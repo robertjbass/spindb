@@ -556,11 +556,29 @@ async function handleCopyConnectionString(
     console.log()
     console.log(success('Connection string copied to clipboard'))
     console.log(chalk.gray(`  ${connectionString}`))
+    console.log()
+
+    await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to continue...'),
+      },
+    ])
   } catch {
     // Fallback: just display the string
     console.log()
     console.log(warning('Could not copy to clipboard. Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
+    console.log()
+
+    await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to continue...'),
+      },
+    ])
   }
 }
 
@@ -720,7 +738,12 @@ async function handleRestore(): Promise<void> {
             )
             console.log(
               chalk.yellow(
-                `  → Your container is running PostgreSQL ${config.version}. Create a PostgreSQL ${pgVersion} container to restore this dump.`,
+                `  → Your system's pg_restore is too old. Upgrade to PostgreSQL ${pgVersion} client tools:`,
+              ),
+            )
+            console.log(
+              chalk.yellow(
+                `     brew install postgresql@${pgVersion} && brew link --force postgresql@${pgVersion}`,
               ),
             )
           }
