@@ -47,7 +47,7 @@ export const createCommand = new Command('create')
         }
 
         // Default database name to container name if not specified
-        database = database || containerName
+        database = database ?? containerName
 
         console.log(header('Creating Database Container'))
         console.log()

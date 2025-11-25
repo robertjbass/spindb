@@ -27,11 +27,13 @@ import { spawn } from 'child_process'
 import { join } from 'path'
 import { paths } from '@/config/paths'
 
-type MenuChoice = {
-  name: string
-  value: string
-  disabled?: boolean | string
-}
+type MenuChoice =
+  | {
+      name: string
+      value: string
+      disabled?: boolean | string
+    }
+  | inquirer.Separator
 
 async function showMainMenu(): Promise<void> {
   console.clear()

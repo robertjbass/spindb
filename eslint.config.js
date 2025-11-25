@@ -12,16 +12,6 @@ export default tseslint.config(
       parserOptions: {
         project: true,
         tsconfigRootDir: import.meta.dirname,
-        ecmaVersion: 2022,
-        sourceType: 'module',
-      },
-    },
-    settings: {
-      'import/resolver': {
-        typescript: {
-          alwaysTryTypes: true,
-          project: './tsconfig.json',
-        },
       },
     },
     rules: {
