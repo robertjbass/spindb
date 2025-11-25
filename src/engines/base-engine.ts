@@ -89,6 +89,14 @@ export abstract class BaseEngine {
   ): Promise<void>
 
   /**
+   * Drop a database within the container
+   */
+  abstract dropDatabase(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<void>
+
+  /**
    * Check if binaries are installed
    */
   abstract isBinaryInstalled(version: string): Promise<boolean>

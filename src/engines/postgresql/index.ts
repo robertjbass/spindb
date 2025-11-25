@@ -190,6 +190,7 @@ export class PostgreSQLEngine extends BaseEngine {
       port,
       database,
       user: defaults.superuser,
+      pgRestorePath: options.pgRestorePath as string, // Use custom path if provided
       ...(options as { format?: string }),
     })
   }
@@ -301,6 +302,29 @@ export class PostgreSQLEngine extends BaseEngine {
       const err = error as Error
       // Ignore "database already exists" error
       if (!err.message.includes('already exists')) {
+        throw error
+      }
+    }
+  }
+
+  /**
+   * Drop a database
+   */
+  async dropDatabase(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<void> {
+    const { port } = container
+    const psqlPath = await this.getPsqlPath()
+
+    try {
+      await execAsync(
+        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'DROP DATABASE IF EXISTS "${database}"'`,
+      )
+    } catch (error) {
+      const err = error as Error
+      // Ignore "database does not exist" error
+      if (!err.message.includes('does not exist')) {
         throw error
       }
     }

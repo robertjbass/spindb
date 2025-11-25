@@ -1,16 +1,13 @@
 import { Command } from 'commander'
-import inquirer from 'inquirer'
 import chalk from 'chalk'
 import { containerManager } from '@/core/container-manager'
 import { processManager } from '@/core/process-manager'
 import { getEngine } from '@/engines'
-import { portManager } from '@/core/port-manager'
-import { defaults } from '@/config/defaults'
 import {
-  promptCreateOptions,
   promptContainerSelect,
-  promptConfirm,
   promptDatabaseName,
+  promptCreateOptions,
+  promptConfirm,
 } from '@/cli/ui/prompts'
 import { createSpinner } from '@/cli/ui/spinner'
 import {
@@ -24,8 +21,12 @@ import {
 import { existsSync } from 'fs'
 import { readdir, rm, lstat } from 'fs/promises'
 import { spawn } from 'child_process'
+import { platform } from 'os'
 import { join } from 'path'
 import { paths } from '@/config/paths'
+import { portManager } from '@/core/port-manager'
+import { defaults } from '@/config/defaults'
+import inquirer from 'inquirer'
 
 type MenuChoice =
   | {
@@ -702,67 +703,194 @@ async function handleRestore(): Promise<void> {
     createDatabase: false,
   })
 
-  // Map pg_dump archive versions to PostgreSQL versions
-  // See: https://www.postgresql.org/docs/current/app-pgdump.html
-  const archiveVersionToPostgres: Record<string, string> = {
-    '1.15': '17',
-    '1.14': '14-16',
-    '1.13': '12-13',
-    '1.12': '10-11',
-    '1.11': '9.6',
-    '1.10': '9.5',
-  }
-
   if (result.code === 0 || !result.stderr) {
     restoreSpinner.succeed('Backup restored successfully')
   } else {
-    restoreSpinner.warn('Restore completed with warnings')
-    // Show stderr output so user can see what went wrong
-    if (result.stderr) {
-      console.log()
-      console.log(chalk.yellow('  Warnings/Errors:'))
-      // Show first 20 lines of stderr to avoid overwhelming output
-      const lines = result.stderr.split('\n').filter((l) => l.trim())
-      const displayLines = lines.slice(0, 20)
-      for (const line of displayLines) {
-        console.log(chalk.gray(`  ${line}`))
+    const stderr = result.stderr || ''
 
-        // Check for version mismatch error and add helpful context
-        const versionMatch = line.match(/unsupported version \((\d+\.\d+)\)/)
-        if (versionMatch) {
-          const archiveVersion = versionMatch[1]
-          const pgVersion = archiveVersionToPostgres[archiveVersion]
-          if (pgVersion) {
-            console.log(
-              chalk.yellow(
-                `  → Archive version ${archiveVersion} was created by PostgreSQL ${pgVersion}`,
-              ),
-            )
-            console.log(
-              chalk.yellow(
-                `  → Your system's pg_restore is too old. Upgrade to PostgreSQL ${pgVersion} client tools:`,
-              ),
-            )
-            console.log(
-              chalk.yellow(
-                `     brew install postgresql@${pgVersion} && brew link --force postgresql@${pgVersion}`,
-              ),
-            )
-          }
-        }
+    // Check for version compatibility errors
+    if (
+      stderr.includes('unsupported version') ||
+      stderr.includes('Archive version') ||
+      stderr.includes('too old')
+    ) {
+      restoreSpinner.fail('Version compatibility detected')
+      console.log()
+      console.log(error('PostgreSQL version incompatibility detected:'))
+      console.log(
+        warning('Your pg_restore version is too old for this backup file.'),
+      )
+
+      // Clean up the failed database since restore didn't actually work
+      console.log(chalk.yellow('Cleaning up failed database...'))
+      try {
+        await engine.dropDatabase(config, databaseName)
+        console.log(chalk.gray(`✓ Removed database "${databaseName}"`))
+      } catch {
+        console.log(
+          chalk.yellow(`Warning: Could not remove database "${databaseName}"`),
+        )
       }
-      if (lines.length > 20) {
-        console.log(chalk.gray(`  ... and ${lines.length - 20} more lines`))
+
+      console.log()
+
+      // Extract version info from error message
+      const versionMatch = stderr.match(/PostgreSQL (\d+)/)
+      const requiredVersion = versionMatch ? versionMatch[1] : '17'
+
+      console.log(
+        chalk.gray(
+          `This backup was created with PostgreSQL ${requiredVersion}`,
+        ),
+      )
+      console.log()
+
+      // Ask user if they want to upgrade
+      const { shouldUpgrade } = await inquirer.prompt({
+        type: 'list',
+        name: 'shouldUpgrade',
+        message: `Would you like to upgrade PostgreSQL client tools to support PostgreSQL ${requiredVersion}?`,
+        choices: [
+          { name: 'Yes', value: true },
+          { name: 'No', value: false },
+        ],
+        default: 0,
+      })
+
+      if (shouldUpgrade) {
+        console.log()
+        const upgradeSpinner = createSpinner(
+          'Upgrading PostgreSQL client tools...',
+        )
+        upgradeSpinner.start()
+
+        try {
+          const { updatePostgresClientTools } = await import(
+            '@/core/postgres-binary-manager'
+          )
+          const updateSuccess = await updatePostgresClientTools()
+
+          if (updateSuccess) {
+            upgradeSpinner.succeed('PostgreSQL client tools upgraded')
+            console.log()
+            console.log(
+              success('Please try the restore again with the updated tools.'),
+            )
+            await new Promise((resolve) => {
+              console.log(chalk.gray('Press Enter to continue...'))
+              process.stdin.once('data', resolve)
+            })
+            return
+          } else {
+            upgradeSpinner.fail('Upgrade failed')
+            console.log()
+            console.log(
+              error('Automatic upgrade failed. Please upgrade manually:'),
+            )
+            console.log(
+              warning(
+                '  macOS: brew install postgresql@17 && brew link --force postgresql@17',
+              ),
+            )
+            console.log(
+              chalk.gray(
+                '    This installs PostgreSQL 17 client tools: pg_restore, pg_dump, psql, and libpq',
+              ),
+            )
+            console.log(
+              warning(
+                '  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-17',
+              ),
+            )
+            console.log(
+              chalk.gray(
+                '    This installs PostgreSQL 17 client tools: pg_restore, pg_dump, psql, and libpq',
+              ),
+            )
+            await new Promise((resolve) => {
+              console.log(chalk.gray('Press Enter to continue...'))
+              process.stdin.once('data', resolve)
+            })
+            return
+          }
+        } catch {
+          upgradeSpinner.fail('Upgrade failed')
+          console.log(error('Failed to upgrade PostgreSQL client tools'))
+          console.log(
+            chalk.gray(
+              'Manual upgrade may be required for pg_restore, pg_dump, and psql',
+            ),
+          )
+          await new Promise((resolve) => {
+            console.log(chalk.gray('Press Enter to continue...'))
+            process.stdin.once('data', resolve)
+          })
+          return
+        }
+      } else {
+        console.log()
+        console.log(
+          warning(
+            'Restore cancelled. Please upgrade PostgreSQL client tools manually and try again.',
+          ),
+        )
+        await new Promise((resolve) => {
+          console.log(chalk.gray('Press Enter to continue...'))
+          process.stdin.once('data', resolve)
+        })
+        return
+      }
+    } else {
+      // Regular warnings/errors - show as before
+      restoreSpinner.warn('Restore completed with warnings')
+      // Show stderr output so user can see what went wrong
+      if (result.stderr) {
+        console.log()
+        console.log(chalk.yellow('  Warnings/Errors:'))
+        // Show first 20 lines of stderr to avoid overwhelming output
+        const lines = result.stderr.split('\n').filter((l) => l.trim())
+        const displayLines = lines.slice(0, 20)
+        for (const line of displayLines) {
+          console.log(chalk.gray(`  ${line}`))
+        }
+        if (lines.length > 20) {
+          console.log(chalk.gray(`  ... and ${lines.length - 20} more lines`))
+        }
       }
     }
   }
 
-  const connectionString = engine.getConnectionString(config, databaseName)
-  console.log()
-  console.log(success(`Database "${databaseName}" restored`))
-  console.log(chalk.gray('  Connection string:'))
-  console.log(chalk.cyan(`  ${connectionString}`))
-  console.log()
+  // Only show success message if restore actually succeeded
+  if (result.code === 0 || !result.stderr) {
+    const connectionString = engine.getConnectionString(config, databaseName)
+    console.log()
+    console.log(success(`Database "${databaseName}" restored`))
+    console.log(chalk.gray('  Connection string:'))
+    console.log(chalk.cyan(`  ${connectionString}`))
+
+    // Copy connection string to clipboard using platform-specific command
+    try {
+      const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
+      const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'] })
+        proc.stdin?.write(connectionString)
+        proc.stdin?.end()
+        proc.on('close', (code) => {
+          if (code === 0) resolve()
+          else reject(new Error(`Clipboard command exited with code ${code}`))
+        })
+        proc.on('error', reject)
+      })
+
+      console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+    } catch {
+      console.log(chalk.gray('  (Could not copy to clipboard)'))
+    }
+
+    console.log()
+  }
 
   // Wait for user to see the result before returning to menu
   await inquirer.prompt([

@@ -9,6 +9,7 @@ import { connectCommand } from '@/cli/commands/connect'
 import { cloneCommand } from '@/cli/commands/clone'
 import { menuCommand } from '@/cli/commands/menu'
 import { configCommand } from '@/cli/commands/config'
+import { postgresToolsCommand } from '@/cli/commands/postgres-tools'
 
 export async function run(): Promise<void> {
   program
@@ -26,6 +27,7 @@ export async function run(): Promise<void> {
   program.addCommand(cloneCommand)
   program.addCommand(menuCommand)
   program.addCommand(configCommand)
+  program.addCommand(postgresToolsCommand)
 
   // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {

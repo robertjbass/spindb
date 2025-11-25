@@ -7,6 +7,8 @@ import { getEngine } from '@/engines'
 import { promptContainerSelect, promptDatabaseName } from '@/cli/ui/prompts'
 import { createSpinner } from '@/cli/ui/spinner'
 import { success, error, warning } from '@/cli/ui/theme'
+import { platform } from 'os'
+import { spawn } from 'child_process'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
@@ -146,6 +148,32 @@ export const restoreCommand = new Command('restore')
         console.log()
         console.log(chalk.gray('  Connection string:'))
         console.log(chalk.cyan(`  ${connectionString}`))
+
+        // Copy connection string to clipboard using platform-specific command
+        try {
+          const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
+          const args =
+            platform() === 'darwin' ? [] : ['-selection', 'clipboard']
+
+          await new Promise<void>((resolve, reject) => {
+            const proc = spawn(cmd, args, {
+              stdio: ['pipe', 'inherit', 'inherit'],
+            })
+            proc.stdin?.write(connectionString)
+            proc.stdin?.end()
+            proc.on('close', (code) => {
+              if (code === 0) resolve()
+              else
+                reject(new Error(`Clipboard command exited with code ${code}`))
+            })
+            proc.on('error', reject)
+          })
+
+          console.log(chalk.gray('  Connection string copied to clipboard'))
+        } catch {
+          console.log(chalk.gray('  (Could not copy to clipboard)'))
+        }
+
         console.log()
         console.log(chalk.gray('  Connect with:'))
         console.log(

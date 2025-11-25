@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { configManager } from '@/core/config-manager'
+import { findBinaryPathFresh } from '@/core/postgres-binary-manager'
 import type { BackupFormat, RestoreResult } from '@/types'
 
 const execAsync = promisify(exec)
@@ -82,6 +83,7 @@ export type RestoreOptions = {
   database: string
   user?: string
   format?: string
+  pgRestorePath?: string
 }
 
 /**
@@ -101,19 +103,27 @@ async function getPsqlPath(): Promise<string> {
 }
 
 /**
- * Get pg_restore path from config, with helpful error message
+ * Get pg_restore path from config or system PATH, with helpful error message
  */
 async function getPgRestorePath(): Promise<string> {
-  const pgRestorePath = await configManager.getBinaryPath('pg_restore')
-  if (!pgRestorePath) {
+  // First try to get from config (in case user has set a custom path)
+  const configPath = await configManager.getBinaryPath('pg_restore')
+  if (configPath) {
+    return configPath
+  }
+
+  // Fall back to finding it on the system PATH with cache refresh
+  const systemPath = await findBinaryPathFresh('pg_restore')
+  if (!systemPath) {
     throw new Error(
       'pg_restore not found. Install PostgreSQL client tools:\n' +
         '  macOS: brew install libpq && brew link --force libpq\n' +
-        '  Ubuntu/Debian: apt install postgresql-client\n\n' +
+        '  Ubuntu/Debian: apt install postgresql-client\n' +
+        '  CentOS/RHEL/Fedora: yum install postgresql\n\n' +
         'Or configure manually: spindb config set pg_restore /path/to/pg_restore',
     )
   }
-  return pgRestorePath
+  return systemPath
 }
 
 /**
@@ -124,7 +134,7 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database, user = 'postgres', format } = options
+  const { port, database, user = 'postgres', format, pgRestorePath } = options
 
   const detectedFormat = format || (await detectBackupFormat(backupPath)).format
 
@@ -141,7 +151,8 @@ export async function restoreBackup(
       ...result,
     }
   } else {
-    const pgRestorePath = await getPgRestorePath()
+    // Use custom path if provided, otherwise find it dynamically
+    const restorePath = pgRestorePath || (await getPgRestorePath())
 
     try {
       const formatFlag =
@@ -151,7 +162,7 @@ export async function restoreBackup(
             ? '-Ft'
             : ''
       const result = await execAsync(
-        `"${pgRestorePath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${database} --no-owner --no-privileges ${formatFlag} "${backupPath}"`,
+        `"${restorePath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${database} --no-owner --no-privileges ${formatFlag} "${backupPath}"`,
         { maxBuffer: 50 * 1024 * 1024 },
       )
 
