@@ -1,15 +1,14 @@
 {
   "name": "spindb",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
   },
   "scripts": {
-    "start": "tsx src/bin/cli.ts",
-    "dev": "tsx watch src/bin/cli.ts",
-    "build": "tsc",
+    "start": "tsx cli/bin.ts",
+    "dev": "tsx watch cli/bin.ts",
     "test": "tsx --test",
     "format": "prettier --write .",
     "lint": "eslint ."
@@ -49,12 +48,12 @@
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.48.0"
   },
-  "tsx": {
-    "tsconfig": "./tsconfig.json"
-  },
   "files": [
-    "bin/**/*",
-    "src/**/*",
-    "tsconfig.json"
+    "bin",
+    "cli",
+    "core",
+    "config",
+    "engines",
+    "types"
   ]
 }
