@@ -100,4 +100,18 @@ export abstract class BaseEngine {
     version: string,
     onProgress?: ProgressCallback,
   ): Promise<string>
+
+  /**
+   * Fetch all available versions from remote source (grouped by major version)
+   * Returns a map of major version -> array of full versions (sorted latest first)
+   * Falls back to hardcoded versions if network fails
+   */
+  async fetchAvailableVersions(): Promise<Record<string, string[]>> {
+    // Default implementation returns supported versions as single-item arrays
+    const versions: Record<string, string[]> = {}
+    for (const v of this.supportedVersions) {
+      versions[v] = [v]
+    }
+    return versions
+  }
 }

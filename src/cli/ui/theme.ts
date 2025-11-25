@@ -93,6 +93,50 @@ export function keyValue(key: string, value: string): string {
 }
 
 /**
+ * Strip ANSI escape codes to get actual string length
+ */
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B\[[0-9;]*m/g, '')
+}
+
+/**
+ * Pad a string (accounting for ANSI codes) to a specific visible width
+ */
+function padToWidth(str: string, width: number): string {
+  const visibleLength = stripAnsi(str).length
+  const padding = Math.max(0, width - visibleLength)
+  return str + ' '.repeat(padding)
+}
+
+/**
+ * Create a box with dynamic width based on content
+ */
+export function box(lines: string[], padding: number = 2): string {
+  // Calculate max visible width
+  const maxWidth = Math.max(...lines.map((line) => stripAnsi(line).length))
+  const innerWidth = maxWidth + padding * 2
+  const horizontalLine = '─'.repeat(innerWidth)
+
+  const boxLines = [chalk.cyan('┌' + horizontalLine + '┐')]
+
+  for (const line of lines) {
+    const paddedLine = padToWidth(line, maxWidth)
+    boxLines.push(
+      chalk.cyan('│') +
+        ' '.repeat(padding) +
+        paddedLine +
+        ' '.repeat(padding) +
+        chalk.cyan('│'),
+    )
+  }
+
+  boxLines.push(chalk.cyan('└' + horizontalLine + '┘'))
+
+  return boxLines.join('\n')
+}
+
+/**
  * Format a connection string box
  */
 export function connectionBox(
@@ -100,14 +144,14 @@ export function connectionBox(
   connectionString: string,
   port: number,
 ): string {
-  return `
-${chalk.cyan('┌─────────────────────────────────────────┐')}
-${chalk.cyan('│')}  ${theme.icons.success} Container ${chalk.bold(name)} is ready!     ${chalk.cyan('│')}
-${chalk.cyan('│')}                                         ${chalk.cyan('│')}
-${chalk.cyan('│')}  ${chalk.gray('Connection string:')}                    ${chalk.cyan('│')}
-${chalk.cyan('│')}  ${chalk.white(connectionString)}  ${chalk.cyan('│')}
-${chalk.cyan('│')}                                         ${chalk.cyan('│')}
-${chalk.cyan('│')}  ${chalk.gray('Port:')} ${chalk.green(String(port))}                              ${chalk.cyan('│')}
-${chalk.cyan('└─────────────────────────────────────────┘')}
-`.trim()
+  const lines = [
+    `${theme.icons.success} Container ${chalk.bold(name)} is ready!`,
+    '',
+    chalk.gray('Connection string:'),
+    chalk.white(connectionString),
+    '',
+    `${chalk.gray('Port:')} ${chalk.green(String(port))}`,
+  ]
+
+  return box(lines)
 }

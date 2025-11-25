@@ -1,8 +1,11 @@
 import net from 'net'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import { existsSync } from 'fs'
+import { readdir, readFile } from 'fs/promises'
 import { defaults } from '@/config/defaults'
-import type { PortResult } from '@/types'
+import { paths } from '@/config/paths'
+import type { ContainerConfig, PortResult } from '@/types'
 
 const execAsync = promisify(exec)
 
@@ -78,6 +81,78 @@ export class PortManager {
     } catch {
       return null
     }
+  }
+
+  /**
+   * Get all ports currently assigned to containers
+   */
+  async getContainerPorts(): Promise<number[]> {
+    const containersDir = paths.containers
+
+    if (!existsSync(containersDir)) {
+      return []
+    }
+
+    const ports: number[] = []
+    const entries = await readdir(containersDir, { withFileTypes: true })
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const configPath = `${containersDir}/${entry.name}/container.json`
+        if (existsSync(configPath)) {
+          try {
+            const content = await readFile(configPath, 'utf8')
+            const config = JSON.parse(content) as ContainerConfig
+            ports.push(config.port)
+          } catch {
+            // Skip invalid configs
+          }
+        }
+      }
+    }
+
+    return ports
+  }
+
+  /**
+   * Find an available port that's not in use by any process AND not assigned to any container
+   */
+  async findAvailablePortExcludingContainers(
+    preferredPort: number = defaults.port,
+  ): Promise<PortResult> {
+    const containerPorts = await this.getContainerPorts()
+
+    // First try the preferred port
+    if (
+      !containerPorts.includes(preferredPort) &&
+      (await this.isPortAvailable(preferredPort))
+    ) {
+      return {
+        port: preferredPort,
+        isDefault: preferredPort === defaults.port,
+      }
+    }
+
+    // Scan for available ports in the range
+    for (
+      let port = defaults.portRange.start;
+      port <= defaults.portRange.end;
+      port++
+    ) {
+      if (containerPorts.includes(port)) continue // Skip ports used by containers
+      if (port === preferredPort) continue // Already tried this one
+
+      if (await this.isPortAvailable(port)) {
+        return {
+          port,
+          isDefault: false,
+        }
+      }
+    }
+
+    throw new Error(
+      `No available ports found in range ${defaults.portRange.start}-${defaults.portRange.end}`,
+    )
   }
 }
 

@@ -10,6 +10,9 @@ Spin up local PostgreSQL databases without Docker. A lightweight alternative to 
 - **Auto port management** - Automatically finds available ports
 - **Clone containers** - Duplicate databases with all data
 - **Backup restore** - Restore pg_dump backups (requires system PostgreSQL client tools)
+- **Custom database names** - Specify database name separate from container name
+- **Engine management** - View installed PostgreSQL versions and free up disk space
+- **Dynamic version selection** - Fetches all available versions from Maven Central
 
 ## Installation
 
@@ -109,10 +112,15 @@ spindb config set pg_restore /path/to/pg_restore
 
 ## Examples
 
-### Create a database with specific version
+### Create a database with specific version and name
 
 ```bash
+# Specify PostgreSQL version and port
 spindb create mydb --pg-version 15 --port 5433
+
+# Specify a custom database name (different from container name)
+spindb create mydb --database my_app_db
+# Connection string: postgresql://postgres@localhost:5432/my_app_db
 ```
 
 ### Restore a backup
@@ -145,7 +153,21 @@ spindb start test-branch
 spindb connect mydb
 
 # Or use the connection string directly
-psql postgresql://postgres@localhost:5432/postgres
+psql postgresql://postgres@localhost:5432/mydb
+```
+
+### Manage installed engines
+
+The Engines menu (accessible from the main menu) shows all installed PostgreSQL versions with their disk usage. You can delete unused versions to free up space.
+
+```
+ENGINE      VERSION     PLATFORM            SIZE
+────────────────────────────────────────────────────────
+postgresql  17          darwin-arm64        45.2 MB
+postgresql  16.9.0      darwin-arm64        44.8 MB
+postgresql  16          darwin-arm64        44.8 MB
+────────────────────────────────────────────────────────
+3 version(s)                                134.8 MB
 ```
 
 ## Configuration
@@ -201,4 +223,3 @@ rm -rf ~/.spindb
 ## License
 
 MIT
-# spindb

@@ -7,23 +7,23 @@ import type { ProcessResult, StatusResult } from '@/types'
 
 const execAsync = promisify(exec)
 
-export interface InitdbOptions {
+export type InitdbOptions = {
   superuser?: string
 }
 
-export interface StartOptions {
+export type StartOptions = {
   port?: number
   logFile?: string
 }
 
-export interface PsqlOptions {
+export type PsqlOptions = {
   port: number
   database?: string
   user?: string
   command?: string
 }
 
-export interface PgRestoreOptions {
+export type PgRestoreOptions = {
   port: number
   database: string
   user?: string

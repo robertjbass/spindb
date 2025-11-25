@@ -28,16 +28,30 @@ export class BinaryManager {
   }
 
   /**
-   * Convert major version to full version (e.g., "16" -> "16.4.0")
+   * Convert version to full version format (e.g., "16" -> "16.6.0", "16.9" -> "16.9.0")
    */
-  getFullVersion(majorVersion: string): string {
+  getFullVersion(version: string): string {
+    // Map major versions to latest stable patch versions
+    // Updated from: https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/
     const versionMap: Record<string, string> = {
-      '14': '14.15.0',
-      '15': '15.10.0',
-      '16': '16.6.0',
-      '17': '17.2.0',
+      '14': '14.20.0',
+      '15': '15.15.0',
+      '16': '16.11.0',
+      '17': '17.7.0',
     }
-    return versionMap[majorVersion] || `${majorVersion}.0.0`
+
+    // If it's a major version only, use the map
+    if (versionMap[version]) {
+      return versionMap[version]
+    }
+
+    // Normalize to X.Y.Z format
+    const parts = version.split('.')
+    if (parts.length === 2) {
+      return `${version}.0`
+    }
+
+    return version
   }
 
   /**
@@ -185,16 +199,32 @@ export class BinaryManager {
 
     try {
       const { stdout } = await execAsync(`"${postgresPath}" --version`)
-      const match = stdout.match(/postgres \(PostgreSQL\) (\d+)/)
-      if (match && match[1] === version) {
+      // Extract version from output like "postgres (PostgreSQL) 16.9"
+      const match = stdout.match(/postgres \(PostgreSQL\) ([\d.]+)/)
+      if (!match) {
+        throw new Error(`Could not parse version from: ${stdout.trim()}`)
+      }
+
+      const reportedVersion = match[1]
+      // Normalize both versions for comparison (16.9.0 -> 16.9, 16 -> 16)
+      const normalizeVersion = (v: string) => v.replace(/\.0$/, '')
+      const expectedNormalized = normalizeVersion(version)
+      const reportedNormalized = normalizeVersion(reportedVersion)
+
+      // Check if versions match (after normalization)
+      if (reportedNormalized === expectedNormalized) {
         return true
       }
-      // Version might be more specific (e.g., 16.4), so also check if it starts with the major version
-      if (stdout.includes(`PostgreSQL) ${version}`)) {
+
+      // Also accept if major versions match (e.g., expected "16", got "16.9")
+      const expectedMajor = version.split('.')[0]
+      const reportedMajor = reportedVersion.split('.')[0]
+      if (expectedMajor === reportedMajor && version === expectedMajor) {
         return true
       }
+
       throw new Error(
-        `Version mismatch: expected ${version}, got ${stdout.trim()}`,
+        `Version mismatch: expected ${version}, got ${reportedVersion}`,
       )
     } catch (error) {
       const err = error as Error

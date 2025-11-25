@@ -1,13 +1,13 @@
-export interface PlatformMappings {
+export type PlatformMappings = {
   [key: string]: string
 }
 
-export interface PortRange {
+export type PortRange = {
   start: number
   end: number
 }
 
-export interface Defaults {
+export type Defaults = {
   postgresVersion: string
   port: number
   portRange: PortRange
@@ -17,6 +17,9 @@ export interface Defaults {
   platformMappings: PlatformMappings
 }
 
+// TODO - make defaults configurable via env vars or config file
+// TODO - make defaults generic so it supports multiple engines
+// TODO - consider using a configuration file or environment variables for overrides
 export const defaults: Defaults = {
   // Default PostgreSQL version
   postgresVersion: '16',

@@ -5,13 +5,14 @@ import { processManager } from '@/core/process-manager'
 import { portManager } from '@/core/port-manager'
 import type { ContainerConfig } from '@/types'
 
-export interface CreateOptions {
+export type CreateOptions = {
   engine: string
   version: string
   port: number
+  database: string
 }
 
-export interface DeleteOptions {
+export type DeleteOptions = {
   force?: boolean
 }
 
@@ -20,7 +21,7 @@ export class ContainerManager {
    * Create a new container
    */
   async create(name: string, options: CreateOptions): Promise<ContainerConfig> {
-    const { engine, version, port } = options
+    const { engine, version, port, database } = options
 
     // Validate container name
     if (!this.isValidName(name)) {
@@ -47,6 +48,7 @@ export class ContainerManager {
       engine,
       version,
       port,
+      database,
       created: new Date().toISOString(),
       status: 'created',
     }
@@ -203,11 +205,57 @@ export class ContainerManager {
     config.created = new Date().toISOString()
     config.clonedFrom = sourceName
 
-    // Assign new port
-    const { port } = await portManager.findAvailablePort()
+    // Assign new port (excluding ports already used by other containers)
+    const { port } = await portManager.findAvailablePortExcludingContainers()
     config.port = port
 
     await this.saveConfig(targetName, config)
+
+    return config
+  }
+
+  /**
+   * Rename a container
+   */
+  async rename(oldName: string, newName: string): Promise<ContainerConfig> {
+    // Validate new name
+    if (!this.isValidName(newName)) {
+      throw new Error(
+        'Container name must be alphanumeric with hyphens/underscores only',
+      )
+    }
+
+    // Check source exists
+    if (!(await this.exists(oldName))) {
+      throw new Error(`Container "${oldName}" not found`)
+    }
+
+    // Check target doesn't exist
+    if (await this.exists(newName)) {
+      throw new Error(`Container "${newName}" already exists`)
+    }
+
+    // Check container is not running
+    const running = await processManager.isRunning(oldName)
+    if (running) {
+      throw new Error(`Container "${oldName}" is running. Stop it first`)
+    }
+
+    // Rename directory
+    const oldPath = paths.getContainerPath(oldName)
+    const newPath = paths.getContainerPath(newName)
+
+    await cp(oldPath, newPath, { recursive: true })
+    await rm(oldPath, { recursive: true, force: true })
+
+    // Update config with new name
+    const config = await this.getConfig(newName)
+    if (!config) {
+      throw new Error('Failed to read renamed container config')
+    }
+
+    config.name = newName
+    await this.saveConfig(newName, config)
 
     return config
   }

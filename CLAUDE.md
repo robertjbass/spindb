@@ -78,6 +78,28 @@ Client tools (psql, pg_restore) are detected from the system. The `config-manage
 ### Interactive Menu
 When `spindb` is run with no arguments, it shows an interactive menu (`src/cli/commands/menu.ts`) using Inquirer's list prompt. Users navigate with arrow keys.
 
+**Menu Navigation Rules:**
+- Any submenu with a "Back" button that goes to a parent menu (not main menu) MUST also have a "Back to main menu" option
+- Back buttons use blue color: `${chalk.blue('←')} Back to...`
+- Main menu buttons use house emoji: `${chalk.blue('🏠')} Back to main menu`
+
+### Container Config
+Each container has a `container.json` with:
+```typescript
+type ContainerConfig = {
+  name: string
+  engine: string
+  version: string
+  port: number
+  database: string      // User's database name (separate from container name)
+  created: string
+  status: 'created' | 'running' | 'stopped'
+  clonedFrom?: string
+}
+```
+
+The `database` field allows users to specify a custom database name in the connection string (e.g., `postgresql://postgres@localhost:5432/my-app-db`).
+
 ## Common Tasks
 
 ### Running the CLI
@@ -112,16 +134,23 @@ import { platform, arch } from 'os';
 // Mapped to zonky.io names in defaults.ts platformMappings
 ```
 
-### Version Mapping
-Major versions (14, 15, 16, 17) map to full versions in `src/engines/postgresql/binary-urls.ts`:
+### Version Fetching
+PostgreSQL versions are fetched dynamically from Maven Central with a 5-minute cache. Falls back to `FALLBACK_VERSION_MAP` if network fails. See `src/engines/postgresql/binary-urls.ts`:
+
 ```typescript
-const VERSION_MAP = {
-  '14': '14.15.0',
-  '15': '15.10.0',
-  '16': '16.6.0',
-  '17': '17.2.0'
-};
+// Fallback versions (used when Maven is unreachable)
+export const FALLBACK_VERSION_MAP: Record<string, string> = {
+  '14': '14.20.0',
+  '15': '15.15.0',
+  '16': '16.11.0',
+  '17': '17.7.0',
+}
+
+// Dynamic fetching from Maven
+export async function fetchAvailableVersions(): Promise<Record<string, string[]>>
 ```
+
+The create flow uses two-step version selection: first major version (14, 15, 16, 17), then specific minor version within that major.
 
 ### Port Management
 - Default port: 5432
@@ -142,15 +171,16 @@ PID file location: `~/.spindb/containers/{name}/data/postmaster.pid`
 1. **No client tools bundled** - psql/pg_restore must be installed separately
 2. **macOS/Linux only** - No Windows support (zonky.io doesn't provide Windows binaries)
 3. **No backup command** - pg_dump must be run manually with system tools
-4. **No automatic updates** - Binary versions are hardcoded in VERSION_MAP
+4. **Database names immutable** - Cannot rename database after creation (would require `ALTER DATABASE`)
 
-## Future Improvements (Not Implemented)
+## Future Improvements
 
+See `TODO.md` for full list. Key items:
 - [ ] Add `spindb backup` command (wrapper around pg_dump)
-- [ ] Support MySQL/SQLite engines (architecture supports it)
 - [ ] Add `spindb logs` command to tail postgres.log
 - [ ] Add `spindb exec` for running SQL files
-- [ ] Automatic binary version updates
+- [ ] Database rename support
+- [ ] Support MySQL/SQLite engines (architecture supports it)
 - [ ] Windows support (would need different binary source)
 
 ## Code Style Notes

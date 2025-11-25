@@ -1,54 +1,56 @@
-export interface ContainerConfig {
+export type ContainerConfig = {
   name: string
   engine: string
   version: string
   port: number
+  database: string
   created: string
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
 }
 
-export interface ProgressCallback {
-  (progress: { stage: string; message: string }): void
-}
+export type ProgressCallback = (progress: {
+  stage: string
+  message: string
+}) => void
 
-export interface InstalledBinary {
+export type InstalledBinary = {
   engine: string
   version: string
   platform: string
   arch: string
 }
 
-export interface PortResult {
+export type PortResult = {
   port: number
   isDefault: boolean
 }
 
-export interface ProcessResult {
+export type ProcessResult = {
   stdout: string
   stderr: string
   code?: number
 }
 
-export interface StatusResult {
+export type StatusResult = {
   running: boolean
   message: string
 }
 
-export interface BackupFormat {
+export type BackupFormat = {
   format: string
   description: string
   restoreCommand: string
 }
 
-export interface RestoreResult {
+export type RestoreResult = {
   format: string
   stdout?: string
   stderr?: string
   code?: number
 }
 
-export interface EngineInfo {
+export type EngineInfo = {
   name: string
   displayName: string
   defaultPort: number
@@ -68,7 +70,7 @@ export type BinarySource = 'bundled' | 'system' | 'custom'
 /**
  * Configuration for a single binary tool
  */
-export interface BinaryConfig {
+export type BinaryConfig = {
   tool: BinaryTool
   path: string
   source: BinarySource
@@ -78,7 +80,7 @@ export interface BinaryConfig {
 /**
  * Global spindb configuration stored in ~/.spindb/config.json
  */
-export interface SpinDBConfig {
+export type SpinDBConfig = {
   // Binary paths for client tools
   binaries: {
     psql?: BinaryConfig

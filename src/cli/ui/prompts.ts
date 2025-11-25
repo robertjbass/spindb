@@ -1,6 +1,7 @@
 import inquirer from 'inquirer'
 import chalk from 'chalk'
-import { listEngines } from '@/engines'
+import ora from 'ora'
+import { listEngines, getEngine } from '@/engines'
 import { defaults } from '@/config/defaults'
 import type { ContainerConfig } from '@/types'
 
@@ -34,16 +35,26 @@ export async function promptContainerName(
 export async function promptEngine(): Promise<string> {
   const engines = listEngines()
 
+  // Build choices from available engines plus coming soon engines
+  const choices = [
+    ...engines.map((e) => ({
+      name: `🐘 ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+      value: e.name,
+      short: e.displayName,
+    })),
+    {
+      name: chalk.gray('🐬 MySQL (coming soon)'),
+      value: 'mysql',
+      disabled: 'Coming soon',
+    },
+  ]
+
   const { engine } = await inquirer.prompt<{ engine: string }>([
     {
       type: 'list',
       name: 'engine',
       message: 'Select database engine:',
-      choices: engines.map((e) => ({
-        name: `${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
-        value: e.name,
-        short: e.displayName,
-      })),
+      choices,
     },
   ])
 
@@ -52,23 +63,89 @@ export async function promptEngine(): Promise<string> {
 
 /**
  * Prompt for PostgreSQL version
+ * Two-step selection: first major version, then specific minor version
  */
-export async function promptVersion(engine: string): Promise<string> {
-  const engines = listEngines()
-  const selectedEngine = engines.find((e) => e.name === engine)
-  const versions =
-    selectedEngine?.supportedVersions || defaults.supportedPostgresVersions
+export async function promptVersion(engineName: string): Promise<string> {
+  const engine = getEngine(engineName)
+  const majorVersions = engine.supportedVersions
+
+  // Fetch available versions with a loading indicator
+  const spinner = ora({
+    text: 'Fetching available versions...',
+    color: 'cyan',
+  }).start()
+
+  let availableVersions: Record<string, string[]>
+  try {
+    availableVersions = await engine.fetchAvailableVersions()
+    spinner.stop()
+  } catch {
+    spinner.stop()
+    // Fall back to major versions only
+    availableVersions = {}
+    for (const v of majorVersions) {
+      availableVersions[v] = []
+    }
+  }
+
+  // Step 1: Select major version
+  type Choice = {
+    name: string
+    value: string
+    short?: string
+  }
+  const majorChoices: Choice[] = []
+
+  for (let i = 0; i < majorVersions.length; i++) {
+    const major = majorVersions[i]
+    const fullVersions = availableVersions[major] || []
+    const versionCount = fullVersions.length
+    const isLatestMajor = i === majorVersions.length - 1
+
+    const countLabel =
+      versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
+    const label = isLatestMajor
+      ? `PostgreSQL ${major} ${countLabel} ${chalk.green('← latest')}`
+      : `PostgreSQL ${major} ${countLabel}`
+
+    majorChoices.push({
+      name: label,
+      value: major,
+      short: `PostgreSQL ${major}`,
+    })
+  }
+
+  const { majorVersion } = await inquirer.prompt<{ majorVersion: string }>([
+    {
+      type: 'list',
+      name: 'majorVersion',
+      message: 'Select major version:',
+      choices: majorChoices,
+      default: majorVersions[majorVersions.length - 1], // Default to latest major
+    },
+  ])
+
+  // Step 2: Select specific version within the major version
+  const minorVersions = availableVersions[majorVersion] || []
+
+  if (minorVersions.length === 0) {
+    // No versions fetched, return major version (will use fallback)
+    return majorVersion
+  }
+
+  const minorChoices: Choice[] = minorVersions.map((v, i) => ({
+    name: i === 0 ? `${v} ${chalk.green('← latest')}` : v,
+    value: v,
+    short: v,
+  }))
 
   const { version } = await inquirer.prompt<{ version: string }>([
     {
       type: 'list',
       name: 'version',
-      message: 'Select version:',
-      choices: versions.map((v, i) => ({
-        name: i === versions.length - 1 ? `${v} ${chalk.green('(latest)')}` : v,
-        value: v,
-      })),
-      default: versions[versions.length - 1], // Default to latest
+      message: `Select PostgreSQL ${majorVersion} version:`,
+      choices: minorChoices,
+      default: minorVersions[0], // Default to latest
     },
   ])
 
@@ -169,6 +246,13 @@ export async function promptDatabaseName(
       default: defaultName,
       validate: (input: string) => {
         if (!input) return 'Database name is required'
+        // PostgreSQL database naming rules
+        if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(input)) {
+          return 'Database name must start with a letter or underscore and contain only letters, numbers, underscores, and hyphens'
+        }
+        if (input.length > 63) {
+          return 'Database name must be 63 characters or less'
+        }
         return true
       },
     },
@@ -177,21 +261,27 @@ export async function promptDatabaseName(
   return database
 }
 
-export interface CreateOptions {
+export type CreateOptions = {
   name: string
   engine: string
   version: string
+  port: number
+  database: string
 }
 
 /**
  * Full interactive create flow
  */
-export async function promptCreateOptions(): Promise<CreateOptions> {
+export async function promptCreateOptions(
+  defaultPort: number = defaults.port,
+): Promise<CreateOptions> {
   console.log(chalk.cyan('\n  🗄️  Create New Database Container\n'))
 
-  const name = await promptContainerName()
   const engine = await promptEngine()
   const version = await promptVersion(engine)
+  const name = await promptContainerName()
+  const database = await promptDatabaseName(name) // Default to container name
+  const port = await promptPort(defaultPort)
 
-  return { name, engine, version }
+  return { name, engine, version, port, database }
 }

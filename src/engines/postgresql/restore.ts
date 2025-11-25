@@ -77,7 +77,7 @@ export async function detectBackupFormat(
   }
 }
 
-export interface RestoreOptions {
+export type RestoreOptions = {
   port: number
   database: string
   user?: string

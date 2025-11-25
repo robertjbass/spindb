@@ -14,16 +14,25 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f`)
 - [ ] **Backup command** - Add `spindb backup` to create dumps using `pg_dump`
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log`
-- [ ] **Engine/binary management** - Menu to list installed PostgreSQL versions, install new versions, uninstall unused versions (free up disk space)
+- [x] **Engine/binary management** - Menu to list installed PostgreSQL versions, install new versions, uninstall unused versions (free up disk space)
 
 ### Medium Priority
-- [ ] **Container rename** - Rename a container without cloning/deleting
-- [ ] **Export connection string** - Copy connection string to clipboard
+- [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu)
+- [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
+- [x] **Export connection string** - Copy connection string to clipboard (via container submenu)
 - [ ] **Multiple databases per container** - List/create/delete databases within a container
+- [x] **Fetch available versions** - Query Maven Central API to show all available PostgreSQL versions instead of hardcoded list
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
 - [ ] **Health checks** - Periodic connection tests to verify containers are responsive
+- [ ] **Offline Support** - Package binaries locally for offline installation
+- [ ] **Binary caching** - Cache downloaded binaries locally to avoid re-downloading
+- [ ] **Binary version management** - List, install, and remove different PostgreSQL versions
+- [ ] **Binary verification** - Verify downloaded binaries with checksums
+- [ ] **Binary cleanup** - Remove old cached binaries to free up disk space
+- [ ] **Binary space monitoring** - Show disk usage of cached binaries
+- [ ] **Binary auto-cleanup** - Automatically remove old versions after a retention period
 
 ---
 

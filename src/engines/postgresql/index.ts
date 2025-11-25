@@ -8,7 +8,11 @@ import { processManager } from '@/core/process-manager'
 import { configManager } from '@/core/config-manager'
 import { paths } from '@/config/paths'
 import { defaults } from '@/config/defaults'
-import { getBinaryUrl, VERSION_MAP } from './binary-urls'
+import {
+  getBinaryUrl,
+  SUPPORTED_MAJOR_VERSIONS,
+  fetchAvailableVersions,
+} from './binary-urls'
 import { detectBackupFormat, restoreBackup } from './restore'
 import type {
   ContainerConfig,
@@ -24,7 +28,15 @@ export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
   defaultPort = 5432
-  supportedVersions = Object.keys(VERSION_MAP)
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
+
+  /**
+   * Fetch all available versions from Maven (grouped by major version)
+   * Falls back to hardcoded versions if network fails
+   */
+  async fetchAvailableVersions(): Promise<Record<string, string[]>> {
+    return fetchAvailableVersions()
+  }
 
   /**
    * Get current platform info
@@ -187,7 +199,7 @@ export class PostgreSQLEngine extends BaseEngine {
    */
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
-    const db = database || 'postgres'
+    const db = database || container.database || 'postgres'
     return `postgresql://${defaults.superuser}@localhost:${port}/${db}`
   }
 

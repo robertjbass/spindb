@@ -17,6 +17,7 @@ export const createCommand = new Command('create')
     'PostgreSQL version',
     defaults.postgresVersion,
   )
+  .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
   .option('--no-start', 'Do not start the container after creation')
   .action(
@@ -25,6 +26,7 @@ export const createCommand = new Command('create')
       options: {
         engine: string
         pgVersion: string
+        database?: string
         port?: string
         start: boolean
       },
@@ -33,6 +35,7 @@ export const createCommand = new Command('create')
         let containerName = name
         let engine = options.engine
         let version = options.pgVersion
+        let database = options.database
 
         // Interactive mode if no name provided
         if (!containerName) {
@@ -40,7 +43,11 @@ export const createCommand = new Command('create')
           containerName = answers.name
           engine = answers.engine
           version = answers.version
+          database = answers.database
         }
+
+        // Default database name to container name if not specified
+        database = database || containerName
 
         console.log(header('Creating Database Container'))
         console.log()
@@ -97,19 +104,20 @@ export const createCommand = new Command('create')
           engine: dbEngine.name,
           version,
           port,
+          database,
         })
 
         createSpinnerInstance.succeed('Container created')
 
-        // Initialize database
-        const initSpinner = createSpinner('Initializing database...')
+        // Initialize database cluster
+        const initSpinner = createSpinner('Initializing database cluster...')
         initSpinner.start()
 
         await dbEngine.initDataDir(containerName, version, {
           superuser: defaults.superuser,
         })
 
-        initSpinner.succeed('Database initialized')
+        initSpinner.succeed('Database cluster initialized')
 
         // Start container if requested
         if (options.start !== false) {
@@ -125,6 +133,18 @@ export const createCommand = new Command('create')
           }
 
           startSpinner.succeed('PostgreSQL started')
+
+          // Create the user's database (if different from 'postgres')
+          if (config && database !== 'postgres') {
+            const dbSpinner = createSpinner(
+              `Creating database "${database}"...`,
+            )
+            dbSpinner.start()
+
+            await dbEngine.createDatabase(config, database)
+
+            dbSpinner.succeed(`Database "${database}" created`)
+          }
         }
 
         // Show success message
