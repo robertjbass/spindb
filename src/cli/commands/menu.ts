@@ -55,6 +55,10 @@ async function showMainMenu(): Promise<void> {
   const canRestore = running > 0
   const canClone = containers.length > 0
 
+  // Check if any engines are installed
+  const engines = await getInstalledEngines()
+  const hasEngines = engines.length > 0
+
   // If containers exist, show List first; otherwise show Create first
   const hasContainers = containers.length > 0
 
@@ -103,7 +107,13 @@ async function showMainMenu(): Promise<void> {
       value: 'clone',
       disabled: canClone ? false : 'No containers',
     },
-    { name: `${chalk.yellow('⚙')} Engines`, value: 'engines' },
+    {
+      name: hasEngines
+        ? `${chalk.yellow('⚙')} List installed engines`
+        : chalk.gray('⚙ List installed engines'),
+      value: 'engines',
+      disabled: hasEngines ? false : 'No engines installed',
+    },
     new inquirer.Separator(),
     { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
   ]
@@ -625,18 +635,25 @@ async function handleRestore(): Promise<void> {
   }
 
   // Get backup file path
-  const { backupPath } = await inquirer.prompt<{ backupPath: string }>([
+  // Strip quotes that terminals add when drag-and-dropping files
+  const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
+
+  const { backupPath: rawBackupPath } = await inquirer.prompt<{
+    backupPath: string
+  }>([
     {
       type: 'input',
       name: 'backupPath',
-      message: 'Path to backup file:',
+      message: 'Path to backup file (drag and drop or enter path):',
       validate: (input: string) => {
         if (!input) return 'Backup path is required'
-        if (!existsSync(input)) return 'File not found'
+        const cleanPath = stripQuotes(input)
+        if (!existsSync(cleanPath)) return 'File not found'
         return true
       },
     },
   ])
+  const backupPath = stripQuotes(rawBackupPath)
 
   const databaseName = await promptDatabaseName(containerName)
 
@@ -665,10 +682,54 @@ async function handleRestore(): Promise<void> {
     createDatabase: false,
   })
 
+  // Map pg_dump archive versions to PostgreSQL versions
+  // See: https://www.postgresql.org/docs/current/app-pgdump.html
+  const archiveVersionToPostgres: Record<string, string> = {
+    '1.15': '17',
+    '1.14': '14-16',
+    '1.13': '12-13',
+    '1.12': '10-11',
+    '1.11': '9.6',
+    '1.10': '9.5',
+  }
+
   if (result.code === 0 || !result.stderr) {
     restoreSpinner.succeed('Backup restored successfully')
   } else {
     restoreSpinner.warn('Restore completed with warnings')
+    // Show stderr output so user can see what went wrong
+    if (result.stderr) {
+      console.log()
+      console.log(chalk.yellow('  Warnings/Errors:'))
+      // Show first 20 lines of stderr to avoid overwhelming output
+      const lines = result.stderr.split('\n').filter((l) => l.trim())
+      const displayLines = lines.slice(0, 20)
+      for (const line of displayLines) {
+        console.log(chalk.gray(`  ${line}`))
+
+        // Check for version mismatch error and add helpful context
+        const versionMatch = line.match(/unsupported version \((\d+\.\d+)\)/)
+        if (versionMatch) {
+          const archiveVersion = versionMatch[1]
+          const pgVersion = archiveVersionToPostgres[archiveVersion]
+          if (pgVersion) {
+            console.log(
+              chalk.yellow(
+                `  → Archive version ${archiveVersion} was created by PostgreSQL ${pgVersion}`,
+              ),
+            )
+            console.log(
+              chalk.yellow(
+                `  → Your container is running PostgreSQL ${config.version}. Create a PostgreSQL ${pgVersion} container to restore this dump.`,
+              ),
+            )
+          }
+        }
+      }
+      if (lines.length > 20) {
+        console.log(chalk.gray(`  ... and ${lines.length - 20} more lines`))
+      }
+    }
   }
 
   const connectionString = engine.getConnectionString(config, databaseName)
@@ -676,6 +737,16 @@ async function handleRestore(): Promise<void> {
   console.log(success(`Database "${databaseName}" restored`))
   console.log(chalk.gray('  Connection string:'))
   console.log(chalk.cyan(`  ${connectionString}`))
+  console.log()
+
+  // Wait for user to see the result before returning to menu
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to continue...'),
+    },
+  ])
 }
 
 async function handleClone(): Promise<void> {
