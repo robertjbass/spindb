@@ -201,7 +201,7 @@ export class PostgreSQLEngine extends BaseEngine {
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
     const db = database || container.database || 'postgres'
-    return `postgresql://${defaults.superuser}@localhost:${port}/${db}`
+    return `postgresql://${defaults.superuser}@127.0.0.1:${port}/${db}`
   }
 
   /**

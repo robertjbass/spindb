@@ -246,7 +246,51 @@ async function handleCreate(): Promise<void> {
     if (config) {
       const connectionString = dbEngine.getConnectionString(config)
       console.log()
-      console.log(connectionBox(containerName, connectionString, port))
+      console.log(success('Database Created'))
+      console.log()
+      console.log(chalk.gray(`  Container: ${containerName}`))
+      console.log(chalk.gray(`  Engine: ${dbEngine.name} ${version}`))
+      console.log(chalk.gray(`  Database: ${database}`))
+      console.log(chalk.gray(`  Port: ${port}`))
+      console.log()
+      console.log(success(`Started Running on port ${port}`))
+      console.log()
+      console.log(chalk.gray('  Connection string:'))
+      console.log(chalk.cyan(`  ${connectionString}`))
+
+      // Copy connection string to clipboard using platform-specific command
+      try {
+        const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
+        const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
+
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(cmd, args, {
+            stdio: ['pipe', 'inherit', 'inherit'],
+          })
+          proc.stdin?.write(connectionString)
+          proc.stdin?.end()
+          proc.on('close', (code) => {
+            if (code === 0) resolve()
+            else reject(new Error(`Clipboard command exited with code ${code}`))
+          })
+          proc.on('error', reject)
+        })
+
+        console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+      } catch {
+        console.log(chalk.gray('  (Could not copy to clipboard)'))
+      }
+
+      console.log()
+
+      // Wait for user to see the result before returning to menu
+      await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'continue',
+          message: chalk.gray('Press Enter to return to the main menu...'),
+        },
+      ])
     }
   } else {
     console.log()
