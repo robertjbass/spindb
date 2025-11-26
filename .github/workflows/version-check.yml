@@ -7,6 +7,8 @@ on:
 jobs:
   check-version:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -22,6 +24,7 @@ jobs:
           echo "version=$NPM_VERSION" >> $GITHUB_OUTPUT
 
       - name: Compare versions
+        id: compare
         run: |
           PR_VERSION="${{ steps.pr_version.outputs.version }}"
           NPM_VERSION="${{ steps.npm_version.outputs.version }}"
@@ -41,14 +44,63 @@ jobs:
             console.log('equal');
           ")
 
-          if [ "$RESULT" != "greater" ]; then
-            echo "❌ Version must be incremented before merging"
-            echo ""
-            echo "Current npm version: $NPM_VERSION"
-            echo "PR version: $PR_VERSION"
-            echo ""
-            echo "Please bump the version in package.json"
-            exit 1
-          fi
+          echo "result=$RESULT" >> $GITHUB_OUTPUT
 
-          echo "✅ Version check passed: $NPM_VERSION → $PR_VERSION"
+      - name: Comment on PR if version not bumped
+        if: steps.compare.outputs.result != 'greater'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prVersion = '${{ steps.pr_version.outputs.version }}';
+            const npmVersion = '${{ steps.npm_version.outputs.version }}';
+
+            const body = `## ❌ Version Check Failed
+
+            | Current npm | This PR |
+            |-------------|---------|
+            | \`${npmVersion}\` | \`${prVersion}\` |
+
+            Please bump the version in \`package.json\` to be greater than \`${npmVersion}\` before merging.
+
+            **Examples:**
+            - Patch: \`${npmVersion.replace(/\d+$/, n => parseInt(n) + 1)}\`
+            - Minor: \`${npmVersion.replace(/\.\d+\.\d+$/, (m) => { const [, minor] = m.split('.'); return \`.\${parseInt(minor) + 1}.0\`; })}\`
+            - Major: \`${npmVersion.replace(/^\d+/, n => parseInt(n) + 1).replace(/\.\d+\.\d+$/, '.0.0')}\``;
+
+            // Check if we already left a comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Version Check Failed')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if version not bumped
+        if: steps.compare.outputs.result != 'greater'
+        run: |
+          echo "❌ Version must be incremented before merging"
+          exit 1
+
+      - name: Success
+        if: steps.compare.outputs.result == 'greater'
+        run: |
+          echo "✅ Version check passed: ${{ steps.npm_version.outputs.version }} → ${{ steps.pr_version.outputs.version }}"
