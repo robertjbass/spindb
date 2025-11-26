@@ -1,0 +1,76 @@
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current commit
+        uses: actions/checkout@v4
+
+      - name: Get current version
+        id: current_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Get previous version from npm
+        id: npm_version
+        run: |
+          NPM_VERSION=$(npm view spindb version 2>/dev/null || echo "0.0.0")
+          echo "version=$NPM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        run: |
+          CURRENT="${{ steps.current_version.outputs.version }}"
+          NPM="${{ steps.npm_version.outputs.version }}"
+
+          echo "Current version: $CURRENT"
+          echo "npm version: $NPM"
+
+          RESULT=$(node -e "
+            const semver = (v) => v.split('.').map(Number);
+            const current = semver('$CURRENT');
+            const npm = semver('$NPM');
+
+            for (let i = 0; i < 3; i++) {
+              if (current[i] > npm[i]) { console.log('greater'); process.exit(0); }
+              if (current[i] < npm[i]) { console.log('lesser'); process.exit(0); }
+            }
+            console.log('equal');
+          ")
+
+          if [ "$RESULT" != "greater" ]; then
+            echo "❌ Version $CURRENT is not greater than npm version $NPM"
+            echo "Skipping publish - version already exists on npm"
+            exit 1
+          fi
+
+          echo "✅ Version check passed: $NPM → $CURRENT"
+
+  publish:
+    needs: version-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish to npm with OIDC
+        run: pnpm publish --no-git-checks --access public
