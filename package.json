@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL.",
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "cli"
   ],
   "author": "Bob Bass <bob@bbass.co>",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "packageManager": "pnpm@9.14.2",
   "engines": {
     "node": ">=18"
