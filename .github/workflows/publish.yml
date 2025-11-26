@@ -69,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
@@ -95,7 +95,9 @@ jobs:
 
       - name: Publish to npm with OIDC
         id: publish
-        run: npm publish --access public --provenance
+        run: npm publish
+        env:
+          NPM_CONFIG_PROVENANCE: true
 
       - name: Create issue on publish failure
         if: failure() && steps.publish.outcome == 'failure'
