@@ -79,9 +79,20 @@ jobs:
       - name: Check npm version
         run: npm --version
 
+      - name: Debug OIDC claims
+        run: |
+          echo "GitHub repository: ${{ github.repository }}"
+          echo "GitHub repository owner: ${{ github.repository_owner }}"
+          echo "GitHub workflow: ${{ github.workflow }}"
+          echo "GitHub workflow ref: ${{ github.workflow_ref }}"
+          echo "GitHub job: ${{ github.job }}"
+          echo "GitHub run id: ${{ github.run_id }}"
+
       - name: Publish to npm with OIDC
         id: publish
         run: npm publish --access public --provenance
+        env:
+          NPM_CONFIG_PROVENANCE: true
 
       - name: Create issue on publish failure
         if: failure() && steps.publish.outcome == 'failure'
