@@ -55,27 +55,33 @@ jobs:
             const prVersion = '${{ steps.pr_version.outputs.version }}';
             const npmVersion = '${{ steps.npm_version.outputs.version }}';
 
-            const body = `## ❌ Version Check Failed
+            const [major, minor, patch] = npmVersion.split('.').map(Number);
+            const patchBump = `${major}.${minor}.${patch + 1}`;
+            const minorBump = `${major}.${minor + 1}.0`;
+            const majorBump = `${major + 1}.0.0`;
 
-            | Current npm | This PR |
-            |-------------|---------|
-            | \`${npmVersion}\` | \`${prVersion}\` |
+            const body = [
+              '## ❌ Version Check Failed',
+              '',
+              '| Current npm | This PR |',
+              '|-------------|---------|',
+              `| \`${npmVersion}\` | \`${prVersion}\` |`,
+              '',
+              `Please bump the version in \`package.json\` to be greater than \`${npmVersion}\` before merging.`,
+              '',
+              '**Examples:**',
+              `- Patch: \`${patchBump}\``,
+              `- Minor: \`${minorBump}\``,
+              `- Major: \`${majorBump}\``,
+            ].join('\n');
 
-            Please bump the version in \`package.json\` to be greater than \`${npmVersion}\` before merging.
-
-            **Examples:**
-            - Patch: \`${npmVersion.replace(/\d+$/, n => parseInt(n) + 1)}\`
-            - Minor: \`${npmVersion.replace(/\.\d+\.\d+$/, (m) => { const [, minor] = m.split('.'); return \`.\${parseInt(minor) + 1}.0\`; })}\`
-            - Major: \`${npmVersion.replace(/^\d+/, n => parseInt(n) + 1).replace(/\.\d+\.\d+$/, '.0.0')}\``;
-
-            // Check if we already left a comment
-            const comments = await github.rest.issues.listComments({
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
 
-            const botComment = comments.data.find(c =>
+            const botComment = comments.find(c =>
               c.user.type === 'Bot' && c.body.includes('Version Check Failed')
             );
 
