@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  version-check:
+  pre-publish-check:
     runs-on: ubuntu-latest
     outputs:
       current_version: ${{ steps.current_version.outputs.version }}
@@ -53,7 +53,7 @@ jobs:
           echo "✅ Version check passed: $NPM → $CURRENT"
 
   publish:
-    needs: version-check
+    needs: pre-publish-check
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,7 +85,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const version = '${{ needs.version-check.outputs.current_version }}';
+            const version = '${{ needs.pre-publish-check.outputs.current_version }}';
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             await github.rest.issues.create({
@@ -112,6 +112,6 @@ jobs:
       - name: Success summary
         if: success()
         run: |
-          echo "🎉 Successfully published v${{ needs.version-check.outputs.current_version }} to npm"
+          echo "🎉 Successfully published v${{ needs.pre-publish-check.outputs.current_version }} to npm"
           echo ""
           echo "View at: https://www.npmjs.com/package/spindb"
