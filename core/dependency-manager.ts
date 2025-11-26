@@ -1,0 +1,407 @@
+/**
+ * Dependency Manager
+ *
+ * Handles checking, installing, and updating OS-level dependencies
+ * for database engines.
+ */
+
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import {
+  type PackageManagerId,
+  type PackageManagerConfig,
+  type Dependency,
+  type Platform,
+  packageManagers,
+  getEngineDependencies,
+  getUniqueDependencies,
+} from '../config/os-dependencies'
+
+const execAsync = promisify(exec)
+
+export type DependencyStatus = {
+  dependency: Dependency
+  installed: boolean
+  path?: string
+  version?: string
+}
+
+export type DetectedPackageManager = {
+  config: PackageManagerConfig
+  id: PackageManagerId
+  name: string
+}
+
+export type InstallResult = {
+  success: boolean
+  dependency: Dependency
+  error?: string
+}
+
+// =============================================================================
+// Package Manager Detection
+// =============================================================================
+
+/**
+ * Detect which package manager is available on the current system
+ */
+export async function detectPackageManager(): Promise<DetectedPackageManager | null> {
+  const platform = process.platform as Platform
+
+  // Filter to package managers available on this platform
+  const candidates = packageManagers.filter((pm) =>
+    pm.platforms.includes(platform),
+  )
+
+  for (const pm of candidates) {
+    try {
+      await execAsync(pm.checkCommand)
+      return {
+        config: pm,
+        id: pm.id,
+        name: pm.name,
+      }
+    } catch {
+      // Package manager not available
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get the current platform
+ */
+export function getCurrentPlatform(): Platform {
+  return process.platform as Platform
+}
+
+// =============================================================================
+// Dependency Checking
+// =============================================================================
+
+/**
+ * Check if a binary is installed and get its path
+ */
+export async function findBinary(
+  binary: string,
+): Promise<{ path: string; version?: string } | null> {
+  try {
+    const command = process.platform === 'win32' ? 'where' : 'which'
+    const { stdout } = await execAsync(`${command} ${binary}`)
+    const path = stdout.trim().split('\n')[0]
+
+    if (!path) return null
+
+    // Try to get version
+    let version: string | undefined
+    try {
+      const { stdout: versionOutput } = await execAsync(`${binary} --version`)
+      const match = versionOutput.match(/(\d+\.\d+(\.\d+)?)/)
+      version = match ? match[1] : undefined
+    } catch {
+      // Version check failed, that's ok
+    }
+
+    return { path, version }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Check the status of a single dependency
+ */
+export async function checkDependency(
+  dependency: Dependency,
+): Promise<DependencyStatus> {
+  const result = await findBinary(dependency.binary)
+
+  return {
+    dependency,
+    installed: result !== null,
+    path: result?.path,
+    version: result?.version,
+  }
+}
+
+/**
+ * Check all dependencies for a specific engine
+ */
+export async function checkEngineDependencies(
+  engine: string,
+): Promise<DependencyStatus[]> {
+  const engineDeps = getEngineDependencies(engine)
+  if (!engineDeps) return []
+
+  const results = await Promise.all(
+    engineDeps.dependencies.map((dep) => checkDependency(dep)),
+  )
+
+  return results
+}
+
+/**
+ * Check all dependencies across all engines
+ */
+export async function checkAllDependencies(): Promise<DependencyStatus[]> {
+  const deps = getUniqueDependencies()
+  const results = await Promise.all(deps.map((dep) => checkDependency(dep)))
+  return results
+}
+
+/**
+ * Get missing dependencies for an engine
+ */
+export async function getMissingDependencies(
+  engine: string,
+): Promise<Dependency[]> {
+  const statuses = await checkEngineDependencies(engine)
+  return statuses.filter((s) => !s.installed).map((s) => s.dependency)
+}
+
+/**
+ * Get all missing dependencies across all engines
+ */
+export async function getAllMissingDependencies(): Promise<Dependency[]> {
+  const statuses = await checkAllDependencies()
+  return statuses.filter((s) => !s.installed).map((s) => s.dependency)
+}
+
+// =============================================================================
+// Installation
+// =============================================================================
+
+/**
+ * Execute command with timeout
+ */
+async function execWithTimeout(
+  command: string,
+  timeoutMs: number = 120000,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = exec(
+      command,
+      { timeout: timeoutMs },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(error)
+        } else {
+          resolve({ stdout, stderr })
+        }
+      },
+    )
+
+    setTimeout(() => {
+      child.kill('SIGTERM')
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`))
+    }, timeoutMs)
+  })
+}
+
+/**
+ * Build install command for a dependency using a package manager
+ */
+export function buildInstallCommand(
+  dependency: Dependency,
+  packageManager: DetectedPackageManager,
+): string[] {
+  const pkgDef = dependency.packages[packageManager.id]
+  if (!pkgDef) {
+    throw new Error(
+      `No package definition for ${dependency.name} with ${packageManager.name}`,
+    )
+  }
+
+  const commands: string[] = []
+
+  // Pre-install commands
+  if (pkgDef.preInstall) {
+    commands.push(...pkgDef.preInstall)
+  }
+
+  // Main install command
+  const installCmd = packageManager.config.installTemplate.replace(
+    '{package}',
+    pkgDef.package,
+  )
+  commands.push(installCmd)
+
+  // Post-install commands
+  if (pkgDef.postInstall) {
+    commands.push(...pkgDef.postInstall)
+  }
+
+  return commands
+}
+
+/**
+ * Install a single dependency
+ */
+export async function installDependency(
+  dependency: Dependency,
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult> {
+  try {
+    const commands = buildInstallCommand(dependency, packageManager)
+
+    for (const cmd of commands) {
+      await execWithTimeout(cmd, 120000)
+    }
+
+    // Verify installation
+    const status = await checkDependency(dependency)
+    if (!status.installed) {
+      return {
+        success: false,
+        dependency,
+        error: 'Installation completed but binary not found in PATH',
+      }
+    }
+
+    return { success: true, dependency }
+  } catch (error) {
+    return {
+      success: false,
+      dependency,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+/**
+ * Install all dependencies for an engine
+ */
+export async function installEngineDependencies(
+  engine: string,
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult[]> {
+  const missing = await getMissingDependencies(engine)
+  if (missing.length === 0) return []
+
+  // Group by package to avoid reinstalling the same package multiple times
+  const packageGroups = new Map<string, Dependency[]>()
+  for (const dep of missing) {
+    const pkgDef = dep.packages[packageManager.id]
+    if (pkgDef) {
+      const existing = packageGroups.get(pkgDef.package) || []
+      existing.push(dep)
+      packageGroups.set(pkgDef.package, existing)
+    }
+  }
+
+  const results: InstallResult[] = []
+
+  // Install each unique package once
+  for (const [, deps] of packageGroups) {
+    // Install using the first dependency (they all use the same package)
+    const result = await installDependency(deps[0], packageManager)
+
+    // Mark all dependencies from this package with the same result
+    for (const dep of deps) {
+      results.push({ ...result, dependency: dep })
+    }
+  }
+
+  return results
+}
+
+/**
+ * Install all missing dependencies across all engines
+ */
+export async function installAllDependencies(
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult[]> {
+  const missing = await getAllMissingDependencies()
+  if (missing.length === 0) return []
+
+  // Group by package
+  const packageGroups = new Map<string, Dependency[]>()
+  for (const dep of missing) {
+    const pkgDef = dep.packages[packageManager.id]
+    if (pkgDef) {
+      const existing = packageGroups.get(pkgDef.package) || []
+      existing.push(dep)
+      packageGroups.set(pkgDef.package, existing)
+    }
+  }
+
+  const results: InstallResult[] = []
+
+  for (const [, deps] of packageGroups) {
+    const result = await installDependency(deps[0], packageManager)
+    for (const dep of deps) {
+      results.push({ ...result, dependency: dep })
+    }
+  }
+
+  return results
+}
+
+// =============================================================================
+// Manual Installation Instructions
+// =============================================================================
+
+/**
+ * Get manual installation instructions for a dependency
+ */
+export function getManualInstallInstructions(
+  dependency: Dependency,
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  return dependency.manualInstall[platform] || []
+}
+
+/**
+ * Get manual installation instructions for all missing dependencies of an engine
+ */
+export function getEngineManualInstallInstructions(
+  engine: string,
+  missingDeps: Dependency[],
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  // Since all deps usually come from the same package, just get instructions from the first one
+  if (missingDeps.length === 0) return []
+
+  return getManualInstallInstructions(missingDeps[0], platform)
+}
+
+// =============================================================================
+// High-Level API
+// =============================================================================
+
+export type DependencyCheckResult = {
+  engine: string
+  allInstalled: boolean
+  installed: DependencyStatus[]
+  missing: DependencyStatus[]
+}
+
+/**
+ * Get a complete dependency report for an engine
+ */
+export async function getDependencyReport(
+  engine: string,
+): Promise<DependencyCheckResult> {
+  const statuses = await checkEngineDependencies(engine)
+
+  return {
+    engine,
+    allInstalled: statuses.every((s) => s.installed),
+    installed: statuses.filter((s) => s.installed),
+    missing: statuses.filter((s) => !s.installed),
+  }
+}
+
+/**
+ * Get dependency reports for all engines
+ */
+export async function getAllDependencyReports(): Promise<
+  DependencyCheckResult[]
+> {
+  const engines = ['postgresql', 'mysql']
+  const reports = await Promise.all(
+    engines.map((engine) => getDependencyReport(engine)),
+  )
+  return reports
+}

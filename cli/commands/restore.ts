@@ -5,7 +5,11 @@ import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
-import { promptContainerSelect, promptDatabaseName } from '../ui/prompts'
+import {
+  promptContainerSelect,
+  promptDatabaseName,
+  promptInstallDependencies,
+} from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { success, error, warning } from '../ui/theme'
 import { platform, tmpdir } from 'os'
@@ -116,6 +120,16 @@ export const restoreCommand = new Command('restore')
           } catch (err) {
             const e = err as Error
             dumpSpinner.fail('Failed to create dump')
+
+            // Check if this is a missing tool error
+            if (
+              e.message.includes('pg_dump not found') ||
+              e.message.includes('ENOENT')
+            ) {
+              await promptInstallDependencies('pg_dump')
+              process.exit(1)
+            }
+
             console.log()
             console.error(error('pg_dump error:'))
             console.log(chalk.gray(`  ${e.message}`))
@@ -236,6 +250,19 @@ export const restoreCommand = new Command('restore')
         console.log()
       } catch (err) {
         const e = err as Error
+
+        // Check if this is a missing tool error
+        if (
+          e.message.includes('pg_restore not found') ||
+          e.message.includes('psql not found')
+        ) {
+          const missingTool = e.message.includes('pg_restore')
+            ? 'pg_restore'
+            : 'psql'
+          await promptInstallDependencies(missingTool)
+          process.exit(1)
+        }
+
         console.error(error(e.message))
         process.exit(1)
       } finally {

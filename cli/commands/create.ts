@@ -6,7 +6,10 @@ import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
 import { getEngine } from '../../engines'
 import { defaults } from '../../config/defaults'
-import { promptCreateOptions } from '../ui/prompts'
+import {
+  promptCreateOptions,
+  promptInstallDependencies,
+} from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { header, error, connectionBox } from '../ui/theme'
 import { tmpdir } from 'os'
@@ -236,6 +239,16 @@ export const createCommand = new Command('create')
               } catch (err) {
                 const e = err as Error
                 dumpSpinner.fail('Failed to create dump')
+
+                // Check if this is a missing tool error
+                if (
+                  e.message.includes('pg_dump not found') ||
+                  e.message.includes('ENOENT')
+                ) {
+                  await promptInstallDependencies('pg_dump')
+                  process.exit(1)
+                }
+
                 console.log()
                 console.error(error('pg_dump error:'))
                 console.log(chalk.gray(`  ${e.message}`))
@@ -325,6 +338,22 @@ export const createCommand = new Command('create')
         }
       } catch (err) {
         const e = err as Error
+
+        // Check if this is a missing tool error
+        if (
+          e.message.includes('pg_restore not found') ||
+          e.message.includes('psql not found') ||
+          e.message.includes('pg_dump not found')
+        ) {
+          const missingTool = e.message.includes('pg_restore')
+            ? 'pg_restore'
+            : e.message.includes('pg_dump')
+              ? 'pg_dump'
+              : 'psql'
+          await promptInstallDependencies(missingTool)
+          process.exit(1)
+        }
+
         console.error(error(e.message))
         process.exit(1)
       } finally {

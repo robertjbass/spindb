@@ -8,6 +8,7 @@ import {
   promptDatabaseName,
   promptCreateOptions,
   promptConfirm,
+  promptInstallDependencies,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import {
@@ -888,16 +889,25 @@ async function handleRestore(): Promise<void> {
     } catch (err) {
       const e = err as Error
       dumpSpinner.fail('Failed to create dump')
-      console.log()
-      console.log(error('pg_dump error:'))
-      console.log(chalk.gray(`  ${e.message}`))
-      console.log()
 
       // Clean up temp file if it was created
       try {
         await rm(tempDumpPath, { force: true })
       } catch {
         // Ignore cleanup errors
+      }
+
+      // Check if this is a missing tool error
+      if (
+        e.message.includes('pg_dump not found') ||
+        e.message.includes('ENOENT')
+      ) {
+        await promptInstallDependencies('pg_dump')
+      } else {
+        console.log()
+        console.log(error('pg_dump error:'))
+        console.log(chalk.gray(`  ${e.message}`))
+        console.log()
       }
 
       // Wait for user to see the error
@@ -1705,6 +1715,22 @@ export const menuCommand = new Command('menu')
       await showMainMenu()
     } catch (err) {
       const e = err as Error
+
+      // Check if this is a missing tool error
+      if (
+        e.message.includes('pg_restore not found') ||
+        e.message.includes('psql not found') ||
+        e.message.includes('pg_dump not found')
+      ) {
+        const missingTool = e.message.includes('pg_restore')
+          ? 'pg_restore'
+          : e.message.includes('pg_dump')
+            ? 'pg_dump'
+            : 'psql'
+        await promptInstallDependencies(missingTool)
+        process.exit(1)
+      }
+
       console.error(error(e.message))
       process.exit(1)
     }

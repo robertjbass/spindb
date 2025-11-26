@@ -3,6 +3,13 @@ import { promisify } from 'util'
 import chalk from 'chalk'
 import { createSpinner } from '../cli/ui/spinner'
 import { warning, error as themeError, success } from '../cli/ui/theme'
+import {
+  detectPackageManager as detectPM,
+  installEngineDependencies,
+  getManualInstallInstructions,
+  getCurrentPlatform,
+} from './dependency-manager'
+import { getEngineDependencies } from '../config/os-dependencies'
 
 const execAsync = promisify(exec)
 
@@ -273,19 +280,29 @@ export async function getBinaryInfo(
 }
 
 /**
- * Install PostgreSQL client tools
+ * Install PostgreSQL client tools using the new dependency manager
  */
 export async function installPostgresBinaries(): Promise<boolean> {
   const spinner = createSpinner('Checking package manager...')
   spinner.start()
 
-  const packageManager = await detectPackageManager()
+  const packageManager = await detectPM()
   if (!packageManager) {
     spinner.fail('No supported package manager found')
     console.log(themeError('Please install PostgreSQL client tools manually:'))
-    console.log('  macOS: brew install libpq')
-    console.log('  Ubuntu/Debian: sudo apt install postgresql-client')
-    console.log('  CentOS/RHEL/Fedora: sudo yum install postgresql')
+
+    // Show platform-specific instructions from the registry
+    const platform = getCurrentPlatform()
+    const pgDeps = getEngineDependencies('postgresql')
+    if (pgDeps && pgDeps.dependencies.length > 0) {
+      const instructions = getManualInstallInstructions(
+        pgDeps.dependencies[0],
+        platform,
+      )
+      for (const instruction of instructions) {
+        console.log(`  ${instruction}`)
+      }
+    }
     return false
   }
 
@@ -297,15 +314,25 @@ export async function installPostgresBinaries(): Promise<boolean> {
   installSpinner.start()
 
   try {
-    await execWithTimeout(packageManager.installCommand('postgresql'), 120000) // 2 minute timeout
-    installSpinner.succeed('PostgreSQL client tools installed')
-    console.log(success('Installation completed successfully'))
-    return true
+    const results = await installEngineDependencies('postgresql', packageManager)
+    const allSuccess = results.every((r) => r.success)
+
+    if (allSuccess) {
+      installSpinner.succeed('PostgreSQL client tools installed')
+      console.log(success('Installation completed successfully'))
+      return true
+    } else {
+      const failed = results.filter((r) => !r.success)
+      installSpinner.fail('Some installations failed')
+      for (const f of failed) {
+        console.log(themeError(`Failed to install ${f.dependency.name}: ${f.error}`))
+      }
+      return false
+    }
   } catch (error: unknown) {
     installSpinner.fail('Installation failed')
     console.log(themeError('Failed to install PostgreSQL client tools'))
-    console.log(warning('Please install manually:'))
-    console.log(`  ${packageManager.installCommand('postgresql')}`)
+    console.log(warning('Please install manually'))
     if (error instanceof Error) {
       console.log(chalk.gray(`Error details: ${error.message}`))
     }
@@ -429,14 +456,8 @@ export async function ensurePostgresBinary(
 ): Promise<{ success: boolean; info: BinaryInfo | null; action?: string }> {
   const { autoInstall = true, autoUpdate = true } = options
 
-  console.log(
-    `[DEBUG] ensurePostgresBinary called for ${binary}, dumpPath: ${dumpPath}`,
-  )
-
   // Check if binary exists
   const info = await getBinaryInfo(binary, dumpPath)
-
-  console.log(`[DEBUG] getBinaryInfo result:`, info)
 
   if (!info) {
     if (!autoInstall) {
@@ -460,10 +481,6 @@ export async function ensurePostgresBinary(
 
   // Check version compatibility
   if (dumpPath && !info.isCompatible) {
-    console.log(
-      `[DEBUG] Version incompatible: current=${info.version}, required=${info.requiredVersion}`,
-    )
-
     if (!autoUpdate) {
       return { success: false, info, action: 'update_required' }
     }
@@ -487,13 +504,11 @@ export async function ensurePostgresBinary(
     // Check again after update
     const updatedInfo = await getBinaryInfo(binary, dumpPath)
     if (!updatedInfo || !updatedInfo.isCompatible) {
-      console.log(`[DEBUG] Update failed or still incompatible:`, updatedInfo)
       return { success: false, info: updatedInfo, action: 'update_failed' }
     }
 
     return { success: true, info: updatedInfo, action: 'updated' }
   }
 
-  console.log(`[DEBUG] Binary is compatible, returning success`)
   return { success: true, info, action: 'compatible' }
 }
