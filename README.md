@@ -51,6 +51,8 @@ spindb connect mydb
 | `spindb delete [name]` | Delete a container |
 | `spindb config show` | Show configuration |
 | `spindb config detect` | Auto-detect PostgreSQL tools |
+| `spindb deps check` | Check status of client tools |
+| `spindb deps install` | Install missing client tools |
 
 ## How It Works
 
@@ -71,15 +73,50 @@ Data is stored in `~/.spindb/`:
 
 ## PostgreSQL Client Tools
 
-SpinDB bundles the PostgreSQL **server** (postgres, pg_ctl, initdb) but not client tools (psql, pg_dump, pg_restore). For `connect` and `restore` commands, you need PostgreSQL client tools installed:
+SpinDB bundles the PostgreSQL **server** (postgres, pg_ctl, initdb) but not client tools (psql, pg_dump, pg_restore). For `connect` and `restore` commands, you need PostgreSQL client tools installed.
+
+### Automatic Installation
+
+SpinDB can check and install client tools automatically:
+
+```bash
+# Check status of all client tools
+spindb deps check
+
+# Install missing tools (uses Homebrew, apt, yum, dnf, or pacman)
+spindb deps install
+
+# Install for a specific engine
+spindb deps install --engine postgresql
+spindb deps install --engine mysql
+
+# Install all missing dependencies for all engines
+spindb deps install --all
+
+# List all supported dependencies
+spindb deps list
+```
+
+### Manual Installation
+
+If automatic installation doesn't work, install manually:
 
 ```bash
 # macOS (Homebrew)
-brew install libpq
-brew link --force libpq
+brew install postgresql@17
+brew link --overwrite postgresql@17
 
 # Ubuntu/Debian
-apt install postgresql-client
+sudo apt install postgresql-client
+
+# CentOS/RHEL
+sudo yum install postgresql
+
+# Fedora
+sudo dnf install postgresql
+
+# Arch
+sudo pacman -S postgresql-libs
 
 # Or use Postgres.app (macOS)
 # Client tools are automatically detected
@@ -123,15 +160,32 @@ spindb create mydb --database my_app_db
 # Connection string: postgresql://postgres@localhost:5432/my_app_db
 ```
 
-### Restore a backup
+### Create and restore in one command
 
 ```bash
-# Start the container first
-spindb start mydb
+# Create a container and restore from a dump file
+spindb create mydb --from ./backup.dump
 
-# Restore (supports .sql, custom format, and tar format)
-spindb restore mydb ./backup.dump -d myapp
+# Create a container and pull from a remote database
+spindb create mydb --from "postgresql://user:pass@remote-host:5432/production_db"
+
+# With specific version and database name
+spindb create mydb --pg-version 17 --database myapp --from ./backup.dump
 ```
+
+The `--from` option auto-detects whether the location is a file path or connection string.
+
+### Restore to an existing container
+
+```bash
+# Restore from a dump file (supports .sql, custom format, and tar format)
+spindb restore mydb ./backup.dump -d myapp
+
+# Or pull directly from a remote database
+spindb restore mydb --from-url "postgresql://user:pass@remote-host:5432/production_db" -d myapp
+```
+
+The interactive menu (`spindb` → "Restore backup") also offers an option to create a new container as part of the restore flow.
 
 ### Clone for testing
 

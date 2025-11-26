@@ -3,6 +3,13 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { listEngines, getEngine } from '../../engines'
 import { defaults } from '../../config/defaults'
+import { installPostgresBinaries } from '../../core/postgres-binary-manager'
+import {
+  detectPackageManager,
+  getManualInstallInstructions,
+  getCurrentPlatform,
+} from '../../core/dependency-manager'
+import { getEngineDependencies } from '../../config/os-dependencies'
 import type { ContainerConfig } from '../../types'
 
 /**
@@ -284,4 +291,130 @@ export async function promptCreateOptions(
   const port = await promptPort(defaultPort)
 
   return { name, engine, version, port, database }
+}
+
+/**
+ * Prompt user to install missing database client tools
+ * Returns true if installation was successful or user declined, false if installation failed
+ *
+ * @param missingTool - The name of the missing tool (e.g., 'psql', 'pg_dump', 'mysql')
+ * @param engine - The database engine (defaults to 'postgresql')
+ */
+export async function promptInstallDependencies(
+  missingTool: string,
+  engine: string = 'postgresql',
+): Promise<boolean> {
+  const platform = getCurrentPlatform()
+
+  console.log()
+  console.log(
+    chalk.yellow(`  Database client tool "${missingTool}" is not installed.`),
+  )
+  console.log()
+
+  // Check what package manager is available
+  const packageManager = await detectPackageManager()
+
+  if (!packageManager) {
+    console.log(chalk.red('  No supported package manager found.'))
+    console.log()
+
+    // Get instructions from the dependency registry
+    const engineDeps = getEngineDependencies(engine)
+    if (engineDeps) {
+      // Find the specific dependency or use the first one for general instructions
+      const dep =
+        engineDeps.dependencies.find((d) => d.binary === missingTool) ||
+        engineDeps.dependencies[0]
+
+      if (dep) {
+        const instructions = getManualInstallInstructions(dep, platform)
+        console.log(
+          chalk.gray(`  Please install ${engineDeps.displayName} client tools:`),
+        )
+        console.log()
+        for (const instruction of instructions) {
+          console.log(chalk.gray(`    ${instruction}`))
+        }
+      }
+    }
+    console.log()
+    return false
+  }
+
+  console.log(
+    chalk.gray(`  Detected package manager: ${chalk.white(packageManager.name)}`),
+  )
+  console.log()
+
+  // Get engine display name
+  const engineDeps = getEngineDependencies(engine)
+  const engineName = engineDeps?.displayName || engine
+
+  const { shouldInstall } = await inquirer.prompt<{ shouldInstall: string }>([
+    {
+      type: 'list',
+      name: 'shouldInstall',
+      message: `Would you like to install ${engineName} client tools now?`,
+      choices: [
+        { name: 'Yes, install now', value: 'yes' },
+        { name: 'No, I will install manually', value: 'no' },
+      ],
+      default: 'yes',
+    },
+  ])
+
+  if (shouldInstall === 'no') {
+    console.log()
+    console.log(chalk.gray('  To install manually, run:'))
+
+    // Get the specific dependency and build install command info
+    if (engineDeps) {
+      const dep = engineDeps.dependencies.find((d) => d.binary === missingTool)
+      if (dep) {
+        const pkgDef = dep.packages[packageManager.id]
+        if (pkgDef) {
+          const installCmd = packageManager.config.installTemplate.replace(
+            '{package}',
+            pkgDef.package,
+          )
+          console.log(chalk.cyan(`    ${installCmd}`))
+          if (pkgDef.postInstall) {
+            for (const postCmd of pkgDef.postInstall) {
+              console.log(chalk.cyan(`    ${postCmd}`))
+            }
+          }
+        }
+      }
+    }
+    console.log()
+    return false
+  }
+
+  console.log()
+
+  // For now, only PostgreSQL has full install support
+  // Future engines will need their own install functions
+  if (engine === 'postgresql') {
+    const success = await installPostgresBinaries()
+
+    if (success) {
+      console.log()
+      console.log(
+        chalk.green(`  ${engineName} client tools installed successfully!`),
+      )
+      console.log(chalk.gray('  Please try your operation again.'))
+      console.log()
+    }
+
+    return success
+  }
+
+  // For other engines, show manual instructions
+  console.log(
+    chalk.yellow(`  Automatic installation for ${engineName} is not yet supported.`),
+  )
+  console.log(chalk.gray('  Please install manually.'))
+  console.log()
+  return false
 }

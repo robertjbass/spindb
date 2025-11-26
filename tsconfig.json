@@ -13,6 +13,12 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["cli/**/*", "core/**/*", "config/**/*", "engines/**/*", "types/**/*"],
+  "include": [
+    "cli/**/*",
+    "core/**/*",
+    "config/**/*",
+    "engines/**/*",
+    "types/**/*"
+  ],
   "exclude": ["node_modules"]
 }

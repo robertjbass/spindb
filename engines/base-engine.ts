@@ -3,6 +3,7 @@ import type {
   ProgressCallback,
   BackupFormat,
   RestoreResult,
+  DumpResult,
   StatusResult,
 } from '../types'
 
@@ -122,4 +123,12 @@ export abstract class BaseEngine {
     }
     return versions
   }
+
+  /**
+   * Create a dump from a remote database using a connection string
+   */
+  abstract dumpFromConnectionString(
+    connectionString: string,
+    outputPath: string,
+  ): Promise<DumpResult>
 }

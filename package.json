@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL.",
   "type": "module",
   "bin": {
@@ -11,7 +11,7 @@
     "dev": "tsx watch cli/bin.ts",
     "test": "tsx --test",
     "format": "prettier --write .",
-    "lint": "eslint ."
+    "lint": "tsc --noEmit && eslint ."
   },
   "keywords": [
     "postgres",

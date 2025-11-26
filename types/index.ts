@@ -50,6 +50,13 @@ export type RestoreResult = {
   code?: number
 }
 
+export type DumpResult = {
+  filePath: string
+  stdout?: string
+  stderr?: string
+  code?: number
+}
+
 export type EngineInfo = {
   name: string
   displayName: string

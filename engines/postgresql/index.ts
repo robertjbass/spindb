@@ -19,6 +19,7 @@ import type {
   ProgressCallback,
   BackupFormat,
   RestoreResult,
+  DumpResult,
   StatusResult,
 } from '../../types'
 
@@ -328,6 +329,58 @@ export class PostgreSQLEngine extends BaseEngine {
         throw error
       }
     }
+  }
+
+  /**
+   * Create a dump from a remote database using a connection string
+   * @param connectionString PostgreSQL connection string (e.g., postgresql://user:pass@host:port/dbname)
+   * @param outputPath Path where the dump file will be saved
+   * @returns DumpResult with file path and any output
+   */
+  async dumpFromConnectionString(
+    connectionString: string,
+    outputPath: string,
+  ): Promise<DumpResult> {
+    const pgDumpPath = await this.getPgDumpPath()
+
+    return new Promise((resolve, reject) => {
+      // Use custom format (-Fc) for best compatibility and compression
+      const args = [connectionString, '-Fc', '-f', outputPath]
+
+      const proc = spawn(pgDumpPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({
+            filePath: outputPath,
+            stdout,
+            stderr,
+            code,
+          })
+        } else {
+          // pg_dump failed
+          const errorMessage = stderr || `pg_dump exited with code ${code}`
+          reject(new Error(errorMessage))
+        }
+      })
+    })
   }
 }
 

@@ -1,0 +1,358 @@
+/**
+ * OS-level dependency registry for database engines
+ *
+ * This module defines the system packages required for each database engine
+ * across different operating systems and package managers.
+ */
+
+export type PackageManagerId = 'brew' | 'apt' | 'yum' | 'dnf' | 'pacman'
+
+export type Platform = 'darwin' | 'linux'
+
+/**
+ * Package definition for a specific package manager
+ */
+export type PackageDefinition = {
+  /** Package name to install */
+  package: string
+  /** Optional post-install commands (e.g., brew link) */
+  postInstall?: string[]
+  /** Optional pre-install commands */
+  preInstall?: string[]
+}
+
+/**
+ * A single dependency (e.g., psql, pg_dump)
+ */
+export type Dependency = {
+  /** Human-readable name */
+  name: string
+  /** Binary name to check for in PATH */
+  binary: string
+  /** Description of what this tool does */
+  description: string
+  /** Package definitions per package manager */
+  packages: Partial<Record<PackageManagerId, PackageDefinition>>
+  /** Alternative installation instructions when no package manager is available */
+  manualInstall: Partial<Record<Platform, string[]>>
+}
+
+/**
+ * Engine dependency configuration
+ */
+export type EngineDependencies = {
+  /** Engine identifier */
+  engine: string
+  /** Human-readable engine name */
+  displayName: string
+  /** List of dependencies for this engine */
+  dependencies: Dependency[]
+}
+
+/**
+ * Package manager configuration
+ */
+export type PackageManagerConfig = {
+  id: PackageManagerId
+  name: string
+  /** Command to check if this package manager is installed */
+  checkCommand: string
+  /** Platforms this package manager is available on */
+  platforms: Platform[]
+  /** Command template to install a package */
+  installTemplate: string
+  /** Command template to update/upgrade a package */
+  updateTemplate: string
+}
+
+// =============================================================================
+// Package Manager Definitions
+// =============================================================================
+
+export const packageManagers: PackageManagerConfig[] = [
+  {
+    id: 'brew',
+    name: 'Homebrew',
+    checkCommand: 'brew --version',
+    platforms: ['darwin'],
+    installTemplate: 'brew install {package}',
+    updateTemplate: 'brew upgrade {package}',
+  },
+  {
+    id: 'apt',
+    name: 'APT',
+    checkCommand: 'apt --version',
+    platforms: ['linux'],
+    installTemplate: 'sudo apt update && sudo apt install -y {package}',
+    updateTemplate: 'sudo apt update && sudo apt upgrade -y {package}',
+  },
+  {
+    id: 'yum',
+    name: 'YUM',
+    checkCommand: 'yum --version',
+    platforms: ['linux'],
+    installTemplate: 'sudo yum install -y {package}',
+    updateTemplate: 'sudo yum update -y {package}',
+  },
+  {
+    id: 'dnf',
+    name: 'DNF',
+    checkCommand: 'dnf --version',
+    platforms: ['linux'],
+    installTemplate: 'sudo dnf install -y {package}',
+    updateTemplate: 'sudo dnf upgrade -y {package}',
+  },
+  {
+    id: 'pacman',
+    name: 'Pacman',
+    checkCommand: 'pacman --version',
+    platforms: ['linux'],
+    installTemplate: 'sudo pacman -S --noconfirm {package}',
+    updateTemplate: 'sudo pacman -Syu --noconfirm {package}',
+  },
+]
+
+// =============================================================================
+// PostgreSQL Dependencies
+// =============================================================================
+
+const postgresqlDependencies: EngineDependencies = {
+  engine: 'postgresql',
+  displayName: 'PostgreSQL',
+  dependencies: [
+    {
+      name: 'psql',
+      binary: 'psql',
+      description: 'PostgreSQL interactive terminal',
+      packages: {
+        brew: {
+          package: 'postgresql@17',
+          postInstall: ['brew link --overwrite postgresql@17'],
+        },
+        apt: { package: 'postgresql-client' },
+        yum: { package: 'postgresql' },
+        dnf: { package: 'postgresql' },
+        pacman: { package: 'postgresql-libs' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
+          'Or install Postgres.app: https://postgresapp.com/downloads.html',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install postgresql-client',
+          'CentOS/RHEL: sudo yum install postgresql',
+          'Fedora: sudo dnf install postgresql',
+          'Arch: sudo pacman -S postgresql-libs',
+        ],
+      },
+    },
+    {
+      name: 'pg_dump',
+      binary: 'pg_dump',
+      description: 'PostgreSQL database backup utility',
+      packages: {
+        brew: {
+          package: 'postgresql@17',
+          postInstall: ['brew link --overwrite postgresql@17'],
+        },
+        apt: { package: 'postgresql-client' },
+        yum: { package: 'postgresql' },
+        dnf: { package: 'postgresql' },
+        pacman: { package: 'postgresql-libs' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
+          'Or install Postgres.app: https://postgresapp.com/downloads.html',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install postgresql-client',
+          'CentOS/RHEL: sudo yum install postgresql',
+          'Fedora: sudo dnf install postgresql',
+          'Arch: sudo pacman -S postgresql-libs',
+        ],
+      },
+    },
+    {
+      name: 'pg_restore',
+      binary: 'pg_restore',
+      description: 'PostgreSQL database restore utility',
+      packages: {
+        brew: {
+          package: 'postgresql@17',
+          postInstall: ['brew link --overwrite postgresql@17'],
+        },
+        apt: { package: 'postgresql-client' },
+        yum: { package: 'postgresql' },
+        dnf: { package: 'postgresql' },
+        pacman: { package: 'postgresql-libs' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
+          'Or install Postgres.app: https://postgresapp.com/downloads.html',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install postgresql-client',
+          'CentOS/RHEL: sudo yum install postgresql',
+          'Fedora: sudo dnf install postgresql',
+          'Arch: sudo pacman -S postgresql-libs',
+        ],
+      },
+    },
+    {
+      name: 'pg_basebackup',
+      binary: 'pg_basebackup',
+      description: 'PostgreSQL base backup utility for physical backups',
+      packages: {
+        brew: {
+          package: 'postgresql@17',
+          postInstall: ['brew link --overwrite postgresql@17'],
+        },
+        apt: { package: 'postgresql-client' },
+        yum: { package: 'postgresql' },
+        dnf: { package: 'postgresql' },
+        pacman: { package: 'postgresql-libs' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
+          'Or install Postgres.app: https://postgresapp.com/downloads.html',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install postgresql-client',
+          'CentOS/RHEL: sudo yum install postgresql',
+          'Fedora: sudo dnf install postgresql',
+          'Arch: sudo pacman -S postgresql-libs',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
+// MySQL Dependencies (placeholder for future)
+// =============================================================================
+
+const mysqlDependencies: EngineDependencies = {
+  engine: 'mysql',
+  displayName: 'MySQL',
+  dependencies: [
+    {
+      name: 'mysql',
+      binary: 'mysql',
+      description: 'MySQL command-line client',
+      packages: {
+        brew: { package: 'mysql-client' },
+        apt: { package: 'mysql-client' },
+        yum: { package: 'mysql' },
+        dnf: { package: 'mysql' },
+        pacman: { package: 'mariadb-clients' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install mysql-client',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install mysql-client',
+          'CentOS/RHEL: sudo yum install mysql',
+          'Fedora: sudo dnf install mysql',
+          'Arch: sudo pacman -S mariadb-clients',
+        ],
+      },
+    },
+    {
+      name: 'mysqldump',
+      binary: 'mysqldump',
+      description: 'MySQL database backup utility',
+      packages: {
+        brew: { package: 'mysql-client' },
+        apt: { package: 'mysql-client' },
+        yum: { package: 'mysql' },
+        dnf: { package: 'mysql' },
+        pacman: { package: 'mariadb-clients' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install mysql-client',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install mysql-client',
+          'CentOS/RHEL: sudo yum install mysql',
+          'Fedora: sudo dnf install mysql',
+          'Arch: sudo pacman -S mariadb-clients',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
+// Registry
+// =============================================================================
+
+/**
+ * All engine dependencies registry
+ */
+export const engineDependencies: EngineDependencies[] = [
+  postgresqlDependencies,
+  mysqlDependencies,
+]
+
+/**
+ * Get dependencies for a specific engine
+ */
+export function getEngineDependencies(
+  engine: string,
+): EngineDependencies | undefined {
+  return engineDependencies.find((e) => e.engine === engine)
+}
+
+/**
+ * Get all dependencies across all engines
+ */
+export function getAllDependencies(): Dependency[] {
+  return engineDependencies.flatMap((e) => e.dependencies)
+}
+
+/**
+ * Get unique dependencies (deduplicated by binary name)
+ */
+export function getUniqueDependencies(): Dependency[] {
+  const seen = new Set<string>()
+  const unique: Dependency[] = []
+
+  for (const dep of getAllDependencies()) {
+    if (!seen.has(dep.binary)) {
+      seen.add(dep.binary)
+      unique.push(dep)
+    }
+  }
+
+  return unique
+}
+
+/**
+ * Get package manager config by ID
+ */
+export function getPackageManager(
+  id: PackageManagerId,
+): PackageManagerConfig | undefined {
+  return packageManagers.find((pm) => pm.id === id)
+}
+
+/**
+ * Get package managers available for a platform
+ */
+export function getPackageManagersForPlatform(
+  platform: Platform,
+): PackageManagerConfig[] {
+  return packageManagers.filter((pm) => pm.platforms.includes(platform))
+}
