@@ -1,6 +1,6 @@
 # SpinDB TODO
 
-## Monetization Model
+## Monetization Ideas
 
 Similar to ngrok - free tier for individual developers with core functionality, paid tiers for power users and teams.
 
