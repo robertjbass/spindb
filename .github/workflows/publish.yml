@@ -79,20 +79,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check npm version
-        run: npm --version
-
-      - name: Debug OIDC claims
-        run: |
-          echo "GitHub repository: ${{ github.repository }}"
-          echo "GitHub repository owner: ${{ github.repository_owner }}"
-          echo "GitHub workflow: ${{ github.workflow }}"
-          echo "GitHub workflow ref: ${{ github.workflow_ref }}"
-          echo "GitHub job: ${{ github.job }}"
-          echo "GitHub run id: ${{ github.run_id }}"
-          echo "Checking .npmrc:"
-          cat ~/.npmrc 2>/dev/null || echo "No .npmrc found"
-
       - name: Publish to npm with OIDC
         id: publish
         run: npm publish

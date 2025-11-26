@@ -183,6 +183,55 @@ See `TODO.md` for full list. Key items:
 - [ ] Support MySQL/SQLite engines (architecture supports it)
 - [ ] Windows support (would need different binary source)
 
+## Publishing to npm
+
+The package is published to npm using GitHub Actions with OIDC trusted publishing (no tokens required).
+
+### Requirements
+
+1. **GitHub repo must be public** - npm OIDC requires public repos for provenance attestation
+2. **npm trusted publisher configured** - On npmjs.com, configure the package with:
+   - Repository: `robertjbass/spindb`
+   - Workflow: `publish.yml`
+   - Environment: (leave blank)
+3. **Version must be incremented** - Publishing only occurs when `package.json` version > npm version
+
+### GitHub Actions Workflows
+
+**`.github/workflows/version-check.yml`** - Runs on PRs to `main`
+- Compares PR version against current npm version
+- Posts a comment if version isn't bumped (with suggested versions)
+- Blocks merge if version check fails
+
+**`.github/workflows/publish.yml`** - Runs on push to `main`
+- Pre-publish check: Verifies version is greater than npm (skips if not)
+- Publishes to npm using OIDC authentication
+- Creates a GitHub issue if publish fails
+
+### How to Release
+
+1. Create a PR from your feature branch to `main`
+2. Bump version in `package.json` (the PR check will remind you if you forget)
+3. Merge the PR
+4. GitHub Actions automatically publishes to npm
+
+### Key Configuration
+
+In `package.json`:
+```json
+"publishConfig": {
+  "access": "public",
+  "provenance": true
+}
+```
+
+In workflow, uses Node 24 and latest npm for OIDC support:
+```yaml
+node-version: '24'
+env:
+  NPM_CONFIG_PROVENANCE: true
+```
+
 ## Code Style Notes
 
 - No `.js` extensions in imports
