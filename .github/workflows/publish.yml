@@ -71,7 +71,6 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -87,12 +86,12 @@ jobs:
           echo "GitHub workflow ref: ${{ github.workflow_ref }}"
           echo "GitHub job: ${{ github.job }}"
           echo "GitHub run id: ${{ github.run_id }}"
+          echo "Checking .npmrc:"
+          cat ~/.npmrc 2>/dev/null || echo "No .npmrc found"
 
       - name: Publish to npm with OIDC
         id: publish
         run: npm publish --access public --provenance
-        env:
-          NPM_CONFIG_PROVENANCE: true
 
       - name: Create issue on publish failure
         if: failure() && steps.publish.outcome == 'failure'
