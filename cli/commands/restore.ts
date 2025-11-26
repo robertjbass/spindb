@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { existsSync } from 'fs'
+import { rm } from 'fs/promises'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -7,23 +8,33 @@ import { getEngine } from '../../engines'
 import { promptContainerSelect, promptDatabaseName } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { success, error, warning } from '../ui/theme'
-import { platform } from 'os'
+import { platform, tmpdir } from 'os'
 import { spawn } from 'child_process'
+import { join } from 'path'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
   .argument('[name]', 'Container name')
-  .argument('[backup]', 'Path to backup file')
+  .argument(
+    '[backup]',
+    'Path to backup file (not required if using --from-url)',
+  )
   .option('-d, --database <name>', 'Target database name')
+  .option(
+    '--from-url <url>',
+    'Pull data from a remote database connection string',
+  )
   .action(
     async (
       name: string | undefined,
       backup: string | undefined,
-      options: { database?: string },
+      options: { database?: string; fromUrl?: string },
     ) => {
+      let tempDumpPath: string | null = null
+
       try {
         let containerName = name
-        const backupPath = backup
+        let backupPath = backup
 
         // Interactive selection if no name provided
         if (!containerName) {
@@ -71,18 +82,64 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
-        // Check backup file
-        if (!backupPath) {
-          console.error(error('Backup file path is required'))
-          console.log(
-            chalk.gray('  Usage: spindb restore <container> <backup-file>'),
-          )
-          process.exit(1)
-        }
+        // Get engine
+        const engine = getEngine(config.engine)
 
-        if (!existsSync(backupPath)) {
-          console.error(error(`Backup file not found: ${backupPath}`))
-          process.exit(1)
+        // Handle --from-url option
+        if (options.fromUrl) {
+          // Validate connection string
+          if (
+            !options.fromUrl.startsWith('postgresql://') &&
+            !options.fromUrl.startsWith('postgres://')
+          ) {
+            console.error(
+              error(
+                'Connection string must start with postgresql:// or postgres://',
+              ),
+            )
+            process.exit(1)
+          }
+
+          // Create temp file for the dump
+          const timestamp = Date.now()
+          tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+
+          const dumpSpinner = createSpinner(
+            'Creating dump from remote database...',
+          )
+          dumpSpinner.start()
+
+          try {
+            await engine.dumpFromConnectionString(options.fromUrl, tempDumpPath)
+            dumpSpinner.succeed('Dump created from remote database')
+            backupPath = tempDumpPath
+          } catch (err) {
+            const e = err as Error
+            dumpSpinner.fail('Failed to create dump')
+            console.log()
+            console.error(error('pg_dump error:'))
+            console.log(chalk.gray(`  ${e.message}`))
+            process.exit(1)
+          }
+        } else {
+          // Check backup file
+          if (!backupPath) {
+            console.error(error('Backup file path is required'))
+            console.log(
+              chalk.gray('  Usage: spindb restore <container> <backup-file>'),
+            )
+            console.log(
+              chalk.gray(
+                '     or: spindb restore <container> --from-url <connection-string>',
+              ),
+            )
+            process.exit(1)
+          }
+
+          if (!existsSync(backupPath)) {
+            console.error(error(`Backup file not found: ${backupPath}`))
+            process.exit(1)
+          }
         }
 
         // Get database name
@@ -90,9 +147,6 @@ export const restoreCommand = new Command('restore')
         if (!databaseName) {
           databaseName = await promptDatabaseName(containerName)
         }
-
-        // Get engine
-        const engine = getEngine(config.engine)
 
         // Detect backup format
         const detectSpinner = createSpinner('Detecting backup format...')
@@ -184,6 +238,15 @@ export const restoreCommand = new Command('restore')
         const e = err as Error
         console.error(error(e.message))
         process.exit(1)
+      } finally {
+        // Clean up temp file if we created one
+        if (tempDumpPath) {
+          try {
+            await rm(tempDumpPath, { force: true })
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
       }
     },
   )

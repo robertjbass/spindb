@@ -11,7 +11,7 @@
     "dev": "tsx watch cli/bin.ts",
     "test": "tsx --test",
     "format": "prettier --write .",
-    "lint": "eslint ."
+    "lint": "tsc --noEmit && eslint ."
   },
   "keywords": [
     "postgres",

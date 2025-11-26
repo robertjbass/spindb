@@ -21,7 +21,7 @@ import {
 import { existsSync } from 'fs'
 import { readdir, rm, lstat } from 'fs/promises'
 import { spawn } from 'child_process'
-import { platform } from 'os'
+import { platform, tmpdir } from 'os'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import { portManager } from '../../core/port-manager'
@@ -678,47 +678,261 @@ async function handleConnect(): Promise<void> {
   })
 }
 
+/**
+ * Create a new container for the restore flow
+ * Returns the container name and config if successful, null if cancelled/error
+ */
+async function handleCreateForRestore(): Promise<{
+  name: string
+  config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>
+} | null> {
+  console.log()
+  const answers = await promptCreateOptions()
+  const { name: containerName, engine, version, port, database } = answers
+
+  console.log()
+  console.log(header('Creating Database Container'))
+  console.log()
+
+  const dbEngine = getEngine(engine)
+
+  // Check if port is currently in use
+  const portAvailable = await portManager.isPortAvailable(port)
+  if (!portAvailable) {
+    console.log(
+      error(`Port ${port} is in use. Please choose a different port.`),
+    )
+    return null
+  }
+
+  // Ensure binaries
+  const binarySpinner = createSpinner(
+    `Checking PostgreSQL ${version} binaries...`,
+  )
+  binarySpinner.start()
+
+  const isInstalled = await dbEngine.isBinaryInstalled(version)
+  if (isInstalled) {
+    binarySpinner.succeed(`PostgreSQL ${version} binaries ready (cached)`)
+  } else {
+    binarySpinner.text = `Downloading PostgreSQL ${version} binaries...`
+    await dbEngine.ensureBinaries(version, ({ message }) => {
+      binarySpinner.text = message
+    })
+    binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+  }
+
+  // Create container
+  const createSpinnerInstance = createSpinner('Creating container...')
+  createSpinnerInstance.start()
+
+  await containerManager.create(containerName, {
+    engine: dbEngine.name,
+    version,
+    port,
+    database,
+  })
+
+  createSpinnerInstance.succeed('Container created')
+
+  // Initialize database cluster
+  const initSpinner = createSpinner('Initializing database cluster...')
+  initSpinner.start()
+
+  await dbEngine.initDataDir(containerName, version, {
+    superuser: defaults.superuser,
+  })
+
+  initSpinner.succeed('Database cluster initialized')
+
+  // Start container
+  const startSpinner = createSpinner('Starting PostgreSQL...')
+  startSpinner.start()
+
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    startSpinner.fail('Failed to get container config')
+    return null
+  }
+
+  await dbEngine.start(config)
+  await containerManager.updateConfig(containerName, { status: 'running' })
+
+  startSpinner.succeed('PostgreSQL started')
+
+  // Create the user's database (if different from 'postgres')
+  if (database !== 'postgres') {
+    const dbSpinner = createSpinner(`Creating database "${database}"...`)
+    dbSpinner.start()
+
+    await dbEngine.createDatabase(config, database)
+
+    dbSpinner.succeed(`Database "${database}" created`)
+  }
+
+  console.log()
+  console.log(success('Container ready for restore'))
+  console.log()
+
+  return { name: containerName, config }
+}
+
 async function handleRestore(): Promise<void> {
   const containers = await containerManager.list()
   const running = containers.filter((c) => c.status === 'running')
 
-  if (running.length === 0) {
-    console.log(warning('No running containers. Start one first.'))
-    return
-  }
+  // Build choices: running containers + create new option
+  const choices = [
+    ...running.map((c) => ({
+      name: `${c.name} ${chalk.gray(`(${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+      value: c.name,
+      short: c.name,
+    })),
+    new inquirer.Separator(),
+    {
+      name: `${chalk.green('➕')} Create new container`,
+      value: '__create_new__',
+      short: 'Create new',
+    },
+  ]
 
-  const containerName = await promptContainerSelect(
-    running,
-    'Select container to restore to:',
-  )
-  if (!containerName) return
-
-  const config = await containerManager.getConfig(containerName)
-  if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
-    return
-  }
-
-  // Get backup file path
-  // Strip quotes that terminals add when drag-and-dropping files
-  const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
-
-  const { backupPath: rawBackupPath } = await inquirer.prompt<{
-    backupPath: string
+  const { selectedContainer } = await inquirer.prompt<{
+    selectedContainer: string
   }>([
     {
-      type: 'input',
-      name: 'backupPath',
-      message: 'Path to backup file (drag and drop or enter path):',
-      validate: (input: string) => {
-        if (!input) return 'Backup path is required'
-        const cleanPath = stripQuotes(input)
-        if (!existsSync(cleanPath)) return 'File not found'
-        return true
-      },
+      type: 'list',
+      name: 'selectedContainer',
+      message: 'Select container to restore to:',
+      choices,
     },
   ])
-  const backupPath = stripQuotes(rawBackupPath)
+
+  let containerName: string
+  let config: Awaited<ReturnType<typeof containerManager.getConfig>>
+
+  if (selectedContainer === '__create_new__') {
+    // Run the create flow first
+    const createResult = await handleCreateForRestore()
+    if (!createResult) return // User cancelled or error
+    containerName = createResult.name
+    config = createResult.config
+  } else {
+    containerName = selectedContainer
+    config = await containerManager.getConfig(containerName)
+    if (!config) {
+      console.error(error(`Container "${containerName}" not found`))
+      return
+    }
+  }
+
+  // Ask for restore source
+  const { restoreSource } = await inquirer.prompt<{
+    restoreSource: 'file' | 'connection'
+  }>([
+    {
+      type: 'list',
+      name: 'restoreSource',
+      message: 'Restore from:',
+      choices: [
+        {
+          name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+          value: 'file',
+        },
+        {
+          name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+          value: 'connection',
+        },
+      ],
+    },
+  ])
+
+  let backupPath: string
+  let isTempFile = false
+
+  if (restoreSource === 'connection') {
+    // Get connection string and create dump
+    const { connectionString } = await inquirer.prompt<{
+      connectionString: string
+    }>([
+      {
+        type: 'input',
+        name: 'connectionString',
+        message: 'Connection string (postgresql://user:pass@host:port/dbname):',
+        validate: (input: string) => {
+          if (!input) return 'Connection string is required'
+          if (
+            !input.startsWith('postgresql://') &&
+            !input.startsWith('postgres://')
+          ) {
+            return 'Connection string must start with postgresql:// or postgres://'
+          }
+          return true
+        },
+      },
+    ])
+
+    const engine = getEngine(config.engine)
+
+    // Create temp file for the dump
+    const timestamp = Date.now()
+    const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+
+    const dumpSpinner = createSpinner('Creating dump from remote database...')
+    dumpSpinner.start()
+
+    try {
+      await engine.dumpFromConnectionString(connectionString, tempDumpPath)
+      dumpSpinner.succeed('Dump created from remote database')
+      backupPath = tempDumpPath
+      isTempFile = true
+    } catch (err) {
+      const e = err as Error
+      dumpSpinner.fail('Failed to create dump')
+      console.log()
+      console.log(error('pg_dump error:'))
+      console.log(chalk.gray(`  ${e.message}`))
+      console.log()
+
+      // Clean up temp file if it was created
+      try {
+        await rm(tempDumpPath, { force: true })
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      // Wait for user to see the error
+      await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'continue',
+          message: chalk.gray('Press Enter to continue...'),
+        },
+      ])
+      return
+    }
+  } else {
+    // Get backup file path
+    // Strip quotes that terminals add when drag-and-dropping files
+    const stripQuotes = (path: string) =>
+      path.replace(/^['"]|['"]$/g, '').trim()
+
+    const { backupPath: rawBackupPath } = await inquirer.prompt<{
+      backupPath: string
+    }>([
+      {
+        type: 'input',
+        name: 'backupPath',
+        message: 'Path to backup file (drag and drop or enter path):',
+        validate: (input: string) => {
+          if (!input) return 'Backup path is required'
+          const cleanPath = stripQuotes(input)
+          if (!existsSync(cleanPath)) return 'File not found'
+          return true
+        },
+      },
+    ])
+    backupPath = stripQuotes(rawBackupPath)
+  }
 
   const databaseName = await promptDatabaseName(containerName)
 
@@ -934,6 +1148,15 @@ async function handleRestore(): Promise<void> {
     }
 
     console.log()
+  }
+
+  // Clean up temp file if we created one
+  if (isTempFile) {
+    try {
+      await rm(backupPath, { force: true })
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 
   // Wait for user to see the result before returning to menu

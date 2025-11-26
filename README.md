@@ -123,15 +123,32 @@ spindb create mydb --database my_app_db
 # Connection string: postgresql://postgres@localhost:5432/my_app_db
 ```
 
-### Restore a backup
+### Create and restore in one command
 
 ```bash
-# Start the container first
-spindb start mydb
+# Create a container and restore from a dump file
+spindb create mydb --from ./backup.dump
 
-# Restore (supports .sql, custom format, and tar format)
-spindb restore mydb ./backup.dump -d myapp
+# Create a container and pull from a remote database
+spindb create mydb --from "postgresql://user:pass@remote-host:5432/production_db"
+
+# With specific version and database name
+spindb create mydb --pg-version 17 --database myapp --from ./backup.dump
 ```
+
+The `--from` option auto-detects whether the location is a file path or connection string.
+
+### Restore to an existing container
+
+```bash
+# Restore from a dump file (supports .sql, custom format, and tar format)
+spindb restore mydb ./backup.dump -d myapp
+
+# Or pull directly from a remote database
+spindb restore mydb --from-url "postgresql://user:pass@remote-host:5432/production_db" -d myapp
+```
+
+The interactive menu (`spindb` → "Restore backup") also offers an option to create a new container as part of the restore flow.
 
 ### Clone for testing
 

@@ -166,17 +166,54 @@ pg_ctl stop -D {dataDir} -m fast -w
 
 PID file location: `~/.spindb/containers/{name}/data/postmaster.pid`
 
+### Create with Restore (One-Shot)
+Create a container and restore data in a single command:
+
+```bash
+# From a dump file
+spindb create mycontainer --from ./backup.dump -d mydb
+
+# From a remote database
+spindb create mycontainer --from "postgresql://user:pass@host:5432/dbname" -d mydb
+```
+
+The `--from` option auto-detects whether the location is a file path or connection string.
+
+### Restore Command
+Restore to an existing container:
+
+1. **From dump file** - Restore from a local `.sql`, custom format, or tar format backup:
+   ```bash
+   spindb restore mycontainer ./backup.dump -d mydb
+   ```
+
+2. **From connection string** - Pull data directly from a remote database using `pg_dump`:
+   ```bash
+   spindb restore mycontainer --from-url "postgresql://user:pass@host:5432/dbname" -d mydb
+   ```
+
+The `--from-url` option:
+- Validates the connection string starts with `postgresql://` or `postgres://`
+- Creates a temporary dump using `pg_dump -Fc` (custom format)
+- Restores it to the target container
+- Automatically cleans up the temp file
+
+### Interactive Menu Restore
+The interactive menu (`spindb` → "Restore backup") offers:
+- Selection of existing running containers
+- Option to create a new container as part of the restore flow
+- Choice between dump file or connection string source
+
 ## Known Limitations
 
-1. **No client tools bundled** - psql/pg_restore must be installed separately
+1. **No client tools bundled** - psql/pg_restore/pg_dump must be installed separately
 2. **macOS/Linux only** - No Windows support (zonky.io doesn't provide Windows binaries)
-3. **No backup command** - pg_dump must be run manually with system tools
-4. **Database names immutable** - Cannot rename database after creation (would require `ALTER DATABASE`)
+3. **Database names immutable** - Cannot rename database after creation (would require `ALTER DATABASE`)
 
 ## Future Improvements
 
 See `TODO.md` for full list. Key items:
-- [ ] Add `spindb backup` command (wrapper around pg_dump)
+- [ ] Add `spindb backup` command (export a container's database to a dump file)
 - [ ] Add `spindb logs` command to tail postgres.log
 - [ ] Add `spindb exec` for running SQL files
 - [ ] Database rename support
