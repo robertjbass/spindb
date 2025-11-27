@@ -308,29 +308,30 @@ export async function installPostgresBinaries(): Promise<boolean> {
 
   spinner.succeed(`Found package manager: ${packageManager.name}`)
 
-  const installSpinner = createSpinner(
-    `Installing PostgreSQL client tools with ${packageManager.name}...`,
-  )
-  installSpinner.start()
+  // Don't use a spinner during installation - it blocks TTY access for sudo password prompts
+  console.log(chalk.cyan(`  Installing PostgreSQL client tools with ${packageManager.name}...`))
+  console.log(chalk.gray('  You may be prompted for your password.'))
+  console.log()
 
   try {
     const results = await installEngineDependencies('postgresql', packageManager)
     const allSuccess = results.every((r) => r.success)
 
     if (allSuccess) {
-      installSpinner.succeed('PostgreSQL client tools installed')
-      console.log(success('Installation completed successfully'))
+      console.log()
+      console.log(success('PostgreSQL client tools installed successfully'))
       return true
     } else {
       const failed = results.filter((r) => !r.success)
-      installSpinner.fail('Some installations failed')
+      console.log()
+      console.log(themeError('Some installations failed:'))
       for (const f of failed) {
-        console.log(themeError(`Failed to install ${f.dependency.name}: ${f.error}`))
+        console.log(themeError(`  ${f.dependency.name}: ${f.error}`))
       }
       return false
     }
   } catch (error: unknown) {
-    installSpinner.fail('Installation failed')
+    console.log()
     console.log(themeError('Failed to install PostgreSQL client tools'))
     console.log(warning('Please install manually'))
     if (error instanceof Error) {

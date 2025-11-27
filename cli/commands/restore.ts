@@ -15,6 +15,7 @@ import { success, error, warning } from '../ui/theme'
 import { platform, tmpdir } from 'os'
 import { spawn } from 'child_process'
 import { join } from 'path'
+import { getMissingDependencies } from '../../core/dependency-manager'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
@@ -89,6 +90,43 @@ export const restoreCommand = new Command('restore')
         // Get engine
         const engine = getEngine(config.engine)
 
+        // Check for required client tools BEFORE doing anything
+        const depsSpinner = createSpinner('Checking required tools...')
+        depsSpinner.start()
+
+        let missingDeps = await getMissingDependencies(config.engine)
+        if (missingDeps.length > 0) {
+          depsSpinner.warn(
+            `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+          )
+
+          // Offer to install
+          const installed = await promptInstallDependencies(
+            missingDeps[0].binary,
+            config.engine,
+          )
+
+          if (!installed) {
+            process.exit(1)
+          }
+
+          // Verify installation worked
+          missingDeps = await getMissingDependencies(config.engine)
+          if (missingDeps.length > 0) {
+            console.error(
+              error(
+                `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+              ),
+            )
+            process.exit(1)
+          }
+
+          console.log(chalk.green('  ✓ All required tools are now available'))
+          console.log()
+        } else {
+          depsSpinner.succeed('Required tools available')
+        }
+
         // Handle --from-url option
         if (options.fromUrl) {
           // Validate connection string
@@ -108,31 +146,49 @@ export const restoreCommand = new Command('restore')
           const timestamp = Date.now()
           tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
 
-          const dumpSpinner = createSpinner(
-            'Creating dump from remote database...',
-          )
-          dumpSpinner.start()
+          let dumpSuccess = false
+          let attempts = 0
+          const maxAttempts = 2 // Allow one retry after installing deps
 
-          try {
-            await engine.dumpFromConnectionString(options.fromUrl, tempDumpPath)
-            dumpSpinner.succeed('Dump created from remote database')
-            backupPath = tempDumpPath
-          } catch (err) {
-            const e = err as Error
-            dumpSpinner.fail('Failed to create dump')
+          while (!dumpSuccess && attempts < maxAttempts) {
+            attempts++
+            const dumpSpinner = createSpinner(
+              'Creating dump from remote database...',
+            )
+            dumpSpinner.start()
 
-            // Check if this is a missing tool error
-            if (
-              e.message.includes('pg_dump not found') ||
-              e.message.includes('ENOENT')
-            ) {
-              await promptInstallDependencies('pg_dump')
+            try {
+              await engine.dumpFromConnectionString(options.fromUrl, tempDumpPath)
+              dumpSpinner.succeed('Dump created from remote database')
+              backupPath = tempDumpPath
+              dumpSuccess = true
+            } catch (err) {
+              const e = err as Error
+              dumpSpinner.fail('Failed to create dump')
+
+              // Check if this is a missing tool error
+              if (
+                e.message.includes('pg_dump not found') ||
+                e.message.includes('ENOENT')
+              ) {
+                const installed = await promptInstallDependencies('pg_dump')
+                if (!installed) {
+                  process.exit(1)
+                }
+                // Loop will retry
+                continue
+              }
+
+              console.log()
+              console.error(error('pg_dump error:'))
+              console.log(chalk.gray(`  ${e.message}`))
               process.exit(1)
             }
+          }
 
-            console.log()
-            console.error(error('pg_dump error:'))
-            console.log(chalk.gray(`  ${e.message}`))
+          // Safety check - should never reach here without backupPath set
+          if (!dumpSuccess) {
+            console.error(error('Failed to create dump after retries'))
             process.exit(1)
           }
         } else {
@@ -160,6 +216,12 @@ export const restoreCommand = new Command('restore')
         let databaseName = options.database
         if (!databaseName) {
           databaseName = await promptDatabaseName(containerName)
+        }
+
+        // At this point backupPath is guaranteed to be set
+        if (!backupPath) {
+          console.error(error('No backup path specified'))
+          process.exit(1)
         }
 
         // Detect backup format
@@ -259,7 +321,12 @@ export const restoreCommand = new Command('restore')
           const missingTool = e.message.includes('pg_restore')
             ? 'pg_restore'
             : 'psql'
-          await promptInstallDependencies(missingTool)
+          const installed = await promptInstallDependencies(missingTool)
+          if (installed) {
+            console.log(
+              chalk.yellow('  Please re-run your command to continue.'),
+            )
+          }
           process.exit(1)
         }
 

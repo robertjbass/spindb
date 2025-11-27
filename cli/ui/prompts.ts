@@ -403,7 +403,7 @@ export async function promptInstallDependencies(
       console.log(
         chalk.green(`  ${engineName} client tools installed successfully!`),
       )
-      console.log(chalk.gray('  Please try your operation again.'))
+      console.log(chalk.gray('  Continuing with your operation...'))
       console.log()
     }
 

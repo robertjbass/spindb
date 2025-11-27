@@ -5,7 +5,7 @@
  * for database engines.
  */
 
-import { exec } from 'child_process'
+import { exec, spawnSync } from 'child_process'
 import { promisify } from 'util'
 import {
   type PackageManagerId,
@@ -173,30 +173,51 @@ export async function getAllMissingDependencies(): Promise<Dependency[]> {
 // =============================================================================
 
 /**
- * Execute command with timeout
+ * Check if stdin is a TTY (interactive terminal)
  */
-async function execWithTimeout(
-  command: string,
-  timeoutMs: number = 120000,
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = exec(
-      command,
-      { timeout: timeoutMs },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(error)
-        } else {
-          resolve({ stdout, stderr })
-        }
-      },
-    )
+function hasTTY(): boolean {
+  return process.stdin.isTTY === true
+}
 
-    setTimeout(() => {
-      child.kill('SIGTERM')
-      reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`))
-    }, timeoutMs)
+/**
+ * Check if running as root
+ */
+function isRoot(): boolean {
+  return process.getuid?.() === 0
+}
+
+/**
+ * Execute command with inherited stdio (for TTY support with sudo)
+ * Uses spawnSync to properly connect to the terminal for password prompts
+ */
+function execWithInheritedStdio(command: string): void {
+  let cmdToRun = command
+
+  // If already running as root, strip sudo from the command
+  if (isRoot() && command.startsWith('sudo ')) {
+    cmdToRun = command.replace(/^sudo\s+/, '')
+  }
+
+  // Check if we need a TTY for sudo password prompts
+  if (!hasTTY() && cmdToRun.includes('sudo')) {
+    throw new Error(
+      'Cannot run sudo commands without an interactive terminal. Please run the install command manually:\n' +
+        `  ${command}`,
+    )
+  }
+
+  const result = spawnSync(cmdToRun, [], {
+    shell: true,
+    stdio: 'inherit',
   })
+
+  if (result.error) {
+    throw result.error
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`Command failed with exit code ${result.status}: ${cmdToRun}`)
+  }
 }
 
 /**
@@ -246,7 +267,8 @@ export async function installDependency(
     const commands = buildInstallCommand(dependency, packageManager)
 
     for (const cmd of commands) {
-      await execWithTimeout(cmd, 120000)
+      // Use inherited stdio so sudo can prompt for password in terminal
+      execWithInheritedStdio(cmd)
     }
 
     // Verify installation
