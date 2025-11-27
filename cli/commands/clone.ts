@@ -58,7 +58,9 @@ export const cloneCommand = new Command('clone')
       }
 
       // Check source is stopped
-      const running = await processManager.isRunning(sourceName)
+      const running = await processManager.isRunning(sourceName, {
+        engine: sourceConfig.engine,
+      })
       if (running) {
         console.error(
           error(

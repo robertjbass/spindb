@@ -3,11 +3,19 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readdir, readFile } from 'fs/promises'
-import { defaults } from '../config/defaults'
+import { defaults, getSupportedEngines } from '../config/defaults'
 import { paths } from '../config/paths'
 import type { ContainerConfig, PortResult } from '../types'
 
 const execAsync = promisify(exec)
+
+/**
+ * Options for finding an available port
+ */
+type FindPortOptions = {
+  preferredPort?: number
+  portRange?: { start: number; end: number }
+}
 
 export class PortManager {
   /**
@@ -36,12 +44,13 @@ export class PortManager {
   }
 
   /**
-   * Find the next available port starting from the default
+   * Find the next available port starting from the preferred port
    * Returns the port number and whether it's the default port
    */
-  async findAvailablePort(
-    preferredPort: number = defaults.port,
-  ): Promise<PortResult> {
+  async findAvailablePort(options: FindPortOptions = {}): Promise<PortResult> {
+    const preferredPort = options.preferredPort ?? defaults.port
+    const portRange = options.portRange ?? defaults.portRange
+
     // First try the preferred port
     if (await this.isPortAvailable(preferredPort)) {
       return {
@@ -51,11 +60,7 @@ export class PortManager {
     }
 
     // Scan for available ports in the range
-    for (
-      let port = defaults.portRange.start;
-      port <= defaults.portRange.end;
-      port++
-    ) {
+    for (let port = portRange.start; port <= portRange.end; port++) {
       if (port === preferredPort) continue // Already tried this one
 
       if (await this.isPortAvailable(port)) {
@@ -67,7 +72,7 @@ export class PortManager {
     }
 
     throw new Error(
-      `No available ports found in range ${defaults.portRange.start}-${defaults.portRange.end}`,
+      `No available ports found in range ${portRange.start}-${portRange.end}`,
     )
   }
 
@@ -84,7 +89,7 @@ export class PortManager {
   }
 
   /**
-   * Get all ports currently assigned to containers
+   * Get all ports currently assigned to containers across all engines
    */
   async getContainerPorts(): Promise<number[]> {
     const containersDir = paths.containers
@@ -94,18 +99,26 @@ export class PortManager {
     }
 
     const ports: number[] = []
-    const entries = await readdir(containersDir, { withFileTypes: true })
+    const engines = getSupportedEngines()
 
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const configPath = `${containersDir}/${entry.name}/container.json`
-        if (existsSync(configPath)) {
-          try {
-            const content = await readFile(configPath, 'utf8')
-            const config = JSON.parse(content) as ContainerConfig
-            ports.push(config.port)
-          } catch {
-            // Skip invalid configs
+    for (const engine of engines) {
+      const engineDir = paths.getEngineContainersPath(engine)
+      if (!existsSync(engineDir)) continue
+
+      const entries = await readdir(engineDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const configPath = paths.getContainerConfigPath(entry.name, {
+            engine,
+          })
+          if (existsSync(configPath)) {
+            try {
+              const content = await readFile(configPath, 'utf8')
+              const config = JSON.parse(content) as ContainerConfig
+              ports.push(config.port)
+            } catch {
+              // Skip invalid configs
+            }
           }
         }
       }
@@ -118,8 +131,10 @@ export class PortManager {
    * Find an available port that's not in use by any process AND not assigned to any container
    */
   async findAvailablePortExcludingContainers(
-    preferredPort: number = defaults.port,
+    options: FindPortOptions = {},
   ): Promise<PortResult> {
+    const preferredPort = options.preferredPort ?? defaults.port
+    const portRange = options.portRange ?? defaults.portRange
     const containerPorts = await this.getContainerPorts()
 
     // First try the preferred port
@@ -134,11 +149,7 @@ export class PortManager {
     }
 
     // Scan for available ports in the range
-    for (
-      let port = defaults.portRange.start;
-      port <= defaults.portRange.end;
-      port++
-    ) {
+    for (let port = portRange.start; port <= portRange.end; port++) {
       if (containerPorts.includes(port)) continue // Skip ports used by containers
       if (port === preferredPort) continue // Already tried this one
 
@@ -151,7 +162,7 @@ export class PortManager {
     }
 
     throw new Error(
-      `No available ports found in range ${defaults.portRange.start}-${defaults.portRange.end}`,
+      `No available ports found in range ${portRange.start}-${portRange.end}`,
     )
   }
 }

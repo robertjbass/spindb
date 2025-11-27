@@ -54,7 +54,12 @@ export class PostgreSQLEngine extends BaseEngine {
    */
   getBinaryPath(version: string): string {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    return paths.getBinaryPath('postgresql', version, p, a)
+    return paths.getBinaryPath({
+      engine: 'postgresql',
+      version,
+      platform: p,
+      arch: a,
+    })
   }
 
   /**
@@ -104,7 +109,9 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<string> {
     const binPath = this.getBinaryPath(version)
     const initdbPath = join(binPath, 'bin', 'initdb')
-    const dataDir = paths.getContainerDataPath(containerName)
+    const dataDir = paths.getContainerDataPath(containerName, {
+      engine: this.name,
+    })
 
     await processManager.initdb(initdbPath, dataDir, {
       superuser: (options.superuser as string) || defaults.superuser,
@@ -123,8 +130,8 @@ export class PostgreSQLEngine extends BaseEngine {
     const { name, version, port } = container
     const binPath = this.getBinaryPath(version)
     const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
-    const dataDir = paths.getContainerDataPath(name)
-    const logFile = paths.getContainerLogPath(name)
+    const dataDir = paths.getContainerDataPath(name, { engine: this.name })
+    const logFile = paths.getContainerLogPath(name, { engine: this.name })
 
     onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL...' })
 
@@ -146,7 +153,7 @@ export class PostgreSQLEngine extends BaseEngine {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
     const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
-    const dataDir = paths.getContainerDataPath(name)
+    const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     await processManager.stop(pgCtlPath, dataDir)
   }
@@ -158,7 +165,7 @@ export class PostgreSQLEngine extends BaseEngine {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
     const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
-    const dataDir = paths.getContainerDataPath(name)
+    const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     return processManager.status(pgCtlPath, dataDir)
   }

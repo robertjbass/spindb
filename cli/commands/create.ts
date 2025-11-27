@@ -5,11 +5,12 @@ import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
 import { getEngine } from '../../engines'
-import { defaults } from '../../config/defaults'
+import { getEngineDefaults } from '../../config/defaults'
 import {
   promptCreateOptions,
   promptInstallDependencies,
   promptContainerName,
+  promptConfirm,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { header, error, connectionBox } from '../ui/theme'
@@ -18,38 +19,42 @@ import { join } from 'path'
 import { spawn } from 'child_process'
 import { platform } from 'os'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import type { EngineName } from '../../types'
 
 /**
  * Detect if a location string is a connection string or a file path
+ * Also infers engine from connection string scheme
  */
-function detectLocationType(
-  location: string,
-): 'connection' | 'file' | 'not_found' {
-  // Check if it's a connection string
+function detectLocationType(location: string): {
+  type: 'connection' | 'file' | 'not_found'
+  inferredEngine?: EngineName
+} {
+  // Check for PostgreSQL connection string
   if (
     location.startsWith('postgresql://') ||
     location.startsWith('postgres://')
   ) {
-    return 'connection'
+    return { type: 'connection', inferredEngine: 'postgresql' }
+  }
+
+  // Check for MySQL connection string
+  if (location.startsWith('mysql://')) {
+    return { type: 'connection', inferredEngine: 'mysql' }
   }
 
   // Check if file exists
   if (existsSync(location)) {
-    return 'file'
+    return { type: 'file' }
   }
 
-  return 'not_found'
+  return { type: 'not_found' }
 }
 
 export const createCommand = new Command('create')
   .description('Create a new database container')
   .argument('[name]', 'Container name')
-  .option('-e, --engine <engine>', 'Database engine', defaults.engine)
-  .option(
-    '--pg-version <version>',
-    'PostgreSQL version',
-    defaults.postgresVersion,
-  )
+  .option('-e, --engine <engine>', 'Database engine (postgresql, mysql)')
+  .option('-v, --version <version>', 'Database version')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
   .option('--no-start', 'Do not start the container after creation')
@@ -61,8 +66,8 @@ export const createCommand = new Command('create')
     async (
       name: string | undefined,
       options: {
-        engine: string
-        pgVersion: string
+        engine?: string
+        version?: string
         database?: string
         port?: string
         start: boolean
@@ -73,41 +78,39 @@ export const createCommand = new Command('create')
 
       try {
         let containerName = name
-        let engine = options.engine
-        let version = options.pgVersion
+        let engine: EngineName = (options.engine as EngineName) || 'postgresql'
+        let version = options.version
         let database = options.database
 
-        // Interactive mode if no name provided
-        if (!containerName) {
-          const answers = await promptCreateOptions()
-          containerName = answers.name
-          engine = answers.engine
-          version = answers.version
-          database = answers.database
-        }
-
-        // Default database name to container name if not specified
-        database = database ?? containerName
-
-        // Validate --from location if provided
+        // Validate --from location if provided (before prompts so we can infer engine)
         let restoreLocation: string | null = null
         let restoreType: 'connection' | 'file' | null = null
 
         if (options.from) {
-          const locationType = detectLocationType(options.from)
+          const locationInfo = detectLocationType(options.from)
 
-          if (locationType === 'not_found') {
+          if (locationInfo.type === 'not_found') {
             console.error(error(`Location not found: ${options.from}`))
             console.log(
               chalk.gray(
-                '  Provide a valid file path or connection string (postgresql://...)',
+                '  Provide a valid file path or connection string (postgresql://, mysql://)',
               ),
             )
             process.exit(1)
           }
 
           restoreLocation = options.from
-          restoreType = locationType
+          restoreType = locationInfo.type
+
+          // Infer engine from connection string if not explicitly set
+          if (!options.engine && locationInfo.inferredEngine) {
+            engine = locationInfo.inferredEngine
+            console.log(
+              chalk.gray(
+                `  Inferred engine "${engine}" from connection string`,
+              ),
+            )
+          }
 
           // If using --from, we must start the container
           if (options.start === false) {
@@ -119,6 +122,26 @@ export const createCommand = new Command('create')
             process.exit(1)
           }
         }
+
+        // Get engine defaults for port range and default version
+        const engineDefaults = getEngineDefaults(engine)
+
+        // Set version to engine default if not specified
+        if (!version) {
+          version = engineDefaults.defaultVersion
+        }
+
+        // Interactive mode if no name provided
+        if (!containerName) {
+          const answers = await promptCreateOptions()
+          containerName = answers.name
+          engine = answers.engine as EngineName
+          version = answers.version
+          database = answers.database
+        }
+
+        // Default database name to container name if not specified
+        database = database ?? containerName
 
         console.log(header('Creating Database Container'))
         console.log()
@@ -178,30 +201,39 @@ export const createCommand = new Command('create')
           portSpinner.succeed(`Using port ${port}`)
         } else {
           const { port: foundPort, isDefault } =
-            await portManager.findAvailablePort()
+            await portManager.findAvailablePort({
+              preferredPort: engineDefaults.defaultPort,
+              portRange: engineDefaults.portRange,
+            })
           port = foundPort
           if (isDefault) {
             portSpinner.succeed(`Using default port ${port}`)
           } else {
-            portSpinner.warn(`Default port 5432 is in use, using port ${port}`)
+            portSpinner.warn(
+              `Default port ${engineDefaults.defaultPort} is in use, using port ${port}`,
+            )
           }
         }
 
         // Ensure binaries are available
         const binarySpinner = createSpinner(
-          `Checking PostgreSQL ${version} binaries...`,
+          `Checking ${dbEngine.displayName} ${version} binaries...`,
         )
         binarySpinner.start()
 
         const isInstalled = await dbEngine.isBinaryInstalled(version)
         if (isInstalled) {
-          binarySpinner.succeed(`PostgreSQL ${version} binaries ready (cached)`)
+          binarySpinner.succeed(
+            `${dbEngine.displayName} ${version} binaries ready (cached)`,
+          )
         } else {
-          binarySpinner.text = `Downloading PostgreSQL ${version} binaries...`
+          binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
           await dbEngine.ensureBinaries(version, ({ message }) => {
             binarySpinner.text = message
           })
-          binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+          binarySpinner.succeed(
+            `${dbEngine.displayName} ${version} binaries downloaded`,
+          )
         }
 
         // Check if container name already exists and prompt for new name if needed
@@ -217,7 +249,7 @@ export const createCommand = new Command('create')
         createSpinnerInstance.start()
 
         await containerManager.create(containerName, {
-          engine: dbEngine.name,
+          engine: dbEngine.name as EngineName,
           version,
           port,
           database,
@@ -230,28 +262,68 @@ export const createCommand = new Command('create')
         initSpinner.start()
 
         await dbEngine.initDataDir(containerName, version, {
-          superuser: defaults.superuser,
+          superuser: engineDefaults.superuser,
         })
 
         initSpinner.succeed('Database cluster initialized')
 
-        // Start container if requested
-        if (options.start !== false) {
-          const startSpinner = createSpinner('Starting PostgreSQL...')
-          startSpinner.start()
+        // Determine if we should start the container
+        // If --from is specified, we must start to restore
+        // If --no-start is specified, don't start
+        // Otherwise, ask the user
+        let shouldStart = false
+        if (restoreLocation) {
+          // Must start to restore data
+          shouldStart = true
+        } else if (options.start === false) {
+          // User explicitly requested no start
+          shouldStart = false
+        } else {
+          // Ask the user
+          console.log()
+          shouldStart = await promptConfirm(
+            `Start ${containerName} now?`,
+            true,
+          )
+        }
 
-          const config = await containerManager.getConfig(containerName)
-          if (config) {
-            await dbEngine.start(config)
-            await containerManager.updateConfig(containerName, {
-              status: 'running',
+        // Get container config for starting and restoration
+        const config = await containerManager.getConfig(containerName)
+
+        // Start container if requested
+        if (shouldStart && config) {
+          // Check port availability before starting
+          const portAvailable = await portManager.isPortAvailable(config.port)
+          if (!portAvailable) {
+            // Find a new available port
+            const { port: newPort } = await portManager.findAvailablePort({
+              portRange: engineDefaults.portRange,
             })
+            console.log(
+              chalk.yellow(
+                `  ⚠ Port ${config.port} is in use, switching to port ${newPort}`,
+              ),
+            )
+            config.port = newPort
+            port = newPort
+            await containerManager.updateConfig(containerName, { port: newPort })
           }
 
-          startSpinner.succeed('PostgreSQL started')
+          const startSpinner = createSpinner(
+            `Starting ${dbEngine.displayName}...`,
+          )
+          startSpinner.start()
 
-          // Create the user's database (if different from 'postgres')
-          if (config && database !== 'postgres') {
+          await dbEngine.start(config)
+          await containerManager.updateConfig(containerName, {
+            status: 'running',
+          })
+
+          startSpinner.succeed(`${dbEngine.displayName} started`)
+
+          // Create the user's database (if different from default)
+          const defaultDb = engineDefaults.superuser // postgres or root
+          if (database !== defaultDb) {
             const dbSpinner = createSpinner(
               `Creating database "${database}"...`,
             )
@@ -261,117 +333,118 @@ export const createCommand = new Command('create')
 
             dbSpinner.succeed(`Database "${database}" created`)
           }
+        }
 
-          // Handle --from restore if specified
-          if (restoreLocation && restoreType && config) {
-            let backupPath = ''
+        // Handle --from restore if specified (only if started)
+        if (restoreLocation && restoreType && config && shouldStart) {
+          let backupPath = ''
 
-            if (restoreType === 'connection') {
-              // Create dump from remote database
-              const timestamp = Date.now()
-              tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+          if (restoreType === 'connection') {
+            // Create dump from remote database
+            const timestamp = Date.now()
+            tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
 
-              let dumpSuccess = false
-              let attempts = 0
-              const maxAttempts = 2 // Allow one retry after installing deps
+            let dumpSuccess = false
+            let attempts = 0
+            const maxAttempts = 2 // Allow one retry after installing deps
 
-              while (!dumpSuccess && attempts < maxAttempts) {
-                attempts++
-                const dumpSpinner = createSpinner(
-                  'Creating dump from remote database...',
+            while (!dumpSuccess && attempts < maxAttempts) {
+              attempts++
+              const dumpSpinner = createSpinner(
+                'Creating dump from remote database...',
+              )
+              dumpSpinner.start()
+
+              try {
+                await dbEngine.dumpFromConnectionString(
+                  restoreLocation,
+                  tempDumpPath,
                 )
-                dumpSpinner.start()
+                dumpSpinner.succeed('Dump created from remote database')
+                backupPath = tempDumpPath
+                dumpSuccess = true
+              } catch (err) {
+                const e = err as Error
+                dumpSpinner.fail('Failed to create dump')
 
-                try {
-                  await dbEngine.dumpFromConnectionString(
-                    restoreLocation,
-                    tempDumpPath,
-                  )
-                  dumpSpinner.succeed('Dump created from remote database')
-                  backupPath = tempDumpPath
-                  dumpSuccess = true
-                } catch (err) {
-                  const e = err as Error
-                  dumpSpinner.fail('Failed to create dump')
-
-                  // Check if this is a missing tool error
-                  if (
-                    e.message.includes('pg_dump not found') ||
-                    e.message.includes('ENOENT')
-                  ) {
-                    const installed = await promptInstallDependencies('pg_dump')
-                    if (!installed) {
-                      process.exit(1)
-                    }
-                    // Loop will retry
-                    continue
+                // Check if this is a missing tool error
+                if (
+                  e.message.includes('pg_dump not found') ||
+                  e.message.includes('ENOENT')
+                ) {
+                  const installed = await promptInstallDependencies('pg_dump')
+                  if (!installed) {
+                    process.exit(1)
                   }
-
-                  console.log()
-                  console.error(error('pg_dump error:'))
-                  console.log(chalk.gray(`  ${e.message}`))
-                  process.exit(1)
+                  // Loop will retry
+                  continue
                 }
-              }
 
-              // Safety check - should never reach here without backupPath set
-              if (!dumpSuccess) {
-                console.error(error('Failed to create dump after retries'))
+                console.log()
+                console.error(error('pg_dump error:'))
+                console.log(chalk.gray(`  ${e.message}`))
                 process.exit(1)
               }
-            } else {
-              backupPath = restoreLocation
             }
 
-            // Detect backup format
-            const detectSpinner = createSpinner('Detecting backup format...')
-            detectSpinner.start()
+            // Safety check - should never reach here without backupPath set
+            if (!dumpSuccess) {
+              console.error(error('Failed to create dump after retries'))
+              process.exit(1)
+            }
+          } else {
+            backupPath = restoreLocation
+          }
 
-            const format = await dbEngine.detectBackupFormat(backupPath)
-            detectSpinner.succeed(`Detected: ${format.description}`)
+          // Detect backup format
+          const detectSpinner = createSpinner('Detecting backup format...')
+          detectSpinner.start()
 
-            // Restore backup
-            const restoreSpinner = createSpinner('Restoring backup...')
-            restoreSpinner.start()
+          const format = await dbEngine.detectBackupFormat(backupPath)
+          detectSpinner.succeed(`Detected: ${format.description}`)
 
-            const result = await dbEngine.restore(config, backupPath, {
-              database,
-              createDatabase: false, // Already created above
-            })
+          // Restore backup
+          const restoreSpinner = createSpinner('Restoring backup...')
+          restoreSpinner.start()
 
-            if (result.code === 0 || !result.stderr) {
-              restoreSpinner.succeed('Backup restored successfully')
-            } else {
-              restoreSpinner.warn('Restore completed with warnings')
-              if (result.stderr) {
-                console.log(chalk.yellow('\n  Warnings:'))
-                const lines = result.stderr.split('\n').slice(0, 5)
-                lines.forEach((line) => {
-                  if (line.trim()) {
-                    console.log(chalk.gray(`    ${line}`))
-                  }
-                })
-                if (result.stderr.split('\n').length > 5) {
-                  console.log(chalk.gray('    ...'))
+          const result = await dbEngine.restore(config, backupPath, {
+            database,
+            createDatabase: false, // Already created above
+          })
+
+          if (result.code === 0 || !result.stderr) {
+            restoreSpinner.succeed('Backup restored successfully')
+          } else {
+            restoreSpinner.warn('Restore completed with warnings')
+            if (result.stderr) {
+              console.log(chalk.yellow('\n  Warnings:'))
+              const lines = result.stderr.split('\n').slice(0, 5)
+              lines.forEach((line) => {
+                if (line.trim()) {
+                  console.log(chalk.gray(`    ${line}`))
                 }
+              })
+              if (result.stderr.split('\n').length > 5) {
+                console.log(chalk.gray('    ...'))
               }
             }
           }
         }
 
         // Show success message
-        const config = await containerManager.getConfig(containerName)
-        if (config) {
-          const connectionString = dbEngine.getConnectionString(config)
+        const finalConfig = await containerManager.getConfig(containerName)
+        if (finalConfig) {
+          const connectionString = dbEngine.getConnectionString(finalConfig)
 
           console.log()
-          console.log(connectionBox(containerName, connectionString, port))
+          console.log(connectionBox(containerName, connectionString, finalConfig.port))
           console.log()
-          console.log(chalk.gray('  Connect with:'))
-          console.log(chalk.cyan(`  spindb connect ${containerName}`))
 
-          // Copy connection string to clipboard
-          if (options.start !== false) {
+          if (shouldStart) {
+            console.log(chalk.gray('  Connect with:'))
+            console.log(chalk.cyan(`  spindb connect ${containerName}`))
+
+            // Copy connection string to clipboard
             try {
               const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
               const args =
@@ -397,6 +470,9 @@ export const createCommand = new Command('create')
             } catch {
               // Ignore clipboard errors
             }
+          } else {
+            console.log(chalk.gray('  Start the container:'))
+            console.log(chalk.cyan(`  spindb start ${containerName}`))
           }
 
           console.log()
@@ -404,23 +480,28 @@ export const createCommand = new Command('create')
       } catch (err) {
         const e = err as Error
 
-        // Check if this is a missing tool error
-        if (
-          e.message.includes('pg_restore not found') ||
-          e.message.includes('psql not found') ||
-          e.message.includes('pg_dump not found')
-        ) {
-          const missingTool = e.message.includes('pg_restore')
-            ? 'pg_restore'
-            : e.message.includes('pg_dump')
-              ? 'pg_dump'
-              : 'psql'
+        // Check if this is a missing tool error (PostgreSQL or MySQL)
+        const missingToolPatterns = [
+          // PostgreSQL
+          'pg_restore not found',
+          'psql not found',
+          'pg_dump not found',
+          // MySQL
+          'mysql not found',
+          'mysqldump not found',
+          'mysqld not found',
+        ]
+
+        const matchingPattern = missingToolPatterns.find((p) =>
+          e.message.includes(p),
+        )
+
+        if (matchingPattern) {
+          const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
             console.log(
-              chalk.yellow(
-                '  Please re-run your command to continue.',
-              ),
+              chalk.yellow('  Please re-run your command to continue.'),
             )
           }
           process.exit(1)

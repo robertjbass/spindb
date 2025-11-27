@@ -67,7 +67,9 @@ export const stopCommand = new Command('stop')
       }
 
       // Check if running
-      const running = await processManager.isRunning(containerName)
+      const running = await processManager.isRunning(containerName, {
+        engine: config.engine,
+      })
       if (!running) {
         console.log(warning(`Container "${containerName}" is not running`))
         return

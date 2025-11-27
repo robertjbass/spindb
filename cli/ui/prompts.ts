@@ -37,24 +37,25 @@ export async function promptContainerName(
 }
 
 /**
+ * Engine icons for display
+ */
+const engineIcons: Record<string, string> = {
+  postgresql: '🐘',
+  mysql: '🐬',
+}
+
+/**
  * Prompt for database engine selection
  */
 export async function promptEngine(): Promise<string> {
   const engines = listEngines()
 
-  // Build choices from available engines plus coming soon engines
-  const choices = [
-    ...engines.map((e) => ({
-      name: `🐘 ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
-      value: e.name,
-      short: e.displayName,
-    })),
-    {
-      name: chalk.gray('🐬 MySQL (coming soon)'),
-      value: 'mysql',
-      disabled: 'Coming soon',
-    },
-  ]
+  // Build choices from available engines
+  const choices = engines.map((e) => ({
+    name: `${engineIcons[e.name] || '🗄️'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    value: e.name,
+    short: e.displayName,
+  }))
 
   const { engine } = await inquirer.prompt<{ engine: string }>([
     {
@@ -69,8 +70,8 @@ export async function promptEngine(): Promise<string> {
 }
 
 /**
- * Prompt for PostgreSQL version
- * Two-step selection: first major version, then specific minor version
+ * Prompt for database version
+ * Two-step selection: first major version, then specific minor version (if available)
  */
 export async function promptVersion(engineName: string): Promise<string> {
   const engine = getEngine(engineName)
@@ -112,13 +113,13 @@ export async function promptVersion(engineName: string): Promise<string> {
     const countLabel =
       versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
     const label = isLatestMajor
-      ? `PostgreSQL ${major} ${countLabel} ${chalk.green('← latest')}`
-      : `PostgreSQL ${major} ${countLabel}`
+      ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
+      : `${engine.displayName} ${major} ${countLabel}`
 
     majorChoices.push({
       name: label,
       value: major,
-      short: `PostgreSQL ${major}`,
+      short: `${engine.displayName} ${major}`,
     })
   }
 
@@ -150,7 +151,7 @@ export async function promptVersion(engineName: string): Promise<string> {
     {
       type: 'list',
       name: 'version',
-      message: `Select PostgreSQL ${majorVersion} version:`,
+      message: `Select ${engine.displayName} ${majorVersion} version:`,
       choices: minorChoices,
       default: minorVersions[0], // Default to latest
     },
@@ -225,7 +226,7 @@ export async function promptContainerSelect(
       name: 'container',
       message,
       choices: containers.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${c.engine} ${c.version}, port ${c.port})`)} ${
+        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${
           c.status === 'running'
             ? chalk.green('● running')
             : chalk.gray('○ stopped')

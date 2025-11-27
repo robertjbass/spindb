@@ -1,4 +1,5 @@
 import { postgresqlEngine } from './postgresql'
+import { mysqlEngine } from './mysql'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
@@ -6,9 +7,13 @@ import type { EngineInfo } from '../types'
  * Registry of available database engines
  */
 export const engines: Record<string, BaseEngine> = {
+  // PostgreSQL and aliases
   postgresql: postgresqlEngine,
-  postgres: postgresqlEngine, // Alias
-  pg: postgresqlEngine, // Alias
+  postgres: postgresqlEngine,
+  pg: postgresqlEngine,
+  // MySQL and aliases
+  mysql: mysqlEngine,
+  mariadb: mysqlEngine, // MariaDB is MySQL-compatible
 }
 
 /**

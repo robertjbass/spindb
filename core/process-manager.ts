@@ -202,10 +202,14 @@ export class ProcessManager {
   }
 
   /**
-   * Check if PostgreSQL is running by looking for PID file
+   * Check if a database server is running by looking for PID file
    */
-  async isRunning(containerName: string): Promise<boolean> {
-    const pidFile = paths.getContainerPidPath(containerName)
+  async isRunning(
+    containerName: string,
+    options: { engine: string },
+  ): Promise<boolean> {
+    const { engine } = options
+    const pidFile = paths.getContainerPidPath(containerName, { engine })
     if (!existsSync(pidFile)) {
       return false
     }
@@ -223,10 +227,14 @@ export class ProcessManager {
   }
 
   /**
-   * Get the PID of a running PostgreSQL server
+   * Get the PID of a running database server
    */
-  async getPid(containerName: string): Promise<number | null> {
-    const pidFile = paths.getContainerPidPath(containerName)
+  async getPid(
+    containerName: string,
+    options: { engine: string },
+  ): Promise<number | null> {
+    const { engine } = options
+    const pidFile = paths.getContainerPidPath(containerName, { engine })
     if (!existsSync(pidFile)) {
       return null
     }
