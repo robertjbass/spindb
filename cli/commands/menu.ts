@@ -5,6 +5,7 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import {
   promptContainerSelect,
+  promptContainerName,
   promptDatabaseName,
   promptCreateOptions,
   promptConfirm,
@@ -28,6 +29,7 @@ import { paths } from '../../config/paths'
 import { portManager } from '../../core/port-manager'
 import { defaults } from '../../config/defaults'
 import inquirer from 'inquirer'
+import { getMissingDependencies } from '../../core/dependency-manager'
 
 type MenuChoice =
   | {
@@ -169,13 +171,49 @@ async function showMainMenu(): Promise<void> {
 async function handleCreate(): Promise<void> {
   console.log()
   const answers = await promptCreateOptions()
-  const { name: containerName, engine, version, port, database } = answers
+  let { name: containerName } = answers
+  const { engine, version, port, database } = answers
 
   console.log()
   console.log(header('Creating Database Container'))
   console.log()
 
   const dbEngine = getEngine(engine)
+
+  // Check for required client tools BEFORE creating anything
+  const depsSpinner = createSpinner('Checking required tools...')
+  depsSpinner.start()
+
+  let missingDeps = await getMissingDependencies(engine)
+  if (missingDeps.length > 0) {
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+
+    // Offer to install
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      engine,
+    )
+
+    if (!installed) {
+      return
+    }
+
+    // Verify installation worked
+    missingDeps = await getMissingDependencies(engine)
+    if (missingDeps.length > 0) {
+      console.log(
+        error(`Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+      )
+      return
+    }
+
+    console.log(chalk.green('  ✓ All required tools are now available'))
+    console.log()
+  } else {
+    depsSpinner.succeed('Required tools available')
+  }
 
   // Check if port is currently in use
   const portAvailable = await portManager.isPortAvailable(port)
@@ -195,6 +233,12 @@ async function handleCreate(): Promise<void> {
       binarySpinner.text = message
     })
     binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+  }
+
+  // Check if container name already exists and prompt for new name if needed
+  while (await containerManager.exists(containerName)) {
+    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+    containerName = await promptContainerName()
   }
 
   // Create container
@@ -689,7 +733,8 @@ async function handleCreateForRestore(): Promise<{
 } | null> {
   console.log()
   const answers = await promptCreateOptions()
-  const { name: containerName, engine, version, port, database } = answers
+  let { name: containerName } = answers
+  const { engine, version, port, database } = answers
 
   console.log()
   console.log(header('Creating Database Container'))
@@ -721,6 +766,12 @@ async function handleCreateForRestore(): Promise<{
       binarySpinner.text = message
     })
     binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+  }
+
+  // Check if container name already exists and prompt for new name if needed
+  while (await containerManager.exists(containerName)) {
+    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+    containerName = await promptContainerName()
   }
 
   // Create container
@@ -826,6 +877,41 @@ async function handleRestore(): Promise<void> {
     }
   }
 
+  // Check for required client tools BEFORE doing anything
+  const depsSpinner = createSpinner('Checking required tools...')
+  depsSpinner.start()
+
+  let missingDeps = await getMissingDependencies(config.engine)
+  if (missingDeps.length > 0) {
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+
+    // Offer to install
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      config.engine,
+    )
+
+    if (!installed) {
+      return
+    }
+
+    // Verify installation worked
+    missingDeps = await getMissingDependencies(config.engine)
+    if (missingDeps.length > 0) {
+      console.log(
+        error(`Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+      )
+      return
+    }
+
+    console.log(chalk.green('  ✓ All required tools are now available'))
+    console.log()
+  } else {
+    depsSpinner.succeed('Required tools available')
+  }
+
   // Ask for restore source
   const { restoreSource } = await inquirer.prompt<{
     restoreSource: 'file' | 'connection'
@@ -847,7 +933,7 @@ async function handleRestore(): Promise<void> {
     },
   ])
 
-  let backupPath: string
+  let backupPath = ''
   let isTempFile = false
 
   if (restoreSource === 'connection') {
@@ -878,46 +964,64 @@ async function handleRestore(): Promise<void> {
     const timestamp = Date.now()
     const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
 
-    const dumpSpinner = createSpinner('Creating dump from remote database...')
-    dumpSpinner.start()
+    let dumpSuccess = false
+    let attempts = 0
+    const maxAttempts = 2 // Allow one retry after installing deps
 
-    try {
-      await engine.dumpFromConnectionString(connectionString, tempDumpPath)
-      dumpSpinner.succeed('Dump created from remote database')
-      backupPath = tempDumpPath
-      isTempFile = true
-    } catch (err) {
-      const e = err as Error
-      dumpSpinner.fail('Failed to create dump')
+    while (!dumpSuccess && attempts < maxAttempts) {
+      attempts++
+      const dumpSpinner = createSpinner('Creating dump from remote database...')
+      dumpSpinner.start()
 
-      // Clean up temp file if it was created
       try {
-        await rm(tempDumpPath, { force: true })
-      } catch {
-        // Ignore cleanup errors
-      }
+        await engine.dumpFromConnectionString(connectionString, tempDumpPath)
+        dumpSpinner.succeed('Dump created from remote database')
+        backupPath = tempDumpPath
+        isTempFile = true
+        dumpSuccess = true
+      } catch (err) {
+        const e = err as Error
+        dumpSpinner.fail('Failed to create dump')
 
-      // Check if this is a missing tool error
-      if (
-        e.message.includes('pg_dump not found') ||
-        e.message.includes('ENOENT')
-      ) {
-        await promptInstallDependencies('pg_dump')
-      } else {
-        console.log()
-        console.log(error('pg_dump error:'))
-        console.log(chalk.gray(`  ${e.message}`))
-        console.log()
-      }
+        // Check if this is a missing tool error
+        if (
+          e.message.includes('pg_dump not found') ||
+          e.message.includes('ENOENT')
+        ) {
+          const installed = await promptInstallDependencies('pg_dump')
+          if (installed) {
+            // Loop will retry
+            continue
+          }
+        } else {
+          console.log()
+          console.log(error('pg_dump error:'))
+          console.log(chalk.gray(`  ${e.message}`))
+          console.log()
+        }
 
-      // Wait for user to see the error
-      await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'continue',
-          message: chalk.gray('Press Enter to continue...'),
-        },
-      ])
+        // Clean up temp file if it was created
+        try {
+          await rm(tempDumpPath, { force: true })
+        } catch {
+          // Ignore cleanup errors
+        }
+
+        // Wait for user to see the error
+        await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'continue',
+            message: chalk.gray('Press Enter to continue...'),
+          },
+        ])
+        return
+      }
+    }
+
+    // Safety check - should never reach here without backupPath set
+    if (!dumpSuccess) {
+      console.log(error('Failed to create dump after retries'))
       return
     }
   } else {
@@ -1727,7 +1831,12 @@ export const menuCommand = new Command('menu')
           : e.message.includes('pg_dump')
             ? 'pg_dump'
             : 'psql'
-        await promptInstallDependencies(missingTool)
+        const installed = await promptInstallDependencies(missingTool)
+        if (installed) {
+          console.log(
+            chalk.yellow('  Please re-run spindb to continue.'),
+          )
+        }
         process.exit(1)
       }
 

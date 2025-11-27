@@ -1,7 +1,45 @@
 import { homedir } from 'os'
 import { join } from 'path'
+import { execSync } from 'child_process'
 
-const SPINDB_HOME = join(homedir(), '.spindb')
+/**
+ * Get the real user's home directory, even when running under sudo.
+ * When a user runs `sudo spindb`, we want to use their home directory,
+ * not root's home directory.
+ */
+function getRealHomeDir(): string {
+  // Check if running under sudo
+  const sudoUser = process.env.SUDO_USER
+
+  if (sudoUser) {
+    // Get the original user's home directory
+    try {
+      // Use getent to reliably get the home directory for the sudo user
+      const result = execSync(`getent passwd ${sudoUser}`, {
+        encoding: 'utf-8',
+      })
+      const parts = result.trim().split(':')
+      if (parts.length >= 6 && parts[5]) {
+        return parts[5]
+      }
+    } catch {
+      // Fall back to constructing the path
+      // On most Linux systems, home dirs are /home/username
+      // On macOS, they're /Users/username
+      const platform = process.platform
+      if (platform === 'darwin') {
+        return `/Users/${sudoUser}`
+      } else {
+        return `/home/${sudoUser}`
+      }
+    }
+  }
+
+  // Not running under sudo, use normal homedir
+  return homedir()
+}
+
+const SPINDB_HOME = join(getRealHomeDir(), '.spindb')
 
 export const paths = {
   // Root directory for all spindb data
