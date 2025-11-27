@@ -5,16 +5,17 @@
 Similar to ngrok - free tier for individual developers with core functionality, paid tiers for power users and teams.
 
 - **Free**: Full local dev experience, unlimited containers, basic backup/restore
-- **Pro** ($X/month): Security features, multi-engine support, advanced features
+- **Pro** ($X/month): Security features, advanced features
 - **Team** ($X/user/month): Shared configs, team collaboration, priority support
 
 ## Free Features
 
 ### High Priority
-- [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f`)
-- [ ] **Backup command** - Add `spindb backup` to create dumps using `pg_dump`
-- [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log`
+- [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f` / `mysql <`)
+- [ ] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
+- [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
 - [x] **Engine/binary management** - Menu to list installed PostgreSQL versions, install new versions, uninstall unused versions (free up disk space)
+- [x] **MySQL support** - Add MySQL engine using system-installed MySQL binaries
 
 ### Medium Priority
 - [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu)
@@ -22,37 +23,31 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [x] **Export connection string** - Copy connection string to clipboard (via container submenu)
 - [ ] **Multiple databases per container** - List/create/delete databases within a container
 - [x] **Fetch available versions** - Query Maven Central API to show all available PostgreSQL versions instead of hardcoded list
+- [x] **Engine-aware shell** - Open shell uses psql for PostgreSQL, mysql for MySQL
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
 - [ ] **Health checks** - Periodic connection tests to verify containers are responsive
 - [ ] **Offline Support** - Package binaries locally for offline installation
 - [ ] **Binary caching** - Cache downloaded binaries locally to avoid re-downloading
-- [ ] **Binary version management** - List, install, and remove different PostgreSQL versions
 - [ ] **Binary verification** - Verify downloaded binaries with checksums
-- [ ] **Binary cleanup** - Remove old cached binaries to free up disk space
-- [ ] **Binary space monitoring** - Show disk usage of cached binaries
-- [ ] **Binary auto-cleanup** - Automatically remove old versions after a retention period
 
 ---
 
 ## Paid Features (Pro)
 
 ### Security
-- [ ] **Password support** - Set password on container creation, modify `pg_hba.conf` for password auth
+- [ ] **Password support** - Set password on container creation, modify auth config for password auth
 - [ ] **Encrypted backups** - Encrypt dumps with password using gpg/openssl
-
-### Multi-Engine Support
-- [ ] **MySQL support** - Add MySQL engine (needs binary source)
-- [ ] **MongoDB support** - Add MongoDB engine
 
 ### Advanced Features
 - [ ] **Container templates** - Save container configs as reusable templates
-- [ ] **Import from Docker** - Import data from Docker PostgreSQL containers
+- [ ] **Import from Docker** - Import data from Docker PostgreSQL/MySQL containers
 - [ ] **Automatic binary updates** - Check for and download newer PostgreSQL versions
-- [ ] **Custom superuser name** - Allow changing from default `postgres` user
+- [ ] **Custom superuser name** - Allow changing from default `postgres`/`root` user
 - [ ] **Scheduled backups** - Cron-like backup scheduling
 - [ ] **Cloud backup sync** - Sync backups to S3/GCS/Azure
+- [ ] **MongoDB support** - Add MongoDB engine
 
 ### Team Features
 - [ ] **Shared configs** - Export/import container configs for team sharing
@@ -70,16 +65,22 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ## Known Limitations
 
-- **No Windows support** - zonky.io doesn't provide Windows binaries
-- **Client tools required** - psql/pg_dump/pg_restore must be installed separately (not bundled)
+- **No Windows support** - zonky.io doesn't provide Windows PostgreSQL binaries
+- **Client tools required** - psql/pg_dump/pg_restore and mysql/mysqldump must be installed separately (not bundled)
 - **Local only** - No remote connection support (binds to 127.0.0.1)
+- **MySQL uses system binaries** - Unlike PostgreSQL, MySQL requires system installation
 
 
 ## System Integration Tests
 
 Tests that verify the full container lifecycle using real database processes and filesystem operations.
 
-**Run tests:** `pnpm test`
+**Run tests:**
+```bash
+pnpm test           # Run all tests (PostgreSQL + MySQL sequentially)
+pnpm test:pg        # PostgreSQL tests only
+pnpm test:mysql     # MySQL tests only
+```
 
 ### Test Configuration
 
@@ -93,7 +94,7 @@ const TEST_PORTS = {
 
 ### Test Suites
 
-#### PostgreSQL Integration Tests
+#### PostgreSQL Integration Tests (14 tests)
 1. **Cleanup** - Delete any existing containers matching `*-test*` pattern
 2. **Create without start** - Create container with `--no-start`, verify not running
 3. **Start container** - Start the container, verify running
@@ -111,7 +112,7 @@ const TEST_PORTS = {
 15. **Delete container** - Delete with `--force`, verify filesystem and list updated
 16. **Final cleanup** - Ensure no test containers remain
 
-#### MySQL Integration Tests
+#### MySQL Integration Tests (14 tests)
 Same test cases as PostgreSQL, using MySQL-specific:
 - Seed file: `tests/seeds/mysql/sample-db.sql`
 - Connection string: `mysql://root@127.0.0.1:{port}/{db}`
@@ -119,10 +120,19 @@ Same test cases as PostgreSQL, using MySQL-specific:
 
 ### Test Helpers
 
+Located in `tests/integration/helpers.ts`:
+
+- `generateTestName(prefix)` - Generate unique test container name
 - `findConsecutiveFreePorts(count, startPort)` - Find N consecutive available ports
 - `cleanupTestContainers()` - Delete all containers matching `*-test*`
 - `executeSQL(engine, port, database, sql)` - Run SQL and return results
+- `executeSQLFile(engine, port, database, filePath)` - Run SQL file
+- `getRowCount(engine, port, database, table)` - Get row count from table
 - `waitForReady(engine, port, timeout)` - Wait for database to accept connections
+- `containerDataExists(containerName, engine)` - Check if data directory exists
+- `getConnectionString(engine, port, database)` - Get connection string
+- `assert(condition, message)` - Assert helper
+- `assertEqual(actual, expected, message)` - Assert equality helper
 
 ### Future Improvements
 

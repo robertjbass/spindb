@@ -1,18 +1,19 @@
 # SpinDB
 
-Spin up local PostgreSQL databases without Docker. A lightweight alternative to DBngin.
+Spin up local PostgreSQL and MySQL databases without Docker. A lightweight alternative to DBngin.
 
 ## Features
 
-- **No Docker required** - Downloads and runs PostgreSQL binaries directly
-- **Multiple containers** - Run multiple isolated PostgreSQL instances on different ports
+- **No Docker required** - Downloads PostgreSQL binaries directly, uses system MySQL
+- **Multiple engines** - PostgreSQL and MySQL support
+- **Multiple containers** - Run multiple isolated database instances on different ports
 - **Interactive menu** - Arrow-key navigation for all operations
 - **Auto port management** - Automatically finds available ports
 - **Clone containers** - Duplicate databases with all data
-- **Backup restore** - Restore pg_dump backups (requires system PostgreSQL client tools)
+- **Backup restore** - Restore pg_dump/mysqldump backups
 - **Custom database names** - Specify database name separate from container name
 - **Engine management** - View installed PostgreSQL versions and free up disk space
-- **Dynamic version selection** - Fetches all available versions from Maven Central
+- **Dynamic version selection** - Fetches available PostgreSQL versions from Maven Central
 
 ## Installation
 
@@ -31,7 +32,8 @@ pnpm add -g spindb
 spindb
 
 # Or use commands directly
-spindb create mydb
+spindb create mydb                    # PostgreSQL (default)
+spindb create mydb --engine mysql     # MySQL
 spindb list
 spindb connect mydb
 ```
@@ -45,61 +47,71 @@ spindb connect mydb
 | `spindb list` | List all containers |
 | `spindb start [name]` | Start a container |
 | `spindb stop [name]` | Stop a container |
-| `spindb connect [name]` | Connect with psql |
+| `spindb connect [name]` | Connect with psql/mysql shell |
 | `spindb restore [name] [backup]` | Restore a backup file |
 | `spindb clone [source] [target]` | Clone a container |
 | `spindb delete [name]` | Delete a container |
 | `spindb config show` | Show configuration |
-| `spindb config detect` | Auto-detect PostgreSQL tools |
+| `spindb config detect` | Auto-detect database tools |
 | `spindb deps check` | Check status of client tools |
 | `spindb deps install` | Install missing client tools |
 
-## How It Works
+## Supported Engines
 
-SpinDB downloads pre-built PostgreSQL binaries from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) on first use. These are the same binaries used by embedded-postgres for Java testing.
+### PostgreSQL 🐘
+
+- Downloads binaries from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries)
+- Versions: 14, 15, 16, 17
+- Requires system client tools (psql, pg_dump, pg_restore) for some operations
+
+### MySQL 🐬
+
+- Uses system-installed MySQL (via Homebrew, apt, etc.)
+- Version determined by system installation
+- Requires: mysqld, mysql, mysqldump, mysqladmin
+
+## How It Works
 
 Data is stored in `~/.spindb/`:
 ```
 ~/.spindb/
-├── bin/                    # PostgreSQL server binaries
-│   └── postgresql-16-darwin-arm64/
-├── containers/             # Container data
-│   └── mydb/
-│       ├── container.json  # Container config
-│       ├── data/           # PostgreSQL data directory
-│       └── postgres.log    # Server logs
-└── config.json             # SpinDB configuration
+├── bin/                              # PostgreSQL server binaries
+│   └── postgresql-17-darwin-arm64/
+├── containers/
+│   ├── postgresql/                   # PostgreSQL containers
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── postgres.log
+│   └── mysql/                        # MySQL containers
+│       └── mydb/
+│           ├── container.json
+│           ├── data/
+│           └── mysql.log
+└── config.json
 ```
 
-## PostgreSQL Client Tools
+## Client Tools
 
-SpinDB bundles the PostgreSQL **server** (postgres, pg_ctl, initdb) but not client tools (psql, pg_dump, pg_restore). For `connect` and `restore` commands, you need PostgreSQL client tools installed.
+SpinDB bundles the PostgreSQL **server** but not client tools. For `connect` and `restore` commands, you need client tools installed.
 
 ### Automatic Installation
-
-SpinDB can check and install client tools automatically:
 
 ```bash
 # Check status of all client tools
 spindb deps check
 
-# Install missing tools (uses Homebrew, apt, yum, dnf, or pacman)
+# Install missing tools
 spindb deps install
 
 # Install for a specific engine
 spindb deps install --engine postgresql
 spindb deps install --engine mysql
-
-# Install all missing dependencies for all engines
-spindb deps install --all
-
-# List all supported dependencies
-spindb deps list
 ```
 
 ### Manual Installation
 
-If automatic installation doesn't work, install manually:
+#### PostgreSQL
 
 ```bash
 # macOS (Homebrew)
@@ -109,30 +121,21 @@ brew link --overwrite postgresql@17
 # Ubuntu/Debian
 sudo apt install postgresql-client
 
-# CentOS/RHEL
-sudo yum install postgresql
-
-# Fedora
-sudo dnf install postgresql
-
 # Arch
 sudo pacman -S postgresql-libs
-
-# Or use Postgres.app (macOS)
-# Client tools are automatically detected
 ```
 
-SpinDB auto-detects installed tools. Check what's configured:
+#### MySQL
 
 ```bash
-spindb config show
-```
+# macOS (Homebrew)
+brew install mysql
 
-Manually configure tool paths:
+# Ubuntu/Debian
+sudo apt install mysql-server
 
-```bash
-spindb config set psql /path/to/psql
-spindb config set pg_restore /path/to/pg_restore
+# Arch
+sudo pacman -S mysql
 ```
 
 ## Supported Platforms
@@ -140,52 +143,30 @@ spindb config set pg_restore /path/to/pg_restore
 - macOS (Apple Silicon & Intel)
 - Linux (x64 & ARM64)
 
-## Supported PostgreSQL Versions
-
-- PostgreSQL 14
-- PostgreSQL 15
-- PostgreSQL 16
-- PostgreSQL 17
-
 ## Examples
 
-### Create a database with specific version and name
+### Create databases
 
 ```bash
-# Specify PostgreSQL version and port
-spindb create mydb --pg-version 15 --port 5433
+# PostgreSQL with specific version and port
+spindb create mydb --engine postgresql --version 16 --port 5433
 
-# Specify a custom database name (different from container name)
+# MySQL
+spindb create mydb --engine mysql --port 3307
+
+# With custom database name
 spindb create mydb --database my_app_db
-# Connection string: postgresql://postgres@localhost:5432/my_app_db
 ```
 
 ### Create and restore in one command
 
 ```bash
-# Create a container and restore from a dump file
+# Create and restore from a dump file
 spindb create mydb --from ./backup.dump
 
-# Create a container and pull from a remote database
+# Create and pull from a remote database
 spindb create mydb --from "postgresql://user:pass@remote-host:5432/production_db"
-
-# With specific version and database name
-spindb create mydb --pg-version 17 --database myapp --from ./backup.dump
 ```
-
-The `--from` option auto-detects whether the location is a file path or connection string.
-
-### Restore to an existing container
-
-```bash
-# Restore from a dump file (supports .sql, custom format, and tar format)
-spindb restore mydb ./backup.dump -d myapp
-
-# Or pull directly from a remote database
-spindb restore mydb --from-url "postgresql://user:pass@remote-host:5432/production_db" -d myapp
-```
-
-The interactive menu (`spindb` → "Restore backup") also offers an option to create a new container as part of the restore flow.
 
 ### Clone for testing
 
@@ -200,63 +181,58 @@ spindb clone production-copy test-branch
 spindb start test-branch
 ```
 
-### Connect and run queries
+### Connect to databases
 
 ```bash
-# Interactive psql session
+# Interactive shell (auto-detects engine)
 spindb connect mydb
 
-# Or use the connection string directly
+# Or use connection string directly
 psql postgresql://postgres@localhost:5432/mydb
+mysql -u root -h 127.0.0.1 -P 3306 mydb
 ```
 
 ### Manage installed engines
 
-The Engines menu (accessible from the main menu) shows all installed PostgreSQL versions with their disk usage. You can delete unused versions to free up space.
+The Engines menu shows installed PostgreSQL versions with disk usage:
 
 ```
 ENGINE      VERSION     PLATFORM            SIZE
 ────────────────────────────────────────────────────────
 postgresql  17          darwin-arm64        45.2 MB
-postgresql  16.9.0      darwin-arm64        44.8 MB
 postgresql  16          darwin-arm64        44.8 MB
 ────────────────────────────────────────────────────────
-3 version(s)                                134.8 MB
+2 version(s)                                90.0 MB
 ```
 
-## Configuration
-
-Configuration is stored in `~/.spindb/config.json`. You can edit it directly or use the `config` commands:
+## Running Tests
 
 ```bash
-# Show all config
-spindb config show
+# Run all tests (PostgreSQL + MySQL)
+pnpm test
 
-# Re-detect system tools
-spindb config detect
-
-# Set custom binary path
-spindb config set psql /usr/local/bin/psql
-
-# Get path for scripting
-spindb config path psql
+# Run individual test suites
+pnpm test:pg
+pnpm test:mysql
 ```
 
 ## Troubleshooting
 
 ### Port already in use
 
-SpinDB automatically finds an available port if the default (5432) is in use. You can also specify a port:
+SpinDB automatically finds an available port. You can also specify one:
 
 ```bash
 spindb create mydb --port 5433
 ```
 
-### psql not found
+### Client tool not found
 
-Install PostgreSQL client tools (see above) or configure the path manually:
+Install client tools or configure the path:
 
 ```bash
+spindb deps install
+# or
 spindb config set psql /path/to/psql
 ```
 
@@ -265,7 +241,8 @@ spindb config set psql /path/to/psql
 Check the logs:
 
 ```bash
-cat ~/.spindb/containers/mydb/postgres.log
+cat ~/.spindb/containers/postgresql/mydb/postgres.log
+cat ~/.spindb/containers/mysql/mydb/mysql.log
 ```
 
 ### Reset everything

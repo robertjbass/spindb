@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local PostgreSQL databases without Docker. It's a lightweight alternative to DBngin, downloading and managing PostgreSQL binaries directly.
+SpinDB is a CLI tool for running local PostgreSQL and MySQL databases without Docker. It's a lightweight alternative to DBngin, downloading PostgreSQL binaries directly and using system-installed MySQL.
 
 ## Tech Stack
 
@@ -17,62 +17,132 @@ SpinDB is a CLI tool for running local PostgreSQL databases without Docker. It's
 ## Project Structure
 
 ```
-src/
-├── bin/cli.ts              # Entry point (#!/usr/bin/env tsx)
-├── cli/
-│   ├── index.ts            # Commander setup, routes to commands
-│   ├── commands/           # CLI commands (create, start, stop, etc.)
-│   │   ├── menu.ts         # Interactive arrow-key menu (default when no args)
-│   │   └── config.ts       # Binary path configuration
-│   └── ui/
-│       ├── prompts.ts      # Inquirer prompts
-│       ├── spinner.ts      # Ora spinner helpers
-│       └── theme.ts        # Chalk color theme
-├── core/
-│   ├── binary-manager.ts   # Downloads PostgreSQL from zonky.io
-│   ├── config-manager.ts   # Manages ~/.spindb/config.json
-│   ├── container-manager.ts # CRUD for containers
-│   ├── port-manager.ts     # Port availability checking
-│   └── process-manager.ts  # pg_ctl start/stop wrapper
-├── config/
-│   ├── paths.ts            # ~/.spindb/ path definitions
-│   └── defaults.ts         # Default values, platform mappings
-├── engines/
-│   ├── base-engine.ts      # Abstract base class
-│   ├── index.ts            # Engine registry
-│   └── postgresql/
-│       ├── index.ts        # PostgreSQL engine implementation
-│       ├── binary-urls.ts  # Zonky.io URL builder
-│       └── restore.ts      # Backup detection and restore
-└── types/index.ts          # TypeScript interfaces
+cli/
+├── bin.ts                  # Entry point (#!/usr/bin/env tsx)
+├── index.ts                # Commander setup, routes to commands
+├── commands/               # CLI commands (create, start, stop, etc.)
+│   ├── menu.ts             # Interactive arrow-key menu (default when no args)
+│   └── config.ts           # Binary path configuration
+└── ui/
+    ├── prompts.ts          # Inquirer prompts
+    ├── spinner.ts          # Ora spinner helpers
+    └── theme.ts            # Chalk color theme
+core/
+├── binary-manager.ts       # Downloads PostgreSQL from zonky.io
+├── config-manager.ts       # Manages ~/.spindb/config.json
+├── container-manager.ts    # CRUD for containers
+├── port-manager.ts         # Port availability checking
+├── process-manager.ts      # pg_ctl start/stop wrapper
+└── dependency-manager.ts   # Client tool detection and installation
+config/
+├── paths.ts                # ~/.spindb/ path definitions
+├── defaults.ts             # Default values, platform mappings
+└── os-dependencies.ts      # OS-specific dependency definitions
+engines/
+├── base-engine.ts          # Abstract base class
+├── index.ts                # Engine registry
+├── postgresql/
+│   ├── index.ts            # PostgreSQL engine implementation
+│   ├── binary-urls.ts      # Zonky.io URL builder
+│   └── restore.ts          # Backup detection and restore
+└── mysql/
+    └── index.ts            # MySQL engine implementation
+types/index.ts              # TypeScript interfaces
+tests/
+├── integration/
+│   ├── helpers.ts          # Test utilities
+│   ├── postgresql.test.ts  # PostgreSQL integration tests
+│   └── mysql.test.ts       # MySQL integration tests
+└── seeds/
+    ├── postgresql/sample-db.sql
+    └── mysql/sample-db.sql
 ```
 
 ## Key Architecture Decisions
 
-### Binary Source
-PostgreSQL server binaries come from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) (Maven Central). These only include server binaries (postgres, pg_ctl, initdb), NOT client tools (psql, pg_dump, pg_restore).
+### Multi-Engine Support
 
-**Download flow:**
+SpinDB supports multiple database engines through an abstract `BaseEngine` class:
+
+```typescript
+// engines/base-engine.ts
+abstract class BaseEngine {
+  abstract name: string
+  abstract displayName: string
+  abstract supportedVersions: string[]
+  abstract start(container: ContainerConfig): Promise<void>
+  abstract stop(container: ContainerConfig): Promise<void>
+  abstract initDataDir(name: string, version: string, options: InitOptions): Promise<void>
+  // ... other abstract methods
+}
+```
+
+**PostgreSQL 🐘**
+- Downloads binaries from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) (Maven Central)
+- Server binaries only (postgres, pg_ctl, initdb)
+- Client tools (psql, pg_dump, pg_restore) from system
+- Versions: 14, 15, 16, 17
+
+**MySQL 🐬**
+- Uses system-installed MySQL (via Homebrew, apt, etc.)
+- Requires: mysqld, mysql, mysqldump, mysqladmin
+- Version determined by system installation
+
+### Engine-Scoped Container Paths
+
+Containers are stored in engine-specific directories:
+```
+~/.spindb/
+├── bin/                                    # PostgreSQL server binaries
+│   └── postgresql-17-darwin-arm64/
+├── containers/
+│   ├── postgresql/                         # PostgreSQL containers
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── postgres.log
+│   └── mysql/                              # MySQL containers
+│       └── mydb/
+│           ├── container.json
+│           ├── data/
+│           └── mysql.log
+└── config.json
+```
+
+### Binary Sources
+
+**PostgreSQL**: Downloaded from zonky.io on first use:
 1. Download JAR from Maven Central
 2. Unzip JAR (it's a ZIP file)
 3. Extract `.txz` file inside
 4. Extract tar.xz to `~/.spindb/bin/postgresql-{version}-{platform}-{arch}/`
 
+**MySQL**: System-installed binaries detected from:
+- PATH
+- /opt/homebrew/bin/ (macOS ARM)
+- /usr/local/bin/ (macOS Intel)
+- /usr/bin/ (Linux)
+
 ### Client Tools
-Client tools (psql, pg_restore) are detected from the system. The `config-manager.ts` handles:
+
+Client tools are detected from the system. The `dependency-manager.ts` handles:
 - Auto-detection from PATH and common locations
 - Caching paths in `~/.spindb/config.json`
-- Manual override via `spindb config set`
+- Prompting to install missing dependencies
 
-### Data Storage
-```
-~/.spindb/
-├── bin/                      # Downloaded PostgreSQL binaries
-├── containers/{name}/
-│   ├── container.json        # Container metadata
-│   ├── data/                 # PostgreSQL data directory
-│   └── postgres.log          # Server logs
-└── config.json               # Tool paths, settings
+### Container Config
+Each container has a `container.json` with:
+```typescript
+type ContainerConfig = {
+  name: string
+  engine: 'postgresql' | 'mysql'
+  version: string
+  port: number
+  database: string      // User's database name (separate from container name)
+  created: string
+  status: 'created' | 'running' | 'stopped'
+  clonedFrom?: string
+}
 ```
 
 ### Ideology
@@ -101,29 +171,17 @@ Client tools (psql, pg_restore) are detected from the system. The `config-manage
 - We need to think of creating/modifying databases or containers the way we'd think of database transactions. When creating a new database, if we fail to install the database drivers, an empty container should not end up being created in the process.
 
 ### Interactive Menu
-When `spindb` is run with no arguments, it shows an interactive menu (`src/cli/commands/menu.ts`) using Inquirer's list prompt. Users navigate with arrow keys.
+When `spindb` is run with no arguments, it shows an interactive menu (`cli/commands/menu.ts`) using Inquirer's list prompt. Users navigate with arrow keys.
 
 **Menu Navigation Rules:**
 - Any submenu with a "Back" button that goes to a parent menu (not main menu) MUST also have a "Back to main menu" option
 - Back buttons use blue color: `${chalk.blue('←')} Back to...`
 - Main menu buttons use house emoji: `${chalk.blue('🏠')} Back to main menu`
 
-### Container Config
-Each container has a `container.json` with:
-```typescript
-type ContainerConfig = {
-  name: string
-  engine: string
-  version: string
-  port: number
-  database: string      // User's database name (separate from container name)
-  created: string
-  status: 'created' | 'running' | 'stopped'
-  clonedFrom?: string
-}
-```
-
-The `database` field allows users to specify a custom database name in the connection string (e.g., `postgresql://postgres@localhost:5432/my-app-db`).
+**Engine Icons:**
+- PostgreSQL: 🐘
+- MySQL: 🐬
+- Default/unknown: 🗄️
 
 ## Common Tasks
 
@@ -134,20 +192,41 @@ pnpm run start create mydb  # Run specific command
 pnpm run start --help       # Show help
 ```
 
-### Testing Changes
-No test suite yet. Manual testing:
+### Running Tests
 ```bash
+pnpm test           # Run all tests (PostgreSQL + MySQL sequentially)
+pnpm test:pg        # PostgreSQL tests only
+pnpm test:mysql     # MySQL tests only
+```
+
+### Testing Changes Manually
+```bash
+# PostgreSQL
 pnpm run start create testdb -p 5433
 pnpm run start list
+pnpm run start connect testdb
+pnpm run start delete testdb --force --yes
+
+# MySQL
+pnpm run start create testdb --engine mysql -p 3307
 pnpm run start connect testdb
 pnpm run start delete testdb --force --yes
 ```
 
 ### Adding a New Command
-1. Create `src/cli/commands/{name}.ts`
+1. Create `cli/commands/{name}.ts`
 2. Export a Commander `Command` instance
-3. Import and add to `src/cli/index.ts`
-4. Optionally add to interactive menu in `src/cli/commands/menu.ts`
+3. Import and add to `cli/index.ts`
+4. Optionally add to interactive menu in `cli/commands/menu.ts`
+
+### Adding a New Engine
+1. Create `engines/{engine}/index.ts` extending `BaseEngine`
+2. Implement all abstract methods
+3. Register in `engines/index.ts`
+4. Add dependencies to `config/os-dependencies.ts`
+5. Add engine defaults to `config/defaults.ts`
+6. Update `paths.ts` if needed
+7. Add integration tests in `tests/integration/{engine}.test.ts`
 
 ## Important Implementation Details
 
@@ -159,8 +238,8 @@ import { platform, arch } from 'os';
 // Mapped to zonky.io names in defaults.ts platformMappings
 ```
 
-### Version Fetching
-PostgreSQL versions are fetched dynamically from Maven Central with a 5-minute cache. Falls back to `FALLBACK_VERSION_MAP` if network fails. See `src/engines/postgresql/binary-urls.ts`:
+### Version Fetching (PostgreSQL)
+PostgreSQL versions are fetched dynamically from Maven Central with a 5-minute cache. Falls back to `FALLBACK_VERSION_MAP` if network fails. See `engines/postgresql/binary-urls.ts`:
 
 ```typescript
 // Fallback versions (used when Maven is unreachable)
@@ -170,30 +249,30 @@ export const FALLBACK_VERSION_MAP: Record<string, string> = {
   '16': '16.11.0',
   '17': '17.7.0',
 }
-
-// Dynamic fetching from Maven
-export async function fetchAvailableVersions(): Promise<Record<string, string[]>>
 ```
 
-The create flow uses two-step version selection: first major version (14, 15, 16, 17), then specific minor version within that major.
-
 ### Port Management
-- Default port: 5432
-- If busy, scans 5432-5500 for available port
+- PostgreSQL default: 5432 (range: 5432-5500)
+- MySQL default: 3306 (range: 3306-3400)
 - Uses `net.createServer()` to test availability
 
 ### Process Management
-Uses `pg_ctl` for start/stop:
+
+**PostgreSQL** uses `pg_ctl`:
 ```bash
 pg_ctl start -D {dataDir} -l {logFile} -w -o "-p {port}"
 pg_ctl stop -D {dataDir} -m fast -w
 ```
 
-PID file location: `~/.spindb/containers/{name}/data/postmaster.pid`
+**MySQL** uses `mysqld` directly and `mysqladmin` for shutdown:
+```bash
+mysqld --datadir={dataDir} --port={port} --socket={socket} --pid-file={pidFile} ...
+mysqladmin -h 127.0.0.1 -P {port} -u root shutdown
+```
+
+MySQL stop waits for process to actually terminate before returning.
 
 ### Create with Restore (One-Shot)
-Create a container and restore data in a single command:
-
 ```bash
 # From a dump file
 spindb create mycontainer --from ./backup.dump -d mydb
@@ -202,48 +281,26 @@ spindb create mycontainer --from ./backup.dump -d mydb
 spindb create mycontainer --from "postgresql://user:pass@host:5432/dbname" -d mydb
 ```
 
-The `--from` option auto-detects whether the location is a file path or connection string.
-
-### Restore Command
-Restore to an existing container:
-
-1. **From dump file** - Restore from a local `.sql`, custom format, or tar format backup:
-   ```bash
-   spindb restore mycontainer ./backup.dump -d mydb
-   ```
-
-2. **From connection string** - Pull data directly from a remote database using `pg_dump`:
-   ```bash
-   spindb restore mycontainer --from-url "postgresql://user:pass@host:5432/dbname" -d mydb
-   ```
-
-The `--from-url` option:
-- Validates the connection string starts with `postgresql://` or `postgres://`
-- Creates a temporary dump using `pg_dump -Fc` (custom format)
-- Restores it to the target container
-- Automatically cleans up the temp file
-
-### Interactive Menu Restore
-The interactive menu (`spindb` → "Restore backup") offers:
-- Selection of existing running containers
-- Option to create a new container as part of the restore flow
-- Choice between dump file or connection string source
+### Engine-Aware Shell
+The "Open shell" option in container submenu:
+- PostgreSQL: `psql {connectionString}`
+- MySQL: `mysql -u root -h 127.0.0.1 -P {port} {database}`
 
 ## Known Limitations
 
-1. **No client tools bundled** - psql/pg_restore/pg_dump must be installed separately
+1. **No client tools bundled** - psql/pg_restore/pg_dump and mysql/mysqldump must be installed separately
 2. **macOS/Linux only** - No Windows support (zonky.io doesn't provide Windows binaries)
-3. **Database names immutable** - Cannot rename database after creation (would require `ALTER DATABASE`)
+3. **MySQL uses system binaries** - Unlike PostgreSQL, MySQL requires system installation
+4. **Database names immutable** - Cannot rename database after creation
 
 ## Future Improvements
 
 See `TODO.md` for full list. Key items:
-- [ ] Add `spindb backup` command (export a container's database to a dump file)
-- [ ] Add `spindb logs` command to tail postgres.log
+- [ ] Add `spindb backup` command
+- [ ] Add `spindb logs` command
 - [ ] Add `spindb exec` for running SQL files
-- [ ] Database rename support
-- [ ] Support MySQL/SQLite engines (architecture supports it)
-- [ ] Windows support (would need different binary source)
+- [ ] SQLite support
+- [ ] Windows support
 
 ## Publishing to npm
 
@@ -258,41 +315,12 @@ The package is published to npm using GitHub Actions with OIDC trusted publishin
    - Environment: (leave blank)
 3. **Version must be incremented** - Publishing only occurs when `package.json` version > npm version
 
-### GitHub Actions Workflows
-
-**`.github/workflows/version-check.yml`** - Runs on PRs to `main`
-- Compares PR version against current npm version
-- Posts a comment if version isn't bumped (with suggested versions)
-- Blocks merge if version check fails
-
-**`.github/workflows/publish.yml`** - Runs on push to `main`
-- Pre-publish check: Verifies version is greater than npm (skips if not)
-- Publishes to npm using OIDC authentication
-- Creates a GitHub issue if publish fails
-
 ### How to Release
 
 1. Create a PR from your feature branch to `main`
 2. Bump version in `package.json` (the PR check will remind you if you forget)
 3. Merge the PR
 4. GitHub Actions automatically publishes to npm
-
-### Key Configuration
-
-In `package.json`:
-```json
-"publishConfig": {
-  "access": "public",
-  "provenance": true
-}
-```
-
-In workflow, uses Node 24 and latest npm for OIDC support:
-```yaml
-node-version: '24'
-env:
-  NPM_CONFIG_PROVENANCE: true
-```
 
 ## Code Style Notes
 
@@ -301,3 +329,4 @@ env:
 - Prefer `async/await` over callbacks
 - Use Ora spinners for long-running operations
 - Error messages should include actionable fix suggestions
+- Engine icons: 🐘 (PostgreSQL), 🐬 (MySQL), 🗄️ (default)
