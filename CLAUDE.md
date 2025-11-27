@@ -75,6 +75,31 @@ Client tools (psql, pg_restore) are detected from the system. The `config-manage
 └── config.json               # Tool paths, settings
 ```
 
+### Ideology
+- All commands need to be CLI-first, this tool needs to have full functionality from the command line, there should never be a command you can run from the interactive CLI that the command line can not also handle
+- Within the app, we should be making cli calls as function calls. For example, our function to create a database is called `createDatabase()` and it does so as follows:
+```ts
+  async createDatabase(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<void> {
+    const { port } = container
+    const psqlPath = await this.getPsqlPath()
+
+    try {
+      await execAsync(
+        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'CREATE DATABASE "${database}"'`,
+      )
+    } catch (error) {
+    //...
+  }
+```
+...this is correct because it us just syntactic sugar for a cli call, it does the same thing as running `psql -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'CREATE DATABASE "${database}"'` from the command line. All new functionality we add needs to follow this pattern. If you notice any place in the app that does not follow this pattern, please let me know so we can fix it.
+- This should be able to be run as a local CLI tool (interactively or with arguments) as well as as an npm package with the same functionality, as well as serve as a back-end for GUI that will be created as a separate project.
+- Although we are optimizing for MacOS while also supporting Linux, we will be adding Windows support, we should use dependency injection to abstract away platform-specific code just as we should use dependency injection to abstract away engine-specific code for ultimate modularity, portability, and maintainability.
+- All interactive menus (except the main menu) should have a "Back to main menu" option and a "Back" option for submenus.
+- We need to think of creating/modifying databases or containers the way we'd think of database transactions. When creating a new database, if we fail to install the database drivers, an empty container should not end up being created in the process.
+
 ### Interactive Menu
 When `spindb` is run with no arguments, it shows an interactive menu (`src/cli/commands/menu.ts`) using Inquirer's list prompt. Users navigate with arrow keys.
 
