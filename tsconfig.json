@@ -18,7 +18,8 @@
     "core/**/*",
     "config/**/*",
     "engines/**/*",
-    "types/**/*"
+    "types/**/*",
+    "tests/**/*"
   ],
   "exclude": ["node_modules"]
 }

@@ -57,7 +57,9 @@ export const deleteCommand = new Command('delete')
         }
 
         // Check if running
-        const running = await processManager.isRunning(containerName)
+        const running = await processManager.isRunning(containerName, {
+          engine: config.engine,
+        })
         if (running) {
           if (options.force) {
             // Stop the container first

@@ -244,11 +244,35 @@ const mysqlDependencies: EngineDependencies = {
   displayName: 'MySQL',
   dependencies: [
     {
+      name: 'mysqld',
+      binary: 'mysqld',
+      description: 'MySQL server daemon',
+      packages: {
+        brew: { package: 'mysql' },
+        apt: { package: 'mysql-server' },
+        yum: { package: 'mysql-server' },
+        dnf: { package: 'mysql-server' },
+        pacman: { package: 'mariadb' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install mysql',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install mysql-server',
+          'CentOS/RHEL: sudo yum install mysql-server',
+          'Fedora: sudo dnf install mysql-server',
+          'Arch: sudo pacman -S mariadb',
+        ],
+      },
+    },
+    {
       name: 'mysql',
       binary: 'mysql',
       description: 'MySQL command-line client',
       packages: {
-        brew: { package: 'mysql-client' },
+        brew: { package: 'mysql' },
         apt: { package: 'mysql-client' },
         yum: { package: 'mysql' },
         dnf: { package: 'mysql' },
@@ -257,7 +281,7 @@ const mysqlDependencies: EngineDependencies = {
       manualInstall: {
         darwin: [
           'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-          'Then run: brew install mysql-client',
+          'Then run: brew install mysql',
         ],
         linux: [
           'Ubuntu/Debian: sudo apt install mysql-client',
@@ -272,7 +296,7 @@ const mysqlDependencies: EngineDependencies = {
       binary: 'mysqldump',
       description: 'MySQL database backup utility',
       packages: {
-        brew: { package: 'mysql-client' },
+        brew: { package: 'mysql' },
         apt: { package: 'mysql-client' },
         yum: { package: 'mysql' },
         dnf: { package: 'mysql' },
@@ -281,7 +305,31 @@ const mysqlDependencies: EngineDependencies = {
       manualInstall: {
         darwin: [
           'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-          'Then run: brew install mysql-client',
+          'Then run: brew install mysql',
+        ],
+        linux: [
+          'Ubuntu/Debian: sudo apt install mysql-client',
+          'CentOS/RHEL: sudo yum install mysql',
+          'Fedora: sudo dnf install mysql',
+          'Arch: sudo pacman -S mariadb-clients',
+        ],
+      },
+    },
+    {
+      name: 'mysqladmin',
+      binary: 'mysqladmin',
+      description: 'MySQL server administration utility',
+      packages: {
+        brew: { package: 'mysql' },
+        apt: { package: 'mysql-client' },
+        yum: { package: 'mysql' },
+        dnf: { package: 'mysql' },
+        pacman: { package: 'mariadb-clients' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install mysql',
         ],
         linux: [
           'Ubuntu/Debian: sudo apt install mysql-client',

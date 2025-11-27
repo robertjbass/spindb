@@ -76,8 +76,12 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
+        const { engine: engineName } = config
+
         // Check if running
-        const running = await processManager.isRunning(containerName)
+        const running = await processManager.isRunning(containerName, {
+          engine: engineName,
+        })
         if (!running) {
           console.error(
             error(
@@ -88,7 +92,7 @@ export const restoreCommand = new Command('restore')
         }
 
         // Get engine
-        const engine = getEngine(config.engine)
+        const engine = getEngine(engineName)
 
         // Check for required client tools BEFORE doing anything
         const depsSpinner = createSpinner('Checking required tools...')
@@ -129,14 +133,34 @@ export const restoreCommand = new Command('restore')
 
         // Handle --from-url option
         if (options.fromUrl) {
-          // Validate connection string
-          if (
-            !options.fromUrl.startsWith('postgresql://') &&
-            !options.fromUrl.startsWith('postgres://')
-          ) {
+          // Validate connection string matches container's engine
+          const isPgUrl =
+            options.fromUrl.startsWith('postgresql://') ||
+            options.fromUrl.startsWith('postgres://')
+          const isMysqlUrl = options.fromUrl.startsWith('mysql://')
+
+          if (engineName === 'postgresql' && !isPgUrl) {
             console.error(
               error(
-                'Connection string must start with postgresql:// or postgres://',
+                'Connection string must start with postgresql:// or postgres:// for PostgreSQL containers',
+              ),
+            )
+            process.exit(1)
+          }
+
+          if (engineName === 'mysql' && !isMysqlUrl) {
+            console.error(
+              error(
+                'Connection string must start with mysql:// for MySQL containers',
+              ),
+            )
+            process.exit(1)
+          }
+
+          if (!isPgUrl && !isMysqlUrl) {
+            console.error(
+              error(
+                'Connection string must start with postgresql://, postgres://, or mysql://',
               ),
             )
             process.exit(1)
@@ -167,11 +191,15 @@ export const restoreCommand = new Command('restore')
               dumpSpinner.fail('Failed to create dump')
 
               // Check if this is a missing tool error
+              const dumpTool = engineName === 'mysql' ? 'mysqldump' : 'pg_dump'
               if (
-                e.message.includes('pg_dump not found') ||
+                e.message.includes(`${dumpTool} not found`) ||
                 e.message.includes('ENOENT')
               ) {
-                const installed = await promptInstallDependencies('pg_dump')
+                const installed = await promptInstallDependencies(
+                  dumpTool,
+                  engineName,
+                )
                 if (!installed) {
                   process.exit(1)
                 }
@@ -180,7 +208,7 @@ export const restoreCommand = new Command('restore')
               }
 
               console.log()
-              console.error(error('pg_dump error:'))
+              console.error(error(`${dumpTool} error:`))
               console.log(chalk.gray(`  ${e.message}`))
               process.exit(1)
             }
@@ -313,14 +341,23 @@ export const restoreCommand = new Command('restore')
       } catch (err) {
         const e = err as Error
 
-        // Check if this is a missing tool error
-        if (
-          e.message.includes('pg_restore not found') ||
-          e.message.includes('psql not found')
-        ) {
-          const missingTool = e.message.includes('pg_restore')
-            ? 'pg_restore'
-            : 'psql'
+        // Check if this is a missing tool error (PostgreSQL or MySQL)
+        const missingToolPatterns = [
+          // PostgreSQL
+          'pg_restore not found',
+          'psql not found',
+          'pg_dump not found',
+          // MySQL
+          'mysql not found',
+          'mysqldump not found',
+        ]
+
+        const matchingPattern = missingToolPatterns.find((p) =>
+          e.message.includes(p),
+        )
+
+        if (matchingPattern) {
+          const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
             console.log(

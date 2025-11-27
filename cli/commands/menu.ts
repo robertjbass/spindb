@@ -28,6 +28,7 @@ import { join } from 'path'
 import { paths } from '../../config/paths'
 import { portManager } from '../../core/port-manager'
 import { defaults } from '../../config/defaults'
+import type { EngineName } from '../../types'
 import inquirer from 'inquirer'
 import { getMissingDependencies } from '../../core/dependency-manager'
 
@@ -38,6 +39,14 @@ type MenuChoice =
       disabled?: boolean | string
     }
   | inquirer.Separator
+
+/**
+ * Engine icons for display
+ */
+const engineIcons: Record<string, string> = {
+  postgresql: '🐘',
+  mysql: '🐬',
+}
 
 async function showMainMenu(): Promise<void> {
   console.clear()
@@ -57,7 +66,6 @@ async function showMainMenu(): Promise<void> {
 
   const canStart = stopped > 0
   const canStop = running > 0
-  const canConnect = running > 0
   const canRestore = running > 0
   const canClone = containers.length > 0
 
@@ -91,13 +99,6 @@ async function showMainMenu(): Promise<void> {
         : chalk.gray('■ Stop a container'),
       value: 'stop',
       disabled: canStop ? false : 'No running containers',
-    },
-    {
-      name: canConnect
-        ? `${chalk.blue('⌘')} Open psql shell`
-        : chalk.gray('⌘ Open psql shell'),
-      value: 'connect',
-      disabled: canConnect ? false : 'No running containers',
     },
     {
       name: canRestore
@@ -146,9 +147,6 @@ async function showMainMenu(): Promise<void> {
       break
     case 'stop':
       await handleStop()
-      break
-    case 'connect':
-      await handleConnect()
       break
     case 'restore':
       await handleRestore()
@@ -246,7 +244,7 @@ async function handleCreate(): Promise<void> {
   createSpinnerInstance.start()
 
   await containerManager.create(containerName, {
-    engine: dbEngine.name,
+    engine: dbEngine.name as EngineName,
     version,
     port,
     database,
@@ -408,7 +406,7 @@ async function handleList(): Promise<void> {
   console.log()
   const containerChoices = [
     ...containers.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${c.engine} ${c.version}, port ${c.port})`)} ${
+      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${
         c.status === 'running'
           ? chalk.green('● running')
           : chalk.gray('○ stopped')
@@ -447,7 +445,9 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
   }
 
   // Check actual running state
-  const isRunning = await processManager.isRunning(containerName)
+  const isRunning = await processManager.isRunning(containerName, {
+    engine: config.engine,
+  })
   const status = isRunning ? 'running' : 'stopped'
 
   console.clear()
@@ -465,6 +465,13 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
     !isRunning
       ? { name: `${chalk.green('▶')} Start container`, value: 'start' }
       : { name: `${chalk.yellow('■')} Stop container`, value: 'stop' },
+    {
+      name: isRunning
+        ? `${chalk.blue('⌘')} Open shell`
+        : chalk.gray('⌘ Open shell'),
+      value: 'shell',
+      disabled: isRunning ? false : 'Start container first',
+    },
     {
       name: !isRunning
         ? `${chalk.white('⚙')} Edit container`
@@ -502,6 +509,10 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       return
     case 'stop':
       await handleStopContainer(containerName)
+      await showContainerSubmenu(containerName)
+      return
+    case 'shell':
+      await handleOpenShell(containerName)
       await showContainerSubmenu(containerName)
       return
     case 'edit': {
@@ -674,21 +685,7 @@ async function handleCopyConnectionString(
   }
 }
 
-async function handleConnect(): Promise<void> {
-  const containers = await containerManager.list()
-  const running = containers.filter((c) => c.status === 'running')
-
-  if (running.length === 0) {
-    console.log(warning('No running containers'))
-    return
-  }
-
-  const containerName = await promptContainerSelect(
-    running,
-    'Select container to connect to:',
-  )
-  if (!containerName) return
-
+async function handleOpenShell(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.error(error(`Container "${containerName}" not found`))
@@ -701,25 +698,49 @@ async function handleConnect(): Promise<void> {
   console.log(info(`Connecting to ${containerName}...`))
   console.log()
 
-  // Spawn psql
-  const psqlProcess = spawn('psql', [connectionString], {
+  // Determine shell command based on engine
+  let shellCmd: string
+  let shellArgs: string[]
+  let installHint: string
+
+  if (config.engine === 'mysql') {
+    shellCmd = 'mysql'
+    // MySQL connection: mysql -u root -h 127.0.0.1 -P port database
+    shellArgs = [
+      '-u',
+      'root',
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(config.port),
+      config.database,
+    ]
+    installHint = 'brew install mysql-client'
+  } else {
+    // PostgreSQL (default)
+    shellCmd = 'psql'
+    shellArgs = [connectionString]
+    installHint = 'brew install libpq && brew link --force libpq'
+  }
+
+  const shellProcess = spawn(shellCmd, shellArgs, {
     stdio: 'inherit',
   })
 
-  psqlProcess.on('error', (err: NodeJS.ErrnoException) => {
+  shellProcess.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'ENOENT') {
-      console.log(warning('psql not found on your system.'))
+      console.log(warning(`${shellCmd} not found on your system.`))
       console.log()
       console.log(chalk.gray('  Connect manually with:'))
       console.log(chalk.cyan(`  ${connectionString}`))
       console.log()
-      console.log(chalk.gray('  Install PostgreSQL client:'))
-      console.log(chalk.cyan('  brew install libpq && brew link --force libpq'))
+      console.log(chalk.gray(`  Install ${config.engine} client:`))
+      console.log(chalk.cyan(`  ${installHint}`))
     }
   })
 
   await new Promise<void>((resolve) => {
-    psqlProcess.on('close', () => resolve())
+    shellProcess.on('close', () => resolve())
   })
 }
 
@@ -779,7 +800,7 @@ async function handleCreateForRestore(): Promise<{
   createSpinnerInstance.start()
 
   await containerManager.create(containerName, {
-    engine: dbEngine.name,
+    engine: dbEngine.name as EngineName,
     version,
     port,
     database,
@@ -836,7 +857,7 @@ async function handleRestore(): Promise<void> {
   // Build choices: running containers + create new option
   const choices = [
     ...running.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
       value: c.name,
       short: c.name,
     })),
@@ -1566,7 +1587,9 @@ async function handleDelete(containerName: string): Promise<void> {
     return
   }
 
-  const isRunning = await processManager.isRunning(containerName)
+  const isRunning = await processManager.isRunning(containerName, {
+    engine: config.engine,
+  })
 
   if (isRunning) {
     const stopSpinner = createSpinner(`Stopping ${containerName}...`)
