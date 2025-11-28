@@ -2,12 +2,13 @@ import inquirer from 'inquirer'
 import chalk from 'chalk'
 import ora from 'ora'
 import { listEngines, getEngine } from '../../engines'
-import { defaults } from '../../config/defaults'
+import { defaults, getEngineDefaults } from '../../config/defaults'
 import { installPostgresBinaries } from '../../core/postgres-binary-manager'
 import {
   detectPackageManager,
   getManualInstallInstructions,
   getCurrentPlatform,
+  installEngineDependencies,
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
 import type { ContainerConfig } from '../../types'
@@ -37,24 +38,25 @@ export async function promptContainerName(
 }
 
 /**
+ * Engine icons for display
+ */
+const engineIcons: Record<string, string> = {
+  postgresql: '🐘',
+  mysql: '🐬',
+}
+
+/**
  * Prompt for database engine selection
  */
 export async function promptEngine(): Promise<string> {
   const engines = listEngines()
 
-  // Build choices from available engines plus coming soon engines
-  const choices = [
-    ...engines.map((e) => ({
-      name: `🐘 ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
-      value: e.name,
-      short: e.displayName,
-    })),
-    {
-      name: chalk.gray('🐬 MySQL (coming soon)'),
-      value: 'mysql',
-      disabled: 'Coming soon',
-    },
-  ]
+  // Build choices from available engines
+  const choices = engines.map((e) => ({
+    name: `${engineIcons[e.name] || '🗄️'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    value: e.name,
+    short: e.displayName,
+  }))
 
   const { engine } = await inquirer.prompt<{ engine: string }>([
     {
@@ -69,8 +71,8 @@ export async function promptEngine(): Promise<string> {
 }
 
 /**
- * Prompt for PostgreSQL version
- * Two-step selection: first major version, then specific minor version
+ * Prompt for database version
+ * Two-step selection: first major version, then specific minor version (if available)
  */
 export async function promptVersion(engineName: string): Promise<string> {
   const engine = getEngine(engineName)
@@ -112,13 +114,13 @@ export async function promptVersion(engineName: string): Promise<string> {
     const countLabel =
       versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
     const label = isLatestMajor
-      ? `PostgreSQL ${major} ${countLabel} ${chalk.green('← latest')}`
-      : `PostgreSQL ${major} ${countLabel}`
+      ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
+      : `${engine.displayName} ${major} ${countLabel}`
 
     majorChoices.push({
       name: label,
       value: major,
-      short: `PostgreSQL ${major}`,
+      short: `${engine.displayName} ${major}`,
     })
   }
 
@@ -150,7 +152,7 @@ export async function promptVersion(engineName: string): Promise<string> {
     {
       type: 'list',
       name: 'version',
-      message: `Select PostgreSQL ${majorVersion} version:`,
+      message: `Select ${engine.displayName} ${majorVersion} version:`,
       choices: minorChoices,
       default: minorVersions[0], // Default to latest
     },
@@ -225,7 +227,7 @@ export async function promptContainerSelect(
       name: 'container',
       message,
       choices: containers.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${c.engine} ${c.version}, port ${c.port})`)} ${
+        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${
           c.status === 'running'
             ? chalk.green('● running')
             : chalk.gray('○ stopped')
@@ -279,16 +281,17 @@ export type CreateOptions = {
 /**
  * Full interactive create flow
  */
-export async function promptCreateOptions(
-  defaultPort: number = defaults.port,
-): Promise<CreateOptions> {
+export async function promptCreateOptions(): Promise<CreateOptions> {
   console.log(chalk.cyan('\n  🗄️  Create New Database Container\n'))
 
   const engine = await promptEngine()
   const version = await promptVersion(engine)
   const name = await promptContainerName()
   const database = await promptDatabaseName(name) // Default to container name
-  const port = await promptPort(defaultPort)
+
+  // Get engine-specific default port
+  const engineDefaults = getEngineDefaults(engine)
+  const port = await promptPort(engineDefaults.defaultPort)
 
   return { name, engine, version, port, database }
 }
@@ -393,8 +396,7 @@ export async function promptInstallDependencies(
 
   console.log()
 
-  // For now, only PostgreSQL has full install support
-  // Future engines will need their own install functions
+  // PostgreSQL has its own install function with extra logic
   if (engine === 'postgresql') {
     const success = await installPostgresBinaries()
 
@@ -410,11 +412,72 @@ export async function promptInstallDependencies(
     return success
   }
 
-  // For other engines, show manual instructions
+  // For other engines (MySQL, etc.), use the generic installer
   console.log(
-    chalk.yellow(`  Automatic installation for ${engineName} is not yet supported.`),
+    chalk.cyan(`  Installing ${engineName} with ${packageManager.name}...`),
   )
-  console.log(chalk.gray('  Please install manually.'))
+  console.log(chalk.gray('  You may be prompted for your password.'))
   console.log()
-  return false
+
+  try {
+    const results = await installEngineDependencies(engine, packageManager)
+    const allSuccess = results.every((r) => r.success)
+
+    if (allSuccess) {
+      console.log()
+      console.log(
+        chalk.green(`  ${engineName} tools installed successfully!`),
+      )
+      console.log(chalk.gray('  Continuing with your operation...'))
+      console.log()
+      return true
+    } else {
+      const failed = results.filter((r) => !r.success)
+      console.log()
+      console.log(chalk.red('  Some installations failed:'))
+      for (const f of failed) {
+        console.log(chalk.red(`    ${f.dependency.name}: ${f.error}`))
+      }
+      console.log()
+
+      // Show manual install instructions
+      if (engineDeps) {
+        const instructions = getManualInstallInstructions(
+          engineDeps.dependencies[0],
+          platform,
+        )
+        if (instructions.length > 0) {
+          console.log(chalk.gray('  To install manually:'))
+          for (const instruction of instructions) {
+            console.log(chalk.gray(`    ${instruction}`))
+          }
+          console.log()
+        }
+      }
+
+      return false
+    }
+  } catch (err) {
+    const e = err as Error
+    console.log()
+    console.log(chalk.red(`  Installation failed: ${e.message}`))
+    console.log()
+
+    // Show manual install instructions on error
+    if (engineDeps) {
+      const instructions = getManualInstallInstructions(
+        engineDeps.dependencies[0],
+        platform,
+      )
+      if (instructions.length > 0) {
+        console.log(chalk.gray('  To install manually:'))
+        for (const instruction of instructions) {
+          console.log(chalk.gray(`    ${instruction}`))
+        }
+        console.log()
+      }
+    }
+
+    return false
+  }
 }

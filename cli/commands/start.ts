@@ -4,6 +4,7 @@ import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
+import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { error, warning } from '../ui/theme'
@@ -46,18 +47,27 @@ export const startCommand = new Command('start')
         process.exit(1)
       }
 
+      const { engine: engineName } = config
+
       // Check if already running
-      const running = await processManager.isRunning(containerName)
+      const running = await processManager.isRunning(containerName, {
+        engine: engineName,
+      })
       if (running) {
         console.log(warning(`Container "${containerName}" is already running`))
         return
       }
 
+      // Get engine defaults for port range and database name
+      const engineDefaults = getEngineDefaults(engineName)
+
       // Check port availability
       const portAvailable = await portManager.isPortAvailable(config.port)
       if (!portAvailable) {
-        // Try to find a new port
-        const { port: newPort } = await portManager.findAvailablePort()
+        // Try to find a new port (using engine-specific port range)
+        const { port: newPort } = await portManager.findAvailablePort({
+          portRange: engineDefaults.portRange,
+        })
         console.log(
           warning(
             `Port ${config.port} is in use, switching to port ${newPort}`,
@@ -68,7 +78,7 @@ export const startCommand = new Command('start')
       }
 
       // Get engine and start
-      const engine = getEngine(config.engine)
+      const engine = getEngine(engineName)
 
       const spinner = createSpinner(`Starting ${containerName}...`)
       spinner.start()
@@ -77,6 +87,22 @@ export const startCommand = new Command('start')
       await containerManager.updateConfig(containerName, { status: 'running' })
 
       spinner.succeed(`Container "${containerName}" started`)
+
+      // Ensure the user's database exists (if different from default)
+      const defaultDb = engineDefaults.superuser // postgres or root
+      if (config.database && config.database !== defaultDb) {
+        const dbSpinner = createSpinner(
+          `Ensuring database "${config.database}" exists...`,
+        )
+        dbSpinner.start()
+        try {
+          await engine.createDatabase(config, config.database)
+          dbSpinner.succeed(`Database "${config.database}" ready`)
+        } catch {
+          // Database might already exist, which is fine
+          dbSpinner.succeed(`Database "${config.database}" ready`)
+        }
+      }
 
       // Show connection info
       const connectionString = engine.getConnectionString(config)

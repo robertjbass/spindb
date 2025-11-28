@@ -1,6 +1,6 @@
 export type ContainerConfig = {
   name: string
-  engine: string
+  engine: EngineName
   version: string
   port: number
   database: string
@@ -8,6 +8,12 @@ export type ContainerConfig = {
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
 }
+
+/**
+ * Supported database engine names
+ * Extendable for future engines (sqlite, etc.)
+ */
+export type EngineName = 'postgresql' | 'mysql'
 
 export type ProgressCallback = (progress: {
   stage: string
@@ -65,9 +71,20 @@ export type EngineInfo = {
 }
 
 /**
- * Binary tool types
+ * Binary tool types for all supported engines
  */
-export type BinaryTool = 'psql' | 'pg_dump' | 'pg_restore' | 'pg_basebackup'
+export type BinaryTool =
+  // PostgreSQL tools
+  | 'psql'
+  | 'pg_dump'
+  | 'pg_restore'
+  | 'pg_basebackup'
+  // MySQL tools
+  | 'mysql'
+  | 'mysqldump'
+  | 'mysqlpump'
+  | 'mysqld'
+  | 'mysqladmin'
 
 /**
  * Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
@@ -88,16 +105,23 @@ export type BinaryConfig = {
  * Global spindb configuration stored in ~/.spindb/config.json
  */
 export type SpinDBConfig = {
-  // Binary paths for client tools
+  // Binary paths for client tools (all engines)
   binaries: {
+    // PostgreSQL tools
     psql?: BinaryConfig
     pg_dump?: BinaryConfig
     pg_restore?: BinaryConfig
     pg_basebackup?: BinaryConfig
+    // MySQL tools
+    mysql?: BinaryConfig
+    mysqldump?: BinaryConfig
+    mysqlpump?: BinaryConfig
+    mysqld?: BinaryConfig
+    mysqladmin?: BinaryConfig
   }
   // Default settings
   defaults?: {
-    engine?: string
+    engine?: EngineName
     version?: string
     port?: number
   }

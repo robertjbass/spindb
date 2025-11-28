@@ -1,3 +1,20 @@
+import {
+  engineDefaults,
+  getEngineDefaults,
+  isEngineSupported,
+  getSupportedEngines,
+  type EngineDefaults,
+} from './engine-defaults'
+
+// Re-export engine-related functions and types
+export {
+  engineDefaults,
+  getEngineDefaults,
+  isEngineSupported,
+  getSupportedEngines,
+  type EngineDefaults,
+}
+
 export type PlatformMappings = {
   [key: string]: string
 }
@@ -7,42 +24,50 @@ export type PortRange = {
   end: number
 }
 
+/**
+ * Legacy Defaults type - kept for backward compatibility
+ * New code should use getEngineDefaults(engine) instead
+ */
 export type Defaults = {
+  /** @deprecated Use getEngineDefaults(engine).defaultVersion instead */
   postgresVersion: string
   port: number
   portRange: PortRange
   engine: string
+  /** @deprecated Use getEngineDefaults(engine).supportedVersions instead */
   supportedPostgresVersions: string[]
   superuser: string
   platformMappings: PlatformMappings
 }
 
-// TODO - make defaults configurable via env vars or config file
-// TODO - make defaults generic so it supports multiple engines
-// TODO - consider using a configuration file or environment variables for overrides
+// Get PostgreSQL defaults from engine-defaults
+const pgDefaults = engineDefaults.postgresql
+
+/**
+ * Default configuration values
+ * For backward compatibility, this defaults to PostgreSQL settings.
+ * New code should use getEngineDefaults(engine) for engine-specific defaults.
+ */
 export const defaults: Defaults = {
-  // Default PostgreSQL version
-  postgresVersion: '16',
+  // Default PostgreSQL version (from engine defaults)
+  postgresVersion: pgDefaults.defaultVersion,
 
   // Default port (standard PostgreSQL port)
-  port: 5432,
+  port: pgDefaults.defaultPort,
 
   // Port range to scan if default is busy
-  portRange: {
-    start: 5432,
-    end: 5500,
-  },
+  portRange: pgDefaults.portRange,
 
   // Default engine
   engine: 'postgresql',
 
-  // Supported PostgreSQL versions
-  supportedPostgresVersions: ['14', '15', '16', '17'],
+  // Supported PostgreSQL versions (from engine defaults)
+  supportedPostgresVersions: pgDefaults.supportedVersions,
 
-  // Default superuser
-  superuser: 'postgres',
+  // Default superuser (from engine defaults)
+  superuser: pgDefaults.superuser,
 
-  // Platform mappings for zonky.io binaries
+  // Platform mappings for zonky.io binaries (PostgreSQL specific)
   platformMappings: {
     'darwin-arm64': 'darwin-arm64v8',
     'darwin-x64': 'darwin-amd64',

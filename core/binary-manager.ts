@@ -62,7 +62,12 @@ export class BinaryManager {
     platform: string,
     arch: string,
   ): Promise<boolean> {
-    const binPath = paths.getBinaryPath('postgresql', version, platform, arch)
+    const binPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version,
+      platform,
+      arch,
+    })
     const postgresPath = join(binPath, 'bin', 'postgres')
     return existsSync(postgresPath)
   }
@@ -109,7 +114,12 @@ export class BinaryManager {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const url = this.getDownloadUrl(version, platform, arch)
-    const binPath = paths.getBinaryPath('postgresql', version, platform, arch)
+    const binPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version,
+      platform,
+      arch,
+    })
     const tempDir = join(paths.bin, `temp-${version}-${platform}-${arch}`)
     const jarFile = join(tempDir, 'postgres.jar')
 
@@ -190,7 +200,12 @@ export class BinaryManager {
     platform: string,
     arch: string,
   ): Promise<boolean> {
-    const binPath = paths.getBinaryPath('postgresql', version, platform, arch)
+    const binPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version,
+      platform,
+      arch,
+    })
     const postgresPath = join(binPath, 'bin', 'postgres')
 
     if (!existsSync(postgresPath)) {
@@ -241,7 +256,12 @@ export class BinaryManager {
     arch: string,
     binary: string,
   ): string {
-    const binPath = paths.getBinaryPath('postgresql', version, platform, arch)
+    const binPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version,
+      platform,
+      arch,
+    })
     return join(binPath, 'bin', binary)
   }
 
@@ -259,7 +279,12 @@ export class BinaryManager {
         stage: 'cached',
         message: 'Using cached PostgreSQL binaries',
       })
-      return paths.getBinaryPath('postgresql', version, platform, arch)
+      return paths.getBinaryPath({
+        engine: 'postgresql',
+        version,
+        platform,
+        arch,
+      })
     }
 
     return this.download(version, platform, arch, onProgress)
