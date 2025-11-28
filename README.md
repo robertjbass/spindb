@@ -1,6 +1,6 @@
 # SpinDB
 
-Spin up local PostgreSQL and MySQL databases without Docker. A lightweight alternative to DBngin.
+Spin up local PostgreSQL and MySQL databases without Docker. A lightweight alternative to DBngin and Postgres.app.
 
 ## Features
 

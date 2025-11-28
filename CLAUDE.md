@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local PostgreSQL and MySQL databases without Docker. It's a lightweight alternative to DBngin, downloading PostgreSQL binaries directly and using system-installed MySQL.
+SpinDB is a CLI tool for running local PostgreSQL and MySQL databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL.
 
 ## Tech Stack
 
