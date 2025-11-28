@@ -1382,6 +1382,15 @@ async function handleStartContainer(containerName: string): Promise<void> {
         `Port ${config.port} is in use. Stop the process using it or change this container's port.`,
       ),
     )
+    console.log()
+    console.log(
+      info(
+        'Tip: If you installed MariaDB via apt, it may have started a system service.',
+      ),
+    )
+    console.log(
+      info('Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb'),
+    )
     return
   }
 
@@ -1390,15 +1399,31 @@ async function handleStartContainer(containerName: string): Promise<void> {
   const spinner = createSpinner(`Starting ${containerName}...`)
   spinner.start()
 
-  await engine.start(config)
-  await containerManager.updateConfig(containerName, { status: 'running' })
+  try {
+    await engine.start(config)
+    await containerManager.updateConfig(containerName, { status: 'running' })
 
-  spinner.succeed(`Container "${containerName}" started`)
+    spinner.succeed(`Container "${containerName}" started`)
 
-  const connectionString = engine.getConnectionString(config)
-  console.log()
-  console.log(chalk.gray('  Connection string:'))
-  console.log(chalk.cyan(`  ${connectionString}`))
+    const connectionString = engine.getConnectionString(config)
+    console.log()
+    console.log(chalk.gray('  Connection string:'))
+    console.log(chalk.cyan(`  ${connectionString}`))
+  } catch (err) {
+    spinner.fail(`Failed to start "${containerName}"`)
+    const e = err as Error
+    console.log()
+    console.log(error(e.message))
+
+    // Check if there's a log file with more details
+    const logPath = paths.getContainerLogPath(containerName, {
+      engine: config.engine,
+    })
+    if (existsSync(logPath)) {
+      console.log()
+      console.log(info(`Check the log file for details: ${logPath}`))
+    }
+  }
 }
 
 async function handleStopContainer(containerName: string): Promise<void> {

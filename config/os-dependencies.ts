@@ -241,17 +241,18 @@ const postgresqlDependencies: EngineDependencies = {
 
 const mysqlDependencies: EngineDependencies = {
   engine: 'mysql',
-  displayName: 'MySQL',
+  displayName: 'MySQL/MariaDB',
   dependencies: [
     {
       name: 'mysqld',
       binary: 'mysqld',
-      description: 'MySQL server daemon',
+      description: 'MySQL/MariaDB server daemon',
       packages: {
         brew: { package: 'mysql' },
-        apt: { package: 'mysql-server' },
-        yum: { package: 'mysql-server' },
-        dnf: { package: 'mysql-server' },
+        // Modern Debian/Ubuntu use mariadb-server (MySQL-compatible)
+        apt: { package: 'mariadb-server' },
+        yum: { package: 'mariadb-server' },
+        dnf: { package: 'mariadb-server' },
         pacman: { package: 'mariadb' },
       },
       manualInstall: {
@@ -260,9 +261,9 @@ const mysqlDependencies: EngineDependencies = {
           'Then run: brew install mysql',
         ],
         linux: [
-          'Ubuntu/Debian: sudo apt install mysql-server',
-          'CentOS/RHEL: sudo yum install mysql-server',
-          'Fedora: sudo dnf install mysql-server',
+          'Debian/Ubuntu: sudo apt install mariadb-server',
+          'CentOS/RHEL: sudo yum install mariadb-server',
+          'Fedora: sudo dnf install mariadb-server',
           'Arch: sudo pacman -S mariadb',
         ],
       },
@@ -270,12 +271,12 @@ const mysqlDependencies: EngineDependencies = {
     {
       name: 'mysql',
       binary: 'mysql',
-      description: 'MySQL command-line client',
+      description: 'MySQL/MariaDB command-line client',
       packages: {
         brew: { package: 'mysql' },
-        apt: { package: 'mysql-client' },
-        yum: { package: 'mysql' },
-        dnf: { package: 'mysql' },
+        apt: { package: 'mariadb-client' },
+        yum: { package: 'mariadb' },
+        dnf: { package: 'mariadb' },
         pacman: { package: 'mariadb-clients' },
       },
       manualInstall: {
@@ -284,9 +285,9 @@ const mysqlDependencies: EngineDependencies = {
           'Then run: brew install mysql',
         ],
         linux: [
-          'Ubuntu/Debian: sudo apt install mysql-client',
-          'CentOS/RHEL: sudo yum install mysql',
-          'Fedora: sudo dnf install mysql',
+          'Debian/Ubuntu: sudo apt install mariadb-client',
+          'CentOS/RHEL: sudo yum install mariadb',
+          'Fedora: sudo dnf install mariadb',
           'Arch: sudo pacman -S mariadb-clients',
         ],
       },
@@ -294,12 +295,12 @@ const mysqlDependencies: EngineDependencies = {
     {
       name: 'mysqldump',
       binary: 'mysqldump',
-      description: 'MySQL database backup utility',
+      description: 'MySQL/MariaDB database backup utility',
       packages: {
         brew: { package: 'mysql' },
-        apt: { package: 'mysql-client' },
-        yum: { package: 'mysql' },
-        dnf: { package: 'mysql' },
+        apt: { package: 'mariadb-client' },
+        yum: { package: 'mariadb' },
+        dnf: { package: 'mariadb' },
         pacman: { package: 'mariadb-clients' },
       },
       manualInstall: {
@@ -308,9 +309,9 @@ const mysqlDependencies: EngineDependencies = {
           'Then run: brew install mysql',
         ],
         linux: [
-          'Ubuntu/Debian: sudo apt install mysql-client',
-          'CentOS/RHEL: sudo yum install mysql',
-          'Fedora: sudo dnf install mysql',
+          'Debian/Ubuntu: sudo apt install mariadb-client',
+          'CentOS/RHEL: sudo yum install mariadb',
+          'Fedora: sudo dnf install mariadb',
           'Arch: sudo pacman -S mariadb-clients',
         ],
       },
@@ -318,12 +319,12 @@ const mysqlDependencies: EngineDependencies = {
     {
       name: 'mysqladmin',
       binary: 'mysqladmin',
-      description: 'MySQL server administration utility',
+      description: 'MySQL/MariaDB server administration utility',
       packages: {
         brew: { package: 'mysql' },
-        apt: { package: 'mysql-client' },
-        yum: { package: 'mysql' },
-        dnf: { package: 'mysql' },
+        apt: { package: 'mariadb-client' },
+        yum: { package: 'mariadb' },
+        dnf: { package: 'mariadb' },
         pacman: { package: 'mariadb-clients' },
       },
       manualInstall: {
@@ -332,9 +333,9 @@ const mysqlDependencies: EngineDependencies = {
           'Then run: brew install mysql',
         ],
         linux: [
-          'Ubuntu/Debian: sudo apt install mysql-client',
-          'CentOS/RHEL: sudo yum install mysql',
-          'Fedora: sudo dnf install mysql',
+          'Debian/Ubuntu: sudo apt install mariadb-client',
+          'CentOS/RHEL: sudo yum install mariadb',
+          'Fedora: sudo dnf install mariadb',
           'Arch: sudo pacman -S mariadb-clients',
         ],
       },

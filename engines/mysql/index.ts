@@ -16,6 +16,9 @@ import {
   getMysqlClientPath,
   getMysqladminPath,
   getMysqldumpPath,
+  getMysqlInstallDbPath,
+  getMariadbInstallDbPath,
+  isMariaDB,
   detectInstalledVersions,
   getInstallInstructions,
 } from './binary-detection'
@@ -101,19 +104,15 @@ export class MySQLEngine extends BaseEngine {
   }
 
   /**
-   * Initialize a new MySQL data directory
-   * CLI wrapper: mysqld --initialize-insecure --datadir={dir}
+   * Initialize a new MySQL/MariaDB data directory
+   * MySQL: mysqld --initialize-insecure --datadir={dir}
+   * MariaDB: mysql_install_db --datadir={dir} --auth-root-authentication-method=normal
    */
   async initDataDir(
     containerName: string,
     _version: string,
     _options: Record<string, unknown> = {},
   ): Promise<string> {
-    const mysqld = await getMysqldPath()
-    if (!mysqld) {
-      throw new Error(getInstallInstructions())
-    }
-
     const dataDir = paths.getContainerDataPath(containerName, { engine: ENGINE })
 
     // Create data directory if it doesn't exist
@@ -121,43 +120,102 @@ export class MySQLEngine extends BaseEngine {
       await mkdir(dataDir, { recursive: true })
     }
 
-    // Initialize MySQL data directory
-    // --initialize-insecure creates root user without password (for local dev)
-    const args = [
-      '--initialize-insecure',
-      `--datadir=${dataDir}`,
-      `--user=${process.env.USER || 'mysql'}`,
-    ]
+    // Check if we're using MariaDB or MySQL
+    const usingMariaDB = await isMariaDB()
 
-    return new Promise((resolve, reject) => {
-      const proc = spawn(mysqld, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+    if (usingMariaDB) {
+      // MariaDB uses mysql_install_db or mariadb-install-db
+      const installDb =
+        (await getMariadbInstallDbPath()) || (await getMysqlInstallDbPath())
+      if (!installDb) {
+        throw new Error(
+          'MariaDB detected but mysql_install_db not found.\n' +
+            'Install MariaDB server package which includes the initialization script.',
+        )
+      }
+
+      // MariaDB initialization
+      // --auth-root-authentication-method=normal allows passwordless root login via socket
+      const args = [
+        `--datadir=${dataDir}`,
+        `--user=${process.env.USER || 'mysql'}`,
+        '--auth-root-authentication-method=normal',
+      ]
+
+      return new Promise((resolve, reject) => {
+        const proc = spawn(installDb, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        proc.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve(dataDir)
+          } else {
+            reject(
+              new Error(
+                `MariaDB initialization failed with code ${code}: ${stderr || stdout}`,
+              ),
+            )
+          }
+        })
+
+        proc.on('error', reject)
       })
+    } else {
+      // MySQL uses mysqld --initialize-insecure
+      const mysqld = await getMysqldPath()
+      if (!mysqld) {
+        throw new Error(getInstallInstructions())
+      }
 
-      let stdout = ''
-      let stderr = ''
+      // MySQL initialization
+      // --initialize-insecure creates root user without password (for local dev)
+      const args = [
+        '--initialize-insecure',
+        `--datadir=${dataDir}`,
+        `--user=${process.env.USER || 'mysql'}`,
+      ]
 
-      proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString()
+      return new Promise((resolve, reject) => {
+        const proc = spawn(mysqld, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        proc.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve(dataDir)
+          } else {
+            reject(
+              new Error(
+                `MySQL initialization failed with code ${code}: ${stderr || stdout}`,
+              ),
+            )
+          }
+        })
+
+        proc.on('error', reject)
       })
-      proc.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString()
-      })
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve(dataDir)
-        } else {
-          reject(
-            new Error(
-              `MySQL initialization failed with code ${code}: ${stderr || stdout}`,
-            ),
-          )
-        }
-      })
-
-      proc.on('error', reject)
-    })
+    }
   }
 
   /**

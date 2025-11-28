@@ -119,6 +119,35 @@ export async function getMysqldumpPath(): Promise<string | null> {
 }
 
 /**
+ * Get the path to mysql_install_db (MariaDB initialization script)
+ */
+export async function getMysqlInstallDbPath(): Promise<string | null> {
+  return findMysqlBinary('mysql_install_db')
+}
+
+/**
+ * Get the path to mariadb-install-db (alternative MariaDB initialization)
+ */
+export async function getMariadbInstallDbPath(): Promise<string | null> {
+  return findMysqlBinary('mariadb-install-db')
+}
+
+/**
+ * Detect if the installed MySQL is actually MariaDB
+ */
+export async function isMariaDB(): Promise<boolean> {
+  const mysqld = await getMysqldPath()
+  if (!mysqld) return false
+
+  try {
+    const { stdout } = await execAsync(`"${mysqld}" --version`)
+    return stdout.toLowerCase().includes('mariadb')
+  } catch {
+    return false
+  }
+}
+
+/**
  * Get the MySQL server version from a mysqld binary
  */
 export async function getMysqlVersion(
