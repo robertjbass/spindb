@@ -2,7 +2,7 @@ import inquirer from 'inquirer'
 import chalk from 'chalk'
 import ora from 'ora'
 import { listEngines, getEngine } from '../../engines'
-import { defaults } from '../../config/defaults'
+import { defaults, getEngineDefaults } from '../../config/defaults'
 import { installPostgresBinaries } from '../../core/postgres-binary-manager'
 import {
   detectPackageManager,
@@ -280,16 +280,17 @@ export type CreateOptions = {
 /**
  * Full interactive create flow
  */
-export async function promptCreateOptions(
-  defaultPort: number = defaults.port,
-): Promise<CreateOptions> {
+export async function promptCreateOptions(): Promise<CreateOptions> {
   console.log(chalk.cyan('\n  🗄️  Create New Database Container\n'))
 
   const engine = await promptEngine()
   const version = await promptVersion(engine)
   const name = await promptContainerName()
   const database = await promptDatabaseName(name) // Default to container name
-  const port = await promptPort(defaultPort)
+
+  // Get engine-specific default port
+  const engineDefaults = getEngineDefaults(engine)
+  const port = await promptPort(engineDefaults.defaultPort)
 
   return { name, engine, version, port, database }
 }

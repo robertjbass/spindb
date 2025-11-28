@@ -360,6 +360,15 @@ async function handleList(): Promise<void> {
     console.log(
       info('No containers found. Create one with the "Create" option.'),
     )
+    console.log()
+
+    await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to return to the main menu...'),
+      },
+    ])
     return
   }
 
