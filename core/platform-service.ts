@@ -125,9 +125,7 @@ export abstract class BasePlatformService {
 
     // First try the which/where command
     try {
-      const { stdout } = await execAsync(
-        `${whichConfig.command} ${toolName}`,
-      )
+      const { stdout } = await execAsync(`${whichConfig.command} ${toolName}`)
       const path = stdout.trim().split('\n')[0]
       if (path && existsSync(path)) {
         return path
@@ -185,7 +183,8 @@ class DarwinPlatformService extends BasePlatformService {
           encoding: 'utf-8',
         })
         const parts = result.trim().split(':')
-        homeDir = parts.length >= 6 && parts[5] ? parts[5] : `/Users/${sudoUser}`
+        homeDir =
+          parts.length >= 6 && parts[5] ? parts[5] : `/Users/${sudoUser}`
       } catch {
         homeDir = `/Users/${sudoUser}`
       }

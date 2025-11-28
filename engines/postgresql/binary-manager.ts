@@ -331,12 +331,19 @@ export async function installPostgresBinaries(): Promise<boolean> {
   spinner.succeed(`Found package manager: ${packageManager.name}`)
 
   // Don't use a spinner during installation - it blocks TTY access for sudo password prompts
-  console.log(chalk.cyan(`  Installing PostgreSQL client tools with ${packageManager.name}...`))
+  console.log(
+    chalk.cyan(
+      `  Installing PostgreSQL client tools with ${packageManager.name}...`,
+    ),
+  )
   console.log(chalk.gray('  You may be prompted for your password.'))
   console.log()
 
   try {
-    const results = await installEngineDependencies('postgresql', packageManager)
+    const results = await installEngineDependencies(
+      'postgresql',
+      packageManager,
+    )
     const allSuccess = results.every((r) => r.success)
 
     if (allSuccess) {
@@ -401,7 +408,9 @@ export async function updatePostgresClientTools(): Promise<boolean> {
 
       spinner.succeed('PostgreSQL client tools updated')
       console.log(
-        success(`Client tools successfully linked to PostgreSQL ${latestMajor}`),
+        success(
+          `Client tools successfully linked to PostgreSQL ${latestMajor}`,
+        ),
       )
       console.log(chalk.gray('ICU dependencies have been updated'))
       return true

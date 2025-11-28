@@ -66,7 +66,9 @@ describe('PostgreSQL Integration Tests', () => {
   })
 
   it('should create container without starting (--no-start)', async () => {
-    console.log(`\n📦 Creating container "${containerName}" without starting...`)
+    console.log(
+      `\n📦 Creating container "${containerName}" without starting...`,
+    )
 
     await containerManager.create(containerName, {
       engine: ENGINE,
@@ -82,9 +84,15 @@ describe('PostgreSQL Integration Tests', () => {
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
     assert(config !== null, 'Container config should exist')
-    assertEqual(config?.status, 'created', 'Container status should be "created"')
+    assertEqual(
+      config?.status,
+      'created',
+      'Container status should be "created"',
+    )
 
-    const running = await processManager.isRunning(containerName, { engine: ENGINE })
+    const running = await processManager.isRunning(containerName, {
+      engine: ENGINE,
+    })
     assert(!running, 'Container should not be running')
 
     console.log('   ✓ Container created and not running')
@@ -107,7 +115,9 @@ describe('PostgreSQL Integration Tests', () => {
     // Create the user database
     await engine.createDatabase(config!, DATABASE)
 
-    const running = await processManager.isRunning(containerName, { engine: ENGINE })
+    const running = await processManager.isRunning(containerName, {
+      engine: ENGINE,
+    })
     assert(running, 'Container should be running')
 
     console.log('   ✓ Container started and ready')
@@ -118,16 +128,31 @@ describe('PostgreSQL Integration Tests', () => {
 
     await executeSQLFile(ENGINE, testPorts[0], DATABASE, SEED_FILE)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Should have correct row count after seeding')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Should have correct row count after seeding',
+    )
 
     console.log(`   ✓ Seeded ${rowCount} rows`)
   })
 
   it('should create a new container from connection string (dump/restore)', async () => {
-    console.log(`\n📋 Creating container "${clonedContainerName}" from connection string...`)
+    console.log(
+      `\n📋 Creating container "${clonedContainerName}" from connection string...`,
+    )
 
-    const sourceConnectionString = getConnectionString(ENGINE, testPorts[0], DATABASE)
+    const sourceConnectionString = getConnectionString(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+    )
 
     // Create container
     await containerManager.create(clonedContainerName, {
@@ -139,13 +164,17 @@ describe('PostgreSQL Integration Tests', () => {
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '17', { superuser: 'postgres' })
+    await engine.initDataDir(clonedContainerName, '17', {
+      superuser: 'postgres',
+    })
 
     const config = await containerManager.getConfig(clonedContainerName)
     assert(config !== null, 'Cloned container config should exist')
 
     await engine.start(config!)
-    await containerManager.updateConfig(clonedContainerName, { status: 'running' })
+    await containerManager.updateConfig(clonedContainerName, {
+      status: 'running',
+    })
 
     // Wait for ready
     const ready = await waitForReady(ENGINE, testPorts[1])
@@ -159,7 +188,10 @@ describe('PostgreSQL Integration Tests', () => {
     const dumpPath = join(tmpdir(), `pg-test-dump-${Date.now()}.dump`)
 
     await engine.dumpFromConnectionString(sourceConnectionString, dumpPath)
-    await engine.restore(config!, dumpPath, { database: DATABASE, createDatabase: false })
+    await engine.restore(config!, dumpPath, {
+      database: DATABASE,
+      createDatabase: false,
+    })
 
     // Clean up dump file
     const { rm } = await import('fs/promises')
@@ -171,8 +203,17 @@ describe('PostgreSQL Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[1], DATABASE, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should have same row count')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should have same row count',
+    )
 
     console.log(`   ✓ Verified ${rowCount} rows in restored container`)
   })
@@ -209,7 +250,12 @@ describe('PostgreSQL Integration Tests', () => {
       "DELETE FROM test_user WHERE email = 'eve@example.com'",
     )
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
     console.log(`   ✓ Row deleted, now have ${rowCount} rows`)
@@ -228,7 +274,9 @@ describe('PostgreSQL Integration Tests', () => {
 
     // Rename container and change port
     await containerManager.rename(containerName, renamedContainerName)
-    await containerManager.updateConfig(renamedContainerName, { port: testPorts[2] })
+    await containerManager.updateConfig(renamedContainerName, {
+      port: testPorts[2],
+    })
 
     // Verify rename
     const oldConfig = await containerManager.getConfig(containerName)
@@ -238,7 +286,9 @@ describe('PostgreSQL Integration Tests', () => {
     assert(newConfig !== null, 'Renamed container should exist')
     assertEqual(newConfig?.port, testPorts[2], 'Port should be updated')
 
-    console.log(`   ✓ Renamed to "${renamedContainerName}" on port ${testPorts[2]}`)
+    console.log(
+      `   ✓ Renamed to "${renamedContainerName}" on port ${testPorts[2]}`,
+    )
   })
 
   it('should verify data persists after rename', async () => {
@@ -250,15 +300,26 @@ describe('PostgreSQL Integration Tests', () => {
     // Start the renamed container
     const engine = getEngine(ENGINE)
     await engine.start(config!)
-    await containerManager.updateConfig(renamedContainerName, { status: 'running' })
+    await containerManager.updateConfig(renamedContainerName, {
+      status: 'running',
+    })
 
     // Wait for ready
     const ready = await waitForReady(ENGINE, testPorts[2])
     assert(ready, 'Renamed PostgreSQL should be ready')
 
     // Verify row count reflects deletion
-    const rowCount = await getRowCount(ENGINE, testPorts[2], DATABASE, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Row count should persist after rename')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[2],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Row count should persist after rename',
+    )
 
     console.log(`   ✓ Data persisted: ${rowCount} rows`)
   })
@@ -275,25 +336,35 @@ describe('PostgreSQL Integration Tests', () => {
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '17', { superuser: 'postgres' })
+    await engine.initDataDir(portConflictContainerName, '17', {
+      superuser: 'postgres',
+    })
 
     // The container should be created but when we try to start, it should detect conflict
     // In real usage, the start command would auto-assign a new port
     const config = await containerManager.getConfig(portConflictContainerName)
     assert(config !== null, 'Container should be created')
-    assertEqual(config?.port, testPorts[2], 'Port should be set to conflicting port initially')
+    assertEqual(
+      config?.port,
+      testPorts[2],
+      'Port should be set to conflicting port initially',
+    )
 
     // Clean up this test container
     await containerManager.delete(portConflictContainerName, { force: true })
 
-    console.log('   ✓ Container created with conflicting port (would auto-reassign on start)')
+    console.log(
+      '   ✓ Container created with conflicting port (would auto-reassign on start)',
+    )
   })
 
   it('should show warning when starting already running container', async () => {
     console.log(`\n⚠️  Testing start on already running container...`)
 
     // Container should already be running from earlier test
-    const running = await processManager.isRunning(renamedContainerName, { engine: ENGINE })
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
     assert(running, 'Container should already be running')
 
     // Attempting to start again should not throw, just warn
@@ -310,10 +381,14 @@ describe('PostgreSQL Integration Tests', () => {
 
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
-    await containerManager.updateConfig(renamedContainerName, { status: 'stopped' })
+    await containerManager.updateConfig(renamedContainerName, {
+      status: 'stopped',
+    })
 
     // Now it's stopped, verify
-    const running = await processManager.isRunning(renamedContainerName, { engine: ENGINE })
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
     assert(!running, 'Container should be stopped')
 
     // Attempting to stop again should not throw

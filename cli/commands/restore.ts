@@ -182,7 +182,10 @@ export const restoreCommand = new Command('restore')
             dumpSpinner.start()
 
             try {
-              await engine.dumpFromConnectionString(options.fromUrl, tempDumpPath)
+              await engine.dumpFromConnectionString(
+                options.fromUrl,
+                tempDumpPath,
+              )
               dumpSpinner.succeed('Dump created from remote database')
               backupPath = tempDumpPath
               dumpSuccess = true

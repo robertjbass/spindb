@@ -102,7 +102,11 @@ export function assertCompatibleFormat(format: BackupFormat): void {
       `This appears to be a MySQL/MariaDB dump file, but you're trying to restore it to PostgreSQL.`,
       'fatal',
       `Create a MySQL container instead:\n  spindb create mydb --engine mysql --from <dump-file>`,
-      { detectedFormat: format.format, expectedEngine: 'postgresql', detectedEngine: 'mysql' },
+      {
+        detectedFormat: format.format,
+        expectedEngine: 'postgresql',
+        detectedEngine: 'mysql',
+      },
     )
   }
 }

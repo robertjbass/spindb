@@ -146,9 +146,7 @@ async function readFirstLines(
  *   -- MariaDB dump 10.19-11.4.3-MariaDB, for osx10.20 (arm64)
  *   -- Server version   11.4.3-MariaDB
  */
-export async function parseDumpVersion(
-  dumpPath: string,
-): Promise<DumpInfo> {
+export async function parseDumpVersion(dumpPath: string): Promise<DumpInfo> {
   try {
     const header = await readFirstLines(dumpPath, 30)
 
@@ -304,7 +302,10 @@ export function checkVersionCompatibility(
   }
 
   // Warn if dump is very old (5+ years)
-  if (dumpInfo.version.major < 5 || (dumpInfo.version.major === 5 && dumpInfo.version.minor < 7)) {
+  if (
+    dumpInfo.version.major < 5 ||
+    (dumpInfo.version.major === 5 && dumpInfo.version.minor < 7)
+  ) {
     result.warning =
       `Dump was created with MySQL ${dumpInfo.version.full}. ` +
       `This is a very old version; some data types may not import correctly.`

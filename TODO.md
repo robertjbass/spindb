@@ -19,14 +19,17 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [x] **MariaDB support** - Automatically detect and support MariaDB as MySQL alternative on Linux
 
 ### Medium Priority
-- [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu)
+- [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu and `spindb edit --name`)
+- [x] **Container port change** - Change container port (via Edit menu and `spindb edit --port`)
 - [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
-- [x] **Export connection string** - Copy connection string to clipboard (via container submenu)
+- [x] **Export connection string** - Copy connection string to clipboard (via container submenu and `spindb url --copy`)
+- [x] **Container info command** - Show detailed container info via `spindb info [name]`
 - [ ] **Multiple databases per container** - List/create/delete databases within a container
 - [x] **Fetch available versions** - Query Maven Central API to show all available PostgreSQL versions instead of hardcoded list
 - [x] **Engine-aware shell** - Open shell uses psql for PostgreSQL, mysql for MySQL
 - [x] **Cross-engine dump detection** - Detect and error when restoring wrong engine dump (e.g., MySQL dump to PostgreSQL)
 - [x] **Version compatibility validation** - Warn/error when dump version is incompatible with client version
+- [x] **CLI parity** - All interactive menu features available via CLI commands (`spindb engines`, `spindb edit`, `spindb url`, `spindb info`)
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
@@ -150,43 +153,5 @@ Located in `tests/integration/helpers.ts`:
 
 ---
 
-# Dump/Restore Notes:
+# Triage:
 
-## Postgres
-
-for pg_restore the version info can be found in the dump file like this:
-
-### Method 1: Use pg_restore to show TOC (Table of Contents)
-`pg_restore --list _dumps/{filename}.dump | head -20`
-to see this:
-
-```bash
-; Archive created at 2025-11-25 14:12:57 CST
-;     dbname: database_name
-;     TOC Entries: 1524
-;     Compression: gzip
-;     Dump Version: 1.15-0
-;     Format: CUSTOM
-;     Integer: 4 bytes
-;     Offset: 8 bytes
-;     Dumped from database version: 16.9 (415ebe8)
-;     Dumped by pg_dump version: 16.0
-```
-
-### Method 2: Use strings to extract version info
-`strings _dumps/{filename}.dump | head -10`
-to see this:
-
-```bash
-strings _dumps/database_name.dump | head -10
-PGDMP
-efficientdb
-16.9 (415ebe8)
-16.0
-ENCODING
-ENCODING
-SET client_encoding = 'UTF8';
-false
-STDSTRINGS
-STDSTRINGS
-```

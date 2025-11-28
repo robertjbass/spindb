@@ -93,7 +93,7 @@ export async function findBinary(
     if (!path) return null
 
     // Try to get version
-    const version = await platformService.getToolVersion(path) || undefined
+    const version = (await platformService.getToolVersion(path)) || undefined
 
     return { path, version }
   } catch {
@@ -208,7 +208,9 @@ function execWithInheritedStdio(command: string): void {
   }
 
   if (result.status !== 0) {
-    throw new Error(`Command failed with exit code ${result.status}: ${cmdToRun}`)
+    throw new Error(
+      `Command failed with exit code ${result.status}: ${cmdToRun}`,
+    )
   }
 }
 

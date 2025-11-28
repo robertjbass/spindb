@@ -64,7 +64,10 @@ export function parseToolVersion(output: string): VersionInfo {
 /**
  * Read the first N lines of a file
  */
-async function readFirstLines(filePath: string, lineCount: number): Promise<string> {
+async function readFirstLines(
+  filePath: string,
+  lineCount: number,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const lines: string[] = []
     const stream = createReadStream(filePath, { encoding: 'utf8' })
@@ -106,7 +109,9 @@ export async function parseDumpVersion(
         `"${restorePath}" -l "${dumpPath}" 2>&1 | head -20`,
       )
       // Look for: "; Dumped from database version 16.1"
-      const match = stdout.match(/Dumped from database version (\d+)\.(\d+)(?:\.(\d+))?/)
+      const match = stdout.match(
+        /Dumped from database version (\d+)\.(\d+)(?:\.(\d+))?/,
+      )
       if (match) {
         return {
           major: parseInt(match[1], 10),
@@ -118,7 +123,9 @@ export async function parseDumpVersion(
     } else {
       // Plain SQL format - read first 50 lines
       const header = await readFirstLines(dumpPath, 50)
-      const match = header.match(/Dumped from database version (\d+)\.(\d+)(?:\.(\d+))?/)
+      const match = header.match(
+        /Dumped from database version (\d+)\.(\d+)(?:\.(\d+))?/,
+      )
       if (match) {
         return {
           major: parseInt(match[1], 10),
@@ -142,7 +149,9 @@ export async function parseDumpVersion(
 /**
  * Get the version of pg_restore
  */
-export async function getPgRestoreVersion(pgRestorePath: string): Promise<VersionInfo> {
+export async function getPgRestoreVersion(
+  pgRestorePath: string,
+): Promise<VersionInfo> {
   const { stdout } = await execAsync(`"${pgRestorePath}" --version`)
   return parseToolVersion(stdout)
 }

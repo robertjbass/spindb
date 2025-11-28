@@ -119,13 +119,20 @@ export async function detectBackupFormat(
  * Check if the backup file is from the wrong engine and throw helpful error
  */
 export function assertCompatibleFormat(format: BackupFormat): void {
-  if (format.format === 'postgresql_custom' || format.format === 'postgresql_sql') {
+  if (
+    format.format === 'postgresql_custom' ||
+    format.format === 'postgresql_sql'
+  ) {
     throw new SpinDBError(
       ErrorCodes.WRONG_ENGINE_DUMP,
       `This appears to be a PostgreSQL dump file, but you're trying to restore it to MySQL.`,
       'fatal',
       `Create a PostgreSQL container instead:\n  spindb create mydb --engine postgresql --from <dump-file>`,
-      { detectedFormat: format.format, expectedEngine: 'mysql', detectedEngine: 'postgresql' },
+      {
+        detectedFormat: format.format,
+        expectedEngine: 'mysql',
+        detectedEngine: 'postgresql',
+      },
     )
   }
 }

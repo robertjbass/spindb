@@ -333,7 +333,9 @@ export async function promptInstallDependencies(
       if (dep) {
         const instructions = getManualInstallInstructions(dep, platform)
         console.log(
-          chalk.gray(`  Please install ${engineDeps.displayName} client tools:`),
+          chalk.gray(
+            `  Please install ${engineDeps.displayName} client tools:`,
+          ),
         )
         console.log()
         for (const instruction of instructions) {
@@ -346,7 +348,9 @@ export async function promptInstallDependencies(
   }
 
   console.log(
-    chalk.gray(`  Detected package manager: ${chalk.white(packageManager.name)}`),
+    chalk.gray(
+      `  Detected package manager: ${chalk.white(packageManager.name)}`,
+    ),
   )
   console.log()
 
@@ -425,9 +429,7 @@ export async function promptInstallDependencies(
 
     if (allSuccess) {
       console.log()
-      console.log(
-        chalk.green(`  ${engineName} tools installed successfully!`),
-      )
+      console.log(chalk.green(`  ${engineName} tools installed successfully!`))
       console.log(chalk.gray('  Continuing with your operation...'))
       console.log()
       return true

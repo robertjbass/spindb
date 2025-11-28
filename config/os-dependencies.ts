@@ -162,11 +162,7 @@ const postgresqlDependencies: EngineDependencies = {
   engine: 'postgresql',
   displayName: 'PostgreSQL',
   dependencies: [
-    createPostgresDependency(
-      'psql',
-      'psql',
-      'PostgreSQL interactive terminal',
-    ),
+    createPostgresDependency('psql', 'psql', 'PostgreSQL interactive terminal'),
     createPostgresDependency(
       'pg_dump',
       'pg_dump',

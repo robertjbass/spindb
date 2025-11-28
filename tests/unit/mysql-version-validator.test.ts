@@ -183,8 +183,18 @@ describe('parseDumpVersion', () => {
 // =============================================================================
 
 describe('checkVersionCompatibility', () => {
-  const mysqlTool: VersionInfo = { major: 8, minor: 0, patch: 35, full: '8.0.35' }
-  const mariadbTool: VersionInfo = { major: 10, minor: 11, patch: 6, full: '10.11.6' }
+  const mysqlTool: VersionInfo = {
+    major: 8,
+    minor: 0,
+    patch: 35,
+    full: '8.0.35',
+  }
+  const mariadbTool: VersionInfo = {
+    major: 10,
+    minor: 11,
+    patch: 6,
+    full: '10.11.6',
+  }
 
   describe('compatible scenarios', () => {
     it('should be compatible when versions match exactly', () => {
@@ -230,7 +240,12 @@ describe('checkVersionCompatibility', () => {
 
   describe('incompatible scenarios', () => {
     it('should be incompatible when MySQL 8 dump restored with MySQL 5.x client', () => {
-      const oldMysqlTool: VersionInfo = { major: 5, minor: 7, patch: 0, full: '5.7.0' }
+      const oldMysqlTool: VersionInfo = {
+        major: 5,
+        minor: 7,
+        patch: 0,
+        full: '5.7.0',
+      }
       const dumpInfo: DumpInfo = {
         version: { major: 8, minor: 0, patch: 35, full: '8.0.35' },
         variant: 'mysql',

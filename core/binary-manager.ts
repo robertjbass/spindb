@@ -55,6 +55,14 @@ export class BinaryManager {
   }
 
   /**
+   * Get major version from any version string (e.g., "17.7.0" -> "17", "16" -> "16")
+   * Used for directory naming to ensure one directory per major version.
+   */
+  getMajorVersion(version: string): string {
+    return version.split('.')[0]
+  }
+
+  /**
    * Check if binaries for a specific version are already installed
    */
   async isInstalled(
@@ -62,9 +70,10 @@ export class BinaryManager {
     platform: string,
     arch: string,
   ): Promise<boolean> {
+    const majorVersion = this.getMajorVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'postgresql',
-      version,
+      version: majorVersion,
       platform,
       arch,
     })
@@ -113,14 +122,15 @@ export class BinaryManager {
     arch: string,
     onProgress?: ProgressCallback,
   ): Promise<string> {
+    const majorVersion = this.getMajorVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
       engine: 'postgresql',
-      version,
+      version: majorVersion,
       platform,
       arch,
     })
-    const tempDir = join(paths.bin, `temp-${version}-${platform}-${arch}`)
+    const tempDir = join(paths.bin, `temp-${majorVersion}-${platform}-${arch}`)
     const jarFile = join(tempDir, 'postgres.jar')
 
     // Ensure directories exist
@@ -200,9 +210,10 @@ export class BinaryManager {
     platform: string,
     arch: string,
   ): Promise<boolean> {
+    const majorVersion = this.getMajorVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'postgresql',
-      version,
+      version: majorVersion,
       platform,
       arch,
     })
@@ -256,9 +267,10 @@ export class BinaryManager {
     arch: string,
     binary: string,
   ): string {
+    const majorVersion = this.getMajorVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'postgresql',
-      version,
+      version: majorVersion,
       platform,
       arch,
     })
@@ -274,6 +286,7 @@ export class BinaryManager {
     arch: string,
     onProgress?: ProgressCallback,
   ): Promise<string> {
+    const majorVersion = this.getMajorVersion(version)
     if (await this.isInstalled(version, platform, arch)) {
       onProgress?.({
         stage: 'cached',
@@ -281,7 +294,7 @@ export class BinaryManager {
       })
       return paths.getBinaryPath({
         engine: 'postgresql',
-        version,
+        version: majorVersion,
         platform,
         arch,
       })

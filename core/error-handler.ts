@@ -123,8 +123,7 @@ export class SpinDBError extends Error {
       return error
     }
 
-    const message =
-      error instanceof Error ? error.message : String(error)
+    const message = error instanceof Error ? error.message : String(error)
 
     return new SpinDBError(code, message, 'error', suggestion, {
       originalError: error instanceof Error ? error.stack : undefined,
@@ -221,7 +220,10 @@ export function logSpinDBError(error: SpinDBError): void {
 /**
  * Log a warning (non-blocking, yellow output)
  */
-export function logWarning(message: string, context?: Record<string, unknown>): void {
+export function logWarning(
+  message: string,
+  context?: Record<string, unknown>,
+): void {
   console.warn(chalk.yellow(`  ⚠ ${message}`))
 
   appendToLogFile({
@@ -235,7 +237,10 @@ export function logWarning(message: string, context?: Record<string, unknown>): 
 /**
  * Log an info message
  */
-export function logInfo(message: string, context?: Record<string, unknown>): void {
+export function logInfo(
+  message: string,
+  context?: Record<string, unknown>,
+): void {
   appendToLogFile({
     code: 'INFO',
     message,
@@ -247,7 +252,10 @@ export function logInfo(message: string, context?: Record<string, unknown>): voi
 /**
  * Log a debug message (only to file, not console)
  */
-export function logDebug(message: string, context?: Record<string, unknown>): void {
+export function logDebug(
+  message: string,
+  context?: Record<string, unknown>,
+): void {
   appendToLogFile({
     code: 'DEBUG',
     message,

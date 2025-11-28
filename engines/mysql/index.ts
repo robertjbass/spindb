@@ -11,7 +11,12 @@ import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
-import { logDebug, logWarning, ErrorCodes, SpinDBError } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  ErrorCodes,
+  SpinDBError,
+} from '../../core/error-handler'
 import {
   getMysqldPath,
   getMysqlClientPath,
@@ -123,7 +128,9 @@ export class MySQLEngine extends BaseEngine {
     _version: string,
     _options: Record<string, unknown> = {},
   ): Promise<string> {
-    const dataDir = paths.getContainerDataPath(containerName, { engine: ENGINE })
+    const dataDir = paths.getContainerDataPath(containerName, {
+      engine: ENGINE,
+    })
 
     // Create data directory if it doesn't exist
     if (!existsSync(dataDir)) {
@@ -576,9 +583,7 @@ export class MySQLEngine extends BaseEngine {
     const mysqladmin = await getMysqladminPath()
     if (mysqladmin) {
       try {
-        await execAsync(
-          `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
-        )
+        await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
         return { running: true, message: 'MySQL is running' }
       } catch {
         return { running: false, message: 'MySQL is not responding' }

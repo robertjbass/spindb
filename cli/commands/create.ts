@@ -304,10 +304,7 @@ export const createCommand = new Command('create')
         } else {
           // Ask the user
           console.log()
-          shouldStart = await promptConfirm(
-            `Start ${containerName} now?`,
-            true,
-          )
+          shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
         }
 
         // Get container config for starting and restoration
@@ -497,7 +494,9 @@ export const createCommand = new Command('create')
           const connectionString = dbEngine.getConnectionString(finalConfig)
 
           console.log()
-          console.log(connectionBox(containerName, connectionString, finalConfig.port))
+          console.log(
+            connectionBox(containerName, connectionString, finalConfig.port),
+          )
           console.log()
 
           if (shouldStart) {
@@ -505,7 +504,8 @@ export const createCommand = new Command('create')
             console.log(chalk.cyan(`  spindb connect ${containerName}`))
 
             // Copy connection string to clipboard
-            const copied = await platformService.copyToClipboard(connectionString)
+            const copied =
+              await platformService.copyToClipboard(connectionString)
             if (copied) {
               console.log(chalk.gray('  Connection string copied to clipboard'))
             }

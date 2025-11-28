@@ -38,7 +38,9 @@ describe('parseToolVersion', () => {
   })
 
   it('should parse version with extra text', () => {
-    const version = parseToolVersion('psql (PostgreSQL) 17.0 (Ubuntu 17.0-1.pgdg22.04+1)')
+    const version = parseToolVersion(
+      'psql (PostgreSQL) 17.0 (Ubuntu 17.0-1.pgdg22.04+1)',
+    )
 
     assertEqual(version.major, 17, 'Major version should be 17')
     assertEqual(version.minor, 0, 'Minor version should be 0')
@@ -50,7 +52,10 @@ describe('parseToolVersion', () => {
       parseToolVersion('no version here')
     } catch (error) {
       threw = true
-      assert((error as Error).message.includes('Cannot parse version'), 'Error should mention parsing failure')
+      assert(
+        (error as Error).message.includes('Cannot parse version'),
+        'Error should mention parsing failure',
+      )
     }
 
     assert(threw, 'Should throw on invalid input')
@@ -94,7 +99,10 @@ describe('checkVersionCompatibility', () => {
 
       const result = checkVersionCompatibility(dumpVersion, toolVersion)
 
-      assert(result.compatible, 'Newer tool should be compatible with older dump')
+      assert(
+        result.compatible,
+        'Newer tool should be compatible with older dump',
+      )
       assert(result.error === undefined, 'Should have no error')
     })
 
@@ -113,8 +121,14 @@ describe('checkVersionCompatibility', () => {
       const result = checkVersionCompatibility(null, toolVersion)
 
       assert(result.compatible, 'Unknown dump version should be compatible')
-      assert(result.warning !== undefined, 'Should have warning about unknown version')
-      assert(result.warning!.includes('Could not detect'), 'Warning should mention detection')
+      assert(
+        result.warning !== undefined,
+        'Should have warning about unknown version',
+      )
+      assert(
+        result.warning!.includes('Could not detect'),
+        'Warning should mention detection',
+      )
     })
   })
 
@@ -125,11 +139,17 @@ describe('checkVersionCompatibility', () => {
 
       const result = checkVersionCompatibility(dumpVersion, toolVersion)
 
-      assert(!result.compatible, 'Older tool should be incompatible with newer dump')
+      assert(
+        !result.compatible,
+        'Older tool should be incompatible with newer dump',
+      )
       assert(result.error !== undefined, 'Should have error message')
       assert(result.error!.includes('17'), 'Error should mention dump version')
       assert(result.error!.includes('15'), 'Error should mention tool version')
-      assert(result.error!.includes('Install'), 'Error should suggest installing')
+      assert(
+        result.error!.includes('Install'),
+        'Error should suggest installing',
+      )
     })
 
     it('should be incompatible even when dump is only 1 major version newer', () => {
@@ -138,7 +158,10 @@ describe('checkVersionCompatibility', () => {
 
       const result = checkVersionCompatibility(dumpVersion, toolVersion)
 
-      assert(!result.compatible, 'Dump one version newer should be incompatible')
+      assert(
+        !result.compatible,
+        'Dump one version newer should be incompatible',
+      )
     })
   })
 
@@ -151,7 +174,10 @@ describe('checkVersionCompatibility', () => {
 
       assert(result.compatible, 'Should still be compatible')
       assert(result.warning !== undefined, 'Should have warning')
-      assert(result.warning!.includes('12'), 'Warning should mention old version')
+      assert(
+        result.warning!.includes('12'),
+        'Warning should mention old version',
+      )
     })
 
     it('should not warn when dump is only 2 major versions old', () => {
@@ -161,7 +187,10 @@ describe('checkVersionCompatibility', () => {
       const result = checkVersionCompatibility(dumpVersion, toolVersion)
 
       assert(result.compatible, 'Should be compatible')
-      assert(result.warning === undefined, 'Should not warn for 2 version difference')
+      assert(
+        result.warning === undefined,
+        'Should not warn for 2 version difference',
+      )
     })
   })
 
@@ -191,9 +220,19 @@ describe('checkVersionCompatibility', () => {
 
       const result = checkVersionCompatibility(null, toolVersion)
 
-      assertEqual(result.dumpVersion, null, 'Null dump should remain null in result')
-      assert(result.compatible, 'Should be compatible when dump version unknown')
-      assert(result.warning !== undefined, 'Should have warning when version unknown')
+      assertEqual(
+        result.dumpVersion,
+        null,
+        'Null dump should remain null in result',
+      )
+      assert(
+        result.compatible,
+        'Should be compatible when dump version unknown',
+      )
+      assert(
+        result.warning !== undefined,
+        'Should have warning when version unknown',
+      )
     })
   })
 })

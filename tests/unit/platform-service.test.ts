@@ -35,14 +35,8 @@ describe('PlatformService', () => {
       )
 
       // Boolean properties
-      assert(
-        typeof info.isWSL === 'boolean',
-        'isWSL should be a boolean',
-      )
-      assert(
-        typeof info.isSudo === 'boolean',
-        'isSudo should be a boolean',
-      )
+      assert(typeof info.isWSL === 'boolean', 'isWSL should be a boolean')
+      assert(typeof info.isSudo === 'boolean', 'isSudo should be a boolean')
 
       // sudoUser should be string or null
       assert(
@@ -55,9 +49,17 @@ describe('PlatformService', () => {
       const info1 = platformService.getPlatformInfo()
       const info2 = platformService.getPlatformInfo()
 
-      assertEqual(info1.platform, info2.platform, 'Platform should be consistent')
+      assertEqual(
+        info1.platform,
+        info2.platform,
+        'Platform should be consistent',
+      )
       assertEqual(info1.arch, info2.arch, 'Architecture should be consistent')
-      assertEqual(info1.homeDir, info2.homeDir, 'Home directory should be consistent')
+      assertEqual(
+        info1.homeDir,
+        info2.homeDir,
+        'Home directory should be consistent',
+      )
     })
   })
 
@@ -69,18 +71,12 @@ describe('PlatformService', () => {
         typeof config.copyCommand === 'string',
         'copyCommand should be a string',
       )
-      assert(
-        Array.isArray(config.copyArgs),
-        'copyArgs should be an array',
-      )
+      assert(Array.isArray(config.copyArgs), 'copyArgs should be an array')
       assert(
         typeof config.pasteCommand === 'string',
         'pasteCommand should be a string',
       )
-      assert(
-        Array.isArray(config.pasteArgs),
-        'pasteArgs should be an array',
-      )
+      assert(Array.isArray(config.pasteArgs), 'pasteArgs should be an array')
       assert(
         typeof config.available === 'boolean',
         'available should be a boolean',
@@ -93,14 +89,15 @@ describe('PlatformService', () => {
 
       if (info.platform === 'darwin') {
         assert(
-          config.copyCommand.includes('pbcopy') || config.copyCommand === 'pbcopy',
+          config.copyCommand.includes('pbcopy') ||
+            config.copyCommand === 'pbcopy',
           'macOS should use pbcopy',
         )
       } else if (info.platform === 'linux') {
         assert(
           config.copyCommand.includes('xclip') ||
-          config.copyCommand.includes('xsel') ||
-          config.copyCommand === 'xclip',
+            config.copyCommand.includes('xsel') ||
+            config.copyCommand === 'xclip',
           'Linux should use xclip or xsel',
         )
       }
@@ -115,10 +112,7 @@ describe('PlatformService', () => {
         typeof config.command === 'string' && config.command.length > 0,
         'command should be a non-empty string',
       )
-      assert(
-        Array.isArray(config.args),
-        'args should be an array',
-      )
+      assert(Array.isArray(config.args), 'args should be an array')
     })
 
     it('should return platform-appropriate command', () => {
@@ -126,15 +120,9 @@ describe('PlatformService', () => {
       const info = platformService.getPlatformInfo()
 
       if (info.platform === 'win32') {
-        assert(
-          config.command === 'where',
-          'Windows should use "where" command',
-        )
+        assert(config.command === 'where', 'Windows should use "where" command')
       } else {
-        assert(
-          config.command === 'which',
-          'Unix should use "which" command',
-        )
+        assert(config.command === 'which', 'Unix should use "which" command')
       }
     })
   })
@@ -187,9 +175,18 @@ describe('PlatformService', () => {
       if (result !== null) {
         assert(typeof result.id === 'string', 'id should be a string')
         assert(typeof result.name === 'string', 'name should be a string')
-        assert(typeof result.checkCommand === 'string', 'checkCommand should be a string')
-        assert(typeof result.installTemplate === 'string', 'installTemplate should be a string')
-        assert(typeof result.updateCommand === 'string', 'updateCommand should be a string')
+        assert(
+          typeof result.checkCommand === 'string',
+          'checkCommand should be a string',
+        )
+        assert(
+          typeof result.installTemplate === 'string',
+          'installTemplate should be a string',
+        )
+        assert(
+          typeof result.updateCommand === 'string',
+          'updateCommand should be a string',
+        )
       }
     })
 
@@ -228,7 +225,9 @@ describe('PlatformService', () => {
     })
 
     it('should return null for non-existent tool', async () => {
-      const path = await platformService.findToolPath('definitely-not-a-real-tool-12345')
+      const path = await platformService.findToolPath(
+        'definitely-not-a-real-tool-12345',
+      )
 
       assertEqual(path, null, 'Should return null for non-existent tool')
     })
@@ -263,10 +262,7 @@ describe('PlatformService', () => {
     it('should return boolean indicating success', async () => {
       const result = await platformService.copyToClipboard('test content')
 
-      assert(
-        typeof result === 'boolean',
-        'Should return a boolean',
-      )
+      assert(typeof result === 'boolean', 'Should return a boolean')
     })
   })
 
@@ -287,7 +283,11 @@ describe('PlatformService', () => {
       }
 
       if (info.platform === 'win32') {
-        assertEqual(zonkyPlatform, null, 'Windows should return null (not supported by zonky)')
+        assertEqual(
+          zonkyPlatform,
+          null,
+          'Windows should return null (not supported by zonky)',
+        )
       }
 
       if (zonkyPlatform !== null) {
@@ -295,8 +295,8 @@ describe('PlatformService', () => {
         // Examples: darwin-arm64v8, darwin-amd64, linux-arm64v8, linux-amd64
         assert(
           zonkyPlatform.startsWith('darwin-') ||
-          zonkyPlatform.startsWith('linux-') ||
-          zonkyPlatform.startsWith('alpine-linux-'),
+            zonkyPlatform.startsWith('linux-') ||
+            zonkyPlatform.startsWith('alpine-linux-'),
           `Zonky platform should start with darwin-, linux-, or alpine-linux-, got: ${zonkyPlatform}`,
         )
       }

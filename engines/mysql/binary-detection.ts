@@ -12,9 +12,7 @@ const execAsync = promisify(exec)
 /**
  * Find a MySQL binary by name using the platform service
  */
-export async function findMysqlBinary(
-  name: string,
-): Promise<string | null> {
+export async function findMysqlBinary(name: string): Promise<string | null> {
   return platformService.findToolPath(name)
 }
 
@@ -175,4 +173,153 @@ export function getInstallInstructions(): string {
     'MySQL server not found. Please install MySQL from:\n' +
     '  https://dev.mysql.com/downloads/mysql/'
   )
+}
+
+export type MysqlPackageManager =
+  | 'homebrew'
+  | 'apt'
+  | 'yum'
+  | 'dnf'
+  | 'pacman'
+  | 'unknown'
+
+export type MysqlInstallInfo = {
+  packageManager: MysqlPackageManager
+  packageName: string
+  path: string
+  uninstallCommand: string
+  isMariaDB: boolean
+}
+
+/**
+ * Detect which package manager installed MySQL and get uninstall info
+ */
+export async function getMysqlInstallInfo(
+  mysqldPath: string,
+): Promise<MysqlInstallInfo> {
+  const { platform } = platformService.getPlatformInfo()
+  const mariadb = await isMariaDB()
+
+  // macOS: Check if path is in Homebrew directories
+  if (platform === 'darwin') {
+    if (
+      mysqldPath.includes('/opt/homebrew/') ||
+      mysqldPath.includes('/usr/local/Cellar/')
+    ) {
+      // Extract package name from path
+      // e.g., /opt/homebrew/opt/mysql@8.0/bin/mysqld -> mysql@8.0
+      // e.g., /opt/homebrew/bin/mysqld -> mysql (linked)
+      let packageName = mariadb ? 'mariadb' : 'mysql'
+
+      const versionMatch = mysqldPath.match(/mysql@(\d+\.\d+)/)
+      if (versionMatch) {
+        packageName = `mysql@${versionMatch[1]}`
+      } else {
+        // Try to get from Homebrew directly
+        try {
+          const { stdout } = await execAsync('brew list --formula')
+          const packages = stdout.split('\n')
+          const mysqlPackage = packages.find(
+            (p) =>
+              p.startsWith('mysql') ||
+              p.startsWith('mariadb') ||
+              p === 'percona-server',
+          )
+          if (mysqlPackage) {
+            packageName = mysqlPackage
+          }
+        } catch {
+          // Ignore errors
+        }
+      }
+
+      return {
+        packageManager: 'homebrew',
+        packageName,
+        path: mysqldPath,
+        uninstallCommand: `brew uninstall ${packageName}`,
+        isMariaDB: mariadb,
+      }
+    }
+  }
+
+  // Linux: Detect package manager from path or check installed packages
+  if (platform === 'linux') {
+    // Check for apt (Debian/Ubuntu)
+    try {
+      const { stdout } = await execAsync('which apt 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
+        return {
+          packageManager: 'apt',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo apt remove ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not apt
+    }
+
+    // Check for dnf (Fedora/RHEL 8+)
+    try {
+      const { stdout } = await execAsync('which dnf 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
+        return {
+          packageManager: 'dnf',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo dnf remove ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not dnf
+    }
+
+    // Check for yum (CentOS/RHEL 7)
+    try {
+      const { stdout } = await execAsync('which yum 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
+        return {
+          packageManager: 'yum',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo yum remove ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not yum
+    }
+
+    // Check for pacman (Arch Linux)
+    try {
+      const { stdout } = await execAsync('which pacman 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb' : 'mysql'
+        return {
+          packageManager: 'pacman',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo pacman -Rs ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not pacman
+    }
+  }
+
+  // Unknown package manager
+  return {
+    packageManager: 'unknown',
+    packageName: mariadb ? 'mariadb' : 'mysql',
+    path: mysqldPath,
+    uninstallCommand: 'Use your system package manager to uninstall',
+    isMariaDB: mariadb,
+  }
 }

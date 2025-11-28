@@ -45,12 +45,17 @@ spindb connect mydb
 | `spindb` | Open interactive menu |
 | `spindb create [name]` | Create a new database container |
 | `spindb list` | List all containers |
+| `spindb info [name]` | Show container details (or all containers) |
 | `spindb start [name]` | Start a container |
 | `spindb stop [name]` | Stop a container |
 | `spindb connect [name]` | Connect with psql/mysql shell |
+| `spindb url [name]` | Output connection string |
+| `spindb edit [name]` | Edit container properties (rename, port) |
 | `spindb restore [name] [backup]` | Restore a backup file |
 | `spindb clone [source] [target]` | Clone a container |
 | `spindb delete [name]` | Delete a container |
+| `spindb engines` | List installed database engines |
+| `spindb engines delete` | Delete an installed engine version |
 | `spindb config show` | Show configuration |
 | `spindb config detect` | Auto-detect database tools |
 | `spindb deps check` | Check status of client tools |
@@ -207,15 +212,59 @@ mysql -u root -h 127.0.0.1 -P 3306 mydb
 
 ### Manage installed engines
 
-The Engines menu shows installed PostgreSQL versions with disk usage:
+View installed engines with disk usage (PostgreSQL) and system detection (MySQL):
+
+```bash
+spindb engines
+```
 
 ```
-ENGINE      VERSION     PLATFORM            SIZE
+ENGINE        VERSION     SOURCE            SIZE
 ────────────────────────────────────────────────────────
-postgresql  17          darwin-arm64        45.2 MB
-postgresql  16          darwin-arm64        44.8 MB
+🐘 postgresql 17.7        darwin-arm64      45.2 MB
+🐘 postgresql 16.8        darwin-arm64      44.8 MB
+🐬 mysql      8.0.35      system            (system-installed)
 ────────────────────────────────────────────────────────
-2 version(s)                                90.0 MB
+
+PostgreSQL: 2 version(s), 90.0 MB
+MySQL: system-installed at /opt/homebrew/bin/mysqld
+```
+
+Delete unused PostgreSQL versions to free disk space:
+
+```bash
+spindb engines delete postgresql 16
+```
+
+### Container info and connection strings
+
+```bash
+# View all container details
+spindb info
+
+# View specific container
+spindb info mydb
+
+# Get connection string for scripting
+spindb url mydb
+export DATABASE_URL=$(spindb url mydb)
+psql $(spindb url mydb)
+
+# Copy connection string to clipboard
+spindb url mydb --copy
+```
+
+### Edit containers
+
+```bash
+# Rename a container (must be stopped)
+spindb edit mydb --name newname
+
+# Change port
+spindb edit mydb --port 5433
+
+# Interactive mode
+spindb edit mydb
 ```
 
 ## Running Tests

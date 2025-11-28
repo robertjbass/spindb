@@ -9,8 +9,14 @@ import assert from 'node:assert/strict'
 import { writeFile, unlink, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { detectBackupFormat as detectPgBackupFormat, assertCompatibleFormat as assertPgCompatibleFormat } from '../../engines/postgresql/restore'
-import { detectBackupFormat as detectMysqlBackupFormat, assertCompatibleFormat as assertMysqlCompatibleFormat } from '../../engines/mysql/restore'
+import {
+  detectBackupFormat as detectPgBackupFormat,
+  assertCompatibleFormat as assertPgCompatibleFormat,
+} from '../../engines/postgresql/restore'
+import {
+  detectBackupFormat as detectMysqlBackupFormat,
+  assertCompatibleFormat as assertMysqlCompatibleFormat,
+} from '../../engines/mysql/restore'
 import { SpinDBError } from '../../core/error-handler'
 
 // =============================================================================
@@ -59,7 +65,7 @@ CREATE TABLE test (id serial PRIMARY KEY);
 `
 
 // PGDMP magic bytes for PostgreSQL custom format
-const PGDMP_MAGIC = Buffer.from([0x50, 0x47, 0x44, 0x4D, 0x50]) // "PGDMP"
+const PGDMP_MAGIC = Buffer.from([0x50, 0x47, 0x44, 0x4d, 0x50]) // "PGDMP"
 
 const GENERIC_SQL = `CREATE TABLE test (id int);
 INSERT INTO test VALUES (1);
@@ -82,9 +88,14 @@ describe('Backup Format Detection', () => {
   after(async () => {
     // Cleanup test files
     const files = [
-      'mysql.sql', 'mysql57.sql', 'mariadb.sql',
-      'postgres.sql', 'postgres-pgdump.sql', 'pgdmp.dump',
-      'generic.sql', 'compressed.sql.gz',
+      'mysql.sql',
+      'mysql57.sql',
+      'mariadb.sql',
+      'postgres.sql',
+      'postgres-pgdump.sql',
+      'pgdmp.dump',
+      'generic.sql',
+      'compressed.sql.gz',
     ]
     for (const file of files) {
       try {
@@ -116,7 +127,10 @@ describe('Backup Format Detection', () => {
 
       const format = await detectPgBackupFormat(filePath)
       assert.equal(format.format, 'mysql_sql')
-      assert.ok(format.description.includes('MySQL') || format.description.includes('MariaDB'))
+      assert.ok(
+        format.description.includes('MySQL') ||
+          format.description.includes('MariaDB'),
+      )
     })
 
     it('should detect PostgreSQL SQL dump format', async () => {
@@ -131,7 +145,10 @@ describe('Backup Format Detection', () => {
     it('should detect PostgreSQL custom format (PGDMP)', async () => {
       const filePath = join(testDir, 'pgdmp.dump')
       // Create a minimal PGDMP file (just magic bytes + some data)
-      const content = Buffer.concat([PGDMP_MAGIC, Buffer.from('fake dump data')])
+      const content = Buffer.concat([
+        PGDMP_MAGIC,
+        Buffer.from('fake dump data'),
+      ])
       await writeFile(filePath, content)
 
       const format = await detectPgBackupFormat(filePath)
@@ -162,7 +179,9 @@ describe('Backup Format Detection', () => {
         (error: unknown) => {
           assert.ok(error instanceof SpinDBError)
           assert.equal((error as SpinDBError).code, 'WRONG_ENGINE_DUMP')
-          assert.ok((error as SpinDBError).suggestion?.includes('--engine mysql'))
+          assert.ok(
+            (error as SpinDBError).suggestion?.includes('--engine mysql'),
+          )
           return true
         },
       )
@@ -170,9 +189,21 @@ describe('Backup Format Detection', () => {
 
     it('should not throw for PostgreSQL formats', () => {
       const formats = [
-        { format: 'custom', description: 'PostgreSQL custom', restoreCommand: 'pg_restore' },
-        { format: 'sql', description: 'PostgreSQL SQL', restoreCommand: 'psql' },
-        { format: 'unknown', description: 'Unknown', restoreCommand: 'pg_restore' },
+        {
+          format: 'custom',
+          description: 'PostgreSQL custom',
+          restoreCommand: 'pg_restore',
+        },
+        {
+          format: 'sql',
+          description: 'PostgreSQL SQL',
+          restoreCommand: 'psql',
+        },
+        {
+          format: 'unknown',
+          description: 'Unknown',
+          restoreCommand: 'pg_restore',
+        },
       ]
 
       for (const format of formats) {
@@ -188,7 +219,10 @@ describe('Backup Format Detection', () => {
   describe('MySQL detectBackupFormat', () => {
     it('should detect PostgreSQL custom format (PGDMP)', async () => {
       const filePath = join(testDir, 'pgdmp.dump')
-      const content = Buffer.concat([PGDMP_MAGIC, Buffer.from('fake dump data')])
+      const content = Buffer.concat([
+        PGDMP_MAGIC,
+        Buffer.from('fake dump data'),
+      ])
       await writeFile(filePath, content)
 
       const format = await detectMysqlBackupFormat(filePath)
@@ -262,7 +296,9 @@ describe('Backup Format Detection', () => {
         (error: unknown) => {
           assert.ok(error instanceof SpinDBError)
           assert.equal((error as SpinDBError).code, 'WRONG_ENGINE_DUMP')
-          assert.ok((error as SpinDBError).suggestion?.includes('--engine postgresql'))
+          assert.ok(
+            (error as SpinDBError).suggestion?.includes('--engine postgresql'),
+          )
           return true
         },
       )
@@ -288,7 +324,11 @@ describe('Backup Format Detection', () => {
     it('should not throw for MySQL/MariaDB formats', () => {
       const formats = [
         { format: 'sql', description: 'MySQL dump', restoreCommand: 'mysql' },
-        { format: 'compressed', description: 'Gzip compressed', restoreCommand: 'mysql' },
+        {
+          format: 'compressed',
+          description: 'Gzip compressed',
+          restoreCommand: 'mysql',
+        },
         { format: 'unknown', description: 'Unknown', restoreCommand: 'mysql' },
       ]
 

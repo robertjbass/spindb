@@ -38,7 +38,10 @@ describe('TransactionManager', () => {
         })
       } catch (error) {
         threw = true
-        assert((error as Error).message.includes('after commit'), 'Error message should mention commit')
+        assert(
+          (error as Error).message.includes('after commit'),
+          'Error message should mention commit',
+        )
       }
 
       assert(threw, 'Should have thrown an error')
@@ -72,7 +75,11 @@ describe('TransactionManager', () => {
       await tx.rollback()
 
       assertEqual(executionOrder.length, 3, 'All actions should execute')
-      assertEqual(executionOrder[0], 3, 'Third added should execute first (LIFO)')
+      assertEqual(
+        executionOrder[0],
+        3,
+        'Third added should execute first (LIFO)',
+      )
       assertEqual(executionOrder[1], 2, 'Second added should execute second')
       assertEqual(executionOrder[2], 1, 'First added should execute last')
     })
@@ -104,10 +111,23 @@ describe('TransactionManager', () => {
       // Should not throw
       await tx.rollback()
 
-      assertEqual(executionOrder.length, 3, 'All actions should attempt to execute')
-      assert(executionOrder.includes('fail'), 'Failed action should have been attempted')
-      assert(executionOrder.includes('success1'), 'Success actions should execute')
-      assert(executionOrder.includes('success2'), 'Success actions should execute')
+      assertEqual(
+        executionOrder.length,
+        3,
+        'All actions should attempt to execute',
+      )
+      assert(
+        executionOrder.includes('fail'),
+        'Failed action should have been attempted',
+      )
+      assert(
+        executionOrder.includes('success1'),
+        'Success actions should execute',
+      )
+      assert(
+        executionOrder.includes('success2'),
+        'Success actions should execute',
+      )
     })
 
     it('should clear the stack after rollback', async () => {
@@ -120,7 +140,11 @@ describe('TransactionManager', () => {
 
       await tx.rollback()
 
-      assertEqual(tx.getPendingCount(), 0, 'Stack should be empty after rollback')
+      assertEqual(
+        tx.getPendingCount(),
+        0,
+        'Stack should be empty after rollback',
+      )
     })
 
     it('should do nothing if stack is empty', async () => {
@@ -263,7 +287,11 @@ describe('withTransaction', () => {
       })
     } catch (error) {
       threw = true
-      assertEqual((error as Error).message, 'Operation failed', 'Should rethrow original error')
+      assertEqual(
+        (error as Error).message,
+        'Operation failed',
+        'Should rethrow original error',
+      )
     }
 
     assert(threw, 'Should have thrown')

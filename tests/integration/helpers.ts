@@ -83,9 +83,7 @@ export async function findConsecutiveFreePorts(
  */
 export async function cleanupTestContainers(): Promise<string[]> {
   const containers = await containerManager.list()
-  const testContainers = containers.filter(
-    (c) => c.name.includes('-test'),
-  )
+  const testContainers = containers.filter((c) => c.name.includes('-test'))
 
   const deleted: string[] = []
   for (const container of testContainers) {
@@ -249,8 +247,6 @@ export function assert(condition: boolean, message: string): asserts condition {
  */
 export function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
-    throw new Error(
-      `${message}\n  Expected: ${expected}\n  Actual: ${actual}`,
-    )
+    throw new Error(`${message}\n  Expected: ${expected}\n  Actual: ${actual}`)
   }
 }

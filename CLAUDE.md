@@ -28,10 +28,14 @@ cli/
 │   ├── stop.ts             # Stop container command
 │   ├── delete.ts           # Delete container command
 │   ├── list.ts             # List containers command
+│   ├── info.ts             # Show container details command
 │   ├── connect.ts          # Connect to container shell
 │   ├── clone.ts            # Clone container command
 │   ├── restore.ts          # Restore from backup command
-│   └── deps.ts             # Dependency management command (engine-agnostic)
+│   ├── deps.ts             # Dependency management command (engine-agnostic)
+│   ├── engines.ts          # Engine list and delete commands
+│   ├── edit.ts             # Container rename/port editing
+│   └── url.ts              # Connection string output
 └── ui/
     ├── prompts.ts          # Inquirer prompts
     ├── spinner.ts          # Ora spinner helpers
@@ -366,6 +370,18 @@ See `TODO.md` for full list. Key items:
 - [ ] Add `spindb exec` for running SQL files
 - [ ] SQLite support
 - [ ] Windows support
+
+## New Feature Checklist
+
+When adding new functionality, ensure ALL of the following are completed:
+
+1. **CLI command** - Direct terminal command (e.g., `spindb edit mydb --port 5433`)
+2. **Interactive CLI** - Menu option in `cli/commands/menu.ts` if applicable
+3. **Tests** - Unit and/or integration tests in `tests/`
+4. **README.md** - Document the new command/feature
+5. **TODO.md** - Check off any related items
+
+This ensures CLI parity: all features available in the interactive menu must also be available via command-line arguments.
 
 ## Version Maintenance
 
