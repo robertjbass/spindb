@@ -1,8 +1,8 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
-import { portManager } from '../../core/port-manager'
 import { processManager } from '../../core/process-manager'
+import { startWithRetry } from '../../core/start-with-retry'
 import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
@@ -61,32 +61,37 @@ export const startCommand = new Command('start')
       // Get engine defaults for port range and database name
       const engineDefaults = getEngineDefaults(engineName)
 
-      // Check port availability
-      const portAvailable = await portManager.isPortAvailable(config.port)
-      if (!portAvailable) {
-        // Try to find a new port (using engine-specific port range)
-        const { port: newPort } = await portManager.findAvailablePort({
-          portRange: engineDefaults.portRange,
-        })
-        console.log(
-          warning(
-            `Port ${config.port} is in use, switching to port ${newPort}`,
-          ),
-        )
-        config.port = newPort
-        await containerManager.updateConfig(containerName, { port: newPort })
-      }
-
-      // Get engine and start
+      // Get engine and start with retry (handles port race conditions)
       const engine = getEngine(engineName)
 
       const spinner = createSpinner(`Starting ${containerName}...`)
       spinner.start()
 
-      await engine.start(config)
+      const result = await startWithRetry({
+        engine,
+        config,
+        onPortChange: (oldPort, newPort) => {
+          spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
+        },
+      })
+
+      if (!result.success) {
+        spinner.fail(`Failed to start "${containerName}"`)
+        if (result.error) {
+          console.error(error(result.error.message))
+        }
+        process.exit(1)
+      }
+
       await containerManager.updateConfig(containerName, { status: 'running' })
 
-      spinner.succeed(`Container "${containerName}" started`)
+      if (result.retriesUsed > 0) {
+        spinner.warn(
+          `Container "${containerName}" started on port ${result.finalPort} (original port was in use)`,
+        )
+      } else {
+        spinner.succeed(`Container "${containerName}" started`)
+      }
 
       // Ensure the user's database exists (if different from default)
       const defaultDb = engineDefaults.superuser // postgres or root

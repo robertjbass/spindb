@@ -16,6 +16,7 @@ import {
   getEngineDependencies,
   getUniqueDependencies,
 } from '../config/os-dependencies'
+import { platformService } from './platform-service'
 
 const execAsync = promisify(exec)
 
@@ -46,7 +47,7 @@ export type InstallResult = {
  * Detect which package manager is available on the current system
  */
 export async function detectPackageManager(): Promise<DetectedPackageManager | null> {
-  const platform = process.platform as Platform
+  const { platform } = platformService.getPlatformInfo()
 
   // Filter to package managers available on this platform
   const candidates = packageManagers.filter((pm) =>
@@ -73,7 +74,7 @@ export async function detectPackageManager(): Promise<DetectedPackageManager | n
  * Get the current platform
  */
 export function getCurrentPlatform(): Platform {
-  return process.platform as Platform
+  return platformService.getPlatformInfo().platform as Platform
 }
 
 // =============================================================================
@@ -87,21 +88,12 @@ export async function findBinary(
   binary: string,
 ): Promise<{ path: string; version?: string } | null> {
   try {
-    const command = process.platform === 'win32' ? 'where' : 'which'
-    const { stdout } = await execAsync(`${command} ${binary}`)
-    const path = stdout.trim().split('\n')[0]
-
+    // Use platformService to find the binary path
+    const path = await platformService.findToolPath(binary)
     if (!path) return null
 
     // Try to get version
-    let version: string | undefined
-    try {
-      const { stdout: versionOutput } = await execAsync(`${binary} --version`)
-      const match = versionOutput.match(/(\d+\.\d+(\.\d+)?)/)
-      version = match ? match[1] : undefined
-    } catch {
-      // Version check failed, that's ok
-    }
+    const version = await platformService.getToolVersion(path) || undefined
 
     return { path, version }
   } catch {

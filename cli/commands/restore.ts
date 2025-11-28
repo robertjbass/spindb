@@ -12,10 +12,10 @@ import {
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { success, error, warning } from '../ui/theme'
-import { platform, tmpdir } from 'os'
-import { spawn } from 'child_process'
+import { tmpdir } from 'os'
 import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import { platformService } from '../../core/platform-service'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
@@ -307,28 +307,11 @@ export const restoreCommand = new Command('restore')
         console.log(chalk.gray('  Connection string:'))
         console.log(chalk.cyan(`  ${connectionString}`))
 
-        // Copy connection string to clipboard using platform-specific command
-        try {
-          const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-          const args =
-            platform() === 'darwin' ? [] : ['-selection', 'clipboard']
-
-          await new Promise<void>((resolve, reject) => {
-            const proc = spawn(cmd, args, {
-              stdio: ['pipe', 'inherit', 'inherit'],
-            })
-            proc.stdin?.write(connectionString)
-            proc.stdin?.end()
-            proc.on('close', (code) => {
-              if (code === 0) resolve()
-              else
-                reject(new Error(`Clipboard command exited with code ${code}`))
-            })
-            proc.on('error', reject)
-          })
-
+        // Copy connection string to clipboard using platform service
+        const copied = await platformService.copyToClipboard(connectionString)
+        if (copied) {
           console.log(chalk.gray('  Connection string copied to clipboard'))
-        } catch {
+        } else {
           console.log(chalk.gray('  (Could not copy to clipboard)'))
         }
 

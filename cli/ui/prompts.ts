@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { listEngines, getEngine } from '../../engines'
 import { defaults, getEngineDefaults } from '../../config/defaults'
-import { installPostgresBinaries } from '../../core/postgres-binary-manager'
+import { installPostgresBinaries } from '../../engines/postgresql/binary-manager'
 import {
   detectPackageManager,
   getManualInstallInstructions,

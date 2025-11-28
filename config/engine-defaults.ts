@@ -12,6 +12,8 @@ export type EngineDefaults = {
   portRange: { start: number; end: number }
   /** Supported major versions */
   supportedVersions: string[]
+  /** Latest major version (used for Homebrew package names like postgresql@17) */
+  latestVersion: string
   /** Default superuser name */
   superuser: string
   /** Connection string scheme (e.g., 'postgresql', 'mysql') */
@@ -28,10 +30,11 @@ export type EngineDefaults = {
 
 export const engineDefaults: Record<string, EngineDefaults> = {
   postgresql: {
-    defaultVersion: '16',
+    defaultVersion: '17',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
     supportedVersions: ['14', '15', '16', '17'],
+    latestVersion: '17', // Update when PostgreSQL 18 is released
     superuser: 'postgres',
     connectionScheme: 'postgresql',
     logFileName: 'postgres.log',
@@ -44,6 +47,7 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
     supportedVersions: ['5.7', '8.0', '8.4', '9.0'],
+    latestVersion: '9.0', // MySQL doesn't use versioned Homebrew packages, but kept for consistency
     superuser: 'root',
     connectionScheme: 'mysql',
     logFileName: 'mysql.log',
@@ -81,4 +85,23 @@ export function isEngineSupported(engine: string): boolean {
  */
 export function getSupportedEngines(): string[] {
   return Object.keys(engineDefaults)
+}
+
+/**
+ * Get Homebrew package name for PostgreSQL client tools
+ * Returns 'postgresql@17' format for versioned installs
+ */
+export function getPostgresHomebrewPackage(): string {
+  const version = engineDefaults.postgresql.latestVersion
+  return `postgresql@${version}`
+}
+
+/**
+ * Get the PostgreSQL Homebrew bin path for a given architecture
+ * @param arch - 'arm64' or 'x64'
+ */
+export function getPostgresHomebrewBinPath(arch: 'arm64' | 'x64'): string {
+  const pkg = getPostgresHomebrewPackage()
+  const prefix = arch === 'arm64' ? '/opt/homebrew' : '/usr/local'
+  return `${prefix}/opt/${pkg}/bin`
 }

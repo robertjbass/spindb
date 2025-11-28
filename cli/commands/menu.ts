@@ -23,11 +23,13 @@ import {
 import { existsSync } from 'fs'
 import { readdir, rm, lstat } from 'fs/promises'
 import { spawn } from 'child_process'
-import { platform, tmpdir } from 'os'
+import { tmpdir } from 'os'
 import { join } from 'path'
 import { paths } from '../../config/paths'
+import { platformService } from '../../core/platform-service'
 import { portManager } from '../../core/port-manager'
 import { defaults } from '../../config/defaults'
+import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import type { EngineName } from '../../types'
 import inquirer from 'inquirer'
 import { getMissingDependencies } from '../../core/dependency-manager'
@@ -95,7 +97,7 @@ async function showMainMenu(): Promise<void> {
     },
     {
       name: canStop
-        ? `${chalk.yellow('■')} Stop a container`
+        ? `${chalk.red('■')} Stop a container`
         : chalk.gray('■ Stop a container'),
       value: 'stop',
       disabled: canStop ? false : 'No running containers',
@@ -301,25 +303,14 @@ async function handleCreate(): Promise<void> {
       console.log(chalk.gray('  Connection string:'))
       console.log(chalk.cyan(`  ${connectionString}`))
 
-      // Copy connection string to clipboard using platform-specific command
+      // Copy connection string to clipboard using platform service
       try {
-        const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-        const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
-
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(cmd, args, {
-            stdio: ['pipe', 'inherit', 'inherit'],
-          })
-          proc.stdin?.write(connectionString)
-          proc.stdin?.end()
-          proc.on('close', (code) => {
-            if (code === 0) resolve()
-            else reject(new Error(`Clipboard command exited with code ${code}`))
-          })
-          proc.on('error', reject)
-        })
-
-        console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+        const copied = await platformService.copyToClipboard(connectionString)
+        if (copied) {
+          console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+        } else {
+          console.log(chalk.gray('  (Could not copy to clipboard)'))
+        }
       } catch {
         console.log(chalk.gray('  (Could not copy to clipboard)'))
       }
@@ -648,50 +639,26 @@ async function handleCopyConnectionString(
   const engine = getEngine(config.engine)
   const connectionString = engine.getConnectionString(config)
 
-  // Copy to clipboard using platform-specific command
-  const { platform } = await import('os')
-  const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-  const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
+  // Copy to clipboard using platform service
+  const copied = await platformService.copyToClipboard(connectionString)
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'] })
-      proc.stdin?.write(connectionString)
-      proc.stdin?.end()
-      proc.on('close', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`Clipboard command exited with code ${code}`))
-      })
-      proc.on('error', reject)
-    })
-
-    console.log()
+  console.log()
+  if (copied) {
     console.log(success('Connection string copied to clipboard'))
     console.log(chalk.gray(`  ${connectionString}`))
-    console.log()
-
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
-  } catch {
-    // Fallback: just display the string
-    console.log()
+  } else {
     console.log(warning('Could not copy to clipboard. Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
-    console.log()
-
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
   }
+  console.log()
+
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to continue...'),
+    },
+  ])
 }
 
 async function handleOpenShell(containerName: string): Promise<void> {
@@ -1168,7 +1135,7 @@ async function handleRestore(): Promise<void> {
 
         try {
           const { updatePostgresClientTools } = await import(
-            '../../core/postgres-binary-manager'
+            '../../engines/postgresql/binary-manager'
           )
           const updateSuccess = await updatePostgresClientTools()
 
@@ -1189,24 +1156,26 @@ async function handleRestore(): Promise<void> {
             console.log(
               error('Automatic upgrade failed. Please upgrade manually:'),
             )
+            const pgPackage = getPostgresHomebrewPackage()
+            const latestMajor = pgPackage.split('@')[1]
             console.log(
               warning(
-                '  macOS: brew install postgresql@17 && brew link --force postgresql@17',
+                `  macOS: brew install ${pgPackage} && brew link --force ${pgPackage}`,
               ),
             )
             console.log(
               chalk.gray(
-                '    This installs PostgreSQL 17 client tools: pg_restore, pg_dump, psql, and libpq',
+                `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
               ),
             )
             console.log(
               warning(
-                '  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-17',
+                `  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-${latestMajor}`,
               ),
             )
             console.log(
               chalk.gray(
-                '    This installs PostgreSQL 17 client tools: pg_restore, pg_dump, psql, and libpq',
+                `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
               ),
             )
             await new Promise((resolve) => {
@@ -1270,24 +1239,11 @@ async function handleRestore(): Promise<void> {
     console.log(chalk.gray('  Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
 
-    // Copy connection string to clipboard using platform-specific command
-    try {
-      const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-      const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
-
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'] })
-        proc.stdin?.write(connectionString)
-        proc.stdin?.end()
-        proc.on('close', (code) => {
-          if (code === 0) resolve()
-          else reject(new Error(`Clipboard command exited with code ${code}`))
-        })
-        proc.on('error', reject)
-      })
-
+    // Copy connection string to clipboard using platform service
+    const copied = await platformService.copyToClipboard(connectionString)
+    if (copied) {
       console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
-    } catch {
+    } else {
       console.log(chalk.gray('  (Could not copy to clipboard)'))
     }
 

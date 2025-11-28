@@ -1,7 +1,7 @@
 -- Sample seed data for MySQL integration tests
 
--- Create test table
-CREATE TABLE IF NOT EXISTS test_users (
+-- Create test table (singular naming convention)
+CREATE TABLE IF NOT EXISTS test_user (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS test_users (
 );
 
 -- Insert sample data (using IGNORE to skip duplicates)
-INSERT IGNORE INTO test_users (name, email) VALUES
+INSERT IGNORE INTO test_user (name, email) VALUES
   ('Alice Johnson', 'alice@example.com'),
   ('Bob Smith', 'bob@example.com'),
   ('Charlie Brown', 'charlie@example.com'),

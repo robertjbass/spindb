@@ -60,15 +60,26 @@ spindb connect mydb
 
 ### PostgreSQL 🐘
 
-- Downloads binaries from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries)
+- Downloads server binaries from [zonky.io embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries)
 - Versions: 14, 15, 16, 17
 - Requires system client tools (psql, pg_dump, pg_restore) for some operations
+
+**Why zonky.io?** Zonky.io provides pre-compiled PostgreSQL server binaries for multiple platforms (macOS, Linux) and architectures (x64, ARM64) hosted on Maven Central. This allows SpinDB to download and run PostgreSQL without requiring a full system installation. The binaries are extracted from official PostgreSQL distributions and repackaged for easy embedding in applications.
 
 ### MySQL 🐬
 
 - Uses system-installed MySQL (via Homebrew, apt, etc.)
 - Version determined by system installation
 - Requires: mysqld, mysql, mysqldump, mysqladmin
+
+**Linux Note:** On Linux systems, MariaDB is commonly used as a drop-in replacement for MySQL. SpinDB fully supports MariaDB and will automatically detect it. When MariaDB is installed, the `mysql`, `mysqld`, and `mysqldump` commands work the same way. Install with:
+```bash
+# Ubuntu/Debian
+sudo apt install mariadb-server
+
+# Arch
+sudo pacman -S mariadb
+```
 
 ## How It Works
 
@@ -109,12 +120,14 @@ spindb deps install --engine postgresql
 spindb deps install --engine mysql
 ```
 
+**Note:** On Linux, package managers (apt, pacman, dnf) require `sudo` privileges. You may be prompted for your password when installing dependencies.
+
 ### Manual Installation
 
 #### PostgreSQL
 
 ```bash
-# macOS (Homebrew)
+# macOS (Homebrew) - use the latest PostgreSQL version (currently 17)
 brew install postgresql@17
 brew link --overwrite postgresql@17
 
@@ -250,6 +263,73 @@ cat ~/.spindb/containers/mysql/mydb/mysql.log
 ```bash
 rm -rf ~/.spindb
 ```
+
+## Project Structure
+
+```
+spindb/
+├── bin.ts                      # Entry point (#!/usr/bin/env tsx)
+├── cli/
+│   ├── index.ts                # Commander setup, routes to commands
+│   ├── commands/               # CLI commands
+│   │   ├── menu.ts             # Interactive arrow-key menu
+│   │   ├── create.ts           # Create container command
+│   │   ├── delete.ts           # Delete container command
+│   │   └── ...                 # Other commands
+│   └── ui/
+│       ├── prompts.ts          # Inquirer prompts
+│       ├── spinner.ts          # Ora spinner helpers
+│       └── theme.ts            # Chalk color theme
+├── core/
+│   ├── binary-manager.ts       # Downloads PostgreSQL from zonky.io
+│   ├── config-manager.ts       # Manages ~/.spindb/config.json
+│   ├── container-manager.ts    # CRUD for containers
+│   ├── port-manager.ts         # Port availability checking
+│   ├── process-manager.ts      # Process start/stop wrapper
+│   ├── dependency-manager.ts   # Client tool detection
+│   ├── error-handler.ts        # Centralized error handling
+│   └── transaction-manager.ts  # Rollback support for operations
+├── config/
+│   ├── paths.ts                # ~/.spindb/ path definitions
+│   ├── defaults.ts             # Default values, platform mappings
+│   └── os-dependencies.ts      # OS-specific dependency definitions
+├── engines/
+│   ├── base-engine.ts          # Abstract base class
+│   ├── index.ts                # Engine registry
+│   ├── postgresql/
+│   │   ├── index.ts            # PostgreSQL engine implementation
+│   │   ├── binary-urls.ts      # Zonky.io URL builder
+│   │   ├── restore.ts          # Backup detection and restore
+│   │   └── version-validator.ts # Version compatibility checks
+│   └── mysql/
+│       ├── index.ts            # MySQL engine implementation
+│       ├── binary-detection.ts # MySQL binary path detection
+│       ├── restore.ts          # Backup detection and restore
+│       └── version-validator.ts # Version compatibility checks
+├── types/
+│   └── index.ts                # TypeScript interfaces
+└── tests/
+    ├── unit/                   # Unit tests
+    ├── integration/            # Integration tests
+    └── fixtures/               # Test data
+        ├── postgresql/
+        │   └── seeds/
+        └── mysql/
+            └── seeds/
+```
+
+## Contributing
+
+### Version Updates
+
+SpinDB uses versioned PostgreSQL packages from Homebrew (e.g., `postgresql@17`). When new major versions are released:
+
+1. Check [PostgreSQL releases](https://www.postgresql.org/docs/release/) and [Homebrew formulae](https://formulae.brew.sh/formula/postgresql)
+2. Update `config/engine-defaults.ts`:
+   - Change `latestVersion` to the new version
+   - Add the new version to `supportedVersions`
+
+See `CLAUDE.md` for detailed maintenance instructions.
 
 ## License
 

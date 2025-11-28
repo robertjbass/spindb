@@ -22,18 +22,31 @@ cli/
 ├── index.ts                # Commander setup, routes to commands
 ├── commands/               # CLI commands (create, start, stop, etc.)
 │   ├── menu.ts             # Interactive arrow-key menu (default when no args)
-│   └── config.ts           # Binary path configuration
+│   ├── config.ts           # Binary path configuration
+│   ├── create.ts           # Create container command
+│   ├── start.ts            # Start container command
+│   ├── stop.ts             # Stop container command
+│   ├── delete.ts           # Delete container command
+│   ├── list.ts             # List containers command
+│   ├── connect.ts          # Connect to container shell
+│   ├── clone.ts            # Clone container command
+│   ├── restore.ts          # Restore from backup command
+│   └── deps.ts             # Dependency management command (engine-agnostic)
 └── ui/
     ├── prompts.ts          # Inquirer prompts
     ├── spinner.ts          # Ora spinner helpers
     └── theme.ts            # Chalk color theme
 core/
-├── binary-manager.ts       # Downloads PostgreSQL from zonky.io
+├── binary-manager.ts       # Downloads PostgreSQL server binaries from zonky.io
 ├── config-manager.ts       # Manages ~/.spindb/config.json
 ├── container-manager.ts    # CRUD for containers
 ├── port-manager.ts         # Port availability checking
-├── process-manager.ts      # pg_ctl start/stop wrapper
-└── dependency-manager.ts   # Client tool detection and installation
+├── process-manager.ts      # Process start/stop wrapper
+├── dependency-manager.ts   # Client tool detection and installation (engine-agnostic)
+├── error-handler.ts        # Centralized error handling with SpinDBError
+├── transaction-manager.ts  # Rollback support for multi-step operations
+├── start-with-retry.ts     # Port conflict detection and retry
+└── platform-service.ts     # Platform-specific abstractions
 config/
 ├── paths.ts                # ~/.spindb/ path definitions
 ├── defaults.ts             # Default values, platform mappings
@@ -43,20 +56,55 @@ engines/
 ├── index.ts                # Engine registry
 ├── postgresql/
 │   ├── index.ts            # PostgreSQL engine implementation
-│   ├── binary-urls.ts      # Zonky.io URL builder
-│   └── restore.ts          # Backup detection and restore
+│   ├── binary-urls.ts      # Zonky.io URL builder for server binaries
+│   ├── binary-manager.ts   # PostgreSQL client tool management (psql, pg_restore)
+│   ├── restore.ts          # Backup detection and restore
+│   └── version-validator.ts # Version compatibility checking
 └── mysql/
-    └── index.ts            # MySQL engine implementation
+    ├── index.ts            # MySQL engine implementation
+    ├── binary-detection.ts # System binary detection (mysqld, mysql, mysqldump)
+    ├── restore.ts          # Backup detection and restore
+    └── version-validator.ts # Version compatibility checking
 types/index.ts              # TypeScript interfaces
 tests/
+├── unit/                   # Unit tests
+│   ├── error-handler.test.ts
+│   ├── transaction-manager.test.ts
+│   ├── version-validator.test.ts
+│   ├── mysql-version-validator.test.ts
+│   └── platform-service.test.ts
 ├── integration/
 │   ├── helpers.ts          # Test utilities
 │   ├── postgresql.test.ts  # PostgreSQL integration tests
 │   └── mysql.test.ts       # MySQL integration tests
-└── seeds/
-    ├── postgresql/sample-db.sql
-    └── mysql/sample-db.sql
+└── fixtures/
+    ├── postgresql/
+    │   ├── seeds/sample-db.sql
+    │   └── dumps/          # Synthetic dumps for version testing
+    └── mysql/
+        ├── seeds/sample-db.sql
+        └── dumps/          # Synthetic dumps for version testing
 ```
+
+## Engine File Structure Convention
+
+Each engine folder should have parallel file structure for maintainability:
+
+```
+engines/{engine}/
+├── index.ts              # Main engine class (extends BaseEngine)
+├── restore.ts            # Backup format detection, restore logic, cross-engine error detection
+├── version-validator.ts  # Version parsing, compatibility checking
+├── binary-manager.ts     # Client tool installation/update (PostgreSQL only - downloads tools)
+└── binary-detection.ts   # System binary detection (MySQL - uses system-installed tools)
+```
+
+**Naming Parity Rules:**
+- `restore.ts` - Every engine has backup/restore functionality
+- `version-validator.ts` - Every engine validates dump vs client version compatibility
+- Binary management differs by engine:
+  - PostgreSQL: `binary-urls.ts` (server binaries from zonky.io) + `binary-manager.ts` (client tools)
+  - MySQL: `binary-detection.ts` (all binaries are system-installed)
 
 ## Key Architecture Decisions
 
@@ -144,6 +192,23 @@ type ContainerConfig = {
   clonedFrom?: string
 }
 ```
+
+### Error Handling
+
+**Interactive CLI vs Direct CLI:**
+- **Interactive CLI (menu mode)**: Always log errors and show a "Press Enter to continue" prompt so the console doesn't clear before the user can read the error message
+- **Direct CLI (command mode)**: Log the error, write to the log file at `~/.spindb/logs/`, and exit with a non-zero exit code
+
+**Log Files:**
+- All errors should be logged to `~/.spindb/logs/spindb.log` (or date-based files like `spindb-2024-01-15.log`)
+- Logs should include timestamp, error code, message, and stack trace
+- This allows users to review errors after the fact, especially useful when running scripts
+
+**Sudo/Elevated Privileges:**
+- On Linux, system package managers (apt, pacman, dnf) require `sudo` privileges
+- When installing dependencies via `spindb deps install`, users may be prompted for their password
+- Always warn users before running commands that require elevated privileges
+- Homebrew on macOS does NOT require sudo (runs in userspace)
 
 ### Ideology
 - All commands need to be CLI-first, this tool needs to have full functionality from the command line, there should never be a command you can run from the interactive CLI that the command line can not also handle
@@ -301,6 +366,25 @@ See `TODO.md` for full list. Key items:
 - [ ] Add `spindb exec` for running SQL files
 - [ ] SQLite support
 - [ ] Windows support
+
+## Version Maintenance
+
+### PostgreSQL Version Updates
+
+The `latestVersion` constant in `config/engine-defaults.ts` controls which PostgreSQL version is used for Homebrew package names (e.g., `postgresql@17`). This should be updated when a new major PostgreSQL version is released.
+
+**Check for new versions periodically:**
+- PostgreSQL releases: https://www.postgresql.org/docs/release/
+- Homebrew formula: `brew info postgresql` or https://formulae.brew.sh/formula/postgresql
+
+**When to update:**
+1. A new major PostgreSQL version is released (e.g., PostgreSQL 18)
+2. Homebrew has the versioned formula available (e.g., `postgresql@18`)
+3. Update `config/engine-defaults.ts`:
+   - Change `latestVersion: '17'` to `latestVersion: '18'`
+   - Add `'18'` to `supportedVersions` array
+
+**GitHub Action (optional):** A `version-check.yml` workflow can be added to check for new PostgreSQL/MySQL releases on PRs and notify maintainers.
 
 ## Publishing to npm
 

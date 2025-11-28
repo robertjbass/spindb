@@ -16,6 +16,7 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
 - [x] **Engine/binary management** - Menu to list installed PostgreSQL versions, install new versions, uninstall unused versions (free up disk space)
 - [x] **MySQL support** - Add MySQL engine using system-installed MySQL binaries
+- [x] **MariaDB support** - Automatically detect and support MariaDB as MySQL alternative on Linux
 
 ### Medium Priority
 - [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu)
@@ -24,6 +25,8 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Multiple databases per container** - List/create/delete databases within a container
 - [x] **Fetch available versions** - Query Maven Central API to show all available PostgreSQL versions instead of hardcoded list
 - [x] **Engine-aware shell** - Open shell uses psql for PostgreSQL, mysql for MySQL
+- [x] **Cross-engine dump detection** - Detect and error when restoring wrong engine dump (e.g., MySQL dump to PostgreSQL)
+- [x] **Version compatibility validation** - Warn/error when dump version is incompatible with client version
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
@@ -98,7 +101,7 @@ const TEST_PORTS = {
 1. **Cleanup** - Delete any existing containers matching `*-test*` pattern
 2. **Create without start** - Create container with `--no-start`, verify not running
 3. **Start container** - Start the container, verify running
-4. **Seed database** - Run `tests/seeds/postgresql/sample-db.sql`, verify data inserted
+4. **Seed database** - Run `tests/fixtures/postgresql/seeds/sample-db.sql`, verify data inserted
 5. **Query data** - Query the seeded table, record row count
 6. **Create from dump** - Use `--from` with connection string to create new container with data
 7. **Verify restored data** - Query restored container, verify row count matches
@@ -114,7 +117,7 @@ const TEST_PORTS = {
 
 #### MySQL Integration Tests (14 tests)
 Same test cases as PostgreSQL, using MySQL-specific:
-- Seed file: `tests/seeds/mysql/sample-db.sql`
+- Seed file: `tests/fixtures/mysql/seeds/sample-db.sql`
 - Connection string: `mysql://root@127.0.0.1:{port}/{db}`
 - Port range: 3333-3400
 
@@ -140,3 +143,50 @@ Located in `tests/integration/helpers.ts`:
 - [ ] **Parallel test isolation** - Run PostgreSQL and MySQL tests in parallel safely
 - [ ] **Backup/restore round-trip** - Dump → delete row → restore → verify row is back
 - [ ] **Binary download test** - Test first-time PostgreSQL binary download (CI only)
+- [x] **Cross-engine format detection tests** - Unit tests for detecting wrong-engine dumps
+- [x] **MySQL dump version parsing tests** - Unit tests for parsing MySQL/MariaDB dump file headers
+- [x] **MySQL 5.7 fixture** - Test fixture for MySQL 5.7 LTS version dumps
+
+
+---
+
+# Dump/Restore Notes:
+
+## Postgres
+
+for pg_restore the version info can be found in the dump file like this:
+
+### Method 1: Use pg_restore to show TOC (Table of Contents)
+`pg_restore --list _dumps/{filename}.dump | head -20`
+to see this:
+
+```bash
+; Archive created at 2025-11-25 14:12:57 CST
+;     dbname: database_name
+;     TOC Entries: 1524
+;     Compression: gzip
+;     Dump Version: 1.15-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 16.9 (415ebe8)
+;     Dumped by pg_dump version: 16.0
+```
+
+### Method 2: Use strings to extract version info
+`strings _dumps/{filename}.dump | head -10`
+to see this:
+
+```bash
+strings _dumps/database_name.dump | head -10
+PGDMP
+efficientdb
+16.9 (415ebe8)
+16.0
+ENCODING
+ENCODING
+SET client_encoding = 'UTF8';
+false
+STDSTRINGS
+STDSTRINGS
+```

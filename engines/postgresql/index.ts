@@ -1,4 +1,3 @@
-import { platform, arch } from 'os'
 import { join } from 'path'
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
@@ -6,6 +5,7 @@ import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
+import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { defaults } from '../../config/defaults'
 import {
@@ -43,9 +43,10 @@ export class PostgreSQLEngine extends BaseEngine {
    * Get current platform info
    */
   getPlatformInfo(): { platform: string; arch: string } {
+    const info = platformService.getPlatformInfo()
     return {
-      platform: platform(),
-      arch: arch(),
+      platform: info.platform,
+      arch: info.arch,
     }
   }
 

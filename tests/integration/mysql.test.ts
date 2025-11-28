@@ -30,7 +30,7 @@ import type { EngineName } from '../../types'
 
 const ENGINE: EngineName = 'mysql'
 const DATABASE = 'testdb'
-const SEED_FILE = join(__dirname, '../seeds/mysql/sample-db.sql')
+const SEED_FILE = join(__dirname, '../fixtures/mysql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
 
 describe('MySQL Integration Tests', () => {
@@ -118,7 +118,7 @@ describe('MySQL Integration Tests', () => {
 
     await executeSQLFile(ENGINE, testPorts[0], DATABASE, SEED_FILE)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_users')
+    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
     assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Should have correct row count after seeding')
 
     console.log(`   ✓ Seeded ${rowCount} rows`)
@@ -171,7 +171,7 @@ describe('MySQL Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[1], DATABASE, 'test_users')
+    const rowCount = await getRowCount(ENGINE, testPorts[1], DATABASE, 'test_user')
     assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should have same row count')
 
     console.log(`   ✓ Verified ${rowCount} rows in restored container`)
@@ -206,10 +206,10 @@ describe('MySQL Integration Tests', () => {
       ENGINE,
       testPorts[0],
       DATABASE,
-      "DELETE FROM test_users WHERE email = 'eve@example.com'",
+      "DELETE FROM test_user WHERE email = 'eve@example.com'",
     )
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_users')
+    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
     console.log(`   ✓ Row deleted, now have ${rowCount} rows`)
@@ -257,7 +257,7 @@ describe('MySQL Integration Tests', () => {
     assert(ready, 'Renamed MySQL should be ready')
 
     // Verify row count reflects deletion
-    const rowCount = await getRowCount(ENGINE, testPorts[2], DATABASE, 'test_users')
+    const rowCount = await getRowCount(ENGINE, testPorts[2], DATABASE, 'test_user')
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Row count should persist after rename')
 
     console.log(`   ✓ Data persisted: ${rowCount} rows`)

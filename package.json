@@ -12,6 +12,9 @@
     "test": "pnpm test:pg && pnpm test:mysql",
     "test:pg": "node --import tsx --test tests/integration/postgresql.test.ts",
     "test:mysql": "node --import tsx --test tests/integration/mysql.test.ts",
+    "test:unit": "node --import tsx --test tests/unit/*.test.ts",
+    "test:integration": "pnpm test:pg && pnpm test:mysql",
+    "test:all": "pnpm test:unit && pnpm test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint ."
   },

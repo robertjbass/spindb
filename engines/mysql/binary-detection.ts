@@ -5,89 +5,17 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
-import { platform } from 'os'
+import { platformService } from '../../core/platform-service'
 
 const execAsync = promisify(exec)
 
 /**
- * Common paths where MySQL binaries might be installed
- */
-const MYSQL_SEARCH_PATHS = {
-  darwin: [
-    // Homebrew (Apple Silicon)
-    '/opt/homebrew/bin',
-    '/opt/homebrew/opt/mysql/bin',
-    '/opt/homebrew/opt/mysql@8.0/bin',
-    '/opt/homebrew/opt/mysql@8.4/bin',
-    '/opt/homebrew/opt/mysql@5.7/bin',
-    // Homebrew (Intel)
-    '/usr/local/bin',
-    '/usr/local/opt/mysql/bin',
-    '/usr/local/opt/mysql@8.0/bin',
-    '/usr/local/opt/mysql@8.4/bin',
-    '/usr/local/opt/mysql@5.7/bin',
-    // Official MySQL installer
-    '/usr/local/mysql/bin',
-  ],
-  linux: [
-    '/usr/bin',
-    '/usr/sbin',
-    '/usr/local/bin',
-    '/usr/local/mysql/bin',
-  ],
-  win32: [
-    'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin',
-    'C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin',
-    'C:\\Program Files\\MySQL\\MySQL Server 5.7\\bin',
-  ],
-}
-
-/**
- * Get search paths for the current platform
- */
-function getSearchPaths(): string[] {
-  const plat = platform()
-  return MYSQL_SEARCH_PATHS[plat as keyof typeof MYSQL_SEARCH_PATHS] || []
-}
-
-/**
- * Check if a binary exists at the given path
- */
-function binaryExists(path: string): boolean {
-  return existsSync(path)
-}
-
-/**
- * Find a MySQL binary by name
+ * Find a MySQL binary by name using the platform service
  */
 export async function findMysqlBinary(
   name: string,
 ): Promise<string | null> {
-  // First, try using 'which' or 'where' command
-  try {
-    const cmd = platform() === 'win32' ? 'where' : 'which'
-    const { stdout } = await execAsync(`${cmd} ${name}`)
-    const path = stdout.trim().split('\n')[0]
-    if (path && binaryExists(path)) {
-      return path
-    }
-  } catch {
-    // Not found in PATH, continue to search common locations
-  }
-
-  // Search common installation paths
-  const searchPaths = getSearchPaths()
-  for (const dir of searchPaths) {
-    const fullPath = platform() === 'win32'
-      ? `${dir}\\${name}.exe`
-      : `${dir}/${name}`
-    if (binaryExists(fullPath)) {
-      return fullPath
-    }
-  }
-
-  return null
+  return platformService.findToolPath(name)
 }
 
 /**
@@ -180,6 +108,7 @@ export async function detectInstalledVersions(): Promise<
   Record<string, string>
 > {
   const versions: Record<string, string> = {}
+  const { platform } = platformService.getPlatformInfo()
 
   // Check default mysqld
   const defaultMysqld = await getMysqldPath()
@@ -191,25 +120,26 @@ export async function detectInstalledVersions(): Promise<
     }
   }
 
-  // Check versioned Homebrew installations
-  const homebrewPaths = platform() === 'darwin'
-    ? [
-        '/opt/homebrew/opt/mysql@5.7/bin/mysqld',
-        '/opt/homebrew/opt/mysql@8.0/bin/mysqld',
-        '/opt/homebrew/opt/mysql@8.4/bin/mysqld',
-        '/usr/local/opt/mysql@5.7/bin/mysqld',
-        '/usr/local/opt/mysql@8.0/bin/mysqld',
-        '/usr/local/opt/mysql@8.4/bin/mysqld',
-      ]
-    : []
+  // Check versioned Homebrew installations (macOS only)
+  if (platform === 'darwin') {
+    const homebrewPaths = [
+      '/opt/homebrew/opt/mysql@5.7/bin/mysqld',
+      '/opt/homebrew/opt/mysql@8.0/bin/mysqld',
+      '/opt/homebrew/opt/mysql@8.4/bin/mysqld',
+      '/usr/local/opt/mysql@5.7/bin/mysqld',
+      '/usr/local/opt/mysql@8.0/bin/mysqld',
+      '/usr/local/opt/mysql@8.4/bin/mysqld',
+    ]
 
-  for (const path of homebrewPaths) {
-    if (binaryExists(path)) {
-      const version = await getMysqlVersion(path)
-      if (version) {
-        const major = getMajorVersion(version)
-        if (!versions[major]) {
-          versions[major] = version
+    const { existsSync } = await import('fs')
+    for (const path of homebrewPaths) {
+      if (existsSync(path)) {
+        const version = await getMysqlVersion(path)
+        if (version) {
+          const major = getMajorVersion(version)
+          if (!versions[major]) {
+            versions[major] = version
+          }
         }
       }
     }
@@ -222,9 +152,9 @@ export async function detectInstalledVersions(): Promise<
  * Get install instructions for MySQL
  */
 export function getInstallInstructions(): string {
-  const plat = platform()
+  const { platform } = platformService.getPlatformInfo()
 
-  if (plat === 'darwin') {
+  if (platform === 'darwin') {
     return (
       'MySQL server not found. Install MySQL:\n' +
       '  brew install mysql\n' +
@@ -233,7 +163,7 @@ export function getInstallInstructions(): string {
     )
   }
 
-  if (plat === 'linux') {
+  if (platform === 'linux') {
     return (
       'MySQL server not found. Install MySQL:\n' +
       '  Ubuntu/Debian: sudo apt install mysql-server\n' +
