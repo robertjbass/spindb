@@ -5,89 +5,15 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
-import { platform } from 'os'
+import { platformService } from '../../core/platform-service'
 
 const execAsync = promisify(exec)
 
 /**
- * Common paths where MySQL binaries might be installed
+ * Find a MySQL binary by name using the platform service
  */
-const MYSQL_SEARCH_PATHS = {
-  darwin: [
-    // Homebrew (Apple Silicon)
-    '/opt/homebrew/bin',
-    '/opt/homebrew/opt/mysql/bin',
-    '/opt/homebrew/opt/mysql@8.0/bin',
-    '/opt/homebrew/opt/mysql@8.4/bin',
-    '/opt/homebrew/opt/mysql@5.7/bin',
-    // Homebrew (Intel)
-    '/usr/local/bin',
-    '/usr/local/opt/mysql/bin',
-    '/usr/local/opt/mysql@8.0/bin',
-    '/usr/local/opt/mysql@8.4/bin',
-    '/usr/local/opt/mysql@5.7/bin',
-    // Official MySQL installer
-    '/usr/local/mysql/bin',
-  ],
-  linux: [
-    '/usr/bin',
-    '/usr/sbin',
-    '/usr/local/bin',
-    '/usr/local/mysql/bin',
-  ],
-  win32: [
-    'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin',
-    'C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin',
-    'C:\\Program Files\\MySQL\\MySQL Server 5.7\\bin',
-  ],
-}
-
-/**
- * Get search paths for the current platform
- */
-function getSearchPaths(): string[] {
-  const plat = platform()
-  return MYSQL_SEARCH_PATHS[plat as keyof typeof MYSQL_SEARCH_PATHS] || []
-}
-
-/**
- * Check if a binary exists at the given path
- */
-function binaryExists(path: string): boolean {
-  return existsSync(path)
-}
-
-/**
- * Find a MySQL binary by name
- */
-export async function findMysqlBinary(
-  name: string,
-): Promise<string | null> {
-  // First, try using 'which' or 'where' command
-  try {
-    const cmd = platform() === 'win32' ? 'where' : 'which'
-    const { stdout } = await execAsync(`${cmd} ${name}`)
-    const path = stdout.trim().split('\n')[0]
-    if (path && binaryExists(path)) {
-      return path
-    }
-  } catch {
-    // Not found in PATH, continue to search common locations
-  }
-
-  // Search common installation paths
-  const searchPaths = getSearchPaths()
-  for (const dir of searchPaths) {
-    const fullPath = platform() === 'win32'
-      ? `${dir}\\${name}.exe`
-      : `${dir}/${name}`
-    if (binaryExists(fullPath)) {
-      return fullPath
-    }
-  }
-
-  return null
+export async function findMysqlBinary(name: string): Promise<string | null> {
+  return platformService.findToolPath(name)
 }
 
 /**
@@ -180,6 +106,7 @@ export async function detectInstalledVersions(): Promise<
   Record<string, string>
 > {
   const versions: Record<string, string> = {}
+  const { platform } = platformService.getPlatformInfo()
 
   // Check default mysqld
   const defaultMysqld = await getMysqldPath()
@@ -191,25 +118,26 @@ export async function detectInstalledVersions(): Promise<
     }
   }
 
-  // Check versioned Homebrew installations
-  const homebrewPaths = platform() === 'darwin'
-    ? [
-        '/opt/homebrew/opt/mysql@5.7/bin/mysqld',
-        '/opt/homebrew/opt/mysql@8.0/bin/mysqld',
-        '/opt/homebrew/opt/mysql@8.4/bin/mysqld',
-        '/usr/local/opt/mysql@5.7/bin/mysqld',
-        '/usr/local/opt/mysql@8.0/bin/mysqld',
-        '/usr/local/opt/mysql@8.4/bin/mysqld',
-      ]
-    : []
+  // Check versioned Homebrew installations (macOS only)
+  if (platform === 'darwin') {
+    const homebrewPaths = [
+      '/opt/homebrew/opt/mysql@5.7/bin/mysqld',
+      '/opt/homebrew/opt/mysql@8.0/bin/mysqld',
+      '/opt/homebrew/opt/mysql@8.4/bin/mysqld',
+      '/usr/local/opt/mysql@5.7/bin/mysqld',
+      '/usr/local/opt/mysql@8.0/bin/mysqld',
+      '/usr/local/opt/mysql@8.4/bin/mysqld',
+    ]
 
-  for (const path of homebrewPaths) {
-    if (binaryExists(path)) {
-      const version = await getMysqlVersion(path)
-      if (version) {
-        const major = getMajorVersion(version)
-        if (!versions[major]) {
-          versions[major] = version
+    const { existsSync } = await import('fs')
+    for (const path of homebrewPaths) {
+      if (existsSync(path)) {
+        const version = await getMysqlVersion(path)
+        if (version) {
+          const major = getMajorVersion(version)
+          if (!versions[major]) {
+            versions[major] = version
+          }
         }
       }
     }
@@ -222,9 +150,9 @@ export async function detectInstalledVersions(): Promise<
  * Get install instructions for MySQL
  */
 export function getInstallInstructions(): string {
-  const plat = platform()
+  const { platform } = platformService.getPlatformInfo()
 
-  if (plat === 'darwin') {
+  if (platform === 'darwin') {
     return (
       'MySQL server not found. Install MySQL:\n' +
       '  brew install mysql\n' +
@@ -233,7 +161,7 @@ export function getInstallInstructions(): string {
     )
   }
 
-  if (plat === 'linux') {
+  if (platform === 'linux') {
     return (
       'MySQL server not found. Install MySQL:\n' +
       '  Ubuntu/Debian: sudo apt install mysql-server\n' +
@@ -245,4 +173,153 @@ export function getInstallInstructions(): string {
     'MySQL server not found. Please install MySQL from:\n' +
     '  https://dev.mysql.com/downloads/mysql/'
   )
+}
+
+export type MysqlPackageManager =
+  | 'homebrew'
+  | 'apt'
+  | 'yum'
+  | 'dnf'
+  | 'pacman'
+  | 'unknown'
+
+export type MysqlInstallInfo = {
+  packageManager: MysqlPackageManager
+  packageName: string
+  path: string
+  uninstallCommand: string
+  isMariaDB: boolean
+}
+
+/**
+ * Detect which package manager installed MySQL and get uninstall info
+ */
+export async function getMysqlInstallInfo(
+  mysqldPath: string,
+): Promise<MysqlInstallInfo> {
+  const { platform } = platformService.getPlatformInfo()
+  const mariadb = await isMariaDB()
+
+  // macOS: Check if path is in Homebrew directories
+  if (platform === 'darwin') {
+    if (
+      mysqldPath.includes('/opt/homebrew/') ||
+      mysqldPath.includes('/usr/local/Cellar/')
+    ) {
+      // Extract package name from path
+      // e.g., /opt/homebrew/opt/mysql@8.0/bin/mysqld -> mysql@8.0
+      // e.g., /opt/homebrew/bin/mysqld -> mysql (linked)
+      let packageName = mariadb ? 'mariadb' : 'mysql'
+
+      const versionMatch = mysqldPath.match(/mysql@(\d+\.\d+)/)
+      if (versionMatch) {
+        packageName = `mysql@${versionMatch[1]}`
+      } else {
+        // Try to get from Homebrew directly
+        try {
+          const { stdout } = await execAsync('brew list --formula')
+          const packages = stdout.split('\n')
+          const mysqlPackage = packages.find(
+            (p) =>
+              p.startsWith('mysql') ||
+              p.startsWith('mariadb') ||
+              p === 'percona-server',
+          )
+          if (mysqlPackage) {
+            packageName = mysqlPackage
+          }
+        } catch {
+          // Ignore errors
+        }
+      }
+
+      return {
+        packageManager: 'homebrew',
+        packageName,
+        path: mysqldPath,
+        uninstallCommand: `brew uninstall ${packageName}`,
+        isMariaDB: mariadb,
+      }
+    }
+  }
+
+  // Linux: Detect package manager from path or check installed packages
+  if (platform === 'linux') {
+    // Check for apt (Debian/Ubuntu)
+    try {
+      const { stdout } = await execAsync('which apt 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
+        return {
+          packageManager: 'apt',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo apt remove ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not apt
+    }
+
+    // Check for dnf (Fedora/RHEL 8+)
+    try {
+      const { stdout } = await execAsync('which dnf 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
+        return {
+          packageManager: 'dnf',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo dnf remove ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not dnf
+    }
+
+    // Check for yum (CentOS/RHEL 7)
+    try {
+      const { stdout } = await execAsync('which yum 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
+        return {
+          packageManager: 'yum',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo yum remove ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not yum
+    }
+
+    // Check for pacman (Arch Linux)
+    try {
+      const { stdout } = await execAsync('which pacman 2>/dev/null')
+      if (stdout.trim()) {
+        const packageName = mariadb ? 'mariadb' : 'mysql'
+        return {
+          packageManager: 'pacman',
+          packageName,
+          path: mysqldPath,
+          uninstallCommand: `sudo pacman -Rs ${packageName}`,
+          isMariaDB: mariadb,
+        }
+      }
+    } catch {
+      // Not pacman
+    }
+  }
+
+  // Unknown package manager
+  return {
+    packageManager: 'unknown',
+    packageName: mariadb ? 'mariadb' : 'mysql',
+    path: mysqldPath,
+    uninstallCommand: 'Use your system package manager to uninstall',
+    isMariaDB: mariadb,
+  }
 }

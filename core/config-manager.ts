@@ -4,6 +4,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { dirname } from 'path'
 import { paths } from '../config/paths'
+import { logDebug, logWarning } from './error-handler'
 import type {
   SpinDBConfig,
   BinaryConfig,
@@ -41,8 +42,12 @@ export class ConfigManager {
       const content = await readFile(configPath, 'utf8')
       this.config = JSON.parse(content) as SpinDBConfig
       return this.config
-    } catch {
+    } catch (error) {
       // If config is corrupted, reset to default
+      logWarning('Config file corrupted, resetting to default', {
+        configPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
       this.config = { ...DEFAULT_CONFIG }
       await this.save()
       return this.config
@@ -110,8 +115,12 @@ export class ConfigManager {
       if (match) {
         version = match[0]
       }
-    } catch {
-      // Version detection failed, that's ok
+    } catch (error) {
+      logDebug('Version detection failed', {
+        tool,
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
 
     config.binaries[tool] = {
@@ -142,8 +151,11 @@ export class ConfigManager {
       if (path && existsSync(path)) {
         return path
       }
-    } catch {
-      // which failed, binary not found
+    } catch (error) {
+      logDebug('which command failed for binary detection', {
+        tool,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
 
     // Check common locations

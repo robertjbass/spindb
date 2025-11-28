@@ -9,14 +9,17 @@ import { connectCommand } from './commands/connect'
 import { cloneCommand } from './commands/clone'
 import { menuCommand } from './commands/menu'
 import { configCommand } from './commands/config'
-import { postgresToolsCommand } from './commands/postgres-tools'
 import { depsCommand } from './commands/deps'
+import { enginesCommand } from './commands/engines'
+import { editCommand } from './commands/edit'
+import { urlCommand } from './commands/url'
+import { infoCommand } from './commands/info'
 
 export async function run(): Promise<void> {
   program
     .name('spindb')
     .description('Spin up local database containers without Docker')
-    .version('0.1.0')
+    .version('0.1.0', '-v, --version', 'output the version number')
 
   program.addCommand(createCommand)
   program.addCommand(listCommand)
@@ -28,8 +31,11 @@ export async function run(): Promise<void> {
   program.addCommand(cloneCommand)
   program.addCommand(menuCommand)
   program.addCommand(configCommand)
-  program.addCommand(postgresToolsCommand)
   program.addCommand(depsCommand)
+  program.addCommand(enginesCommand)
+  program.addCommand(editCommand)
+  program.addCommand(urlCommand)
+  program.addCommand(infoCommand)
 
   // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {

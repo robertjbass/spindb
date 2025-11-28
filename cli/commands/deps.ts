@@ -188,7 +188,11 @@ depsCommand
 
       if (succeeded.length > 0) {
         console.log()
-        console.log(success(`Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`))
+        console.log(
+          success(
+            `Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`,
+          ),
+        )
       }
     } else if (options.engine) {
       // Install dependencies for specific engine
@@ -254,7 +258,11 @@ depsCommand
 
       if (succeeded.length > 0) {
         console.log()
-        console.log(success(`Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`))
+        console.log(
+          success(
+            `Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`,
+          ),
+        )
       }
     } else {
       // Default: install PostgreSQL dependencies (most common use case)
@@ -278,7 +286,10 @@ depsCommand
       const spinner = createSpinner('Installing PostgreSQL dependencies...')
       spinner.start()
 
-      const results = await installEngineDependencies('postgresql', packageManager)
+      const results = await installEngineDependencies(
+        'postgresql',
+        packageManager,
+      )
 
       const succeeded = results.filter((r) => r.success)
       const failed = results.filter((r) => !r.success)
@@ -295,7 +306,11 @@ depsCommand
 
       if (succeeded.length > 0) {
         console.log()
-        console.log(success(`Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`))
+        console.log(
+          success(
+            `Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`,
+          ),
+        )
       }
     }
   })

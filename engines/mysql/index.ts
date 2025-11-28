@@ -5,12 +5,18 @@
 
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, createReadStream } from 'fs'
-import { mkdir, writeFile, readFile, rm } from 'fs/promises'
+import { existsSync } from 'fs'
+import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
+import {
+  logDebug,
+  logWarning,
+  ErrorCodes,
+  SpinDBError,
+} from '../../core/error-handler'
 import {
   getMysqldPath,
   getMysqlClientPath,
@@ -22,6 +28,11 @@ import {
   detectInstalledVersions,
   getInstallInstructions,
 } from './binary-detection'
+import {
+  detectBackupFormat as detectBackupFormatImpl,
+  restoreBackup,
+  parseConnectionString,
+} from './restore'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -30,6 +41,10 @@ import type {
   DumpResult,
   StatusResult,
 } from '../../types'
+
+// Re-export modules for external access
+export * from './version-validator'
+export * from './restore'
 
 const execAsync = promisify(exec)
 
@@ -113,7 +128,9 @@ export class MySQLEngine extends BaseEngine {
     _version: string,
     _options: Record<string, unknown> = {},
   ): Promise<string> {
-    const dataDir = paths.getContainerDataPath(containerName, { engine: ENGINE })
+    const dataDir = paths.getContainerDataPath(containerName, {
+      engine: ENGINE,
+    })
 
     // Create data directory if it doesn't exist
     if (!existsSync(dataDir)) {
@@ -316,72 +333,238 @@ export class MySQLEngine extends BaseEngine {
     const { name, port } = container
     const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
 
-    // Try graceful shutdown first with mysqladmin
+    logDebug(`Stopping MySQL container "${name}" on port ${port}`)
+
+    // Step 1: Get PID with validation
+    const pid = await this.getValidatedPid(pidFile)
+    if (pid === null) {
+      // No valid PID file - check if process might still be running on port
+      logDebug('No valid PID, checking if MySQL is responding on port')
+      const mysqladmin = await getMysqladminPath()
+      if (mysqladmin) {
+        try {
+          await execAsync(
+            `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
+            { timeout: 2000 },
+          )
+          // MySQL is responding - try graceful shutdown even without PID
+          logWarning(`MySQL responding on port ${port} but no valid PID file`)
+          await this.gracefulShutdown(port)
+        } catch {
+          // MySQL not responding, nothing to stop
+          logDebug('MySQL not responding, nothing to stop')
+        }
+      }
+      return
+    }
+
+    // Step 2: Try graceful shutdown
+    const gracefulSuccess = await this.gracefulShutdown(port, pid)
+    if (gracefulSuccess) {
+      await this.cleanupPidFile(pidFile)
+      logDebug('MySQL stopped gracefully')
+      return
+    }
+
+    // Step 3: Force kill with escalation
+    await this.forceKillWithEscalation(pid, pidFile)
+  }
+
+  /**
+   * Get and validate PID from PID file
+   * Returns null if PID file doesn't exist, is corrupt, or references dead process
+   */
+  private async getValidatedPid(pidFile: string): Promise<number | null> {
+    if (!existsSync(pidFile)) {
+      logDebug('PID file does not exist')
+      return null
+    }
+
+    try {
+      const content = await readFile(pidFile, 'utf8')
+      const pid = parseInt(content.trim(), 10)
+
+      if (isNaN(pid) || pid <= 0) {
+        logWarning(`PID file contains invalid value: "${content.trim()}"`, {
+          code: ErrorCodes.PID_FILE_CORRUPT,
+          pidFile,
+        })
+        // Clean up corrupt PID file
+        await this.cleanupPidFile(pidFile)
+        return null
+      }
+
+      // Verify process exists
+      try {
+        process.kill(pid, 0) // Signal 0 = check existence
+        logDebug(`Validated PID ${pid}`)
+        return pid
+      } catch {
+        logWarning(`PID file references non-existent process ${pid}`, {
+          code: ErrorCodes.PID_FILE_STALE,
+          pidFile,
+        })
+        // Clean up stale PID file
+        await this.cleanupPidFile(pidFile)
+        return null
+      }
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException
+      if (e.code !== 'ENOENT') {
+        logWarning(`Failed to read PID file: ${e.message}`, {
+          pidFile,
+          errorCode: e.code,
+        })
+      }
+      return null
+    }
+  }
+
+  /**
+   * Attempt graceful shutdown via mysqladmin
+   */
+  private async gracefulShutdown(
+    port: number,
+    pid?: number,
+    timeoutMs = 10000,
+  ): Promise<boolean> {
     const mysqladmin = await getMysqladminPath()
+
     if (mysqladmin) {
       try {
+        logDebug('Attempting mysqladmin shutdown')
         await execAsync(
           `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root shutdown`,
+          { timeout: 5000 },
         )
-      } catch {
-        // Fall back to killing the process
-        if (existsSync(pidFile)) {
-          try {
-            const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
-            process.kill(pid, 'SIGTERM')
-          } catch {
-            // Process might already be dead
-          }
-        }
+      } catch (err) {
+        const e = err as Error
+        logDebug(`mysqladmin shutdown failed: ${e.message}`)
+        // Continue to wait for process to die or send SIGTERM
       }
-    } else if (existsSync(pidFile)) {
-      // No mysqladmin, kill by PID
+    } else if (pid) {
+      // No mysqladmin available, send SIGTERM
+      logDebug('No mysqladmin available, sending SIGTERM')
       try {
-        const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
         process.kill(pid, 'SIGTERM')
       } catch {
-        // Process might already be dead
+        // Process may already be dead
+        return true
       }
     }
 
-    // Wait for the process to actually stop
-    const maxWaitMs = 10000
-    const checkIntervalMs = 200
-    const startTime = Date.now()
+    // Wait for process to terminate
+    if (pid) {
+      const startTime = Date.now()
+      const checkIntervalMs = 200
 
-    while (Date.now() - startTime < maxWaitMs) {
-      // Check if PID file is gone or process is dead
-      if (!existsSync(pidFile)) {
-        return
-      }
-
-      try {
-        const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
-        // Check if process is still running (signal 0 doesn't kill, just checks)
-        process.kill(pid, 0)
-        // Process still running, wait a bit
-        await new Promise((resolve) => setTimeout(resolve, checkIntervalMs))
-      } catch {
-        // Process is dead, remove stale PID file if it exists
+      while (Date.now() - startTime < timeoutMs) {
         try {
-          await rm(pidFile, { force: true })
+          process.kill(pid, 0)
+          await this.sleep(checkIntervalMs)
         } catch {
-          // Ignore
+          // Process is gone
+          logDebug(`Process ${pid} terminated after graceful shutdown`)
+          return true
         }
-        return
       }
+
+      logDebug(`Graceful shutdown timed out after ${timeoutMs}ms`)
+      return false
     }
 
-    // Timeout - force kill if still running
-    if (existsSync(pidFile)) {
+    // No PID to check, assume success if mysqladmin didn't throw
+    return true
+  }
+
+  /**
+   * Force kill with signal escalation (SIGTERM -> SIGKILL)
+   */
+  private async forceKillWithEscalation(
+    pid: number,
+    pidFile: string,
+  ): Promise<void> {
+    logWarning(`Graceful shutdown failed, force killing process ${pid}`)
+
+    // Try SIGTERM first (if not already sent in graceful shutdown)
+    try {
+      process.kill(pid, 'SIGTERM')
+      await this.sleep(2000)
+
+      // Check if still running
       try {
-        const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
-        process.kill(pid, 'SIGKILL')
-        await rm(pidFile, { force: true })
+        process.kill(pid, 0)
       } catch {
-        // Ignore
+        // Process terminated
+        logDebug(`Process ${pid} terminated after SIGTERM`)
+        await this.cleanupPidFile(pidFile)
+        return
+      }
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException
+      if (e.code === 'ESRCH') {
+        // Process already dead
+        await this.cleanupPidFile(pidFile)
+        return
+      }
+      logDebug(`SIGTERM failed: ${e.message}`)
+    }
+
+    // Escalate to SIGKILL
+    logWarning(`SIGTERM failed, escalating to SIGKILL for process ${pid}`)
+    try {
+      process.kill(pid, 'SIGKILL')
+      await this.sleep(1000)
+
+      // Verify process is gone
+      try {
+        process.kill(pid, 0)
+        // Process still running after SIGKILL - this is unexpected
+        throw new SpinDBError(
+          ErrorCodes.PROCESS_STOP_TIMEOUT,
+          `Failed to stop MySQL process ${pid} even with SIGKILL`,
+          'error',
+          `Try manually killing the process: kill -9 ${pid}`,
+        )
+      } catch (checkErr) {
+        const checkE = checkErr as NodeJS.ErrnoException
+        if (checkE instanceof SpinDBError) throw checkE
+        // Process is gone (ESRCH)
+        logDebug(`Process ${pid} terminated after SIGKILL`)
+        await this.cleanupPidFile(pidFile)
+      }
+    } catch (err) {
+      if (err instanceof SpinDBError) throw err
+      const e = err as NodeJS.ErrnoException
+      if (e.code === 'ESRCH') {
+        // Process already dead
+        await this.cleanupPidFile(pidFile)
+        return
+      }
+      logDebug(`SIGKILL failed: ${e.message}`)
+    }
+  }
+
+  /**
+   * Clean up PID file
+   */
+  private async cleanupPidFile(pidFile: string): Promise<void> {
+    try {
+      await unlink(pidFile)
+      logDebug('PID file cleaned up')
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException
+      if (e.code !== 'ENOENT') {
+        logDebug(`Failed to clean up PID file: ${e.message}`)
       }
     }
+  }
+
+  /**
+   * Sleep helper
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   /**
@@ -400,9 +583,7 @@ export class MySQLEngine extends BaseEngine {
     const mysqladmin = await getMysqladminPath()
     if (mysqladmin) {
       try {
-        await execAsync(
-          `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
-        )
+        await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
         return { running: true, message: 'MySQL is running' }
       } catch {
         return { running: false, message: 'MySQL is not responding' }
@@ -421,40 +602,15 @@ export class MySQLEngine extends BaseEngine {
 
   /**
    * Detect backup format
-   * MySQL dumps are typically SQL files
+   * Delegates to restore.ts module
    */
   async detectBackupFormat(filePath: string): Promise<BackupFormat> {
-    // Read first few bytes to detect format
-    const buffer = Buffer.alloc(64)
-    const { open } = await import('fs/promises')
-    const file = await open(filePath, 'r')
-    await file.read(buffer, 0, 64, 0)
-    await file.close()
-
-    const header = buffer.toString('utf8')
-
-    // Check for MySQL dump markers
-    if (
-      header.includes('-- MySQL dump') ||
-      header.includes('-- MariaDB dump')
-    ) {
-      return {
-        format: 'sql',
-        description: 'MySQL SQL dump',
-        restoreCommand: 'mysql',
-      }
-    }
-
-    // Default to SQL format
-    return {
-      format: 'sql',
-      description: 'SQL file',
-      restoreCommand: 'mysql',
-    }
+    return detectBackupFormatImpl(filePath)
   }
 
   /**
    * Restore a backup
+   * Delegates to restore.ts module with version validation
    * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
    */
   async restore(
@@ -470,56 +626,13 @@ export class MySQLEngine extends BaseEngine {
       await this.createDatabase(container, database)
     }
 
-    const mysql = await getMysqlClientPath()
-    if (!mysql) {
-      throw new Error(
-        'mysql client not found. Install MySQL client tools:\n' +
-          '  macOS: brew install mysql-client\n' +
-          '  Ubuntu/Debian: sudo apt install mysql-client',
-      )
-    }
-
-    // Restore using mysql client
-    // CLI: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
-    return new Promise((resolve, reject) => {
-      const args = [
-        '-h',
-        '127.0.0.1',
-        '-P',
-        String(port),
-        '-u',
-        engineDef.superuser,
-        database,
-      ]
-
-      const proc = spawn(mysql, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-
-      // Pipe backup file to stdin
-      const fileStream = createReadStream(backupPath)
-      fileStream.pipe(proc.stdin)
-
-      let stdout = ''
-      let stderr = ''
-
-      proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString()
-      })
-      proc.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString()
-      })
-
-      proc.on('close', (code) => {
-        resolve({
-          format: 'sql',
-          stdout,
-          stderr,
-          code: code ?? undefined,
-        })
-      })
-
-      proc.on('error', reject)
+    // Use the restore module with version validation
+    return restoreBackup(backupPath, {
+      port,
+      database,
+      user: engineDef.superuser,
+      createDatabase: false, // Already created above
+      validateVersion: options.validateVersion !== false,
     })
   }
 
@@ -638,13 +751,9 @@ export class MySQLEngine extends BaseEngine {
       )
     }
 
-    // Parse MySQL connection string: mysql://user:pass@host:port/dbname
-    const url = new URL(connectionString)
-    const host = url.hostname
-    const port = url.port || '3306'
-    const user = url.username || 'root'
-    const password = url.password
-    const database = url.pathname.slice(1) // Remove leading /
+    // Parse MySQL connection string using restore module helper
+    const { host, port, user, password, database } =
+      parseConnectionString(connectionString)
 
     const args = [
       '-h',

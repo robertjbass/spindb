@@ -16,14 +16,20 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
 - [x] **Engine/binary management** - Menu to list installed PostgreSQL versions, install new versions, uninstall unused versions (free up disk space)
 - [x] **MySQL support** - Add MySQL engine using system-installed MySQL binaries
+- [x] **MariaDB support** - Automatically detect and support MariaDB as MySQL alternative on Linux
 
 ### Medium Priority
-- [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu)
+- [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu and `spindb edit --name`)
+- [x] **Container port change** - Change container port (via Edit menu and `spindb edit --port`)
 - [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
-- [x] **Export connection string** - Copy connection string to clipboard (via container submenu)
+- [x] **Export connection string** - Copy connection string to clipboard (via container submenu and `spindb url --copy`)
+- [x] **Container info command** - Show detailed container info via `spindb info [name]`
 - [ ] **Multiple databases per container** - List/create/delete databases within a container
 - [x] **Fetch available versions** - Query Maven Central API to show all available PostgreSQL versions instead of hardcoded list
 - [x] **Engine-aware shell** - Open shell uses psql for PostgreSQL, mysql for MySQL
+- [x] **Cross-engine dump detection** - Detect and error when restoring wrong engine dump (e.g., MySQL dump to PostgreSQL)
+- [x] **Version compatibility validation** - Warn/error when dump version is incompatible with client version
+- [x] **CLI parity** - All interactive menu features available via CLI commands (`spindb engines`, `spindb edit`, `spindb url`, `spindb info`)
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
@@ -98,7 +104,7 @@ const TEST_PORTS = {
 1. **Cleanup** - Delete any existing containers matching `*-test*` pattern
 2. **Create without start** - Create container with `--no-start`, verify not running
 3. **Start container** - Start the container, verify running
-4. **Seed database** - Run `tests/seeds/postgresql/sample-db.sql`, verify data inserted
+4. **Seed database** - Run `tests/fixtures/postgresql/seeds/sample-db.sql`, verify data inserted
 5. **Query data** - Query the seeded table, record row count
 6. **Create from dump** - Use `--from` with connection string to create new container with data
 7. **Verify restored data** - Query restored container, verify row count matches
@@ -114,7 +120,7 @@ const TEST_PORTS = {
 
 #### MySQL Integration Tests (14 tests)
 Same test cases as PostgreSQL, using MySQL-specific:
-- Seed file: `tests/seeds/mysql/sample-db.sql`
+- Seed file: `tests/fixtures/mysql/seeds/sample-db.sql`
 - Connection string: `mysql://root@127.0.0.1:{port}/{db}`
 - Port range: 3333-3400
 
@@ -140,3 +146,12 @@ Located in `tests/integration/helpers.ts`:
 - [ ] **Parallel test isolation** - Run PostgreSQL and MySQL tests in parallel safely
 - [ ] **Backup/restore round-trip** - Dump → delete row → restore → verify row is back
 - [ ] **Binary download test** - Test first-time PostgreSQL binary download (CI only)
+- [x] **Cross-engine format detection tests** - Unit tests for detecting wrong-engine dumps
+- [x] **MySQL dump version parsing tests** - Unit tests for parsing MySQL/MariaDB dump file headers
+- [x] **MySQL 5.7 fixture** - Test fixture for MySQL 5.7 LTS version dumps
+
+
+---
+
+# Triage:
+

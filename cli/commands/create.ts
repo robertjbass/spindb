@@ -16,9 +16,10 @@ import { createSpinner } from '../ui/spinner'
 import { header, error, connectionBox } from '../ui/theme'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { spawn } from 'child_process'
-import { platform } from 'os'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import { platformService } from '../../core/platform-service'
+import { startWithRetry } from '../../core/start-with-retry'
+import { TransactionManager } from '../../core/transaction-manager'
 import type { EngineName } from '../../types'
 
 /**
@@ -244,28 +245,50 @@ export const createCommand = new Command('create')
           containerName = await promptContainerName()
         }
 
+        // Create transaction manager for rollback support
+        const tx = new TransactionManager()
+
         // Create container
         const createSpinnerInstance = createSpinner('Creating container...')
         createSpinnerInstance.start()
 
-        await containerManager.create(containerName, {
-          engine: dbEngine.name as EngineName,
-          version,
-          port,
-          database,
-        })
+        try {
+          await containerManager.create(containerName, {
+            engine: dbEngine.name as EngineName,
+            version,
+            port,
+            database,
+          })
 
-        createSpinnerInstance.succeed('Container created')
+          // Register rollback action for container deletion
+          tx.addRollback({
+            description: `Delete container "${containerName}"`,
+            execute: async () => {
+              await containerManager.delete(containerName, { force: true })
+            },
+          })
+
+          createSpinnerInstance.succeed('Container created')
+        } catch (err) {
+          createSpinnerInstance.fail('Failed to create container')
+          throw err
+        }
 
         // Initialize database cluster
         const initSpinner = createSpinner('Initializing database cluster...')
         initSpinner.start()
 
-        await dbEngine.initDataDir(containerName, version, {
-          superuser: engineDefaults.superuser,
-        })
-
-        initSpinner.succeed('Database cluster initialized')
+        try {
+          await dbEngine.initDataDir(containerName, version, {
+            superuser: engineDefaults.superuser,
+          })
+          // Note: initDataDir is covered by the container delete rollback
+          initSpinner.succeed('Database cluster initialized')
+        } catch (err) {
+          initSpinner.fail('Failed to initialize database cluster')
+          await tx.rollback()
+          throw err
+        }
 
         // Determine if we should start the container
         // If --from is specified, we must start to restore
@@ -281,10 +304,7 @@ export const createCommand = new Command('create')
         } else {
           // Ask the user
           console.log()
-          shouldStart = await promptConfirm(
-            `Start ${containerName} now?`,
-            true,
-          )
+          shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
         }
 
         // Get container config for starting and restoration
@@ -292,34 +312,63 @@ export const createCommand = new Command('create')
 
         // Start container if requested
         if (shouldStart && config) {
-          // Check port availability before starting
-          const portAvailable = await portManager.isPortAvailable(config.port)
-          if (!portAvailable) {
-            // Find a new available port
-            const { port: newPort } = await portManager.findAvailablePort({
-              portRange: engineDefaults.portRange,
-            })
-            console.log(
-              chalk.yellow(
-                `  ⚠ Port ${config.port} is in use, switching to port ${newPort}`,
-              ),
-            )
-            config.port = newPort
-            port = newPort
-            await containerManager.updateConfig(containerName, { port: newPort })
-          }
-
           const startSpinner = createSpinner(
             `Starting ${dbEngine.displayName}...`,
           )
           startSpinner.start()
 
-          await dbEngine.start(config)
-          await containerManager.updateConfig(containerName, {
-            status: 'running',
-          })
+          try {
+            // Use startWithRetry to handle port race conditions
+            const result = await startWithRetry({
+              engine: dbEngine,
+              config,
+              onPortChange: (oldPort, newPort) => {
+                startSpinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
+                port = newPort
+              },
+            })
 
-          startSpinner.succeed(`${dbEngine.displayName} started`)
+            if (!result.success) {
+              startSpinner.fail(`Failed to start ${dbEngine.displayName}`)
+              await tx.rollback()
+              if (result.error) {
+                throw result.error
+              }
+              throw new Error('Failed to start container')
+            }
+
+            // Register rollback action for stopping the container
+            tx.addRollback({
+              description: `Stop container "${containerName}"`,
+              execute: async () => {
+                try {
+                  await dbEngine.stop(config)
+                } catch {
+                  // Ignore stop errors during rollback
+                }
+              },
+            })
+
+            await containerManager.updateConfig(containerName, {
+              status: 'running',
+            })
+
+            if (result.retriesUsed > 0) {
+              startSpinner.warn(
+                `${dbEngine.displayName} started on port ${result.finalPort} (original port was in use)`,
+              )
+            } else {
+              startSpinner.succeed(`${dbEngine.displayName} started`)
+            }
+          } catch (err) {
+            if (!startSpinner.isSpinning) {
+              // Error was already handled above
+            } else {
+              startSpinner.fail(`Failed to start ${dbEngine.displayName}`)
+            }
+            await tx.rollback()
+            throw err
+          }
 
           // Create the user's database (if different from default)
           const defaultDb = engineDefaults.superuser // postgres or root
@@ -329,9 +378,14 @@ export const createCommand = new Command('create')
             )
             dbSpinner.start()
 
-            await dbEngine.createDatabase(config, database)
-
-            dbSpinner.succeed(`Database "${database}" created`)
+            try {
+              await dbEngine.createDatabase(config, database)
+              dbSpinner.succeed(`Database "${database}" created`)
+            } catch (err) {
+              dbSpinner.fail(`Failed to create database "${database}"`)
+              await tx.rollback()
+              throw err
+            }
           }
         }
 
@@ -431,13 +485,18 @@ export const createCommand = new Command('create')
           }
         }
 
+        // Commit the transaction - all operations succeeded
+        tx.commit()
+
         // Show success message
         const finalConfig = await containerManager.getConfig(containerName)
         if (finalConfig) {
           const connectionString = dbEngine.getConnectionString(finalConfig)
 
           console.log()
-          console.log(connectionBox(containerName, connectionString, finalConfig.port))
+          console.log(
+            connectionBox(containerName, connectionString, finalConfig.port),
+          )
           console.log()
 
           if (shouldStart) {
@@ -445,30 +504,10 @@ export const createCommand = new Command('create')
             console.log(chalk.cyan(`  spindb connect ${containerName}`))
 
             // Copy connection string to clipboard
-            try {
-              const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-              const args =
-                platform() === 'darwin' ? [] : ['-selection', 'clipboard']
-
-              await new Promise<void>((resolve, reject) => {
-                const proc = spawn(cmd, args, {
-                  stdio: ['pipe', 'inherit', 'inherit'],
-                })
-                proc.stdin?.write(connectionString)
-                proc.stdin?.end()
-                proc.on('close', (code) => {
-                  if (code === 0) resolve()
-                  else
-                    reject(
-                      new Error(`Clipboard command exited with code ${code}`),
-                    )
-                })
-                proc.on('error', reject)
-              })
-
+            const copied =
+              await platformService.copyToClipboard(connectionString)
+            if (copied) {
               console.log(chalk.gray('  Connection string copied to clipboard'))
-            } catch {
-              // Ignore clipboard errors
             }
           } else {
             console.log(chalk.gray('  Start the container:'))

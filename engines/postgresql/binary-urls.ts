@@ -1,4 +1,4 @@
-import { platform, arch } from 'os'
+import { platformService } from '../../core/platform-service'
 import { defaults } from '../../config/defaults'
 
 /**
@@ -33,9 +33,10 @@ export async function fetchAvailableVersions(): Promise<
     return cachedVersions
   }
 
-  const zonkyPlatform = getZonkyPlatform(platform(), arch())
+  const zonkyPlatform = platformService.getZonkyPlatform()
   if (!zonkyPlatform) {
-    throw new Error(`Unsupported platform: ${platform()}-${arch()}`)
+    const { platform, arch } = platformService.getPlatformInfo()
+    throw new Error(`Unsupported platform: ${platform}-${arch}`)
   }
 
   const url = `https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${zonkyPlatform}/`
@@ -123,6 +124,7 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
 
 /**
  * Get the zonky.io platform identifier
+ * @deprecated Use platformService.getZonkyPlatform() instead
  */
 export function getZonkyPlatform(
   platform: string,

@@ -5,9 +5,11 @@
  * across different operating systems and package managers.
  */
 
+import { getPostgresHomebrewPackage } from './engine-defaults'
+
 export type PackageManagerId = 'brew' | 'apt' | 'yum' | 'dnf' | 'pacman'
 
-export type Platform = 'darwin' | 'linux'
+export type Platform = 'darwin' | 'linux' | 'win32'
 
 /**
  * Package definition for a specific package manager
@@ -116,122 +118,66 @@ export const packageManagers: PackageManagerConfig[] = [
 // PostgreSQL Dependencies
 // =============================================================================
 
+/**
+ * Helper to create PostgreSQL client tool dependency
+ * Uses getPostgresHomebrewPackage() to get the current latest version
+ */
+function createPostgresDependency(
+  name: string,
+  binary: string,
+  description: string,
+): Dependency {
+  const pgPackage = getPostgresHomebrewPackage()
+  return {
+    name,
+    binary,
+    description,
+    packages: {
+      brew: {
+        package: pgPackage,
+        postInstall: [`brew link --overwrite ${pgPackage}`],
+      },
+      apt: { package: 'postgresql-client' },
+      yum: { package: 'postgresql' },
+      dnf: { package: 'postgresql' },
+      pacman: { package: 'postgresql-libs' },
+    },
+    manualInstall: {
+      darwin: [
+        'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+        `Then run: brew install ${pgPackage} && brew link --overwrite ${pgPackage}`,
+        'Or install Postgres.app: https://postgresapp.com/downloads.html',
+      ],
+      linux: [
+        'Ubuntu/Debian: sudo apt install postgresql-client',
+        'CentOS/RHEL: sudo yum install postgresql',
+        'Fedora: sudo dnf install postgresql',
+        'Arch: sudo pacman -S postgresql-libs',
+      ],
+    },
+  }
+}
+
 const postgresqlDependencies: EngineDependencies = {
   engine: 'postgresql',
   displayName: 'PostgreSQL',
   dependencies: [
-    {
-      name: 'psql',
-      binary: 'psql',
-      description: 'PostgreSQL interactive terminal',
-      packages: {
-        brew: {
-          package: 'postgresql@17',
-          postInstall: ['brew link --overwrite postgresql@17'],
-        },
-        apt: { package: 'postgresql-client' },
-        yum: { package: 'postgresql' },
-        dnf: { package: 'postgresql' },
-        pacman: { package: 'postgresql-libs' },
-      },
-      manualInstall: {
-        darwin: [
-          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
-          'Or install Postgres.app: https://postgresapp.com/downloads.html',
-        ],
-        linux: [
-          'Ubuntu/Debian: sudo apt install postgresql-client',
-          'CentOS/RHEL: sudo yum install postgresql',
-          'Fedora: sudo dnf install postgresql',
-          'Arch: sudo pacman -S postgresql-libs',
-        ],
-      },
-    },
-    {
-      name: 'pg_dump',
-      binary: 'pg_dump',
-      description: 'PostgreSQL database backup utility',
-      packages: {
-        brew: {
-          package: 'postgresql@17',
-          postInstall: ['brew link --overwrite postgresql@17'],
-        },
-        apt: { package: 'postgresql-client' },
-        yum: { package: 'postgresql' },
-        dnf: { package: 'postgresql' },
-        pacman: { package: 'postgresql-libs' },
-      },
-      manualInstall: {
-        darwin: [
-          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
-          'Or install Postgres.app: https://postgresapp.com/downloads.html',
-        ],
-        linux: [
-          'Ubuntu/Debian: sudo apt install postgresql-client',
-          'CentOS/RHEL: sudo yum install postgresql',
-          'Fedora: sudo dnf install postgresql',
-          'Arch: sudo pacman -S postgresql-libs',
-        ],
-      },
-    },
-    {
-      name: 'pg_restore',
-      binary: 'pg_restore',
-      description: 'PostgreSQL database restore utility',
-      packages: {
-        brew: {
-          package: 'postgresql@17',
-          postInstall: ['brew link --overwrite postgresql@17'],
-        },
-        apt: { package: 'postgresql-client' },
-        yum: { package: 'postgresql' },
-        dnf: { package: 'postgresql' },
-        pacman: { package: 'postgresql-libs' },
-      },
-      manualInstall: {
-        darwin: [
-          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
-          'Or install Postgres.app: https://postgresapp.com/downloads.html',
-        ],
-        linux: [
-          'Ubuntu/Debian: sudo apt install postgresql-client',
-          'CentOS/RHEL: sudo yum install postgresql',
-          'Fedora: sudo dnf install postgresql',
-          'Arch: sudo pacman -S postgresql-libs',
-        ],
-      },
-    },
-    {
-      name: 'pg_basebackup',
-      binary: 'pg_basebackup',
-      description: 'PostgreSQL base backup utility for physical backups',
-      packages: {
-        brew: {
-          package: 'postgresql@17',
-          postInstall: ['brew link --overwrite postgresql@17'],
-        },
-        apt: { package: 'postgresql-client' },
-        yum: { package: 'postgresql' },
-        dnf: { package: 'postgresql' },
-        pacman: { package: 'postgresql-libs' },
-      },
-      manualInstall: {
-        darwin: [
-          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-          'Then run: brew install postgresql@17 && brew link --overwrite postgresql@17',
-          'Or install Postgres.app: https://postgresapp.com/downloads.html',
-        ],
-        linux: [
-          'Ubuntu/Debian: sudo apt install postgresql-client',
-          'CentOS/RHEL: sudo yum install postgresql',
-          'Fedora: sudo dnf install postgresql',
-          'Arch: sudo pacman -S postgresql-libs',
-        ],
-      },
-    },
+    createPostgresDependency('psql', 'psql', 'PostgreSQL interactive terminal'),
+    createPostgresDependency(
+      'pg_dump',
+      'pg_dump',
+      'PostgreSQL database backup utility',
+    ),
+    createPostgresDependency(
+      'pg_restore',
+      'pg_restore',
+      'PostgreSQL database restore utility',
+    ),
+    createPostgresDependency(
+      'pg_basebackup',
+      'pg_basebackup',
+      'PostgreSQL base backup utility for physical backups',
+    ),
   ],
 }
 

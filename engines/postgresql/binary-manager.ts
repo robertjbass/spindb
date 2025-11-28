@@ -1,15 +1,17 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import chalk from 'chalk'
-import { createSpinner } from '../cli/ui/spinner'
-import { warning, error as themeError, success } from '../cli/ui/theme'
+import { createSpinner } from '../../cli/ui/spinner'
+import { warning, error as themeError, success } from '../../cli/ui/theme'
 import {
   detectPackageManager as detectPM,
   installEngineDependencies,
   getManualInstallInstructions,
   getCurrentPlatform,
-} from './dependency-manager'
-import { getEngineDependencies } from '../config/os-dependencies'
+} from '../../core/dependency-manager'
+import { getEngineDependencies } from '../../config/os-dependencies'
+import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
+import { logDebug } from '../../core/error-handler'
 
 const execAsync = promisify(exec)
 
@@ -34,16 +36,17 @@ export type PackageManager = {
  * Detect which package manager is available on the system
  */
 export async function detectPackageManager(): Promise<PackageManager | null> {
+  const pgPackage = getPostgresHomebrewPackage()
   const managers: PackageManager[] = [
     {
       name: 'brew',
       checkCommand: 'brew --version',
       installCommand: () =>
-        'brew install postgresql@17 && brew link --overwrite postgresql@17',
+        `brew install ${pgPackage} && brew link --overwrite ${pgPackage}`,
       updateCommand: () =>
-        'brew link --overwrite postgresql@17 || brew install postgresql@17 && brew link --overwrite postgresql@17',
+        `brew link --overwrite ${pgPackage} || brew install ${pgPackage} && brew link --overwrite ${pgPackage}`,
       versionCheckCommand: () =>
-        'brew info postgresql@17 | grep "postgresql@17:" | head -1',
+        `brew info ${pgPackage} | grep "${pgPackage}:" | head -1`,
     },
     {
       name: 'apt',
@@ -74,8 +77,12 @@ export async function detectPackageManager(): Promise<PackageManager | null> {
     try {
       await execAsync(manager.checkCommand)
       return manager
-    } catch {
-      // Manager not available
+    } catch (error) {
+      // Manager not available - log for debugging
+      logDebug(`Package manager ${manager.name} not available`, {
+        command: manager.checkCommand,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -92,7 +99,10 @@ export async function getPostgresVersion(
     const { stdout } = await execAsync(`${binary} --version`)
     const match = stdout.match(/(\d+\.\d+)/)
     return match ? match[1] : null
-  } catch {
+  } catch (error) {
+    logDebug(`Failed to get version for ${binary}`, {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -105,7 +115,10 @@ export async function findBinaryPath(binary: string): Promise<string | null> {
     const command = process.platform === 'win32' ? 'where' : 'which'
     const { stdout } = await execAsync(`${command} ${binary}`)
     return stdout.trim().split('\n')[0] || null
-  } catch {
+  } catch (error) {
+    logDebug(`Binary ${binary} not found in PATH`, {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -128,7 +141,10 @@ export async function findBinaryPathFresh(
       `${shell} -c 'source ~/.${shell.endsWith('zsh') ? 'zshrc' : 'bashrc'} && which ${binary}'`,
     )
     return stdout.trim().split('\n')[0] || null
-  } catch {
+  } catch (error) {
+    logDebug(`Binary ${binary} not found after PATH refresh`, {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -185,14 +201,20 @@ export async function getDumpRequiredVersion(
             return '15.0' // Minimum version for recent dumps
           }
         }
-      } catch {
+      } catch (error) {
         // If hexdump fails, fall back to checking error patterns
+        logDebug(`hexdump failed for ${dumpPath}`, {
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
     }
 
     // Fallback: if we can't determine, assume it needs a recent version
     return '15.0'
-  } catch {
+  } catch (error) {
+    logDebug(`Failed to determine dump version for ${dumpPath}`, {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -309,12 +331,19 @@ export async function installPostgresBinaries(): Promise<boolean> {
   spinner.succeed(`Found package manager: ${packageManager.name}`)
 
   // Don't use a spinner during installation - it blocks TTY access for sudo password prompts
-  console.log(chalk.cyan(`  Installing PostgreSQL client tools with ${packageManager.name}...`))
+  console.log(
+    chalk.cyan(
+      `  Installing PostgreSQL client tools with ${packageManager.name}...`,
+    ),
+  )
   console.log(chalk.gray('  You may be prompted for your password.'))
   console.log()
 
   try {
-    const results = await installEngineDependencies('postgresql', packageManager)
+    const results = await installEngineDependencies(
+      'postgresql',
+      packageManager,
+    )
     const allSuccess = results.every((r) => r.success)
 
     if (allSuccess) {
@@ -356,14 +385,20 @@ export async function updatePostgresClientTools(): Promise<boolean> {
 
   spinner.succeed(`Found package manager: ${packageManager.name}`)
 
+  const pgPackage = getPostgresHomebrewPackage()
+  const latestMajor = pgPackage.split('@')[1] // e.g., '17' from 'postgresql@17'
+
   try {
     if (packageManager.name === 'brew') {
       // Handle brew conflicts and dependency issues
+      // Unlink all older PostgreSQL versions before linking the latest
+      const olderVersions = ['14', '15', '16'].filter((v) => v !== latestMajor)
+      const unlinkCommands = olderVersions.map(
+        (v) => `brew unlink postgresql@${v} 2>/dev/null || true`,
+      )
       const commands = [
-        'brew unlink postgresql@14 2>/dev/null || true', // Unlink old version if exists
-        'brew unlink postgresql@15 2>/dev/null || true', // Unlink other old versions
-        'brew unlink postgresql@16 2>/dev/null || true',
-        'brew link --overwrite postgresql@17', // Link postgresql@17 with overwrite
+        ...unlinkCommands,
+        `brew link --overwrite ${pgPackage}`, // Link latest version with overwrite
         'brew upgrade icu4c 2>/dev/null || true', // Fix ICU dependency issues
       ]
 
@@ -372,7 +407,11 @@ export async function updatePostgresClientTools(): Promise<boolean> {
       }
 
       spinner.succeed('PostgreSQL client tools updated')
-      console.log(success('Client tools successfully linked to PostgreSQL 17'))
+      console.log(
+        success(
+          `Client tools successfully linked to PostgreSQL ${latestMajor}`,
+        ),
+      )
       console.log(chalk.gray('ICU dependencies have been updated'))
       return true
     } else {
@@ -388,13 +427,14 @@ export async function updatePostgresClientTools(): Promise<boolean> {
     console.log(warning('Please update manually:'))
 
     if (packageManager.name === 'brew') {
+      const olderVersions = ['14', '15', '16'].filter((v) => v !== latestMajor)
       console.log(chalk.yellow('  macOS:'))
       console.log(
         chalk.yellow(
-          '    brew unlink postgresql@14 postgresql@15 postgresql@16',
+          `    brew unlink ${olderVersions.map((v) => `postgresql@${v}`).join(' ')}`,
         ),
       )
-      console.log(chalk.yellow('    brew link --overwrite postgresql@17'))
+      console.log(chalk.yellow(`    brew link --overwrite ${pgPackage}`))
       console.log(
         chalk.yellow('    brew upgrade icu4c  # Fix ICU dependency issues'),
       )

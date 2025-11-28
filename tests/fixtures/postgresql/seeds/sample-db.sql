@@ -1,7 +1,7 @@
 -- Sample seed data for PostgreSQL integration tests
 
--- Create test table
-CREATE TABLE IF NOT EXISTS test_users (
+-- Create test table (singular naming convention)
+CREATE TABLE IF NOT EXISTS test_user (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS test_users (
 );
 
 -- Insert sample data
-INSERT INTO test_users (name, email) VALUES
+INSERT INTO test_user (name, email) VALUES
   ('Alice Johnson', 'alice@example.com'),
   ('Bob Smith', 'bob@example.com'),
   ('Charlie Brown', 'charlie@example.com'),

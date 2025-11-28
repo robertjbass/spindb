@@ -1,0 +1,118 @@
+name: Upstream Version Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-upstream-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Get configured versions
+        id: configured
+        run: |
+          # Extract latestVersion for PostgreSQL from engine-defaults.ts
+          PG_VERSION=$(grep -A5 "postgresql:" config/engine-defaults.ts | grep "latestVersion:" | head -1 | sed "s/.*latestVersion: '\([^']*\)'.*/\1/")
+          echo "pg_version=$PG_VERSION" >> $GITHUB_OUTPUT
+          echo "Configured PostgreSQL version: $PG_VERSION"
+
+      - name: Check latest PostgreSQL version from Homebrew
+        id: upstream_pg
+        run: |
+          # Fetch Homebrew formula info for postgresql
+          # The unversioned postgresql formula tracks the latest stable version
+          BREW_INFO=$(curl -s "https://formulae.brew.sh/api/formula/postgresql.json" || echo "{}")
+          LATEST_PG=$(echo "$BREW_INFO" | node -e "
+            const data = require('fs').readFileSync(0, 'utf8');
+            try {
+              const info = JSON.parse(data);
+              // Extract major version from version string like '17.2'
+              const version = info.versions?.stable || '';
+              const major = version.split('.')[0];
+              console.log(major || 'unknown');
+            } catch {
+              console.log('unknown');
+            }
+          ")
+          echo "latest_pg=$LATEST_PG" >> $GITHUB_OUTPUT
+          echo "Latest PostgreSQL major version: $LATEST_PG"
+
+      - name: Compare versions and comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const configuredPg = '${{ steps.configured.outputs.pg_version }}';
+            const latestPg = '${{ steps.upstream_pg.outputs.latest_pg }}';
+
+            // Skip if we couldn't determine the latest version
+            if (latestPg === 'unknown' || !latestPg) {
+              console.log('Could not determine latest PostgreSQL version, skipping check');
+              return;
+            }
+
+            const configuredNum = parseInt(configuredPg, 10);
+            const latestNum = parseInt(latestPg, 10);
+
+            // Only comment if there's a newer version available
+            if (latestNum <= configuredNum) {
+              console.log(`PostgreSQL ${configuredPg} is current (latest: ${latestPg})`);
+              return;
+            }
+
+            const body = [
+              '## 📦 New PostgreSQL Version Available',
+              '',
+              `A newer PostgreSQL major version is available:`,
+              '',
+              '| Configured | Latest Available |',
+              '|------------|------------------|',
+              `| PostgreSQL ${configuredPg} | PostgreSQL ${latestPg} |`,
+              '',
+              '**To update (optional):**',
+              '1. Edit `config/engine-defaults.ts`',
+              `2. Change \`latestVersion: '${configuredPg}'\` to \`latestVersion: '${latestPg}'\``,
+              `3. Add \`'${latestPg}'\` to the \`supportedVersions\` array`,
+              '',
+              '*This is informational only and does not block the PR.*',
+            ].join('\n');
+
+            // Check for existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('New PostgreSQL Version Available')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Summary
+        run: |
+          echo "## Upstream Version Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Engine | Configured | Latest |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| PostgreSQL | ${{ steps.configured.outputs.pg_version }} | ${{ steps.upstream_pg.outputs.latest_pg }} |" >> $GITHUB_STEP_SUMMARY

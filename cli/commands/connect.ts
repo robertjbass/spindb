@@ -55,7 +55,8 @@ export const connectCommand = new Command('connect')
       const engineDefaults = getEngineDefaults(engineName)
 
       // Default database: container's database or superuser
-      const database = options.database ?? config.database ?? engineDefaults.superuser
+      const database =
+        options.database ?? config.database ?? engineDefaults.superuser
 
       // Check if running
       const running = await processManager.isRunning(containerName, {
@@ -83,9 +84,12 @@ export const connectCommand = new Command('connect')
         // MySQL: mysql -h 127.0.0.1 -P port -u root database
         clientCmd = 'mysql'
         clientArgs = [
-          '-h', '127.0.0.1',
-          '-P', String(config.port),
-          '-u', engineDefaults.superuser,
+          '-h',
+          '127.0.0.1',
+          '-P',
+          String(config.port),
+          '-u',
+          engineDefaults.superuser,
           database,
         ]
       } else {

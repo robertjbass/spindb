@@ -2,23 +2,37 @@ import { readFile } from 'fs/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { configManager } from '../../core/config-manager'
-import { findBinaryPathFresh } from '../../core/postgres-binary-manager'
+import { findBinaryPathFresh } from './binary-manager'
+import { validateRestoreCompatibility } from './version-validator'
+import { SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 const execAsync = promisify(exec)
 
 /**
  * Detect the format of a PostgreSQL backup file
+ *
+ * Also detects MySQL/MariaDB dumps to provide helpful error messages.
  */
 export async function detectBackupFormat(
   filePath: string,
 ): Promise<BackupFormat> {
-  // Read the first few bytes to detect format
+  // Read the first 128 bytes to detect format
   const file = await readFile(filePath)
-  const buffer = Buffer.alloc(16)
+  const buffer = Buffer.alloc(128)
 
   // Copy first bytes
-  file.copy(buffer, 0, 0, Math.min(16, file.length))
+  file.copy(buffer, 0, 0, Math.min(128, file.length))
+  const header = buffer.toString('utf8')
+
+  // Check for MySQL/MariaDB dump markers (before PostgreSQL checks)
+  if (header.includes('-- MySQL dump') || header.includes('-- MariaDB dump')) {
+    return {
+      format: 'mysql_sql',
+      description: 'MySQL/MariaDB SQL dump (incompatible with PostgreSQL)',
+      restoreCommand: 'mysql',
+    }
+  }
 
   // Check for PostgreSQL custom format magic number
   // Custom format starts with "PGDMP"
@@ -75,6 +89,25 @@ export async function detectBackupFormat(
     format: 'unknown',
     description: 'Unknown format - will attempt custom format restore',
     restoreCommand: 'pg_restore',
+  }
+}
+
+/**
+ * Check if the backup file is from the wrong engine and throw helpful error
+ */
+export function assertCompatibleFormat(format: BackupFormat): void {
+  if (format.format === 'mysql_sql') {
+    throw new SpinDBError(
+      ErrorCodes.WRONG_ENGINE_DUMP,
+      `This appears to be a MySQL/MariaDB dump file, but you're trying to restore it to PostgreSQL.`,
+      'fatal',
+      `Create a MySQL container instead:\n  spindb create mydb --engine mysql --from <dump-file>`,
+      {
+        detectedFormat: format.format,
+        expectedEngine: 'postgresql',
+        detectedEngine: 'mysql',
+      },
+    )
   }
 }
 
@@ -136,7 +169,23 @@ export async function restoreBackup(
 ): Promise<RestoreResult> {
   const { port, database, user = 'postgres', format, pgRestorePath } = options
 
-  const detectedFormat = format || (await detectBackupFormat(backupPath)).format
+  // Detect format and check for wrong engine
+  const detectedBackupFormat = await detectBackupFormat(backupPath)
+  assertCompatibleFormat(detectedBackupFormat)
+
+  const detectedFormat = format || detectedBackupFormat.format
+
+  // For pg_restore formats, validate version compatibility
+  if (detectedFormat !== 'sql') {
+    const restorePath = pgRestorePath || (await getPgRestorePath())
+
+    // This will throw SpinDBError if versions are incompatible
+    await validateRestoreCompatibility({
+      dumpPath: backupPath,
+      format: detectedFormat,
+      pgRestorePath: restorePath,
+    })
+  }
 
   if (detectedFormat === 'sql') {
     const psqlPath = await getPsqlPath()

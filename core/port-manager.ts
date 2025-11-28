@@ -5,6 +5,7 @@ import { existsSync } from 'fs'
 import { readdir, readFile } from 'fs/promises'
 import { defaults, getSupportedEngines } from '../config/defaults'
 import { paths } from '../config/paths'
+import { logDebug } from './error-handler'
 import type { ContainerConfig, PortResult } from '../types'
 
 const execAsync = promisify(exec)
@@ -83,7 +84,11 @@ export class PortManager {
     try {
       const { stdout } = await execAsync(`lsof -i :${port} -P -n | head -5`)
       return stdout.trim()
-    } catch {
+    } catch (error) {
+      logDebug('Could not determine port user', {
+        port,
+        error: error instanceof Error ? error.message : String(error),
+      })
       return null
     }
   }
@@ -116,8 +121,11 @@ export class PortManager {
               const content = await readFile(configPath, 'utf8')
               const config = JSON.parse(content) as ContainerConfig
               ports.push(config.port)
-            } catch {
-              // Skip invalid configs
+            } catch (error) {
+              logDebug('Skipping invalid container config', {
+                configPath,
+                error: error instanceof Error ? error.message : String(error),
+              })
             }
           }
         }

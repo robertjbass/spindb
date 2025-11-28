@@ -3,6 +3,7 @@ import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { paths } from '../config/paths'
+import { logDebug } from './error-handler'
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
@@ -221,7 +222,12 @@ export class ProcessManager {
       // Check if process is still running
       process.kill(pid, 0)
       return true
-    } catch {
+    } catch (error) {
+      logDebug('PID file check failed', {
+        containerName,
+        engine: options.engine,
+        error: error instanceof Error ? error.message : String(error),
+      })
       return false
     }
   }
@@ -242,7 +248,11 @@ export class ProcessManager {
     try {
       const content = await readFile(pidFile, 'utf8')
       return parseInt(content.split('\n')[0], 10)
-    } catch {
+    } catch (error) {
+      logDebug('Failed to read PID file', {
+        pidFile,
+        error: error instanceof Error ? error.message : String(error),
+      })
       return null
     }
   }

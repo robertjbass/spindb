@@ -22,15 +22,24 @@ import {
 } from '../ui/theme'
 import { existsSync } from 'fs'
 import { readdir, rm, lstat } from 'fs/promises'
-import { spawn } from 'child_process'
-import { platform, tmpdir } from 'os'
+import { spawn, exec } from 'child_process'
+import { promisify } from 'util'
+import { tmpdir } from 'os'
 import { join } from 'path'
 import { paths } from '../../config/paths'
+import { platformService } from '../../core/platform-service'
 import { portManager } from '../../core/port-manager'
 import { defaults } from '../../config/defaults'
+import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import type { EngineName } from '../../types'
 import inquirer from 'inquirer'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import {
+  getMysqldPath,
+  getMysqlVersion,
+  isMariaDB,
+  getMysqlInstallInfo,
+} from '../../engines/mysql/binary-detection'
 
 type MenuChoice =
   | {
@@ -95,7 +104,7 @@ async function showMainMenu(): Promise<void> {
     },
     {
       name: canStop
-        ? `${chalk.yellow('■')} Stop a container`
+        ? `${chalk.red('■')} Stop a container`
         : chalk.gray('■ Stop a container'),
       value: 'stop',
       disabled: canStop ? false : 'No running containers',
@@ -202,7 +211,9 @@ async function handleCreate(): Promise<void> {
     missingDeps = await getMissingDependencies(engine)
     if (missingDeps.length > 0) {
       console.log(
-        error(`Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+        error(
+          `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+        ),
       )
       return
     }
@@ -301,25 +312,14 @@ async function handleCreate(): Promise<void> {
       console.log(chalk.gray('  Connection string:'))
       console.log(chalk.cyan(`  ${connectionString}`))
 
-      // Copy connection string to clipboard using platform-specific command
+      // Copy connection string to clipboard using platform service
       try {
-        const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-        const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
-
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(cmd, args, {
-            stdio: ['pipe', 'inherit', 'inherit'],
-          })
-          proc.stdin?.write(connectionString)
-          proc.stdin?.end()
-          proc.on('close', (code) => {
-            if (code === 0) resolve()
-            else reject(new Error(`Clipboard command exited with code ${code}`))
-          })
-          proc.on('error', reject)
-        })
-
-        console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+        const copied = await platformService.copyToClipboard(connectionString)
+        if (copied) {
+          console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+        } else {
+          console.log(chalk.gray('  (Could not copy to clipboard)'))
+        }
       } catch {
         console.log(chalk.gray('  (Could not copy to clipboard)'))
       }
@@ -648,50 +648,26 @@ async function handleCopyConnectionString(
   const engine = getEngine(config.engine)
   const connectionString = engine.getConnectionString(config)
 
-  // Copy to clipboard using platform-specific command
-  const { platform } = await import('os')
-  const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-  const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
+  // Copy to clipboard using platform service
+  const copied = await platformService.copyToClipboard(connectionString)
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'] })
-      proc.stdin?.write(connectionString)
-      proc.stdin?.end()
-      proc.on('close', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`Clipboard command exited with code ${code}`))
-      })
-      proc.on('error', reject)
-    })
-
-    console.log()
+  console.log()
+  if (copied) {
     console.log(success('Connection string copied to clipboard'))
     console.log(chalk.gray(`  ${connectionString}`))
-    console.log()
-
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
-  } catch {
-    // Fallback: just display the string
-    console.log()
+  } else {
     console.log(warning('Could not copy to clipboard. Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
-    console.log()
-
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
   }
+  console.log()
+
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to continue...'),
+    },
+  ])
 }
 
 async function handleOpenShell(containerName: string): Promise<void> {
@@ -931,7 +907,9 @@ async function handleRestore(): Promise<void> {
     missingDeps = await getMissingDependencies(config.engine)
     if (missingDeps.length > 0) {
       console.log(
-        error(`Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+        error(
+          `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+        ),
       )
       return
     }
@@ -1168,7 +1146,7 @@ async function handleRestore(): Promise<void> {
 
         try {
           const { updatePostgresClientTools } = await import(
-            '../../core/postgres-binary-manager'
+            '../../engines/postgresql/binary-manager'
           )
           const updateSuccess = await updatePostgresClientTools()
 
@@ -1189,24 +1167,26 @@ async function handleRestore(): Promise<void> {
             console.log(
               error('Automatic upgrade failed. Please upgrade manually:'),
             )
+            const pgPackage = getPostgresHomebrewPackage()
+            const latestMajor = pgPackage.split('@')[1]
             console.log(
               warning(
-                '  macOS: brew install postgresql@17 && brew link --force postgresql@17',
+                `  macOS: brew install ${pgPackage} && brew link --force ${pgPackage}`,
               ),
             )
             console.log(
               chalk.gray(
-                '    This installs PostgreSQL 17 client tools: pg_restore, pg_dump, psql, and libpq',
+                `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
               ),
             )
             console.log(
               warning(
-                '  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-17',
+                `  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-${latestMajor}`,
               ),
             )
             console.log(
               chalk.gray(
-                '    This installs PostgreSQL 17 client tools: pg_restore, pg_dump, psql, and libpq',
+                `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
               ),
             )
             await new Promise((resolve) => {
@@ -1270,24 +1250,11 @@ async function handleRestore(): Promise<void> {
     console.log(chalk.gray('  Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
 
-    // Copy connection string to clipboard using platform-specific command
-    try {
-      const cmd = platform() === 'darwin' ? 'pbcopy' : 'xclip'
-      const args = platform() === 'darwin' ? [] : ['-selection', 'clipboard']
-
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'] })
-        proc.stdin?.write(connectionString)
-        proc.stdin?.end()
-        proc.on('close', (code) => {
-          if (code === 0) resolve()
-          else reject(new Error(`Clipboard command exited with code ${code}`))
-        })
-        proc.on('error', reject)
-      })
-
+    // Copy connection string to clipboard using platform service
+    const copied = await platformService.copyToClipboard(connectionString)
+    if (copied) {
       console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
-    } catch {
+    } else {
       console.log(chalk.gray('  (Could not copy to clipboard)'))
     }
 
@@ -1389,7 +1356,9 @@ async function handleStartContainer(containerName: string): Promise<void> {
       ),
     )
     console.log(
-      info('Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb'),
+      info(
+        'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
+      ),
     )
     return
   }
@@ -1643,72 +1612,135 @@ async function handleDelete(containerName: string): Promise<void> {
   deleteSpinner.succeed(`Container "${containerName}" deleted`)
 }
 
-type InstalledEngine = {
-  engine: string
+type InstalledPostgresEngine = {
+  engine: 'postgresql'
   version: string
   platform: string
   arch: string
   path: string
   sizeBytes: number
+  source: 'downloaded'
+}
+
+type InstalledMysqlEngine = {
+  engine: 'mysql'
+  version: string
+  path: string
+  source: 'system'
+  isMariaDB: boolean
+}
+
+type InstalledEngine = InstalledPostgresEngine | InstalledMysqlEngine
+
+const execAsync = promisify(exec)
+
+/**
+ * Get the actual PostgreSQL version from the binary
+ */
+async function getPostgresVersionFromBinary(
+  binPath: string,
+): Promise<string | null> {
+  const postgresPath = join(binPath, 'bin', 'postgres')
+  if (!existsSync(postgresPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execAsync(`"${postgresPath}" --version`)
+    // Output: postgres (PostgreSQL) 17.7
+    const match = stdout.match(/\(PostgreSQL\)\s+([\d.]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
 }
 
 async function getInstalledEngines(): Promise<InstalledEngine[]> {
-  const binDir = paths.bin
-
-  if (!existsSync(binDir)) {
-    return []
-  }
-
-  const entries = await readdir(binDir, { withFileTypes: true })
   const engines: InstalledEngine[] = []
 
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      // Parse directory name: postgresql-17-darwin-arm64
-      const match = entry.name.match(/^(\w+)-(.+)-(\w+)-(\w+)$/)
-      if (match) {
-        const [, engine, version, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+  // Get PostgreSQL engines from ~/.spindb/bin/
+  const binDir = paths.bin
+  if (existsSync(binDir)) {
+    const entries = await readdir(binDir, { withFileTypes: true })
 
-        // Get directory size (using lstat to avoid following symlinks)
-        let sizeBytes = 0
-        try {
-          const files = await readdir(dirPath, { recursive: true })
-          for (const file of files) {
-            try {
-              const filePath = join(dirPath, file.toString())
-              const fileStat = await lstat(filePath)
-              // Only count regular files (not symlinks or directories)
-              if (fileStat.isFile()) {
-                sizeBytes += fileStat.size
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        // Parse directory name: postgresql-17-darwin-arm64
+        const match = entry.name.match(/^(\w+)-(.+)-(\w+)-(\w+)$/)
+        if (match && match[1] === 'postgresql') {
+          const [, , majorVersion, platform, arch] = match
+          const dirPath = join(binDir, entry.name)
+
+          // Get actual version from the binary
+          const actualVersion =
+            (await getPostgresVersionFromBinary(dirPath)) || majorVersion
+
+          // Get directory size (using lstat to avoid following symlinks)
+          let sizeBytes = 0
+          try {
+            const files = await readdir(dirPath, { recursive: true })
+            for (const file of files) {
+              try {
+                const filePath = join(dirPath, file.toString())
+                const fileStat = await lstat(filePath)
+                // Only count regular files (not symlinks or directories)
+                if (fileStat.isFile()) {
+                  sizeBytes += fileStat.size
+                }
+              } catch {
+                // Skip files we can't stat
               }
-            } catch {
-              // Skip files we can't stat
             }
+          } catch {
+            // Skip directories we can't read
           }
-        } catch {
-          // Skip directories we can't read
-        }
 
-        engines.push({
-          engine,
-          version,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-        })
+          engines.push({
+            engine: 'postgresql',
+            version: actualVersion,
+            platform,
+            arch,
+            path: dirPath,
+            sizeBytes,
+            source: 'downloaded',
+          })
+        }
       }
     }
   }
 
-  // Sort by engine name, then by version (descending)
-  engines.sort((a, b) => {
-    if (a.engine !== b.engine) return a.engine.localeCompare(b.engine)
-    return compareVersions(b.version, a.version)
-  })
+  // Detect system-installed MySQL
+  const mysqldPath = await getMysqldPath()
+  if (mysqldPath) {
+    const version = await getMysqlVersion(mysqldPath)
+    if (version) {
+      const mariadb = await isMariaDB()
+      engines.push({
+        engine: 'mysql',
+        version,
+        path: mysqldPath,
+        source: 'system',
+        isMariaDB: mariadb,
+      })
+    }
+  }
 
-  return engines
+  // Sort PostgreSQL by version (descending), MySQL stays at end
+  const pgEngines = engines.filter(
+    (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
+  )
+  const mysqlEngine = engines.find(
+    (e): e is InstalledMysqlEngine => e.engine === 'mysql',
+  )
+
+  pgEngines.sort((a, b) => compareVersions(b.version, a.version))
+
+  const result: InstalledEngine[] = [...pgEngines]
+  if (mysqlEngine) {
+    result.push(mysqlEngine)
+  }
+
+  return result
 }
 
 function compareVersions(a: string, b: string): number {
@@ -1742,54 +1774,104 @@ async function handleEngines(): Promise<void> {
     console.log(info('No engines installed yet.'))
     console.log(
       chalk.gray(
-        '  Engines are downloaded automatically when you create a container.',
+        '  PostgreSQL engines are downloaded automatically when you create a container.',
+      ),
+    )
+    console.log(
+      chalk.gray(
+        '  MySQL requires system installation (brew install mysql or apt install mysql-server).',
       ),
     )
     return
   }
 
-  // Calculate total size
-  const totalSize = engines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  // Separate PostgreSQL and MySQL
+  const pgEngines = engines.filter(
+    (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
+  )
+  const mysqlEngine = engines.find(
+    (e): e is InstalledMysqlEngine => e.engine === 'mysql',
+  )
+
+  // Calculate total size for PostgreSQL
+  const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   // Table header
   console.log()
   console.log(
     chalk.gray('  ') +
-      chalk.bold.white('ENGINE'.padEnd(12)) +
+      chalk.bold.white('ENGINE'.padEnd(14)) +
       chalk.bold.white('VERSION'.padEnd(12)) +
-      chalk.bold.white('PLATFORM'.padEnd(20)) +
+      chalk.bold.white('SOURCE'.padEnd(18)) +
       chalk.bold.white('SIZE'),
   )
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
-  // Table rows
-  for (const engine of engines) {
+  // PostgreSQL rows
+  for (const engine of pgEngines) {
+    const icon = engineIcons[engine.engine] || '🗄️'
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engine.engine.padEnd(12)) +
+        chalk.cyan(`${icon} ${engine.engine}`.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(`${engine.platform}-${engine.arch}`.padEnd(20)) +
+        chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
+  // MySQL row
+  if (mysqlEngine) {
+    const icon = engineIcons.mysql
+    const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(`${icon} ${displayName}`.padEnd(13)) +
+        chalk.yellow(mysqlEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
-  console.log(
-    chalk.gray('  ') +
-      chalk.bold.white(`${engines.length} version(s)`.padEnd(44)) +
-      chalk.bold.white(formatBytes(totalSize)),
-  )
+
+  // Summary
+  console.log()
+  if (pgEngines.length > 0) {
+    console.log(
+      chalk.gray(
+        `  PostgreSQL: ${pgEngines.length} version(s), ${formatBytes(totalPgSize)}`,
+      ),
+    )
+  }
+  if (mysqlEngine) {
+    console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
+  }
   console.log()
 
-  // Menu options
-  const choices: MenuChoice[] = [
-    ...engines.map((e) => ({
+  // Menu options - only allow deletion of PostgreSQL engines
+  const choices: MenuChoice[] = []
+
+  for (const e of pgEngines) {
+    choices.push({
       name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
       value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })),
-    new inquirer.Separator(),
-    { name: `${chalk.blue('←')} Back to main menu`, value: 'back' },
-  ]
+    })
+  }
+
+  // MySQL info option (not disabled, shows info icon)
+  if (mysqlEngine) {
+    const displayName = mysqlEngine.isMariaDB ? 'MariaDB' : 'MySQL'
+    choices.push({
+      name: `${chalk.blue('ℹ')} ${displayName} ${mysqlEngine.version} ${chalk.gray('(system-installed)')}`,
+      value: `mysql-info:${mysqlEngine.path}`,
+    })
+  }
+
+  choices.push(new inquirer.Separator())
+  choices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })
 
   const { action } = await inquirer.prompt<{ action: string }>([
     {
@@ -1808,6 +1890,13 @@ async function handleEngines(): Promise<void> {
   if (action.startsWith('delete:')) {
     const [, enginePath, engineName, engineVersion] = action.split(':')
     await handleDeleteEngine(enginePath, engineName, engineVersion)
+    // Return to engines menu
+    await handleEngines()
+  }
+
+  if (action.startsWith('mysql-info:')) {
+    const mysqldPath = action.replace('mysql-info:', '')
+    await handleMysqlInfo(mysqldPath)
     // Return to engines menu
     await handleEngines()
   }
@@ -1869,6 +1958,174 @@ async function handleDeleteEngine(
   }
 }
 
+async function handleMysqlInfo(mysqldPath: string): Promise<void> {
+  console.clear()
+
+  // Get install info
+  const installInfo = await getMysqlInstallInfo(mysqldPath)
+  const displayName = installInfo.isMariaDB ? 'MariaDB' : 'MySQL'
+
+  // Get version
+  const version = await getMysqlVersion(mysqldPath)
+
+  console.log(header(`${displayName} Information`))
+  console.log()
+
+  // Check for containers using MySQL
+  const containers = await containerManager.list()
+  const mysqlContainers = containers.filter((c) => c.engine === 'mysql')
+
+  // Track running containers for uninstall instructions
+  const runningContainers: string[] = []
+
+  if (mysqlContainers.length > 0) {
+    console.log(
+      warning(
+        `${mysqlContainers.length} container(s) are using ${displayName}:`,
+      ),
+    )
+    console.log()
+    for (const c of mysqlContainers) {
+      const isRunning = await processManager.isRunning(c.name, {
+        engine: c.engine,
+      })
+      if (isRunning) {
+        runningContainers.push(c.name)
+      }
+      const status = isRunning
+        ? chalk.green('● running')
+        : chalk.gray('○ stopped')
+      console.log(chalk.gray(`  • ${c.name} ${status}`))
+    }
+    console.log()
+    console.log(
+      chalk.yellow(
+        '  Uninstalling will break these containers. Delete them first.',
+      ),
+    )
+    console.log()
+  }
+
+  // Show installation details
+  console.log(chalk.white('  Installation Details:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Version:'.padEnd(18)) +
+      chalk.yellow(version || 'unknown'),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Binary Path:'.padEnd(18)) +
+      chalk.gray(mysqldPath),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Package Manager:'.padEnd(18)) +
+      chalk.cyan(installInfo.packageManager),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Package Name:'.padEnd(18)) +
+      chalk.cyan(installInfo.packageName),
+  )
+  console.log()
+
+  // Uninstall instructions
+  console.log(chalk.white('  To uninstall:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+
+  let stepNum = 1
+
+  // Step: Stop running containers first
+  if (runningContainers.length > 0) {
+    console.log(chalk.gray(`  # ${stepNum}. Stop running SpinDB containers`))
+    console.log(chalk.cyan('  spindb stop <container-name>'))
+    console.log()
+    stepNum++
+  }
+
+  // Step: Delete SpinDB containers
+  if (mysqlContainers.length > 0) {
+    console.log(chalk.gray(`  # ${stepNum}. Delete SpinDB containers`))
+    console.log(chalk.cyan('  spindb delete <container-name>'))
+    console.log()
+    stepNum++
+  }
+
+  if (installInfo.packageManager === 'homebrew') {
+    console.log(
+      chalk.gray(
+        `  # ${stepNum}. Stop Homebrew service (if running separately)`,
+      ),
+    )
+    console.log(chalk.cyan(`  brew services stop ${installInfo.packageName}`))
+    console.log()
+    console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
+    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
+  } else if (installInfo.packageManager === 'apt') {
+    console.log(chalk.gray(`  # ${stepNum}. Stop the system service`))
+    console.log(
+      chalk.cyan(
+        `  sudo systemctl stop ${installInfo.isMariaDB ? 'mariadb' : 'mysql'}`,
+      ),
+    )
+    console.log()
+    console.log(chalk.gray(`  # ${stepNum + 1}. Disable auto-start on boot`))
+    console.log(
+      chalk.cyan(
+        `  sudo systemctl disable ${installInfo.isMariaDB ? 'mariadb' : 'mysql'}`,
+      ),
+    )
+    console.log()
+    console.log(chalk.gray(`  # ${stepNum + 2}. Uninstall the package`))
+    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
+    console.log()
+    console.log(chalk.gray(`  # ${stepNum + 3}. Remove data files (optional)`))
+    console.log(
+      chalk.cyan('  sudo apt purge mysql-server mysql-client mysql-common'),
+    )
+    console.log(chalk.cyan('  sudo rm -rf /var/lib/mysql /etc/mysql'))
+  } else if (
+    installInfo.packageManager === 'yum' ||
+    installInfo.packageManager === 'dnf'
+  ) {
+    console.log(chalk.gray(`  # ${stepNum}. Stop the system service`))
+    console.log(
+      chalk.cyan(
+        `  sudo systemctl stop ${installInfo.isMariaDB ? 'mariadb' : 'mysqld'}`,
+      ),
+    )
+    console.log()
+    console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
+    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
+  } else if (installInfo.packageManager === 'pacman') {
+    console.log(chalk.gray(`  # ${stepNum}. Stop the system service`))
+    console.log(
+      chalk.cyan(
+        `  sudo systemctl stop ${installInfo.isMariaDB ? 'mariadb' : 'mysqld'}`,
+      ),
+    )
+    console.log()
+    console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
+    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
+  } else {
+    console.log(chalk.gray('  Use your system package manager to uninstall.'))
+    console.log(chalk.gray(`  The binary is located at: ${mysqldPath}`))
+  }
+
+  console.log()
+
+  // Wait for user
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to go back...'),
+    },
+  ])
+}
+
 export const menuCommand = new Command('menu')
   .description('Interactive menu for managing containers')
   .action(async () => {
@@ -1890,9 +2147,7 @@ export const menuCommand = new Command('menu')
             : 'psql'
         const installed = await promptInstallDependencies(missingTool)
         if (installed) {
-          console.log(
-            chalk.yellow('  Please re-run spindb to continue.'),
-          )
+          console.log(chalk.yellow('  Please re-run spindb to continue.'))
         }
         process.exit(1)
       }
