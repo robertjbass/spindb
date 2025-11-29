@@ -1297,7 +1297,7 @@ async function handleRestore(): Promise<void> {
     backupPath = stripQuotes(rawBackupPath)
   }
 
-  const databaseName = await promptDatabaseName(containerName)
+  const databaseName = await promptDatabaseName(containerName, config.engine)
 
   const engine = getEngine(config.engine)
 

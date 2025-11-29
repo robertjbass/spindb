@@ -243,19 +243,25 @@ export async function promptContainerSelect(
 
 /**
  * Prompt for database name
+ * @param defaultName - Default value for the database name
+ * @param engine - Database engine (mysql shows "schema" terminology)
  */
 export async function promptDatabaseName(
   defaultName?: string,
+  engine?: string,
 ): Promise<string> {
+  // MySQL uses "schema" terminology (database and schema are synonymous)
+  const label = engine === 'mysql' ? 'Database (schema) name:' : 'Database name:'
+
   const { database } = await inquirer.prompt<{ database: string }>([
     {
       type: 'input',
       name: 'database',
-      message: 'Database name:',
+      message: label,
       default: defaultName,
       validate: (input: string) => {
         if (!input) return 'Database name is required'
-        // PostgreSQL database naming rules
+        // PostgreSQL database naming rules (also valid for MySQL)
         if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(input)) {
           return 'Database name must start with a letter or underscore and contain only letters, numbers, underscores, and hyphens'
         }
@@ -287,7 +293,7 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
   const engine = await promptEngine()
   const version = await promptVersion(engine)
   const name = await promptContainerName()
-  const database = await promptDatabaseName(name) // Default to container name
+  const database = await promptDatabaseName(name, engine) // Default to container name
 
   // Get engine-specific default port
   const engineDefaults = getEngineDefaults(engine)
