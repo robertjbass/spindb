@@ -18,11 +18,23 @@ Spin up local PostgreSQL and MySQL databases without Docker. A lightweight alter
 ## Installation
 
 ```bash
-# Run directly with pnpx (no install needed)
-pnpx spindb
+# Install globally (recommended)
+npm install -g spindb
 
-# Or install globally
-pnpm add -g spindb
+# Or run directly with pnpx (no install needed)
+pnpx spindb
+```
+
+### Updating
+
+SpinDB checks for updates automatically and will notify you when a new version is available:
+
+```bash
+# Update to latest version
+spindb self-update
+
+# Or check manually
+spindb version --check
 ```
 
 ## Quick Start
@@ -61,6 +73,10 @@ spindb connect mydb
 | `spindb config detect` | Auto-detect database tools |
 | `spindb deps check` | Check status of client tools |
 | `spindb deps install` | Install missing client tools |
+| `spindb version` | Show current version |
+| `spindb version --check` | Check for available updates |
+| `spindb self-update` | Update to latest version |
+| `spindb config update-check [on\|off]` | Enable/disable update notifications |
 
 ## Supported Engines
 

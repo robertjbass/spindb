@@ -36,7 +36,9 @@ cli/
 │   ├── deps.ts             # Dependency management command (engine-agnostic)
 │   ├── engines.ts          # Engine list and delete commands
 │   ├── edit.ts             # Container rename/port editing
-│   └── url.ts              # Connection string output
+│   ├── url.ts              # Connection string output
+│   ├── self-update.ts      # Self-update command
+│   └── version.ts          # Version info and update check command
 └── ui/
     ├── prompts.ts          # Inquirer prompts
     ├── spinner.ts          # Ora spinner helpers

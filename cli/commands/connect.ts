@@ -26,9 +26,15 @@ export const connectCommand = new Command('connect')
   .option('-d, --database <name>', 'Database name')
   .option('--tui', 'Use usql for enhanced shell experience')
   .option('--install-tui', 'Install usql if not present, then connect')
-  .option('--pgcli', 'Use pgcli for enhanced PostgreSQL shell (dropdown auto-completion)')
+  .option(
+    '--pgcli',
+    'Use pgcli for enhanced PostgreSQL shell (dropdown auto-completion)',
+  )
   .option('--install-pgcli', 'Install pgcli if not present, then connect')
-  .option('--mycli', 'Use mycli for enhanced MySQL shell (dropdown auto-completion)')
+  .option(
+    '--mycli',
+    'Use mycli for enhanced MySQL shell (dropdown auto-completion)',
+  )
   .option('--install-mycli', 'Install mycli if not present, then connect')
   .action(
     async (
@@ -164,7 +170,9 @@ export const connectCommand = new Command('connect')
         const usePgcli = options.pgcli || options.installPgcli
         if (usePgcli) {
           if (engineName !== 'postgresql') {
-            console.error(error('pgcli is only available for PostgreSQL containers'))
+            console.error(
+              error('pgcli is only available for PostgreSQL containers'),
+            )
             console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
             process.exit(1)
           }
@@ -173,7 +181,9 @@ export const connectCommand = new Command('connect')
 
           if (!pgcliInstalled) {
             if (options.installPgcli) {
-              console.log(info('Installing pgcli for enhanced PostgreSQL shell...'))
+              console.log(
+                info('Installing pgcli for enhanced PostgreSQL shell...'),
+              )
               const pm = await detectPackageManager()
               if (pm) {
                 const result = await installPgcli(pm)
@@ -181,7 +191,9 @@ export const connectCommand = new Command('connect')
                   console.log(success('pgcli installed successfully!'))
                   console.log()
                 } else {
-                  console.error(error(`Failed to install pgcli: ${result.error}`))
+                  console.error(
+                    error(`Failed to install pgcli: ${result.error}`),
+                  )
                   console.log()
                   console.log(chalk.gray('Manual installation:'))
                   for (const instruction of getPgcliManualInstructions()) {
@@ -201,7 +213,9 @@ export const connectCommand = new Command('connect')
             } else {
               console.error(error('pgcli is not installed'))
               console.log()
-              console.log(chalk.gray('Install pgcli for enhanced PostgreSQL shell:'))
+              console.log(
+                chalk.gray('Install pgcli for enhanced PostgreSQL shell:'),
+              )
               console.log(chalk.cyan('  spindb connect --install-pgcli'))
               console.log()
               console.log(chalk.gray('Or install manually:'))
@@ -218,7 +232,9 @@ export const connectCommand = new Command('connect')
         if (useMycli) {
           if (engineName !== 'mysql') {
             console.error(error('mycli is only available for MySQL containers'))
-            console.log(chalk.gray('For PostgreSQL, use: spindb connect --pgcli'))
+            console.log(
+              chalk.gray('For PostgreSQL, use: spindb connect --pgcli'),
+            )
             process.exit(1)
           }
 
@@ -234,7 +250,9 @@ export const connectCommand = new Command('connect')
                   console.log(success('mycli installed successfully!'))
                   console.log()
                 } else {
-                  console.error(error(`Failed to install mycli: ${result.error}`))
+                  console.error(
+                    error(`Failed to install mycli: ${result.error}`),
+                  )
                   console.log()
                   console.log(chalk.gray('Manual installation:'))
                   for (const instruction of getMycliManualInstructions()) {
@@ -327,7 +345,9 @@ export const connectCommand = new Command('connect')
 
             if (clientCmd === 'usql') {
               console.log(chalk.gray('  Install usql:'))
-              console.log(chalk.cyan('  brew tap xo/xo && brew install xo/xo/usql'))
+              console.log(
+                chalk.cyan('  brew tap xo/xo && brew install xo/xo/usql'),
+              )
             } else if (clientCmd === 'pgcli') {
               console.log(chalk.gray('  Install pgcli:'))
               console.log(chalk.cyan('  brew install pgcli'))

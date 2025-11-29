@@ -251,7 +251,8 @@ export async function promptDatabaseName(
   engine?: string,
 ): Promise<string> {
   // MySQL uses "schema" terminology (database and schema are synonymous)
-  const label = engine === 'mysql' ? 'Database (schema) name:' : 'Database name:'
+  const label =
+    engine === 'mysql' ? 'Database (schema) name:' : 'Database name:'
 
   const { database } = await inquirer.prompt<{ database: string }>([
     {

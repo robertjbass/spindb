@@ -147,4 +147,10 @@ export type SpinDBConfig = {
   }
   // Last updated timestamp
   updatedAt?: string
+  // Self-update tracking
+  update?: {
+    lastCheck?: string // ISO timestamp of last npm registry check
+    latestVersion?: string // Latest version found from registry
+    autoCheckEnabled?: boolean // Default true, user can disable
+  }
 }

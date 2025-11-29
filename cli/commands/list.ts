@@ -85,8 +85,7 @@ export const listCommand = new Command('list')
         const engineDisplay = `${engineIcon} ${container.engine}`
 
         // Format size: show value if running, dash if stopped
-        const sizeDisplay =
-          size !== null ? formatBytes(size) : chalk.gray('—')
+        const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
         console.log(
           chalk.gray('  ') +
