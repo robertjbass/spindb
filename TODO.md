@@ -67,6 +67,84 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Windows support** - Add Windows support for MySQL
 - [ ] **Offline support** - Add offline support for PostgreSQL
 - [ ] **Offline support** - Add offline support for MySQL
+
+---
+
+## Brew Binary
+
+Distribute SpinDB as a standalone Homebrew binary (no Node.js dependency).
+
+### Approach: Standalone Binary with Bun
+
+Compile TypeScript to a single executable using `bun build --compile`:
+
+```bash
+# Build standalone binary
+bun build ./cli/bin.ts --compile --outfile dist/spindb
+```
+
+### Build Script
+
+Add to `package.json`:
+```json
+"build:binary": "bun build ./cli/bin.ts --compile --outfile dist/spindb"
+```
+
+### Homebrew Formula
+
+Create a tap at `github.com/robertjbass/homebrew-tap` with:
+
+```ruby
+# Formula/spindb.rb
+class Spindb < Formula
+  desc "Spin up local database containers without Docker"
+  homepage "https://github.com/robertjbass/spindb"
+  version "X.X.X"
+  license "PolyForm-Noncommercial-1.0.0"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/robertjbass/spindb/releases/download/vX.X.X/spindb-darwin-arm64.tar.gz"
+      sha256 "ARM64_CHECKSUM"
+    end
+    on_intel do
+      url "https://github.com/robertjbass/spindb/releases/download/vX.X.X/spindb-darwin-x64.tar.gz"
+      sha256 "X64_CHECKSUM"
+    end
+  end
+
+  def install
+    bin.install "spindb"
+  end
+
+  test do
+    system bin/"spindb", "--version"
+  end
+end
+```
+
+### GitHub Release Workflow
+
+Build binaries for multiple platforms in CI:
+- `darwin-arm64` (Apple Silicon)
+- `darwin-x64` (Intel Mac)
+- `linux-x64` (Linux)
+
+### User Installation
+
+```bash
+brew tap robertjbass/tap
+brew install spindb
+```
+
+### Alternative Tools
+
+| Tool | Notes |
+|------|-------|
+| [pkg](https://github.com/vercel/pkg) | Single binary with Node.js bundled |
+| [bun build --compile](https://bun.sh/docs/bundler/executables) | Native executable (recommended) |
+| [esbuild](https://esbuild.github.io/) + [caxa](https://github.com/leafac/caxa) | Bundled app |
+
 ---
 
 ## Known Limitations
