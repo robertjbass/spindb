@@ -276,6 +276,93 @@ export async function promptDatabaseName(
   return database
 }
 
+/**
+ * Prompt to select a database from a list of databases in a container
+ */
+export async function promptDatabaseSelect(
+  databases: string[],
+  message: string = 'Select database:',
+): Promise<string> {
+  if (databases.length === 0) {
+    throw new Error('No databases available to select')
+  }
+
+  if (databases.length === 1) {
+    return databases[0]
+  }
+
+  const { database } = await inquirer.prompt<{ database: string }>([
+    {
+      type: 'list',
+      name: 'database',
+      message,
+      choices: databases.map((db, index) => ({
+        name: index === 0 ? `${db} ${chalk.gray('(primary)')}` : db,
+        value: db,
+        short: db,
+      })),
+    },
+  ])
+
+  return database
+}
+
+/**
+ * Prompt for backup format selection
+ */
+export async function promptBackupFormat(
+  engine: string,
+): Promise<'sql' | 'dump'> {
+  const sqlDescription =
+    engine === 'mysql'
+      ? 'Plain SQL - human-readable, larger file'
+      : 'Plain SQL - human-readable, larger file'
+  const dumpDescription =
+    engine === 'mysql'
+      ? 'Compressed SQL (.sql.gz) - smaller file'
+      : 'Custom format - smaller file, faster restore'
+
+  const { format } = await inquirer.prompt<{ format: 'sql' | 'dump' }>([
+    {
+      type: 'list',
+      name: 'format',
+      message: 'Select backup format:',
+      choices: [
+        { name: `.sql ${chalk.gray(`- ${sqlDescription}`)}`, value: 'sql' },
+        { name: `.dump ${chalk.gray(`- ${dumpDescription}`)}`, value: 'dump' },
+      ],
+      default: 'sql',
+    },
+  ])
+
+  return format
+}
+
+/**
+ * Prompt for backup filename
+ */
+export async function promptBackupFilename(
+  defaultName: string,
+): Promise<string> {
+  const { filename } = await inquirer.prompt<{ filename: string }>([
+    {
+      type: 'input',
+      name: 'filename',
+      message: 'Backup filename (without extension):',
+      default: defaultName,
+      validate: (input: string) => {
+        if (!input) return 'Filename is required'
+        if (!/^[a-zA-Z0-9_-]+$/.test(input)) {
+          return 'Filename must contain only letters, numbers, underscores, and hyphens'
+        }
+        return true
+      },
+    },
+  ])
+
+  return filename
+}
+
 export type CreateOptions = {
   name: string
   engine: string

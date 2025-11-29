@@ -33,10 +33,13 @@ import {
   restoreBackup,
   parseConnectionString,
 } from './restore'
+import { createBackup } from './backup'
 import type {
   ContainerConfig,
   ProgressCallback,
   BackupFormat,
+  BackupOptions,
+  BackupResult,
   RestoreResult,
   DumpResult,
   StatusResult,
@@ -735,6 +738,31 @@ export class MySQLEngine extends BaseEngine {
   }
 
   /**
+   * Get the size of the container's database in bytes
+   * Uses information_schema.tables to sum data_length + index_length
+   * Returns null if container is not running or query fails
+   */
+  async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
+    const { port, database } = container
+    const db = database || 'mysql'
+
+    try {
+      const mysql = await getMysqlClientPath()
+      if (!mysql) return null
+
+      // Query information_schema for total data + index size
+      const { stdout } = await execAsync(
+        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
+      )
+      const size = parseInt(stdout.trim(), 10)
+      return isNaN(size) ? null : size
+    } catch {
+      // Container not running or query failed
+      return null
+    }
+  }
+
+  /**
    * Create a dump from a remote database using a connection string
    * CLI wrapper: mysqldump -h {host} -P {port} -u {user} -p{pass} {db} > {file}
    */
@@ -802,6 +830,17 @@ export class MySQLEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  /**
+   * Create a backup of a MySQL database
+   */
+  async backup(
+    container: ContainerConfig,
+    outputPath: string,
+    options: BackupOptions,
+  ): Promise<BackupResult> {
+    return createBackup(container, outputPath, options)
   }
 }
 

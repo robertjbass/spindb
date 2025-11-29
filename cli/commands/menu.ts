@@ -7,6 +7,9 @@ import {
   promptContainerSelect,
   promptContainerName,
   promptDatabaseName,
+  promptDatabaseSelect,
+  promptBackupFormat,
+  promptBackupFilename,
   promptCreateOptions,
   promptConfirm,
   promptInstallDependencies,
@@ -19,6 +22,7 @@ import {
   warning,
   info,
   connectionBox,
+  formatBytes,
 } from '../ui/theme'
 import { existsSync } from 'fs'
 import { readdir, rm, lstat } from 'fs/promises'
@@ -142,6 +146,13 @@ async function showMainMenu(): Promise<void> {
       disabled: canRestore ? false : 'No running containers',
     },
     {
+      name: canRestore
+        ? `${chalk.magenta('↑')} Backup database`
+        : chalk.gray('↑ Backup database'),
+      value: 'backup',
+      disabled: canRestore ? false : 'No running containers',
+    },
+    {
       name: canClone
         ? `${chalk.cyan('⧉')} Clone a container`
         : chalk.gray('⧉ Clone a container'),
@@ -184,6 +195,9 @@ async function showMainMenu(): Promise<void> {
       break
     case 'restore':
       await handleRestore()
+      break
+    case 'backup':
+      await handleBackup()
       break
     case 'clone':
       await handleClone()
@@ -397,6 +411,19 @@ async function handleList(): Promise<void> {
     return
   }
 
+  // Fetch sizes for running containers in parallel
+  const sizes = await Promise.all(
+    containers.map(async (container) => {
+      if (container.status !== 'running') return null
+      try {
+        const engine = getEngine(container.engine)
+        return await engine.getDatabaseSize(container)
+      } catch {
+        return null
+      }
+    }),
+  )
+
   // Table header
   console.log()
   console.log(
@@ -405,16 +432,22 @@ async function handleList(): Promise<void> {
       chalk.bold.white('ENGINE'.padEnd(12)) +
       chalk.bold.white('VERSION'.padEnd(10)) +
       chalk.bold.white('PORT'.padEnd(8)) +
+      chalk.bold.white('SIZE'.padEnd(10)) +
       chalk.bold.white('STATUS'),
   )
-  console.log(chalk.gray('  ' + '─'.repeat(60)))
+  console.log(chalk.gray('  ' + '─'.repeat(70)))
 
   // Table rows
-  for (const container of containers) {
+  for (let i = 0; i < containers.length; i++) {
+    const container = containers[i]
+    const size = sizes[i]
+
     const statusDisplay =
       container.status === 'running'
         ? chalk.green('● running')
         : chalk.gray('○ stopped')
+
+    const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
     console.log(
       chalk.gray('  ') +
@@ -422,6 +455,7 @@ async function handleList(): Promise<void> {
         chalk.white(container.engine.padEnd(12)) +
         chalk.yellow(container.version.padEnd(10)) +
         chalk.green(String(container.port).padEnd(8)) +
+        chalk.magenta(sizeDisplay.padEnd(10)) +
         statusDisplay,
     )
   }
@@ -439,15 +473,19 @@ async function handleList(): Promise<void> {
   // Container selection with submenu
   console.log()
   const containerChoices = [
-    ...containers.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${
-        c.status === 'running'
-          ? chalk.green('● running')
-          : chalk.gray('○ stopped')
-      }`,
-      value: c.name,
-      short: c.name,
-    })),
+    ...containers.map((c, i) => {
+      const size = sizes[i]
+      const sizeLabel = size !== null ? `, ${formatBytes(size)}` : ''
+      return {
+        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port}${sizeLabel})`)} ${
+          c.status === 'running'
+            ? chalk.green('● running')
+            : chalk.gray('○ stopped')
+        }`,
+        value: c.name,
+        short: c.name,
+      }
+    }),
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back to main menu`, value: 'back' },
   ]
@@ -1521,6 +1559,148 @@ async function handleRestore(): Promise<void> {
   ])
 }
 
+/**
+ * Generate a timestamp string for backup filenames
+ */
+function generateBackupTimestamp(): string {
+  const now = new Date()
+  return now.toISOString().replace(/:/g, '').split('.')[0]
+}
+
+/**
+ * Get file extension for backup format
+ */
+function getBackupExtension(format: 'sql' | 'dump', engine: string): string {
+  if (format === 'sql') {
+    return '.sql'
+  }
+  return engine === 'mysql' ? '.sql.gz' : '.dump'
+}
+
+async function handleBackup(): Promise<void> {
+  const containers = await containerManager.list()
+  const running = containers.filter((c) => c.status === 'running')
+
+  if (running.length === 0) {
+    console.log(warning('No running containers. Start a container first.'))
+    await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to continue...'),
+      },
+    ])
+    return
+  }
+
+  // Select container
+  const containerName = await promptContainerSelect(
+    running,
+    'Select container to backup:',
+  )
+  if (!containerName) return
+
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(error(`Container "${containerName}" not found`))
+    return
+  }
+
+  const engine = getEngine(config.engine)
+
+  // Check for required tools
+  const depsSpinner = createSpinner('Checking required tools...')
+  depsSpinner.start()
+
+  let missingDeps = await getMissingDependencies(config.engine)
+  if (missingDeps.length > 0) {
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      config.engine,
+    )
+
+    if (!installed) {
+      return
+    }
+
+    missingDeps = await getMissingDependencies(config.engine)
+    if (missingDeps.length > 0) {
+      console.log(
+        error(`Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+      )
+      return
+    }
+
+    console.log(chalk.green('  ✓ All required tools are now available'))
+    console.log()
+  } else {
+    depsSpinner.succeed('Required tools available')
+  }
+
+  // Select database
+  const databases = config.databases || [config.database]
+  let databaseName: string
+
+  if (databases.length > 1) {
+    databaseName = await promptDatabaseSelect(databases, 'Select database to backup:')
+  } else {
+    databaseName = databases[0]
+  }
+
+  // Select format
+  const format = await promptBackupFormat(config.engine)
+
+  // Get filename
+  const defaultFilename = `${containerName}-${databaseName}-backup-${generateBackupTimestamp()}`
+  const filename = await promptBackupFilename(defaultFilename)
+
+  // Build output path
+  const extension = getBackupExtension(format, config.engine)
+  const outputPath = join(process.cwd(), `${filename}${extension}`)
+
+  // Create backup
+  const backupSpinner = createSpinner(
+    `Creating ${format === 'sql' ? 'SQL' : 'dump'} backup of "${databaseName}"...`,
+  )
+  backupSpinner.start()
+
+  try {
+    const result = await engine.backup(config, outputPath, {
+      database: databaseName,
+      format,
+    })
+
+    backupSpinner.succeed('Backup created successfully')
+
+    console.log()
+    console.log(success('Backup complete'))
+    console.log()
+    console.log(chalk.gray('  File:'), chalk.cyan(result.path))
+    console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
+    console.log(chalk.gray('  Format:'), chalk.white(result.format))
+    console.log()
+  } catch (err) {
+    const e = err as Error
+    backupSpinner.fail('Backup failed')
+    console.log()
+    console.log(error(e.message))
+    console.log()
+  }
+
+  // Wait for user to see the result
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to continue...'),
+    },
+  ])
+}
+
 async function handleClone(): Promise<void> {
   const containers = await containerManager.list()
   const stopped = containers.filter((c) => c.status !== 'running')
@@ -1995,14 +2175,6 @@ function compareVersions(a: string, b: string): number {
     if (numA !== numB) return numA - numB
   }
   return 0
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
 async function handleEngines(): Promise<void> {

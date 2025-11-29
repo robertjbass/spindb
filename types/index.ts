@@ -4,6 +4,7 @@ export type ContainerConfig = {
   version: string
   port: number
   database: string
+  databases?: string[]
   created: string
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
@@ -56,6 +57,17 @@ export type RestoreResult = {
   code?: number
 }
 
+export type BackupOptions = {
+  database: string
+  format: 'sql' | 'dump'
+}
+
+export type BackupResult = {
+  path: string
+  format: string
+  size: number
+}
+
 export type DumpResult = {
   filePath: string
   stdout?: string
@@ -85,6 +97,10 @@ export type BinaryTool =
   | 'mysqlpump'
   | 'mysqld'
   | 'mysqladmin'
+  // Enhanced shells (optional)
+  | 'pgcli'
+  | 'mycli'
+  | 'usql'
 
 /**
  * Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
@@ -118,6 +134,10 @@ export type SpinDBConfig = {
     mysqlpump?: BinaryConfig
     mysqld?: BinaryConfig
     mysqladmin?: BinaryConfig
+    // Enhanced shells (optional)
+    pgcli?: BinaryConfig
+    mycli?: BinaryConfig
+    usql?: BinaryConfig
   }
   // Default settings
   defaults?: {

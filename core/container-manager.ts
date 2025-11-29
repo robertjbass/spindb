@@ -51,6 +51,7 @@ export class ContainerManager {
       version,
       port,
       database,
+      databases: [database],
       created: new Date().toISOString(),
       status: 'created',
     }
@@ -63,6 +64,7 @@ export class ContainerManager {
   /**
    * Get container configuration
    * If engine is not provided, searches all engine directories
+   * Automatically migrates old schemas to include databases array
    */
   async getConfig(
     name: string,
@@ -77,7 +79,8 @@ export class ContainerManager {
         return null
       }
       const content = await readFile(configPath, 'utf8')
-      return JSON.parse(content) as ContainerConfig
+      const config = JSON.parse(content) as ContainerConfig
+      return this.migrateConfig(config)
     }
 
     // Search all engine directories
@@ -86,11 +89,41 @@ export class ContainerManager {
       const configPath = paths.getContainerConfigPath(name, { engine: eng })
       if (existsSync(configPath)) {
         const content = await readFile(configPath, 'utf8')
-        return JSON.parse(content) as ContainerConfig
+        const config = JSON.parse(content) as ContainerConfig
+        return this.migrateConfig(config)
       }
     }
 
     return null
+  }
+
+  /**
+   * Migrate old container configs to include databases array
+   * Ensures primary database is always in the databases array
+   */
+  private async migrateConfig(
+    config: ContainerConfig,
+  ): Promise<ContainerConfig> {
+    let needsSave = false
+
+    // If databases array is missing, create it with the primary database
+    if (!config.databases) {
+      config.databases = [config.database]
+      needsSave = true
+    }
+
+    // Ensure primary database is in the array
+    if (!config.databases.includes(config.database)) {
+      config.databases = [config.database, ...config.databases]
+      needsSave = true
+    }
+
+    // Save if we made changes
+    if (needsSave) {
+      await this.saveConfig(config.name, { engine: config.engine }, config)
+    }
+
+    return config
   }
 
   /**
@@ -331,6 +364,47 @@ export class ContainerManager {
    */
   isValidName(name: string): boolean {
     return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
+  }
+
+  /**
+   * Add a database to the container's databases array
+   */
+  async addDatabase(containerName: string, database: string): Promise<void> {
+    const config = await this.getConfig(containerName)
+    if (!config) {
+      throw new Error(`Container "${containerName}" not found`)
+    }
+
+    // Ensure databases array exists
+    if (!config.databases) {
+      config.databases = [config.database]
+    }
+
+    // Add if not already present
+    if (!config.databases.includes(database)) {
+      config.databases.push(database)
+      await this.saveConfig(containerName, { engine: config.engine }, config)
+    }
+  }
+
+  /**
+   * Remove a database from the container's databases array
+   */
+  async removeDatabase(containerName: string, database: string): Promise<void> {
+    const config = await this.getConfig(containerName)
+    if (!config) {
+      throw new Error(`Container "${containerName}" not found`)
+    }
+
+    // Don't remove the primary database from the array
+    if (database === config.database) {
+      throw new Error(`Cannot remove primary database "${database}" from tracking`)
+    }
+
+    if (config.databases) {
+      config.databases = config.databases.filter((db) => db !== database)
+      await this.saveConfig(containerName, { engine: config.engine }, config)
+    }
   }
 
   /**

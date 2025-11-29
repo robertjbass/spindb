@@ -10,7 +10,7 @@ import { paths } from '../../config/paths'
 import { containerManager } from '../../core/container-manager'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning, info } from '../ui/theme'
+import { error, warning, info, formatBytes } from '../ui/theme'
 import {
   getMysqldPath,
   getMysqlVersion,
@@ -183,14 +183,6 @@ function compareVersions(a: string, b: string): number {
     if (numA !== numB) return numA - numB
   }
   return 0
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
 /**

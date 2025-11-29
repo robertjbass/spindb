@@ -32,6 +32,7 @@ cli/
 │   ├── connect.ts          # Connect to container shell
 │   ├── clone.ts            # Clone container command
 │   ├── restore.ts          # Restore from backup command
+│   ├── backup.ts           # Create database backup command
 │   ├── deps.ts             # Dependency management command (engine-agnostic)
 │   ├── engines.ts          # Engine list and delete commands
 │   ├── edit.ts             # Container rename/port editing
@@ -62,16 +63,19 @@ engines/
 │   ├── index.ts            # PostgreSQL engine implementation
 │   ├── binary-urls.ts      # Zonky.io URL builder for server binaries
 │   ├── binary-manager.ts   # PostgreSQL client tool management (psql, pg_restore)
+│   ├── backup.ts           # Backup creation using pg_dump
 │   ├── restore.ts          # Backup detection and restore
 │   └── version-validator.ts # Version compatibility checking
 └── mysql/
     ├── index.ts            # MySQL engine implementation
     ├── binary-detection.ts # System binary detection (mysqld, mysql, mysqldump)
+    ├── backup.ts           # Backup creation using mysqldump (with gzip compression)
     ├── restore.ts          # Backup detection and restore
     └── version-validator.ts # Version compatibility checking
 types/index.ts              # TypeScript interfaces
 tests/
 ├── unit/                   # Unit tests
+│   ├── backup.test.ts
 │   ├── error-handler.test.ts
 │   ├── transaction-manager.test.ts
 │   ├── version-validator.test.ts
@@ -97,6 +101,7 @@ Each engine folder should have parallel file structure for maintainability:
 ```
 engines/{engine}/
 ├── index.ts              # Main engine class (extends BaseEngine)
+├── backup.ts             # Backup creation (pg_dump/mysqldump wrapper)
 ├── restore.ts            # Backup format detection, restore logic, cross-engine error detection
 ├── version-validator.ts  # Version parsing, compatibility checking
 ├── binary-manager.ts     # Client tool installation/update (PostgreSQL only - downloads tools)
@@ -104,11 +109,18 @@ engines/{engine}/
 ```
 
 **Naming Parity Rules:**
+- `backup.ts` - Every engine creates backups using its native dump tool
 - `restore.ts` - Every engine has backup/restore functionality
 - `version-validator.ts` - Every engine validates dump vs client version compatibility
 - Binary management differs by engine:
   - PostgreSQL: `binary-urls.ts` (server binaries from zonky.io) + `binary-manager.ts` (client tools)
   - MySQL: `binary-detection.ts` (all binaries are system-installed)
+
+**Version Resolution (PostgreSQL):**
+- Major versions (e.g., `"17"`) are resolved to full versions (e.g., `"17.7.0"`)
+- Resolution happens in `PostgreSQLEngine.resolveFullVersion()` and `BinaryManager.getFullVersion()`
+- Full versions are used for: filesystem paths, container configs, and all UI display
+- Never show or store just the major version - always use full version
 
 ## Key Architecture Decisions
 
@@ -146,11 +158,11 @@ Containers are stored in engine-specific directories:
 ```
 ~/.spindb/
 ├── bin/                                    # PostgreSQL server binaries
-│   └── postgresql-17-darwin-arm64/
+│   └── postgresql-17.7.0-darwin-arm64/     # Full version in directory name
 ├── containers/
 │   ├── postgresql/                         # PostgreSQL containers
 │   │   └── mydb/
-│   │       ├── container.json
+│   │       ├── container.json              # Contains full version (e.g., "17.7.0")
 │   │       ├── data/
 │   │       └── postgres.log
 │   └── mysql/                              # MySQL containers
@@ -167,7 +179,9 @@ Containers are stored in engine-specific directories:
 1. Download JAR from Maven Central
 2. Unzip JAR (it's a ZIP file)
 3. Extract `.txz` file inside
-4. Extract tar.xz to `~/.spindb/bin/postgresql-{version}-{platform}-{arch}/`
+4. Extract tar.xz to `~/.spindb/bin/postgresql-{fullVersion}-{platform}-{arch}/`
+
+**Version Resolution**: When a major version (e.g., `"17"`) is provided via CLI or config, it's resolved to the full version (e.g., `"17.7.0"`) using `FALLBACK_VERSION_MAP` or network fetch. The full version is used everywhere: filesystem paths, container configs, and UI display.
 
 **MySQL**: System-installed binaries detected from:
 - PATH
@@ -175,12 +189,38 @@ Containers are stored in engine-specific directories:
 - /usr/local/bin/ (macOS Intel)
 - /usr/bin/ (Linux)
 
-### Client Tools
+### Client Tools and Config Cache
 
-Client tools are detected from the system. The `dependency-manager.ts` handles:
+Client tools are detected from the system and cached in `~/.spindb/config.json`. The `config-manager.ts` handles:
 - Auto-detection from PATH and common locations
-- Caching paths in `~/.spindb/config.json`
+- Caching paths and versions for all tools (PostgreSQL, MySQL, enhanced shells)
+- 7-day staleness threshold for automatic re-detection
+
+**Tool Categories:**
+- PostgreSQL tools: `psql`, `pg_dump`, `pg_restore`, `pg_basebackup`
+- MySQL tools: `mysql`, `mysqldump`, `mysqladmin`, `mysqld`
+- Enhanced shells: `pgcli`, `mycli`, `usql`
+
+**IMPORTANT: Config Cache Refresh**
+
+The config cache MUST be refreshed after any interaction with a system package manager (Homebrew, apt, dnf, etc.). This ensures newly installed or updated tools are detected with correct paths and versions.
+
+```typescript
+// After any package manager interaction (brew install, apt install, etc.)
+await configManager.refreshAllBinaries()
+```
+
+This is already implemented in `dependency-manager.ts` - the `installDependency()` function calls `configManager.refreshAllBinaries()` after successfully running package manager commands. When adding new features that invoke package managers, always refresh the config cache afterward.
+
+**When to refresh:**
+- After `brew install`, `apt install`, `dnf install`, etc.
+- After helping a user install pgcli, mycli, usql, or any database tools
+- After any upgrade commands (`brew upgrade`, etc.)
+
+The `dependency-manager.ts` handles:
 - Prompting to install missing dependencies
+- Running package manager commands with proper TTY handling for sudo
+- Auto-refreshing the config cache after successful installs
 
 ### Container Config
 Each container has a `container.json` with:
@@ -190,12 +230,20 @@ type ContainerConfig = {
   engine: 'postgresql' | 'mysql'
   version: string
   port: number
-  database: string      // User's database name (separate from container name)
+  database: string      // Primary database name (separate from container name)
+  databases?: string[]  // All databases in this container (auto-populated)
   created: string
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
 }
 ```
+
+**Multi-Database Tracking:**
+- `database` is the primary database (created with the container)
+- `databases` tracks all databases in the container (including restored databases)
+- Auto-migration: old configs without `databases` are migrated on first read
+- The primary database is always first in the `databases` array
+- Restored databases are automatically added to the `databases` array
 
 ### Error Handling
 
@@ -376,7 +424,6 @@ CLI flags:
 ## Future Improvements
 
 See `TODO.md` for full list. Key items:
-- [ ] Add `spindb backup` command
 - [ ] Add `spindb logs` command
 - [ ] Add `spindb exec` for running SQL files
 - [ ] SQLite support

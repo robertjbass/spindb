@@ -5,6 +5,7 @@ import { startCommand } from './commands/start'
 import { stopCommand } from './commands/stop'
 import { deleteCommand } from './commands/delete'
 import { restoreCommand } from './commands/restore'
+import { backupCommand } from './commands/backup'
 import { connectCommand } from './commands/connect'
 import { cloneCommand } from './commands/clone'
 import { menuCommand } from './commands/menu'
@@ -27,6 +28,7 @@ export async function run(): Promise<void> {
   program.addCommand(stopCommand)
   program.addCommand(deleteCommand)
   program.addCommand(restoreCommand)
+  program.addCommand(backupCommand)
   program.addCommand(connectCommand)
   program.addCommand(cloneCommand)
   program.addCommand(menuCommand)

@@ -12,15 +12,17 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ### High Priority
 - [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f` / `mysql <`)
-- [ ] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
+- [x] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
 
 ### Medium Priority
 - [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
-- [ ] **Multiple databases per container** - List/create/delete databases within a container
+- [x] **Multiple databases per container** - List/create/delete databases within a container (tracking via `databases[]` in container.json)
+- [ ] **Multi-database container backup** - Bundle all databases in a container into a single proprietary archive format with metadata
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
+- [ ] **MongoDB support** - Add MongoDB engine
 - [ ] **Health checks** - Periodic connection tests to verify containers are responsive
 - [ ] **Offline Support** - Package binaries locally for offline installation
 - [ ] **Binary caching** - Cache downloaded binaries locally to avoid re-downloading
@@ -38,7 +40,11 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Container templates** - Save container configs as reusable templates
 - [ ] **Import from Docker** - Import data from Docker PostgreSQL/MySQL containers
 - [ ] **Automatic binary updates** - Check for and download newer PostgreSQL versions
-- [ ] **Custom superuser name** - Allow changing from default `postgres`/`root` user
+- [ ] **User management** - Support for custom usernames, passwords, and additional database users
+  - Custom superuser name (instead of default `postgres`/`root`)
+  - Set password on container creation
+  - Create additional users with specific privileges
+  - Store credentials securely (keychain integration?)
 - [ ] **Scheduled backups** - Cron-like backup scheduling
 - [ ] **Cloud backup sync** - Sync backups to S3/GCS/Azure
 - [ ] **MongoDB support** - Add MongoDB engine
@@ -55,7 +61,12 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Terminal-based IDE** - Full TUI (terminal UI) for browsing tables, running queries, viewing results, editing data inline (think `lazygit` but for databases)
   - Potential libraries: [blessed](https://github.com/chjj/blessed), [ink](https://github.com/vadimdemedes/ink), [terminal-kit](https://github.com/cronvel/terminal-kit)
   - Inspiration: `lazygit`, `k9s`, `pgcli`
-
+- [ ] **Multi-database container backup** - Bundle all databases in a container into a single proprietary archive format with metadata
+- [ ] **Multi-database container restore** - Restore all databases from a single proprietary archive format with metadata
+- [ ] **Windows support** - Add Windows support for PostgreSQL
+- [ ] **Windows support** - Add Windows support for MySQL
+- [ ] **Offline support** - Add offline support for PostgreSQL
+- [ ] **Offline support** - Add offline support for MySQL
 ---
 
 ## Known Limitations
