@@ -19,6 +19,7 @@ import {
   warning,
   info,
   connectionBox,
+  formatBytes,
 } from '../ui/theme'
 import { existsSync } from 'fs'
 import { readdir, rm, lstat } from 'fs/promises'
@@ -397,6 +398,19 @@ async function handleList(): Promise<void> {
     return
   }
 
+  // Fetch sizes for running containers in parallel
+  const sizes = await Promise.all(
+    containers.map(async (container) => {
+      if (container.status !== 'running') return null
+      try {
+        const engine = getEngine(container.engine)
+        return await engine.getDatabaseSize(container)
+      } catch {
+        return null
+      }
+    }),
+  )
+
   // Table header
   console.log()
   console.log(
@@ -405,16 +419,22 @@ async function handleList(): Promise<void> {
       chalk.bold.white('ENGINE'.padEnd(12)) +
       chalk.bold.white('VERSION'.padEnd(10)) +
       chalk.bold.white('PORT'.padEnd(8)) +
+      chalk.bold.white('SIZE'.padEnd(10)) +
       chalk.bold.white('STATUS'),
   )
-  console.log(chalk.gray('  ' + '─'.repeat(60)))
+  console.log(chalk.gray('  ' + '─'.repeat(70)))
 
   // Table rows
-  for (const container of containers) {
+  for (let i = 0; i < containers.length; i++) {
+    const container = containers[i]
+    const size = sizes[i]
+
     const statusDisplay =
       container.status === 'running'
         ? chalk.green('● running')
         : chalk.gray('○ stopped')
+
+    const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
     console.log(
       chalk.gray('  ') +
@@ -422,6 +442,7 @@ async function handleList(): Promise<void> {
         chalk.white(container.engine.padEnd(12)) +
         chalk.yellow(container.version.padEnd(10)) +
         chalk.green(String(container.port).padEnd(8)) +
+        chalk.magenta(sizeDisplay.padEnd(10)) +
         statusDisplay,
     )
   }
@@ -439,15 +460,19 @@ async function handleList(): Promise<void> {
   // Container selection with submenu
   console.log()
   const containerChoices = [
-    ...containers.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${
-        c.status === 'running'
-          ? chalk.green('● running')
-          : chalk.gray('○ stopped')
-      }`,
-      value: c.name,
-      short: c.name,
-    })),
+    ...containers.map((c, i) => {
+      const size = sizes[i]
+      const sizeLabel = size !== null ? `, ${formatBytes(size)}` : ''
+      return {
+        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port}${sizeLabel})`)} ${
+          c.status === 'running'
+            ? chalk.green('● running')
+            : chalk.gray('○ stopped')
+        }`,
+        value: c.name,
+        short: c.name,
+      }
+    }),
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back to main menu`, value: 'back' },
   ]
@@ -1995,14 +2020,6 @@ function compareVersions(a: string, b: string): number {
     if (numA !== numB) return numA - numB
   }
   return 0
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
 async function handleEngines(): Promise<void> {

@@ -370,6 +370,29 @@ export class PostgreSQLEngine extends BaseEngine {
   }
 
   /**
+   * Get the size of the container's database in bytes
+   * Uses pg_database_size() to get accurate data size
+   * Returns null if container is not running or query fails
+   */
+  async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
+    const { port, database } = container
+    const db = database || 'postgres'
+
+    try {
+      const psqlPath = await this.getPsqlPath()
+      // Query pg_database_size for the specific database
+      const { stdout } = await execAsync(
+        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "SELECT pg_database_size('${db}')"`,
+      )
+      const size = parseInt(stdout.trim(), 10)
+      return isNaN(size) ? null : size
+    } catch {
+      // Container not running or query failed
+      return null
+    }
+  }
+
+  /**
    * Create a dump from a remote database using a connection string
    * @param connectionString PostgreSQL connection string (e.g., postgresql://user:pass@host:port/dbname)
    * @param outputPath Path where the dump file will be saved

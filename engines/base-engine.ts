@@ -131,4 +131,10 @@ export abstract class BaseEngine {
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult>
+
+  /**
+   * Get the size of a database in bytes
+   * Returns null if the container is not running or size cannot be determined
+   */
+  abstract getDatabaseSize(container: ContainerConfig): Promise<number | null>
 }
