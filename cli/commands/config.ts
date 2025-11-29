@@ -8,7 +8,8 @@ import {
   ENHANCED_SHELLS,
   ALL_TOOLS,
 } from '../../core/config-manager'
-import { error, success, header } from '../ui/theme'
+import { updateManager } from '../../core/update-manager'
+import { error, success, header, info } from '../ui/theme'
 import { createSpinner } from '../ui/spinner'
 import type { BinaryTool } from '../../types'
 
@@ -78,7 +79,9 @@ export const configCommand = new Command('config')
 
           if (config.updatedAt) {
             const isStale = await configManager.isStale()
-            const staleWarning = isStale ? chalk.yellow(' (stale - run config detect to refresh)') : ''
+            const staleWarning = isStale
+              ? chalk.yellow(' (stale - run config detect to refresh)')
+              : ''
             console.log(
               chalk.gray(
                 `  Last updated: ${new Date(config.updatedAt).toLocaleString()}${staleWarning}`,
@@ -283,6 +286,58 @@ export const configCommand = new Command('config')
               chalk.gray(`  Run 'spindb config detect' to auto-detect tools`),
             )
             process.exit(1)
+          }
+        } catch (err) {
+          const e = err as Error
+          console.error(error(e.message))
+          process.exit(1)
+        }
+      }),
+  )
+  .addCommand(
+    new Command('update-check')
+      .description('Enable or disable automatic update checks on startup')
+      .argument('[state]', 'on or off (omit to show current status)')
+      .action(async (state?: string) => {
+        try {
+          const cached = await updateManager.getCachedUpdateInfo()
+
+          if (!state) {
+            // Show current status
+            const status = cached.autoCheckEnabled
+              ? chalk.green('enabled')
+              : chalk.yellow('disabled')
+            console.log()
+            console.log(`  Update checks on startup: ${status}`)
+            console.log()
+            console.log(chalk.gray('  Usage:'))
+            console.log(
+              chalk.gray('    spindb config update-check on   # Enable'),
+            )
+            console.log(
+              chalk.gray('    spindb config update-check off  # Disable'),
+            )
+            console.log()
+            return
+          }
+
+          if (state !== 'on' && state !== 'off') {
+            console.error(error('Invalid state. Use "on" or "off"'))
+            process.exit(1)
+          }
+
+          const enabled = state === 'on'
+          await updateManager.setAutoCheckEnabled(enabled)
+
+          if (enabled) {
+            console.log(success('Update checks enabled on startup'))
+          } else {
+            console.log(info('Update checks disabled on startup'))
+            console.log(
+              chalk.gray(
+                '  You can still manually check with: spindb version --check',
+              ),
+            )
           }
         } catch (err) {
           const e = err as Error

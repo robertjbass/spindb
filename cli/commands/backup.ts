@@ -51,7 +51,10 @@ export const backupCommand = new Command('backup')
   .argument('[container]', 'Container name')
   .option('-d, --database <name>', 'Database to backup')
   .option('-n, --name <name>', 'Custom backup filename (without extension)')
-  .option('-o, --output <path>', 'Output directory (defaults to current directory)')
+  .option(
+    '-o, --output <path>',
+    'Output directory (defaults to current directory)',
+  )
   .option('--format <format>', 'Output format: sql or dump')
   .option('--sql', 'Output as plain SQL (shorthand for --format sql)')
   .option('--dump', 'Output as dump format (shorthand for --format dump)')
@@ -198,7 +201,10 @@ export const backupCommand = new Command('backup')
         }
 
         // Determine filename
-        const defaultFilename = generateDefaultFilename(containerName, databaseName)
+        const defaultFilename = generateDefaultFilename(
+          containerName,
+          databaseName,
+        )
         let filename = options.name || defaultFilename
 
         // In interactive mode with no name provided, optionally prompt for custom name
@@ -229,17 +235,17 @@ export const backupCommand = new Command('backup')
         console.log(success('Backup complete'))
         console.log()
         console.log(chalk.gray('  File:'), chalk.cyan(result.path))
-        console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
+        console.log(
+          chalk.gray('  Size:'),
+          chalk.white(formatBytes(result.size)),
+        )
         console.log(chalk.gray('  Format:'), chalk.white(result.format))
         console.log()
       } catch (err) {
         const e = err as Error
 
         // Check if this is a missing tool error
-        const missingToolPatterns = [
-          'pg_dump not found',
-          'mysqldump not found',
-        ]
+        const missingToolPatterns = ['pg_dump not found', 'mysqldump not found']
 
         const matchingPattern = missingToolPatterns.find((p) =>
           e.message.includes(p),

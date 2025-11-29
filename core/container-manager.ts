@@ -398,7 +398,9 @@ export class ContainerManager {
 
     // Don't remove the primary database from the array
     if (database === config.database) {
-      throw new Error(`Cannot remove primary database "${database}" from tracking`)
+      throw new Error(
+        `Cannot remove primary database "${database}" from tracking`,
+      )
     }
 
     if (config.databases) {

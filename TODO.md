@@ -39,7 +39,7 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 ### Advanced Features
 - [ ] **Container templates** - Save container configs as reusable templates
 - [ ] **Import from Docker** - Import data from Docker PostgreSQL/MySQL containers
-- [ ] **Automatic binary updates** - Check for and download newer PostgreSQL versions
+- [x] **Self-update** - `spindb self-update` command with automatic update notifications on startup
 - [ ] **User management** - Support for custom usernames, passwords, and additional database users
   - Custom superuser name (instead of default `postgres`/`root`)
   - Set password on container creation

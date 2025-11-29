@@ -1,0 +1,109 @@
+import { Command } from 'commander'
+import chalk from 'chalk'
+import inquirer from 'inquirer'
+import { updateManager } from '../../core/update-manager'
+import { createSpinner } from '../ui/spinner'
+import { success, error, info, header } from '../ui/theme'
+
+export const selfUpdateCommand = new Command('self-update')
+  .alias('update')
+  .description('Update spindb to the latest version')
+  .option('-f, --force', 'Update even if already on latest version')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .action(
+    async (options: { force?: boolean; yes?: boolean }): Promise<void> => {
+      console.log()
+      console.log(header('SpinDB Self-Update'))
+      console.log()
+
+      const checkSpinner = createSpinner('Checking for updates...')
+      checkSpinner.start()
+
+      const result = await updateManager.checkForUpdate(true)
+
+      if (!result) {
+        checkSpinner.fail('Could not reach npm registry')
+        console.log()
+        console.log(info('Check your internet connection and try again.'))
+        console.log(chalk.gray('  Manual update: npm install -g spindb@latest'))
+        process.exit(1)
+      }
+
+      if (!result.updateAvailable && !options.force) {
+        checkSpinner.succeed('Already on latest version')
+        console.log()
+        console.log(chalk.gray(`  Current version: ${result.currentVersion}`))
+        console.log(chalk.gray(`  Latest version:  ${result.latestVersion}`))
+        console.log()
+        return
+      }
+
+      if (result.updateAvailable) {
+        checkSpinner.succeed('Update available')
+      } else {
+        checkSpinner.succeed('Version check complete')
+      }
+
+      console.log()
+      console.log(chalk.gray(`  Current version: ${result.currentVersion}`))
+      console.log(
+        chalk.gray(
+          `  Latest version:  ${result.updateAvailable ? chalk.green(result.latestVersion) : result.latestVersion}`,
+        ),
+      )
+      console.log()
+
+      // Confirm unless --yes
+      if (!options.yes) {
+        const message = result.updateAvailable
+          ? `Update spindb from ${result.currentVersion} to ${result.latestVersion}?`
+          : `Reinstall spindb ${result.currentVersion}?`
+
+        const { confirm } = await inquirer.prompt<{ confirm: boolean }>([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message,
+            default: true,
+          },
+        ])
+
+        if (!confirm) {
+          console.log(chalk.yellow('Update cancelled'))
+          return
+        }
+      }
+
+      console.log()
+      const updateSpinner = createSpinner('Updating spindb...')
+      updateSpinner.start()
+
+      const updateResult = await updateManager.performUpdate()
+
+      if (updateResult.success) {
+        updateSpinner.succeed('Update complete')
+        console.log()
+        console.log(
+          success(
+            `Updated from ${updateResult.previousVersion} to ${updateResult.newVersion}`,
+          ),
+        )
+        console.log()
+        if (updateResult.previousVersion !== updateResult.newVersion) {
+          console.log(
+            chalk.gray(
+              '  Please restart your terminal to use the new version.',
+            ),
+          )
+          console.log()
+        }
+      } else {
+        updateSpinner.fail('Update failed')
+        console.log()
+        console.log(error(updateResult.error || 'Unknown error'))
+        console.log()
+        console.log(info('Manual update: npm install -g spindb@latest'))
+        process.exit(1)
+      }
+    },
+  )

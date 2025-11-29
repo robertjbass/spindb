@@ -29,12 +29,7 @@ const POSTGRESQL_TOOLS: BinaryTool[] = [
   'pg_basebackup',
 ]
 
-const MYSQL_TOOLS: BinaryTool[] = [
-  'mysql',
-  'mysqldump',
-  'mysqladmin',
-  'mysqld',
-]
+const MYSQL_TOOLS: BinaryTool[] = ['mysql', 'mysqldump', 'mysqladmin', 'mysqld']
 
 const ENHANCED_SHELLS: BinaryTool[] = ['pgcli', 'mycli', 'usql']
 
@@ -359,9 +354,4 @@ export class ConfigManager {
 export const configManager = new ConfigManager()
 
 // Export tool categories for use in commands
-export {
-  POSTGRESQL_TOOLS,
-  MYSQL_TOOLS,
-  ENHANCED_SHELLS,
-  ALL_TOOLS,
-}
+export { POSTGRESQL_TOOLS, MYSQL_TOOLS, ENHANCED_SHELLS, ALL_TOOLS }
