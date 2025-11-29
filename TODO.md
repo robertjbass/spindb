@@ -38,7 +38,11 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Container templates** - Save container configs as reusable templates
 - [ ] **Import from Docker** - Import data from Docker PostgreSQL/MySQL containers
 - [ ] **Automatic binary updates** - Check for and download newer PostgreSQL versions
-- [ ] **Custom superuser name** - Allow changing from default `postgres`/`root` user
+- [ ] **User management** - Support for custom usernames, passwords, and additional database users
+  - Custom superuser name (instead of default `postgres`/`root`)
+  - Set password on container creation
+  - Create additional users with specific privileges
+  - Store credentials securely (keychain integration?)
 - [ ] **Scheduled backups** - Cron-like backup scheduling
 - [ ] **Cloud backup sync** - Sync backups to S3/GCS/Azure
 - [ ] **MongoDB support** - Add MongoDB engine
