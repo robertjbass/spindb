@@ -351,9 +351,20 @@ spindb create mycontainer --from "postgresql://user:pass@host:5432/dbname" -d my
 ```
 
 ### Engine-Aware Shell
-The "Open shell" option in container submenu:
-- PostgreSQL: `psql {connectionString}`
-- MySQL: `mysql -u root -h 127.0.0.1 -P {port} {database}`
+The "Open shell" option in container submenu offers multiple shell options:
+- **Use default shell (psql/mysql)** - Standard database client
+- **Use pgcli/mycli (enhanced)** - Engine-specific CLI with dropdown auto-completion (if installed)
+- **Use usql (universal)** - Universal SQL client with tab-completion and syntax highlighting (if installed)
+- **Install options** - Downloads and installs enhanced shells via Homebrew (if not installed)
+
+CLI flags:
+- `spindb connect mydb` - Default shell (psql for PostgreSQL, mysql for MySQL)
+- `spindb connect mydb --pgcli` - Use pgcli for PostgreSQL (dropdown auto-completion)
+- `spindb connect mydb --mycli` - Use mycli for MySQL (dropdown auto-completion)
+- `spindb connect mydb --install-pgcli` - Install pgcli and connect
+- `spindb connect mydb --install-mycli` - Install mycli and connect
+- `spindb connect mydb --tui` - Use usql (universal SQL client)
+- `spindb connect mydb --install-tui` - Install usql and connect
 
 ## Known Limitations
 

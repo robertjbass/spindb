@@ -251,7 +251,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // PostgreSQL rows
   for (const engine of pgEngines) {
-    const icon = engineIcons[engine.engine] || '🗄️'
+    const icon = engineIcons[engine.engine] || '▣'
     const platformInfo = `${engine.platform}-${engine.arch}`
 
     console.log(

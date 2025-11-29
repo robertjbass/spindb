@@ -40,7 +40,7 @@ export const theme = {
     info: chalk.blue('ℹ'),
     arrow: chalk.cyan('→'),
     bullet: chalk.gray('•'),
-    database: '🗄️',
+    database: '▣',
     postgres: '🐘',
   },
 }

@@ -53,7 +53,7 @@ export async function promptEngine(): Promise<string> {
 
   // Build choices from available engines
   const choices = engines.map((e) => ({
-    name: `${engineIcons[e.name] || '🗄️'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    name: `${engineIcons[e.name] || '▣'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
@@ -227,7 +227,7 @@ export async function promptContainerSelect(
       name: 'container',
       message,
       choices: containers.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${
+        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${
           c.status === 'running'
             ? chalk.green('● running')
             : chalk.gray('○ stopped')
@@ -243,19 +243,25 @@ export async function promptContainerSelect(
 
 /**
  * Prompt for database name
+ * @param defaultName - Default value for the database name
+ * @param engine - Database engine (mysql shows "schema" terminology)
  */
 export async function promptDatabaseName(
   defaultName?: string,
+  engine?: string,
 ): Promise<string> {
+  // MySQL uses "schema" terminology (database and schema are synonymous)
+  const label = engine === 'mysql' ? 'Database (schema) name:' : 'Database name:'
+
   const { database } = await inquirer.prompt<{ database: string }>([
     {
       type: 'input',
       name: 'database',
-      message: 'Database name:',
+      message: label,
       default: defaultName,
       validate: (input: string) => {
         if (!input) return 'Database name is required'
-        // PostgreSQL database naming rules
+        // PostgreSQL database naming rules (also valid for MySQL)
         if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(input)) {
           return 'Database name must start with a letter or underscore and contain only letters, numbers, underscores, and hyphens'
         }
@@ -282,12 +288,12 @@ export type CreateOptions = {
  * Full interactive create flow
  */
 export async function promptCreateOptions(): Promise<CreateOptions> {
-  console.log(chalk.cyan('\n  🗄️  Create New Database Container\n'))
+  console.log(chalk.cyan('\n  ▣  Create New Database Container\n'))
 
   const engine = await promptEngine()
   const version = await promptVersion(engine)
   const name = await promptContainerName()
-  const database = await promptDatabaseName(name) // Default to container name
+  const database = await promptDatabaseName(name, engine) // Default to container name
 
   // Get engine-specific default port
   const engineDefaults = getEngineDefaults(engine)

@@ -65,7 +65,7 @@ async function displayContainerInfo(
     return
   }
 
-  const icon = engineIcons[config.engine] || '🗄️'
+  const icon = engineIcons[config.engine] || '▣'
   const statusDisplay =
     actualStatus === 'running'
       ? chalk.green('● running')
@@ -168,7 +168,7 @@ async function displayAllContainersInfo(
         ? chalk.green('● running')
         : chalk.gray('○ stopped')
 
-    const icon = engineIcons[container.engine] || '🗄️'
+    const icon = engineIcons[container.engine] || '▣'
     const engineDisplay = `${icon} ${container.engine}`
 
     console.log(
@@ -251,7 +251,7 @@ export const infoCommand = new Command('info')
             choices: [
               { name: 'All containers', value: 'all' },
               ...containers.map((c) => ({
-                name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine})`)}`,
+                name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine})`)}`,
                 value: c.name,
               })),
             ],

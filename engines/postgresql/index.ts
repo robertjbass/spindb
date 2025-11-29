@@ -12,6 +12,8 @@ import {
   getBinaryUrl,
   SUPPORTED_MAJOR_VERSIONS,
   fetchAvailableVersions,
+  getLatestVersion,
+  FALLBACK_VERSION_MAP,
 } from './binary-urls'
 import { detectBackupFormat, restoreBackup } from './restore'
 import type {
@@ -51,13 +53,41 @@ export class PostgreSQLEngine extends BaseEngine {
   }
 
   /**
+   * Resolve a version string to a full version.
+   * If given a major version like '17', resolves to '17.7.0'.
+   * If already a full version like '17.7.0', returns as-is.
+   */
+  resolveFullVersion(version: string): string {
+    // Check if already a full version (has at least one dot with numbers after)
+    if (/^\d+\.\d+/.test(version)) {
+      return version
+    }
+    // It's a major version, resolve using fallback map (sync, no network)
+    return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
+  }
+
+  /**
+   * Resolve version asynchronously (tries network first for latest)
+   */
+  async resolveFullVersionAsync(version: string): Promise<string> {
+    // Check if already a full version
+    if (/^\d+\.\d+/.test(version)) {
+      return version
+    }
+    // Resolve from network/cache
+    return getLatestVersion(version)
+  }
+
+  /**
    * Get binary path for current platform
+   * Uses full version for directory naming (e.g., postgresql-17.7.0-darwin-arm64)
    */
   getBinaryPath(version: string): string {
+    const fullVersion = this.resolveFullVersion(version)
     const { platform: p, arch: a } = this.getPlatformInfo()
     return paths.getBinaryPath({
       engine: 'postgresql',
-      version,
+      version: fullVersion,
       platform: p,
       arch: a,
     })

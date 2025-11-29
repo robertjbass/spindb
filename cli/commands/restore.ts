@@ -246,7 +246,7 @@ export const restoreCommand = new Command('restore')
         // Get database name
         let databaseName = options.database
         if (!databaseName) {
-          databaseName = await promptDatabaseName(containerName)
+          databaseName = await promptDatabaseName(containerName, engineName)
         }
 
         // At this point backupPath is guaranteed to be set

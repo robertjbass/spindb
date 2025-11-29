@@ -290,6 +290,98 @@ const mysqlDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// Optional Tools (engine-agnostic)
+// =============================================================================
+
+/**
+ * usql - Universal SQL client
+ * Works with PostgreSQL, MySQL, SQLite, and 20+ other databases
+ * https://github.com/xo/usql
+ */
+export const usqlDependency: Dependency = {
+  name: 'usql',
+  binary: 'usql',
+  description:
+    'Universal SQL client with auto-completion, syntax highlighting, and multi-database support',
+  packages: {
+    brew: {
+      package: 'xo/xo/usql',
+      preInstall: ['brew tap xo/xo'],
+    },
+    // Note: usql is not in standard Linux package repos, must use manual install
+  },
+  manualInstall: {
+    darwin: [
+      'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+      'Then run: brew tap xo/xo && brew install xo/xo/usql',
+    ],
+    linux: [
+      'Download from GitHub releases: https://github.com/xo/usql/releases',
+      'Extract and move to PATH: sudo mv usql /usr/local/bin/',
+      'Or install via Go: go install github.com/xo/usql@latest',
+    ],
+  },
+}
+
+/**
+ * pgcli - PostgreSQL CLI with auto-completion and syntax highlighting
+ * https://github.com/dbcli/pgcli
+ */
+export const pgcliDependency: Dependency = {
+  name: 'pgcli',
+  binary: 'pgcli',
+  description:
+    'PostgreSQL CLI with intelligent auto-completion and syntax highlighting',
+  packages: {
+    brew: { package: 'pgcli' },
+    apt: { package: 'pgcli' },
+    dnf: { package: 'pgcli' },
+    yum: { package: 'pgcli' },
+    pacman: { package: 'pgcli' },
+  },
+  manualInstall: {
+    darwin: [
+      'Install with Homebrew: brew install pgcli',
+      'Or with pip: pip install pgcli',
+    ],
+    linux: [
+      'Debian/Ubuntu: sudo apt install pgcli',
+      'Fedora: sudo dnf install pgcli',
+      'Or with pip: pip install pgcli',
+    ],
+  },
+}
+
+/**
+ * mycli - MySQL CLI with auto-completion and syntax highlighting
+ * https://github.com/dbcli/mycli
+ */
+export const mycliDependency: Dependency = {
+  name: 'mycli',
+  binary: 'mycli',
+  description:
+    'MySQL/MariaDB CLI with intelligent auto-completion and syntax highlighting',
+  packages: {
+    brew: { package: 'mycli' },
+    apt: { package: 'mycli' },
+    dnf: { package: 'mycli' },
+    yum: { package: 'mycli' },
+    pacman: { package: 'mycli' },
+  },
+  manualInstall: {
+    darwin: [
+      'Install with Homebrew: brew install mycli',
+      'Or with pip: pip install mycli',
+    ],
+    linux: [
+      'Debian/Ubuntu: sudo apt install mycli',
+      'Fedora: sudo dnf install mycli',
+      'Or with pip: pip install mycli',
+    ],
+  },
+}
+
+// =============================================================================
 // Registry
 // =============================================================================
 
