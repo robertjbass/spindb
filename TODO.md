@@ -22,6 +22,7 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
+- [ ] **MongoDB support** - Add MongoDB engine
 - [ ] **Health checks** - Periodic connection tests to verify containers are responsive
 - [ ] **Offline Support** - Package binaries locally for offline installation
 - [ ] **Binary caching** - Cache downloaded binaries locally to avoid re-downloading
@@ -60,7 +61,12 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Terminal-based IDE** - Full TUI (terminal UI) for browsing tables, running queries, viewing results, editing data inline (think `lazygit` but for databases)
   - Potential libraries: [blessed](https://github.com/chjj/blessed), [ink](https://github.com/vadimdemedes/ink), [terminal-kit](https://github.com/cronvel/terminal-kit)
   - Inspiration: `lazygit`, `k9s`, `pgcli`
-
+- [ ] **Multi-database container backup** - Bundle all databases in a container into a single proprietary archive format with metadata
+- [ ] **Multi-database container restore** - Restore all databases from a single proprietary archive format with metadata
+- [ ] **Windows support** - Add Windows support for PostgreSQL
+- [ ] **Windows support** - Add Windows support for MySQL
+- [ ] **Offline support** - Add offline support for PostgreSQL
+- [ ] **Offline support** - Add offline support for MySQL
 ---
 
 ## Known Limitations
