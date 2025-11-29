@@ -48,7 +48,7 @@ export const listCommand = new Command('list')
             ? chalk.green('● running')
             : chalk.gray('○ stopped')
 
-        const engineIcon = engineIcons[container.engine] || '🗄️'
+        const engineIcon = engineIcons[container.engine] || '▣'
         const engineDisplay = `${engineIcon} ${container.engine}`
 
         console.log(

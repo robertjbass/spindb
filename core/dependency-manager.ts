@@ -15,6 +15,9 @@ import {
   packageManagers,
   getEngineDependencies,
   getUniqueDependencies,
+  usqlDependency,
+  pgcliDependency,
+  mycliDependency,
 } from '../config/os-dependencies'
 import { platformService } from './platform-service'
 
@@ -420,4 +423,136 @@ export async function getAllDependencyReports(): Promise<
     engines.map((engine) => getDependencyReport(engine)),
   )
   return reports
+}
+
+// =============================================================================
+// usql (Enhanced Shell) Support
+// =============================================================================
+
+/**
+ * Check if usql is installed
+ */
+export async function isUsqlInstalled(): Promise<boolean> {
+  const status = await checkDependency(usqlDependency)
+  return status.installed
+}
+
+/**
+ * Get usql dependency status
+ */
+export async function getUsqlStatus(): Promise<DependencyStatus> {
+  return checkDependency(usqlDependency)
+}
+
+/**
+ * Install usql using the detected package manager
+ */
+export async function installUsql(
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult> {
+  return installDependency(usqlDependency, packageManager)
+}
+
+/**
+ * Get usql manual installation instructions
+ */
+export function getUsqlManualInstructions(
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  return getManualInstallInstructions(usqlDependency, platform)
+}
+
+/**
+ * Get the usql dependency definition
+ */
+export function getUsqlDependency(): Dependency {
+  return usqlDependency
+}
+
+// =============================================================================
+// pgcli (PostgreSQL Enhanced Shell) Support
+// =============================================================================
+
+/**
+ * Check if pgcli is installed
+ */
+export async function isPgcliInstalled(): Promise<boolean> {
+  const status = await checkDependency(pgcliDependency)
+  return status.installed
+}
+
+/**
+ * Get pgcli dependency status
+ */
+export async function getPgcliStatus(): Promise<DependencyStatus> {
+  return checkDependency(pgcliDependency)
+}
+
+/**
+ * Install pgcli using the detected package manager
+ */
+export async function installPgcli(
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult> {
+  return installDependency(pgcliDependency, packageManager)
+}
+
+/**
+ * Get pgcli manual installation instructions
+ */
+export function getPgcliManualInstructions(
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  return getManualInstallInstructions(pgcliDependency, platform)
+}
+
+/**
+ * Get the pgcli dependency definition
+ */
+export function getPgcliDependency(): Dependency {
+  return pgcliDependency
+}
+
+// =============================================================================
+// mycli (MySQL Enhanced Shell) Support
+// =============================================================================
+
+/**
+ * Check if mycli is installed
+ */
+export async function isMycliInstalled(): Promise<boolean> {
+  const status = await checkDependency(mycliDependency)
+  return status.installed
+}
+
+/**
+ * Get mycli dependency status
+ */
+export async function getMycliStatus(): Promise<DependencyStatus> {
+  return checkDependency(mycliDependency)
+}
+
+/**
+ * Install mycli using the detected package manager
+ */
+export async function installMycli(
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult> {
+  return installDependency(mycliDependency, packageManager)
+}
+
+/**
+ * Get mycli manual installation instructions
+ */
+export function getMycliManualInstructions(
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  return getManualInstallInstructions(mycliDependency, platform)
+}
+
+/**
+ * Get the mycli dependency definition
+ */
+export function getMycliDependency(): Dependency {
+  return mycliDependency
 }

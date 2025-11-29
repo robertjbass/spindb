@@ -53,7 +53,7 @@ export async function promptEngine(): Promise<string> {
 
   // Build choices from available engines
   const choices = engines.map((e) => ({
-    name: `${engineIcons[e.name] || '🗄️'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    name: `${engineIcons[e.name] || '▣'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
@@ -227,7 +227,7 @@ export async function promptContainerSelect(
       name: 'container',
       message,
       choices: containers.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${
+        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${
           c.status === 'running'
             ? chalk.green('● running')
             : chalk.gray('○ stopped')
@@ -282,7 +282,7 @@ export type CreateOptions = {
  * Full interactive create flow
  */
 export async function promptCreateOptions(): Promise<CreateOptions> {
-  console.log(chalk.cyan('\n  🗄️  Create New Database Container\n'))
+  console.log(chalk.cyan('\n  ▣  Create New Database Container\n'))
 
   const engine = await promptEngine()
   const version = await promptVersion(engine)

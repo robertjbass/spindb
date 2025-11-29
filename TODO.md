@@ -14,22 +14,10 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 - [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f` / `mysql <`)
 - [ ] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
-- [x] **Engine/binary management** - Menu to list installed PostgreSQL versions, install new versions, uninstall unused versions (free up disk space)
-- [x] **MySQL support** - Add MySQL engine using system-installed MySQL binaries
-- [x] **MariaDB support** - Automatically detect and support MariaDB as MySQL alternative on Linux
 
 ### Medium Priority
-- [x] **Container rename** - Rename a container without cloning/deleting (via Edit menu and `spindb edit --name`)
-- [x] **Container port change** - Change container port (via Edit menu and `spindb edit --port`)
 - [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
-- [x] **Export connection string** - Copy connection string to clipboard (via container submenu and `spindb url --copy`)
-- [x] **Container info command** - Show detailed container info via `spindb info [name]`
 - [ ] **Multiple databases per container** - List/create/delete databases within a container
-- [x] **Fetch available versions** - Query Maven Central API to show all available PostgreSQL versions instead of hardcoded list
-- [x] **Engine-aware shell** - Open shell uses psql for PostgreSQL, mysql for MySQL
-- [x] **Cross-engine dump detection** - Detect and error when restoring wrong engine dump (e.g., MySQL dump to PostgreSQL)
-- [x] **Version compatibility validation** - Warn/error when dump version is incompatible with client version
-- [x] **CLI parity** - All interactive menu features available via CLI commands (`spindb engines`, `spindb edit`, `spindb url`, `spindb info`)
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
@@ -63,6 +51,7 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ## Stretch Goals
 
+- [ ] **Desktop GUI (Tauri)** - System tray app showing running database status, with full GUI for container management. Separate repository.
 - [ ] **Terminal-based IDE** - Full TUI (terminal UI) for browsing tables, running queries, viewing results, editing data inline (think `lazygit` but for databases)
   - Potential libraries: [blessed](https://github.com/chjj/blessed), [ink](https://github.com/vadimdemedes/ink), [terminal-kit](https://github.com/cronvel/terminal-kit)
   - Inspiration: `lazygit`, `k9s`, `pgcli`
@@ -142,16 +131,38 @@ Located in `tests/integration/helpers.ts`:
 
 ### Future Improvements
 
-- [ ] **Port pre-allocation** - Reserve ports at test start to prevent race conditions
 - [ ] **Parallel test isolation** - Run PostgreSQL and MySQL tests in parallel safely
 - [ ] **Backup/restore round-trip** - Dump → delete row → restore → verify row is back
 - [ ] **Binary download test** - Test first-time PostgreSQL binary download (CI only)
-- [x] **Cross-engine format detection tests** - Unit tests for detecting wrong-engine dumps
-- [x] **MySQL dump version parsing tests** - Unit tests for parsing MySQL/MariaDB dump file headers
-- [x] **MySQL 5.7 fixture** - Test fixture for MySQL 5.7 LTS version dumps
 
 
 ---
 
-# Triage:
+## Desktop GUI Architecture (Future)
 
+**Framework:** Tauri v2 (Rust backend + React frontend)
+**Repository:** Separate repo (not monorepo) - avoids restructuring CLI, GUI shells out to `spindb` commands
+**Bundle size:** ~10-15MB (vs ~150MB for Electron)
+
+### Core Features (v1)
+- System tray icon showing running database count/status
+- Click tray icon to open main GUI window
+- List all containers with status indicators
+- Start/stop/delete containers
+- Create new containers
+- View connection strings
+
+### Optional Features (user opt-in)
+- Auto-updates via `tauri-plugin-updater`
+- Launch on system startup via `tauri-plugin-autostart`
+
+### Technical Approach
+- Rust backend: Thin wrappers around `spindb` CLI commands via `std::process::Command`
+- React frontend: Full TypeScript, component library TBD (Radix, shadcn, etc.)
+- IPC: Tauri's `invoke` for React → Rust communication
+- State: Poll `spindb list --json` periodically or on user action
+
+### Future Enhancements
+- Tray dropdown menu with quick start/stop (instead of opening full GUI)
+- Native notifications for container events
+- Database browser/query tool

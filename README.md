@@ -48,7 +48,7 @@ spindb connect mydb
 | `spindb info [name]` | Show container details (or all containers) |
 | `spindb start [name]` | Start a container |
 | `spindb stop [name]` | Stop a container |
-| `spindb connect [name]` | Connect with psql/mysql shell |
+| `spindb connect [name]` | Connect with psql/mysql shell (`--pgcli`/`--mycli` for enhanced) |
 | `spindb url [name]` | Output connection string |
 | `spindb edit [name]` | Edit container properties (rename, port) |
 | `spindb restore [name] [backup]` | Restore a backup file |
@@ -106,6 +106,44 @@ Data is stored in `~/.spindb/`:
 │           └── mysql.log
 └── config.json
 ```
+
+## How Data Persists
+
+SpinDB runs database servers as **native processes** on your machine—no Docker or virtualization involved. When you start a container, SpinDB launches the actual `postgres` or `mysqld` binary, which listens on localhost at your configured port.
+
+### What happens when you start a container
+
+1. SpinDB runs the database server binary (e.g., `pg_ctl start`)
+2. The server binds to `127.0.0.1` on your configured port
+3. A **PID file** is created to track the running process
+4. Logs are written to the container's log file
+
+### What happens when you stop a container
+
+1. SpinDB sends a shutdown signal to the database process
+2. The server flushes any pending writes to disk
+3. The **PID file is removed**
+4. Your data remains safely in the data directory
+
+### Where your data lives
+
+All database files persist in the container's `data/` directory:
+
+```
+~/.spindb/containers/postgresql/mydb/
+├── container.json    # Container configuration (port, version, etc.)
+├── postgres.log      # Server logs
+└── data/             # ← Your actual database files live here
+    ├── base/         # Table data
+    ├── pg_wal/       # Transaction logs
+    └── ...
+```
+
+The `data/` directory is a standard PostgreSQL/MySQL data directory. Stopping and starting a container doesn't affect your data—only the PID file changes.
+
+### How SpinDB knows if a container is running
+
+SpinDB checks for the PID file and verifies the process is still alive. No PID file (or dead process) = stopped container.
 
 ## Client Tools
 
@@ -204,6 +242,18 @@ spindb start test-branch
 ```bash
 # Interactive shell (auto-detects engine)
 spindb connect mydb
+
+# Use pgcli/mycli for enhanced shell (dropdown auto-completion)
+spindb connect mydb --pgcli     # PostgreSQL
+spindb connect mydb --mycli     # MySQL
+
+# Install pgcli/mycli and connect in one command
+spindb connect mydb --install-pgcli
+spindb connect mydb --install-mycli
+
+# Use usql for universal SQL client (works with both engines)
+spindb connect mydb --tui
+spindb connect mydb --install-tui
 
 # Or use connection string directly
 psql postgresql://postgres@localhost:5432/mydb

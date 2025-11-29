@@ -33,7 +33,19 @@ import { defaults } from '../../config/defaults'
 import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import type { EngineName } from '../../types'
 import inquirer from 'inquirer'
-import { getMissingDependencies } from '../../core/dependency-manager'
+import {
+  getMissingDependencies,
+  isUsqlInstalled,
+  isPgcliInstalled,
+  isMycliInstalled,
+  detectPackageManager,
+  installUsql,
+  installPgcli,
+  installMycli,
+  getUsqlManualInstructions,
+  getPgcliManualInstructions,
+  getMycliManualInstructions,
+} from '../../core/dependency-manager'
 import {
   getMysqldPath,
   getMysqlVersion,
@@ -55,6 +67,19 @@ type MenuChoice =
 const engineIcons: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
+}
+
+/**
+ * Helper to pause and wait for user to press Enter
+ */
+async function pressEnterToContinue(): Promise<void> {
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to continue...'),
+    },
+  ])
 }
 
 async function showMainMenu(): Promise<void> {
@@ -88,12 +113,12 @@ async function showMainMenu(): Promise<void> {
   const choices: MenuChoice[] = [
     ...(hasContainers
       ? [
-          { name: `${chalk.cyan('◉')} List containers`, value: 'list' },
+          { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
           { name: `${chalk.green('+')} Create new container`, value: 'create' },
         ]
       : [
           { name: `${chalk.green('+')} Create new container`, value: 'create' },
-          { name: `${chalk.cyan('◉')} List containers`, value: 'list' },
+          { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
         ]),
     {
       name: canStart
@@ -415,7 +440,7 @@ async function handleList(): Promise<void> {
   console.log()
   const containerChoices = [
     ...containers.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${
+      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${
         c.status === 'running'
           ? chalk.green('● running')
           : chalk.gray('○ stopped')
@@ -435,6 +460,7 @@ async function handleList(): Promise<void> {
       name: 'selectedContainer',
       message: 'Select a container for more options:',
       choices: containerChoices,
+      pageSize: 15,
     },
   ])
 
@@ -473,7 +499,7 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
     // Start or Stop depending on current state
     !isRunning
       ? { name: `${chalk.green('▶')} Start container`, value: 'start' }
-      : { name: `${chalk.yellow('■')} Stop container`, value: 'stop' },
+      : { name: `${chalk.red('■')} Stop container`, value: 'stop' },
     {
       name: isRunning
         ? `${chalk.blue('⌘')} Open shell`
@@ -496,10 +522,16 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       disabled: !isRunning ? false : 'Stop container first',
     },
     { name: `${chalk.magenta('⎘')} Copy connection string`, value: 'copy' },
-    { name: `${chalk.red('✕')} Delete container`, value: 'delete' },
+    {
+      name: !isRunning
+        ? `${chalk.red('✕')} Delete container`
+        : chalk.gray('✕ Delete container'),
+      value: 'delete',
+      disabled: !isRunning ? false : 'Stop container first',
+    },
     new inquirer.Separator(),
-    { name: `${chalk.blue('←')} Back to container list`, value: 'back' },
-    { name: `${chalk.blue('🏠')} Back to main menu`, value: 'main' },
+    { name: `${chalk.blue('←')} Back to containers`, value: 'back' },
+    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
   ]
 
   const { action } = await inquirer.prompt<{ action: string }>([
@@ -508,6 +540,7 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       name: 'action',
       message: 'What would you like to do?',
       choices: actionChoices,
+      pageSize: 15,
     },
   ])
 
@@ -680,15 +713,222 @@ async function handleOpenShell(containerName: string): Promise<void> {
   const engine = getEngine(config.engine)
   const connectionString = engine.getConnectionString(config)
 
+  // Check which enhanced shells are installed
+  const usqlInstalled = await isUsqlInstalled()
+  const pgcliInstalled = await isPgcliInstalled()
+  const mycliInstalled = await isMycliInstalled()
+
+  type ShellChoice =
+    | 'default'
+    | 'usql'
+    | 'install-usql'
+    | 'pgcli'
+    | 'install-pgcli'
+    | 'mycli'
+    | 'install-mycli'
+    | 'back'
+
+  const defaultShellName = config.engine === 'mysql' ? 'mysql' : 'psql'
+  const engineSpecificCli = config.engine === 'mysql' ? 'mycli' : 'pgcli'
+  const engineSpecificInstalled =
+    config.engine === 'mysql' ? mycliInstalled : pgcliInstalled
+
+  const choices: Array<{ name: string; value: ShellChoice }> = [
+    {
+      name: `>_ Use default shell (${defaultShellName})`,
+      value: 'default',
+    },
+  ]
+
+  // Engine-specific enhanced CLI (pgcli for PostgreSQL, mycli for MySQL)
+  if (engineSpecificInstalled) {
+    choices.push({
+      name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
+      value: config.engine === 'mysql' ? 'mycli' : 'pgcli',
+    })
+  } else {
+    choices.push({
+      name: `↓ Install ${engineSpecificCli} (enhanced features, recommended)`,
+      value: config.engine === 'mysql' ? 'install-mycli' : 'install-pgcli',
+    })
+  }
+
+  // usql - universal option
+  if (usqlInstalled) {
+    choices.push({
+      name: '⚡ Use usql (universal SQL client)',
+      value: 'usql',
+    })
+  } else {
+    choices.push({
+      name: '↓ Install usql (universal SQL client)',
+      value: 'install-usql',
+    })
+  }
+
+  choices.push({
+    name: `${chalk.blue('←')} Back`,
+    value: 'back',
+  })
+
+  const { shellChoice } = await inquirer.prompt<{ shellChoice: ShellChoice }>([
+    {
+      type: 'list',
+      name: 'shellChoice',
+      message: 'Select shell option:',
+      choices,
+      pageSize: 10,
+    },
+  ])
+
+  if (shellChoice === 'back') {
+    return
+  }
+
+  // Handle pgcli installation
+  if (shellChoice === 'install-pgcli') {
+    console.log()
+    console.log(info('Installing pgcli for enhanced PostgreSQL shell...'))
+    const pm = await detectPackageManager()
+    if (pm) {
+      const result = await installPgcli(pm)
+      if (result.success) {
+        console.log(success('pgcli installed successfully!'))
+        console.log()
+        await launchShell(containerName, config, connectionString, 'pgcli')
+      } else {
+        console.error(error(`Failed to install pgcli: ${result.error}`))
+        console.log()
+        console.log(chalk.gray('Manual installation:'))
+        for (const instruction of getPgcliManualInstructions()) {
+          console.log(chalk.cyan(`  ${instruction}`))
+        }
+        console.log()
+        await pressEnterToContinue()
+      }
+    } else {
+      console.error(error('No supported package manager found'))
+      console.log()
+      console.log(chalk.gray('Manual installation:'))
+      for (const instruction of getPgcliManualInstructions()) {
+        console.log(chalk.cyan(`  ${instruction}`))
+      }
+      console.log()
+      await pressEnterToContinue()
+    }
+    return
+  }
+
+  // Handle mycli installation
+  if (shellChoice === 'install-mycli') {
+    console.log()
+    console.log(info('Installing mycli for enhanced MySQL shell...'))
+    const pm = await detectPackageManager()
+    if (pm) {
+      const result = await installMycli(pm)
+      if (result.success) {
+        console.log(success('mycli installed successfully!'))
+        console.log()
+        await launchShell(containerName, config, connectionString, 'mycli')
+      } else {
+        console.error(error(`Failed to install mycli: ${result.error}`))
+        console.log()
+        console.log(chalk.gray('Manual installation:'))
+        for (const instruction of getMycliManualInstructions()) {
+          console.log(chalk.cyan(`  ${instruction}`))
+        }
+        console.log()
+        await pressEnterToContinue()
+      }
+    } else {
+      console.error(error('No supported package manager found'))
+      console.log()
+      console.log(chalk.gray('Manual installation:'))
+      for (const instruction of getMycliManualInstructions()) {
+        console.log(chalk.cyan(`  ${instruction}`))
+      }
+      console.log()
+      await pressEnterToContinue()
+    }
+    return
+  }
+
+  // Handle usql installation
+  if (shellChoice === 'install-usql') {
+    console.log()
+    console.log(info('Installing usql for enhanced shell experience...'))
+    const pm = await detectPackageManager()
+    if (pm) {
+      const result = await installUsql(pm)
+      if (result.success) {
+        console.log(success('usql installed successfully!'))
+        console.log()
+        await launchShell(containerName, config, connectionString, 'usql')
+      } else {
+        console.error(error(`Failed to install usql: ${result.error}`))
+        console.log()
+        console.log(chalk.gray('Manual installation:'))
+        for (const instruction of getUsqlManualInstructions()) {
+          console.log(chalk.cyan(`  ${instruction}`))
+        }
+        console.log()
+        await pressEnterToContinue()
+      }
+    } else {
+      console.error(error('No supported package manager found'))
+      console.log()
+      console.log(chalk.gray('Manual installation:'))
+      for (const instruction of getUsqlManualInstructions()) {
+        console.log(chalk.cyan(`  ${instruction}`))
+      }
+      console.log()
+      await pressEnterToContinue()
+    }
+    return
+  }
+
+  // Launch the selected shell
+  await launchShell(containerName, config, connectionString, shellChoice)
+}
+
+async function launchShell(
+  containerName: string,
+  config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
+  connectionString: string,
+  shellType: 'default' | 'usql' | 'pgcli' | 'mycli',
+): Promise<void> {
   console.log(info(`Connecting to ${containerName}...`))
   console.log()
 
-  // Determine shell command based on engine
+  // Determine shell command based on engine and shell type
   let shellCmd: string
   let shellArgs: string[]
   let installHint: string
 
-  if (config.engine === 'mysql') {
+  if (shellType === 'pgcli') {
+    // pgcli accepts connection strings
+    shellCmd = 'pgcli'
+    shellArgs = [connectionString]
+    installHint = 'brew install pgcli'
+  } else if (shellType === 'mycli') {
+    // mycli: mycli -h host -P port -u user database
+    shellCmd = 'mycli'
+    shellArgs = [
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(config.port),
+      '-u',
+      'root',
+      config.database,
+    ]
+    installHint = 'brew install mycli'
+  } else if (shellType === 'usql') {
+    // usql accepts connection strings directly for both PostgreSQL and MySQL
+    shellCmd = 'usql'
+    shellArgs = [connectionString]
+    installHint = 'brew tap xo/xo && brew install xo/xo/usql'
+  } else if (config.engine === 'mysql') {
     shellCmd = 'mysql'
     // MySQL connection: mysql -u root -h 127.0.0.1 -P port database
     shellArgs = [
@@ -719,7 +959,7 @@ async function handleOpenShell(containerName: string): Promise<void> {
       console.log(chalk.gray('  Connect manually with:'))
       console.log(chalk.cyan(`  ${connectionString}`))
       console.log()
-      console.log(chalk.gray(`  Install ${config.engine} client:`))
+      console.log(chalk.gray(`  Install ${shellCmd}:`))
       console.log(chalk.cyan(`  ${installHint}`))
     }
   })
@@ -842,7 +1082,7 @@ async function handleRestore(): Promise<void> {
   // Build choices: running containers + create new option
   const choices = [
     ...running.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '🗄️'} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
       value: c.name,
       short: c.name,
     })),
@@ -862,6 +1102,7 @@ async function handleRestore(): Promise<void> {
       name: 'selectedContainer',
       message: 'Select container to restore to:',
       choices,
+      pageSize: 15,
     },
   ])
 
@@ -1437,7 +1678,7 @@ async function handleEditContainer(
     },
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back to container`, value: 'back' },
-    { name: `${chalk.blue('🏠')} Back to main menu`, value: 'main' },
+    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
   ]
 
   const { field } = await inquirer.prompt<{ field: string }>([
@@ -1446,6 +1687,7 @@ async function handleEditContainer(
       name: 'field',
       message: 'Select field to edit:',
       choices: editChoices,
+      pageSize: 10,
     },
   ])
 
@@ -1809,7 +2051,7 @@ async function handleEngines(): Promise<void> {
 
   // PostgreSQL rows
   for (const engine of pgEngines) {
-    const icon = engineIcons[engine.engine] || '🗄️'
+    const icon = engineIcons[engine.engine] || '▣'
     const platformInfo = `${engine.platform}-${engine.arch}`
 
     console.log(
