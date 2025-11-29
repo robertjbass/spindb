@@ -271,6 +271,9 @@ export const restoreCommand = new Command('restore')
         await engine.createDatabase(config, databaseName)
         dbSpinner.succeed(`Database "${databaseName}" ready`)
 
+        // Add database to container's databases array
+        await containerManager.addDatabase(containerName, databaseName)
+
         // Restore backup
         const restoreSpinner = createSpinner('Restoring backup...')
         restoreSpinner.start()

@@ -4,6 +4,7 @@ export type ContainerConfig = {
   version: string
   port: number
   database: string
+  databases?: string[]
   created: string
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
@@ -54,6 +55,17 @@ export type RestoreResult = {
   stdout?: string
   stderr?: string
   code?: number
+}
+
+export type BackupOptions = {
+  database: string
+  format: 'sql' | 'dump'
+}
+
+export type BackupResult = {
+  path: string
+  format: string
+  size: number
 }
 
 export type DumpResult = {

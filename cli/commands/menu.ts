@@ -7,6 +7,9 @@ import {
   promptContainerSelect,
   promptContainerName,
   promptDatabaseName,
+  promptDatabaseSelect,
+  promptBackupFormat,
+  promptBackupFilename,
   promptCreateOptions,
   promptConfirm,
   promptInstallDependencies,
@@ -143,6 +146,13 @@ async function showMainMenu(): Promise<void> {
       disabled: canRestore ? false : 'No running containers',
     },
     {
+      name: canRestore
+        ? `${chalk.magenta('↑')} Backup database`
+        : chalk.gray('↑ Backup database'),
+      value: 'backup',
+      disabled: canRestore ? false : 'No running containers',
+    },
+    {
       name: canClone
         ? `${chalk.cyan('⧉')} Clone a container`
         : chalk.gray('⧉ Clone a container'),
@@ -185,6 +195,9 @@ async function showMainMenu(): Promise<void> {
       break
     case 'restore':
       await handleRestore()
+      break
+    case 'backup':
+      await handleBackup()
       break
     case 'clone':
       await handleClone()
@@ -1537,6 +1550,148 @@ async function handleRestore(): Promise<void> {
   }
 
   // Wait for user to see the result before returning to menu
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to continue...'),
+    },
+  ])
+}
+
+/**
+ * Generate a timestamp string for backup filenames
+ */
+function generateBackupTimestamp(): string {
+  const now = new Date()
+  return now.toISOString().replace(/:/g, '').split('.')[0]
+}
+
+/**
+ * Get file extension for backup format
+ */
+function getBackupExtension(format: 'sql' | 'dump', engine: string): string {
+  if (format === 'sql') {
+    return '.sql'
+  }
+  return engine === 'mysql' ? '.sql.gz' : '.dump'
+}
+
+async function handleBackup(): Promise<void> {
+  const containers = await containerManager.list()
+  const running = containers.filter((c) => c.status === 'running')
+
+  if (running.length === 0) {
+    console.log(warning('No running containers. Start a container first.'))
+    await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to continue...'),
+      },
+    ])
+    return
+  }
+
+  // Select container
+  const containerName = await promptContainerSelect(
+    running,
+    'Select container to backup:',
+  )
+  if (!containerName) return
+
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(error(`Container "${containerName}" not found`))
+    return
+  }
+
+  const engine = getEngine(config.engine)
+
+  // Check for required tools
+  const depsSpinner = createSpinner('Checking required tools...')
+  depsSpinner.start()
+
+  let missingDeps = await getMissingDependencies(config.engine)
+  if (missingDeps.length > 0) {
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      config.engine,
+    )
+
+    if (!installed) {
+      return
+    }
+
+    missingDeps = await getMissingDependencies(config.engine)
+    if (missingDeps.length > 0) {
+      console.log(
+        error(`Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+      )
+      return
+    }
+
+    console.log(chalk.green('  ✓ All required tools are now available'))
+    console.log()
+  } else {
+    depsSpinner.succeed('Required tools available')
+  }
+
+  // Select database
+  const databases = config.databases || [config.database]
+  let databaseName: string
+
+  if (databases.length > 1) {
+    databaseName = await promptDatabaseSelect(databases, 'Select database to backup:')
+  } else {
+    databaseName = databases[0]
+  }
+
+  // Select format
+  const format = await promptBackupFormat(config.engine)
+
+  // Get filename
+  const defaultFilename = `${containerName}-${databaseName}-backup-${generateBackupTimestamp()}`
+  const filename = await promptBackupFilename(defaultFilename)
+
+  // Build output path
+  const extension = getBackupExtension(format, config.engine)
+  const outputPath = join(process.cwd(), `${filename}${extension}`)
+
+  // Create backup
+  const backupSpinner = createSpinner(
+    `Creating ${format === 'sql' ? 'SQL' : 'dump'} backup of "${databaseName}"...`,
+  )
+  backupSpinner.start()
+
+  try {
+    const result = await engine.backup(config, outputPath, {
+      database: databaseName,
+      format,
+    })
+
+    backupSpinner.succeed('Backup created successfully')
+
+    console.log()
+    console.log(success('Backup complete'))
+    console.log()
+    console.log(chalk.gray('  File:'), chalk.cyan(result.path))
+    console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
+    console.log(chalk.gray('  Format:'), chalk.white(result.format))
+    console.log()
+  } catch (err) {
+    const e = err as Error
+    backupSpinner.fail('Backup failed')
+    console.log()
+    console.log(error(e.message))
+    console.log()
+  }
+
+  // Wait for user to see the result
   await inquirer.prompt([
     {
       type: 'input',

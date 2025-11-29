@@ -7,6 +7,7 @@
 import { spawn } from 'child_process'
 import { createReadStream } from 'fs'
 import { open } from 'fs/promises'
+import { createGunzip } from 'zlib'
 import { getMysqlClientPath } from './binary-detection'
 import { validateRestoreCompatibility } from './version-validator'
 import { getEngineDefaults } from '../../config/defaults'
@@ -200,6 +201,7 @@ export async function restoreBackup(
 
   // Restore using mysql client
   // CLI: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
+  // For compressed files: gunzip -c {file} | mysql ...
   return new Promise((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
 
@@ -207,9 +209,21 @@ export async function restoreBackup(
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
-    // Pipe backup file to stdin
+    // Pipe backup file to stdin, decompressing if necessary
     const fileStream = createReadStream(backupPath)
-    fileStream.pipe(proc.stdin)
+
+    if (format.format === 'compressed') {
+      // Decompress gzipped file before piping to mysql
+      const gunzip = createGunzip()
+      fileStream.pipe(gunzip).pipe(proc.stdin)
+
+      // Handle gunzip errors
+      gunzip.on('error', (err) => {
+        reject(new Error(`Failed to decompress backup file: ${err.message}`))
+      })
+    } else {
+      fileStream.pipe(proc.stdin)
+    }
 
     let stdout = ''
     let stderr = ''

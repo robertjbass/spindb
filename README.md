@@ -10,7 +10,7 @@ Spin up local PostgreSQL and MySQL databases without Docker. A lightweight alter
 - **Interactive menu** - Arrow-key navigation for all operations
 - **Auto port management** - Automatically finds available ports
 - **Clone containers** - Duplicate databases with all data
-- **Backup restore** - Restore pg_dump/mysqldump backups
+- **Backup & restore** - Create and restore pg_dump/mysqldump backups
 - **Custom database names** - Specify database name separate from container name
 - **Engine management** - View installed PostgreSQL versions and free up disk space
 - **Dynamic version selection** - Fetches available PostgreSQL versions from Maven Central
@@ -51,6 +51,7 @@ spindb connect mydb
 | `spindb connect [name]` | Connect with psql/mysql shell (`--pgcli`/`--mycli` for enhanced) |
 | `spindb url [name]` | Output connection string |
 | `spindb edit [name]` | Edit container properties (rename, port) |
+| `spindb backup [name]` | Create a database backup |
 | `spindb restore [name] [backup]` | Restore a backup file |
 | `spindb clone [source] [target]` | Clone a container |
 | `spindb delete [name]` | Delete a container |
@@ -303,6 +304,31 @@ psql $(spindb url mydb)
 # Copy connection string to clipboard
 spindb url mydb --copy
 ```
+
+### Backup databases
+
+```bash
+# Backup with default settings (SQL format, auto-generated filename)
+spindb backup mydb
+
+# Backup specific database in container
+spindb backup mydb --database my_app_db
+
+# Custom filename and output directory
+spindb backup mydb --name my-backup --output ./backups/
+
+# Choose format: sql (plain text) or dump (compressed/binary)
+spindb backup mydb --format sql     # Plain SQL (.sql)
+spindb backup mydb --format dump    # PostgreSQL custom format (.dump) / MySQL gzipped (.sql.gz)
+
+# Shorthand flags
+spindb backup mydb --sql            # Same as --format sql
+spindb backup mydb --dump           # Same as --format dump
+```
+
+**Backup formats:**
+- **SQL format** (`.sql`) - Plain text, universal, can be read/edited
+- **Dump format** - PostgreSQL uses custom format (`.dump`), MySQL uses gzipped SQL (`.sql.gz`)
 
 ### Edit containers
 

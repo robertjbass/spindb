@@ -32,6 +32,7 @@ cli/
 │   ├── connect.ts          # Connect to container shell
 │   ├── clone.ts            # Clone container command
 │   ├── restore.ts          # Restore from backup command
+│   ├── backup.ts           # Create database backup command
 │   ├── deps.ts             # Dependency management command (engine-agnostic)
 │   ├── engines.ts          # Engine list and delete commands
 │   ├── edit.ts             # Container rename/port editing
@@ -62,16 +63,19 @@ engines/
 │   ├── index.ts            # PostgreSQL engine implementation
 │   ├── binary-urls.ts      # Zonky.io URL builder for server binaries
 │   ├── binary-manager.ts   # PostgreSQL client tool management (psql, pg_restore)
+│   ├── backup.ts           # Backup creation using pg_dump
 │   ├── restore.ts          # Backup detection and restore
 │   └── version-validator.ts # Version compatibility checking
 └── mysql/
     ├── index.ts            # MySQL engine implementation
     ├── binary-detection.ts # System binary detection (mysqld, mysql, mysqldump)
+    ├── backup.ts           # Backup creation using mysqldump (with gzip compression)
     ├── restore.ts          # Backup detection and restore
     └── version-validator.ts # Version compatibility checking
 types/index.ts              # TypeScript interfaces
 tests/
 ├── unit/                   # Unit tests
+│   ├── backup.test.ts
 │   ├── error-handler.test.ts
 │   ├── transaction-manager.test.ts
 │   ├── version-validator.test.ts
@@ -97,6 +101,7 @@ Each engine folder should have parallel file structure for maintainability:
 ```
 engines/{engine}/
 ├── index.ts              # Main engine class (extends BaseEngine)
+├── backup.ts             # Backup creation (pg_dump/mysqldump wrapper)
 ├── restore.ts            # Backup format detection, restore logic, cross-engine error detection
 ├── version-validator.ts  # Version parsing, compatibility checking
 ├── binary-manager.ts     # Client tool installation/update (PostgreSQL only - downloads tools)
@@ -104,6 +109,7 @@ engines/{engine}/
 ```
 
 **Naming Parity Rules:**
+- `backup.ts` - Every engine creates backups using its native dump tool
 - `restore.ts` - Every engine has backup/restore functionality
 - `version-validator.ts` - Every engine validates dump vs client version compatibility
 - Binary management differs by engine:
@@ -224,12 +230,20 @@ type ContainerConfig = {
   engine: 'postgresql' | 'mysql'
   version: string
   port: number
-  database: string      // User's database name (separate from container name)
+  database: string      // Primary database name (separate from container name)
+  databases?: string[]  // All databases in this container (auto-populated)
   created: string
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
 }
 ```
+
+**Multi-Database Tracking:**
+- `database` is the primary database (created with the container)
+- `databases` tracks all databases in the container (including restored databases)
+- Auto-migration: old configs without `databases` are migrated on first read
+- The primary database is always first in the `databases` array
+- Restored databases are automatically added to the `databases` array
 
 ### Error Handling
 
@@ -410,7 +424,6 @@ CLI flags:
 ## Future Improvements
 
 See `TODO.md` for full list. Key items:
-- [ ] Add `spindb backup` command
 - [ ] Add `spindb logs` command
 - [ ] Add `spindb exec` for running SQL files
 - [ ] SQLite support

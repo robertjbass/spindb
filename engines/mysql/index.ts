@@ -33,10 +33,13 @@ import {
   restoreBackup,
   parseConnectionString,
 } from './restore'
+import { createBackup } from './backup'
 import type {
   ContainerConfig,
   ProgressCallback,
   BackupFormat,
+  BackupOptions,
+  BackupResult,
   RestoreResult,
   DumpResult,
   StatusResult,
@@ -827,6 +830,17 @@ export class MySQLEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  /**
+   * Create a backup of a MySQL database
+   */
+  async backup(
+    container: ContainerConfig,
+    outputPath: string,
+    options: BackupOptions,
+  ): Promise<BackupResult> {
+    return createBackup(container, outputPath, options)
   }
 }
 

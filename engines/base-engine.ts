@@ -2,6 +2,8 @@ import type {
   ContainerConfig,
   ProgressCallback,
   BackupFormat,
+  BackupOptions,
+  BackupResult,
   RestoreResult,
   DumpResult,
   StatusResult,
@@ -137,4 +139,16 @@ export abstract class BaseEngine {
    * Returns null if the container is not running or size cannot be determined
    */
   abstract getDatabaseSize(container: ContainerConfig): Promise<number | null>
+
+  /**
+   * Create a backup of a database
+   * @param container - The container configuration
+   * @param outputPath - Path to write the backup file
+   * @param options - Backup options including database name and format
+   */
+  abstract backup(
+    container: ContainerConfig,
+    outputPath: string,
+    options: BackupOptions,
+  ): Promise<BackupResult>
 }

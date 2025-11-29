@@ -16,10 +16,13 @@ import {
   FALLBACK_VERSION_MAP,
 } from './binary-urls'
 import { detectBackupFormat, restoreBackup } from './restore'
+import { createBackup } from './backup'
 import type {
   ContainerConfig,
   ProgressCallback,
   BackupFormat,
+  BackupOptions,
+  BackupResult,
   RestoreResult,
   DumpResult,
   StatusResult,
@@ -442,6 +445,17 @@ export class PostgreSQLEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  /**
+   * Create a backup of a PostgreSQL database
+   */
+  async backup(
+    container: ContainerConfig,
+    outputPath: string,
+    options: BackupOptions,
+  ): Promise<BackupResult> {
+    return createBackup(container, outputPath, options)
   }
 }
 

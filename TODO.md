@@ -12,12 +12,13 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ### High Priority
 - [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f` / `mysql <`)
-- [ ] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
+- [x] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
 
 ### Medium Priority
 - [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
-- [ ] **Multiple databases per container** - List/create/delete databases within a container
+- [x] **Multiple databases per container** - List/create/delete databases within a container (tracking via `databases[]` in container.json)
+- [ ] **Multi-database container backup** - Bundle all databases in a container into a single proprietary archive format with metadata
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
