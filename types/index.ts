@@ -85,6 +85,10 @@ export type BinaryTool =
   | 'mysqlpump'
   | 'mysqld'
   | 'mysqladmin'
+  // Enhanced shells (optional)
+  | 'pgcli'
+  | 'mycli'
+  | 'usql'
 
 /**
  * Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
@@ -118,6 +122,10 @@ export type SpinDBConfig = {
     mysqlpump?: BinaryConfig
     mysqld?: BinaryConfig
     mysqladmin?: BinaryConfig
+    // Enhanced shells (optional)
+    pgcli?: BinaryConfig
+    mycli?: BinaryConfig
+    usql?: BinaryConfig
   }
   // Default settings
   defaults?: {

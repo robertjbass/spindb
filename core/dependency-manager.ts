@@ -20,6 +20,7 @@ import {
   mycliDependency,
 } from '../config/os-dependencies'
 import { platformService } from './platform-service'
+import { configManager } from './config-manager'
 
 const execAsync = promisify(exec)
 
@@ -267,6 +268,10 @@ export async function installDependency(
       // Use inherited stdio so sudo can prompt for password in terminal
       execWithInheritedStdio(cmd)
     }
+
+    // Refresh config cache after package manager interaction
+    // This ensures newly installed tools are detected with correct versions
+    await configManager.refreshAllBinaries()
 
     // Verify installation
     const status = await checkDependency(dependency)

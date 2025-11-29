@@ -1,17 +1,43 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { existsSync } from 'fs'
-import { configManager } from '../../core/config-manager'
+import {
+  configManager,
+  POSTGRESQL_TOOLS,
+  MYSQL_TOOLS,
+  ENHANCED_SHELLS,
+  ALL_TOOLS,
+} from '../../core/config-manager'
 import { error, success, header } from '../ui/theme'
 import { createSpinner } from '../ui/spinner'
 import type { BinaryTool } from '../../types'
 
-const VALID_TOOLS: BinaryTool[] = [
-  'psql',
-  'pg_dump',
-  'pg_restore',
-  'pg_basebackup',
-]
+/**
+ * Helper to display a tool's config
+ */
+function displayToolConfig(
+  tool: BinaryTool,
+  binaryConfig: { path: string; version?: string; source: string } | undefined,
+): void {
+  if (binaryConfig) {
+    const sourceLabel =
+      binaryConfig.source === 'system'
+        ? chalk.blue('system')
+        : binaryConfig.source === 'custom'
+          ? chalk.yellow('custom')
+          : chalk.green('bundled')
+    const versionLabel = binaryConfig.version
+      ? chalk.gray(` (v${binaryConfig.version})`)
+      : ''
+    console.log(
+      `    ${chalk.cyan(tool.padEnd(15))} ${binaryConfig.path}${versionLabel} [${sourceLabel}]`,
+    )
+  } else {
+    console.log(
+      `    ${chalk.cyan(tool.padEnd(15))} ${chalk.gray('not detected')}`,
+    )
+  }
+}
 
 export const configCommand = new Command('config')
   .description('Manage spindb configuration')
@@ -26,37 +52,36 @@ export const configCommand = new Command('config')
           console.log(header('SpinDB Configuration'))
           console.log()
 
-          console.log(chalk.bold('  Binary Paths:'))
-          console.log(chalk.gray('  ' + '─'.repeat(50)))
-
-          for (const tool of VALID_TOOLS) {
-            const binaryConfig = config.binaries[tool]
-            if (binaryConfig) {
-              const sourceLabel =
-                binaryConfig.source === 'system'
-                  ? chalk.blue('system')
-                  : binaryConfig.source === 'custom'
-                    ? chalk.yellow('custom')
-                    : chalk.green('bundled')
-              const versionLabel = binaryConfig.version
-                ? chalk.gray(` (v${binaryConfig.version})`)
-                : ''
-              console.log(
-                `  ${chalk.cyan(tool.padEnd(15))} ${binaryConfig.path}${versionLabel} [${sourceLabel}]`,
-              )
-            } else {
-              console.log(
-                `  ${chalk.cyan(tool.padEnd(15))} ${chalk.gray('not configured')}`,
-              )
-            }
+          // PostgreSQL tools
+          console.log(chalk.bold('  🐘 PostgreSQL Tools:'))
+          console.log(chalk.gray('  ' + '─'.repeat(60)))
+          for (const tool of POSTGRESQL_TOOLS) {
+            displayToolConfig(tool, config.binaries[tool])
           }
+          console.log()
 
+          // MySQL tools
+          console.log(chalk.bold('  🐬 MySQL Tools:'))
+          console.log(chalk.gray('  ' + '─'.repeat(60)))
+          for (const tool of MYSQL_TOOLS) {
+            displayToolConfig(tool, config.binaries[tool])
+          }
+          console.log()
+
+          // Enhanced shells
+          console.log(chalk.bold('  ✨ Enhanced Shells (optional):'))
+          console.log(chalk.gray('  ' + '─'.repeat(60)))
+          for (const tool of ENHANCED_SHELLS) {
+            displayToolConfig(tool, config.binaries[tool])
+          }
           console.log()
 
           if (config.updatedAt) {
+            const isStale = await configManager.isStale()
+            const staleWarning = isStale ? chalk.yellow(' (stale - run config detect to refresh)') : ''
             console.log(
               chalk.gray(
-                `  Last updated: ${new Date(config.updatedAt).toLocaleString()}`,
+                `  Last updated: ${new Date(config.updatedAt).toLocaleString()}${staleWarning}`,
               ),
             )
             console.log()
@@ -70,55 +95,108 @@ export const configCommand = new Command('config')
   )
   .addCommand(
     new Command('detect')
-      .description('Auto-detect PostgreSQL client tools on your system')
+      .description('Auto-detect all database tools on your system')
       .action(async () => {
         try {
           console.log()
-          console.log(header('Detecting PostgreSQL Tools'))
+          console.log(header('Detecting Database Tools'))
           console.log()
 
-          const spinner = createSpinner(
-            'Searching for PostgreSQL client tools...',
-          )
+          const spinner = createSpinner('Searching for database tools...')
           spinner.start()
 
           // Clear existing configs to force re-detection
           await configManager.clearAllBinaries()
 
-          const { found, missing } = await configManager.initialize()
+          const result = await configManager.initialize()
 
           spinner.succeed('Detection complete')
           console.log()
 
-          if (found.length > 0) {
-            console.log(chalk.bold('  Found:'))
-            for (const tool of found) {
-              const config = await configManager.getBinaryConfig(tool)
-              if (config) {
-                const versionLabel = config.version
-                  ? chalk.gray(` (v${config.version})`)
-                  : ''
+          // Helper to display category results
+          async function displayCategory(
+            title: string,
+            icon: string,
+            found: BinaryTool[],
+            missing: BinaryTool[],
+          ): Promise<void> {
+            console.log(chalk.bold(`  ${icon} ${title}:`))
+
+            if (found.length > 0) {
+              for (const tool of found) {
+                const config = await configManager.getBinaryConfig(tool)
+                if (config) {
+                  const versionLabel = config.version
+                    ? chalk.gray(` (v${config.version})`)
+                    : ''
+                  console.log(
+                    `    ${chalk.green('✓')} ${chalk.cyan(tool.padEnd(15))} ${config.path}${versionLabel}`,
+                  )
+                }
+              }
+            }
+
+            if (missing.length > 0) {
+              for (const tool of missing) {
                 console.log(
-                  `  ${chalk.green('✓')} ${chalk.cyan(tool.padEnd(15))} ${config.path}${versionLabel}`,
+                  `    ${chalk.gray('○')} ${chalk.gray(tool.padEnd(15))} not found`,
                 )
               }
+            }
+
+            console.log()
+          }
+
+          await displayCategory(
+            'PostgreSQL Tools',
+            '🐘',
+            result.postgresql.found,
+            result.postgresql.missing,
+          )
+          await displayCategory(
+            'MySQL Tools',
+            '🐬',
+            result.mysql.found,
+            result.mysql.missing,
+          )
+          await displayCategory(
+            'Enhanced Shells (optional)',
+            '✨',
+            result.enhanced.found,
+            result.enhanced.missing,
+          )
+
+          // Show install hints for missing required tools
+          if (
+            result.postgresql.missing.length > 0 ||
+            result.mysql.missing.length > 0
+          ) {
+            console.log(chalk.gray('  Install missing tools:'))
+            if (result.postgresql.missing.length > 0) {
+              console.log(
+                chalk.gray('    PostgreSQL: brew install postgresql@17'),
+              )
+            }
+            if (result.mysql.missing.length > 0) {
+              console.log(chalk.gray('    MySQL:      brew install mysql'))
             }
             console.log()
           }
 
-          if (missing.length > 0) {
-            console.log(chalk.bold('  Not found:'))
-            for (const tool of missing) {
-              console.log(`  ${chalk.red('✗')} ${chalk.cyan(tool)}`)
+          // Show enhanced shell hints
+          if (result.enhanced.missing.length > 0) {
+            console.log(chalk.gray('  Optional enhanced shells:'))
+            if (result.enhanced.missing.includes('pgcli')) {
+              console.log(chalk.gray('    pgcli: brew install pgcli'))
             }
-            console.log()
-            console.log(chalk.gray('  Install missing tools:'))
-            console.log(
-              chalk.gray(
-                '    macOS:  brew install libpq && brew link --force libpq',
-              ),
-            )
-            console.log(chalk.gray('    Ubuntu: apt install postgresql-client'))
+            if (result.enhanced.missing.includes('mycli')) {
+              console.log(chalk.gray('    mycli: brew install mycli'))
+            }
+            if (result.enhanced.missing.includes('usql')) {
+              console.log(
+                chalk.gray('    usql:  brew tap xo/xo && brew install usql'),
+              )
+            }
             console.log()
           }
         } catch (err) {
@@ -131,14 +209,14 @@ export const configCommand = new Command('config')
   .addCommand(
     new Command('set')
       .description('Set a custom binary path')
-      .argument('<tool>', `Tool name (${VALID_TOOLS.join(', ')})`)
+      .argument('<tool>', 'Tool name (psql, mysql, pgcli, etc.)')
       .argument('<path>', 'Path to the binary')
       .action(async (tool: string, path: string) => {
         try {
           // Validate tool name
-          if (!VALID_TOOLS.includes(tool as BinaryTool)) {
+          if (!ALL_TOOLS.includes(tool as BinaryTool)) {
             console.error(error(`Invalid tool: ${tool}`))
-            console.log(chalk.gray(`  Valid tools: ${VALID_TOOLS.join(', ')}`))
+            console.log(chalk.gray(`  Valid tools: ${ALL_TOOLS.join(', ')}`))
             process.exit(1)
           }
 
@@ -164,13 +242,13 @@ export const configCommand = new Command('config')
   .addCommand(
     new Command('unset')
       .description('Remove a custom binary path')
-      .argument('<tool>', `Tool name (${VALID_TOOLS.join(', ')})`)
+      .argument('<tool>', 'Tool name (psql, mysql, pgcli, etc.)')
       .action(async (tool: string) => {
         try {
           // Validate tool name
-          if (!VALID_TOOLS.includes(tool as BinaryTool)) {
+          if (!ALL_TOOLS.includes(tool as BinaryTool)) {
             console.error(error(`Invalid tool: ${tool}`))
-            console.log(chalk.gray(`  Valid tools: ${VALID_TOOLS.join(', ')}`))
+            console.log(chalk.gray(`  Valid tools: ${ALL_TOOLS.join(', ')}`))
             process.exit(1)
           }
 
@@ -186,13 +264,13 @@ export const configCommand = new Command('config')
   .addCommand(
     new Command('path')
       .description('Show the path for a specific tool')
-      .argument('<tool>', `Tool name (${VALID_TOOLS.join(', ')})`)
+      .argument('<tool>', 'Tool name (psql, mysql, pgcli, etc.)')
       .action(async (tool: string) => {
         try {
           // Validate tool name
-          if (!VALID_TOOLS.includes(tool as BinaryTool)) {
+          if (!ALL_TOOLS.includes(tool as BinaryTool)) {
             console.error(error(`Invalid tool: ${tool}`))
-            console.log(chalk.gray(`  Valid tools: ${VALID_TOOLS.join(', ')}`))
+            console.log(chalk.gray(`  Valid tools: ${ALL_TOOLS.join(', ')}`))
             process.exit(1)
           }
 

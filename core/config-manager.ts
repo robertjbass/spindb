@@ -18,6 +18,32 @@ const DEFAULT_CONFIG: SpinDBConfig = {
   binaries: {},
 }
 
+// Cache staleness threshold (7 days in milliseconds)
+const CACHE_STALENESS_MS = 7 * 24 * 60 * 60 * 1000
+
+// All tools organized by category
+const POSTGRESQL_TOOLS: BinaryTool[] = [
+  'psql',
+  'pg_dump',
+  'pg_restore',
+  'pg_basebackup',
+]
+
+const MYSQL_TOOLS: BinaryTool[] = [
+  'mysql',
+  'mysqldump',
+  'mysqladmin',
+  'mysqld',
+]
+
+const ENHANCED_SHELLS: BinaryTool[] = ['pgcli', 'mycli', 'usql']
+
+const ALL_TOOLS: BinaryTool[] = [
+  ...POSTGRESQL_TOOLS,
+  ...MYSQL_TOOLS,
+  ...ENHANCED_SHELLS,
+]
+
 export class ConfigManager {
   private config: SpinDBConfig | null = null
 
@@ -170,44 +196,55 @@ export class ConfigManager {
   }
 
   /**
-   * Get common installation paths for PostgreSQL client tools
+   * Get common installation paths for database tools
    */
   private getCommonBinaryPaths(tool: BinaryTool): string[] {
-    const paths: string[] = []
+    const commonPaths: string[] = []
 
-    // Homebrew (macOS)
-    paths.push(`/opt/homebrew/bin/${tool}`)
-    paths.push(`/opt/homebrew/opt/libpq/bin/${tool}`)
-    paths.push(`/usr/local/bin/${tool}`)
-    paths.push(`/usr/local/opt/libpq/bin/${tool}`)
+    // Homebrew (macOS ARM)
+    commonPaths.push(`/opt/homebrew/bin/${tool}`)
+    // Homebrew (macOS Intel)
+    commonPaths.push(`/usr/local/bin/${tool}`)
 
-    // Postgres.app (macOS)
-    paths.push(
-      `/Applications/Postgres.app/Contents/Versions/latest/bin/${tool}`,
-    )
+    // PostgreSQL-specific paths
+    if (POSTGRESQL_TOOLS.includes(tool) || tool === 'pgcli') {
+      commonPaths.push(`/opt/homebrew/opt/libpq/bin/${tool}`)
+      commonPaths.push(`/usr/local/opt/libpq/bin/${tool}`)
+      // Postgres.app (macOS)
+      commonPaths.push(
+        `/Applications/Postgres.app/Contents/Versions/latest/bin/${tool}`,
+      )
+      // Linux PostgreSQL paths
+      commonPaths.push(`/usr/lib/postgresql/17/bin/${tool}`)
+      commonPaths.push(`/usr/lib/postgresql/16/bin/${tool}`)
+      commonPaths.push(`/usr/lib/postgresql/15/bin/${tool}`)
+      commonPaths.push(`/usr/lib/postgresql/14/bin/${tool}`)
+    }
 
-    // Linux common paths
-    paths.push(`/usr/bin/${tool}`)
-    paths.push(`/usr/lib/postgresql/16/bin/${tool}`)
-    paths.push(`/usr/lib/postgresql/15/bin/${tool}`)
-    paths.push(`/usr/lib/postgresql/14/bin/${tool}`)
+    // MySQL-specific paths
+    if (MYSQL_TOOLS.includes(tool) || tool === 'mycli') {
+      commonPaths.push(`/opt/homebrew/opt/mysql/bin/${tool}`)
+      commonPaths.push(`/opt/homebrew/opt/mysql-client/bin/${tool}`)
+      commonPaths.push(`/usr/local/opt/mysql/bin/${tool}`)
+      commonPaths.push(`/usr/local/opt/mysql-client/bin/${tool}`)
+      // Linux MySQL/MariaDB paths
+      commonPaths.push(`/usr/bin/${tool}`)
+      commonPaths.push(`/usr/sbin/${tool}`)
+    }
 
-    return paths
+    // General Linux paths
+    commonPaths.push(`/usr/bin/${tool}`)
+
+    return commonPaths
   }
 
   /**
    * Detect all available client tools on the system
    */
   async detectAllTools(): Promise<Map<BinaryTool, string>> {
-    const tools: BinaryTool[] = [
-      'psql',
-      'pg_dump',
-      'pg_restore',
-      'pg_basebackup',
-    ]
     const found = new Map<BinaryTool, string>()
 
-    for (const tool of tools) {
+    for (const tool of ALL_TOOLS) {
       const path = await this.detectSystemBinary(tool)
       if (path) {
         found.set(tool, path)
@@ -219,18 +256,19 @@ export class ConfigManager {
 
   /**
    * Initialize config by detecting all available tools
+   * Groups results by category for better display
    */
-  async initialize(): Promise<{ found: BinaryTool[]; missing: BinaryTool[] }> {
-    const tools: BinaryTool[] = [
-      'psql',
-      'pg_dump',
-      'pg_restore',
-      'pg_basebackup',
-    ]
+  async initialize(): Promise<{
+    found: BinaryTool[]
+    missing: BinaryTool[]
+    postgresql: { found: BinaryTool[]; missing: BinaryTool[] }
+    mysql: { found: BinaryTool[]; missing: BinaryTool[] }
+    enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
+  }> {
     const found: BinaryTool[] = []
     const missing: BinaryTool[] = []
 
-    for (const tool of tools) {
+    for (const tool of ALL_TOOLS) {
       const path = await this.getBinaryPath(tool)
       if (path) {
         found.push(tool)
@@ -239,7 +277,57 @@ export class ConfigManager {
       }
     }
 
-    return { found, missing }
+    return {
+      found,
+      missing,
+      postgresql: {
+        found: found.filter((t) => POSTGRESQL_TOOLS.includes(t)),
+        missing: missing.filter((t) => POSTGRESQL_TOOLS.includes(t)),
+      },
+      mysql: {
+        found: found.filter((t) => MYSQL_TOOLS.includes(t)),
+        missing: missing.filter((t) => MYSQL_TOOLS.includes(t)),
+      },
+      enhanced: {
+        found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
+        missing: missing.filter((t) => ENHANCED_SHELLS.includes(t)),
+      },
+    }
+  }
+
+  /**
+   * Check if the config cache is stale (older than 7 days)
+   */
+  async isStale(): Promise<boolean> {
+    const config = await this.load()
+    if (!config.updatedAt) {
+      return true
+    }
+
+    const updatedAt = new Date(config.updatedAt).getTime()
+    const now = Date.now()
+    return now - updatedAt > CACHE_STALENESS_MS
+  }
+
+  /**
+   * Refresh all tool paths if cache is stale
+   * Returns true if refresh was performed
+   */
+  async refreshIfStale(): Promise<boolean> {
+    if (await this.isStale()) {
+      await this.refreshAllBinaries()
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Force refresh all binary paths
+   * Re-detects all tools and updates versions
+   */
+  async refreshAllBinaries(): Promise<void> {
+    await this.clearAllBinaries()
+    await this.initialize()
   }
 
   /**
@@ -269,3 +357,11 @@ export class ConfigManager {
 }
 
 export const configManager = new ConfigManager()
+
+// Export tool categories for use in commands
+export {
+  POSTGRESQL_TOOLS,
+  MYSQL_TOOLS,
+  ENHANCED_SHELLS,
+  ALL_TOOLS,
+}

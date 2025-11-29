@@ -110,6 +110,12 @@ engines/{engine}/
   - PostgreSQL: `binary-urls.ts` (server binaries from zonky.io) + `binary-manager.ts` (client tools)
   - MySQL: `binary-detection.ts` (all binaries are system-installed)
 
+**Version Resolution (PostgreSQL):**
+- Major versions (e.g., `"17"`) are resolved to full versions (e.g., `"17.7.0"`)
+- Resolution happens in `PostgreSQLEngine.resolveFullVersion()` and `BinaryManager.getFullVersion()`
+- Full versions are used for: filesystem paths, container configs, and all UI display
+- Never show or store just the major version - always use full version
+
 ## Key Architecture Decisions
 
 ### Multi-Engine Support
@@ -146,11 +152,11 @@ Containers are stored in engine-specific directories:
 ```
 ~/.spindb/
 ├── bin/                                    # PostgreSQL server binaries
-│   └── postgresql-17-darwin-arm64/
+│   └── postgresql-17.7.0-darwin-arm64/     # Full version in directory name
 ├── containers/
 │   ├── postgresql/                         # PostgreSQL containers
 │   │   └── mydb/
-│   │       ├── container.json
+│   │       ├── container.json              # Contains full version (e.g., "17.7.0")
 │   │       ├── data/
 │   │       └── postgres.log
 │   └── mysql/                              # MySQL containers
@@ -167,7 +173,9 @@ Containers are stored in engine-specific directories:
 1. Download JAR from Maven Central
 2. Unzip JAR (it's a ZIP file)
 3. Extract `.txz` file inside
-4. Extract tar.xz to `~/.spindb/bin/postgresql-{version}-{platform}-{arch}/`
+4. Extract tar.xz to `~/.spindb/bin/postgresql-{fullVersion}-{platform}-{arch}/`
+
+**Version Resolution**: When a major version (e.g., `"17"`) is provided via CLI or config, it's resolved to the full version (e.g., `"17.7.0"`) using `FALLBACK_VERSION_MAP` or network fetch. The full version is used everywhere: filesystem paths, container configs, and UI display.
 
 **MySQL**: System-installed binaries detected from:
 - PATH
@@ -175,12 +183,38 @@ Containers are stored in engine-specific directories:
 - /usr/local/bin/ (macOS Intel)
 - /usr/bin/ (Linux)
 
-### Client Tools
+### Client Tools and Config Cache
 
-Client tools are detected from the system. The `dependency-manager.ts` handles:
+Client tools are detected from the system and cached in `~/.spindb/config.json`. The `config-manager.ts` handles:
 - Auto-detection from PATH and common locations
-- Caching paths in `~/.spindb/config.json`
+- Caching paths and versions for all tools (PostgreSQL, MySQL, enhanced shells)
+- 7-day staleness threshold for automatic re-detection
+
+**Tool Categories:**
+- PostgreSQL tools: `psql`, `pg_dump`, `pg_restore`, `pg_basebackup`
+- MySQL tools: `mysql`, `mysqldump`, `mysqladmin`, `mysqld`
+- Enhanced shells: `pgcli`, `mycli`, `usql`
+
+**IMPORTANT: Config Cache Refresh**
+
+The config cache MUST be refreshed after any interaction with a system package manager (Homebrew, apt, dnf, etc.). This ensures newly installed or updated tools are detected with correct paths and versions.
+
+```typescript
+// After any package manager interaction (brew install, apt install, etc.)
+await configManager.refreshAllBinaries()
+```
+
+This is already implemented in `dependency-manager.ts` - the `installDependency()` function calls `configManager.refreshAllBinaries()` after successfully running package manager commands. When adding new features that invoke package managers, always refresh the config cache afterward.
+
+**When to refresh:**
+- After `brew install`, `apt install`, `dnf install`, etc.
+- After helping a user install pgcli, mycli, usql, or any database tools
+- After any upgrade commands (`brew upgrade`, etc.)
+
+The `dependency-manager.ts` handles:
 - Prompting to install missing dependencies
+- Running package manager commands with proper TTY handling for sudo
+- Auto-refreshing the config cache after successful installs
 
 ### Container Config
 Each container has a `container.json` with:
