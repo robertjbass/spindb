@@ -219,12 +219,21 @@ After completing a feature, ensure these files are updated:
 5. **Tests** - Add unit and/or integration tests for new functionality
 
 ### Adding a New Engine
-1. Create `engines/{engine}/index.ts` extending `BaseEngine`
-2. Implement all abstract methods
-3. Register in `engines/index.ts`
-4. Add to `config/os-dependencies.ts`
-5. Add to `config/defaults.ts`
-6. Add integration tests
+
+**IMPORTANT:** Before implementing a new engine, review `FEATURE.md` thoroughly. It contains the complete checklist of ALL features that must be implemented for an engine to be considered complete.
+
+1. **Review `FEATURE.md`** - Exhaustive checklist of required features
+2. Create `engines/{engine}/index.ts` extending `BaseEngine`
+3. Implement ALL abstract methods (see `FEATURE.md` for full list)
+4. Register in `engines/index.ts` and `types/index.ts` (Engine enum)
+5. Add to `config/os-dependencies.ts` and `config/defaults.ts`
+6. Ensure ALL CLI commands work with new engine (see `FEATURE.md`)
+7. Add integration tests (`tests/integration/{engine}.test.ts`)
+8. Update documentation (README.md, TODO.md, CHANGELOG.md)
+
+**Engine Types:**
+- **Server databases** (PostgreSQL, MySQL): Data in `~/.spindb/containers/`, port management, start/stop
+- **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
 
 ## Implementation Details
 
@@ -283,14 +292,25 @@ Error messages should include actionable fix suggestions.
 3. **MySQL uses system binaries** - Unlike PostgreSQL
 4. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
 
-## Publishing
+## Publishing & Versioning
 
 npm publishing via GitHub Actions with OIDC trusted publishing.
 
+### Release Process
 1. Create PR to `main`
 2. Bump version in `package.json`
-3. Merge PR
-4. GitHub Actions publishes automatically
+3. **Update CHANGELOG.md:**
+   - Move items from `[Unreleased]` to new version section
+   - Add date in format `[X.Y.Z] - YYYY-MM-DD`
+   - Keep `[Unreleased]` section for future changes
+4. Merge PR
+5. GitHub Actions publishes automatically
+
+### Version Bump Checklist
+When bumping the version in `package.json`, always:
+1. Update `CHANGELOG.md` with the new version and date
+2. Move unreleased items to the new version section
+3. Ensure all changes since last release are documented
 
 ## Code Style
 

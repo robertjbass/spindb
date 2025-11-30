@@ -13,14 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `status` alias for `info` command
 - `shell` alias for `connect` command
 - Port availability validation in `edit` command
-- Documentation of intentional silent catch blocks in TODO.md
 
-## [0.7.1] - 2024-11-30
+### Documentation
+- Comprehensive engine documentation in TODO.md (backup formats, binary sizes)
+- FEATURE.md checklist for adding new engines
+- Silent catch blocks documentation in TODO.md
+
+## [0.7.1] - 2025-11-30
 
 ### Changed
 - Improved file path prompt UX by moving instructions above input field
 
-## [0.7.0] - 2024-11-29
+## [0.7.0] - 2025-11-29
 
 ### Added
 - `run` command to execute SQL files against containers
@@ -30,14 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Replaced EngineName type with Engine enum across codebase
 
-## [0.6.0] - 2024-11-XX
+## [0.6.0] - 2025-11-29
 
 ### Added
 - `self-update` command with automatic update notifications
-- Version management and update checking
-- Homebrew binary distribution plan
+- Version management and update checking (`spindb version --check`)
+- Homebrew binary distribution plan (Bun compilation)
 
-## [0.5.5] - 2024-11-XX
+## [0.5.5] - 2025-11-29
 
 ### Added
 - `backup` command with multi-database support
@@ -48,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PostgreSQL binary management to use full versions instead of major versions only
 - Config management to support MySQL tools and enhanced shells
 
-## [0.5.0] - 2024-11-XX
+## [0.5.0] - 2025-11-27
 
 ### Added
 - MySQL/MariaDB engine support
@@ -59,28 +63,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Multi-engine architecture with abstract BaseEngine class
 
-## [0.4.0] - 2024-11-XX
+## [0.4.0] - 2025-11-26
 
 ### Added
-- Dependency management system with automatic installation
+- Dependency management system with automatic installation (`spindb deps`)
 - Create-with-restore feature (`--from` flag)
 - Interactive restore workflow with auto-detection
 
-## [0.3.0] - 2024-11-XX
+## [0.3.0] - 2025-11-26
 
 ### Added
 - Clone container functionality
 - Edit command for renaming and port changes
 - Port conflict detection with auto-increment
+- GitHub Actions workflow for automated npm publishing
 
-## [0.2.0] - 2024-11-XX
+### Changed
+- License updated to PolyForm Noncommercial 1.0.0
+
+## [0.2.0] - 2025-11-25
 
 ### Added
 - Interactive menu with arrow-key navigation
 - Multiple PostgreSQL versions (14, 15, 16, 17)
 - Connection string output and clipboard support
 
-## [0.1.0] - 2024-11-XX
+### Changed
+- Refactored project structure to remove TypeScript path aliases
+
+## [0.1.0] - 2025-11-25
 
 ### Added
 - Initial release
