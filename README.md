@@ -65,6 +65,7 @@ spindb connect mydb
 | `spindb edit [name]` | Edit container properties (rename, port) |
 | `spindb backup [name]` | Create a database backup |
 | `spindb restore [name] [backup]` | Restore a backup file |
+| `spindb run <name> [file]` | Run SQL file or `--sql` statement |
 | `spindb clone [source] [target]` | Clone a container |
 | `spindb delete [name]` | Delete a container |
 | `spindb engines` | List installed database engines |
@@ -358,6 +359,21 @@ spindb edit mydb --port 5433
 # Interactive mode
 spindb edit mydb
 ```
+
+### Run SQL files
+
+```bash
+# Run a SQL file against a container
+spindb run mydb script.sql
+
+# Run inline SQL
+spindb run mydb --sql "SELECT * FROM users LIMIT 10"
+
+# Target a specific database (if container has multiple)
+spindb run mydb migrations.sql --database my_app_db
+```
+
+Files can be dragged and dropped into the terminal when using the interactive menu.
 
 ## Running Tests
 

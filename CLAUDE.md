@@ -38,7 +38,8 @@ cli/
 │   ├── edit.ts             # Container rename/port editing
 │   ├── url.ts              # Connection string output
 │   ├── self-update.ts      # Self-update command
-│   └── version.ts          # Version info and update check command
+│   ├── version.ts          # Version info and update check command
+│   └── run.ts              # Run SQL files or inline SQL statements
 └── ui/
     ├── prompts.ts          # Inquirer prompts
     ├── spinner.ts          # Ora spinner helpers
@@ -423,11 +424,27 @@ CLI flags:
 3. **MySQL uses system binaries** - Unlike PostgreSQL, MySQL requires system installation
 4. **Database names immutable** - Cannot rename database after creation
 
+### Run SQL Files
+The `run` command executes SQL files or inline SQL statements against containers:
+```bash
+# Run SQL file
+spindb run mycontainer script.sql
+
+# Run inline SQL
+spindb run mycontainer --sql "SELECT * FROM users"
+
+# Target specific database
+spindb run mycontainer script.sql -d mydb
+```
+
+Interactive menu: "Run SQL file" option in container submenu accepts drag-and-drop file paths.
+
 ## Future Improvements
 
-See `TODO.md` for full list. Key items:
+See `TODO.md` for full list. See `FEATURE.md` for engine feature checklist.
+
+Key items:
 - [ ] Add `spindb logs` command
-- [ ] Add `spindb exec` for running SQL files
 - [ ] SQLite support
 - [ ] Windows support
 

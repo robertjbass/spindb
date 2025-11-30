@@ -14,14 +14,14 @@ import {
   generateTestName,
   findConsecutiveFreePorts,
   cleanupTestContainers,
-  executeSQLFile,
-  executeSQL,
   getRowCount,
   waitForReady,
   containerDataExists,
   getConnectionString,
   assert,
   assertEqual,
+  runScriptFile,
+  runScriptSQL,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -123,10 +123,12 @@ describe('PostgreSQL Integration Tests', () => {
     console.log('   ✓ Container started and ready')
   })
 
-  it('should seed the database with test data', async () => {
-    console.log(`\n🌱 Seeding database with test data...`)
+  it('should seed the database with test data using runScript', async () => {
+    console.log(`\n🌱 Seeding database with test data using engine.runScript...`)
 
-    await executeSQLFile(ENGINE, testPorts[0], DATABASE, SEED_FILE)
+    // Use runScriptFile which internally calls engine.runScript
+    // This tests the `spindb run` command functionality
+    await runScriptFile(containerName, SEED_FILE, DATABASE)
 
     const rowCount = await getRowCount(
       ENGINE,
@@ -140,7 +142,7 @@ describe('PostgreSQL Integration Tests', () => {
       'Should have correct row count after seeding',
     )
 
-    console.log(`   ✓ Seeded ${rowCount} rows`)
+    console.log(`   ✓ Seeded ${rowCount} rows using engine.runScript`)
   })
 
   it('should create a new container from connection string (dump/restore)', async () => {
@@ -240,14 +242,15 @@ describe('PostgreSQL Integration Tests', () => {
     console.log('   ✓ Container deleted and filesystem cleaned up')
   })
 
-  it('should modify data in original container', async () => {
-    console.log(`\n✏️  Deleting one row from original container...`)
+  it('should modify data using runScript inline SQL', async () => {
+    console.log(`\n✏️  Deleting one row using engine.runScript with inline SQL...`)
 
-    await executeSQL(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
+    // Use runScriptSQL which internally calls engine.runScript with --sql option
+    // This tests the `spindb run --sql` command functionality
+    await runScriptSQL(
+      containerName,
       "DELETE FROM test_user WHERE email = 'eve@example.com'",
+      DATABASE,
     )
 
     const rowCount = await getRowCount(
@@ -258,7 +261,7 @@ describe('PostgreSQL Integration Tests', () => {
     )
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
-    console.log(`   ✓ Row deleted, now have ${rowCount} rows`)
+    console.log(`   ✓ Row deleted using engine.runScript, now have ${rowCount} rows`)
   })
 
   it('should stop, rename container, and change port', async () => {

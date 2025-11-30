@@ -151,4 +151,14 @@ export abstract class BaseEngine {
     outputPath: string,
     options: BackupOptions,
   ): Promise<BackupResult>
+
+  /**
+   * Run a SQL file or inline SQL statement against the database
+   * @param container - The container configuration
+   * @param options - Options including file path or SQL statement, and target database
+   */
+  abstract runScript(
+    container: ContainerConfig,
+    options: { file?: string; sql?: string; database?: string },
+  ): Promise<void>
 }

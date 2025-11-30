@@ -11,7 +11,7 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 ## Free Features
 
 ### High Priority
-- [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f` / `mysql <`)
+- [x] **Run SQL file** - `spindb run <container> <file.sql>` to run SQL files or `--sql` for inline SQL (wrapper around `psql -f` / `mysql <`)
 - [x] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
 - [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
 
@@ -22,6 +22,7 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ### Low Priority
 - [ ] **SQLite support** - Add SQLite engine
+- [ ] **Redis support** - Add Redis engine
 - [ ] **MongoDB support** - Add MongoDB engine
 - [ ] **Health checks** - Periodic connection tests to verify containers are responsive
 - [ ] **Offline Support** - Package binaries locally for offline installation
@@ -57,6 +58,12 @@ Similar to ngrok - free tier for individual developers with core functionality, 
 
 ## Stretch Goals
 
+### Run Command Enhancements
+- [ ] **Export results to CSV** - `spindb run <container> <file.sql> --format csv --output results.csv`
+- [ ] **Export results to JSON** - `spindb run <container> <file.sql> --format json --output results.json`
+- [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql` (run files in sequence)
+
+### GUI and TUI
 - [ ] **Desktop GUI (Tauri)** - System tray app showing running database status, with full GUI for container management. Separate repository.
 - [ ] **Terminal-based IDE** - Full TUI (terminal UI) for browsing tables, running queries, viewing results, editing data inline (think `lazygit` but for databases)
   - Potential libraries: [blessed](https://github.com/chjj/blessed), [ink](https://github.com/vadimdemedes/ink), [terminal-kit](https://github.com/cronvel/terminal-kit)

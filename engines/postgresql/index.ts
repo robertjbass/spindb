@@ -457,6 +457,55 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<BackupResult> {
     return createBackup(container, outputPath, options)
   }
+
+  /**
+   * Run a SQL file or inline SQL statement against the database
+   * CLI wrapper: psql -h 127.0.0.1 -p {port} -U postgres -d {db} -f {file}
+   * CLI wrapper: psql -h 127.0.0.1 -p {port} -U postgres -d {db} -c "{sql}"
+   */
+  async runScript(
+    container: ContainerConfig,
+    options: { file?: string; sql?: string; database?: string },
+  ): Promise<void> {
+    const { port } = container
+    const db = options.database || container.database || 'postgres'
+    const psqlPath = await this.getPsqlPath()
+
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      defaults.superuser,
+      '-d',
+      db,
+    ]
+
+    if (options.file) {
+      args.push('-f', options.file)
+    } else if (options.sql) {
+      args.push('-c', options.sql)
+    } else {
+      throw new Error('Either file or sql option must be provided')
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(psqlPath, args, { stdio: 'inherit' })
+
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`psql exited with code ${code}`))
+        }
+      })
+    })
+  }
 }
 
 export const postgresqlEngine = new PostgreSQLEngine()

@@ -639,6 +639,13 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       disabled: isRunning ? false : 'Start container first',
     },
     {
+      name: isRunning
+        ? `${chalk.yellow('▷')} Run SQL file`
+        : chalk.gray('▷ Run SQL file'),
+      value: 'run-sql',
+      disabled: isRunning ? false : 'Start container first',
+    },
+    {
       name: !isRunning
         ? `${chalk.white('⚙')} Edit container`
         : chalk.gray('⚙ Edit container'),
@@ -686,6 +693,10 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       return
     case 'shell':
       await handleOpenShell(containerName)
+      await showContainerSubmenu(containerName)
+      return
+    case 'run-sql':
+      await handleRunSql(containerName)
       await showContainerSubmenu(containerName)
       return
     case 'edit': {
@@ -844,10 +855,19 @@ async function handleOpenShell(containerName: string): Promise<void> {
   const engine = getEngine(config.engine)
   const connectionString = engine.getConnectionString(config)
 
-  // Check which enhanced shells are installed
-  const usqlInstalled = await isUsqlInstalled()
-  const pgcliInstalled = await isPgcliInstalled()
-  const mycliInstalled = await isMycliInstalled()
+  // Check which enhanced shells are installed (with loading indicator)
+  const shellCheckSpinner = createSpinner('Checking available shells...')
+  shellCheckSpinner.start()
+
+  const [usqlInstalled, pgcliInstalled, mycliInstalled] = await Promise.all([
+    isUsqlInstalled(),
+    isPgcliInstalled(),
+    isMycliInstalled(),
+  ])
+
+  shellCheckSpinner.stop()
+  // Clear the spinner line
+  process.stdout.write('\x1b[1A\x1b[2K')
 
   type ShellChoice =
     | 'default'
@@ -864,7 +884,7 @@ async function handleOpenShell(containerName: string): Promise<void> {
   const engineSpecificInstalled =
     config.engine === 'mysql' ? mycliInstalled : pgcliInstalled
 
-  const choices: Array<{ name: string; value: ShellChoice }> = [
+  const choices: Array<{ name: string; value: ShellChoice } | inquirer.Separator> = [
     {
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
@@ -897,6 +917,7 @@ async function handleOpenShell(containerName: string): Promise<void> {
     })
   }
 
+  choices.push(new inquirer.Separator())
   choices.push({
     name: `${chalk.blue('←')} Back`,
     value: 'back',
@@ -1098,6 +1119,107 @@ async function launchShell(
   await new Promise<void>((resolve) => {
     shellProcess.on('close', () => resolve())
   })
+}
+
+async function handleRunSql(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.error(error(`Container "${containerName}" not found`))
+    return
+  }
+
+  const engine = getEngine(config.engine)
+
+  // Check for required client tools
+  let missingDeps = await getMissingDependencies(config.engine)
+  if (missingDeps.length > 0) {
+    console.log(
+      warning(`Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+    )
+
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      config.engine,
+    )
+
+    if (!installed) {
+      return
+    }
+
+    missingDeps = await getMissingDependencies(config.engine)
+    if (missingDeps.length > 0) {
+      console.log(
+        error(
+          `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+        ),
+      )
+      return
+    }
+
+    console.log(chalk.green('  ✓ All required tools are now available'))
+    console.log()
+  }
+
+  // Strip quotes that terminals add when drag-and-dropping files
+  const stripQuotes = (path: string) =>
+    path.replace(/^['"]|['"]$/g, '').trim()
+
+  // Prompt for file path (empty input = go back)
+  const { filePath: rawFilePath } = await inquirer.prompt<{
+    filePath: string
+  }>([
+    {
+      type: 'input',
+      name: 'filePath',
+      message: `SQL file path ${chalk.reset('(drag/drop, or Enter to go back)')}:`,
+      validate: (input: string) => {
+        if (!input) return true // Empty = go back
+        const cleanPath = stripQuotes(input)
+        if (!existsSync(cleanPath)) return 'File not found'
+        return true
+      },
+    },
+  ])
+
+  // Empty input = go back to submenu
+  if (!rawFilePath.trim()) {
+    return
+  }
+
+  const filePath = stripQuotes(rawFilePath)
+
+  // Select database if container has multiple
+  const databases = config.databases || [config.database]
+  let databaseName: string
+
+  if (databases.length > 1) {
+    databaseName = await promptDatabaseSelect(
+      databases,
+      'Select database to run SQL against:',
+    )
+  } else {
+    databaseName = databases[0]
+  }
+
+  console.log()
+  console.log(info(`Running SQL file against "${databaseName}"...`))
+  console.log()
+
+  try {
+    await engine.runScript(config, {
+      file: filePath,
+      database: databaseName,
+    })
+    console.log()
+    console.log(success('SQL file executed successfully'))
+  } catch (err) {
+    const e = err as Error
+    console.log()
+    console.log(error(`SQL execution failed: ${e.message}`))
+  }
+
+  console.log()
+  await pressEnterToContinue()
 }
 
 /**
@@ -1324,9 +1446,9 @@ async function handleRestore(): Promise<void> {
       {
         type: 'input',
         name: 'connectionString',
-        message: 'Connection string (postgresql://user:pass@host:port/dbname):',
+        message: `Connection string ${chalk.reset('(or Enter to go back)')}:`,
         validate: (input: string) => {
-          if (!input) return 'Connection string is required'
+          if (!input) return true // Empty = go back
           if (
             !input.startsWith('postgresql://') &&
             !input.startsWith('postgres://')
@@ -1337,6 +1459,11 @@ async function handleRestore(): Promise<void> {
         },
       },
     ])
+
+    // Empty input = go back
+    if (!connectionString.trim()) {
+      return
+    }
 
     const engine = getEngine(config.engine)
 
@@ -1416,15 +1543,21 @@ async function handleRestore(): Promise<void> {
       {
         type: 'input',
         name: 'backupPath',
-        message: 'Path to backup file (drag and drop or enter path):',
+        message: `Backup file path ${chalk.reset('(drag/drop, or Enter to go back)')}:`,
         validate: (input: string) => {
-          if (!input) return 'Backup path is required'
+          if (!input) return true // Empty = go back
           const cleanPath = stripQuotes(input)
           if (!existsSync(cleanPath)) return 'File not found'
           return true
         },
       },
     ])
+
+    // Empty input = go back
+    if (!rawBackupPath.trim()) {
+      return
+    }
+
     backupPath = stripQuotes(rawBackupPath)
   }
 

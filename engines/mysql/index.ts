@@ -842,6 +842,83 @@ export class MySQLEngine extends BaseEngine {
   ): Promise<BackupResult> {
     return createBackup(container, outputPath, options)
   }
+
+  /**
+   * Run a SQL file or inline SQL statement against the database
+   * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
+   * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root {db} -e "{sql}"
+   */
+  async runScript(
+    container: ContainerConfig,
+    options: { file?: string; sql?: string; database?: string },
+  ): Promise<void> {
+    const { port } = container
+    const db = options.database || container.database || 'mysql'
+
+    const mysql = await getMysqlClientPath()
+    if (!mysql) {
+      throw new Error(
+        'mysql client not found. Install MySQL client tools:\n' +
+          '  macOS: brew install mysql-client\n' +
+          '  Ubuntu/Debian: sudo apt install mysql-client',
+      )
+    }
+
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(port),
+      '-u',
+      engineDef.superuser,
+      db,
+    ]
+
+    if (options.sql) {
+      // For inline SQL, use -e flag
+      args.push('-e', options.sql)
+      return new Promise((resolve, reject) => {
+        const proc = spawn(mysql, args, { stdio: 'inherit' })
+
+        proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`mysql exited with code ${code}`))
+          }
+        })
+      })
+    } else if (options.file) {
+      // For file input, pipe the file to mysql stdin
+      const { createReadStream } = await import('fs')
+
+      return new Promise((resolve, reject) => {
+        const fileStream = createReadStream(options.file!)
+        const proc = spawn(mysql, args, {
+          stdio: ['pipe', 'inherit', 'inherit'],
+        })
+
+        fileStream.pipe(proc.stdin)
+
+        fileStream.on('error', (err) => {
+          proc.kill()
+          reject(err)
+        })
+
+        proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`mysql exited with code ${code}`))
+          }
+        })
+      })
+    } else {
+      throw new Error('Either file or sql option must be provided')
+    }
+  }
 }
 
 export const mysqlEngine = new MySQLEngine()

@@ -250,3 +250,43 @@ export function assertEqual<T>(actual: T, expected: T, message: string): void {
     throw new Error(`${message}\n  Expected: ${expected}\n  Actual: ${actual}`)
   }
 }
+
+/**
+ * Execute SQL file using engine.runScript (tests the run command functionality)
+ */
+export async function runScriptFile(
+  containerName: string,
+  filePath: string,
+  database?: string,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    throw new Error(`Container "${containerName}" not found`)
+  }
+
+  const engine = getEngine(config.engine)
+  await engine.runScript(config, {
+    file: filePath,
+    database,
+  })
+}
+
+/**
+ * Execute inline SQL using engine.runScript (tests the run command functionality)
+ */
+export async function runScriptSQL(
+  containerName: string,
+  sql: string,
+  database?: string,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    throw new Error(`Container "${containerName}" not found`)
+  }
+
+  const engine = getEngine(config.engine)
+  await engine.runScript(config, {
+    sql,
+    database,
+  })
+}
