@@ -229,11 +229,31 @@ After completing a feature, ensure these files are updated:
 5. Add to `config/os-dependencies.ts` and `config/defaults.ts`
 6. Ensure ALL CLI commands work with new engine (see `FEATURE.md`)
 7. Add integration tests (`tests/integration/{engine}.test.ts`)
-8. Update documentation (README.md, TODO.md, CHANGELOG.md)
+8. Update documentation:
+   - **README.md** - Add engine to "Supported Engines" section (with version, port, binary source details), update "Enhanced CLI Tools" table, move from "Planned Engines" to supported
+   - **TODO.md** - Update engine status in roadmap and engines table
+   - **CHANGELOG.md** - Add to unreleased section
 
 **Engine Types:**
 - **Server databases** (PostgreSQL, MySQL): Data in `~/.spindb/containers/`, port management, start/stop
 - **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
+
+### Updating Supported Engine Versions
+
+When new major versions of supported engines are released (e.g., PostgreSQL 18):
+
+1. **Check binary availability:**
+   - PostgreSQL: Verify zonky.io has binaries at [Maven Central](https://mvnrepository.com/artifact/io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64)
+   - MySQL: System-installed, no action needed
+
+2. **Update code:**
+   - `config/defaults.ts` - Add new version to `supportedVersions`, update `latestVersion`
+   - `engines/{engine}/binary-urls.ts` - Update fallback version map if needed
+
+3. **Update documentation:**
+   - **README.md** - Update "Supported Engines" section (versions list)
+   - **CLAUDE.md** - Update version references in this file
+   - **CHANGELOG.md** - Add to unreleased section
 
 ## Implementation Details
 

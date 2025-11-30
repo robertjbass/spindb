@@ -227,14 +227,14 @@ Currently MariaDB is treated as a drop-in replacement for MySQL on Linux systems
 
 For now, the MySQL engine's MariaDB support is sufficient for most use cases.
 
----
+### Enhanced CLI Tools
 
-## Monetization Strategy
+| Engine | Standard CLI | Enhanced CLI | Notes |
+|--------|-------------|--------------|-------|
+| PostgreSQL | `psql` | `pgcli` | Auto-completion, syntax highlighting |
+| MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
+| SQLite | `sqlite3` | `litecli` | Planned for v1.2 |
+| Redis | `redis-cli` | `iredis` | Planned for v1.2 |
+| MongoDB | `mongosh` | - | Built-in shell is already enhanced |
+| Universal | - | `usql` | Works with all SQL databases |
 
-Similar to ngrok - free tier for individuals, paid tiers for power users and teams.
-
-| Tier | Price | Features |
-|------|-------|----------|
-| **Free** | $0 | Full local dev, unlimited containers, backup/restore |
-| **Pro** | TBD | Password auth, encrypted backups, scheduled backups |
-| **Team** | TBD | Shared configs, cloud sync, priority support |
