@@ -17,10 +17,6 @@ import { existsSync } from 'fs'
 
 const execAsync = promisify(exec)
 
-// =============================================================================
-// Types
-// =============================================================================
-
 export type Platform = 'darwin' | 'linux' | 'win32'
 export type Architecture = 'arm64' | 'x64'
 
@@ -53,10 +49,6 @@ export type PackageManagerInfo = {
   installTemplate: string
   updateCommand: string
 }
-
-// =============================================================================
-// Abstract Base Class
-// =============================================================================
 
 export abstract class BasePlatformService {
   protected cachedPlatformInfo: PlatformInfo | null = null
@@ -164,10 +156,6 @@ export abstract class BasePlatformService {
     }
   }
 }
-
-// =============================================================================
-// Darwin (macOS) Implementation
-// =============================================================================
 
 class DarwinPlatformService extends BasePlatformService {
   getPlatformInfo(): PlatformInfo {
@@ -308,10 +296,6 @@ class DarwinPlatformService extends BasePlatformService {
     return `${dir}/${toolName}`
   }
 }
-
-// =============================================================================
-// Linux Implementation
-// =============================================================================
 
 class LinuxPlatformService extends BasePlatformService {
   getPlatformInfo(): PlatformInfo {
@@ -494,10 +478,6 @@ class LinuxPlatformService extends BasePlatformService {
   }
 }
 
-// =============================================================================
-// Windows Implementation (Stub for future support)
-// =============================================================================
-
 class Win32PlatformService extends BasePlatformService {
   getPlatformInfo(): PlatformInfo {
     if (this.cachedPlatformInfo) return this.cachedPlatformInfo
@@ -607,10 +587,6 @@ class Win32PlatformService extends BasePlatformService {
     return `${dir}\\${toolName}.exe`
   }
 }
-
-// =============================================================================
-// Factory and Singleton
-// =============================================================================
 
 /**
  * Create the appropriate platform service for the current OS

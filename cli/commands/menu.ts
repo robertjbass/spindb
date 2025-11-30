@@ -25,9 +25,8 @@ import {
   formatBytes,
 } from '../ui/theme'
 import { existsSync } from 'fs'
-import { readdir, rm, lstat, readFile } from 'fs/promises'
-import { spawn, exec } from 'child_process'
-import { promisify } from 'util'
+import { rm, readFile } from 'fs/promises'
+import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { paths } from '../../config/paths'
@@ -51,12 +50,16 @@ import {
   getMycliManualInstructions,
 } from '../../core/dependency-manager'
 import {
-  getMysqldPath,
   getMysqlVersion,
-  isMariaDB,
   getMysqlInstallInfo,
 } from '../../engines/mysql/binary-detection'
 import { updateManager } from '../../core/update-manager'
+import { getEngineIcon, ENGINE_ICONS } from '../constants'
+import {
+  getInstalledEngines,
+  type InstalledPostgresEngine,
+  type InstalledMysqlEngine,
+} from '../helpers'
 
 type MenuChoice =
   | {
@@ -65,14 +68,6 @@ type MenuChoice =
       disabled?: boolean | string
     }
   | inquirer.Separator
-
-/**
- * Engine icons for display
- */
-const engineIcons: Record<string, string> = {
-  postgresql: '🐘',
-  mysql: '🐬',
-}
 
 /**
  * Helper to pause and wait for user to press Enter
@@ -570,7 +565,7 @@ async function handleList(): Promise<void> {
       const size = sizes[i]
       const sizeLabel = size !== null ? `, ${formatBytes(size)}` : ''
       return {
-        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port}${sizeLabel})`)} ${
+        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port}${sizeLabel})`)} ${
           c.status === 'running'
             ? chalk.green('● running')
             : chalk.gray('○ stopped')
@@ -1427,7 +1422,7 @@ async function handleRestore(): Promise<void> {
   // Build choices: running containers + create new option
   const choices = [
     ...running.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+      name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
       value: c.name,
       short: c.name,
     })),
@@ -2359,149 +2354,6 @@ async function handleDelete(containerName: string): Promise<void> {
   deleteSpinner.succeed(`Container "${containerName}" deleted`)
 }
 
-type InstalledPostgresEngine = {
-  engine: 'postgresql'
-  version: string
-  platform: string
-  arch: string
-  path: string
-  sizeBytes: number
-  source: 'downloaded'
-}
-
-type InstalledMysqlEngine = {
-  engine: 'mysql'
-  version: string
-  path: string
-  source: 'system'
-  isMariaDB: boolean
-}
-
-type InstalledEngine = InstalledPostgresEngine | InstalledMysqlEngine
-
-const execAsync = promisify(exec)
-
-/**
- * Get the actual PostgreSQL version from the binary
- */
-async function getPostgresVersionFromBinary(
-  binPath: string,
-): Promise<string | null> {
-  const postgresPath = join(binPath, 'bin', 'postgres')
-  if (!existsSync(postgresPath)) {
-    return null
-  }
-
-  try {
-    const { stdout } = await execAsync(`"${postgresPath}" --version`)
-    // Output: postgres (PostgreSQL) 17.7
-    const match = stdout.match(/\(PostgreSQL\)\s+([\d.]+)/)
-    return match ? match[1] : null
-  } catch {
-    return null
-  }
-}
-
-async function getInstalledEngines(): Promise<InstalledEngine[]> {
-  const engines: InstalledEngine[] = []
-
-  // Get PostgreSQL engines from ~/.spindb/bin/
-  const binDir = paths.bin
-  if (existsSync(binDir)) {
-    const entries = await readdir(binDir, { withFileTypes: true })
-
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        // Parse directory name: postgresql-17-darwin-arm64
-        const match = entry.name.match(/^(\w+)-(.+)-(\w+)-(\w+)$/)
-        if (match && match[1] === 'postgresql') {
-          const [, , majorVersion, platform, arch] = match
-          const dirPath = join(binDir, entry.name)
-
-          // Get actual version from the binary
-          const actualVersion =
-            (await getPostgresVersionFromBinary(dirPath)) || majorVersion
-
-          // Get directory size (using lstat to avoid following symlinks)
-          let sizeBytes = 0
-          try {
-            const files = await readdir(dirPath, { recursive: true })
-            for (const file of files) {
-              try {
-                const filePath = join(dirPath, file.toString())
-                const fileStat = await lstat(filePath)
-                // Only count regular files (not symlinks or directories)
-                if (fileStat.isFile()) {
-                  sizeBytes += fileStat.size
-                }
-              } catch {
-                // Skip files we can't stat
-              }
-            }
-          } catch {
-            // Skip directories we can't read
-          }
-
-          engines.push({
-            engine: 'postgresql',
-            version: actualVersion,
-            platform,
-            arch,
-            path: dirPath,
-            sizeBytes,
-            source: 'downloaded',
-          })
-        }
-      }
-    }
-  }
-
-  // Detect system-installed MySQL
-  const mysqldPath = await getMysqldPath()
-  if (mysqldPath) {
-    const version = await getMysqlVersion(mysqldPath)
-    if (version) {
-      const mariadb = await isMariaDB()
-      engines.push({
-        engine: 'mysql',
-        version,
-        path: mysqldPath,
-        source: 'system',
-        isMariaDB: mariadb,
-      })
-    }
-  }
-
-  // Sort PostgreSQL by version (descending), MySQL stays at end
-  const pgEngines = engines.filter(
-    (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
-  )
-  const mysqlEngine = engines.find(
-    (e): e is InstalledMysqlEngine => e.engine === 'mysql',
-  )
-
-  pgEngines.sort((a, b) => compareVersions(b.version, a.version))
-
-  const result: InstalledEngine[] = [...pgEngines]
-  if (mysqlEngine) {
-    result.push(mysqlEngine)
-  }
-
-  return result
-}
-
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
-  const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] || 0
-    const numB = partsB[i] || 0
-    if (numA !== numB) return numA - numB
-  }
-  return 0
-}
-
 async function handleEngines(): Promise<void> {
   console.clear()
   console.log(header('Installed Engines'))
@@ -2548,7 +2400,7 @@ async function handleEngines(): Promise<void> {
 
   // PostgreSQL rows
   for (const engine of pgEngines) {
-    const icon = engineIcons[engine.engine] || '▣'
+    const icon = getEngineIcon(engine.engine)
     const platformInfo = `${engine.platform}-${engine.arch}`
 
     console.log(
@@ -2562,7 +2414,7 @@ async function handleEngines(): Promise<void> {
 
   // MySQL row
   if (mysqlEngine) {
-    const icon = engineIcons.mysql
+    const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
 
     console.log(

@@ -43,13 +43,6 @@ export type InstallResult = {
   error?: string
 }
 
-// =============================================================================
-// Package Manager Detection
-// =============================================================================
-
-/**
- * Detect which package manager is available on the current system
- */
 export async function detectPackageManager(): Promise<DetectedPackageManager | null> {
   const { platform } = platformService.getPlatformInfo()
 
@@ -81,13 +74,6 @@ export function getCurrentPlatform(): Platform {
   return platformService.getPlatformInfo().platform as Platform
 }
 
-// =============================================================================
-// Dependency Checking
-// =============================================================================
-
-/**
- * Check if a binary is installed and get its path
- */
 export async function findBinary(
   binary: string,
 ): Promise<{ path: string; version?: string } | null> {
@@ -164,13 +150,6 @@ export async function getAllMissingDependencies(): Promise<Dependency[]> {
   return statuses.filter((s) => !s.installed).map((s) => s.dependency)
 }
 
-// =============================================================================
-// Installation
-// =============================================================================
-
-/**
- * Check if stdin is a TTY (interactive terminal)
- */
 function hasTTY(): boolean {
   return process.stdin.isTTY === true
 }
@@ -362,13 +341,6 @@ export async function installAllDependencies(
   return results
 }
 
-// =============================================================================
-// Manual Installation Instructions
-// =============================================================================
-
-/**
- * Get manual installation instructions for a dependency
- */
 export function getManualInstallInstructions(
   dependency: Dependency,
   platform: Platform = getCurrentPlatform(),
@@ -376,188 +348,53 @@ export function getManualInstallInstructions(
   return dependency.manualInstall[platform] || []
 }
 
-/**
- * Get manual installation instructions for all missing dependencies of an engine
- */
-export function getEngineManualInstallInstructions(
-  engine: string,
-  missingDeps: Dependency[],
-  platform: Platform = getCurrentPlatform(),
-): string[] {
-  // Since all deps usually come from the same package, just get instructions from the first one
-  if (missingDeps.length === 0) return []
-
-  return getManualInstallInstructions(missingDeps[0], platform)
-}
-
-// =============================================================================
-// High-Level API
-// =============================================================================
-
-export type DependencyCheckResult = {
-  engine: string
-  allInstalled: boolean
-  installed: DependencyStatus[]
-  missing: DependencyStatus[]
-}
-
-/**
- * Get a complete dependency report for an engine
- */
-export async function getDependencyReport(
-  engine: string,
-): Promise<DependencyCheckResult> {
-  const statuses = await checkEngineDependencies(engine)
-
-  return {
-    engine,
-    allInstalled: statuses.every((s) => s.installed),
-    installed: statuses.filter((s) => s.installed),
-    missing: statuses.filter((s) => !s.installed),
-  }
-}
-
-/**
- * Get dependency reports for all engines
- */
-export async function getAllDependencyReports(): Promise<
-  DependencyCheckResult[]
-> {
-  const engines = ['postgresql', 'mysql']
-  const reports = await Promise.all(
-    engines.map((engine) => getDependencyReport(engine)),
-  )
-  return reports
-}
-
-// =============================================================================
-// usql (Enhanced Shell) Support
-// =============================================================================
-
-/**
- * Check if usql is installed
- */
 export async function isUsqlInstalled(): Promise<boolean> {
   const status = await checkDependency(usqlDependency)
   return status.installed
 }
 
-/**
- * Get usql dependency status
- */
-export async function getUsqlStatus(): Promise<DependencyStatus> {
-  return checkDependency(usqlDependency)
-}
-
-/**
- * Install usql using the detected package manager
- */
 export async function installUsql(
   packageManager: DetectedPackageManager,
 ): Promise<InstallResult> {
   return installDependency(usqlDependency, packageManager)
 }
 
-/**
- * Get usql manual installation instructions
- */
 export function getUsqlManualInstructions(
   platform: Platform = getCurrentPlatform(),
 ): string[] {
   return getManualInstallInstructions(usqlDependency, platform)
 }
 
-/**
- * Get the usql dependency definition
- */
-export function getUsqlDependency(): Dependency {
-  return usqlDependency
-}
-
-// =============================================================================
-// pgcli (PostgreSQL Enhanced Shell) Support
-// =============================================================================
-
-/**
- * Check if pgcli is installed
- */
 export async function isPgcliInstalled(): Promise<boolean> {
   const status = await checkDependency(pgcliDependency)
   return status.installed
 }
 
-/**
- * Get pgcli dependency status
- */
-export async function getPgcliStatus(): Promise<DependencyStatus> {
-  return checkDependency(pgcliDependency)
-}
-
-/**
- * Install pgcli using the detected package manager
- */
 export async function installPgcli(
   packageManager: DetectedPackageManager,
 ): Promise<InstallResult> {
   return installDependency(pgcliDependency, packageManager)
 }
 
-/**
- * Get pgcli manual installation instructions
- */
 export function getPgcliManualInstructions(
   platform: Platform = getCurrentPlatform(),
 ): string[] {
   return getManualInstallInstructions(pgcliDependency, platform)
 }
 
-/**
- * Get the pgcli dependency definition
- */
-export function getPgcliDependency(): Dependency {
-  return pgcliDependency
-}
-
-// =============================================================================
-// mycli (MySQL Enhanced Shell) Support
-// =============================================================================
-
-/**
- * Check if mycli is installed
- */
 export async function isMycliInstalled(): Promise<boolean> {
   const status = await checkDependency(mycliDependency)
   return status.installed
 }
 
-/**
- * Get mycli dependency status
- */
-export async function getMycliStatus(): Promise<DependencyStatus> {
-  return checkDependency(mycliDependency)
-}
-
-/**
- * Install mycli using the detected package manager
- */
 export async function installMycli(
   packageManager: DetectedPackageManager,
 ): Promise<InstallResult> {
   return installDependency(mycliDependency, packageManager)
 }
 
-/**
- * Get mycli manual installation instructions
- */
 export function getMycliManualInstructions(
   platform: Platform = getCurrentPlatform(),
 ): string[] {
   return getManualInstallInstructions(mycliDependency, platform)
-}
-
-/**
- * Get the mycli dependency definition
- */
-export function getMycliDependency(): Dependency {
-  return mycliDependency
 }

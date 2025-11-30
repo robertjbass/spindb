@@ -5,15 +5,8 @@ import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
 import { error, info, header } from '../ui/theme'
+import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
-
-/**
- * Engine icons
- */
-const engineIcons: Record<string, string> = {
-  postgresql: '🐘',
-  mysql: '🐬',
-}
 
 /**
  * Format a date for display
@@ -65,7 +58,7 @@ async function displayContainerInfo(
     return
   }
 
-  const icon = engineIcons[config.engine] || '▣'
+  const icon = getEngineIcon(config.engine)
   const statusDisplay =
     actualStatus === 'running'
       ? chalk.green('● running')
@@ -168,7 +161,7 @@ async function displayAllContainersInfo(
         ? chalk.green('● running')
         : chalk.gray('○ stopped')
 
-    const icon = engineIcons[container.engine] || '▣'
+    const icon = getEngineIcon(container.engine)
     const engineDisplay = `${icon} ${container.engine}`
 
     console.log(
@@ -252,7 +245,7 @@ export const infoCommand = new Command('info')
             choices: [
               { name: 'All containers', value: 'all' },
               ...containers.map((c) => ({
-                name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine})`)}`,
+                name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine})`)}`,
                 value: c.name,
               })),
             ],

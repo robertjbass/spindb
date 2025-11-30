@@ -3,15 +3,8 @@ import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { info, error, formatBytes } from '../ui/theme'
+import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
-
-/**
- * Engine icons for display
- */
-const engineIcons: Record<string, string> = {
-  postgresql: '🐘',
-  mysql: '🐬',
-}
 
 /**
  * Get database size for a container (only if running)
@@ -81,7 +74,7 @@ export const listCommand = new Command('list')
             ? chalk.green('● running')
             : chalk.gray('○ stopped')
 
-        const engineIcon = engineIcons[container.engine] || '▣'
+        const engineIcon = getEngineIcon(container.engine)
         const engineDisplay = `${engineIcon} ${container.engine}`
 
         // Format size: show value if running, dash if stopped

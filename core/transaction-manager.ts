@@ -7,18 +7,10 @@
 
 import { logError, logDebug, ErrorCodes } from './error-handler'
 
-// =============================================================================
-// Types
-// =============================================================================
-
 export type RollbackAction = {
   description: string
   execute: () => Promise<void>
 }
-
-// =============================================================================
-// Transaction Manager Implementation
-// =============================================================================
 
 /**
  * Manages a stack of rollback actions for transactional operations.
