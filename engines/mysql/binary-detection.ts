@@ -4,6 +4,7 @@
  */
 
 import { exec } from 'child_process'
+import { existsSync } from 'fs'
 import { promisify } from 'util'
 import { platformService } from '../../core/platform-service'
 
@@ -129,7 +130,6 @@ export async function detectInstalledVersions(): Promise<
       '/usr/local/opt/mysql@8.4/bin/mysqld',
     ]
 
-    const { existsSync } = await import('fs')
     for (const path of homebrewPaths) {
       if (existsSync(path)) {
         const version = await getMysqlVersion(path)

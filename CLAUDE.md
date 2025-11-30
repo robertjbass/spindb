@@ -22,7 +22,15 @@ cli/
 ├── bin.ts                  # Entry point (#!/usr/bin/env tsx)
 ├── index.ts                # Commander setup, routes to commands
 ├── commands/               # CLI commands
-│   ├── menu.ts             # Interactive arrow-key menu (default)
+│   ├── menu/               # Interactive menu (default command)
+│   │   ├── index.ts        # Main menu orchestrator
+│   │   ├── shared.ts       # MenuChoice type, pressEnterToContinue
+│   │   ├── container-handlers.ts  # Create, list, start, stop, edit, delete
+│   │   ├── backup-handlers.ts     # Backup, restore, clone
+│   │   ├── shell-handlers.ts      # Open shell, copy connection string
+│   │   ├── sql-handlers.ts        # Run SQL, view logs
+│   │   ├── engine-handlers.ts     # List/delete engines
+│   │   └── update-handlers.ts     # Check for updates
 │   ├── create.ts           # Create container
 │   ├── start.ts            # Start container
 │   ├── stop.ts             # Stop container
@@ -79,7 +87,7 @@ engines/
     └── version-validator.ts
 types/index.ts              # TypeScript types
 tests/
-├── unit/                   # Unit tests (141 tests)
+├── unit/                   # Unit tests (302 tests)
 ├── integration/            # Integration tests (28 tests)
 └── fixtures/               # Test data
 ```

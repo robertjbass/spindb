@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
+import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
@@ -233,9 +234,7 @@ export const infoCommand = new Command('info')
 
       // If running interactively without name, ask if they want all or specific
       if (!options.json && process.stdout.isTTY && containers.length > 1) {
-        const { choice } = await (
-          await import('inquirer')
-        ).default.prompt<{
+        const { choice } = await inquirer.prompt<{
           choice: string
         }>([
           {

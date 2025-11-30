@@ -126,8 +126,7 @@ export async function run(): Promise<void> {
 
   // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {
-    const { menuCommand: menu } = await import('./commands/menu')
-    await menu.parseAsync([])
+    await menuCommand.parseAsync([])
     return
   }
 

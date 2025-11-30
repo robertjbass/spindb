@@ -5,7 +5,7 @@
 
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
+import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
@@ -892,8 +892,6 @@ export class MySQLEngine extends BaseEngine {
       })
     } else if (options.file) {
       // For file input, pipe the file to mysql stdin
-      const { createReadStream } = await import('fs')
-
       return new Promise((resolve, reject) => {
         const fileStream = createReadStream(options.file!)
         const proc = spawn(mysql, args, {
