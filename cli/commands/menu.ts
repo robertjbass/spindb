@@ -35,7 +35,7 @@ import { platformService } from '../../core/platform-service'
 import { portManager } from '../../core/port-manager'
 import { defaults } from '../../config/defaults'
 import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
-import type { EngineName } from '../../types'
+import { Engine } from '../../types'
 import inquirer from 'inquirer'
 import {
   getMissingDependencies,
@@ -387,7 +387,7 @@ async function handleCreate(): Promise<void> {
   createSpinnerInstance.start()
 
   await containerManager.create(containerName, {
-    engine: dbEngine.name as EngineName,
+    engine: dbEngine.name as Engine,
     version,
     port,
     database,
@@ -1156,7 +1156,7 @@ async function handleCreateForRestore(): Promise<{
   createSpinnerInstance.start()
 
   await containerManager.create(containerName, {
-    engine: dbEngine.name as EngineName,
+    engine: dbEngine.name as Engine,
     version,
     port,
     database,

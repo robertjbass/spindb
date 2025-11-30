@@ -6,7 +6,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { defaults } from '../config/defaults'
-import type { ProgressCallback, InstalledBinary } from '../types'
+import { Engine, type ProgressCallback, type InstalledBinary } from '../types'
 
 const execAsync = promisify(exec)
 
@@ -91,7 +91,7 @@ export class BinaryManager {
         const parts = entry.name.split('-')
         if (parts.length >= 4) {
           installed.push({
-            engine: parts[0],
+            engine: parts[0] as Engine,
             version: parts[1],
             platform: parts[2],
             arch: parts[3],

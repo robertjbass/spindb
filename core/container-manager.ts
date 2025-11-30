@@ -5,10 +5,11 @@ import { processManager } from './process-manager'
 import { portManager } from './port-manager'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
-import type { ContainerConfig, EngineName } from '../types'
+import type { ContainerConfig } from '../types'
+import { Engine } from '../types'
 
 export type CreateOptions = {
-  engine: EngineName
+  engine: Engine
   version: string
   port: number
   database: string

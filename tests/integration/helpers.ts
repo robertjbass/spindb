@@ -11,7 +11,7 @@ import { portManager } from '../../core/port-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { paths } from '../../config/paths'
-import type { EngineName } from '../../types'
+import { Engine } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -115,12 +115,12 @@ export async function cleanupTestContainers(): Promise<string[]> {
  * Execute SQL against a database and return the result
  */
 export async function executeSQL(
-  engine: EngineName,
+  engine: Engine,
   port: number,
   database: string,
   sql: string,
 ): Promise<{ stdout: string; stderr: string }> {
-  if (engine === 'mysql') {
+  if (engine === Engine.MySQL) {
     const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else {
@@ -134,12 +134,12 @@ export async function executeSQL(
  * Execute a SQL file against a database
  */
 export async function executeSQLFile(
-  engine: EngineName,
+  engine: Engine,
   port: number,
   database: string,
   filePath: string,
 ): Promise<{ stdout: string; stderr: string }> {
-  if (engine === 'mysql') {
+  if (engine === Engine.MySQL) {
     const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else {
@@ -153,7 +153,7 @@ export async function executeSQLFile(
  * Query row count from a table
  */
 export async function getRowCount(
-  engine: EngineName,
+  engine: Engine,
   port: number,
   database: string,
   table: string,
@@ -183,7 +183,7 @@ export async function getRowCount(
  * Wait for a database to be ready to accept connections
  */
 export async function waitForReady(
-  engine: EngineName,
+  engine: Engine,
   port: number,
   timeoutMs = 30000,
 ): Promise<boolean> {
@@ -192,7 +192,7 @@ export async function waitForReady(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      if (engine === 'mysql') {
+      if (engine === Engine.MySQL) {
         await execAsync(`mysqladmin -h 127.0.0.1 -P ${port} -u root ping`)
       } else {
         await execAsync(
@@ -213,7 +213,7 @@ export async function waitForReady(
  */
 export function containerDataExists(
   containerName: string,
-  engine: EngineName,
+  engine: Engine,
 ): boolean {
   const containerPath = paths.getContainerPath(containerName, { engine })
   return existsSync(containerPath)
@@ -223,11 +223,11 @@ export function containerDataExists(
  * Get connection string for a container
  */
 export function getConnectionString(
-  engine: EngineName,
+  engine: Engine,
   port: number,
   database: string,
 ): string {
-  if (engine === 'mysql') {
+  if (engine === Engine.MySQL) {
     return `mysql://root@127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
