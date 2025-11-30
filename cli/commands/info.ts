@@ -214,6 +214,7 @@ async function displayAllContainersInfo(
 }
 
 export const infoCommand = new Command('info')
+  .alias('status')
   .description('Show container details')
   .argument('[name]', 'Container name (omit to show all)')
   .option('--json', 'Output as JSON')

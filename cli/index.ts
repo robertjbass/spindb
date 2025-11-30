@@ -23,6 +23,7 @@ import { infoCommand } from './commands/info'
 import { selfUpdateCommand } from './commands/self-update'
 import { versionCommand } from './commands/version'
 import { runCommand } from './commands/run'
+import { logsCommand } from './commands/logs'
 import { updateManager } from '../core/update-manager'
 
 /**
@@ -121,6 +122,7 @@ export async function run(): Promise<void> {
   program.addCommand(selfUpdateCommand)
   program.addCommand(versionCommand)
   program.addCommand(runCommand)
+  program.addCommand(logsCommand)
 
   // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {

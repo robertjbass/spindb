@@ -21,6 +21,7 @@ import { promptContainerSelect } from '../ui/prompts'
 import { error, warning, info, success } from '../ui/theme'
 
 export const connectCommand = new Command('connect')
+  .alias('shell')
   .description('Connect to a container with database client')
   .argument('[name]', 'Container name')
   .option('-d, --database <name>', 'Database name')

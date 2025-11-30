@@ -25,7 +25,7 @@ import {
   formatBytes,
 } from '../ui/theme'
 import { existsSync } from 'fs'
-import { readdir, rm, lstat } from 'fs/promises'
+import { readdir, rm, lstat, readFile } from 'fs/promises'
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
 import { tmpdir } from 'os'
@@ -646,6 +646,10 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       disabled: isRunning ? false : 'Start container first',
     },
     {
+      name: `${chalk.gray('📋')} View logs`,
+      value: 'logs',
+    },
+    {
       name: !isRunning
         ? `${chalk.white('⚙')} Edit container`
         : chalk.gray('⚙ Edit container'),
@@ -697,6 +701,10 @@ async function showContainerSubmenu(containerName: string): Promise<void> {
       return
     case 'run-sql':
       await handleRunSql(containerName)
+      await showContainerSubmenu(containerName)
+      return
+    case 'logs':
+      await handleViewLogs(containerName)
       await showContainerSubmenu(containerName)
       return
     case 'edit': {
@@ -1219,6 +1227,89 @@ async function handleRunSql(containerName: string): Promise<void> {
     console.log(error(`SQL execution failed: ${e.message}`))
   }
 
+  console.log()
+  await pressEnterToContinue()
+}
+
+/**
+ * View container logs with interactive options
+ */
+async function handleViewLogs(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.error(error(`Container "${containerName}" not found`))
+    return
+  }
+
+  const logPath = paths.getContainerLogPath(config.name, {
+    engine: config.engine,
+  })
+
+  if (!existsSync(logPath)) {
+    console.log(
+      info(
+        `No log file found for "${containerName}". The container may not have been started yet.`,
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  const { action } = await inquirer.prompt<{ action: string }>([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'How would you like to view logs?',
+      choices: [
+        { name: 'View last 50 lines', value: 'tail-50' },
+        { name: 'View last 100 lines', value: 'tail-100' },
+        { name: 'Follow logs (live)', value: 'follow' },
+        { name: 'Open in editor', value: 'editor' },
+        { name: `${chalk.blue('←')} Back`, value: 'back' },
+      ],
+    },
+  ])
+
+  if (action === 'back') {
+    return
+  }
+
+  if (action === 'editor') {
+    const editorCmd = process.env.EDITOR || 'vi'
+    const child = spawn(editorCmd, [logPath], { stdio: 'inherit' })
+    await new Promise<void>((resolve) => {
+      child.on('close', () => resolve())
+    })
+    return
+  }
+
+  if (action === 'follow') {
+    console.log(chalk.gray('  Press Ctrl+C to stop following logs'))
+    console.log()
+    const child = spawn('tail', ['-n', '50', '-f', logPath], {
+      stdio: 'inherit',
+    })
+    await new Promise<void>((resolve) => {
+      process.on('SIGINT', () => {
+        child.kill('SIGTERM')
+        resolve()
+      })
+      child.on('close', () => resolve())
+    })
+    return
+  }
+
+  // tail-50 or tail-100
+  const lineCount = action === 'tail-100' ? 100 : 50
+  const content = await readFile(logPath, 'utf-8')
+  if (content.trim() === '') {
+    console.log(info('Log file is empty'))
+  } else {
+    const lines = content.split('\n')
+    const nonEmptyLines =
+      lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
+    console.log(nonEmptyLines.slice(-lineCount).join('\n'))
+  }
   console.log()
   await pressEnterToContinue()
 }

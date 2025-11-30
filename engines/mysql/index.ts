@@ -289,8 +289,9 @@ export class MySQLEngine extends BaseEngine {
         // Write PID file manually since we're running detached
         try {
           await writeFile(pidFile, String(proc.pid))
-        } catch {
+        } catch (error) {
           // PID file might be written by mysqld itself
+          logDebug(`Could not write PID file (mysqld may write it): ${error}`)
         }
 
         // Wait for MySQL to be ready

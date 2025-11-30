@@ -11,10 +11,11 @@ export const urlCommand = new Command('url')
   .argument('[name]', 'Container name')
   .option('-c, --copy', 'Copy to clipboard')
   .option('-d, --database <database>', 'Use different database name')
+  .option('--json', 'Output as JSON with additional connection info')
   .action(
     async (
       name: string | undefined,
-      options: { copy?: boolean; database?: string },
+      options: { copy?: boolean; database?: string; json?: boolean },
     ) => {
       try {
         let containerName = name
@@ -45,10 +46,23 @@ export const urlCommand = new Command('url')
 
         // Get connection string
         const engine = getEngine(config.engine)
-        const connectionString = engine.getConnectionString(
-          config,
-          options.database,
-        )
+        const databaseName = options.database || config.database
+        const connectionString = engine.getConnectionString(config, databaseName)
+
+        // JSON output
+        if (options.json) {
+          const jsonOutput = {
+            connectionString,
+            host: '127.0.0.1',
+            port: config.port,
+            database: databaseName,
+            user: config.engine === 'postgresql' ? 'postgres' : 'root',
+            engine: config.engine,
+            container: config.name,
+          }
+          console.log(JSON.stringify(jsonOutput, null, 2))
+          return
+        }
 
         // Copy to clipboard if requested
         if (options.copy) {
