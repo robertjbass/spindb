@@ -20,6 +20,44 @@ const execAsync = promisify(exec)
 export type Platform = 'darwin' | 'linux' | 'win32'
 export type Architecture = 'arm64' | 'x64'
 
+/**
+ * Options for resolving home directory under sudo
+ */
+export type ResolveHomeDirOptions = {
+  sudoUser: string | null
+  getentResult: string | null
+  platform: 'darwin' | 'linux'
+  defaultHome: string
+}
+
+/**
+ * Resolve the correct home directory, handling sudo scenarios.
+ * This is extracted as a pure function for testability.
+ *
+ * When running under sudo, we need to use the original user's home directory,
+ * not root's home. This prevents ~/.spindb from being created in /root/.
+ */
+export function resolveHomeDir(options: ResolveHomeDirOptions): string {
+  const { sudoUser, getentResult, platform, defaultHome } = options
+
+  // Not running under sudo - use default
+  if (!sudoUser) {
+    return defaultHome
+  }
+
+  // Try to parse home from getent passwd output
+  // Format: username:password:uid:gid:gecos:home:shell
+  if (getentResult) {
+    const parts = getentResult.trim().split(':')
+    if (parts.length >= 6 && parts[5]) {
+      return parts[5]
+    }
+  }
+
+  // Fallback to platform-specific default
+  return platform === 'darwin' ? `/Users/${sudoUser}` : `/home/${sudoUser}`
+}
+
 export type PlatformInfo = {
   platform: Platform
   arch: Architecture
@@ -162,23 +200,25 @@ class DarwinPlatformService extends BasePlatformService {
     if (this.cachedPlatformInfo) return this.cachedPlatformInfo
 
     const sudoUser = process.env.SUDO_USER || null
-    let homeDir: string
 
+    // Try to get home from getent passwd (may fail on macOS)
+    let getentResult: string | null = null
     if (sudoUser) {
-      // Running under sudo - get original user's home
       try {
-        const result = execSync(`getent passwd ${sudoUser}`, {
+        getentResult = execSync(`getent passwd ${sudoUser}`, {
           encoding: 'utf-8',
         })
-        const parts = result.trim().split(':')
-        homeDir =
-          parts.length >= 6 && parts[5] ? parts[5] : `/Users/${sudoUser}`
       } catch {
-        homeDir = `/Users/${sudoUser}`
+        // getent may not be available on macOS
       }
-    } else {
-      homeDir = homedir()
     }
+
+    const homeDir = resolveHomeDir({
+      sudoUser,
+      getentResult,
+      platform: 'darwin',
+      defaultHome: homedir(),
+    })
 
     this.cachedPlatformInfo = {
       platform: 'darwin',
@@ -302,21 +342,25 @@ class LinuxPlatformService extends BasePlatformService {
     if (this.cachedPlatformInfo) return this.cachedPlatformInfo
 
     const sudoUser = process.env.SUDO_USER || null
-    let homeDir: string
 
+    // Try to get home from getent passwd
+    let getentResult: string | null = null
     if (sudoUser) {
       try {
-        const result = execSync(`getent passwd ${sudoUser}`, {
+        getentResult = execSync(`getent passwd ${sudoUser}`, {
           encoding: 'utf-8',
         })
-        const parts = result.trim().split(':')
-        homeDir = parts.length >= 6 && parts[5] ? parts[5] : `/home/${sudoUser}`
       } catch {
-        homeDir = `/home/${sudoUser}`
+        // getent failed
       }
-    } else {
-      homeDir = homedir()
     }
+
+    const homeDir = resolveHomeDir({
+      sudoUser,
+      getentResult,
+      platform: 'linux',
+      defaultHome: homedir(),
+    })
 
     // Check if running in WSL
     let isWSL = false

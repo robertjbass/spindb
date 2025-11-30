@@ -5,6 +5,7 @@
 import { describe, it } from 'node:test'
 import {
   platformService,
+  resolveHomeDir,
   type PlatformInfo,
   type ClipboardConfig,
   type PackageManagerInfo,
@@ -300,6 +301,188 @@ describe('PlatformService', () => {
           `Zonky platform should start with darwin-, linux-, or alpine-linux-, got: ${zonkyPlatform}`,
         )
       }
+    })
+  })
+})
+
+describe('resolveHomeDir', () => {
+  describe('when not running under sudo', () => {
+    it('should return default home directory', () => {
+      const result = resolveHomeDir({
+        sudoUser: null,
+        getentResult: null,
+        platform: 'darwin',
+        defaultHome: '/Users/bob',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should return default home')
+    })
+
+    it('should ignore getent result if sudoUser is null', () => {
+      const result = resolveHomeDir({
+        sudoUser: null,
+        getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh',
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/root', 'Should return default home even with getent')
+    })
+  })
+
+  describe('when running under sudo with valid getent result', () => {
+    it('should parse home from standard getent passwd format', () => {
+      // Format: username:password:uid:gid:gecos:home:shell
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: 'bob:x:501:20:Bob Bass:/Users/bob:/bin/zsh',
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should parse home from getent')
+    })
+
+    it('should handle getent with empty gecos field', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh',
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should parse home with empty gecos')
+    })
+
+    it('should handle Linux-style home paths', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'deploy',
+        getentResult: 'deploy:x:1000:1000:Deploy User:/home/deploy:/bin/bash',
+        platform: 'linux',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/home/deploy', 'Should parse Linux home path')
+    })
+
+    it('should handle custom home directories', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'service',
+        getentResult: 'service:x:999:999:Service Account:/var/lib/service:/bin/false',
+        platform: 'linux',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/var/lib/service', 'Should parse custom home path')
+    })
+
+    it('should handle getent with trailing newline', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh\n',
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should handle trailing newline')
+    })
+  })
+
+  describe('when running under sudo without valid getent result', () => {
+    it('should fallback to /Users/{user} on macOS', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: null,
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should fallback to /Users/bob')
+    })
+
+    it('should fallback to /home/{user} on Linux', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: null,
+        platform: 'linux',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/home/bob', 'Should fallback to /home/bob')
+    })
+
+    it('should fallback when getent result is malformed (too few fields)', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: 'bob:x:501',
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should fallback with malformed getent')
+    })
+
+    it('should fallback when home field is empty', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: 'bob:x:501:20:::/bin/zsh',
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob', 'Should fallback when home is empty')
+    })
+
+    it('should fallback when getent is empty string', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: '',
+        platform: 'linux',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/home/bob', 'Should fallback with empty getent')
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle usernames with special characters', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob-bass',
+        getentResult: null,
+        platform: 'darwin',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/Users/bob-bass', 'Should handle hyphenated username')
+    })
+
+    it('should handle usernames with underscores', () => {
+      const result = resolveHomeDir({
+        sudoUser: 'bob_bass',
+        getentResult: null,
+        platform: 'linux',
+        defaultHome: '/root',
+      })
+
+      assertEqual(result, '/home/bob_bass', 'Should handle underscored username')
+    })
+
+    it('should prevent using root home when sudo is detected', () => {
+      // This is the key security test - we should NEVER return /root
+      // when SUDO_USER is set
+      const result = resolveHomeDir({
+        sudoUser: 'bob',
+        getentResult: null,
+        platform: 'darwin',
+        defaultHome: '/var/root', // macOS root home
+      })
+
+      assert(
+        !result.includes('root'),
+        `Should not return root home directory, got: ${result}`,
+      )
+      assertEqual(result, '/Users/bob', 'Should use user home, not root')
     })
   })
 })
