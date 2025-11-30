@@ -45,9 +45,15 @@ export const configCommand = new Command('config')
   .addCommand(
     new Command('show')
       .description('Show current configuration')
-      .action(async () => {
+      .option('--json', 'Output as JSON')
+      .action(async (options: { json?: boolean }) => {
         try {
           const config = await configManager.getConfig()
+
+          if (options.json) {
+            console.log(JSON.stringify(config, null, 2))
+            return
+          }
 
           console.log()
           console.log(header('SpinDB Configuration'))

@@ -9,11 +9,8 @@ import { portManager } from './port-manager'
 import { containerManager } from './container-manager'
 import { logWarning, logDebug } from './error-handler'
 import type { BaseEngine } from '../engines/base-engine'
+import { getEngineDefaults } from '../config/defaults'
 import type { ContainerConfig } from '../types'
-
-// =============================================================================
-// Types
-// =============================================================================
 
 export type StartWithRetryOptions = {
   engine: BaseEngine
@@ -29,13 +26,6 @@ export type StartWithRetryResult = {
   error?: Error
 }
 
-// =============================================================================
-// Port Error Detection
-// =============================================================================
-
-/**
- * Check if an error is a port-in-use error
- */
 function isPortInUseError(err: unknown): boolean {
   const message = (err as Error)?.message?.toLowerCase() || ''
   return (
@@ -46,10 +36,6 @@ function isPortInUseError(err: unknown): boolean {
     message.includes('socket already in use')
   )
 }
-
-// =============================================================================
-// Start with Retry Implementation
-// =============================================================================
 
 /**
  * Start a database container with automatic port retry on conflict
@@ -129,20 +115,9 @@ export async function startWithRetry(
   }
 }
 
-/**
- * Get the port range for an engine
- */
 function getEnginePortRange(engine: string): { start: number; end: number } {
-  // Import defaults dynamically to avoid circular dependency
-  // These are the standard ranges from config/defaults.ts
-  if (engine === 'postgresql') {
-    return { start: 5432, end: 5500 }
-  }
-  if (engine === 'mysql') {
-    return { start: 3306, end: 3400 }
-  }
-  // Default fallback range
-  return { start: 5432, end: 6000 }
+  const engineDefaults = getEngineDefaults(engine)
+  return engineDefaults.portRange
 }
 
 /**

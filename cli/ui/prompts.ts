@@ -11,6 +11,7 @@ import {
   installEngineDependencies,
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
+import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
 
 /**
@@ -38,22 +39,13 @@ export async function promptContainerName(
 }
 
 /**
- * Engine icons for display
- */
-const engineIcons: Record<string, string> = {
-  postgresql: '🐘',
-  mysql: '🐬',
-}
-
-/**
  * Prompt for database engine selection
  */
 export async function promptEngine(): Promise<string> {
   const engines = listEngines()
 
-  // Build choices from available engines
   const choices = engines.map((e) => ({
-    name: `${engineIcons[e.name] || '▣'} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
@@ -227,7 +219,7 @@ export async function promptContainerSelect(
       name: 'container',
       message,
       choices: containers.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine} ${c.version}, port ${c.port})`)} ${
+        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${
           c.status === 'running'
             ? chalk.green('● running')
             : chalk.gray('○ stopped')

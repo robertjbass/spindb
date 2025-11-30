@@ -1,257 +1,240 @@
 # SpinDB TODO
 
-## Monetization Ideas
+## Roadmap
 
-Similar to ngrok - free tier for individual developers with core functionality, paid tiers for power users and teams.
+### v1.0 - Core Features (Complete)
+- [x] PostgreSQL container management (create, start, stop, delete)
+- [x] MySQL/MariaDB engine support
+- [x] Backup and restore with version compatibility checking
+- [x] Clone containers from connection strings
+- [x] Multiple databases per container
+- [x] Interactive menu with arrow-key navigation
+- [x] Enhanced shells (pgcli, mycli, usql)
+- [x] Run SQL files and inline statements
+- [x] Logs command with follow and editor options
+- [x] Self-update with automatic notifications
+- [x] JSON output for scripting (`--json` flags)
 
-- **Free**: Full local dev experience, unlimited containers, basic backup/restore
-- **Pro** ($X/month): Security features, advanced features
-- **Team** ($X/user/month): Shared configs, team collaboration, priority support
+### v1.1 - Remote Connections & Secrets
+- [ ] **Remote database connections** - Connect to remote databases (not just local containers)
+  - `spindb connect --remote "postgresql://user:pass@host:5432/db"`
+  - Save remote connections in config for quick access
+  - List saved remotes with `spindb remotes list`
+- [ ] **Environment variable support** - Use env vars in connection strings
+  - `spindb connect --remote "$DATABASE_URL"`
+  - `spindb create mydb --from "$PROD_DATABASE_URL"`
+- [ ] **Secrets management** - Secure credential storage
+  - macOS Keychain integration for storing passwords
+  - `spindb secrets set mydb-password`
+  - `spindb secrets get mydb-password`
+  - Reference secrets in connection strings: `postgresql://user:${secret:mydb-password}@host/db`
 
-## Free Features
+### v1.2 - Additional Engines
 
-### High Priority
-- [ ] **Run SQL file** - Add menu option to run a `.sql` file against a container (wrapper around `psql -f` / `mysql <`)
-- [x] **Backup command** - Add `spindb backup` to create dumps using `pg_dump` / `mysqldump`
-- [ ] **Logs command** - Add `spindb logs <container>` to tail `postgres.log` / `mysql.log`
+See [Engines](#engines) section below for full engine status and details.
 
-### Medium Priority
-- [ ] **Database rename** - Rename a database within a container (requires stopping container, running `ALTER DATABASE ... RENAME TO ...`, updating config)
-- [x] **Multiple databases per container** - List/create/delete databases within a container (tracking via `databases[]` in container.json)
-- [ ] **Multi-database container backup** - Bundle all databases in a container into a single proprietary archive format with metadata
-
-### Low Priority
-- [ ] **SQLite support** - Add SQLite engine
-- [ ] **MongoDB support** - Add MongoDB engine
-- [ ] **Health checks** - Periodic connection tests to verify containers are responsive
-- [ ] **Offline Support** - Package binaries locally for offline installation
-- [ ] **Binary caching** - Cache downloaded binaries locally to avoid re-downloading
-- [ ] **Binary verification** - Verify downloaded binaries with checksums
-
----
-
-## Paid Features (Pro)
-
-### Security
-- [ ] **Password support** - Set password on container creation, modify auth config for password auth
-- [ ] **Encrypted backups** - Encrypt dumps with password using gpg/openssl
-
-### Advanced Features
-- [ ] **Container templates** - Save container configs as reusable templates
-- [ ] **Import from Docker** - Import data from Docker PostgreSQL/MySQL containers
-- [x] **Self-update** - `spindb self-update` command with automatic update notifications on startup
-- [ ] **User management** - Support for custom usernames, passwords, and additional database users
-  - Custom superuser name (instead of default `postgres`/`root`)
-  - Set password on container creation
-  - Create additional users with specific privileges
-  - Store credentials securely (keychain integration?)
+### v1.3 - Advanced Features
+- [ ] **Database rename** - Rename databases within containers
+- [ ] **Container templates** - Save/load container configurations
 - [ ] **Scheduled backups** - Cron-like backup scheduling
-- [ ] **Cloud backup sync** - Sync backups to S3/GCS/Azure
-- [ ] **MongoDB support** - Add MongoDB engine
-
-### Team Features
-- [ ] **Shared configs** - Export/import container configs for team sharing
-- [ ] **Config profiles** - Dev/staging/test profiles with different settings
+- [ ] **Import from Docker** - Migrate data from Docker containers
 
 ---
 
-## Stretch Goals
+## Feature Backlog
 
-- [ ] **Desktop GUI (Tauri)** - System tray app showing running database status, with full GUI for container management. Separate repository.
-- [ ] **Terminal-based IDE** - Full TUI (terminal UI) for browsing tables, running queries, viewing results, editing data inline (think `lazygit` but for databases)
-  - Potential libraries: [blessed](https://github.com/chjj/blessed), [ink](https://github.com/vadimdemedes/ink), [terminal-kit](https://github.com/cronvel/terminal-kit)
-  - Inspiration: `lazygit`, `k9s`, `pgcli`
-- [ ] **Multi-database container backup** - Bundle all databases in a container into a single proprietary archive format with metadata
-- [ ] **Multi-database container restore** - Restore all databases from a single proprietary archive format with metadata
-- [ ] **Windows support** - Add Windows support for PostgreSQL
-- [ ] **Windows support** - Add Windows support for MySQL
-- [ ] **Offline support** - Add offline support for PostgreSQL
-- [ ] **Offline support** - Add offline support for MySQL
+### CLI Improvements
+- [ ] **Export query results** - `spindb run <container> query.sql --format csv/json --output file`
+- [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
+- [ ] **Health checks** - Periodic connection tests for container status
+
+### Security (Pro)
+- [ ] **Password authentication** - Set passwords on container creation
+- [ ] **Encrypted backups** - GPG/OpenSSL encryption for dumps
+- [ ] **User management** - Custom users with specific privileges
+
+### Team Features (Pro)
+- [ ] **Shared configs** - Export/import container configs
+- [ ] **Config profiles** - Dev/staging/test environment profiles
+- [ ] **Cloud backup sync** - S3/GCS/Azure backup storage
+
+### Platform Support
+- [ ] **Windows support** - Requires alternative binary source (zonky.io is macOS/Linux only)
+- [ ] **Offline mode** - Bundle binaries for air-gapped environments
 
 ---
 
-## Brew Binary
+## Distribution
 
-Distribute SpinDB as a standalone Homebrew binary (no Node.js dependency).
+### Homebrew Binary
 
-### Approach: Standalone Binary with Bun
+Distribute SpinDB as a standalone binary (no Node.js dependency) via Homebrew tap.
 
-Compile TypeScript to a single executable using `bun build --compile`:
+**Build:** `bun build ./cli/bin.ts --compile --outfile dist/spindb`
 
-```bash
-# Build standalone binary
-bun build ./cli/bin.ts --compile --outfile dist/spindb
-```
-
-### Build Script
-
-Add to `package.json`:
-```json
-"build:binary": "bun build ./cli/bin.ts --compile --outfile dist/spindb"
-```
-
-### Homebrew Formula
-
-Create a tap at `github.com/robertjbass/homebrew-tap` with:
-
-```ruby
-# Formula/spindb.rb
-class Spindb < Formula
-  desc "Spin up local database containers without Docker"
-  homepage "https://github.com/robertjbass/spindb"
-  version "X.X.X"
-  license "PolyForm-Noncommercial-1.0.0"
-
-  on_macos do
-    on_arm do
-      url "https://github.com/robertjbass/spindb/releases/download/vX.X.X/spindb-darwin-arm64.tar.gz"
-      sha256 "ARM64_CHECKSUM"
-    end
-    on_intel do
-      url "https://github.com/robertjbass/spindb/releases/download/vX.X.X/spindb-darwin-x64.tar.gz"
-      sha256 "X64_CHECKSUM"
-    end
-  end
-
-  def install
-    bin.install "spindb"
-  end
-
-  test do
-    system bin/"spindb", "--version"
-  end
-end
-```
-
-### GitHub Release Workflow
-
-Build binaries for multiple platforms in CI:
-- `darwin-arm64` (Apple Silicon)
-- `darwin-x64` (Intel Mac)
-- `linux-x64` (Linux)
-
-### User Installation
-
+**Install:**
 ```bash
 brew tap robertjbass/tap
 brew install spindb
 ```
 
-### Alternative Tools
+**Platforms:**
+- darwin-arm64 (Apple Silicon)
+- darwin-x64 (Intel Mac)
+- linux-x64
 
-| Tool | Notes |
-|------|-------|
-| [pkg](https://github.com/vercel/pkg) | Single binary with Node.js bundled |
-| [bun build --compile](https://bun.sh/docs/bundler/executables) | Native executable (recommended) |
-| [esbuild](https://esbuild.github.io/) + [caxa](https://github.com/leafac/caxa) | Bundled app |
+See `.github/workflows/release.yml` for CI build configuration.
+
+---
+
+## Desktop GUI (Separate Repository)
+
+**Framework:** Tauri v2 (Rust + React)
+**Architecture:** GUI shells out to `spindb` CLI commands
+
+### Features
+- System tray with running container status
+- Start/stop/delete containers
+- Create new containers
+- View connection strings
+- Auto-updates and launch on startup (opt-in)
 
 ---
 
 ## Known Limitations
 
 - **No Windows support** - zonky.io doesn't provide Windows PostgreSQL binaries
-- **Client tools required** - psql/pg_dump/pg_restore and mysql/mysqldump must be installed separately (not bundled)
-- **Local only** - No remote connection support (binds to 127.0.0.1)
+- **Client tools required** - psql/pg_dump and mysql/mysqldump must be installed separately
+- **Local only (currently)** - Binds to 127.0.0.1; remote connections planned for v1.1
 - **MySQL uses system binaries** - Unlike PostgreSQL, MySQL requires system installation
-
-
-## System Integration Tests
-
-Tests that verify the full container lifecycle using real database processes and filesystem operations.
-
-**Run tests:**
-```bash
-pnpm test           # Run all tests (PostgreSQL + MySQL sequentially)
-pnpm test:pg        # PostgreSQL tests only
-pnpm test:mysql     # MySQL tests only
-```
-
-### Test Configuration
-
-```typescript
-// Default test ports (will auto-increment if in use)
-const TEST_PORTS = {
-  postgresql: { base: 5454, clone: 5456, renamed: 5455 },
-  mysql: { base: 3333, clone: 3335, renamed: 3334 },
-}
-```
-
-### Test Suites
-
-#### PostgreSQL Integration Tests (14 tests)
-1. **Cleanup** - Delete any existing containers matching `*-test*` pattern
-2. **Create without start** - Create container with `--no-start`, verify not running
-3. **Start container** - Start the container, verify running
-4. **Seed database** - Run `tests/fixtures/postgresql/seeds/sample-db.sql`, verify data inserted
-5. **Query data** - Query the seeded table, record row count
-6. **Create from dump** - Use `--from` with connection string to create new container with data
-7. **Verify restored data** - Query restored container, verify row count matches
-8. **Stop and delete restored container** - Clean up, verify filesystem removed
-9. **Modify original data** - Delete 1 row from original container
-10. **Edit container** - Rename container and change port
-11. **Verify persistence** - Start renamed container, verify row count reflects deletion
-12. **Port conflict handling** - Create container on busy port, verify auto-increment
-13. **Start already running** - Attempt to start running container, verify warning (not error)
-14. **Stop already stopped** - Attempt to stop stopped container, verify warning (not error)
-15. **Delete container** - Delete with `--force`, verify filesystem and list updated
-16. **Final cleanup** - Ensure no test containers remain
-
-#### MySQL Integration Tests (14 tests)
-Same test cases as PostgreSQL, using MySQL-specific:
-- Seed file: `tests/fixtures/mysql/seeds/sample-db.sql`
-- Connection string: `mysql://root@127.0.0.1:{port}/{db}`
-- Port range: 3333-3400
-
-### Test Helpers
-
-Located in `tests/integration/helpers.ts`:
-
-- `generateTestName(prefix)` - Generate unique test container name
-- `findConsecutiveFreePorts(count, startPort)` - Find N consecutive available ports
-- `cleanupTestContainers()` - Delete all containers matching `*-test*`
-- `executeSQL(engine, port, database, sql)` - Run SQL and return results
-- `executeSQLFile(engine, port, database, filePath)` - Run SQL file
-- `getRowCount(engine, port, database, table)` - Get row count from table
-- `waitForReady(engine, port, timeout)` - Wait for database to accept connections
-- `containerDataExists(containerName, engine)` - Check if data directory exists
-- `getConnectionString(engine, port, database)` - Get connection string
-- `assert(condition, message)` - Assert helper
-- `assertEqual(actual, expected, message)` - Assert equality helper
-
-### Future Improvements
-
-- [ ] **Parallel test isolation** - Run PostgreSQL and MySQL tests in parallel safely
-- [ ] **Backup/restore round-trip** - Dump → delete row → restore → verify row is back
-- [ ] **Binary download test** - Test first-time PostgreSQL binary download (CI only)
-
 
 ---
 
-## Desktop GUI Architecture (Future)
+## Silent Catch Blocks (By Design)
 
-**Framework:** Tauri v2 (Rust backend + React frontend)
-**Repository:** Separate repo (not monorepo) - avoids restructuring CLI, GUI shells out to `spindb` commands
-**Bundle size:** ~10-15MB (vs ~150MB for Electron)
+These catch blocks intentionally suppress errors because they handle expected failure scenarios:
 
-### Core Features (v1)
-- System tray icon showing running database count/status
-- Click tray icon to open main GUI window
-- List all containers with status indicators
-- Start/stop/delete containers
-- Create new containers
-- View connection strings
+| Location | Purpose |
+|----------|---------|
+| `mysql/binary-detection.ts:71,87` | Version/MariaDB detection probes |
+| `mysql/binary-detection.ts:231,261,278,295,312` | Package manager detection |
+| `mysql/index.ts:315` | MySQL readiness probe loop |
+| `mysql/index.ts:356` | MySQL ping check (no PID file) |
+| `cli/commands/list.ts:28` | Database size fetch (container not running) |
+| `postgresql/binary-urls.ts:75` | Maven version fetch (fallback to hardcoded) |
+| `cli/index.ts:78,88` | Update check notification (non-critical) |
 
-### Optional Features (user opt-in)
-- Auto-updates via `tauri-plugin-updater`
-- Launch on system startup via `tauri-plugin-autostart`
+---
 
-### Technical Approach
-- Rust backend: Thin wrappers around `spindb` CLI commands via `std::process::Command`
-- React frontend: Full TypeScript, component library TBD (Radix, shadcn, etc.)
-- IPC: Tauri's `invoke` for React → Rust communication
-- State: Poll `spindb list --json` periodically or on user action
+## Testing
 
-### Future Enhancements
-- Tray dropdown menu with quick start/stop (instead of opening full GUI)
-- Native notifications for container events
-- Database browser/query tool
+### Run Tests
+```bash
+pnpm test           # All tests (unit + integration)
+pnpm test:unit      # Unit tests only
+pnpm test:pg        # PostgreSQL integration
+pnpm test:mysql     # MySQL integration
+```
+
+### Test Ports
+- PostgreSQL: 5454-5456
+- MySQL: 3333-3335
+
+### Test Coverage
+- **Unit tests:** 141 tests covering validation, error handling, version compatibility
+- **Integration tests:** 28 tests (14 PostgreSQL + 14 MySQL) covering full container lifecycle
+
+---
+
+## Engines
+
+### Supported
+
+| Engine | Status | Binary Source | Binary Size | Notes |
+|--------|--------|---------------|-------------|-------|
+| 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-17 |
+| 🐬 **MySQL** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Also supports MariaDB as drop-in replacement |
+
+### Planned
+
+| Engine | Status | Type | Binary Size | Notes |
+|--------|--------|------|-------------|-------|
+| 🪶 **SQLite** | 🔜 Planned | File-based | ~500 KB | Extremely lightweight, embedded library |
+| 🔴 **Redis** | 🔜 Planned | In-memory | ~3-5 MB | Lightweight server binary |
+| 🍃 **MongoDB** | 🔜 Planned | Document DB | ~200-300 MB | Large binary, may use system install like MySQL |
+
+### Engine Details
+
+#### 🪶 SQLite
+- **Data location:** Project directory (CWD by default), not `~/.spindb/`
+- **Create:** `spindb create mydb --engine sqlite --path ./data/mydb.sqlite`
+- **Process:** No start/stop needed (embedded database, no server process)
+- **Enhanced CLI:** `litecli`
+- **Backup formats:**
+  - `.dump` → SQL text file (portable, can import to other DBs)
+  - File copy / `.backup` → Binary database file (faster, SQLite-only)
+  - Compressed: `sqlite3 db.sqlite .dump | gzip > backup.sql.gz`
+- **Considerations:**
+  - No port management needed
+  - Connection string is just the file path
+  - May need to handle file locking for concurrent access
+
+#### 🔴 Redis
+- **Data location:** `~/.spindb/containers/redis/{name}/`
+- **Process:** Server process (like MySQL/PostgreSQL)
+- **Binary source:** Could download from redis.io or use system install
+- **Enhanced CLI:** `iredis`
+- **Backup formats:**
+  - **RDB** (Redis Database Backup) - Compact binary snapshot, fast recovery, recommended for backups
+  - **AOF** (Append Only File) - Change log format, larger but more durable
+  - RDB is typically smaller and faster to restore than AOF
+- **Considerations:**
+  - RDB files use LZF compression internally
+  - May want to support both RDB snapshots and AOF for different use cases
+  - `BGSAVE` for background saves, `SAVE` for synchronous
+
+#### 🍃 MongoDB
+- **Data location:** `~/.spindb/containers/mongodb/{name}/`
+- **Process:** Server process (`mongod`)
+- **Binary source:** System install recommended due to large binary size (~200-300 MB)
+- **Enhanced CLI:** `mongosh` (MongoDB Shell)
+- **Backup formats:**
+  - **mongodump** (BSON) - Binary format, preserves all BSON types, recommended for backups
+  - **mongoexport** (JSON/CSV) - Human-readable, but loses some BSON type fidelity
+  - **WARNING:** Avoid mongoexport for production backups (doesn't preserve all BSON types)
+- **Considerations:**
+  - Large binary size may favor system install approach (like MySQL)
+  - BSON format is more compact and faster than JSON
+  - mongodump creates directory with .bson files per collection
+
+### Backup Format Summary
+
+| Engine | Text Format | Binary/Compressed Format | Recommended |
+|--------|-------------|-------------------------|-------------|
+| PostgreSQL | `.sql` (pg_dump) | `.dump` (custom format) | `.dump` for full backup |
+| MySQL | `.sql` (mysqldump) | `.sql.gz` (gzipped SQL) | `.sql.gz` for storage |
+| SQLite | `.sql` (.dump) | `.db` (file copy) | File copy for speed |
+| Redis | N/A | `.rdb` (RDB snapshot) | RDB for backups |
+| MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
+
+### Considerations
+
+**MariaDB as separate engine:**
+Currently MariaDB is treated as a drop-in replacement for MySQL on Linux systems. The MySQL engine auto-detects MariaDB and handles compatibility. However, MariaDB has diverged from MySQL in recent versions with unique features (e.g., sequences, system-versioned tables). Consider creating a dedicated MariaDB engine in the future if:
+- Users need MariaDB-specific features not available in MySQL
+- Compatibility issues arise between MySQL and MariaDB dumps
+- MariaDB binary management differs significantly from MySQL
+
+For now, the MySQL engine's MariaDB support is sufficient for most use cases.
+
+### Enhanced CLI Tools
+
+| Engine | Standard CLI | Enhanced CLI | Notes |
+|--------|-------------|--------------|-------|
+| PostgreSQL | `psql` | `pgcli` | Auto-completion, syntax highlighting |
+| MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
+| SQLite | `sqlite3` | `litecli` | Planned for v1.2 |
+| Redis | `redis-cli` | `iredis` | Planned for v1.2 |
+| MongoDB | `mongosh` | - | Built-in shell is already enhanced |
+| Universal | - | `usql` | Works with all SQL databases |
+

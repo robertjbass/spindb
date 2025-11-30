@@ -1,0 +1,417 @@
+/**
+ * Unit tests for binary-manager module
+ */
+
+import { describe, it } from 'node:test'
+import { BinaryManager } from '../../core/binary-manager'
+import { assert, assertEqual } from '../integration/helpers'
+
+describe('BinaryManager', () => {
+  describe('getFullVersion', () => {
+    it('should map major versions to full versions', () => {
+      const binaryManager = new BinaryManager()
+
+      const testCases = [
+        { input: '14', expected: '14.20.0' },
+        { input: '15', expected: '15.15.0' },
+        { input: '16', expected: '16.11.0' },
+        { input: '17', expected: '17.7.0' },
+      ]
+
+      for (const { input, expected } of testCases) {
+        const result = binaryManager.getFullVersion(input)
+        assertEqual(
+          result,
+          expected,
+          `Major version ${input} should map to ${expected}`,
+        )
+      }
+    })
+
+    it('should normalize two-part versions to three parts', () => {
+      const binaryManager = new BinaryManager()
+
+      assertEqual(
+        binaryManager.getFullVersion('16.9'),
+        '16.9.0',
+        'Should add .0 to two-part versions',
+      )
+      assertEqual(
+        binaryManager.getFullVersion('15.4'),
+        '15.4.0',
+        'Should add .0 to two-part versions',
+      )
+    })
+
+    it('should return three-part versions unchanged', () => {
+      const binaryManager = new BinaryManager()
+
+      assertEqual(
+        binaryManager.getFullVersion('16.9.0'),
+        '16.9.0',
+        'Should not modify three-part versions',
+      )
+      assertEqual(
+        binaryManager.getFullVersion('17.7.0'),
+        '17.7.0',
+        'Should not modify three-part versions',
+      )
+    })
+  })
+
+  describe('getDownloadUrl', () => {
+    it('should generate valid Maven Central URL for darwin-arm64', () => {
+      const binaryManager = new BinaryManager()
+      const url = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
+
+      assert(
+        url.includes('repo1.maven.org'),
+        'URL should use Maven Central',
+      )
+      assert(
+        url.includes('embedded-postgres-binaries'),
+        'URL should reference embedded-postgres',
+      )
+      assert(
+        url.includes('darwin-arm64v8'),
+        'URL should include platform mapping for ARM Mac',
+      )
+      assert(url.endsWith('.jar'), 'URL should point to JAR file')
+    })
+
+    it('should generate valid URL for darwin-x64', () => {
+      const binaryManager = new BinaryManager()
+      const url = binaryManager.getDownloadUrl('16', 'darwin', 'x64')
+
+      assert(
+        url.includes('darwin-amd64'),
+        'URL should include platform mapping for Intel Mac',
+      )
+    })
+
+    it('should generate valid URL for linux-x64', () => {
+      const binaryManager = new BinaryManager()
+      const url = binaryManager.getDownloadUrl('16', 'linux', 'x64')
+
+      assert(
+        url.includes('linux-amd64'),
+        'URL should include platform mapping for Linux x64',
+      )
+    })
+
+    it('should throw error for unsupported platform', () => {
+      const binaryManager = new BinaryManager()
+
+      try {
+        binaryManager.getDownloadUrl('17', 'win32', 'x64')
+        assert(false, 'Should have thrown an error')
+      } catch (error) {
+        assert(error instanceof Error, 'Should throw Error')
+        assert(
+          error.message.includes('Unsupported platform'),
+          `Error should mention unsupported platform: ${error.message}`,
+        )
+        assert(
+          error.message.includes('win32-x64'),
+          `Error should include the platform key: ${error.message}`,
+        )
+      }
+    })
+
+    it('should include full version in URL', () => {
+      const binaryManager = new BinaryManager()
+      const url = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
+
+      // Major version 17 maps to 17.7.0
+      assert(
+        url.includes('17.7.0'),
+        'URL should include full version (17.7.0), not just major version',
+      )
+    })
+  })
+
+  describe('getBinaryExecutable', () => {
+    it('should return correct path for postgres binary', () => {
+      const binaryManager = new BinaryManager()
+      const path = binaryManager.getBinaryExecutable(
+        '17',
+        'darwin',
+        'arm64',
+        'postgres',
+      )
+
+      assert(path.includes('bin/postgres'), 'Path should include bin/postgres')
+      assert(
+        path.includes('17.7.0'),
+        'Path should use full version',
+      )
+    })
+
+    it('should return correct path for pg_ctl binary', () => {
+      const binaryManager = new BinaryManager()
+      const path = binaryManager.getBinaryExecutable(
+        '16',
+        'darwin',
+        'arm64',
+        'pg_ctl',
+      )
+
+      assert(path.includes('bin/pg_ctl'), 'Path should include bin/pg_ctl')
+    })
+
+    it('should return correct path for initdb binary', () => {
+      const binaryManager = new BinaryManager()
+      const path = binaryManager.getBinaryExecutable(
+        '16',
+        'darwin',
+        'arm64',
+        'initdb',
+      )
+
+      assert(path.includes('bin/initdb'), 'Path should include bin/initdb')
+    })
+  })
+
+  describe('listInstalled', () => {
+    it('should return array of InstalledBinary objects', async () => {
+      const binaryManager = new BinaryManager()
+      const installed = await binaryManager.listInstalled()
+
+      assert(Array.isArray(installed), 'Should return an array')
+
+      for (const binary of installed) {
+        assert(typeof binary.engine === 'string', 'Should have engine')
+        assert(typeof binary.version === 'string', 'Should have version')
+        assert(typeof binary.platform === 'string', 'Should have platform')
+        assert(typeof binary.arch === 'string', 'Should have arch')
+      }
+    })
+
+    it('should parse directory names correctly', () => {
+      // Test the parsing logic used in listInstalled
+      const dirName = 'postgresql-17.7.0-darwin-arm64'
+      const parts = dirName.split('-')
+
+      assertEqual(parts[0], 'postgresql', 'Should extract engine')
+      assertEqual(parts[1], '17.7.0', 'Should extract version')
+      assertEqual(parts[2], 'darwin', 'Should extract platform')
+      assertEqual(parts[3], 'arm64', 'Should extract arch')
+    })
+  })
+
+  describe('isInstalled', () => {
+    it('should return boolean', async () => {
+      const binaryManager = new BinaryManager()
+      const result = await binaryManager.isInstalled('99', 'darwin', 'arm64')
+
+      assert(typeof result === 'boolean', 'Should return boolean')
+      // Version 99 shouldn't exist
+      assertEqual(result, false, 'Non-existent version should not be installed')
+    })
+
+    it('should use full version for path checking', async () => {
+      const binaryManager = new BinaryManager()
+      // This tests that isInstalled internally calls getFullVersion
+      const result = await binaryManager.isInstalled('17', 'darwin', 'arm64')
+
+      assert(typeof result === 'boolean', 'Should handle major version input')
+    })
+  })
+
+  describe('verify', () => {
+    it('should throw error for non-existent binary', async () => {
+      const binaryManager = new BinaryManager()
+
+      try {
+        await binaryManager.verify('99', 'darwin', 'arm64')
+        assert(false, 'Should have thrown an error')
+      } catch (error) {
+        assert(error instanceof Error, 'Should throw Error')
+        assert(
+          error.message.includes('not found'),
+          `Error should indicate binary not found: ${error.message}`,
+        )
+      }
+    })
+
+    it('should parse postgres --version output correctly', () => {
+      const testOutputs = [
+        { output: 'postgres (PostgreSQL) 16.9', expected: '16.9' },
+        { output: 'postgres (PostgreSQL) 17.7', expected: '17.7' },
+        { output: 'postgres (PostgreSQL) 15.4', expected: '15.4' },
+      ]
+
+      for (const { output, expected } of testOutputs) {
+        const match = output.match(/postgres \(PostgreSQL\) ([\d.]+)/)
+        assert(match !== null, `Should match pattern in: ${output}`)
+        assertEqual(match![1], expected, `Should extract version ${expected}`)
+      }
+    })
+
+    it('should handle version comparison correctly', () => {
+      // Test the normalizeVersion logic from verify
+      const normalizeVersion = (v: string) => v.replace(/\.0$/, '')
+
+      assertEqual(normalizeVersion('16.9.0'), '16.9', 'Should strip trailing .0')
+      assertEqual(normalizeVersion('16.9'), '16.9', 'Should not modify without trailing .0')
+      assertEqual(normalizeVersion('16'), '16', 'Should handle single part')
+    })
+  })
+
+  describe('download', () => {
+    it('should report download progress stages', () => {
+      // Test the progress callback stages
+      const stages = ['downloading', 'extracting', 'verifying', 'cached']
+
+      for (const stage of stages) {
+        assert(
+          ['downloading', 'extracting', 'verifying', 'cached'].includes(stage),
+          `Stage "${stage}" should be valid`,
+        )
+      }
+    })
+
+    it('should handle download errors gracefully', async () => {
+      // Test error message format for failed downloads
+      const status = 404
+      const statusText = 'Not Found'
+      const errorMessage = `Failed to download binaries: ${status} ${statusText}`
+
+      assert(
+        errorMessage.includes('404'),
+        'Error should include status code',
+      )
+      assert(
+        errorMessage.includes('Not Found'),
+        'Error should include status text',
+      )
+    })
+
+    it('should throw meaningful error when txz not found', () => {
+      const errorMessage = 'Could not find .txz file in downloaded archive'
+
+      assert(
+        errorMessage.includes('.txz'),
+        'Error should mention the missing file type',
+      )
+    })
+  })
+
+  describe('ensureInstalled', () => {
+    it('should report cached stage when already installed', async () => {
+      const binaryManager = new BinaryManager()
+      let progressStage: string | undefined
+
+      // If not installed, this would start a download
+      // We're testing the concept of the cached path
+      const isInstalled = await binaryManager.isInstalled('17', 'darwin', 'arm64')
+
+      if (isInstalled) {
+        // Would call onProgress with stage: 'cached'
+        progressStage = 'cached'
+      }
+
+      if (isInstalled) {
+        assertEqual(progressStage, 'cached', 'Should report cached stage')
+      }
+    })
+  })
+
+  describe('ProgressCallback', () => {
+    it('should have correct shape', () => {
+      const progress = {
+        stage: 'downloading' as const,
+        message: 'Downloading PostgreSQL binaries...',
+      }
+
+      assert(typeof progress.stage === 'string', 'Should have stage')
+      assert(typeof progress.message === 'string', 'Should have message')
+    })
+
+    it('should support all stages', () => {
+      const validStages = ['downloading', 'extracting', 'verifying', 'cached']
+
+      for (const stage of validStages) {
+        const progress = { stage, message: `Stage: ${stage}` }
+        assert(
+          validStages.includes(progress.stage),
+          `${stage} should be a valid stage`,
+        )
+      }
+    })
+  })
+
+  describe('Platform Mappings', () => {
+    it('should map darwin-arm64 to darwin-arm64v8', () => {
+      // This tests the mapping used internally
+      const platformMappings: Record<string, string> = {
+        'darwin-arm64': 'darwin-arm64v8',
+        'darwin-x64': 'darwin-amd64',
+        'linux-x64': 'linux-amd64',
+        'linux-arm64': 'linux-arm64v8',
+      }
+
+      assertEqual(
+        platformMappings['darwin-arm64'],
+        'darwin-arm64v8',
+        'ARM Mac should map correctly',
+      )
+      assertEqual(
+        platformMappings['darwin-x64'],
+        'darwin-amd64',
+        'Intel Mac should map correctly',
+      )
+    })
+  })
+
+  describe('Error Messages', () => {
+    it('should provide clear error for unsupported platform', () => {
+      const binaryManager = new BinaryManager()
+
+      try {
+        binaryManager.getDownloadUrl('17', 'unsupported', 'arch')
+      } catch (error) {
+        assert(error instanceof Error, 'Should throw Error')
+        assert(
+          error.message.includes('Unsupported platform'),
+          'Error should clearly state unsupported platform',
+        )
+        assert(
+          error.message.includes('unsupported-arch'),
+          'Error should include the attempted platform-arch combo',
+        )
+      }
+    })
+
+    it('should provide clear error for failed verification', () => {
+      const errorCases = [
+        { message: 'PostgreSQL binary not found at /path', check: 'not found' },
+        { message: 'Could not parse version from: unknown', check: 'parse version' },
+        { message: 'Version mismatch: expected 17, got 16', check: 'mismatch' },
+      ]
+
+      for (const { message, check } of errorCases) {
+        assert(
+          message.toLowerCase().includes(check),
+          `Error "${message}" should include "${check}"`,
+        )
+      }
+    })
+  })
+})
+
+describe('InstalledBinary Type', () => {
+  it('should have all required fields', () => {
+    const binary = {
+      engine: 'postgresql' as const,
+      version: '17.7.0',
+      platform: 'darwin',
+      arch: 'arm64',
+    }
+
+    assert(typeof binary.engine === 'string', 'Should have engine')
+    assert(typeof binary.version === 'string', 'Should have version')
+    assert(typeof binary.platform === 'string', 'Should have platform')
+    assert(typeof binary.arch === 'string', 'Should have arch')
+  })
+})

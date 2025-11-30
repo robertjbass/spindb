@@ -143,3 +143,6 @@ vite.config.ts.timestamp-*
 
 # Local testing
 _dumps
+
+# Private docs
+MONETIZATION.md

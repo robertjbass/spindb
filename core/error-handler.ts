@@ -17,10 +17,6 @@ function getSpinDBRoot(): string {
   return join(home, '.spindb')
 }
 
-// =============================================================================
-// Types
-// =============================================================================
-
 export type ErrorSeverity = 'fatal' | 'error' | 'warning' | 'info'
 
 export type SpinDBErrorInfo = {
@@ -30,10 +26,6 @@ export type SpinDBErrorInfo = {
   suggestion?: string
   context?: Record<string, unknown>
 }
-
-// =============================================================================
-// Error Codes
-// =============================================================================
 
 export const ErrorCodes = {
   // Port errors
@@ -83,10 +75,6 @@ export const ErrorCodes = {
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes]
 
-// =============================================================================
-// SpinDBError Class
-// =============================================================================
-
 export class SpinDBError extends Error {
   public readonly code: string
   public readonly severity: ErrorSeverity
@@ -131,13 +119,6 @@ export class SpinDBError extends Error {
   }
 }
 
-// =============================================================================
-// Logging Functions
-// =============================================================================
-
-/**
- * Get the path to the log file
- */
 function getLogPath(): string {
   return join(getSpinDBRoot(), 'spindb.log')
 }
@@ -264,13 +245,6 @@ export function logDebug(
   })
 }
 
-// =============================================================================
-// Error Creation Helpers
-// =============================================================================
-
-/**
- * Create a port-in-use error with helpful suggestion
- */
 export function createPortInUseError(port: number): SpinDBError {
   return new SpinDBError(
     ErrorCodes.PORT_IN_USE,

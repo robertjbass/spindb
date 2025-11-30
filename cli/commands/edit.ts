@@ -90,6 +90,16 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
     return null
   }
 
+  // Double-check availability and warn (user already confirmed via validation)
+  const portAvailable = await portManager.isPortAvailable(newPort)
+  if (!portAvailable) {
+    console.log(
+      warning(
+        `Note: Port ${newPort} is currently in use. It will be used when the container starts.`,
+      ),
+    )
+  }
+
   return newPort
 }
 

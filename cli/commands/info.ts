@@ -1,19 +1,13 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
+import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
 import { error, info, header } from '../ui/theme'
+import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
-
-/**
- * Engine icons
- */
-const engineIcons: Record<string, string> = {
-  postgresql: '🐘',
-  mysql: '🐬',
-}
 
 /**
  * Format a date for display
@@ -65,7 +59,7 @@ async function displayContainerInfo(
     return
   }
 
-  const icon = engineIcons[config.engine] || '▣'
+  const icon = getEngineIcon(config.engine)
   const statusDisplay =
     actualStatus === 'running'
       ? chalk.green('● running')
@@ -168,7 +162,7 @@ async function displayAllContainersInfo(
         ? chalk.green('● running')
         : chalk.gray('○ stopped')
 
-    const icon = engineIcons[container.engine] || '▣'
+    const icon = getEngineIcon(container.engine)
     const engineDisplay = `${icon} ${container.engine}`
 
     console.log(
@@ -214,6 +208,7 @@ async function displayAllContainersInfo(
 }
 
 export const infoCommand = new Command('info')
+  .alias('status')
   .description('Show container details')
   .argument('[name]', 'Container name (omit to show all)')
   .option('--json', 'Output as JSON')
@@ -239,9 +234,7 @@ export const infoCommand = new Command('info')
 
       // If running interactively without name, ask if they want all or specific
       if (!options.json && process.stdout.isTTY && containers.length > 1) {
-        const { choice } = await (
-          await import('inquirer')
-        ).default.prompt<{
+        const { choice } = await inquirer.prompt<{
           choice: string
         }>([
           {
@@ -251,7 +244,7 @@ export const infoCommand = new Command('info')
             choices: [
               { name: 'All containers', value: 'all' },
               ...containers.map((c) => ({
-                name: `${c.name} ${chalk.gray(`(${engineIcons[c.engine] || '▣'} ${c.engine})`)}`,
+                name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine})`)}`,
                 value: c.name,
               })),
             ],

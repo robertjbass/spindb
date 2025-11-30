@@ -1,0 +1,130 @@
+import { Command } from 'commander'
+import { spawn } from 'child_process'
+import { existsSync } from 'fs'
+import { readFile } from 'fs/promises'
+import { containerManager } from '../../core/container-manager'
+import { paths } from '../../config/paths'
+import { promptContainerSelect } from '../ui/prompts'
+import { error, warning, info } from '../ui/theme'
+
+/**
+ * Get the last N lines from a file content
+ */
+function getLastNLines(content: string, n: number): string {
+  const lines = content.split('\n')
+  // Filter empty trailing line if present
+  const nonEmptyLines =
+    lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
+  return nonEmptyLines.slice(-n).join('\n')
+}
+
+export const logsCommand = new Command('logs')
+  .description('View container logs')
+  .argument('[name]', 'Container name')
+  .option('-f, --follow', 'Follow log output (like tail -f)')
+  .option('-n, --lines <number>', 'Number of lines to show', '50')
+  .option('--editor', 'Open logs in $EDITOR')
+  .action(
+    async (
+      name: string | undefined,
+      options: { follow?: boolean; lines?: string; editor?: boolean },
+    ) => {
+      try {
+        let containerName = name
+
+        // Interactive selection if no name provided
+        if (!containerName) {
+          const containers = await containerManager.list()
+
+          if (containers.length === 0) {
+            console.log(warning('No containers found'))
+            return
+          }
+
+          const selected = await promptContainerSelect(
+            containers,
+            'Select container:',
+          )
+          if (!selected) return
+          containerName = selected
+        }
+
+        // Get container config
+        const config = await containerManager.getConfig(containerName)
+        if (!config) {
+          console.error(error(`Container "${containerName}" not found`))
+          process.exit(1)
+        }
+
+        // Get log file path
+        const logPath = paths.getContainerLogPath(config.name, {
+          engine: config.engine,
+        })
+
+        // Check if log file exists
+        if (!existsSync(logPath)) {
+          console.log(
+            info(
+              `No log file found for "${containerName}". The container may not have been started yet.`,
+            ),
+          )
+          return
+        }
+
+        // Open in editor if requested
+        if (options.editor) {
+          const editorCmd = process.env.EDITOR || 'vi'
+          const child = spawn(editorCmd, [logPath], {
+            stdio: 'inherit',
+          })
+
+          await new Promise<void>((resolve, reject) => {
+            child.on('close', (code) => {
+              if (code === 0) {
+                resolve()
+              } else {
+                reject(new Error(`Editor exited with code ${code}`))
+              }
+            })
+            child.on('error', reject)
+          })
+          return
+        }
+
+        // Follow mode using tail -f
+        if (options.follow) {
+          const lineCount = parseInt(options.lines || '50', 10)
+          const child = spawn('tail', ['-n', String(lineCount), '-f', logPath], {
+            stdio: 'inherit',
+          })
+
+          // Handle SIGINT gracefully
+          process.on('SIGINT', () => {
+            child.kill('SIGTERM')
+            process.exit(0)
+          })
+
+          await new Promise<void>((resolve) => {
+            child.on('close', () => resolve())
+          })
+          return
+        }
+
+        // Default: read and output last N lines
+        const lineCount = parseInt(options.lines || '50', 10)
+        const content = await readFile(logPath, 'utf-8')
+
+        if (content.trim() === '') {
+          console.log(info('Log file is empty'))
+          return
+        }
+
+        const output = getLastNLines(content, lineCount)
+        console.log(output)
+      } catch (err) {
+        const e = err as Error
+        console.error(error(e.message))
+        process.exit(1)
+      }
+    },
+  )
