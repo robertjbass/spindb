@@ -1165,13 +1165,14 @@ async function handleRunSql(containerName: string): Promise<void> {
     path.replace(/^['"]|['"]$/g, '').trim()
 
   // Prompt for file path (empty input = go back)
+  console.log(chalk.gray('  Drag & drop, enter path (abs or rel), or press Enter to go back'))
   const { filePath: rawFilePath } = await inquirer.prompt<{
     filePath: string
   }>([
     {
       type: 'input',
       name: 'filePath',
-      message: `SQL file path ${chalk.reset('(drag/drop, or Enter to go back)')}:`,
+      message: 'SQL file path:',
       validate: (input: string) => {
         if (!input) return true // Empty = go back
         const cleanPath = stripQuotes(input)
@@ -1440,13 +1441,14 @@ async function handleRestore(): Promise<void> {
 
   if (restoreSource === 'connection') {
     // Get connection string and create dump
+    console.log(chalk.gray('  Enter connection string, or press Enter to go back'))
     const { connectionString } = await inquirer.prompt<{
       connectionString: string
     }>([
       {
         type: 'input',
         name: 'connectionString',
-        message: `Connection string ${chalk.reset('(or Enter to go back)')}:`,
+        message: 'Connection string:',
         validate: (input: string) => {
           if (!input) return true // Empty = go back
           if (
@@ -1537,13 +1539,14 @@ async function handleRestore(): Promise<void> {
     const stripQuotes = (path: string) =>
       path.replace(/^['"]|['"]$/g, '').trim()
 
+    console.log(chalk.gray('  Drag & drop, enter path (abs or rel), or press Enter to go back'))
     const { backupPath: rawBackupPath } = await inquirer.prompt<{
       backupPath: string
     }>([
       {
         type: 'input',
         name: 'backupPath',
-        message: `Backup file path ${chalk.reset('(drag/drop, or Enter to go back)')}:`,
+        message: 'Backup file path:',
         validate: (input: string) => {
           if (!input) return true // Empty = go back
           const cleanPath = stripQuotes(input)
