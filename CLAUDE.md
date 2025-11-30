@@ -209,6 +209,15 @@ pnpm test:mysql     # MySQL integration
 3. Import and register in `cli/index.ts`
 4. Add to `cli/commands/menu.ts` if needed
 
+### After Adding Any New Feature
+After completing a feature, ensure these files are updated:
+
+1. **CLAUDE.md** - Update with new conventions, architecture changes, or commands
+2. **README.md** - Document new commands and usage examples
+3. **TODO.md** - Check off completed items, add any discovered future enhancements
+4. **CHANGELOG.md** - Add entry under `[Unreleased]` section (check git history if needed)
+5. **Tests** - Add unit and/or integration tests for new functionality
+
 ### Adding a New Engine
 1. Create `engines/{engine}/index.ts` extending `BaseEngine`
 2. Implement all abstract methods
