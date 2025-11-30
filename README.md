@@ -79,13 +79,20 @@ You'll get an interactive menu with arrow-key navigation:
 
 ## Installation
 
+SpinDB is distributed via npm. A global install is recommended so you can run `spindb` from anywhere.
+
+We recommend [pnpm](https://pnpm.io/) as a faster, more disk-efficient alternative to npm.
+
 ```bash
-# Install globally (recommended)
+# Using pnpm (recommended)
+pnpm add -g spindb
+
+# Using npm
 npm install -g spindb
 
 # Or run directly without installing
-npx spindb
 pnpx spindb
+npx spindb
 ```
 
 ### Updating
