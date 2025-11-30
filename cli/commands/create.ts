@@ -20,7 +20,7 @@ import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
-import type { EngineName } from '../../types'
+import { Engine } from '../../types'
 
 /**
  * Detect if a location string is a connection string or a file path
@@ -28,19 +28,19 @@ import type { EngineName } from '../../types'
  */
 function detectLocationType(location: string): {
   type: 'connection' | 'file' | 'not_found'
-  inferredEngine?: EngineName
+  inferredEngine?: Engine
 } {
   // Check for PostgreSQL connection string
   if (
     location.startsWith('postgresql://') ||
     location.startsWith('postgres://')
   ) {
-    return { type: 'connection', inferredEngine: 'postgresql' }
+    return { type: 'connection', inferredEngine: Engine.PostgreSQL }
   }
 
   // Check for MySQL connection string
   if (location.startsWith('mysql://')) {
-    return { type: 'connection', inferredEngine: 'mysql' }
+    return { type: 'connection', inferredEngine: Engine.MySQL }
   }
 
   // Check if file exists
@@ -79,7 +79,7 @@ export const createCommand = new Command('create')
 
       try {
         let containerName = name
-        let engine: EngineName = (options.engine as EngineName) || 'postgresql'
+        let engine: Engine = (options.engine as Engine) || Engine.PostgreSQL
         let version = options.version
         let database = options.database
 
@@ -136,7 +136,7 @@ export const createCommand = new Command('create')
         if (!containerName) {
           const answers = await promptCreateOptions()
           containerName = answers.name
-          engine = answers.engine as EngineName
+          engine = answers.engine as Engine
           version = answers.version
           database = answers.database
         }
@@ -254,7 +254,7 @@ export const createCommand = new Command('create')
 
         try {
           await containerManager.create(containerName, {
-            engine: dbEngine.name as EngineName,
+            engine: dbEngine.name as Engine,
             version,
             port,
             database,

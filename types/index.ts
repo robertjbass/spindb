@@ -1,6 +1,6 @@
 export type ContainerConfig = {
   name: string
-  engine: EngineName
+  engine: Engine
   version: string
   port: number
   database: string
@@ -14,7 +14,10 @@ export type ContainerConfig = {
  * Supported database engine names
  * Extendable for future engines (sqlite, etc.)
  */
-export type EngineName = 'postgresql' | 'mysql'
+export enum Engine {
+  PostgreSQL = 'postgresql',
+  MySQL = 'mysql',
+}
 
 export type ProgressCallback = (progress: {
   stage: string
@@ -22,7 +25,7 @@ export type ProgressCallback = (progress: {
 }) => void
 
 export type InstalledBinary = {
-  engine: string
+  engine: Engine
   version: string
   platform: string
   arch: string
@@ -141,7 +144,7 @@ export type SpinDBConfig = {
   }
   // Default settings
   defaults?: {
-    engine?: EngineName
+    engine?: Engine
     version?: string
     port?: number
   }

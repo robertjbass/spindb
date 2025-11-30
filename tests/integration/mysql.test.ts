@@ -26,9 +26,9 @@ import {
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
-import type { EngineName } from '../../types'
+import { Engine } from '../../types'
 
-const ENGINE: EngineName = 'mysql'
+const ENGINE = Engine.MySQL
 const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/mysql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5

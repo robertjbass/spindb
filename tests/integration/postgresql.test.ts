@@ -26,9 +26,9 @@ import {
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
-import type { EngineName } from '../../types'
+import { Engine } from '../../types'
 
-const ENGINE: EngineName = 'postgresql'
+const ENGINE = Engine.PostgreSQL
 const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/postgresql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
