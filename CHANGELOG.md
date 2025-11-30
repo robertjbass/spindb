@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `shell` alias for `connect` command
 - Port availability validation in `edit` command
 
+### Changed
+- Refactored interactive menu from single 2749-line file into modular handler structure
+  - New `cli/commands/menu/` directory with feature-specific handler modules
+  - Extracted: `container-handlers.ts`, `backup-handlers.ts`, `shell-handlers.ts`, `sql-handlers.ts`, `engine-handlers.ts`, `update-handlers.ts`
+  - Shared utilities in `shared.ts` (`MenuChoice` type, `pressEnterToContinue`)
+- Converted dynamic imports to static top-level imports across codebase for better maintainability
+
 ### Documentation
 - Comprehensive engine documentation in TODO.md (backup formats, binary sizes)
 - FEATURE.md checklist for adding new engines
