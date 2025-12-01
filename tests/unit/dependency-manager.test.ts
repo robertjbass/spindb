@@ -329,7 +329,7 @@ describe('DependencyManager', () => {
         dependency: {
           name: 'Test',
           binary: 'test',
-          description: 'A test tool',
+          description: 'A test dependency',
           packages: {},
           manualInstall: {},
         },
@@ -353,12 +353,16 @@ describe('DependencyManager', () => {
 
   describe('InstallResult Shape', () => {
     it('should have correct success structure', () => {
-      const result: { success: boolean; dependency: object; error?: string } = {
+      const result: {
+        success: boolean
+        dependency: { name: string; binary: string; description: string; packages: Record<string, unknown>; manualInstall: Record<string, unknown> }
+        error?: string
+      } = {
         success: true,
         dependency: {
           name: 'Test',
           binary: 'test',
-          description: 'A test tool',
+          description: 'A test dependency',
           packages: {},
           manualInstall: {},
         },
@@ -375,7 +379,7 @@ describe('DependencyManager', () => {
         dependency: {
           name: 'Test',
           binary: 'test',
-          description: 'A test tool',
+          description: 'A test dependency',
           packages: {},
           manualInstall: {},
         },
@@ -415,7 +419,7 @@ describe('Error Messages', () => {
     const mockDep = {
       name: 'PostgreSQL Client',
       binary: 'psql',
-      description: 'PostgreSQL interactive terminal',
+      description: 'PostgreSQL command-line client',
       packages: {},
       manualInstall: { darwin: [], linux: [] },
     }
