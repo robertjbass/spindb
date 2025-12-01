@@ -13,7 +13,6 @@ export const stopCommand = new Command('stop')
   .action(async (name: string | undefined, options: { all?: boolean }) => {
     try {
       if (options.all) {
-        // Stop all running containers
         const containers = await containerManager.list()
         const running = containers.filter((c) => c.status === 'running')
 
@@ -41,7 +40,6 @@ export const stopCommand = new Command('stop')
 
       let containerName = name
 
-      // Interactive selection if no name provided
       if (!containerName) {
         const containers = await containerManager.list()
         const running = containers.filter((c) => c.status === 'running')
@@ -59,14 +57,12 @@ export const stopCommand = new Command('stop')
         containerName = selected
       }
 
-      // Get container config
       const config = await containerManager.getConfig(containerName)
       if (!config) {
         console.error(error(`Container "${containerName}" not found`))
         process.exit(1)
       }
 
-      // Check if running
       const running = await processManager.isRunning(containerName, {
         engine: config.engine,
       })
@@ -75,7 +71,6 @@ export const stopCommand = new Command('stop')
         return
       }
 
-      // Get engine and stop
       const engine = getEngine(config.engine)
 
       const spinner = createSpinner(`Stopping ${containerName}...`)

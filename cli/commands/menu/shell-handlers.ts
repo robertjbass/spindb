@@ -32,7 +32,6 @@ export async function handleCopyConnectionString(
   const engine = getEngine(config.engine)
   const connectionString = engine.getConnectionString(config)
 
-  // Copy to clipboard using platform service
   const copied = await platformService.copyToClipboard(connectionString)
 
   console.log()
@@ -64,7 +63,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   const engine = getEngine(config.engine)
   const connectionString = engine.getConnectionString(config)
 
-  // Check which enhanced shells are installed (with loading indicator)
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
 
@@ -100,7 +98,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     },
   ]
 
-  // Engine-specific enhanced CLI (pgcli for PostgreSQL, mycli for MySQL)
   if (engineSpecificInstalled) {
     choices.push({
       name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
@@ -113,7 +110,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     })
   }
 
-  // usql - universal option
   if (usqlInstalled) {
     choices.push({
       name: '⚡ Use usql (universal SQL client)',
@@ -146,7 +142,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  // Handle pgcli installation
   if (shellChoice === 'install-pgcli') {
     console.log()
     console.log(info('Installing pgcli for enhanced PostgreSQL shell...'))
@@ -180,7 +175,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  // Handle mycli installation
   if (shellChoice === 'install-mycli') {
     console.log()
     console.log(info('Installing mycli for enhanced MySQL shell...'))
@@ -214,7 +208,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  // Handle usql installation
   if (shellChoice === 'install-usql') {
     console.log()
     console.log(info('Installing usql for enhanced shell experience...'))
@@ -248,7 +241,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  // Launch the selected shell
   await launchShell(containerName, config, connectionString, shellChoice)
 }
 
@@ -261,7 +253,6 @@ async function launchShell(
   console.log(info(`Connecting to ${containerName}...`))
   console.log()
 
-  // Determine shell command based on engine and shell type
   let shellCmd: string
   let shellArgs: string[]
   let installHint: string
@@ -291,7 +282,6 @@ async function launchShell(
     installHint = 'brew tap xo/xo && brew install xo/xo/usql'
   } else if (config.engine === 'mysql') {
     shellCmd = 'mysql'
-    // MySQL connection: mysql -u root -h 127.0.0.1 -P port database
     shellArgs = [
       '-u',
       'root',
@@ -303,7 +293,6 @@ async function launchShell(
     ]
     installHint = 'brew install mysql-client'
   } else {
-    // PostgreSQL (default)
     shellCmd = 'psql'
     shellArgs = [connectionString]
     installHint = 'brew install libpq && brew link --force libpq'

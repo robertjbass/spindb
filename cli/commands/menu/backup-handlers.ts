@@ -12,7 +12,6 @@ import { getEngine } from '../../../engines'
 import { defaults } from '../../../config/defaults'
 import { getPostgresHomebrewPackage } from '../../../config/engine-defaults'
 import { updatePostgresClientTools } from '../../../engines/postgresql/binary-manager'
-import { type Engine } from '../../../types'
 import {
   promptCreateOptions,
   promptContainerName,
@@ -33,29 +32,21 @@ import {
   formatBytes,
 } from '../../ui/theme'
 import { getEngineIcon } from '../../constants'
+import { type Engine } from '../../../types'
 
-/**
- * Generate a timestamp string for backup filenames
- */
 function generateBackupTimestamp(): string {
   const now = new Date()
   return now.toISOString().replace(/:/g, '').split('.')[0]
 }
 
-/**
- * Get file extension for backup format
- */
 function getBackupExtension(format: 'sql' | 'dump', engine: string): string {
   if (format === 'sql') {
     return '.sql'
   }
+  // MySQL dump is gzipped SQL, PostgreSQL dump is custom format
   return engine === 'mysql' ? '.sql.gz' : '.dump'
 }
 
-/**
- * Create a new container for the restore flow
- * Returns the container name and config if successful, null if cancelled/error
- */
 export async function handleCreateForRestore(): Promise<{
   name: string
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>
@@ -71,7 +62,6 @@ export async function handleCreateForRestore(): Promise<{
 
   const dbEngine = getEngine(engine)
 
-  // Check if port is currently in use
   const portAvailable = await portManager.isPortAvailable(port)
   if (!portAvailable) {
     console.log(
@@ -80,7 +70,6 @@ export async function handleCreateForRestore(): Promise<{
     return null
   }
 
-  // Ensure binaries
   const binarySpinner = createSpinner(
     `Checking PostgreSQL ${version} binaries...`,
   )
@@ -97,13 +86,11 @@ export async function handleCreateForRestore(): Promise<{
     binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
   }
 
-  // Check if container name already exists and prompt for new name if needed
   while (await containerManager.exists(containerName)) {
     console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
     containerName = await promptContainerName()
   }
 
-  // Create container
   const createSpinnerInstance = createSpinner('Creating container...')
   createSpinnerInstance.start()
 
@@ -116,7 +103,6 @@ export async function handleCreateForRestore(): Promise<{
 
   createSpinnerInstance.succeed('Container created')
 
-  // Initialize database cluster
   const initSpinner = createSpinner('Initializing database cluster...')
   initSpinner.start()
 
@@ -126,7 +112,6 @@ export async function handleCreateForRestore(): Promise<{
 
   initSpinner.succeed('Database cluster initialized')
 
-  // Start container
   const startSpinner = createSpinner('Starting PostgreSQL...')
   startSpinner.start()
 
@@ -141,7 +126,6 @@ export async function handleCreateForRestore(): Promise<{
 
   startSpinner.succeed('PostgreSQL started')
 
-  // Create the user's database (if different from 'postgres')
   if (database !== 'postgres') {
     const dbSpinner = createSpinner(`Creating database "${database}"...`)
     dbSpinner.start()
@@ -162,7 +146,6 @@ export async function handleRestore(): Promise<void> {
   const containers = await containerManager.list()
   const running = containers.filter((c) => c.status === 'running')
 
-  // Build choices: running containers + create new option
   const choices = [
     ...running.map((c) => ({
       name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
@@ -193,9 +176,8 @@ export async function handleRestore(): Promise<void> {
   let config: Awaited<ReturnType<typeof containerManager.getConfig>>
 
   if (selectedContainer === '__create_new__') {
-    // Run the create flow first
     const createResult = await handleCreateForRestore()
-    if (!createResult) return // User cancelled or error
+    if (!createResult) return
     containerName = createResult.name
     config = createResult.config
   } else {
@@ -207,7 +189,6 @@ export async function handleRestore(): Promise<void> {
     }
   }
 
-  // Check for required client tools BEFORE doing anything
   const depsSpinner = createSpinner('Checking required tools...')
   depsSpinner.start()
 
@@ -217,7 +198,6 @@ export async function handleRestore(): Promise<void> {
       `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
     )
 
-    // Offer to install
     const installed = await promptInstallDependencies(
       missingDeps[0].binary,
       config.engine,
@@ -227,7 +207,6 @@ export async function handleRestore(): Promise<void> {
       return
     }
 
-    // Verify installation worked
     missingDeps = await getMissingDependencies(config.engine)
     if (missingDeps.length > 0) {
       console.log(
@@ -244,7 +223,6 @@ export async function handleRestore(): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  // Ask for restore source
   const { restoreSource } = await inquirer.prompt<{
     restoreSource: 'file' | 'connection'
   }>([
@@ -269,8 +247,9 @@ export async function handleRestore(): Promise<void> {
   let isTempFile = false
 
   if (restoreSource === 'connection') {
-    // Get connection string and create dump
-    console.log(chalk.gray('  Enter connection string, or press Enter to go back'))
+    console.log(
+      chalk.gray('  Enter connection string, or press Enter to go back'),
+    )
     const { connectionString } = await inquirer.prompt<{
       connectionString: string
     }>([
@@ -279,7 +258,7 @@ export async function handleRestore(): Promise<void> {
         name: 'connectionString',
         message: 'Connection string:',
         validate: (input: string) => {
-          if (!input) return true // Empty = go back
+          if (!input) return true
           if (
             !input.startsWith('postgresql://') &&
             !input.startsWith('postgres://')
@@ -291,20 +270,18 @@ export async function handleRestore(): Promise<void> {
       },
     ])
 
-    // Empty input = go back
     if (!connectionString.trim()) {
       return
     }
 
     const engine = getEngine(config.engine)
 
-    // Create temp file for the dump
     const timestamp = Date.now()
     const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
 
     let dumpSuccess = false
     let attempts = 0
-    const maxAttempts = 2 // Allow one retry after installing deps
+    const maxAttempts = 2
 
     while (!dumpSuccess && attempts < maxAttempts) {
       attempts++
@@ -321,14 +298,12 @@ export async function handleRestore(): Promise<void> {
         const e = err as Error
         dumpSpinner.fail('Failed to create dump')
 
-        // Check if this is a missing tool error
         if (
           e.message.includes('pg_dump not found') ||
           e.message.includes('ENOENT')
         ) {
           const installed = await promptInstallDependencies('pg_dump')
           if (installed) {
-            // Loop will retry
             continue
           }
         } else {
@@ -338,14 +313,12 @@ export async function handleRestore(): Promise<void> {
           console.log()
         }
 
-        // Clean up temp file if it was created
         try {
           await rm(tempDumpPath, { force: true })
         } catch {
           // Ignore cleanup errors
         }
 
-        // Wait for user to see the error
         await inquirer.prompt([
           {
             type: 'input',
@@ -357,18 +330,19 @@ export async function handleRestore(): Promise<void> {
       }
     }
 
-    // Safety check - should never reach here without backupPath set
     if (!dumpSuccess) {
       console.log(error('Failed to create dump after retries'))
       return
     }
   } else {
-    // Get backup file path
-    // Strip quotes that terminals add when drag-and-dropping files
     const stripQuotes = (path: string) =>
       path.replace(/^['"]|['"]$/g, '').trim()
 
-    console.log(chalk.gray('  Drag & drop, enter path (abs or rel), or press Enter to go back'))
+    console.log(
+      chalk.gray(
+        '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+      ),
+    )
     const { backupPath: rawBackupPath } = await inquirer.prompt<{
       backupPath: string
     }>([
@@ -377,7 +351,7 @@ export async function handleRestore(): Promise<void> {
         name: 'backupPath',
         message: 'Backup file path:',
         validate: (input: string) => {
-          if (!input) return true // Empty = go back
+          if (!input) return true
           const cleanPath = stripQuotes(input)
           if (!existsSync(cleanPath)) return 'File not found'
           return true
@@ -385,7 +359,6 @@ export async function handleRestore(): Promise<void> {
       },
     ])
 
-    // Empty input = go back
     if (!rawBackupPath.trim()) {
       return
     }
@@ -397,21 +370,18 @@ export async function handleRestore(): Promise<void> {
 
   const engine = getEngine(config.engine)
 
-  // Detect format
   const detectSpinner = createSpinner('Detecting backup format...')
   detectSpinner.start()
 
   const format = await engine.detectBackupFormat(backupPath)
   detectSpinner.succeed(`Detected: ${format.description}`)
 
-  // Create database
   const dbSpinner = createSpinner(`Creating database "${databaseName}"...`)
   dbSpinner.start()
 
   await engine.createDatabase(config, databaseName)
   dbSpinner.succeed(`Database "${databaseName}" ready`)
 
-  // Restore
   const restoreSpinner = createSpinner('Restoring backup...')
   restoreSpinner.start()
 
@@ -425,7 +395,6 @@ export async function handleRestore(): Promise<void> {
   } else {
     const stderr = result.stderr || ''
 
-    // Check for version compatibility errors
     if (
       stderr.includes('unsupported version') ||
       stderr.includes('Archive version') ||
@@ -438,7 +407,6 @@ export async function handleRestore(): Promise<void> {
         warning('Your pg_restore version is too old for this backup file.'),
       )
 
-      // Clean up the failed database since restore didn't actually work
       console.log(chalk.yellow('Cleaning up failed database...'))
       try {
         await engine.dropDatabase(config, databaseName)
@@ -451,7 +419,6 @@ export async function handleRestore(): Promise<void> {
 
       console.log()
 
-      // Extract version info from error message
       const versionMatch = stderr.match(/PostgreSQL (\d+)/)
       const requiredVersion = versionMatch ? versionMatch[1] : '17'
 
@@ -462,7 +429,6 @@ export async function handleRestore(): Promise<void> {
       )
       console.log()
 
-      // Ask user if they want to upgrade
       const { shouldUpgrade } = await inquirer.prompt({
         type: 'list',
         name: 'shouldUpgrade',
@@ -557,13 +523,10 @@ export async function handleRestore(): Promise<void> {
         return
       }
     } else {
-      // Regular warnings/errors - show as before
       restoreSpinner.warn('Restore completed with warnings')
-      // Show stderr output so user can see what went wrong
       if (result.stderr) {
         console.log()
         console.log(chalk.yellow('  Warnings/Errors:'))
-        // Show first 20 lines of stderr to avoid overwhelming output
         const lines = result.stderr.split('\n').filter((l) => l.trim())
         const displayLines = lines.slice(0, 20)
         for (const line of displayLines) {
@@ -576,7 +539,6 @@ export async function handleRestore(): Promise<void> {
     }
   }
 
-  // Only show success message if restore actually succeeded
   if (result.code === 0 || !result.stderr) {
     const connectionString = engine.getConnectionString(config, databaseName)
     console.log()
@@ -584,7 +546,6 @@ export async function handleRestore(): Promise<void> {
     console.log(chalk.gray('  Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
 
-    // Copy connection string to clipboard using platform service
     const copied = await platformService.copyToClipboard(connectionString)
     if (copied) {
       console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
@@ -595,7 +556,6 @@ export async function handleRestore(): Promise<void> {
     console.log()
   }
 
-  // Clean up temp file if we created one
   if (isTempFile) {
     try {
       await rm(backupPath, { force: true })
@@ -604,7 +564,6 @@ export async function handleRestore(): Promise<void> {
     }
   }
 
-  // Wait for user to see the result before returning to menu
   await inquirer.prompt([
     {
       type: 'input',
@@ -630,7 +589,6 @@ export async function handleBackup(): Promise<void> {
     return
   }
 
-  // Select container
   const containerName = await promptContainerSelect(
     running,
     'Select container to backup:',
@@ -645,7 +603,6 @@ export async function handleBackup(): Promise<void> {
 
   const engine = getEngine(config.engine)
 
-  // Check for required tools
   const depsSpinner = createSpinner('Checking required tools...')
   depsSpinner.start()
 
@@ -680,7 +637,6 @@ export async function handleBackup(): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  // Select database
   const databases = config.databases || [config.database]
   let databaseName: string
 
@@ -693,18 +649,14 @@ export async function handleBackup(): Promise<void> {
     databaseName = databases[0]
   }
 
-  // Select format
   const format = await promptBackupFormat(config.engine)
 
-  // Get filename
   const defaultFilename = `${containerName}-${databaseName}-backup-${generateBackupTimestamp()}`
   const filename = await promptBackupFilename(defaultFilename)
 
-  // Build output path
   const extension = getBackupExtension(format, config.engine)
   const outputPath = join(process.cwd(), `${filename}${extension}`)
 
-  // Create backup
   const backupSpinner = createSpinner(
     `Creating ${format === 'sql' ? 'SQL' : 'dump'} backup of "${databaseName}"...`,
   )
@@ -733,7 +685,6 @@ export async function handleBackup(): Promise<void> {
     console.log()
   }
 
-  // Wait for user to see the result
   await inquirer.prompt([
     {
       type: 'input',

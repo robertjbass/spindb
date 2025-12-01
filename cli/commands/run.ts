@@ -23,7 +23,6 @@ export const runCommand = new Command('run')
       try {
         const containerName = name
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
@@ -32,7 +31,6 @@ export const runCommand = new Command('run')
 
         const { engine: engineName } = config
 
-        // Check if running
         const running = await processManager.isRunning(containerName, {
           engine: engineName,
         })
@@ -45,7 +43,6 @@ export const runCommand = new Command('run')
           process.exit(1)
         }
 
-        // Validate: must have either file or --sql, not both
         if (file && options.sql) {
           console.error(
             error('Cannot specify both a file and --sql option. Choose one.'),
@@ -64,16 +61,13 @@ export const runCommand = new Command('run')
           process.exit(1)
         }
 
-        // Validate file exists
         if (file && !existsSync(file)) {
           console.error(error(`SQL file not found: ${file}`))
           process.exit(1)
         }
 
-        // Get engine
         const engine = getEngine(engineName)
 
-        // Check for required client tools
         let missingDeps = await getMissingDependencies(engineName)
         if (missingDeps.length > 0) {
           console.log(
@@ -82,7 +76,6 @@ export const runCommand = new Command('run')
             ),
           )
 
-          // Offer to install
           const installed = await promptInstallDependencies(
             missingDeps[0].binary,
             engineName,
@@ -92,7 +85,6 @@ export const runCommand = new Command('run')
             process.exit(1)
           }
 
-          // Verify installation worked
           missingDeps = await getMissingDependencies(engineName)
           if (missingDeps.length > 0) {
             console.error(
@@ -107,10 +99,8 @@ export const runCommand = new Command('run')
           console.log()
         }
 
-        // Determine target database
         const database = options.database || config.database
 
-        // Run the SQL
         await engine.runScript(config, {
           file,
           sql: options.sql,
@@ -119,7 +109,6 @@ export const runCommand = new Command('run')
       } catch (err) {
         const e = err as Error
 
-        // Check if this is a missing tool error
         const missingToolPatterns = [
           'psql not found',
           'mysql not found',

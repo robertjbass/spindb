@@ -40,7 +40,6 @@ export async function handleEngines(): Promise<void> {
     return
   }
 
-  // Separate PostgreSQL and MySQL
   const pgEngines = engines.filter(
     (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
   )
@@ -48,10 +47,8 @@ export async function handleEngines(): Promise<void> {
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
   )
 
-  // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
-  // Table header
   console.log()
   console.log(
     chalk.gray('  ') +
@@ -62,7 +59,6 @@ export async function handleEngines(): Promise<void> {
   )
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
-  // PostgreSQL rows
   for (const engine of pgEngines) {
     const icon = getEngineIcon(engine.engine)
     const platformInfo = `${engine.platform}-${engine.arch}`
@@ -76,7 +72,6 @@ export async function handleEngines(): Promise<void> {
     )
   }
 
-  // MySQL row
   if (mysqlEngine) {
     const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
@@ -92,7 +87,6 @@ export async function handleEngines(): Promise<void> {
 
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
-  // Summary
   console.log()
   if (pgEngines.length > 0) {
     console.log(
@@ -106,7 +100,6 @@ export async function handleEngines(): Promise<void> {
   }
   console.log()
 
-  // Menu options - only allow deletion of PostgreSQL engines
   const choices: MenuChoice[] = []
 
   for (const e of pgEngines) {
@@ -116,7 +109,6 @@ export async function handleEngines(): Promise<void> {
     })
   }
 
-  // MySQL info option (not disabled, shows info icon)
   if (mysqlEngine) {
     const displayName = mysqlEngine.isMariaDB ? 'MariaDB' : 'MySQL'
     choices.push({
@@ -145,14 +137,12 @@ export async function handleEngines(): Promise<void> {
   if (action.startsWith('delete:')) {
     const [, enginePath, engineName, engineVersion] = action.split(':')
     await handleDeleteEngine(enginePath, engineName, engineVersion)
-    // Return to engines menu
     await handleEngines()
   }
 
   if (action.startsWith('mysql-info:')) {
     const mysqldPath = action.replace('mysql-info:', '')
     await handleMysqlInfo(mysqldPath)
-    // Return to engines menu
     await handleEngines()
   }
 }
@@ -162,7 +152,6 @@ async function handleDeleteEngine(
   engineName: string,
   engineVersion: string,
 ): Promise<void> {
-  // Check if any container is using this engine version
   const containers = await containerManager.list()
   const usingContainers = containers.filter(
     (c) => c.engine === engineName && c.version === engineVersion,
@@ -216,21 +205,17 @@ async function handleDeleteEngine(
 async function handleMysqlInfo(mysqldPath: string): Promise<void> {
   console.clear()
 
-  // Get install info
   const installInfo = await getMysqlInstallInfo(mysqldPath)
   const displayName = installInfo.isMariaDB ? 'MariaDB' : 'MySQL'
 
-  // Get version
   const version = await getMysqlVersion(mysqldPath)
 
   console.log(header(`${displayName} Information`))
   console.log()
 
-  // Check for containers using MySQL
   const containers = await containerManager.list()
   const mysqlContainers = containers.filter((c) => c.engine === 'mysql')
 
-  // Track running containers for uninstall instructions
   const runningContainers: string[] = []
 
   if (mysqlContainers.length > 0) {
@@ -261,7 +246,6 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
     console.log()
   }
 
-  // Show installation details
   console.log(chalk.white('  Installation Details:'))
   console.log(chalk.gray('  ' + '─'.repeat(50)))
   console.log(
@@ -286,13 +270,11 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
   )
   console.log()
 
-  // Uninstall instructions
   console.log(chalk.white('  To uninstall:'))
   console.log(chalk.gray('  ' + '─'.repeat(50)))
 
   let stepNum = 1
 
-  // Step: Stop running containers first
   if (runningContainers.length > 0) {
     console.log(chalk.gray(`  # ${stepNum}. Stop running SpinDB containers`))
     console.log(chalk.cyan('  spindb stop <container-name>'))
@@ -300,7 +282,6 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
     stepNum++
   }
 
-  // Step: Delete SpinDB containers
   if (mysqlContainers.length > 0) {
     console.log(chalk.gray(`  # ${stepNum}. Delete SpinDB containers`))
     console.log(chalk.cyan('  spindb delete <container-name>'))
@@ -371,7 +352,6 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
 
   console.log()
 
-  // Wait for user
   await inquirer.prompt([
     {
       type: 'input',

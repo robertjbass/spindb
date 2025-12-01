@@ -9,7 +9,6 @@ import { processManager } from '../../../core/process-manager'
 import { getEngine } from '../../../engines'
 import { defaults } from '../../../config/defaults'
 import { paths } from '../../../config/paths'
-import { type Engine } from '../../../types'
 import {
   promptCreateOptions,
   promptContainerName,
@@ -28,9 +27,10 @@ import {
   formatBytes,
 } from '../../ui/theme'
 import { getEngineIcon } from '../../constants'
-import { type MenuChoice } from './shared'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
+import { type Engine } from '../../../types'
+import { type MenuChoice } from './shared'
 
 export async function handleCreate(): Promise<void> {
   console.log()
@@ -44,7 +44,6 @@ export async function handleCreate(): Promise<void> {
 
   const dbEngine = getEngine(engine)
 
-  // Check for required client tools BEFORE creating anything
   const depsSpinner = createSpinner('Checking required tools...')
   depsSpinner.start()
 
@@ -54,7 +53,6 @@ export async function handleCreate(): Promise<void> {
       `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
     )
 
-    // Offer to install
     const installed = await promptInstallDependencies(
       missingDeps[0].binary,
       engine,
@@ -64,7 +62,6 @@ export async function handleCreate(): Promise<void> {
       return
     }
 
-    // Verify installation worked
     missingDeps = await getMissingDependencies(engine)
     if (missingDeps.length > 0) {
       console.log(
@@ -81,10 +78,8 @@ export async function handleCreate(): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  // Check if port is currently in use
   const portAvailable = await portManager.isPortAvailable(port)
 
-  // Ensure binaries
   const binarySpinner = createSpinner(
     `Checking PostgreSQL ${version} binaries...`,
   )
@@ -101,13 +96,11 @@ export async function handleCreate(): Promise<void> {
     binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
   }
 
-  // Check if container name already exists and prompt for new name if needed
   while (await containerManager.exists(containerName)) {
     console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
     containerName = await promptContainerName()
   }
 
-  // Create container
   const createSpinnerInstance = createSpinner('Creating container...')
   createSpinnerInstance.start()
 
@@ -120,7 +113,6 @@ export async function handleCreate(): Promise<void> {
 
   createSpinnerInstance.succeed('Container created')
 
-  // Initialize database cluster
   const initSpinner = createSpinner('Initializing database cluster...')
   initSpinner.start()
 
@@ -130,7 +122,6 @@ export async function handleCreate(): Promise<void> {
 
   initSpinner.succeed('Database cluster initialized')
 
-  // Start container (only if port is available)
   if (portAvailable) {
     const startSpinner = createSpinner('Starting PostgreSQL...')
     startSpinner.start()
@@ -143,7 +134,6 @@ export async function handleCreate(): Promise<void> {
 
     startSpinner.succeed('PostgreSQL started')
 
-    // Create the user's database (if different from 'postgres')
     if (config && database !== 'postgres') {
       const dbSpinner = createSpinner(`Creating database "${database}"...`)
       dbSpinner.start()
@@ -153,7 +143,6 @@ export async function handleCreate(): Promise<void> {
       dbSpinner.succeed(`Database "${database}" created`)
     }
 
-    // Show success
     if (config) {
       const connectionString = dbEngine.getConnectionString(config)
       console.log()
@@ -169,7 +158,6 @@ export async function handleCreate(): Promise<void> {
       console.log(chalk.gray('  Connection string:'))
       console.log(chalk.cyan(`  ${connectionString}`))
 
-      // Copy connection string to clipboard using platform service
       try {
         const copied = await platformService.copyToClipboard(connectionString)
         if (copied) {
@@ -183,7 +171,6 @@ export async function handleCreate(): Promise<void> {
 
       console.log()
 
-      // Wait for user to see the result before returning to menu
       await inquirer.prompt([
         {
           type: 'input',
@@ -231,7 +218,6 @@ export async function handleList(
     return
   }
 
-  // Fetch sizes for running containers in parallel
   const sizes = await Promise.all(
     containers.map(async (container) => {
       if (container.status !== 'running') return null
@@ -244,7 +230,6 @@ export async function handleList(
     }),
   )
 
-  // Table header
   console.log()
   console.log(
     chalk.gray('  ') +
@@ -257,7 +242,6 @@ export async function handleList(
   )
   console.log(chalk.gray('  ' + '─'.repeat(70)))
 
-  // Table rows
   for (let i = 0; i < containers.length; i++) {
     const container = containers[i]
     const size = sizes[i]
@@ -290,7 +274,6 @@ export async function handleList(
     ),
   )
 
-  // Container selection with submenu
   console.log()
   const containerChoices = [
     ...containers.map((c, i) => {
@@ -340,7 +323,6 @@ export async function showContainerSubmenu(
     return
   }
 
-  // Check actual running state
   const isRunning = await processManager.isRunning(containerName, {
     engine: config.engine,
   })
@@ -357,10 +339,15 @@ export async function showContainerSubmenu(
   console.log()
 
   const actionChoices: MenuChoice[] = [
-    // Start or Stop depending on current state
     !isRunning
-      ? { name: `${chalk.green('▶')} Start container`, value: 'start' }
-      : { name: `${chalk.red('■')} Stop container`, value: 'stop' },
+      ? {
+          name: `${chalk.green('▶')} Start container`,
+          value: 'start',
+        }
+      : {
+          name: `${chalk.red('■')} Stop container`,
+          value: 'stop',
+        },
     {
       name: isRunning
         ? `${chalk.blue('⌘')} Open shell`
@@ -374,10 +361,6 @@ export async function showContainerSubmenu(
         : chalk.gray('▷ Run SQL file'),
       value: 'run-sql',
       disabled: isRunning ? false : 'Start container first',
-    },
-    {
-      name: `${chalk.gray('📋')} View logs`,
-      value: 'logs',
     },
     {
       name: !isRunning
@@ -395,6 +378,10 @@ export async function showContainerSubmenu(
     },
     { name: `${chalk.magenta('⎘')} Copy connection string`, value: 'copy' },
     {
+      name: `${chalk.gray('☰')} View logs`,
+      value: 'logs',
+    },
+    {
       name: !isRunning
         ? `${chalk.red('✕')} Delete container`
         : chalk.gray('✕ Delete container'),
@@ -402,8 +389,14 @@ export async function showContainerSubmenu(
       disabled: !isRunning ? false : 'Stop container first',
     },
     new inquirer.Separator(),
-    { name: `${chalk.blue('←')} Back to containers`, value: 'back' },
-    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
+    {
+      name: `${chalk.blue('←')} Back to containers`,
+      value: 'back',
+    },
+    {
+      name: `${chalk.blue('⌂')} Back to main menu`,
+      value: 'main',
+    },
   ]
 
   const { action } = await inquirer.prompt<{ action: string }>([
@@ -490,7 +483,6 @@ export async function handleStart(): Promise<void> {
     return
   }
 
-  // Check port availability
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
     const { port: newPort } = await portManager.findAvailablePort()
@@ -556,7 +548,6 @@ async function handleStartContainer(containerName: string): Promise<void> {
     return
   }
 
-  // Check port availability
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
     console.log(
@@ -599,7 +590,6 @@ async function handleStartContainer(containerName: string): Promise<void> {
     console.log()
     console.log(error(e.message))
 
-    // Check if there's a log file with more details
     const logPath = paths.getContainerLogPath(containerName, {
       engine: config.engine,
     })
@@ -651,8 +641,14 @@ async function handleEditContainer(
       value: 'port',
     },
     new inquirer.Separator(),
-    { name: `${chalk.blue('←')} Back to container`, value: 'back' },
-    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
+    {
+      name: `${chalk.blue('←')} Back to container`,
+      value: 'back',
+    },
+    {
+      name: `${chalk.blue('⌂')} Back to main menu`,
+      value: 'main',
+    },
   ]
 
   const { field } = await inquirer.prompt<{ field: string }>([
@@ -695,7 +691,6 @@ async function handleEditContainer(
       return await handleEditContainer(containerName)
     }
 
-    // Check if new name already exists
     if (await containerManager.exists(newName)) {
       console.log(error(`Container "${newName}" already exists`))
       return await handleEditContainer(containerName)
@@ -735,7 +730,6 @@ async function handleEditContainer(
       return await handleEditContainer(containerName)
     }
 
-    // Check if port is in use
     const portAvailable = await portManager.isPortAvailable(newPort)
     if (!portAvailable) {
       console.log(
@@ -788,7 +782,6 @@ async function handleCloneFromSubmenu(
   console.log()
   console.log(connectionBox(targetName, connectionString, newConfig.port))
 
-  // Go to the new container's submenu
   await showContainerSubmenu(targetName, showMainMenu)
 }
 

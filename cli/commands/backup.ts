@@ -15,18 +15,11 @@ import { createSpinner } from '../ui/spinner'
 import { success, error, warning, formatBytes } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
 
-/**
- * Generate a timestamp string for backup filenames
- * Format: YYYY-MM-DDTHHMMSS (ISO 8601 without colons for filesystem compatibility)
- */
 function generateTimestamp(): string {
   const now = new Date()
   return now.toISOString().replace(/:/g, '').split('.')[0]
 }
 
-/**
- * Generate default backup filename
- */
 function generateDefaultFilename(
   containerName: string,
   database: string,
@@ -35,9 +28,6 @@ function generateDefaultFilename(
   return `${containerName}-${database}-backup-${timestamp}`
 }
 
-/**
- * Get file extension for backup format
- */
 function getExtension(format: 'sql' | 'dump', engine: string): string {
   if (format === 'sql') {
     return '.sql'
@@ -73,7 +63,6 @@ export const backupCommand = new Command('backup')
       try {
         let containerName = containerArg
 
-        // Interactive selection if no container provided
         if (!containerName) {
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
@@ -101,7 +90,6 @@ export const backupCommand = new Command('backup')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
@@ -110,7 +98,6 @@ export const backupCommand = new Command('backup')
 
         const { engine: engineName } = config
 
-        // Check if running
         const running = await processManager.isRunning(containerName, {
           engine: engineName,
         })
@@ -123,10 +110,8 @@ export const backupCommand = new Command('backup')
           process.exit(1)
         }
 
-        // Get engine
         const engine = getEngine(engineName)
 
-        // Check for required client tools
         const depsSpinner = createSpinner('Checking required tools...')
         depsSpinner.start()
 
@@ -136,7 +121,6 @@ export const backupCommand = new Command('backup')
             `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
           )
 
-          // Offer to install
           const installed = await promptInstallDependencies(
             missingDeps[0].binary,
             config.engine,
@@ -146,7 +130,6 @@ export const backupCommand = new Command('backup')
             process.exit(1)
           }
 
-          // Verify installation worked
           missingDeps = await getMissingDependencies(config.engine)
           if (missingDeps.length > 0) {
             console.error(
@@ -163,27 +146,22 @@ export const backupCommand = new Command('backup')
           depsSpinner.succeed('Required tools available')
         }
 
-        // Determine which database to backup
         let databaseName = options.database
 
         if (!databaseName) {
-          // Get list of databases in container
           const databases = config.databases || [config.database]
 
           if (databases.length > 1) {
-            // Interactive mode: prompt for database selection
             databaseName = await promptDatabaseSelect(
               databases,
               'Select database to backup:',
             )
           } else {
-            // Single database: use it
             databaseName = databases[0]
           }
         }
 
-        // Determine format
-        let format: 'sql' | 'dump' = 'sql' // Default to SQL
+        let format: 'sql' | 'dump' = 'sql'
 
         if (options.sql) {
           format = 'sql'
@@ -196,28 +174,23 @@ export const backupCommand = new Command('backup')
           }
           format = options.format as 'sql' | 'dump'
         } else if (!containerArg) {
-          // Interactive mode: prompt for format
           format = await promptBackupFormat(engineName)
         }
 
-        // Determine filename
         const defaultFilename = generateDefaultFilename(
           containerName,
           databaseName,
         )
         let filename = options.name || defaultFilename
 
-        // In interactive mode with no name provided, optionally prompt for custom name
         if (!containerArg && !options.name) {
           filename = await promptBackupFilename(defaultFilename)
         }
 
-        // Build full output path
         const extension = getExtension(format, engineName)
         const outputDir = options.output || process.cwd()
         const outputPath = join(outputDir, `${filename}${extension}`)
 
-        // Create backup
         const backupSpinner = createSpinner(
           `Creating ${format === 'sql' ? 'SQL' : 'dump'} backup of "${databaseName}"...`,
         )
@@ -230,7 +203,6 @@ export const backupCommand = new Command('backup')
 
         backupSpinner.succeed('Backup created successfully')
 
-        // Show result
         console.log()
         console.log(success('Backup complete'))
         console.log()
@@ -244,7 +216,6 @@ export const backupCommand = new Command('backup')
       } catch (err) {
         const e = err as Error
 
-        // Check if this is a missing tool error
         const missingToolPatterns = ['pg_dump not found', 'mysqldump not found']
 
         const matchingPattern = missingToolPatterns.find((p) =>

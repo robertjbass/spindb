@@ -8,16 +8,10 @@ import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { error, warning, success } from '../ui/theme'
 
-/**
- * Validate container name format
- */
 function isValidName(name: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
 }
 
-/**
- * Prompt for what to edit when no options provided
- */
 async function promptEditAction(): Promise<'name' | 'port' | null> {
   const { action } = await inquirer.prompt<{ action: string }>([
     {
@@ -36,9 +30,6 @@ async function promptEditAction(): Promise<'name' | 'port' | null> {
   return action as 'name' | 'port'
 }
 
-/**
- * Prompt for new container name
- */
 async function promptNewName(currentName: string): Promise<string | null> {
   const { newName } = await inquirer.prompt<{ newName: string }>([
     {
@@ -64,9 +55,6 @@ async function promptNewName(currentName: string): Promise<string | null> {
   return newName
 }
 
-/**
- * Prompt for new port
- */
 async function promptNewPort(currentPort: number): Promise<number | null> {
   const { newPort } = await inquirer.prompt<{ newPort: number }>([
     {
@@ -90,7 +78,6 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
     return null
   }
 
-  // Double-check availability and warn (user already confirmed via validation)
   const portAvailable = await portManager.isPortAvailable(newPort)
   if (!portAvailable) {
     console.log(
@@ -116,7 +103,6 @@ export const editCommand = new Command('edit')
       try {
         let containerName = name
 
-        // Interactive selection if no name provided
         if (!containerName) {
           const containers = await containerManager.list()
 
@@ -133,14 +119,12 @@ export const editCommand = new Command('edit')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
-        // If no options provided, prompt for what to edit
         if (options.name === undefined && options.port === undefined) {
           const action = await promptEditAction()
           if (!action) return
@@ -162,9 +146,7 @@ export const editCommand = new Command('edit')
           }
         }
 
-        // Handle rename
         if (options.name) {
-          // Validate new name
           if (!isValidName(options.name)) {
             console.error(
               error(
@@ -174,7 +156,6 @@ export const editCommand = new Command('edit')
             process.exit(1)
           }
 
-          // Check if new name already exists
           const exists = await containerManager.exists(options.name, {
             engine: config.engine,
           })
@@ -183,7 +164,6 @@ export const editCommand = new Command('edit')
             process.exit(1)
           }
 
-          // Check if container is running
           const running = await processManager.isRunning(containerName, {
             engine: config.engine,
           })
@@ -196,7 +176,6 @@ export const editCommand = new Command('edit')
             process.exit(1)
           }
 
-          // Rename the container
           const spinner = createSpinner(
             `Renaming "${containerName}" to "${options.name}"...`,
           )
@@ -206,19 +185,15 @@ export const editCommand = new Command('edit')
 
           spinner.succeed(`Renamed "${containerName}" to "${options.name}"`)
 
-          // Update containerName for subsequent operations
           containerName = options.name
         }
 
-        // Handle port change
         if (options.port !== undefined) {
-          // Validate port
           if (options.port < 1 || options.port > 65535) {
             console.error(error('Port must be between 1 and 65535'))
             process.exit(1)
           }
 
-          // Check port availability (warning only)
           const portAvailable = await portManager.isPortAvailable(options.port)
           if (!portAvailable) {
             console.log(
@@ -228,7 +203,6 @@ export const editCommand = new Command('edit')
             )
           }
 
-          // Update the config
           const spinner = createSpinner(`Changing port to ${options.port}...`)
           spinner.start()
 

@@ -6,9 +6,6 @@ import { info, error, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
 
-/**
- * Get database size for a container (only if running)
- */
 async function getContainerSize(
   container: ContainerConfig,
 ): Promise<number | null> {
@@ -32,7 +29,6 @@ export const listCommand = new Command('list')
       const containers = await containerManager.list()
 
       if (options.json) {
-        // Include sizes in JSON output
         const containersWithSize = await Promise.all(
           containers.map(async (container) => ({
             ...container,
@@ -48,10 +44,8 @@ export const listCommand = new Command('list')
         return
       }
 
-      // Fetch sizes for running containers in parallel
       const sizes = await Promise.all(containers.map(getContainerSize))
 
-      // Table header
       console.log()
       console.log(
         chalk.gray('  ') +
@@ -64,7 +58,6 @@ export const listCommand = new Command('list')
       )
       console.log(chalk.gray('  ' + '─'.repeat(73)))
 
-      // Table rows
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
         const size = sizes[i]
@@ -77,7 +70,6 @@ export const listCommand = new Command('list')
         const engineIcon = getEngineIcon(container.engine)
         const engineDisplay = `${engineIcon} ${container.engine}`
 
-        // Format size: show value if running, dash if stopped
         const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
         console.log(
@@ -93,7 +85,6 @@ export const listCommand = new Command('list')
 
       console.log()
 
-      // Summary
       const running = containers.filter((c) => c.status === 'running').length
       const stopped = containers.filter((c) => c.status !== 'running').length
       console.log(

@@ -7,12 +7,8 @@ import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { error, warning, info } from '../ui/theme'
 
-/**
- * Get the last N lines from a file content
- */
 function getLastNLines(content: string, n: number): string {
   const lines = content.split('\n')
-  // Filter empty trailing line if present
   const nonEmptyLines =
     lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
   return nonEmptyLines.slice(-n).join('\n')
@@ -32,7 +28,6 @@ export const logsCommand = new Command('logs')
       try {
         let containerName = name
 
-        // Interactive selection if no name provided
         if (!containerName) {
           const containers = await containerManager.list()
 
@@ -49,19 +44,16 @@ export const logsCommand = new Command('logs')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
-        // Get log file path
         const logPath = paths.getContainerLogPath(config.name, {
           engine: config.engine,
         })
 
-        // Check if log file exists
         if (!existsSync(logPath)) {
           console.log(
             info(
@@ -71,7 +63,6 @@ export const logsCommand = new Command('logs')
           return
         }
 
-        // Open in editor if requested
         if (options.editor) {
           const editorCmd = process.env.EDITOR || 'vi'
           const child = spawn(editorCmd, [logPath], {
@@ -91,14 +82,12 @@ export const logsCommand = new Command('logs')
           return
         }
 
-        // Follow mode using tail -f
         if (options.follow) {
           const lineCount = parseInt(options.lines || '50', 10)
           const child = spawn('tail', ['-n', String(lineCount), '-f', logPath], {
             stdio: 'inherit',
           })
 
-          // Handle SIGINT gracefully
           process.on('SIGINT', () => {
             child.kill('SIGTERM')
             process.exit(0)
@@ -110,7 +99,6 @@ export const logsCommand = new Command('logs')
           return
         }
 
-        // Default: read and output last N lines
         const lineCount = parseInt(options.lines || '50', 10)
         const content = await readFile(logPath, 'utf-8')
 

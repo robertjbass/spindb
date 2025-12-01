@@ -20,7 +20,6 @@ export const deleteCommand = new Command('delete')
       try {
         let containerName = name
 
-        // Interactive selection if no name provided
         if (!containerName) {
           const containers = await containerManager.list()
 
@@ -37,14 +36,12 @@ export const deleteCommand = new Command('delete')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
-        // Confirm deletion
         if (!options.yes) {
           const confirmed = await promptConfirm(
             `Are you sure you want to delete "${containerName}"? This cannot be undone.`,
@@ -56,13 +53,11 @@ export const deleteCommand = new Command('delete')
           }
         }
 
-        // Check if running
         const running = await processManager.isRunning(containerName, {
           engine: config.engine,
         })
         if (running) {
           if (options.force) {
-            // Stop the container first
             const stopSpinner = createSpinner(`Stopping ${containerName}...`)
             stopSpinner.start()
 
@@ -80,7 +75,6 @@ export const deleteCommand = new Command('delete')
           }
         }
 
-        // Delete the container
         const deleteSpinner = createSpinner(`Deleting ${containerName}...`)
         deleteSpinner.start()
 

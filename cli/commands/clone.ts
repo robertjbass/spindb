@@ -16,7 +16,6 @@ export const cloneCommand = new Command('clone')
       let sourceName = source
       let targetName = target
 
-      // Interactive selection if no source provided
       if (!sourceName) {
         const containers = await containerManager.list()
         const stopped = containers.filter((c) => c.status !== 'running')
@@ -50,14 +49,12 @@ export const cloneCommand = new Command('clone')
         sourceName = selected
       }
 
-      // Check source exists
       const sourceConfig = await containerManager.getConfig(sourceName)
       if (!sourceConfig) {
         console.error(error(`Container "${sourceName}" not found`))
         process.exit(1)
       }
 
-      // Check source is stopped
       const running = await processManager.isRunning(sourceName, {
         engine: sourceConfig.engine,
       })
@@ -70,12 +67,10 @@ export const cloneCommand = new Command('clone')
         process.exit(1)
       }
 
-      // Get target name
       if (!targetName) {
         targetName = await promptContainerName(`${sourceName}-copy`)
       }
 
-      // Clone the container
       const cloneSpinner = createSpinner(
         `Cloning ${sourceName} to ${targetName}...`,
       )
@@ -85,7 +80,6 @@ export const cloneCommand = new Command('clone')
 
       cloneSpinner.succeed(`Cloned "${sourceName}" to "${targetName}"`)
 
-      // Get engine for connection string
       const engine = getEngine(newConfig.engine)
       const connectionString = engine.getConnectionString(newConfig)
 
