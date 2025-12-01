@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--max-connections` flag for `create` command to customize connection limits
 - `--set-config` flag for `edit` command to modify PostgreSQL config values
 - Interactive config editing in `edit` menu for PostgreSQL containers
-- Higher default `max_connections` (200) for new PostgreSQL containers to support parallel builds (Next.js, etc.)
+- Higher default `max_connections` (200) for new PostgreSQL and MySQL containers to support parallel builds (Next.js, etc.)
 
 ### Changed
 - Refactored interactive menu from single 2749-line file into modular handler structure
