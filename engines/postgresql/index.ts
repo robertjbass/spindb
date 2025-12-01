@@ -1,13 +1,14 @@
 import { join } from 'path'
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
+import { readFile, writeFile } from 'fs/promises'
 import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
-import { defaults } from '../../config/defaults'
+import { defaults, getEngineDefaults } from '../../config/defaults'
 import {
   getBinaryUrl,
   SUPPORTED_MAJOR_VERSIONS,
@@ -151,7 +152,68 @@ export class PostgreSQLEngine extends BaseEngine {
       superuser: (options.superuser as string) || defaults.superuser,
     })
 
+    // Configure max_connections after initdb creates postgresql.conf
+    const maxConnections =
+      (options.maxConnections as number) || getEngineDefaults('postgresql').maxConnections
+    await this.setConfigValue(dataDir, 'max_connections', String(maxConnections))
+
     return dataDir
+  }
+
+  /**
+   * Get the path to postgresql.conf for a container
+   */
+  getConfigPath(containerName: string): string {
+    const dataDir = paths.getContainerDataPath(containerName, {
+      engine: this.name,
+    })
+    return join(dataDir, 'postgresql.conf')
+  }
+
+  /**
+   * Set a configuration value in postgresql.conf
+   * If the setting exists (commented or not), it updates the line.
+   * If not found, appends it to the end of the file.
+   */
+  async setConfigValue(
+    dataDir: string,
+    key: string,
+    value: string,
+  ): Promise<void> {
+    const configPath = join(dataDir, 'postgresql.conf')
+    let content = await readFile(configPath, 'utf8')
+
+    // Match both commented (#key = ...) and uncommented (key = ...) lines
+    const regex = new RegExp(`^#?\\s*${key}\\s*=.*$`, 'm')
+
+    if (regex.test(content)) {
+      // Update existing line (commented or not)
+      content = content.replace(regex, `${key} = ${value}`)
+    } else {
+      // Append to end of file
+      content = content.trimEnd() + `\n${key} = ${value}\n`
+    }
+
+    await writeFile(configPath, content, 'utf8')
+  }
+
+  /**
+   * Get a configuration value from postgresql.conf
+   * Returns null if not found or commented out
+   */
+  async getConfigValue(dataDir: string, key: string): Promise<string | null> {
+    const configPath = join(dataDir, 'postgresql.conf')
+    const content = await readFile(configPath, 'utf8')
+
+    // Match only uncommented lines
+    const regex = new RegExp(`^${key}\\s*=\\s*(.+?)\\s*(?:#.*)?$`, 'm')
+    const match = content.match(regex)
+
+    if (match) {
+      // Remove quotes if present
+      return match[1].replace(/^['"]|['"]$/g, '')
+    }
+    return null
   }
 
   /**

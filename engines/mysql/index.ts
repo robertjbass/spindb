@@ -274,6 +274,7 @@ export class MySQLEngine extends BaseEngine {
       `--pid-file=${pidFile}`,
       `--log-error=${logFile}`,
       '--bind-address=127.0.0.1',
+      `--max-connections=${engineDef.maxConnections}`, // Higher than default 151 for parallel builds
     ]
 
     return new Promise((resolve, reject) => {

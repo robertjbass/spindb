@@ -4,30 +4,45 @@ import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
+import { getEngine } from '../../engines'
+import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning, success } from '../ui/theme'
+import { error, warning, success, info } from '../ui/theme'
 
 function isValidName(name: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
 }
 
-async function promptEditAction(): Promise<'name' | 'port' | null> {
+/**
+ * Prompt for what to edit when no options provided
+ */
+async function promptEditAction(
+  engine: string,
+): Promise<'name' | 'port' | 'config' | null> {
+  const choices = [
+    { name: 'Rename container', value: 'name' },
+    { name: 'Change port', value: 'port' },
+  ]
+
+  // Only show config option for engines that support it
+  if (engine === 'postgresql') {
+    choices.push({ name: 'Edit database config (postgresql.conf)', value: 'config' })
+  }
+
+  choices.push({ name: chalk.gray('Cancel'), value: 'cancel' })
+
   const { action } = await inquirer.prompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
       message: 'What would you like to edit?',
-      choices: [
-        { name: 'Rename container', value: 'name' },
-        { name: 'Change port', value: 'port' },
-        { name: chalk.gray('Cancel'), value: 'cancel' },
-      ],
+      choices,
     },
   ])
 
   if (action === 'cancel') return null
-  return action as 'name' | 'port'
+  return action as 'name' | 'port' | 'config'
 }
 
 async function promptNewName(currentName: string): Promise<string | null> {
@@ -55,6 +70,74 @@ async function promptNewName(currentName: string): Promise<string | null> {
   return newName
 }
 
+// Common PostgreSQL config settings that users might want to edit
+const COMMON_PG_SETTINGS = [
+  { name: 'max_connections', description: 'Maximum concurrent connections', default: '200' },
+  { name: 'shared_buffers', description: 'Memory for shared buffers', default: '128MB' },
+  { name: 'work_mem', description: 'Memory per operation', default: '4MB' },
+  { name: 'maintenance_work_mem', description: 'Memory for maintenance ops', default: '64MB' },
+  { name: 'effective_cache_size', description: 'Planner cache size estimate', default: '4GB' },
+]
+
+/**
+ * Prompt for PostgreSQL config setting to edit
+ */
+async function promptConfigSetting(): Promise<{ key: string; value: string } | null> {
+  const choices = COMMON_PG_SETTINGS.map((s) => ({
+    name: `${s.name.padEnd(25)} ${chalk.gray(s.description)}`,
+    value: s.name,
+  }))
+  choices.push({ name: chalk.cyan('Custom setting...'), value: '__custom__' })
+  choices.push({ name: chalk.gray('Cancel'), value: '__cancel__' })
+
+  const { setting } = await inquirer.prompt<{ setting: string }>([
+    {
+      type: 'list',
+      name: 'setting',
+      message: 'Select setting to edit:',
+      choices,
+    },
+  ])
+
+  if (setting === '__cancel__') return null
+
+  let key = setting
+  if (setting === '__custom__') {
+    const { customKey } = await inquirer.prompt<{ customKey: string }>([
+      {
+        type: 'input',
+        name: 'customKey',
+        message: 'Setting name:',
+        validate: (input: string) => {
+          if (!input.trim()) return 'Setting name is required'
+          if (!/^[a-z_]+$/.test(input)) return 'Setting names are lowercase with underscores'
+          return true
+        },
+      },
+    ])
+    key = customKey
+  }
+
+  const defaultValue = COMMON_PG_SETTINGS.find((s) => s.name === key)?.default || ''
+  const { value } = await inquirer.prompt<{ value: string }>([
+    {
+      type: 'input',
+      name: 'value',
+      message: `Value for ${key}:`,
+      default: defaultValue,
+      validate: (input: string) => {
+        if (!input.trim()) return 'Value is required'
+        return true
+      },
+    },
+  ])
+
+  return { key, value }
+}
+
+/**
+ * Prompt for new port
+ */
 async function promptNewPort(currentPort: number): Promise<number | null> {
   const { newPort } = await inquirer.prompt<{ newPort: number }>([
     {
@@ -91,14 +174,18 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
 }
 
 export const editCommand = new Command('edit')
-  .description('Edit container properties (rename or change port)')
+  .description('Edit container properties (rename, port, or database config)')
   .argument('[name]', 'Container name')
   .option('-n, --name <newName>', 'New container name')
   .option('-p, --port <port>', 'New port number', parseInt)
+  .option(
+    '--set-config <setting>',
+    'Set a database config value (e.g., max_connections=200)',
+  )
   .action(
     async (
       name: string | undefined,
-      options: { name?: string; port?: number },
+      options: { name?: string; port?: number; setConfig?: string },
     ) => {
       try {
         let containerName = name
@@ -125,8 +212,13 @@ export const editCommand = new Command('edit')
           process.exit(1)
         }
 
-        if (options.name === undefined && options.port === undefined) {
-          const action = await promptEditAction()
+        // If no options provided, prompt for what to edit
+        if (
+          options.name === undefined &&
+          options.port === undefined &&
+          options.setConfig === undefined
+        ) {
+          const action = await promptEditAction(config.engine)
           if (!action) return
 
           if (action === 'name') {
@@ -140,6 +232,13 @@ export const editCommand = new Command('edit')
             const newPort = await promptNewPort(config.port)
             if (newPort) {
               options.port = newPort
+            } else {
+              return
+            }
+          } else if (action === 'config') {
+            const configSetting = await promptConfigSetting()
+            if (configSetting) {
+              options.setConfig = `${configSetting.key}=${configSetting.value}`
             } else {
               return
             }
@@ -216,6 +315,75 @@ export const editCommand = new Command('edit')
               '  Note: Port change takes effect on next container start.',
             ),
           )
+        }
+
+        // Handle config change
+        if (options.setConfig) {
+          // Only PostgreSQL supports config editing for now
+          if (config.engine !== 'postgresql') {
+            console.error(
+              error(`Config editing is only supported for PostgreSQL containers`),
+            )
+            process.exit(1)
+          }
+
+          // Parse the setting (key=value format)
+          const match = options.setConfig.match(/^([a-z_]+)=(.+)$/)
+          if (!match) {
+            console.error(
+              error(
+                'Invalid config format. Use: --set-config key=value (e.g., max_connections=200)',
+              ),
+            )
+            process.exit(1)
+          }
+
+          const [, configKey, configValue] = match
+
+          // Get the PostgreSQL engine to update config
+          const engine = getEngine(config.engine)
+          const dataDir = paths.getContainerDataPath(containerName, {
+            engine: config.engine,
+          })
+
+          const spinner = createSpinner(
+            `Setting ${configKey} = ${configValue}...`,
+          )
+          spinner.start()
+
+          // Use the PostgreSQL engine's setConfigValue method
+          if ('setConfigValue' in engine) {
+            await (engine as { setConfigValue: (dataDir: string, key: string, value: string) => Promise<void> }).setConfigValue(
+              dataDir,
+              configKey,
+              configValue,
+            )
+          }
+
+          spinner.succeed(`Set ${configKey} = ${configValue}`)
+
+          // Check if container is running and warn about restart
+          const running = await processManager.isRunning(containerName, {
+            engine: config.engine,
+          })
+          if (running) {
+            console.log(
+              info(
+                '  Note: Restart the container for changes to take effect.',
+              ),
+            )
+            console.log(
+              chalk.gray(
+                `    spindb stop ${containerName} && spindb start ${containerName}`,
+              ),
+            )
+          } else {
+            console.log(
+              chalk.gray(
+                '  Config change will take effect on next container start.',
+              ),
+            )
+          }
         }
 
         console.log()

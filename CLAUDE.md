@@ -197,11 +197,16 @@ try {
 ## Common Tasks
 
 ### Running the CLI
+
+**IMPORTANT:** During development, always use `pnpm start` instead of `spindb` to ensure you're running the development version, not the globally installed version.
+
 ```bash
-pnpm run start              # Interactive menu
-pnpm run start create mydb  # Direct command
-pnpm run start --help       # Help
+pnpm start              # Interactive menu
+pnpm start create mydb  # Direct command
+pnpm start --help       # Help
 ```
+
+Note: `pnpm start` and `pnpm run start` are equivalent.
 
 ### Running Tests
 ```bash
