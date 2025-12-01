@@ -47,6 +47,7 @@ See [Engines](#engines) section below for full engine status and details.
 - [ ] **Export query results** - `spindb run <container> query.sql --format csv/json --output file`
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
+- [ ] **Overwrite existing databases on restore** - Add `--force` or `--drop-existing` flag to restore/create commands to drop and recreate tables that already exist (currently fails if tables exist)
 
 ### Security (Pro)
 - [ ] **Password authentication** - Set passwords on container creation

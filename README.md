@@ -217,6 +217,7 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 | `--version`, `-v` | Engine version |
 | `--port`, `-p` | Port number |
 | `--database`, `-d` | Primary database name |
+| `--max-connections` | Maximum database connections (default: 200) |
 | `--from` | Restore from backup file or connection string |
 | `--no-start` | Create without starting |
 
@@ -332,12 +333,13 @@ spindb clone source-db new-db
 spindb start new-db
 ```
 
-#### `edit` - Rename or change port
+#### `edit` - Rename, change port, or edit database config
 
 ```bash
-spindb edit mydb --name newname   # Must be stopped
+spindb edit mydb --name newname              # Must be stopped
 spindb edit mydb --port 5433
-spindb edit mydb                  # Interactive mode
+spindb edit mydb --set-config max_connections=300   # PostgreSQL config
+spindb edit mydb                             # Interactive mode
 ```
 
 #### `logs` - View container logs

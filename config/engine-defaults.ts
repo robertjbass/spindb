@@ -26,6 +26,8 @@ export type EngineDefaults = {
   dataSubdir: string
   /** Client tools required for this engine */
   clientTools: string[]
+  /** Default max connections (higher than PostgreSQL default of 100 for parallel builds) */
+  maxConnections: number
 }
 
 export const engineDefaults: Record<string, EngineDefaults> = {
@@ -41,6 +43,7 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     pidFileName: 'postmaster.pid',
     dataSubdir: 'data',
     clientTools: ['psql', 'pg_dump', 'pg_restore', 'pg_basebackup'],
+    maxConnections: 200, // Higher than default 100 for parallel builds (Next.js, etc.)
   },
   mysql: {
     defaultVersion: '9.0',
@@ -54,6 +57,7 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     pidFileName: 'mysql.pid',
     dataSubdir: 'data',
     clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
+    maxConnections: 200, // Higher than default 151 for parallel builds
   },
 }
 

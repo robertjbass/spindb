@@ -51,6 +51,10 @@ export const createCommand = new Command('create')
   .option('-v, --version <version>', 'Database version')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
+  .option(
+    '--max-connections <number>',
+    'Maximum number of database connections (default: 200)',
+  )
   .option('--no-start', 'Do not start the container after creation')
   .option(
     '--from <location>',
@@ -64,6 +68,7 @@ export const createCommand = new Command('create')
         version?: string
         database?: string
         port?: string
+        maxConnections?: string
         start: boolean
         from?: string
       },
@@ -256,6 +261,9 @@ export const createCommand = new Command('create')
         try {
           await dbEngine.initDataDir(containerName, version, {
             superuser: engineDefaults.superuser,
+            maxConnections: options.maxConnections
+              ? parseInt(options.maxConnections, 10)
+              : undefined,
           })
           initSpinner.succeed('Database cluster initialized')
         } catch (err) {

@@ -147,7 +147,12 @@ describe('UpdateManager', () => {
 
   describe('UpdateResult Shape', () => {
     it('should have correct success structure', () => {
-      const result = {
+      const result: {
+        success: boolean
+        previousVersion: string
+        newVersion: string
+        error?: string
+      } = {
         success: true,
         previousVersion: '1.0.0',
         newVersion: '2.0.0',
