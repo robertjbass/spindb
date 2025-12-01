@@ -22,15 +22,10 @@ import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
 import { Engine } from '../../types'
 
-/**
- * Detect if a location string is a connection string or a file path
- * Also infers engine from connection string scheme
- */
 function detectLocationType(location: string): {
   type: 'connection' | 'file' | 'not_found'
   inferredEngine?: Engine
 } {
-  // Check for PostgreSQL connection string
   if (
     location.startsWith('postgresql://') ||
     location.startsWith('postgres://')
@@ -38,12 +33,10 @@ function detectLocationType(location: string): {
     return { type: 'connection', inferredEngine: Engine.PostgreSQL }
   }
 
-  // Check for MySQL connection string
   if (location.startsWith('mysql://')) {
     return { type: 'connection', inferredEngine: Engine.MySQL }
   }
 
-  // Check if file exists
   if (existsSync(location)) {
     return { type: 'file' }
   }
@@ -83,7 +76,6 @@ export const createCommand = new Command('create')
         let version = options.version
         let database = options.database
 
-        // Validate --from location if provided (before prompts so we can infer engine)
         let restoreLocation: string | null = null
         let restoreType: 'connection' | 'file' | null = null
 
@@ -103,7 +95,6 @@ export const createCommand = new Command('create')
           restoreLocation = options.from
           restoreType = locationInfo.type
 
-          // Infer engine from connection string if not explicitly set
           if (!options.engine && locationInfo.inferredEngine) {
             engine = locationInfo.inferredEngine
             console.log(
@@ -113,7 +104,6 @@ export const createCommand = new Command('create')
             )
           }
 
-          // If using --from, we must start the container
           if (options.start === false) {
             console.error(
               error(
@@ -124,15 +114,12 @@ export const createCommand = new Command('create')
           }
         }
 
-        // Get engine defaults for port range and default version
         const engineDefaults = getEngineDefaults(engine)
 
-        // Set version to engine default if not specified
         if (!version) {
           version = engineDefaults.defaultVersion
         }
 
-        // Interactive mode if no name provided
         if (!containerName) {
           const answers = await promptCreateOptions()
           containerName = answers.name
@@ -141,16 +128,13 @@ export const createCommand = new Command('create')
           database = answers.database
         }
 
-        // Default database name to container name if not specified
         database = database ?? containerName
 
         console.log(header('Creating Database Container'))
         console.log()
 
-        // Get the engine
         const dbEngine = getEngine(engine)
 
-        // Check for required client tools BEFORE creating anything
         const depsSpinner = createSpinner('Checking required tools...')
         depsSpinner.start()
 
@@ -160,7 +144,6 @@ export const createCommand = new Command('create')
             `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
           )
 
-          // Offer to install
           const installed = await promptInstallDependencies(
             missingDeps[0].binary,
             engine,
@@ -170,7 +153,6 @@ export const createCommand = new Command('create')
             process.exit(1)
           }
 
-          // Verify installation worked
           missingDeps = await getMissingDependencies(engine)
           if (missingDeps.length > 0) {
             console.error(
@@ -187,7 +169,6 @@ export const createCommand = new Command('create')
           depsSpinner.succeed('Required tools available')
         }
 
-        // Find available port
         const portSpinner = createSpinner('Finding available port...')
         portSpinner.start()
 
@@ -216,7 +197,6 @@ export const createCommand = new Command('create')
           }
         }
 
-        // Ensure binaries are available
         const binarySpinner = createSpinner(
           `Checking ${dbEngine.displayName} ${version} binaries...`,
         )
@@ -237,7 +217,6 @@ export const createCommand = new Command('create')
           )
         }
 
-        // Check if container name already exists and prompt for new name if needed
         while (await containerManager.exists(containerName)) {
           console.log(
             chalk.yellow(`  Container "${containerName}" already exists.`),
@@ -245,10 +224,8 @@ export const createCommand = new Command('create')
           containerName = await promptContainerName()
         }
 
-        // Create transaction manager for rollback support
         const tx = new TransactionManager()
 
-        // Create container
         const createSpinnerInstance = createSpinner('Creating container...')
         createSpinnerInstance.start()
 
@@ -260,7 +237,6 @@ export const createCommand = new Command('create')
             database,
           })
 
-          // Register rollback action for container deletion
           tx.addRollback({
             description: `Delete container "${containerName}"`,
             execute: async () => {
@@ -274,7 +250,6 @@ export const createCommand = new Command('create')
           throw err
         }
 
-        // Initialize database cluster
         const initSpinner = createSpinner('Initializing database cluster...')
         initSpinner.start()
 
@@ -282,7 +257,6 @@ export const createCommand = new Command('create')
           await dbEngine.initDataDir(containerName, version, {
             superuser: engineDefaults.superuser,
           })
-          // Note: initDataDir is covered by the container delete rollback
           initSpinner.succeed('Database cluster initialized')
         } catch (err) {
           initSpinner.fail('Failed to initialize database cluster')
@@ -290,27 +264,19 @@ export const createCommand = new Command('create')
           throw err
         }
 
-        // Determine if we should start the container
-        // If --from is specified, we must start to restore
-        // If --no-start is specified, don't start
-        // Otherwise, ask the user
+        // --from requires start, --no-start skips, otherwise ask user
         let shouldStart = false
         if (restoreLocation) {
-          // Must start to restore data
           shouldStart = true
         } else if (options.start === false) {
-          // User explicitly requested no start
           shouldStart = false
         } else {
-          // Ask the user
           console.log()
           shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
         }
 
-        // Get container config for starting and restoration
         const config = await containerManager.getConfig(containerName)
 
-        // Start container if requested
         if (shouldStart && config) {
           const startSpinner = createSpinner(
             `Starting ${dbEngine.displayName}...`,
@@ -318,7 +284,6 @@ export const createCommand = new Command('create')
           startSpinner.start()
 
           try {
-            // Use startWithRetry to handle port race conditions
             const result = await startWithRetry({
               engine: dbEngine,
               config,
@@ -337,7 +302,6 @@ export const createCommand = new Command('create')
               throw new Error('Failed to start container')
             }
 
-            // Register rollback action for stopping the container
             tx.addRollback({
               description: `Stop container "${containerName}"`,
               execute: async () => {
@@ -370,8 +334,7 @@ export const createCommand = new Command('create')
             throw err
           }
 
-          // Create the user's database (if different from default)
-          const defaultDb = engineDefaults.superuser // postgres or root
+          const defaultDb = engineDefaults.superuser
           if (database !== defaultDb) {
             const dbSpinner = createSpinner(
               `Creating database "${database}"...`,
@@ -389,18 +352,16 @@ export const createCommand = new Command('create')
           }
         }
 
-        // Handle --from restore if specified (only if started)
         if (restoreLocation && restoreType && config && shouldStart) {
           let backupPath = ''
 
           if (restoreType === 'connection') {
-            // Create dump from remote database
             const timestamp = Date.now()
             tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
 
             let dumpSuccess = false
             let attempts = 0
-            const maxAttempts = 2 // Allow one retry after installing deps
+            const maxAttempts = 2
 
             while (!dumpSuccess && attempts < maxAttempts) {
               attempts++
@@ -421,7 +382,6 @@ export const createCommand = new Command('create')
                 const e = err as Error
                 dumpSpinner.fail('Failed to create dump')
 
-                // Check if this is a missing tool error
                 if (
                   e.message.includes('pg_dump not found') ||
                   e.message.includes('ENOENT')
@@ -430,7 +390,6 @@ export const createCommand = new Command('create')
                   if (!installed) {
                     process.exit(1)
                   }
-                  // Loop will retry
                   continue
                 }
 
@@ -441,7 +400,6 @@ export const createCommand = new Command('create')
               }
             }
 
-            // Safety check - should never reach here without backupPath set
             if (!dumpSuccess) {
               console.error(error('Failed to create dump after retries'))
               process.exit(1)
@@ -450,20 +408,18 @@ export const createCommand = new Command('create')
             backupPath = restoreLocation
           }
 
-          // Detect backup format
           const detectSpinner = createSpinner('Detecting backup format...')
           detectSpinner.start()
 
           const format = await dbEngine.detectBackupFormat(backupPath)
           detectSpinner.succeed(`Detected: ${format.description}`)
 
-          // Restore backup
           const restoreSpinner = createSpinner('Restoring backup...')
           restoreSpinner.start()
 
           const result = await dbEngine.restore(config, backupPath, {
             database,
-            createDatabase: false, // Already created above
+            createDatabase: false,
           })
 
           if (result.code === 0 || !result.stderr) {
@@ -485,10 +441,8 @@ export const createCommand = new Command('create')
           }
         }
 
-        // Commit the transaction - all operations succeeded
         tx.commit()
 
-        // Show success message
         const finalConfig = await containerManager.getConfig(containerName)
         if (finalConfig) {
           const connectionString = dbEngine.getConnectionString(finalConfig)
@@ -503,7 +457,6 @@ export const createCommand = new Command('create')
             console.log(chalk.gray('  Connect with:'))
             console.log(chalk.cyan(`  spindb connect ${containerName}`))
 
-            // Copy connection string to clipboard
             const copied =
               await platformService.copyToClipboard(connectionString)
             if (copied) {
@@ -519,13 +472,10 @@ export const createCommand = new Command('create')
       } catch (err) {
         const e = err as Error
 
-        // Check if this is a missing tool error (PostgreSQL or MySQL)
         const missingToolPatterns = [
-          // PostgreSQL
           'pg_restore not found',
           'psql not found',
           'pg_dump not found',
-          // MySQL
           'mysql not found',
           'mysqldump not found',
           'mysqld not found',
@@ -549,7 +499,6 @@ export const createCommand = new Command('create')
         console.error(error(e.message))
         process.exit(1)
       } finally {
-        // Clean up temp file if we created one
         if (tempDumpPath) {
           try {
             await rm(tempDumpPath, { force: true })

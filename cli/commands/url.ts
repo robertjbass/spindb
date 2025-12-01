@@ -20,7 +20,6 @@ export const urlCommand = new Command('url')
       try {
         let containerName = name
 
-        // Interactive selection if no name provided
         if (!containerName) {
           const containers = await containerManager.list()
 
@@ -37,19 +36,16 @@ export const urlCommand = new Command('url')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
-        // Get connection string
         const engine = getEngine(config.engine)
         const databaseName = options.database || config.database
         const connectionString = engine.getConnectionString(config, databaseName)
 
-        // JSON output
         if (options.json) {
           const jsonOutput = {
             connectionString,
@@ -64,22 +60,17 @@ export const urlCommand = new Command('url')
           return
         }
 
-        // Copy to clipboard if requested
         if (options.copy) {
           const copied = await platformService.copyToClipboard(connectionString)
           if (copied) {
-            // Output the string AND confirmation
             console.log(connectionString)
             console.error(success('Copied to clipboard'))
           } else {
-            // Output the string but warn about clipboard
             console.log(connectionString)
             console.error(warning('Could not copy to clipboard'))
           }
         } else {
-          // Just output the connection string (no newline formatting for easy piping)
           process.stdout.write(connectionString)
-          // Add newline if stdout is a TTY (interactive terminal)
           if (process.stdout.isTTY) {
             console.log()
           }

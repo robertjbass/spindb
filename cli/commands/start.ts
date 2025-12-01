@@ -16,7 +16,6 @@ export const startCommand = new Command('start')
     try {
       let containerName = name
 
-      // Interactive selection if no name provided
       if (!containerName) {
         const containers = await containerManager.list()
         const stopped = containers.filter((c) => c.status !== 'running')
@@ -40,7 +39,6 @@ export const startCommand = new Command('start')
         containerName = selected
       }
 
-      // Get container config
       const config = await containerManager.getConfig(containerName)
       if (!config) {
         console.error(error(`Container "${containerName}" not found`))
@@ -49,7 +47,6 @@ export const startCommand = new Command('start')
 
       const { engine: engineName } = config
 
-      // Check if already running
       const running = await processManager.isRunning(containerName, {
         engine: engineName,
       })
@@ -58,10 +55,7 @@ export const startCommand = new Command('start')
         return
       }
 
-      // Get engine defaults for port range and database name
       const engineDefaults = getEngineDefaults(engineName)
-
-      // Get engine and start with retry (handles port race conditions)
       const engine = getEngine(engineName)
 
       const spinner = createSpinner(`Starting ${containerName}...`)
@@ -93,8 +87,8 @@ export const startCommand = new Command('start')
         spinner.succeed(`Container "${containerName}" started`)
       }
 
-      // Ensure the user's database exists (if different from default)
-      const defaultDb = engineDefaults.superuser // postgres or root
+      // Database might already exist, which is fine
+      const defaultDb = engineDefaults.superuser
       if (config.database && config.database !== defaultDb) {
         const dbSpinner = createSpinner(
           `Ensuring database "${config.database}" exists...`,
@@ -104,12 +98,10 @@ export const startCommand = new Command('start')
           await engine.createDatabase(config, config.database)
           dbSpinner.succeed(`Database "${config.database}" ready`)
         } catch {
-          // Database might already exist, which is fine
           dbSpinner.succeed(`Database "${config.database}" ready`)
         }
       }
 
-      // Show connection info
       const connectionString = engine.getConnectionString(config)
       console.log()
       console.log(chalk.gray('  Connection string:'))

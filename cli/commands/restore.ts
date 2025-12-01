@@ -41,7 +41,6 @@ export const restoreCommand = new Command('restore')
         let containerName = name
         let backupPath = backup
 
-        // Interactive selection if no name provided
         if (!containerName) {
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
@@ -69,7 +68,6 @@ export const restoreCommand = new Command('restore')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
@@ -78,7 +76,6 @@ export const restoreCommand = new Command('restore')
 
         const { engine: engineName } = config
 
-        // Check if running
         const running = await processManager.isRunning(containerName, {
           engine: engineName,
         })
@@ -91,10 +88,8 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
-        // Get engine
         const engine = getEngine(engineName)
 
-        // Check for required client tools BEFORE doing anything
         const depsSpinner = createSpinner('Checking required tools...')
         depsSpinner.start()
 
@@ -104,7 +99,6 @@ export const restoreCommand = new Command('restore')
             `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
           )
 
-          // Offer to install
           const installed = await promptInstallDependencies(
             missingDeps[0].binary,
             config.engine,
@@ -114,7 +108,6 @@ export const restoreCommand = new Command('restore')
             process.exit(1)
           }
 
-          // Verify installation worked
           missingDeps = await getMissingDependencies(config.engine)
           if (missingDeps.length > 0) {
             console.error(
@@ -131,9 +124,7 @@ export const restoreCommand = new Command('restore')
           depsSpinner.succeed('Required tools available')
         }
 
-        // Handle --from-url option
         if (options.fromUrl) {
-          // Validate connection string matches container's engine
           const isPgUrl =
             options.fromUrl.startsWith('postgresql://') ||
             options.fromUrl.startsWith('postgres://')
@@ -166,13 +157,12 @@ export const restoreCommand = new Command('restore')
             process.exit(1)
           }
 
-          // Create temp file for the dump
           const timestamp = Date.now()
           tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
 
           let dumpSuccess = false
           let attempts = 0
-          const maxAttempts = 2 // Allow one retry after installing deps
+          const maxAttempts = 2
 
           while (!dumpSuccess && attempts < maxAttempts) {
             attempts++
@@ -193,7 +183,6 @@ export const restoreCommand = new Command('restore')
               const e = err as Error
               dumpSpinner.fail('Failed to create dump')
 
-              // Check if this is a missing tool error
               const dumpTool = engineName === 'mysql' ? 'mysqldump' : 'pg_dump'
               if (
                 e.message.includes(`${dumpTool} not found`) ||
@@ -206,7 +195,6 @@ export const restoreCommand = new Command('restore')
                 if (!installed) {
                   process.exit(1)
                 }
-                // Loop will retry
                 continue
               }
 
@@ -217,13 +205,11 @@ export const restoreCommand = new Command('restore')
             }
           }
 
-          // Safety check - should never reach here without backupPath set
           if (!dumpSuccess) {
             console.error(error('Failed to create dump after retries'))
             process.exit(1)
           }
         } else {
-          // Check backup file
           if (!backupPath) {
             console.error(error('Backup file path is required'))
             console.log(
@@ -243,26 +229,22 @@ export const restoreCommand = new Command('restore')
           }
         }
 
-        // Get database name
         let databaseName = options.database
         if (!databaseName) {
           databaseName = await promptDatabaseName(containerName, engineName)
         }
 
-        // At this point backupPath is guaranteed to be set
         if (!backupPath) {
           console.error(error('No backup path specified'))
           process.exit(1)
         }
 
-        // Detect backup format
         const detectSpinner = createSpinner('Detecting backup format...')
         detectSpinner.start()
 
         const format = await engine.detectBackupFormat(backupPath)
         detectSpinner.succeed(`Detected: ${format.description}`)
 
-        // Create database
         const dbSpinner = createSpinner(
           `Creating database "${databaseName}"...`,
         )
@@ -271,16 +253,14 @@ export const restoreCommand = new Command('restore')
         await engine.createDatabase(config, databaseName)
         dbSpinner.succeed(`Database "${databaseName}" ready`)
 
-        // Add database to container's databases array
         await containerManager.addDatabase(containerName, databaseName)
 
-        // Restore backup
         const restoreSpinner = createSpinner('Restoring backup...')
         restoreSpinner.start()
 
         const result = await engine.restore(config, backupPath, {
           database: databaseName,
-          createDatabase: false, // Already created
+          createDatabase: false,
         })
 
         if (result.code === 0 || !result.stderr) {
@@ -302,7 +282,6 @@ export const restoreCommand = new Command('restore')
           }
         }
 
-        // Show connection info
         const connectionString = engine.getConnectionString(
           config,
           databaseName,
@@ -313,7 +292,6 @@ export const restoreCommand = new Command('restore')
         console.log(chalk.gray('  Connection string:'))
         console.log(chalk.cyan(`  ${connectionString}`))
 
-        // Copy connection string to clipboard using platform service
         const copied = await platformService.copyToClipboard(connectionString)
         if (copied) {
           console.log(chalk.gray('  Connection string copied to clipboard'))
@@ -330,13 +308,10 @@ export const restoreCommand = new Command('restore')
       } catch (err) {
         const e = err as Error
 
-        // Check if this is a missing tool error (PostgreSQL or MySQL)
         const missingToolPatterns = [
-          // PostgreSQL
           'pg_restore not found',
           'psql not found',
           'pg_dump not found',
-          // MySQL
           'mysql not found',
           'mysqldump not found',
         ]
@@ -359,7 +334,6 @@ export const restoreCommand = new Command('restore')
         console.error(error(e.message))
         process.exit(1)
       } finally {
-        // Clean up temp file if we created one
         if (tempDumpPath) {
           try {
             await rm(tempDumpPath, { force: true })

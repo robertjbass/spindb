@@ -5,20 +5,16 @@ import { containerManager } from '../../../core/container-manager'
 import { promptInstallDependencies } from '../../ui/prompts'
 import { header, error } from '../../ui/theme'
 import { getInstalledEngines } from '../../helpers'
-import { type MenuChoice } from './shared'
 import {
   handleCreate,
   handleList,
   handleStart,
   handleStop,
 } from './container-handlers'
-import {
-  handleBackup,
-  handleRestore,
-  handleClone,
-} from './backup-handlers'
+import { handleBackup, handleRestore, handleClone } from './backup-handlers'
 import { handleEngines } from './engine-handlers'
 import { handleCheckUpdate } from './update-handlers'
+import { type MenuChoice } from './shared'
 
 async function showMainMenu(): Promise<void> {
   console.clear()
@@ -148,7 +144,6 @@ async function showMainMenu(): Promise<void> {
       process.exit(0)
   }
 
-  // Return to menu after action
   await showMainMenu()
 }
 

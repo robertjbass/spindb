@@ -20,7 +20,6 @@ export async function handleRunSql(containerName: string): Promise<void> {
 
   const engine = getEngine(config.engine)
 
-  // Check for required client tools
   let missingDeps = await getMissingDependencies(config.engine)
   if (missingDeps.length > 0) {
     console.log(
@@ -72,14 +71,12 @@ export async function handleRunSql(containerName: string): Promise<void> {
     },
   ])
 
-  // Empty input = go back to submenu
   if (!rawFilePath.trim()) {
     return
   }
 
   const filePath = stripQuotes(rawFilePath)
 
-  // Select database if container has multiple
   const databases = config.databases || [config.database]
   let databaseName: string
 

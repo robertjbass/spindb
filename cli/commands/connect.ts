@@ -53,7 +53,6 @@ export const connectCommand = new Command('connect')
       try {
         let containerName = name
 
-        // Interactive selection if no name provided
         if (!containerName) {
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
@@ -81,7 +80,6 @@ export const connectCommand = new Command('connect')
           containerName = selected
         }
 
-        // Get container config
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           console.error(error(`Container "${containerName}" not found`))
@@ -91,11 +89,9 @@ export const connectCommand = new Command('connect')
         const { engine: engineName } = config
         const engineDefaults = getEngineDefaults(engineName)
 
-        // Default database: container's database or superuser
         const database =
           options.database ?? config.database ?? engineDefaults.superuser
 
-        // Check if running
         const running = await processManager.isRunning(containerName, {
           engine: engineName,
         })
@@ -108,18 +104,15 @@ export const connectCommand = new Command('connect')
           process.exit(1)
         }
 
-        // Get engine
         const engine = getEngine(engineName)
         const connectionString = engine.getConnectionString(config, database)
 
-        // Handle --tui and --install-tui flags (usql)
         const useUsql = options.tui || options.installTui
         if (useUsql) {
           const usqlInstalled = await isUsqlInstalled()
 
           if (!usqlInstalled) {
             if (options.installTui) {
-              // Try to install usql
               console.log(
                 info('Installing usql for enhanced shell experience...'),
               )
@@ -150,7 +143,6 @@ export const connectCommand = new Command('connect')
                 process.exit(1)
               }
             } else {
-              // --tui flag but usql not installed
               console.error(error('usql is not installed'))
               console.log()
               console.log(
@@ -167,7 +159,6 @@ export const connectCommand = new Command('connect')
           }
         }
 
-        // Handle --pgcli and --install-pgcli flags
         const usePgcli = options.pgcli || options.installPgcli
         if (usePgcli) {
           if (engineName !== 'postgresql') {
@@ -228,7 +219,6 @@ export const connectCommand = new Command('connect')
           }
         }
 
-        // Handle --mycli and --install-mycli flags
         const useMycli = options.mycli || options.installMycli
         if (useMycli) {
           if (engineName !== 'mysql') {
@@ -288,16 +278,13 @@ export const connectCommand = new Command('connect')
         console.log(info(`Connecting to ${containerName}:${database}...`))
         console.log()
 
-        // Build client command based on engine and shell preference
         let clientCmd: string
         let clientArgs: string[]
 
         if (usePgcli) {
-          // pgcli accepts connection strings
           clientCmd = 'pgcli'
           clientArgs = [connectionString]
         } else if (useMycli) {
-          // mycli: mycli -h host -P port -u user database
           clientCmd = 'mycli'
           clientArgs = [
             '-h',
@@ -309,11 +296,9 @@ export const connectCommand = new Command('connect')
             database,
           ]
         } else if (useUsql) {
-          // usql accepts connection strings directly for both PostgreSQL and MySQL
           clientCmd = 'usql'
           clientArgs = [connectionString]
         } else if (engineName === 'mysql') {
-          // MySQL: mysql -h 127.0.0.1 -P port -u root database
           clientCmd = 'mysql'
           clientArgs = [
             '-h',
@@ -325,7 +310,6 @@ export const connectCommand = new Command('connect')
             database,
           ]
         } else {
-          // PostgreSQL: psql connection_string
           clientCmd = 'psql'
           clientArgs = [connectionString]
         }

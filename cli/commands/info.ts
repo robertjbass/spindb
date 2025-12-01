@@ -9,17 +9,11 @@ import { error, info, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
 
-/**
- * Format a date for display
- */
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
   return date.toLocaleString()
 }
 
-/**
- * Get actual running status (not just config status)
- */
 async function getActualStatus(
   config: ContainerConfig,
 ): Promise<'running' | 'stopped'> {
@@ -29,9 +23,6 @@ async function getActualStatus(
   return running ? 'running' : 'stopped'
 }
 
-/**
- * Display info for a single container
- */
 async function displayContainerInfo(
   config: ContainerConfig,
   options: { json?: boolean },
@@ -109,15 +100,11 @@ async function displayContainerInfo(
   console.log()
 }
 
-/**
- * Display summary info for all containers
- */
 async function displayAllContainersInfo(
   containers: ContainerConfig[],
   options: { json?: boolean },
 ): Promise<void> {
   if (options.json) {
-    // Get actual status for all containers
     const containersWithStatus = await Promise.all(
       containers.map(async (config) => {
         const actualStatus = await getActualStatus(config)
@@ -142,7 +129,6 @@ async function displayAllContainersInfo(
   console.log(header('All Containers'))
   console.log()
 
-  // Table header
   console.log(
     chalk.gray('  ') +
       chalk.bold.white('NAME'.padEnd(18)) +
@@ -154,7 +140,6 @@ async function displayAllContainersInfo(
   )
   console.log(chalk.gray('  ' + '─'.repeat(78)))
 
-  // Table rows
   for (const container of containers) {
     const actualStatus = await getActualStatus(container)
     const statusDisplay =
@@ -178,7 +163,6 @@ async function displayAllContainersInfo(
 
   console.log()
 
-  // Summary
   const statusChecks = await Promise.all(
     containers.map((c) => getActualStatus(c)),
   )
@@ -192,7 +176,6 @@ async function displayAllContainersInfo(
   )
   console.log()
 
-  // Connection strings
   console.log(chalk.bold.white('  Connection Strings:'))
   console.log(chalk.gray('  ' + '─'.repeat(78)))
   for (const container of containers) {
@@ -221,7 +204,6 @@ export const infoCommand = new Command('info')
         return
       }
 
-      // If name provided, show single container
       if (name) {
         const config = await containerManager.getConfig(name)
         if (!config) {
@@ -232,7 +214,6 @@ export const infoCommand = new Command('info')
         return
       }
 
-      // If running interactively without name, ask if they want all or specific
       if (!options.json && process.stdout.isTTY && containers.length > 1) {
         const { choice } = await inquirer.prompt<{
           choice: string
@@ -262,7 +243,6 @@ export const infoCommand = new Command('info')
         return
       }
 
-      // Non-interactive or only one container: show all
       await displayAllContainersInfo(containers, options)
     } catch (err) {
       const e = err as Error
