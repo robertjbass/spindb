@@ -156,7 +156,7 @@ describe('UpdateManager', () => {
       assert(result.success === true, 'success should be true')
       assert(typeof result.previousVersion === 'string', 'Should have previousVersion')
       assert(typeof result.newVersion === 'string', 'Should have newVersion')
-      assert(result.error === undefined, 'error should be undefined on success')
+      assert(!('error' in result), 'error should not be present on success')
     })
 
     it('should have correct failure structure', () => {
