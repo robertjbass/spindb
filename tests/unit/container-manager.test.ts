@@ -217,7 +217,16 @@ describe('ContainerManager', () => {
 
     it('should migrate configs without databases array', async () => {
       // Test the concept of migration
-      const oldConfig = {
+      const oldConfig: {
+        name: string
+        engine: string
+        version: string
+        port: number
+        database: string
+        databases?: string[]
+        created: string
+        status: string
+      } = {
         name: 'testdb',
         engine: 'postgresql',
         version: '17',

@@ -2,7 +2,7 @@
  * Unit tests for port-manager module
  */
 
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import { PortManager } from '../../core/port-manager'
 import { assert, assertEqual } from '../integration/helpers'
 
@@ -42,12 +42,7 @@ describe('PortManager', () => {
     it('should throw error when no ports available in range', async () => {
       const portManager = new PortManager()
       // Create a mock that always returns false (all ports in use)
-      const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
-      let callCount = 0
-      portManager.isPortAvailable = async () => {
-        callCount++
-        return false
-      }
+      portManager.isPortAvailable = async () => false
 
       try {
         await portManager.findAvailablePort({
@@ -65,8 +60,6 @@ describe('PortManager', () => {
           error.message.includes('59990-59992'),
           `Error message should include port range: ${error.message}`,
         )
-      } finally {
-        portManager.isPortAvailable = originalIsPortAvailable
       }
     })
 

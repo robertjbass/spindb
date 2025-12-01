@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
   "type": "module",
   "bin": {
@@ -16,7 +16,8 @@
     "test:integration": "pnpm test:pg && pnpm test:mysql",
     "test:all": "pnpm test:unit && pnpm test:integration",
     "format": "prettier --write .",
-    "lint": "tsc --noEmit && eslint ."
+    "lint": "tsc --noEmit && eslint .",
+    "prepare": "husky"
   },
   "keywords": [
     "postgres",
@@ -54,6 +55,7 @@
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.10.0",
     "eslint": "^9.39.1",
+    "husky": "^9.1.7",
     "prettier": "^3.6.2",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.48.0"

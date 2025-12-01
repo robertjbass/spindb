@@ -75,7 +75,7 @@ describe('StartWithRetryResult', () => {
     assert(successResult.success === true, 'success should be true')
     assertEqual(successResult.finalPort, 5432, 'finalPort should be set')
     assertEqual(successResult.retriesUsed, 0, 'retriesUsed should be 0 on first try')
-    assert(successResult.error === undefined, 'error should be undefined on success')
+    assert(!('error' in successResult), 'error should not be present on success')
   })
 
   it('should have correct failure result shape', () => {
@@ -174,15 +174,17 @@ describe('Port Change Callback', () => {
 
   it('should not call onPortChange if not provided', () => {
     // This tests that undefined callback doesn't crash
-    const onPortChange: ((oldPort: number, newPort: number) => void) | undefined = undefined
+    let callbackWasCalled = false
+    const maybeCallback = Math.random() > 2
+      ? ((_oldPort: number, _newPort: number) => { callbackWasCalled = true })
+      : undefined
 
     // Simulate the check that exists in start-with-retry
-    if (onPortChange) {
-      onPortChange(5432, 5433)
-      assert(false, 'Should not reach here')
+    if (maybeCallback) {
+      maybeCallback(5432, 5433)
     }
 
-    assert(true, 'Should handle undefined callback gracefully')
+    assert(!callbackWasCalled, 'Should handle undefined callback gracefully')
   })
 })
 
@@ -201,7 +203,7 @@ describe('Engine Port Range Resolution', () => {
 
 describe('Error Conversion', () => {
   it('should convert unknown errors to Error objects', () => {
-    const unknownError = 'string error'
+    const unknownError: unknown = 'string error'
     const converted = unknownError instanceof Error
       ? unknownError
       : new Error(String(unknownError))

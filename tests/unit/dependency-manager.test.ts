@@ -106,6 +106,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'List Command',
         binary: 'ls',
+        description: 'List directory contents',
         packages: {},
         manualInstall: { darwin: [], linux: [] },
       }
@@ -124,6 +125,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Fake Tool',
         binary: 'fake-tool-that-does-not-exist-xyz',
+        description: 'A fake tool for testing',
         packages: {},
         manualInstall: { darwin: [], linux: [] },
       }
@@ -140,6 +142,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Test Package',
         binary: 'test-bin',
+        description: 'A test package',
         packages: {
           brew: { package: 'test-package' },
         },
@@ -154,6 +157,7 @@ describe('DependencyManager', () => {
           name: 'Homebrew',
           checkCommand: 'brew --version',
           installTemplate: 'brew install {package}',
+          updateTemplate: 'brew upgrade {package}',
           platforms: ['darwin'],
         },
       }
@@ -172,6 +176,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Test Package',
         binary: 'test-bin',
+        description: 'A test package',
         packages: {
           brew: {
             package: 'test-package',
@@ -189,6 +194,7 @@ describe('DependencyManager', () => {
           name: 'Homebrew',
           checkCommand: 'brew --version',
           installTemplate: 'brew install {package}',
+          updateTemplate: 'brew upgrade {package}',
           platforms: ['darwin'],
         },
       }
@@ -204,6 +210,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Test Package',
         binary: 'test-bin',
+        description: 'A test package',
         packages: {
           brew: {
             package: 'test-package',
@@ -221,6 +228,7 @@ describe('DependencyManager', () => {
           name: 'Homebrew',
           checkCommand: 'brew --version',
           installTemplate: 'brew install {package}',
+          updateTemplate: 'brew upgrade {package}',
           platforms: ['darwin'],
         },
       }
@@ -236,6 +244,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Test Package',
         binary: 'test-bin',
+        description: 'A test package',
         packages: {}, // No package definitions
         manualInstall: { darwin: [], linux: [] },
       }
@@ -248,6 +257,7 @@ describe('DependencyManager', () => {
           name: 'Homebrew',
           checkCommand: 'brew --version',
           installTemplate: 'brew install {package}',
+          updateTemplate: 'brew upgrade {package}',
           platforms: ['darwin'],
         },
       }
@@ -270,6 +280,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Test Package',
         binary: 'test-bin',
+        description: 'A test package',
         packages: {},
         manualInstall: {
           darwin: ['brew install test-package'],
@@ -298,6 +309,7 @@ describe('DependencyManager', () => {
       const mockDep = {
         name: 'Test Package',
         binary: 'test-bin',
+        description: 'A test package',
         packages: {},
         manualInstall: {
           darwin: ['brew install test-package'],
@@ -317,6 +329,7 @@ describe('DependencyManager', () => {
         dependency: {
           name: 'Test',
           binary: 'test',
+          description: 'A test tool',
           packages: {},
           manualInstall: {},
         },
@@ -340,11 +353,12 @@ describe('DependencyManager', () => {
 
   describe('InstallResult Shape', () => {
     it('should have correct success structure', () => {
-      const result = {
+      const result: { success: boolean; dependency: object; error?: string } = {
         success: true,
         dependency: {
           name: 'Test',
           binary: 'test',
+          description: 'A test tool',
           packages: {},
           manualInstall: {},
         },
@@ -361,6 +375,7 @@ describe('DependencyManager', () => {
         dependency: {
           name: 'Test',
           binary: 'test',
+          description: 'A test tool',
           packages: {},
           manualInstall: {},
         },
@@ -400,6 +415,7 @@ describe('Error Messages', () => {
     const mockDep = {
       name: 'PostgreSQL Client',
       binary: 'psql',
+      description: 'PostgreSQL interactive terminal',
       packages: {},
       manualInstall: { darwin: [], linux: [] },
     }
@@ -412,6 +428,7 @@ describe('Error Messages', () => {
         name: 'Homebrew',
         checkCommand: 'brew --version',
         installTemplate: 'brew install {package}',
+        updateTemplate: 'brew upgrade {package}',
         platforms: ['darwin'],
       },
     }
