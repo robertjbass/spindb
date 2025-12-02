@@ -592,6 +592,7 @@ export async function handleBackup(): Promise<void> {
   const containerName = await promptContainerSelect(
     running,
     'Select container to backup:',
+    { includeBack: true },
   )
   if (!containerName) return
 
@@ -715,6 +716,7 @@ export async function handleClone(): Promise<void> {
   const sourceName = await promptContainerSelect(
     stopped,
     'Select container to clone:',
+    { includeBack: true },
   )
   if (!sourceName) return
 

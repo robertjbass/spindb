@@ -474,6 +474,7 @@ export async function handleStart(): Promise<void> {
   const containerName = await promptContainerSelect(
     stopped,
     'Select container to start:',
+    { includeBack: true },
   )
   if (!containerName) return
 
@@ -521,6 +522,7 @@ export async function handleStop(): Promise<void> {
   const containerName = await promptContainerSelect(
     running,
     'Select container to stop:',
+    { includeBack: true },
   )
   if (!containerName) return
 

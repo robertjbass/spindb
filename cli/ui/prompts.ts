@@ -204,13 +204,33 @@ export async function promptConfirm(
 
 /**
  * Prompt for container selection from a list
+ * @param containers - List of containers to choose from
+ * @param message - Prompt message
+ * @param options - Optional settings
+ * @param options.includeBack - Include a back option (returns null when selected)
  */
 export async function promptContainerSelect(
   containers: ContainerConfig[],
   message: string = 'Select container:',
+  options: { includeBack?: boolean } = {},
 ): Promise<string | null> {
   if (containers.length === 0) {
     return null
+  }
+
+  type Choice = { name: string; value: string; short?: string }
+  const choices: Choice[] = containers.map((c) => ({
+    name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${
+      c.status === 'running'
+        ? chalk.green('● running')
+        : chalk.gray('○ stopped')
+    }`,
+    value: c.name,
+    short: c.name,
+  }))
+
+  if (options.includeBack) {
+    choices.push({ name: `${chalk.blue('←')} Back`, value: '__back__' })
   }
 
   const { container } = await inquirer.prompt<{ container: string }>([
@@ -218,17 +238,13 @@ export async function promptContainerSelect(
       type: 'list',
       name: 'container',
       message,
-      choices: containers.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${
-          c.status === 'running'
-            ? chalk.green('● running')
-            : chalk.gray('○ stopped')
-        }`,
-        value: c.name,
-        short: c.name,
-      })),
+      choices,
     },
   ])
+
+  if (container === '__back__') {
+    return null
+  }
 
   return container
 }
