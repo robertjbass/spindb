@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MongoDB engine support** - Full support for MongoDB as a third database engine
+  - Versions 6.0, 7.0, 8.0 supported
+  - Default port: 27017
+  - Uses system-installed MongoDB (like MySQL)
+  - `mongosh` for interactive shell
+  - `mongodump`/`mongorestore` for backups
+  - Connection string support (`mongodb://` and `mongodb+srv://`)
+  - Full container lifecycle: create, start, stop, delete, clone
+  - Database management: create, drop, list databases
+  - Backup and restore with archive format
+  - Integration tests covering full lifecycle
 - `logs` command to view container logs (`--follow`, `-n`, `--editor` options)
 - `--json` flag for `config show` and `url` commands
 - `status` alias for `info` command

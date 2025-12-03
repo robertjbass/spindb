@@ -290,6 +290,103 @@ const mysqlDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// MongoDB Dependencies
+// =============================================================================
+
+const mongodbDependencies: EngineDependencies = {
+  engine: 'mongodb',
+  displayName: 'MongoDB',
+  dependencies: [
+    {
+      name: 'mongod',
+      binary: 'mongod',
+      description: 'MongoDB server daemon',
+      packages: {
+        brew: {
+          package: 'mongodb-community',
+          preInstall: ['brew tap mongodb/brew'],
+        },
+        // Linux uses MongoDB's official repo (not standard distro packages)
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew tap mongodb/brew && brew install mongodb-community',
+        ],
+        linux: [
+          'Follow MongoDB installation guide for your distro:',
+          'https://www.mongodb.com/docs/manual/administration/install-on-linux/',
+          'Ubuntu: https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/',
+          'RHEL/CentOS: https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-red-hat/',
+        ],
+      },
+    },
+    {
+      name: 'mongosh',
+      binary: 'mongosh',
+      description: 'MongoDB Shell - interactive JavaScript shell for MongoDB',
+      packages: {
+        brew: {
+          package: 'mongosh',
+        },
+        // mongosh is included with mongodb-community on macOS
+        // On Linux, it's typically installed separately
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install mongosh',
+          'Or download from: https://www.mongodb.com/try/download/shell',
+        ],
+        linux: [
+          'Download from: https://www.mongodb.com/try/download/shell',
+          'Or follow: https://www.mongodb.com/docs/mongodb-shell/install/',
+        ],
+      },
+    },
+    {
+      name: 'mongodump',
+      binary: 'mongodump',
+      description: 'MongoDB backup utility for creating BSON dump files',
+      packages: {
+        brew: {
+          package: 'mongodb-database-tools',
+        },
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install mongodb-database-tools',
+          'Or download from: https://www.mongodb.com/try/download/database-tools',
+        ],
+        linux: [
+          'Download from: https://www.mongodb.com/try/download/database-tools',
+          'Or follow: https://www.mongodb.com/docs/database-tools/installation/',
+        ],
+      },
+    },
+    {
+      name: 'mongorestore',
+      binary: 'mongorestore',
+      description: 'MongoDB restore utility for restoring BSON dump files',
+      packages: {
+        brew: {
+          package: 'mongodb-database-tools',
+        },
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install mongodb-database-tools',
+          'Or download from: https://www.mongodb.com/try/download/database-tools',
+        ],
+        linux: [
+          'Download from: https://www.mongodb.com/try/download/database-tools',
+          'Or follow: https://www.mongodb.com/docs/database-tools/installation/',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -391,6 +488,7 @@ export const mycliDependency: Dependency = {
 export const engineDependencies: EngineDependencies[] = [
   postgresqlDependencies,
   mysqlDependencies,
+  mongodbDependencies,
 ]
 
 /**

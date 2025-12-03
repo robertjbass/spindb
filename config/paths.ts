@@ -88,13 +88,14 @@ export const paths = {
 
   /**
    * Get path for container PID file
-   * Note: For PostgreSQL, PID is inside data dir. For MySQL, it may differ.
+   * Note: For PostgreSQL, PID is inside data dir. For MySQL/MongoDB, PID is at container level.
    */
   getContainerPidPath(name: string, options: ContainerPathOptions): string {
     const { engine } = options
     const engineDef = getEngineDefaults(engine)
     // PostgreSQL: data/postmaster.pid
-    // MySQL: data/mysql.pid (or just mysql.pid depending on config)
+    // MySQL: mysql.pid (at container level)
+    // MongoDB: mongod.pid (at container level)
     if (engine === 'postgresql') {
       return join(
         this.containers,
@@ -104,7 +105,7 @@ export const paths = {
         engineDef.pidFileName,
       )
     }
-    // MySQL and others: PID file at container level
+    // MySQL, MongoDB, and others: PID file at container level
     return join(this.containers, engine, name, engineDef.pidFileName)
   },
 

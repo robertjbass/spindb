@@ -37,6 +37,10 @@ function detectLocationType(location: string): {
     return { type: 'connection', inferredEngine: Engine.MySQL }
   }
 
+  if (location.startsWith('mongodb://') || location.startsWith('mongodb+srv://')) {
+    return { type: 'connection', inferredEngine: Engine.MongoDB }
+  }
+
   if (existsSync(location)) {
     return { type: 'file' }
   }
@@ -47,7 +51,7 @@ function detectLocationType(location: string): {
 export const createCommand = new Command('create')
   .description('Create a new database container')
   .argument('[name]', 'Container name')
-  .option('-e, --engine <engine>', 'Database engine (postgresql, mysql)')
+  .option('-e, --engine <engine>', 'Database engine (postgresql, mysql, mongodb)')
   .option('-v, --version <version>', 'Database version')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')

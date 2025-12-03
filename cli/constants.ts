@@ -1,6 +1,7 @@
 export const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
+  mongodb: '🍃',
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

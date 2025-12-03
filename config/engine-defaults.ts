@@ -59,6 +59,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
+  mongodb: {
+    defaultVersion: '8.0',
+    defaultPort: 27017,
+    portRange: { start: 27017, end: 27100 },
+    supportedVersions: ['6.0', '7.0', '8.0'],
+    latestVersion: '8.0',
+    superuser: '', // MongoDB doesn't require a superuser for local dev (auth disabled)
+    connectionScheme: 'mongodb',
+    logFileName: 'mongodb.log',
+    pidFileName: 'mongod.pid',
+    dataSubdir: 'data',
+    clientTools: ['mongosh', 'mongodump', 'mongorestore'],
+    maxConnections: 200, // MongoDB default is 65536, but we set a reasonable default
+  },
 }
 
 /**

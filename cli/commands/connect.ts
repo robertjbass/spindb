@@ -165,7 +165,11 @@ export const connectCommand = new Command('connect')
             console.error(
               error('pgcli is only available for PostgreSQL containers'),
             )
-            console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
+            if (engineName === 'mysql') {
+              console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
+            } else if (engineName === 'mongodb') {
+              console.log(chalk.gray('For MongoDB, use: spindb connect --tui (usql)'))
+            }
             process.exit(1)
           }
 
@@ -223,9 +227,11 @@ export const connectCommand = new Command('connect')
         if (useMycli) {
           if (engineName !== 'mysql') {
             console.error(error('mycli is only available for MySQL containers'))
-            console.log(
-              chalk.gray('For PostgreSQL, use: spindb connect --pgcli'),
-            )
+            if (engineName === 'postgresql') {
+              console.log(chalk.gray('For PostgreSQL, use: spindb connect --pgcli'))
+            } else if (engineName === 'mongodb') {
+              console.log(chalk.gray('For MongoDB, use: spindb connect --tui (usql)'))
+            }
             process.exit(1)
           }
 
@@ -309,6 +315,9 @@ export const connectCommand = new Command('connect')
             engineDefaults.superuser,
             database,
           ]
+        } else if (engineName === 'mongodb') {
+          clientCmd = 'mongosh'
+          clientArgs = [connectionString]
         } else {
           clientCmd = 'psql'
           clientArgs = [connectionString]
@@ -339,6 +348,11 @@ export const connectCommand = new Command('connect')
             } else if (clientCmd === 'mycli') {
               console.log(chalk.gray('  Install mycli:'))
               console.log(chalk.cyan('  brew install mycli'))
+            } else if (clientCmd === 'mongosh') {
+              console.log(chalk.gray('  On macOS with Homebrew:'))
+              console.log(chalk.cyan('  brew install mongosh'))
+              console.log(chalk.gray('  Or download from:'))
+              console.log(chalk.cyan('  https://www.mongodb.com/try/download/shell'))
             } else if (engineName === 'mysql') {
               console.log(chalk.gray('  On macOS with Homebrew:'))
               console.log(chalk.cyan('  brew install mysql-client'))

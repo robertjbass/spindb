@@ -17,6 +17,7 @@ export type ContainerConfig = {
 export enum Engine {
   PostgreSQL = 'postgresql',
   MySQL = 'mysql',
+  MongoDB = 'mongodb',
 }
 
 export type ProgressCallback = (progress: {
@@ -100,6 +101,11 @@ export type BinaryTool =
   | 'mysqlpump'
   | 'mysqld'
   | 'mysqladmin'
+  // MongoDB tools
+  | 'mongod'
+  | 'mongosh'
+  | 'mongodump'
+  | 'mongorestore'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -137,6 +143,11 @@ export type SpinDBConfig = {
     mysqlpump?: BinaryConfig
     mysqld?: BinaryConfig
     mysqladmin?: BinaryConfig
+    // MongoDB tools
+    mongod?: BinaryConfig
+    mongosh?: BinaryConfig
+    mongodump?: BinaryConfig
+    mongorestore?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

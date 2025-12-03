@@ -105,9 +105,9 @@ See `.github/workflows/release.yml` for CI build configuration.
 ## Known Limitations
 
 - **No Windows support** - zonky.io doesn't provide Windows PostgreSQL binaries
-- **Client tools required** - psql/pg_dump and mysql/mysqldump must be installed separately
+- **Client tools required** - psql/pg_dump, mysql/mysqldump, and mongosh/mongodump must be installed separately
 - **Local only (currently)** - Binds to 127.0.0.1; remote connections planned for v1.1
-- **MySQL uses system binaries** - Unlike PostgreSQL, MySQL requires system installation
+- **MySQL/MongoDB use system binaries** - Unlike PostgreSQL, MySQL and MongoDB require system installation
 
 ---
 
@@ -135,15 +135,17 @@ pnpm test           # All tests (unit + integration)
 pnpm test:unit      # Unit tests only
 pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
+pnpm test:mongodb   # MongoDB integration
 ```
 
 ### Test Ports
 - PostgreSQL: 5454-5456
 - MySQL: 3333-3335
+- MongoDB: 27027-27029
 
 ### Test Coverage
 - **Unit tests:** 141 tests covering validation, error handling, version compatibility
-- **Integration tests:** 28 tests (14 PostgreSQL + 14 MySQL) covering full container lifecycle
+- **Integration tests:** 42 tests (14 PostgreSQL + 14 MySQL + 14 MongoDB) covering full container lifecycle
 
 ---
 
@@ -155,6 +157,7 @@ pnpm test:mysql     # MySQL integration
 |--------|--------|---------------|-------------|-------|
 | 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-17 |
 | 🐬 **MySQL** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Also supports MariaDB as drop-in replacement |
+| 🍃 **MongoDB** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Versions 6.0, 7.0, 8.0 |
 
 ### Planned
 
@@ -162,7 +165,6 @@ pnpm test:mysql     # MySQL integration
 |--------|--------|------|-------------|-------|
 | 🪶 **SQLite** | 🔜 Planned | File-based | ~500 KB | Extremely lightweight, embedded library |
 | 🔴 **Redis** | 🔜 Planned | In-memory | ~3-5 MB | Lightweight server binary |
-| 🍃 **MongoDB** | 🔜 Planned | Document DB | ~200-300 MB | Large binary, may use system install like MySQL |
 
 ### Engine Details
 
@@ -194,19 +196,18 @@ pnpm test:mysql     # MySQL integration
   - May want to support both RDB snapshots and AOF for different use cases
   - `BGSAVE` for background saves, `SAVE` for synchronous
 
-#### 🍃 MongoDB
+#### 🍃 MongoDB (Implemented)
 - **Data location:** `~/.spindb/containers/mongodb/{name}/`
 - **Process:** Server process (`mongod`)
-- **Binary source:** System install recommended due to large binary size (~200-300 MB)
+- **Binary source:** System install (Homebrew or manual)
+- **Versions:** 6.0, 7.0, 8.0
+- **Default port:** 27017
 - **Enhanced CLI:** `mongosh` (MongoDB Shell)
 - **Backup formats:**
-  - **mongodump** (BSON) - Binary format, preserves all BSON types, recommended for backups
-  - **mongoexport** (JSON/CSV) - Human-readable, but loses some BSON type fidelity
-  - **WARNING:** Avoid mongoexport for production backups (doesn't preserve all BSON types)
-- **Considerations:**
-  - Large binary size may favor system install approach (like MySQL)
-  - BSON format is more compact and faster than JSON
-  - mongodump creates directory with .bson files per collection
+  - **mongodump** (archive) - Binary archive format, preserves all BSON types, recommended for backups
+  - **mongodump** (directory) - Creates directory with .bson files per collection
+- **Install:** `brew tap mongodb/brew && brew install mongodb-community`
+- **Database tools:** `brew install mongodb-database-tools` for mongodump/mongorestore
 
 ### Backup Format Summary
 
@@ -214,9 +215,9 @@ pnpm test:mysql     # MySQL integration
 |--------|-------------|-------------------------|-------------|
 | PostgreSQL | `.sql` (pg_dump) | `.dump` (custom format) | `.dump` for full backup |
 | MySQL | `.sql` (mysqldump) | `.sql.gz` (gzipped SQL) | `.sql.gz` for storage |
-| SQLite | `.sql` (.dump) | `.db` (file copy) | File copy for speed |
-| Redis | N/A | `.rdb` (RDB snapshot) | RDB for backups |
-| MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
+| MongoDB | N/A | `.archive` (mongodump) | Archive for backups |
+| SQLite (planned) | `.sql` (.dump) | `.db` (file copy) | File copy for speed |
+| Redis (planned) | N/A | `.rdb` (RDB snapshot) | RDB for backups |
 
 ### Considerations
 

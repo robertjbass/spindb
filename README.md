@@ -6,7 +6,7 @@
 
 **Local databases without the Docker baggage.**
 
-Spin up PostgreSQL and MySQL instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, and MongoDB instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -176,13 +176,44 @@ spindb deps check --engine mysql
 
 **Linux users:** MariaDB works as a drop-in replacement for MySQL. If you have MariaDB installed, SpinDB will detect and use it automatically. In a future release, MariaDB will be available as its own engine with support for MariaDB-specific features.
 
+#### MongoDB
+
+| | |
+|---|---|
+| Versions | 6.0, 7.0, 8.0 |
+| Default port | 27017 |
+| Default user | (none - auth disabled for local dev) |
+| Binary source | System installation |
+
+Like MySQL, SpinDB uses your system's MongoDB installation. MongoDB doesn't have a cross-platform binary distribution like zonky.io provides for PostgreSQL.
+
+```bash
+# macOS
+brew tap mongodb/brew && brew install mongodb-community
+
+# Ubuntu/Debian - See MongoDB official installation guide:
+# https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/
+
+# Check if SpinDB can find MongoDB
+spindb deps check --engine mongodb
+```
+
+**Additional tools:** For backups and restores, you'll also need the MongoDB Database Tools:
+
+```bash
+# macOS
+brew install mongodb-database-tools
+
+# Or download from:
+# https://www.mongodb.com/try/download/database-tools
+```
+
 ### Planned Engines
 
 | Engine | Type | Status |
 |--------|------|--------|
 | SQLite | File-based | Planned for v1.2 |
 | Redis | In-memory key-value | Planned for v1.2 |
-| MongoDB | Document database | Planned for v1.2 |
 
 ---
 
@@ -195,6 +226,7 @@ spindb deps check --engine mysql
 ```bash
 spindb create mydb                           # PostgreSQL (default)
 spindb create mydb --engine mysql            # MySQL
+spindb create mydb --engine mongodb          # MongoDB
 spindb create mydb --version 16              # Specific PostgreSQL version
 spindb create mydb --port 5433               # Custom port
 spindb create mydb --database my_app         # Custom database name
@@ -213,7 +245,7 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mysql`) |
+| `--engine`, `-e` | Database engine (`postgresql`, `mysql`, `mongodb`) |
 | `--version`, `-v` | Engine version |
 | `--port`, `-p` | Port number |
 | `--database`, `-d` | Primary database name |
@@ -415,9 +447,9 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 |--------|----------|----------|-----------|
 | PostgreSQL | `psql` | `pgcli` | `usql` |
 | MySQL | `mysql` | `mycli` | `usql` |
+| MongoDB | `mongosh` | - | `usql` |
 | SQLite (planned) | `sqlite3` | `litecli` | `usql` |
 | Redis (planned) | `redis-cli` | `iredis` | - |
-| MongoDB (planned) | `mongosh` | - | - |
 
 **pgcli / mycli** provide:
 - Intelligent auto-completion (tables, columns, keywords)
@@ -451,11 +483,16 @@ spindb connect mydb --install-tui      # usql
 │   │       ├── container.json              # Configuration
 │   │       ├── data/                       # Database files
 │   │       └── postgres.log                # Server logs
-│   └── mysql/
+│   ├── mysql/
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── mysql.log
+│   └── mongodb/
 │       └── mydb/
 │           ├── container.json
-│           ├── data/
-│           └── mysql.log
+│           ├── data/                       # Database files (BSON)
+│           └── mongodb.log                 # Server logs
 ├── logs/                                   # Error logs
 └── config.json                             # Tool paths cache
 ```
@@ -486,6 +523,8 @@ When you stop a container:
 
 **MySQL:** Uses your system's MySQL installation. SpinDB detects binaries from Homebrew, apt, pacman, or custom paths.
 
+**MongoDB:** Uses your system's MongoDB installation. SpinDB detects `mongod`, `mongosh`, and MongoDB Database Tools from Homebrew or custom paths. Install via `brew tap mongodb/brew && brew install mongodb-community`.
+
 ---
 
 ## Supported Platforms
@@ -505,9 +544,9 @@ When you stop a container:
 ## Limitations
 
 - **No Windows support** - zonky.io doesn't provide Windows PostgreSQL binaries
-- **Client tools required** - `psql` and `mysql` must be installed separately for some operations
+- **Client tools required** - `psql`, `mysql`, and `mongosh` must be installed separately for some operations
 - **Local only** - Databases bind to `127.0.0.1`; remote connections planned for v1.1
-- **MySQL requires system install** - Unlike PostgreSQL, we don't download MySQL binaries
+- **MySQL/MongoDB require system install** - Unlike PostgreSQL, we don't download MySQL or MongoDB binaries
 
 ---
 
@@ -523,7 +562,6 @@ See [TODO.md](TODO.md) for the full roadmap.
 ### v1.2 - Additional Engines
 - SQLite (file-based, no server)
 - Redis (in-memory key-value)
-- MongoDB (document database)
 - MariaDB as standalone engine
 
 ### v1.3 - Advanced Features
@@ -582,6 +620,7 @@ pnpm test           # All tests
 pnpm test:unit      # Unit tests only
 pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
+pnpm test:mongodb   # MongoDB integration
 ```
 
 ---

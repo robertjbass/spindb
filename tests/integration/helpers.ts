@@ -21,6 +21,7 @@ const execAsync = promisify(exec)
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
+  mongodb: { base: 27027, clone: 27029, renamed: 27028 },
 }
 
 /**
@@ -113,6 +114,7 @@ export async function cleanupTestContainers(): Promise<string[]> {
 
 /**
  * Execute SQL against a database and return the result
+ * For MongoDB, this executes JavaScript code instead of SQL
  */
 export async function executeSQL(
   engine: Engine,
@@ -123,6 +125,11 @@ export async function executeSQL(
   if (engine === Engine.MySQL) {
     const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
+  } else if (engine === Engine.MongoDB) {
+    // For MongoDB, sql is actually JavaScript code
+    const connectionString = `mongodb://127.0.0.1:${port}/${database}`
+    const cmd = `mongosh "${connectionString}" --eval "${sql.replace(/"/g, '\\"')}" --quiet`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const cmd = `psql "${connectionString}" -c "${sql.replace(/"/g, '\\"')}"`
@@ -132,6 +139,7 @@ export async function executeSQL(
 
 /**
  * Execute a SQL file against a database
+ * For MongoDB, this executes a JavaScript file
  */
 export async function executeSQLFile(
   engine: Engine,
@@ -142,6 +150,10 @@ export async function executeSQLFile(
   if (engine === Engine.MySQL) {
     const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
+  } else if (engine === Engine.MongoDB) {
+    const connectionString = `mongodb://127.0.0.1:${port}/${database}`
+    const cmd = `mongosh "${connectionString}" "${filePath}"`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const cmd = `psql "${connectionString}" -f "${filePath}"`
@@ -150,7 +162,7 @@ export async function executeSQLFile(
 }
 
 /**
- * Query row count from a table
+ * Query row count from a table/collection
  */
 export async function getRowCount(
   engine: Engine,
@@ -158,6 +170,21 @@ export async function getRowCount(
   database: string,
   table: string,
 ): Promise<number> {
+  if (engine === Engine.MongoDB) {
+    // For MongoDB, table is a collection name
+    const { stdout } = await executeSQL(
+      engine,
+      port,
+      database,
+      `db.${table}.countDocuments()`,
+    )
+    const count = parseInt(stdout.trim(), 10)
+    if (!isNaN(count)) {
+      return count
+    }
+    throw new Error(`Could not parse document count from: ${stdout}`)
+  }
+
   const { stdout } = await executeSQL(
     engine,
     port,
@@ -194,6 +221,10 @@ export async function waitForReady(
     try {
       if (engine === Engine.MySQL) {
         await execAsync(`mysqladmin -h 127.0.0.1 -P ${port} -u root ping`)
+      } else if (engine === Engine.MongoDB) {
+        await execAsync(
+          `mongosh "mongodb://127.0.0.1:${port}/admin" --eval "db.runCommand({ ping: 1 })" --quiet`,
+        )
       } else {
         await execAsync(
           `psql "postgresql://postgres@127.0.0.1:${port}/postgres" -c "SELECT 1"`,
@@ -229,6 +260,9 @@ export function getConnectionString(
 ): string {
   if (engine === Engine.MySQL) {
     return `mysql://root@127.0.0.1:${port}/${database}`
+  }
+  if (engine === Engine.MongoDB) {
+    return `mongodb://127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }
