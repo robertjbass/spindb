@@ -9,9 +9,9 @@
  * - Uses a registry to track file paths
  */
 
-import { spawn, exec } from 'child_process'
+import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync } from 'fs'
+import { existsSync, statSync, createReadStream, createWriteStream } from 'fs'
 import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
@@ -30,7 +30,7 @@ import type {
   StatusResult,
 } from '../../types'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 const engineDef = getEngineDefaults('sqlite')
 
 export class SQLiteEngine extends BaseEngine {
@@ -98,7 +98,7 @@ export class SQLiteEngine extends BaseEngine {
 
     // Check system PATH
     try {
-      const { stdout } = await execAsync('which sqlite3')
+      const { stdout } = await execFileAsync('which', ['sqlite3'])
       const path = stdout.trim()
       return path || null
     } catch {
@@ -118,7 +118,7 @@ export class SQLiteEngine extends BaseEngine {
 
     // Check system PATH
     try {
-      const { stdout } = await execAsync('which litecli')
+      const { stdout } = await execFileAsync('which', ['litecli'])
       const path = stdout.trim()
       return path || null
     } catch {
@@ -162,7 +162,7 @@ export class SQLiteEngine extends BaseEngine {
       throw new Error('sqlite3 not found')
     }
 
-    await execAsync(`"${sqlite3}" "${absolutePath}" "SELECT 1"`)
+    await execFileAsync(sqlite3, [absolutePath, 'SELECT 1'])
 
     // Register in the SQLite registry
     await sqliteRegistry.add({
@@ -350,7 +350,8 @@ export class SQLiteEngine extends BaseEngine {
         throw new Error('sqlite3 not found')
       }
 
-      await execAsync(`"${sqlite3}" "${entry.filePath}" .dump > "${outputPath}"`)
+      // Pipe .dump output to file (avoids shell injection)
+      await this.dumpToFile(sqlite3, entry.filePath, outputPath)
     } else {
       // Binary copy for 'dump' format
       await copyFile(entry.filePath, outputPath)
@@ -386,7 +387,8 @@ export class SQLiteEngine extends BaseEngine {
         throw new Error('sqlite3 not found')
       }
 
-      await execAsync(`"${sqlite3}" "${entry.filePath}" < "${backupPath}"`)
+      // Pipe file to sqlite3 stdin (avoids shell injection)
+      await this.runSqlFile(sqlite3, entry.filePath, backupPath)
       return { format: 'sql' }
     } else {
       // Binary file copy
@@ -439,7 +441,8 @@ export class SQLiteEngine extends BaseEngine {
       throw new Error('sqlite3 not found')
     }
 
-    await execAsync(`"${sqlite3}" "${filePath}" .dump > "${outputPath}"`)
+    // Pipe .dump output to file (avoids shell injection)
+    await this.dumpToFile(sqlite3, filePath, outputPath)
 
     // Clean up temp file if we downloaded it
     if (tempFile && existsSync(tempFile)) {
@@ -447,6 +450,81 @@ export class SQLiteEngine extends BaseEngine {
     }
 
     return { filePath: outputPath }
+  }
+
+  /**
+   * Dump SQLite database to a file using spawn (avoids shell injection)
+   * Equivalent to: sqlite3 dbPath .dump > outputPath
+   */
+  private async dumpToFile(
+    sqlite3Path: string,
+    dbPath: string,
+    outputPath: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const output = createWriteStream(outputPath)
+      const proc = spawn(sqlite3Path, [dbPath, '.dump'])
+
+      proc.stdout.pipe(output)
+
+      proc.stderr.on('data', (data: Buffer) => {
+        // Collect stderr but don't fail immediately - sqlite3 may write warnings
+        console.error(data.toString())
+      })
+
+      proc.on('error', (err) => {
+        output.close()
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        output.close()
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`sqlite3 dump failed with exit code ${code}`))
+        }
+      })
+    })
+  }
+
+  /**
+   * Run a SQL file against SQLite database using spawn (avoids shell injection)
+   * Equivalent to: sqlite3 dbPath < sqlFilePath
+   */
+  private async runSqlFile(
+    sqlite3Path: string,
+    dbPath: string,
+    sqlFilePath: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const input = createReadStream(sqlFilePath)
+      const proc = spawn(sqlite3Path, [dbPath])
+
+      input.pipe(proc.stdin)
+
+      proc.stderr.on('data', (data: Buffer) => {
+        // Collect stderr but don't fail immediately - sqlite3 may write warnings
+        console.error(data.toString())
+      })
+
+      input.on('error', (err) => {
+        proc.kill()
+        reject(err)
+      })
+
+      proc.on('error', (err) => {
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`sqlite3 script execution failed with exit code ${code}`))
+        }
+      })
+    })
   }
 
   /**
@@ -497,11 +575,11 @@ export class SQLiteEngine extends BaseEngine {
     }
 
     if (options.file) {
-      // Run SQL file
-      await execAsync(`"${sqlite3}" "${entry.filePath}" < "${options.file}"`)
+      // Run SQL file - pipe file to stdin (avoids shell injection)
+      await this.runSqlFile(sqlite3, entry.filePath, options.file)
     } else if (options.sql) {
-      // Run inline SQL
-      await execAsync(`"${sqlite3}" "${entry.filePath}" "${options.sql}"`)
+      // Run inline SQL - pass as argument (avoids shell injection)
+      await execFileAsync(sqlite3, [entry.filePath, options.sql])
     } else {
       throw new Error('Either file or sql option must be provided')
     }

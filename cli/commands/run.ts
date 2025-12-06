@@ -137,7 +137,9 @@ export const runCommand = new Command('run')
           const missingTool = matchingPattern
             .replace(' not found', '')
             .replace(' client', '')
-          const installed = await promptInstallDependencies(missingTool)
+          // Determine engine from the missing tool name
+          const toolEngine = missingTool === 'mysql' ? Engine.MySQL : Engine.PostgreSQL
+          const installed = await promptInstallDependencies(missingTool, toolEngine)
           if (installed) {
             console.log(
               chalk.yellow('  Please re-run your command to continue.'),

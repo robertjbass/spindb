@@ -374,19 +374,31 @@ async function launchShell(
     stdio: 'inherit',
   })
 
-  shellProcess.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'ENOENT') {
-      console.log(warning(`${shellCmd} not found on your system.`))
-      console.log()
-      console.log(chalk.gray('  Connect manually with:'))
-      console.log(chalk.cyan(`  ${connectionString}`))
-      console.log()
-      console.log(chalk.gray(`  Install ${shellCmd}:`))
-      console.log(chalk.cyan(`  ${installHint}`))
-    }
-  })
-
   await new Promise<void>((resolve) => {
-    shellProcess.on('close', () => resolve())
+    let settled = false
+
+    const settle = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+
+    shellProcess.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        console.log(warning(`${shellCmd} not found on your system.`))
+        console.log()
+        console.log(chalk.gray('  Connect manually with:'))
+        console.log(chalk.cyan(`  ${connectionString}`))
+        console.log()
+        console.log(chalk.gray(`  Install ${shellCmd}:`))
+        console.log(chalk.cyan(`  ${installHint}`))
+      } else {
+        console.log(error(`Failed to start ${shellCmd}: ${err.message}`))
+      }
+      settle()
+    })
+
+    shellProcess.on('close', settle)
   })
 }

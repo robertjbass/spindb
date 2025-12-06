@@ -1,6 +1,6 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, renameSync, statSync, mkdirSync } from 'fs'
+import { existsSync, renameSync, statSync, mkdirSync, copyFileSync, unlinkSync } from 'fs'
 import { dirname, basename, join, resolve } from 'path'
 import { homedir } from 'os'
 import { containerManager } from '../../../core/container-manager'
@@ -38,7 +38,7 @@ export async function handleCreate(): Promise<void> {
   console.log()
   const answers = await promptCreateOptions()
   let { name: containerName } = answers
-  const { engine, version, port, database } = answers
+  const { engine, version, port, database, path: sqlitePath } = answers
 
   console.log()
   console.log(header('Creating Database Container'))
@@ -128,6 +128,7 @@ export async function handleCreate(): Promise<void> {
 
   await dbEngine.initDataDir(containerName, version, {
     superuser: defaults.superuser,
+    path: sqlitePath, // SQLite file path (undefined for server databases)
   })
 
   initSpinner.succeed(isSQLite ? 'Database file created' : 'Database cluster initialized')
@@ -589,7 +590,10 @@ export async function showContainerSubmenu(
 
 export async function handleStart(): Promise<void> {
   const containers = await containerManager.list()
-  const stopped = containers.filter((c) => c.status !== 'running')
+  // Filter for stopped containers, excluding SQLite (no server process to start)
+  const stopped = containers.filter(
+    (c) => c.status !== 'running' && c.engine !== Engine.SQLite,
+  )
 
   if (stopped.length === 0) {
     console.log(warning('All containers are already running'))
@@ -637,7 +641,10 @@ export async function handleStart(): Promise<void> {
 
 export async function handleStop(): Promise<void> {
   const containers = await containerManager.list()
-  const running = containers.filter((c) => c.status === 'running')
+  // Filter for running containers, excluding SQLite (no server process to stop)
+  const running = containers.filter(
+    (c) => c.status === 'running' && c.engine !== Engine.SQLite,
+  )
 
   if (running.length === 0) {
     console.log(warning('No running containers'))
@@ -984,8 +991,34 @@ async function handleEditContainer(
     spinner.start()
 
     try {
-      // Move the file
-      renameSync(config.database, finalPath)
+      // Try rename first (fast, same filesystem)
+      try {
+        renameSync(config.database, finalPath)
+      } catch (renameErr) {
+        const e = renameErr as NodeJS.ErrnoException
+        // EXDEV = cross-device link, need to copy+delete
+        if (e.code === 'EXDEV') {
+          try {
+            // Copy file preserving mode/permissions
+            copyFileSync(config.database, finalPath)
+            // Only delete source after successful copy
+            unlinkSync(config.database)
+          } catch (copyErr) {
+            // Clean up partial target on failure
+            if (existsSync(finalPath)) {
+              try {
+                unlinkSync(finalPath)
+              } catch {
+                // Ignore cleanup errors
+              }
+            }
+            throw copyErr
+          }
+        } else {
+          throw renameErr
+        }
+      }
+
       // Update the container config and SQLite registry
       await containerManager.updateConfig(containerName, { database: finalPath })
       await sqliteRegistry.update(containerName, { filePath: finalPath })

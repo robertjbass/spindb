@@ -412,7 +412,7 @@ export class ContainerManager {
       throw new Error(`Container "${newName}" already exists`)
     }
 
-    // SQLite: rename in registry only (no directory to move)
+    // SQLite: rename in registry and handle container directory
     if (engine === Engine.SQLite) {
       const entry = await sqliteRegistry.get(oldName)
       if (!entry) {
@@ -427,6 +427,14 @@ export class ContainerManager {
         created: entry.created,
         lastVerified: entry.lastVerified,
       })
+
+      // Rename container directory if it exists (created by containerManager.create)
+      const oldContainerPath = paths.getContainerPath(oldName, { engine })
+      const newContainerPath = paths.getContainerPath(newName, { engine })
+      if (existsSync(oldContainerPath)) {
+        await cp(oldContainerPath, newContainerPath, { recursive: true })
+        await rm(oldContainerPath, { recursive: true, force: true })
+      }
 
       // Return updated config
       return {

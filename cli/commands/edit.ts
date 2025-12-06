@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, renameSync, mkdirSync, statSync } from 'fs'
+import { existsSync, renameSync, mkdirSync, statSync, unlinkSync, copyFileSync } from 'fs'
 import { dirname, resolve, basename, join } from 'path'
 import { homedir } from 'os'
 import { containerManager } from '../../core/container-manager'
@@ -246,13 +246,17 @@ export const editCommand = new Command('edit')
     'New file location for SQLite database (moves the file)',
   )
   .option(
+    '--overwrite',
+    'Overwrite destination file if it exists (for --relocate)',
+  )
+  .option(
     '--set-config <setting>',
     'Set a database config value (e.g., max_connections=200)',
   )
   .action(
     async (
       name: string | undefined,
-      options: { name?: string; port?: number; relocate?: string; setConfig?: string },
+      options: { name?: string; port?: number; relocate?: string; overwrite?: boolean; setConfig?: string },
     ) => {
       try {
         let containerName = name
@@ -444,10 +448,17 @@ export const editCommand = new Command('edit')
 
           // Check if destination already exists
           if (existsSync(newPath)) {
-            console.error(
-              error(`Destination file already exists: ${newPath}`),
-            )
-            process.exit(1)
+            if (options.overwrite) {
+              // Remove existing file before move
+              unlinkSync(newPath)
+              console.log(warning(`Overwriting existing file: ${newPath}`))
+            } else {
+              console.error(
+                error(`Destination file already exists: ${newPath}`),
+              )
+              console.log(info('Use --overwrite to replace the existing file'))
+              process.exit(1)
+            }
           }
 
           // Ensure target directory exists
@@ -463,8 +474,33 @@ export const editCommand = new Command('edit')
           spinner.start()
 
           try {
-            // Move the file
-            renameSync(config.database, newPath)
+            // Try rename first (fast, same filesystem)
+            try {
+              renameSync(config.database, newPath)
+            } catch (renameErr) {
+              const e = renameErr as NodeJS.ErrnoException
+              // EXDEV = cross-device link, need to copy+delete
+              if (e.code === 'EXDEV') {
+                try {
+                  // Copy file preserving mode/permissions
+                  copyFileSync(config.database, newPath)
+                  // Only delete source after successful copy
+                  unlinkSync(config.database)
+                } catch (copyErr) {
+                  // Clean up partial target on failure
+                  if (existsSync(newPath)) {
+                    try {
+                      unlinkSync(newPath)
+                    } catch {
+                      // Ignore cleanup errors
+                    }
+                  }
+                  throw copyErr
+                }
+              } else {
+                throw renameErr
+              }
+            }
 
             // Update the container config and SQLite registry
             await containerManager.updateConfig(containerName, {

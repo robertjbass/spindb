@@ -1,6 +1,9 @@
 import inquirer from 'inquirer'
 import chalk from 'chalk'
 import ora from 'ora'
+import { existsSync, statSync } from 'fs'
+import { resolve, join } from 'path'
+import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { installPostgresBinaries } from '../../engines/postgresql/binary-manager'
@@ -399,6 +402,111 @@ export type CreateOptions = {
   version: string
   port: number
   database: string
+  path?: string // SQLite file path
+}
+
+/**
+ * Prompt for SQLite database file location
+ * Similar to the relocate logic in container-handlers.ts
+ */
+export async function promptSqlitePath(
+  containerName: string,
+): Promise<string | undefined> {
+  const defaultPath = `./${containerName}.sqlite`
+
+  console.log(chalk.gray('  SQLite databases are stored as files in your project directory.'))
+  console.log(chalk.gray(`  Default: ${defaultPath}`))
+  console.log()
+
+  const { useDefault } = await inquirer.prompt<{ useDefault: string }>([
+    {
+      type: 'list',
+      name: 'useDefault',
+      message: 'Where should the database file be created?',
+      choices: [
+        { name: `Use default location (${defaultPath})`, value: 'default' },
+        { name: 'Specify custom path', value: 'custom' },
+      ],
+    },
+  ])
+
+  if (useDefault === 'default') {
+    return undefined // Use default
+  }
+
+  const { inputPath } = await inquirer.prompt<{ inputPath: string }>([
+    {
+      type: 'input',
+      name: 'inputPath',
+      message: 'File path:',
+      default: defaultPath,
+      validate: (input: string) => {
+        if (!input) return 'Path is required'
+        return true
+      },
+    },
+  ])
+
+  // Expand ~ to home directory
+  let expandedPath = inputPath
+  if (inputPath === '~') {
+    expandedPath = homedir()
+  } else if (inputPath.startsWith('~/')) {
+    expandedPath = join(homedir(), inputPath.slice(2))
+  }
+
+  // Convert relative paths to absolute
+  if (!expandedPath.startsWith('/')) {
+    expandedPath = resolve(process.cwd(), expandedPath)
+  }
+
+  // Check if path looks like a file (has db extension) or directory
+  const hasDbExtension = /\.(sqlite3?|db)$/i.test(expandedPath)
+
+  // Treat as directory if:
+  // - ends with /
+  // - exists and is a directory
+  // - doesn't have a database file extension (assume it's a directory path)
+  const isDirectory =
+    expandedPath.endsWith('/') ||
+    (existsSync(expandedPath) && statSync(expandedPath).isDirectory()) ||
+    !hasDbExtension
+
+  let finalPath: string
+  if (isDirectory) {
+    // Remove trailing slash if present, then append filename
+    const dirPath = expandedPath.endsWith('/')
+      ? expandedPath.slice(0, -1)
+      : expandedPath
+    finalPath = join(dirPath, `${containerName}.sqlite`)
+  } else {
+    finalPath = expandedPath
+  }
+
+  // Check if file already exists
+  if (existsSync(finalPath)) {
+    console.log(chalk.yellow(`  Warning: File already exists: ${finalPath}`))
+    const { overwrite } = await inquirer.prompt<{ overwrite: string }>([
+      {
+        type: 'list',
+        name: 'overwrite',
+        message: 'A file already exists at this location. What would you like to do?',
+        choices: [
+          { name: 'Choose a different path', value: 'different' },
+          { name: 'Cancel', value: 'cancel' },
+        ],
+      },
+    ])
+
+    if (overwrite === 'cancel') {
+      throw new Error('Creation cancelled')
+    }
+
+    // Recursively prompt again
+    return promptSqlitePath(containerName)
+  }
+
+  return finalPath
 }
 
 /**
@@ -412,14 +520,17 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
   const name = await promptContainerName()
   const database = await promptDatabaseName(name, engine) // Default to container name
 
-  // SQLite is file-based, no port needed
+  // SQLite is file-based, no port needed but needs path
   let port = 0
-  if (engine !== 'sqlite') {
+  let path: string | undefined
+  if (engine === 'sqlite') {
+    path = await promptSqlitePath(name)
+  } else {
     const engineDefaults = getEngineDefaults(engine)
     port = await promptPort(engineDefaults.defaultPort)
   }
 
-  return { name, engine, version, port, database }
+  return { name, engine, version, port, database, path }
 }
 
 /**

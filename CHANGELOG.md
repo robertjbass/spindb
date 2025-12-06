@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Supports tilde expansion (`~/path`), relative paths, and directories
   - Auto-creates destination directories if needed
   - Updates both container config and SQLite registry
+  - `--overwrite` flag to replace existing destination file
+  - Cross-filesystem moves supported (copy+delete fallback for EXDEV)
 
 ### Changed
 - Refactored interactive menu from single 2749-line file into modular handler structure

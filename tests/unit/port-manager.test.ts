@@ -128,7 +128,8 @@ describe('PortManager', () => {
       assert(Array.isArray(ports), 'Should return an array')
       for (const port of ports) {
         assert(typeof port === 'number', 'Each port should be a number')
-        assert(port > 0, 'Port should be positive')
+        // Port 0 is valid for file-based databases like SQLite (no server)
+        assert(port >= 0, 'Port should be non-negative')
       }
     })
 

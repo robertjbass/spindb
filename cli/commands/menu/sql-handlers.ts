@@ -169,11 +169,23 @@ export async function handleViewLogs(containerName: string): Promise<void> {
       stdio: 'inherit',
     })
     await new Promise<void>((resolve) => {
-      process.on('SIGINT', () => {
+      let settled = false
+
+      const cleanup = () => {
+        if (!settled) {
+          settled = true
+          process.off('SIGINT', handleSigint)
+          resolve()
+        }
+      }
+
+      const handleSigint = () => {
         child.kill('SIGTERM')
-        resolve()
-      })
-      child.on('close', () => resolve())
+        cleanup()
+      }
+
+      process.on('SIGINT', handleSigint)
+      child.on('close', cleanup)
     })
     return
   }
