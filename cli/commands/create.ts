@@ -20,6 +20,7 @@ import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
+import { isValidDatabaseName } from '../../core/error-handler'
 import { Engine } from '../../types'
 import type { BaseEngine } from '../../engines/base-engine'
 import { resolve } from 'path'
@@ -237,6 +238,16 @@ export const createCommand = new Command('create')
         }
 
         database = database ?? containerName
+
+        // Validate database name to prevent SQL injection
+        if (!isValidDatabaseName(database)) {
+          console.error(
+            error(
+              'Database name must start with a letter and contain only letters, numbers, hyphens, and underscores',
+            ),
+          )
+          process.exit(1)
+        }
 
         console.log(header('Creating Database Container'))
         console.log()

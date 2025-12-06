@@ -1,5 +1,14 @@
 import { existsSync } from 'fs'
-import { mkdir, readdir, readFile, writeFile, rm, cp, unlink } from 'fs/promises'
+import {
+  mkdir,
+  readdir,
+  readFile,
+  writeFile,
+  rm,
+  cp,
+  unlink,
+  rename as fsRename,
+} from 'fs/promises'
 import { paths } from '../config/paths'
 import { processManager } from './process-manager'
 import { portManager } from './port-manager'
@@ -366,26 +375,35 @@ export class ContainerManager {
 
     await cp(sourcePath, targetPath, { recursive: true })
 
-    // Update target config
-    const config = await this.getConfig(targetName, { engine })
-    if (!config) {
-      throw new Error('Failed to read cloned container config')
+    // If anything fails after copy, clean up the target directory
+    try {
+      // Update target config
+      const config = await this.getConfig(targetName, { engine })
+      if (!config) {
+        throw new Error('Failed to read cloned container config')
+      }
+
+      config.name = targetName
+      config.created = new Date().toISOString()
+      config.clonedFrom = sourceName
+
+      // Assign new port (excluding ports already used by other containers)
+      const engineDefaults = getEngineDefaults(engine)
+      const { port } = await portManager.findAvailablePortExcludingContainers({
+        portRange: engineDefaults.portRange,
+      })
+      config.port = port
+
+      await this.saveConfig(targetName, { engine }, config)
+
+      return config
+    } catch (err) {
+      // Clean up the copied directory on failure
+      await rm(targetPath, { recursive: true, force: true }).catch(() => {
+        // Ignore cleanup errors
+      })
+      throw err
     }
-
-    config.name = targetName
-    config.created = new Date().toISOString()
-    config.clonedFrom = sourceName
-
-    // Assign new port (excluding ports already used by other containers)
-    const engineDefaults = getEngineDefaults(engine)
-    const { port } = await portManager.findAvailablePortExcludingContainers({
-      portRange: engineDefaults.portRange,
-    })
-    config.port = port
-
-    await this.saveConfig(targetName, { engine }, config)
-
-    return config
   }
 
   /**
@@ -432,8 +450,7 @@ export class ContainerManager {
       const oldContainerPath = paths.getContainerPath(oldName, { engine })
       const newContainerPath = paths.getContainerPath(newName, { engine })
       if (existsSync(oldContainerPath)) {
-        await cp(oldContainerPath, newContainerPath, { recursive: true })
-        await rm(oldContainerPath, { recursive: true, force: true })
+        await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
       }
 
       // Return updated config
@@ -453,8 +470,7 @@ export class ContainerManager {
     const oldPath = paths.getContainerPath(oldName, { engine })
     const newPath = paths.getContainerPath(newName, { engine })
 
-    await cp(oldPath, newPath, { recursive: true })
-    await rm(oldPath, { recursive: true, force: true })
+    await this.atomicMoveDirectory(oldPath, newPath)
 
     // Update config with new name
     const config = await this.getConfig(newName, { engine })
@@ -466,6 +482,40 @@ export class ContainerManager {
     await this.saveConfig(newName, { engine }, config)
 
     return config
+  }
+
+  /**
+   * Move a directory atomically when possible, with copy+delete fallback.
+   * Uses fs.rename which is atomic on same filesystem, falls back to
+   * copy+delete for cross-filesystem moves (with cleanup on failure).
+   */
+  private async atomicMoveDirectory(
+    sourcePath: string,
+    targetPath: string,
+  ): Promise<void> {
+    try {
+      // Try atomic rename first (only works on same filesystem)
+      await fsRename(sourcePath, targetPath)
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException
+      if (e.code === 'EXDEV') {
+        // Cross-filesystem move - fall back to copy+delete
+        await cp(sourcePath, targetPath, { recursive: true })
+        try {
+          await rm(sourcePath, { recursive: true, force: true })
+        } catch {
+          // If delete fails after copy, we have duplicates
+          // Try to clean up the target to avoid inconsistency
+          await rm(targetPath, { recursive: true, force: true }).catch(() => {})
+          throw new Error(
+            `Failed to complete move: source and target may both exist. ` +
+              `Please manually remove one of: ${sourcePath} or ${targetPath}`,
+          )
+        }
+      } else {
+        throw err
+      }
+    }
   }
 
   /**

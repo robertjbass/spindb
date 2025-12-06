@@ -56,6 +56,20 @@ async function createSqlBackup(
   outputPath: string,
 ): Promise<BackupResult> {
   return new Promise((resolve, reject) => {
+    let settled = false
+    const safeResolve = (value: BackupResult) => {
+      if (!settled) {
+        settled = true
+        resolve(value)
+      }
+    }
+    const safeReject = (err: Error) => {
+      if (!settled) {
+        settled = true
+        reject(err)
+      }
+    }
+
     const args = [
       '-h',
       '127.0.0.1',
@@ -79,20 +93,20 @@ async function createSqlBackup(
     })
 
     proc.on('error', (err: NodeJS.ErrnoException) => {
-      reject(err)
+      safeReject(err)
     })
 
     proc.on('close', async (code) => {
       if (code === 0) {
         const stats = await stat(outputPath)
-        resolve({
+        safeResolve({
           path: outputPath,
           format: 'sql',
           size: stats.size,
         })
       } else {
         const errorMessage = stderr || `mysqldump exited with code ${code}`
-        reject(new Error(errorMessage))
+        safeReject(new Error(errorMessage))
       }
     })
   })
@@ -109,6 +123,20 @@ async function createCompressedBackup(
   outputPath: string,
 ): Promise<BackupResult> {
   return new Promise((resolve, reject) => {
+    let settled = false
+    const safeResolve = (value: BackupResult) => {
+      if (!settled) {
+        settled = true
+        resolve(value)
+      }
+    }
+    const safeReject = (err: Error) => {
+      if (!settled) {
+        settled = true
+        reject(err)
+      }
+    }
+
     const args = [
       '-h',
       '127.0.0.1',
@@ -136,22 +164,22 @@ async function createCompressedBackup(
     pipeline(proc.stdout!, gzip, output)
       .then(async () => {
         const stats = await stat(outputPath)
-        resolve({
+        safeResolve({
           path: outputPath,
           format: 'compressed',
           size: stats.size,
         })
       })
-      .catch(reject)
+      .catch(safeReject)
 
     proc.on('error', (err: NodeJS.ErrnoException) => {
-      reject(err)
+      safeReject(err)
     })
 
     proc.on('close', (code) => {
       if (code !== 0) {
         const errorMessage = stderr || `mysqldump exited with code ${code}`
-        reject(new Error(errorMessage))
+        safeReject(new Error(errorMessage))
       }
       // If code is 0, the pipeline promise will resolve
     })

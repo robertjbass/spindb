@@ -18,6 +18,7 @@ import {
 } from './binary-urls'
 import { detectBackupFormat, restoreBackup } from './restore'
 import { createBackup } from './backup'
+import { assertValidDatabaseName } from '../../core/error-handler'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -395,6 +396,7 @@ export class PostgreSQLEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
@@ -418,6 +420,7 @@ export class PostgreSQLEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
@@ -442,6 +445,9 @@ export class PostgreSQLEngine extends BaseEngine {
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const { port, database } = container
     const db = database || 'postgres'
+
+    // Validate database name to prevent SQL injection
+    assertValidDatabaseName(db)
 
     try {
       const psqlPath = await this.getPsqlPath()

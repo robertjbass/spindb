@@ -6,7 +6,7 @@
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, createReadStream } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -16,6 +16,7 @@ import {
   logWarning,
   ErrorCodes,
   SpinDBError,
+  assertValidDatabaseName,
 } from '../../core/error-handler'
 import {
   getMysqldPath,
@@ -135,9 +136,27 @@ export class MySQLEngine extends BaseEngine {
       engine: ENGINE,
     })
 
+    // Track if we created the directory (for cleanup on failure)
+    let createdDataDir = false
+
     // Create data directory if it doesn't exist
     if (!existsSync(dataDir)) {
       await mkdir(dataDir, { recursive: true })
+      createdDataDir = true
+    }
+
+    // Helper to clean up on failure
+    const cleanupOnFailure = async () => {
+      if (createdDataDir) {
+        try {
+          await rm(dataDir, { recursive: true, force: true })
+          logDebug(`Cleaned up data directory after init failure: ${dataDir}`)
+        } catch (cleanupErr) {
+          logDebug(
+            `Failed to clean up data directory: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
+          )
+        }
+      }
     }
 
     // Check if we're using MariaDB or MySQL
@@ -148,6 +167,7 @@ export class MySQLEngine extends BaseEngine {
       const installDb =
         (await getMariadbInstallDbPath()) || (await getMysqlInstallDbPath())
       if (!installDb) {
+        await cleanupOnFailure()
         throw new Error(
           'MariaDB detected but mysql_install_db not found.\n' +
             'Install MariaDB server package which includes the initialization script.',
@@ -177,10 +197,11 @@ export class MySQLEngine extends BaseEngine {
           stderr += data.toString()
         })
 
-        proc.on('close', (code) => {
+        proc.on('close', async (code) => {
           if (code === 0) {
             resolve(dataDir)
           } else {
+            await cleanupOnFailure()
             reject(
               new Error(
                 `MariaDB initialization failed with code ${code}: ${stderr || stdout}`,
@@ -189,12 +210,16 @@ export class MySQLEngine extends BaseEngine {
           }
         })
 
-        proc.on('error', reject)
+        proc.on('error', async (err) => {
+          await cleanupOnFailure()
+          reject(err)
+        })
       })
     } else {
       // MySQL uses mysqld --initialize-insecure
       const mysqld = await getMysqldPath()
       if (!mysqld) {
+        await cleanupOnFailure()
         throw new Error(getInstallInstructions())
       }
 
@@ -221,10 +246,11 @@ export class MySQLEngine extends BaseEngine {
           stderr += data.toString()
         })
 
-        proc.on('close', (code) => {
+        proc.on('close', async (code) => {
           if (code === 0) {
             resolve(dataDir)
           } else {
+            await cleanupOnFailure()
             reject(
               new Error(
                 `MySQL initialization failed with code ${code}: ${stderr || stdout}`,
@@ -233,7 +259,10 @@ export class MySQLEngine extends BaseEngine {
           }
         })
 
-        proc.on('error', reject)
+        proc.on('error', async (err) => {
+          await cleanupOnFailure()
+          reject(err)
+        })
       })
     }
   }
@@ -312,6 +341,14 @@ export class MySQLEngine extends BaseEngine {
                 port,
                 connectionString: this.getConnectionString(container),
               })
+              return
+            } else {
+              // mysqladmin not found - cannot verify MySQL is ready
+              reject(
+                new Error(
+                  'mysqladmin not found - cannot verify MySQL startup. Install MySQL client tools.',
+                ),
+              )
               return
             }
           } catch {
@@ -687,6 +724,7 @@ export class MySQLEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
 
     const mysql = await getMysqlClientPath()
@@ -720,6 +758,7 @@ export class MySQLEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
 
     const mysql = await getMysqlClientPath()
@@ -747,6 +786,9 @@ export class MySQLEngine extends BaseEngine {
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const { port, database } = container
     const db = database || 'mysql'
+
+    // Validate database name to prevent SQL injection
+    assertValidDatabaseName(db)
 
     try {
       const mysql = await getMysqlClientPath()
