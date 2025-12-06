@@ -228,7 +228,7 @@ describe('UpdateManager', () => {
 
       // Default should be enabled
       assert(
-        info.autoCheckEnabled === true || info.autoCheckEnabled === false,
+        typeof info.autoCheckEnabled === 'boolean',
         'autoCheckEnabled should be boolean',
       )
     })
