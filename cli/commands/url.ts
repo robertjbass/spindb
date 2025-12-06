@@ -47,15 +47,23 @@ export const urlCommand = new Command('url')
         const connectionString = engine.getConnectionString(config, databaseName)
 
         if (options.json) {
-          const jsonOutput = {
-            connectionString,
-            host: '127.0.0.1',
-            port: config.port,
-            database: databaseName,
-            user: config.engine === 'postgresql' ? 'postgres' : 'root',
-            engine: config.engine,
-            container: config.name,
-          }
+          const jsonOutput =
+            config.engine === 'sqlite'
+              ? {
+                  connectionString,
+                  path: databaseName,
+                  engine: config.engine,
+                  container: config.name,
+                }
+              : {
+                  connectionString,
+                  host: '127.0.0.1',
+                  port: config.port,
+                  database: databaseName,
+                  user: config.engine === 'postgresql' ? 'postgres' : 'root',
+                  engine: config.engine,
+                  container: config.name,
+                }
           console.log(JSON.stringify(jsonOutput, null, 2))
           return
         }

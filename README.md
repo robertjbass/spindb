@@ -250,7 +250,7 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 | `--path` | File path for SQLite databases |
 | `--max-connections` | Maximum database connections (default: 200) |
 | `--from` | Restore from backup file or connection string |
-| `--no-start` | Create without starting
+| `--no-start` | Create without starting |
 
 </details>
 

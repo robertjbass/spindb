@@ -244,29 +244,6 @@ describe('UpdateManager', () => {
     })
   })
 
-  describe('Network Error Handling', () => {
-    it('should handle fetch timeout gracefully', async () => {
-      // Test that the timeout concept works
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 100)
-
-      try {
-        // This tests the concept, actual fetch would need mocking
-        clearTimeout(timeout)
-        assert(true, 'Timeout handling setup works')
-      } catch {
-        assert(true, 'Aborted fetch should not crash')
-      }
-    })
-
-    it('should return null on network error', async () => {
-      // The checkForUpdate method returns null on network errors
-      // This is the expected behavior documented in the code
-      const result: { currentVersion: string } | null = null
-      assertEqual(result, null, 'Network error should result in null')
-    })
-  })
-
   describe('npm Registry Response Parsing', () => {
     it('should parse dist-tags.latest from registry response', () => {
       const mockResponse = {
