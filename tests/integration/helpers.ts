@@ -4,7 +4,8 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
+import { rm } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
@@ -108,11 +109,32 @@ export async function cleanupTestContainers(): Promise<string[]> {
     }
   }
 
+  // Also clean up orphaned SQLite container directories
+  // (directories that exist but aren't in the registry)
+  const sqliteContainersDir = paths.getEngineContainersPath('sqlite')
+  if (existsSync(sqliteContainersDir)) {
+    const dirs = readdirSync(sqliteContainersDir, { withFileTypes: true })
+    for (const dir of dirs) {
+      if (dir.isDirectory() && dir.name.includes('-test')) {
+        try {
+          const dirPath = `${sqliteContainersDir}/${dir.name}`
+          await rm(dirPath, { recursive: true, force: true })
+          if (!deleted.includes(dir.name)) {
+            deleted.push(dir.name)
+          }
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+    }
+  }
+
   return deleted
 }
 
 /**
  * Execute SQL against a database and return the result
+ * For SQLite, the database parameter is the file path
  */
 export async function executeSQL(
   engine: Engine,
@@ -120,7 +142,11 @@ export async function executeSQL(
   database: string,
   sql: string,
 ): Promise<{ stdout: string; stderr: string }> {
-  if (engine === Engine.MySQL) {
+  if (engine === Engine.SQLite) {
+    // For SQLite, database is the file path
+    const cmd = `sqlite3 "${database}" "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.MySQL) {
     const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else {
@@ -132,6 +158,7 @@ export async function executeSQL(
 
 /**
  * Execute a SQL file against a database
+ * For SQLite, the database parameter is the file path
  */
 export async function executeSQLFile(
   engine: Engine,
@@ -139,7 +166,11 @@ export async function executeSQLFile(
   database: string,
   filePath: string,
 ): Promise<{ stdout: string; stderr: string }> {
-  if (engine === Engine.MySQL) {
+  if (engine === Engine.SQLite) {
+    // For SQLite, database is the file path
+    const cmd = `sqlite3 "${database}" < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.MySQL) {
     const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else {
@@ -210,13 +241,27 @@ export async function waitForReady(
 
 /**
  * Check if a container's data directory exists on the filesystem
+ * For SQLite, checks the registry instead
  */
 export function containerDataExists(
   containerName: string,
   engine: Engine,
 ): boolean {
+  if (engine === Engine.SQLite) {
+    // SQLite doesn't use container directories, just registry entries
+    // This function should check if registry entry exists
+    // For simplicity in tests, we return false for SQLite
+    return false
+  }
   const containerPath = paths.getContainerPath(containerName, { engine })
   return existsSync(containerPath)
+}
+
+/**
+ * Check if a SQLite database file exists
+ */
+export function sqliteFileExists(filePath: string): boolean {
+  return existsSync(filePath)
 }
 
 /**

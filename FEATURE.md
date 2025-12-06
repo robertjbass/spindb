@@ -198,11 +198,19 @@ Each engine must work with ALL existing CLI commands:
 | Enhanced CLI (mycli) | ✅ |
 | Integration tests | ✅ |
 
-### SQLite (Planned)
+### SQLite 🪶
 | Feature | Status |
 |---------|--------|
-| Container lifecycle | ❌ |
-| Backup/restore | ❌ |
+| Container lifecycle | ✅ |
+| Backup/restore | ✅ |
 | Multi-database | N/A (single file) |
-| Enhanced CLI (litecli) | ❌ |
-| Integration tests | ❌ |
+| Enhanced CLI (litecli) | ✅ |
+| Integration tests | ✅ |
+
+**SQLite-specific notes:**
+- Uses `🔵 available` / `⚪ missing` status (not running/stopped)
+- No start/stop required (file-based, no server process)
+- No port management
+- Database files stored in project directories, not `~/.spindb/`
+- Supports HTTP/HTTPS URLs for remote restore
+- `--relocate` option in `edit` command moves the database file

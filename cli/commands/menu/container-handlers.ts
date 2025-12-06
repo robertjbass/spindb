@@ -1,12 +1,15 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync } from 'fs'
+import { existsSync, renameSync, statSync, mkdirSync, copyFileSync, unlinkSync } from 'fs'
+import { dirname, basename, join, resolve } from 'path'
+import { homedir } from 'os'
 import { containerManager } from '../../../core/container-manager'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
 import { processManager } from '../../../core/process-manager'
 import { getEngine } from '../../../engines'
+import { sqliteRegistry } from '../../../engines/sqlite/registry'
 import { defaults } from '../../../config/defaults'
 import { paths } from '../../../config/paths'
 import {
@@ -26,24 +29,25 @@ import {
   connectionBox,
   formatBytes,
 } from '../../ui/theme'
-import { getEngineIcon } from '../../constants'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
-import { type Engine } from '../../../types'
-import { type MenuChoice } from './shared'
+import { Engine } from '../../../types'
+import { type MenuChoice, pressEnterToContinue } from './shared'
 
 export async function handleCreate(): Promise<void> {
   console.log()
   const answers = await promptCreateOptions()
   let { name: containerName } = answers
-  const { engine, version, port, database } = answers
+  const { engine, version, port, database, path: sqlitePath } = answers
 
   console.log()
   console.log(header('Creating Database Container'))
   console.log()
 
   const dbEngine = getEngine(engine)
+  const isSQLite = engine === 'sqlite'
 
+  // Check dependencies (all engines need this)
   const depsSpinner = createSpinner('Checking required tools...')
   depsSpinner.start()
 
@@ -78,22 +82,26 @@ export async function handleCreate(): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  const portAvailable = await portManager.isPortAvailable(port)
+  // Server databases: check port and binaries
+  let portAvailable = true
+  if (!isSQLite) {
+    portAvailable = await portManager.isPortAvailable(port)
 
-  const binarySpinner = createSpinner(
-    `Checking PostgreSQL ${version} binaries...`,
-  )
-  binarySpinner.start()
+    const binarySpinner = createSpinner(
+      `Checking ${dbEngine.displayName} ${version} binaries...`,
+    )
+    binarySpinner.start()
 
-  const isInstalled = await dbEngine.isBinaryInstalled(version)
-  if (isInstalled) {
-    binarySpinner.succeed(`PostgreSQL ${version} binaries ready (cached)`)
-  } else {
-    binarySpinner.text = `Downloading PostgreSQL ${version} binaries...`
-    await dbEngine.ensureBinaries(version, ({ message }) => {
-      binarySpinner.text = message
-    })
-    binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+    const isInstalled = await dbEngine.isBinaryInstalled(version)
+    if (isInstalled) {
+      binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries ready (cached)`)
+    } else {
+      binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
+      await dbEngine.ensureBinaries(version, ({ message }) => {
+        binarySpinner.text = message
+      })
+      binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries downloaded`)
+    }
   }
 
   while (await containerManager.exists(containerName)) {
@@ -113,17 +121,62 @@ export async function handleCreate(): Promise<void> {
 
   createSpinnerInstance.succeed('Container created')
 
-  const initSpinner = createSpinner('Initializing database cluster...')
+  const initSpinner = createSpinner(
+    isSQLite ? 'Creating database file...' : 'Initializing database cluster...',
+  )
   initSpinner.start()
 
   await dbEngine.initDataDir(containerName, version, {
     superuser: defaults.superuser,
+    path: sqlitePath, // SQLite file path (undefined for server databases)
   })
 
-  initSpinner.succeed('Database cluster initialized')
+  initSpinner.succeed(isSQLite ? 'Database file created' : 'Database cluster initialized')
 
+  // SQLite: show file path, no start needed
+  if (isSQLite) {
+    const config = await containerManager.getConfig(containerName)
+    if (config) {
+      const connectionString = dbEngine.getConnectionString(config)
+      console.log()
+      console.log(success('Database Created'))
+      console.log()
+      console.log(chalk.gray(`  Container: ${containerName}`))
+      console.log(chalk.gray(`  Engine: ${dbEngine.displayName} ${version}`))
+      console.log(chalk.gray(`  File: ${config.database}`))
+      console.log()
+      console.log(success(`Available at ${config.database}`))
+      console.log()
+      console.log(chalk.gray('  Connection string:'))
+      console.log(chalk.cyan(`  ${connectionString}`))
+
+      try {
+        const copied = await platformService.copyToClipboard(connectionString)
+        if (copied) {
+          console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+        } else {
+          console.log(chalk.gray('  (Could not copy to clipboard)'))
+        }
+      } catch {
+        console.log(chalk.gray('  (Could not copy to clipboard)'))
+      }
+
+      console.log()
+
+      await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'continue',
+          message: chalk.gray('Press Enter to return to the main menu...'),
+        },
+      ])
+    }
+    return
+  }
+
+  // Server databases: start and create database
   if (portAvailable) {
-    const startSpinner = createSpinner('Starting PostgreSQL...')
+    const startSpinner = createSpinner(`Starting ${dbEngine.displayName}...`)
     startSpinner.start()
 
     const config = await containerManager.getConfig(containerName)
@@ -132,7 +185,7 @@ export async function handleCreate(): Promise<void> {
       await containerManager.updateConfig(containerName, { status: 'running' })
     }
 
-    startSpinner.succeed('PostgreSQL started')
+    startSpinner.succeed(`${dbEngine.displayName} started`)
 
     if (config && database !== 'postgres') {
       const dbSpinner = createSpinner(`Creating database "${database}"...`)
@@ -149,11 +202,11 @@ export async function handleCreate(): Promise<void> {
       console.log(success('Database Created'))
       console.log()
       console.log(chalk.gray(`  Container: ${containerName}`))
-      console.log(chalk.gray(`  Engine: ${dbEngine.name} ${version}`))
+      console.log(chalk.gray(`  Engine: ${dbEngine.displayName} ${version}`))
       console.log(chalk.gray(`  Database: ${database}`))
       console.log(chalk.gray(`  Port: ${port}`))
       console.log()
-      console.log(success(`Started Running on port ${port}`))
+      console.log(success(`Running on port ${port}`))
       console.log()
       console.log(chalk.gray('  Connection string:'))
       console.log(chalk.cyan(`  ${connectionString}`))
@@ -233,58 +286,86 @@ export async function handleList(
   console.log()
   console.log(
     chalk.gray('  ') +
-      chalk.bold.white('NAME'.padEnd(20)) +
-      chalk.bold.white('ENGINE'.padEnd(12)) +
-      chalk.bold.white('VERSION'.padEnd(10)) +
-      chalk.bold.white('PORT'.padEnd(8)) +
-      chalk.bold.white('SIZE'.padEnd(10)) +
+      chalk.bold.white('NAME'.padEnd(16)) +
+      chalk.bold.white('ENGINE'.padEnd(11)) +
+      chalk.bold.white('VERSION'.padEnd(8)) +
+      chalk.bold.white('PORT'.padEnd(6)) +
+      chalk.bold.white('SIZE'.padEnd(9)) +
       chalk.bold.white('STATUS'),
   )
-  console.log(chalk.gray('  ' + '─'.repeat(70)))
+  console.log(chalk.gray('  ' + '─'.repeat(58)))
 
   for (let i = 0; i < containers.length; i++) {
     const container = containers[i]
     const size = sizes[i]
+    const isSQLite = container.engine === Engine.SQLite
 
-    const statusDisplay =
-      container.status === 'running'
-        ? chalk.green('● running')
-        : chalk.gray('○ stopped')
+    // SQLite uses available/missing, server databases use running/stopped
+    const statusDisplay = isSQLite
+      ? (container.status === 'running'
+          ? chalk.blue('● available')
+          : chalk.gray('○ missing'))
+      : (container.status === 'running'
+          ? chalk.green('● running')
+          : chalk.gray('○ stopped'))
 
     const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
+    // Truncate name if too long
+    const displayName = container.name.length > 15
+      ? container.name.slice(0, 14) + '…'
+      : container.name
+
+    // SQLite shows dash instead of port
+    const portDisplay = isSQLite ? '—' : String(container.port)
+
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(container.name.padEnd(20)) +
-        chalk.white(container.engine.padEnd(12)) +
-        chalk.yellow(container.version.padEnd(10)) +
-        chalk.green(String(container.port).padEnd(8)) +
-        chalk.magenta(sizeDisplay.padEnd(10)) +
+        chalk.cyan(displayName.padEnd(16)) +
+        chalk.white(container.engine.padEnd(11)) +
+        chalk.yellow(container.version.padEnd(8)) +
+        chalk.green(portDisplay.padEnd(6)) +
+        chalk.magenta(sizeDisplay.padEnd(9)) +
         statusDisplay,
     )
   }
 
   console.log()
 
-  const running = containers.filter((c) => c.status === 'running').length
-  const stopped = containers.filter((c) => c.status !== 'running').length
+  // Separate counts for server databases and SQLite
+  const serverContainers = containers.filter((c) => c.engine !== Engine.SQLite)
+  const sqliteContainers = containers.filter((c) => c.engine === Engine.SQLite)
+
+  const running = serverContainers.filter((c) => c.status === 'running').length
+  const stopped = serverContainers.filter((c) => c.status !== 'running').length
+  const available = sqliteContainers.filter((c) => c.status === 'running').length
+  const missing = sqliteContainers.filter((c) => c.status !== 'running').length
+
+  const parts: string[] = []
+  if (serverContainers.length > 0) {
+    parts.push(`${running} running, ${stopped} stopped`)
+  }
+  if (sqliteContainers.length > 0) {
+    parts.push(`${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`)
+  }
+
   console.log(
     chalk.gray(
-      `  ${containers.length} container(s): ${running} running, ${stopped} stopped`,
+      `  ${containers.length} container(s): ${parts.join('; ')}`,
     ),
   )
 
   console.log()
   const containerChoices = [
-    ...containers.map((c, i) => {
-      const size = sizes[i]
-      const sizeLabel = size !== null ? `, ${formatBytes(size)}` : ''
+    ...containers.map((c) => {
+      // Simpler selector - table already shows details
+      const statusLabel =
+        c.engine === Engine.SQLite
+          ? (c.status === 'running' ? chalk.blue('● available') : chalk.gray('○ missing'))
+          : (c.status === 'running' ? chalk.green('● running') : chalk.gray('○ stopped'))
+
       return {
-        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port}${sizeLabel})`)} ${
-          c.status === 'running'
-            ? chalk.green('● running')
-            : chalk.gray('○ stopped')
-        }`,
+        name: `${c.name} ${statusLabel}`,
         value: c.name,
         short: c.name,
       }
@@ -323,71 +404,116 @@ export async function showContainerSubmenu(
     return
   }
 
-  const isRunning = await processManager.isRunning(containerName, {
-    engine: config.engine,
-  })
-  const status = isRunning ? 'running' : 'stopped'
+  // SQLite: Check file existence instead of running status
+  const isSQLite = config.engine === Engine.SQLite
+  let isRunning: boolean
+  let status: string
+  let locationInfo: string
+
+  if (isSQLite) {
+    const fileExists = existsSync(config.database)
+    isRunning = fileExists // For SQLite, "running" means "file exists"
+    status = fileExists ? 'available' : 'missing'
+    locationInfo = `at ${config.database}`
+  } else {
+    isRunning = await processManager.isRunning(containerName, {
+      engine: config.engine,
+    })
+    status = isRunning ? 'running' : 'stopped'
+    locationInfo = `on port ${config.port}`
+  }
 
   console.clear()
   console.log(header(containerName))
   console.log()
   console.log(
     chalk.gray(
-      `  ${config.engine} ${config.version} on port ${config.port} - ${status}`,
+      `  ${config.engine} ${config.version} ${locationInfo} - ${status}`,
     ),
   )
   console.log()
 
-  const actionChoices: MenuChoice[] = [
-    !isRunning
-      ? {
-          name: `${chalk.green('▶')} Start container`,
-          value: 'start',
-        }
-      : {
-          name: `${chalk.red('■')} Stop container`,
-          value: 'stop',
-        },
-    {
-      name: isRunning
-        ? `${chalk.blue('⌘')} Open shell`
-        : chalk.gray('⌘ Open shell'),
-      value: 'shell',
-      disabled: isRunning ? false : 'Start container first',
-    },
-    {
-      name: isRunning
-        ? `${chalk.yellow('▷')} Run SQL file`
-        : chalk.gray('▷ Run SQL file'),
-      value: 'run-sql',
-      disabled: isRunning ? false : 'Start container first',
-    },
-    {
-      name: !isRunning
-        ? `${chalk.white('⚙')} Edit container`
-        : chalk.gray('⚙ Edit container'),
-      value: 'edit',
-      disabled: !isRunning ? false : 'Stop container first',
-    },
-    {
-      name: !isRunning
-        ? `${chalk.cyan('⧉')} Clone container`
-        : chalk.gray('⧉ Clone container'),
-      value: 'clone',
-      disabled: !isRunning ? false : 'Stop container first',
-    },
+  // Build action choices based on engine type
+  const actionChoices: MenuChoice[] = []
+
+  // Start/Stop buttons only for server databases (not SQLite)
+  if (!isSQLite) {
+    if (!isRunning) {
+      actionChoices.push({
+        name: `${chalk.green('▶')} Start container`,
+        value: 'start',
+      })
+    } else {
+      actionChoices.push({
+        name: `${chalk.red('■')} Stop container`,
+        value: 'stop',
+      })
+    }
+  }
+
+  // Open shell - always enabled for SQLite (if file exists), server databases need to be running
+  const canOpenShell = isSQLite ? existsSync(config.database) : isRunning
+  actionChoices.push({
+    name: canOpenShell
+      ? `${chalk.blue('⌘')} Open shell`
+      : chalk.gray('⌘ Open shell'),
+    value: 'shell',
+    disabled: canOpenShell ? false : (isSQLite ? 'Database file missing' : 'Start container first'),
+  })
+
+  // Run SQL - always enabled for SQLite (if file exists), server databases need to be running
+  const canRunSql = isSQLite ? existsSync(config.database) : isRunning
+  actionChoices.push({
+    name: canRunSql
+      ? `${chalk.yellow('▷')} Run SQL file`
+      : chalk.gray('▷ Run SQL file'),
+    value: 'run-sql',
+    disabled: canRunSql ? false : (isSQLite ? 'Database file missing' : 'Start container first'),
+  })
+
+  // Edit container - SQLite can always edit (no running state), server databases must be stopped
+  const canEdit = isSQLite ? true : !isRunning
+  actionChoices.push({
+    name: canEdit
+      ? `${chalk.white('⚙')} Edit container`
+      : chalk.gray('⚙ Edit container'),
+    value: 'edit',
+    disabled: canEdit ? false : 'Stop container first',
+  })
+
+  // Clone container - SQLite can always clone, server databases must be stopped
+  const canClone = isSQLite ? true : !isRunning
+  actionChoices.push({
+    name: canClone
+      ? `${chalk.cyan('⧉')} Clone container`
+      : chalk.gray('⧉ Clone container'),
+    value: 'clone',
+    disabled: canClone ? false : 'Stop container first',
+  })
+
+  actionChoices.push(
     { name: `${chalk.magenta('⎘')} Copy connection string`, value: 'copy' },
-    {
+  )
+
+  // View logs - not available for SQLite (no log file)
+  if (!isSQLite) {
+    actionChoices.push({
       name: `${chalk.gray('☰')} View logs`,
       value: 'logs',
-    },
-    {
-      name: !isRunning
-        ? `${chalk.red('✕')} Delete container`
-        : chalk.gray('✕ Delete container'),
-      value: 'delete',
-      disabled: !isRunning ? false : 'Stop container first',
-    },
+    })
+  }
+
+  // Delete container - SQLite can always delete, server databases must be stopped
+  const canDelete = isSQLite ? true : !isRunning
+  actionChoices.push({
+    name: canDelete
+      ? `${chalk.red('✕')} Delete container`
+      : chalk.gray('✕ Delete container'),
+    value: 'delete',
+    disabled: canDelete ? false : 'Stop container first',
+  })
+
+  actionChoices.push(
     new inquirer.Separator(),
     {
       name: `${chalk.blue('←')} Back to containers`,
@@ -397,7 +523,7 @@ export async function showContainerSubmenu(
       name: `${chalk.blue('⌂')} Back to main menu`,
       value: 'main',
     },
-  ]
+  )
 
   const { action } = await inquirer.prompt<{ action: string }>([
     {
@@ -464,7 +590,10 @@ export async function showContainerSubmenu(
 
 export async function handleStart(): Promise<void> {
   const containers = await containerManager.list()
-  const stopped = containers.filter((c) => c.status !== 'running')
+  // Filter for stopped containers, excluding SQLite (no server process to start)
+  const stopped = containers.filter(
+    (c) => c.status !== 'running' && c.engine !== Engine.SQLite,
+  )
 
   if (stopped.length === 0) {
     console.log(warning('All containers are already running'))
@@ -512,7 +641,10 @@ export async function handleStart(): Promise<void> {
 
 export async function handleStop(): Promise<void> {
   const containers = await containerManager.list()
-  const running = containers.filter((c) => c.status === 'running')
+  // Filter for running containers, excluding SQLite (no server process to stop)
+  const running = containers.filter(
+    (c) => c.status === 'running' && c.engine !== Engine.SQLite,
+  )
 
   if (running.length === 0) {
     console.log(warning('No running containers'))
@@ -629,29 +761,41 @@ async function handleEditContainer(
     return null
   }
 
+  const isSQLite = config.engine === Engine.SQLite
+
   console.clear()
   console.log(header(`Edit: ${containerName}`))
   console.log()
 
-  const editChoices = [
+  const editChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
     {
       name: `Name: ${chalk.white(containerName)}`,
       value: 'name',
     },
-    {
+  ]
+
+  // SQLite: show relocate option with file path; others: show port
+  if (isSQLite) {
+    editChoices.push({
+      name: `Location: ${chalk.white(config.database)}`,
+      value: 'relocate',
+    })
+  } else {
+    editChoices.push({
       name: `Port: ${chalk.white(String(config.port))}`,
       value: 'port',
-    },
-    new inquirer.Separator(),
-    {
-      name: `${chalk.blue('←')} Back to container`,
-      value: 'back',
-    },
-    {
-      name: `${chalk.blue('⌂')} Back to main menu`,
-      value: 'main',
-    },
-  ]
+    })
+  }
+
+  editChoices.push(new inquirer.Separator())
+  editChoices.push({
+    name: `${chalk.blue('←')} Back to container`,
+    value: 'back',
+  })
+  editChoices.push({
+    name: `${chalk.blue('⌂')} Back to main menu`,
+    value: 'main',
+  })
 
   const { field } = await inquirer.prompt<{ field: string }>([
     {
@@ -745,6 +889,150 @@ async function handleEditContainer(
     console.log(success(`Changed port from ${config.port} to ${newPort}`))
 
     // Continue editing
+    return await handleEditContainer(containerName)
+  }
+
+  if (field === 'relocate') {
+    const currentFileName = basename(config.database)
+
+    const { inputPath } = await inquirer.prompt<{ inputPath: string }>([
+      {
+        type: 'input',
+        name: 'inputPath',
+        message: 'New file path:',
+        default: config.database,
+        validate: (input: string) => {
+          if (!input) return 'Path is required'
+          return true
+        },
+      },
+    ])
+
+    // Expand ~ to home directory
+    let expandedPath = inputPath
+    if (inputPath === '~') {
+      expandedPath = homedir()
+    } else if (inputPath.startsWith('~/')) {
+      expandedPath = join(homedir(), inputPath.slice(2))
+    }
+
+    // Convert relative paths to absolute
+    if (!expandedPath.startsWith('/')) {
+      expandedPath = resolve(process.cwd(), expandedPath)
+    }
+
+    // Check if path looks like a file (has db extension) or directory
+    const hasDbExtension = /\.(sqlite3?|db)$/i.test(expandedPath)
+
+    // Treat as directory if:
+    // - ends with /
+    // - exists and is a directory
+    // - doesn't have a database file extension (assume it's a directory path)
+    const isDirectory = expandedPath.endsWith('/') ||
+      (existsSync(expandedPath) && statSync(expandedPath).isDirectory()) ||
+      !hasDbExtension
+
+    let finalPath: string
+    if (isDirectory) {
+      // Remove trailing slash if present, then append filename
+      const dirPath = expandedPath.endsWith('/') ? expandedPath.slice(0, -1) : expandedPath
+      finalPath = join(dirPath, currentFileName)
+    } else {
+      finalPath = expandedPath
+    }
+
+    if (finalPath === config.database) {
+      console.log(info('Location unchanged'))
+      return await handleEditContainer(containerName)
+    }
+
+    // Check if source file exists
+    if (!existsSync(config.database)) {
+      console.log(error(`Source file not found: ${config.database}`))
+      return await handleEditContainer(containerName)
+    }
+
+    // Check if destination already exists
+    if (existsSync(finalPath)) {
+      console.log(error(`Destination file already exists: ${finalPath}`))
+      return await handleEditContainer(containerName)
+    }
+
+    // Check if destination directory exists
+    const destDir = dirname(finalPath)
+    if (!existsSync(destDir)) {
+      console.log(warning(`Directory does not exist: ${destDir}`))
+      const { createDir } = await inquirer.prompt<{ createDir: string }>([
+        {
+          type: 'list',
+          name: 'createDir',
+          message: 'Create this directory?',
+          choices: [
+            { name: 'Yes, create it', value: 'yes' },
+            { name: 'No, cancel', value: 'no' },
+          ],
+        },
+      ])
+
+      if (createDir !== 'yes') {
+        return await handleEditContainer(containerName)
+      }
+
+      try {
+        mkdirSync(destDir, { recursive: true })
+        console.log(success(`Created directory: ${destDir}`))
+      } catch (err) {
+        console.log(error(`Failed to create directory: ${(err as Error).message}`))
+        return await handleEditContainer(containerName)
+      }
+    }
+
+    const spinner = createSpinner('Moving database file...')
+    spinner.start()
+
+    try {
+      // Try rename first (fast, same filesystem)
+      try {
+        renameSync(config.database, finalPath)
+      } catch (renameErr) {
+        const e = renameErr as NodeJS.ErrnoException
+        // EXDEV = cross-device link, need to copy+delete
+        if (e.code === 'EXDEV') {
+          try {
+            // Copy file preserving mode/permissions
+            copyFileSync(config.database, finalPath)
+            // Only delete source after successful copy
+            unlinkSync(config.database)
+          } catch (copyErr) {
+            // Clean up partial target on failure
+            if (existsSync(finalPath)) {
+              try {
+                unlinkSync(finalPath)
+              } catch {
+                // Ignore cleanup errors
+              }
+            }
+            throw copyErr
+          }
+        } else {
+          throw renameErr
+        }
+      }
+
+      // Update the container config and SQLite registry
+      await containerManager.updateConfig(containerName, { database: finalPath })
+      await sqliteRegistry.update(containerName, { filePath: finalPath })
+      spinner.succeed(`Moved database to ${finalPath}`)
+
+      // Wait for user to see success message before refreshing
+      await pressEnterToContinue()
+    } catch (err) {
+      spinner.fail('Failed to move database file')
+      console.log(error((err as Error).message))
+      await pressEnterToContinue()
+    }
+
+    // Continue editing (will fetch fresh config)
     return await handleEditContainer(containerName)
   }
 

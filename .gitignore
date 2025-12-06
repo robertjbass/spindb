@@ -143,6 +143,12 @@ vite.config.ts.timestamp-*
 
 # Local testing
 _dumps
+.spindb
+
+# SQLite database files (created during testing or development)
+*.sqlite
+*.sqlite3
+*.db
 
 # Private docs
 MONETIZATION.md

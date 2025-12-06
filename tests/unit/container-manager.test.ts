@@ -99,17 +99,6 @@ describe('ContainerManager', () => {
 
       assertEqual(clonedConfig.clonedFrom, 'original-db', 'Should track clone source')
     })
-
-    it('should have valid status values', () => {
-      const validStatuses = ['created', 'running', 'stopped']
-
-      for (const status of validStatuses) {
-        assert(
-          ['created', 'running', 'stopped'].includes(status),
-          `"${status}" should be a valid status`,
-        )
-      }
-    })
   })
 
   describe('CreateOptions Shape', () => {

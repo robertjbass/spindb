@@ -2,6 +2,9 @@
 
 ## Roadmap
 
+### Maintenance
+- [ ] Review and update `EVALUATION.md` periodically (last updated: 2025-12-06, v0.9.0)
+
 ### v1.0 - Core Features (Complete)
 - [x] PostgreSQL container management (create, start, stop, delete)
 - [x] MySQL/MariaDB engine support
@@ -48,6 +51,7 @@ See [Engines](#engines) section below for full engine status and details.
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
 - [ ] **Overwrite existing databases on restore** - Add `--force` or `--drop-existing` flag to restore/create commands to drop and recreate tables that already exist (currently fails if tables exist)
+- [ ] **Update doctor tool** - Add checks for database file permissions, container health, and engines
 
 ### Security (Pro)
 - [ ] **Password authentication** - Set passwords on container creation
@@ -142,8 +146,8 @@ pnpm test:mysql     # MySQL integration
 - MySQL: 3333-3335
 
 ### Test Coverage
-- **Unit tests:** 141 tests covering validation, error handling, version compatibility
-- **Integration tests:** 28 tests (14 PostgreSQL + 14 MySQL) covering full container lifecycle
+- **Unit tests:** 358 tests covering validation, error handling, version compatibility, SQLite registry, relocation
+- **Integration tests:** 38 tests (14 PostgreSQL + 14 MySQL + 10 SQLite) covering full container lifecycle
 
 ---
 
@@ -155,12 +159,12 @@ pnpm test:mysql     # MySQL integration
 |--------|--------|---------------|-------------|-------|
 | 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-17 |
 | 🐬 **MySQL** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Also supports MariaDB as drop-in replacement |
+| 🪶 **SQLite** | ✅ Complete | System | N/A (system) | File-based, stores in project directories |
 
 ### Planned
 
 | Engine | Status | Type | Binary Size | Notes |
 |--------|--------|------|-------------|-------|
-| 🪶 **SQLite** | 🔜 Planned | File-based | ~500 KB | Extremely lightweight, embedded library |
 | 🔴 **Redis** | 🔜 Planned | In-memory | ~3-5 MB | Lightweight server binary |
 | 🍃 **MongoDB** | 🔜 Planned | Document DB | ~200-300 MB | Large binary, may use system install like MySQL |
 
@@ -228,14 +232,24 @@ Currently MariaDB is treated as a drop-in replacement for MySQL on Linux systems
 
 For now, the MySQL engine's MariaDB support is sufficient for most use cases.
 
+Engine Emojis:
+🦭 MariaDB
+🐬 MySQL
+🐘 Postgres
+🍃 MongoDB
+🔴 Redis
+🪶 SQLite
+
 ### Enhanced CLI Tools
 
 | Engine | Standard CLI | Enhanced CLI | Notes |
 |--------|-------------|--------------|-------|
 | PostgreSQL | `psql` | `pgcli` | Auto-completion, syntax highlighting |
 | MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
-| SQLite | `sqlite3` | `litecli` | Planned for v1.2 |
+| SQLite | `sqlite3` | `litecli` | Available in v0.9 |
 | Redis | `redis-cli` | `iredis` | Planned for v1.2 |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
 
+### Packaging
+- [ ] Consider Bun support for binaries to create smaller, faster distribution packages for faster startup and smaller downloads

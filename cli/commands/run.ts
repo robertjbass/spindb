@@ -7,6 +7,7 @@ import { getEngine } from '../../engines'
 import { promptInstallDependencies } from '../ui/prompts'
 import { error, warning } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import { Engine } from '../../types'
 
 export const runCommand = new Command('run')
   .description('Run SQL file or statement against a container')
@@ -31,16 +32,29 @@ export const runCommand = new Command('run')
 
         const { engine: engineName } = config
 
-        const running = await processManager.isRunning(containerName, {
-          engine: engineName,
-        })
-        if (!running) {
-          console.error(
-            error(
-              `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
-            ),
-          )
-          process.exit(1)
+        // SQLite: check file exists instead of running status
+        if (engineName === Engine.SQLite) {
+          if (!existsSync(config.database)) {
+            console.error(
+              error(
+                `SQLite database file not found: ${config.database}`,
+              ),
+            )
+            process.exit(1)
+          }
+        } else {
+          // Server databases need to be running
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          if (!running) {
+            console.error(
+              error(
+                `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
+              ),
+            )
+            process.exit(1)
+          }
         }
 
         if (file && options.sql) {
@@ -123,7 +137,9 @@ export const runCommand = new Command('run')
           const missingTool = matchingPattern
             .replace(' not found', '')
             .replace(' client', '')
-          const installed = await promptInstallDependencies(missingTool)
+          // Determine engine from the missing tool name
+          const toolEngine = missingTool === 'mysql' ? Engine.MySQL : Engine.PostgreSQL
+          const installed = await promptInstallDependencies(missingTool, toolEngine)
           if (installed) {
             console.log(
               chalk.yellow('  Please re-run your command to continue.'),

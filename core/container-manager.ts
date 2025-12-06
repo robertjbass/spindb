@@ -1,10 +1,11 @@
 import { existsSync } from 'fs'
-import { mkdir, readdir, readFile, writeFile, rm, cp } from 'fs/promises'
+import { mkdir, readdir, readFile, writeFile, rm, cp, unlink } from 'fs/promises'
 import { paths } from '../config/paths'
 import { processManager } from './process-manager'
 import { portManager } from './port-manager'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
+import { sqliteRegistry } from '../engines/sqlite/registry'
 import type { ContainerConfig } from '../types'
 import { Engine } from '../types'
 
@@ -74,6 +75,11 @@ export class ContainerManager {
     const { engine } = options || {}
 
     if (engine) {
+      // SQLite uses registry instead of filesystem
+      if (engine === 'sqlite') {
+        return this.getSqliteConfig(name)
+      }
+
       // Look in specific engine directory
       const configPath = paths.getContainerConfigPath(name, { engine })
       if (!existsSync(configPath)) {
@@ -84,8 +90,14 @@ export class ContainerManager {
       return this.migrateConfig(config)
     }
 
-    // Search all engine directories
-    const engines = getSupportedEngines()
+    // Search SQLite registry first
+    const sqliteConfig = await this.getSqliteConfig(name)
+    if (sqliteConfig) {
+      return sqliteConfig
+    }
+
+    // Search all engine directories (excluding sqlite which uses registry)
+    const engines = getSupportedEngines().filter((e) => e !== 'sqlite')
     for (const eng of engines) {
       const configPath = paths.getContainerConfigPath(name, { engine: eng })
       if (existsSync(configPath)) {
@@ -96,6 +108,29 @@ export class ContainerManager {
     }
 
     return null
+  }
+
+  /**
+   * Get SQLite container config from registry
+   */
+  private async getSqliteConfig(name: string): Promise<ContainerConfig | null> {
+    const entry = await sqliteRegistry.get(name)
+    if (!entry) {
+      return null
+    }
+
+    // Convert registry entry to ContainerConfig format
+    const fileExists = existsSync(entry.filePath)
+    return {
+      name: entry.name,
+      engine: Engine.SQLite,
+      version: '3',
+      port: 0,
+      database: entry.filePath, // For SQLite, database field stores file path
+      databases: [entry.filePath],
+      created: entry.created,
+      status: fileExists ? 'running' : 'stopped', // "running" = file exists
+    }
   }
 
   /**
@@ -165,12 +200,21 @@ export class ContainerManager {
     const { engine } = options || {}
 
     if (engine) {
+      // SQLite uses registry
+      if (engine === 'sqlite') {
+        return sqliteRegistry.exists(name)
+      }
       const configPath = paths.getContainerConfigPath(name, { engine })
       return existsSync(configPath)
     }
 
-    // Check all engine directories
-    const engines = getSupportedEngines()
+    // Check SQLite registry first
+    if (await sqliteRegistry.exists(name)) {
+      return true
+    }
+
+    // Check all engine directories (excluding sqlite)
+    const engines = getSupportedEngines().filter((e) => e !== 'sqlite')
     for (const eng of engines) {
       const configPath = paths.getContainerConfigPath(name, { engine: eng })
       if (existsSync(configPath)) {
@@ -185,14 +229,31 @@ export class ContainerManager {
    * List all containers across all engines
    */
   async list(): Promise<ContainerConfig[]> {
-    const containersDir = paths.containers
+    const containers: ContainerConfig[] = []
 
-    if (!existsSync(containersDir)) {
-      return []
+    // List SQLite containers from registry
+    const sqliteEntries = await sqliteRegistry.list()
+    for (const entry of sqliteEntries) {
+      const fileExists = existsSync(entry.filePath)
+      containers.push({
+        name: entry.name,
+        engine: Engine.SQLite,
+        version: '3',
+        port: 0,
+        database: entry.filePath,
+        databases: [entry.filePath],
+        created: entry.created,
+        status: fileExists ? 'running' : 'stopped', // "running" = file exists
+      })
     }
 
-    const containers: ContainerConfig[] = []
-    const engines = getSupportedEngines()
+    // List server-based containers (PostgreSQL, MySQL)
+    const containersDir = paths.containers
+    if (!existsSync(containersDir)) {
+      return containers
+    }
+
+    const engines = getSupportedEngines().filter((e) => e !== 'sqlite')
 
     for (const engine of engines) {
       const engineDir = paths.getEngineContainersPath(engine)
@@ -236,7 +297,23 @@ export class ContainerManager {
 
     const { engine } = config
 
-    // Check if running
+    // SQLite: delete file, remove from registry, and clean up container directory
+    if (engine === Engine.SQLite) {
+      const entry = await sqliteRegistry.get(name)
+      if (entry && existsSync(entry.filePath)) {
+        await unlink(entry.filePath)
+      }
+      await sqliteRegistry.remove(name)
+
+      // Also remove the container directory (created by containerManager.create)
+      const containerPath = paths.getContainerPath(name, { engine })
+      if (existsSync(containerPath)) {
+        await rm(containerPath, { recursive: true, force: true })
+      }
+      return
+    }
+
+    // Server databases: check if running first
     const running = await processManager.isRunning(name, { engine })
     if (running && !force) {
       throw new Error(
@@ -335,7 +412,38 @@ export class ContainerManager {
       throw new Error(`Container "${newName}" already exists`)
     }
 
-    // Check container is not running
+    // SQLite: rename in registry and handle container directory
+    if (engine === Engine.SQLite) {
+      const entry = await sqliteRegistry.get(oldName)
+      if (!entry) {
+        throw new Error(`SQLite container "${oldName}" not found in registry`)
+      }
+
+      // Remove old entry and add new one with updated name
+      await sqliteRegistry.remove(oldName)
+      await sqliteRegistry.add({
+        name: newName,
+        filePath: entry.filePath,
+        created: entry.created,
+        lastVerified: entry.lastVerified,
+      })
+
+      // Rename container directory if it exists (created by containerManager.create)
+      const oldContainerPath = paths.getContainerPath(oldName, { engine })
+      const newContainerPath = paths.getContainerPath(newName, { engine })
+      if (existsSync(oldContainerPath)) {
+        await cp(oldContainerPath, newContainerPath, { recursive: true })
+        await rm(oldContainerPath, { recursive: true, force: true })
+      }
+
+      // Return updated config
+      return {
+        ...sourceConfig,
+        name: newName,
+      }
+    }
+
+    // Server databases: check container is not running
     const running = await processManager.isRunning(oldName, { engine })
     if (running) {
       throw new Error(`Container "${oldName}" is running. Stop it first`)

@@ -187,16 +187,6 @@ describe('BinaryManager', () => {
       }
     })
 
-    it('should parse directory names correctly', () => {
-      // Test the parsing logic used in listInstalled
-      const dirName = 'postgresql-17.7.0-darwin-arm64'
-      const parts = dirName.split('-')
-
-      assertEqual(parts[0], 'postgresql', 'Should extract engine')
-      assertEqual(parts[1], '17.7.0', 'Should extract version')
-      assertEqual(parts[2], 'darwin', 'Should extract platform')
-      assertEqual(parts[3], 'arm64', 'Should extract arch')
-    })
   })
 
   describe('isInstalled', () => {
@@ -248,170 +238,69 @@ describe('BinaryManager', () => {
       }
     })
 
-    it('should handle version comparison correctly', () => {
-      // Test the normalizeVersion logic from verify
-      const normalizeVersion = (v: string) => v.replace(/\.0$/, '')
-
-      assertEqual(normalizeVersion('16.9.0'), '16.9', 'Should strip trailing .0')
-      assertEqual(normalizeVersion('16.9'), '16.9', 'Should not modify without trailing .0')
-      assertEqual(normalizeVersion('16'), '16', 'Should handle single part')
-    })
-  })
-
-  describe('download', () => {
-    it('should report download progress stages', () => {
-      // Test the progress callback stages
-      const stages = ['downloading', 'extracting', 'verifying', 'cached']
-
-      for (const stage of stages) {
-        assert(
-          ['downloading', 'extracting', 'verifying', 'cached'].includes(stage),
-          `Stage "${stage}" should be valid`,
-        )
-      }
-    })
-
-    it('should handle download errors gracefully', async () => {
-      // Test error message format for failed downloads
-      const status = 404
-      const statusText = 'Not Found'
-      const errorMessage = `Failed to download binaries: ${status} ${statusText}`
-
-      assert(
-        errorMessage.includes('404'),
-        'Error should include status code',
-      )
-      assert(
-        errorMessage.includes('Not Found'),
-        'Error should include status text',
-      )
-    })
-
-    it('should throw meaningful error when txz not found', () => {
-      const errorMessage = 'Could not find .txz file in downloaded archive'
-
-      assert(
-        errorMessage.includes('.txz'),
-        'Error should mention the missing file type',
-      )
-    })
   })
 
   describe('ensureInstalled', () => {
-    it('should report cached stage when already installed', async () => {
+    it('should invoke progress callback with cached stage when already installed', async () => {
       const binaryManager = new BinaryManager()
-      let progressStage: string | undefined
-
-      // If not installed, this would start a download
-      // We're testing the concept of the cached path
       const isInstalled = await binaryManager.isInstalled('17', 'darwin', 'arm64')
 
       if (isInstalled) {
-        // Would call onProgress with stage: 'cached'
-        progressStage = 'cached'
+        const progressCalls: Array<{ stage: string; message: string }> = []
+
+        // Actually call ensureInstalled and verify the callback
+        await binaryManager.ensureInstalled('17', 'darwin', 'arm64', (progress) => {
+          progressCalls.push(progress)
+        })
+
+        assert(progressCalls.length > 0, 'Progress callback should be invoked')
+        assertEqual(progressCalls[0].stage, 'cached', 'Should report cached stage')
+        assert(
+          progressCalls[0].message.includes('cached'),
+          'Message should mention cached',
+        )
       }
+    })
+
+    it('should return path to binary directory', async () => {
+      const binaryManager = new BinaryManager()
+      const isInstalled = await binaryManager.isInstalled('17', 'darwin', 'arm64')
 
       if (isInstalled) {
-        assertEqual(progressStage, 'cached', 'Should report cached stage')
+        const binPath = await binaryManager.ensureInstalled('17', 'darwin', 'arm64')
+
+        assert(typeof binPath === 'string', 'Should return path string')
+        assert(binPath.includes('17.7.0'), 'Path should include full version')
+        assert(binPath.includes('darwin-arm64'), 'Path should include platform')
       }
     })
   })
 
-  describe('ProgressCallback', () => {
-    it('should have correct shape', () => {
-      const progress = {
-        stage: 'downloading' as const,
-        message: 'Downloading PostgreSQL binaries...',
-      }
-
-      assert(typeof progress.stage === 'string', 'Should have stage')
-      assert(typeof progress.message === 'string', 'Should have message')
-    })
-
-    it('should support all stages', () => {
-      const validStages = ['downloading', 'extracting', 'verifying', 'cached']
-
-      for (const stage of validStages) {
-        const progress = { stage, message: `Stage: ${stage}` }
-        assert(
-          validStages.includes(progress.stage),
-          `${stage} should be a valid stage`,
-        )
-      }
-    })
-  })
-
-  describe('Platform Mappings', () => {
-    it('should map darwin-arm64 to darwin-arm64v8', () => {
-      // This tests the mapping used internally
-      const platformMappings: Record<string, string> = {
-        'darwin-arm64': 'darwin-arm64v8',
-        'darwin-x64': 'darwin-amd64',
-        'linux-x64': 'linux-amd64',
-        'linux-arm64': 'linux-arm64v8',
-      }
-
-      assertEqual(
-        platformMappings['darwin-arm64'],
-        'darwin-arm64v8',
-        'ARM Mac should map correctly',
-      )
-      assertEqual(
-        platformMappings['darwin-x64'],
-        'darwin-amd64',
-        'Intel Mac should map correctly',
-      )
-    })
-  })
-
-  describe('Error Messages', () => {
-    it('should provide clear error for unsupported platform', () => {
+  describe('platform mappings via getDownloadUrl', () => {
+    it('should use correct zonky platform mappings in URLs', () => {
       const binaryManager = new BinaryManager()
 
-      try {
-        binaryManager.getDownloadUrl('17', 'unsupported', 'arch')
-      } catch (error) {
-        assert(error instanceof Error, 'Should throw Error')
-        assert(
-          error.message.includes('Unsupported platform'),
-          'Error should clearly state unsupported platform',
-        )
-        assert(
-          error.message.includes('unsupported-arch'),
-          'Error should include the attempted platform-arch combo',
-        )
-      }
-    })
+      // Test darwin-arm64 maps to darwin-arm64v8
+      const armUrl = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
+      assert(
+        armUrl.includes('darwin-arm64v8'),
+        'ARM Mac should map to darwin-arm64v8',
+      )
 
-    it('should provide clear error for failed verification', () => {
-      const errorCases = [
-        { message: 'PostgreSQL binary not found at /path', check: 'not found' },
-        { message: 'Could not parse version from: unknown', check: 'parse version' },
-        { message: 'Version mismatch: expected 17, got 16', check: 'mismatch' },
-      ]
+      // Test darwin-x64 maps to darwin-amd64
+      const intelUrl = binaryManager.getDownloadUrl('17', 'darwin', 'x64')
+      assert(
+        intelUrl.includes('darwin-amd64'),
+        'Intel Mac should map to darwin-amd64',
+      )
 
-      for (const { message, check } of errorCases) {
-        assert(
-          message.toLowerCase().includes(check),
-          `Error "${message}" should include "${check}"`,
-        )
-      }
+      // Test linux-x64 maps to linux-amd64
+      const linuxUrl = binaryManager.getDownloadUrl('17', 'linux', 'x64')
+      assert(
+        linuxUrl.includes('linux-amd64'),
+        'Linux x64 should map to linux-amd64',
+      )
     })
   })
 })
 
-describe('InstalledBinary Type', () => {
-  it('should have all required fields', () => {
-    const binary = {
-      engine: 'postgresql' as const,
-      version: '17.7.0',
-      platform: 'darwin',
-      arch: 'arm64',
-    }
-
-    assert(typeof binary.engine === 'string', 'Should have engine')
-    assert(typeof binary.version === 'string', 'Should have version')
-    assert(typeof binary.platform === 'string', 'Should have platform')
-    assert(typeof binary.arch === 'string', 'Should have arch')
-  })
-})

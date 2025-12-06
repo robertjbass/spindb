@@ -6,7 +6,7 @@
 
 **Local databases without the Docker baggage.**
 
-Spin up PostgreSQL and MySQL instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, and SQLite instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -176,11 +176,37 @@ spindb deps check --engine mysql
 
 **Linux users:** MariaDB works as a drop-in replacement for MySQL. If you have MariaDB installed, SpinDB will detect and use it automatically. In a future release, MariaDB will be available as its own engine with support for MariaDB-specific features.
 
+#### SQLite
+
+| | |
+|---|---|
+| Version | 3 (system) |
+| Default port | N/A (file-based) |
+| Data location | Project directory (CWD) |
+| Binary source | System installation |
+
+SQLite is a file-based database—no server process, no ports. Databases are stored in your project directory by default, not `~/.spindb/`. SpinDB tracks registered SQLite databases in a registry file.
+
+```bash
+# Create in current directory
+spindb create mydb --engine sqlite
+
+# Create with custom path
+spindb create mydb --engine sqlite --path ./data/mydb.sqlite
+
+# Connect to it
+spindb connect mydb
+
+# Use litecli for enhanced experience
+spindb connect mydb --litecli
+```
+
+**Note:** Unlike server databases, SQLite databases don't need to be "started" or "stopped"—they're always available as long as the file exists.
+
 ### Planned Engines
 
 | Engine | Type | Status |
 |--------|------|--------|
-| SQLite | File-based | Planned for v1.2 |
 | Redis | In-memory key-value | Planned for v1.2 |
 | MongoDB | Document database | Planned for v1.2 |
 
@@ -195,10 +221,14 @@ spindb deps check --engine mysql
 ```bash
 spindb create mydb                           # PostgreSQL (default)
 spindb create mydb --engine mysql            # MySQL
+spindb create mydb --engine sqlite           # SQLite (file-based)
 spindb create mydb --version 16              # Specific PostgreSQL version
 spindb create mydb --port 5433               # Custom port
 spindb create mydb --database my_app         # Custom database name
 spindb create mydb --no-start                # Create without starting
+
+# SQLite with custom path
+spindb create mydb --engine sqlite --path ./data/app.sqlite
 ```
 
 Create and restore in one command:
@@ -213,10 +243,11 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mysql`) |
+| `--engine`, `-e` | Database engine (`postgresql`, `mysql`, `sqlite`) |
 | `--version`, `-v` | Engine version |
-| `--port`, `-p` | Port number |
+| `--port`, `-p` | Port number (not applicable for SQLite) |
 | `--database`, `-d` | Primary database name |
+| `--path` | File path for SQLite databases |
 | `--max-connections` | Maximum database connections (default: 200) |
 | `--from` | Restore from backup file or connection string |
 | `--no-start` | Create without starting |
@@ -333,11 +364,12 @@ spindb clone source-db new-db
 spindb start new-db
 ```
 
-#### `edit` - Rename, change port, or edit database config
+#### `edit` - Rename, change port, relocate, or edit database config
 
 ```bash
 spindb edit mydb --name newname              # Must be stopped
 spindb edit mydb --port 5433
+spindb edit mydb --relocate ~/new/path       # Move SQLite database file
 spindb edit mydb --set-config max_connections=300   # PostgreSQL config
 spindb edit mydb                             # Interactive mode
 ```
@@ -405,6 +437,43 @@ spindb version --check    # Check for updates
 spindb self-update
 ```
 
+#### `doctor` - System health check
+
+```bash
+spindb doctor            # Interactive health check
+spindb doctor --json     # JSON output for scripting
+```
+
+Checks performed:
+- Configuration file validity and binary cache freshness
+- Container status across all engines
+- SQLite registry for orphaned entries (files deleted outside SpinDB)
+- Database tool availability
+
+Example output:
+
+```
+SpinDB Health Check
+═══════════════════
+
+✓ Configuration
+  └─ Configuration valid, 12 tools cached
+
+✓ Containers
+  └─ 4 container(s)
+     postgresql: 2 running, 0 stopped
+     mysql: 0 running, 1 stopped
+     sqlite: 1 exist, 0 missing
+
+⚠ SQLite Registry
+  └─ 1 orphaned entry found
+     "old-project" → /path/to/missing.sqlite
+
+? What would you like to do?
+❯ Remove orphaned entries from registry
+  Skip (do nothing)
+```
+
 ---
 
 ## Enhanced CLI Tools
@@ -415,7 +484,7 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 |--------|----------|----------|-----------|
 | PostgreSQL | `psql` | `pgcli` | `usql` |
 | MySQL | `mysql` | `mycli` | `usql` |
-| SQLite (planned) | `sqlite3` | `litecli` | `usql` |
+| SQLite | `sqlite3` | `litecli` | `usql` |
 | Redis (planned) | `redis-cli` | `iredis` | - |
 | MongoDB (planned) | `mongosh` | - | - |
 
@@ -456,8 +525,13 @@ spindb connect mydb --install-tui      # usql
 │           ├── container.json
 │           ├── data/
 │           └── mysql.log
+├── sqlite-registry.json                    # Tracks SQLite file locations
 ├── logs/                                   # Error logs
 └── config.json                             # Tool paths cache
+
+# SQLite databases are stored in project directories, not ~/.spindb/
+./myproject/
+└── mydb.sqlite                             # Created with: spindb create mydb -e sqlite
 ```
 
 ### How Data Persists
@@ -521,7 +595,6 @@ See [TODO.md](TODO.md) for the full roadmap.
 - Secrets management (macOS Keychain)
 
 ### v1.2 - Additional Engines
-- SQLite (file-based, no server)
 - Redis (in-memory key-value)
 - MongoDB (document database)
 - MariaDB as standalone engine

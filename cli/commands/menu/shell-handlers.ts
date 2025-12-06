@@ -6,13 +6,16 @@ import {
   isUsqlInstalled,
   isPgcliInstalled,
   isMycliInstalled,
+  isLitecliInstalled,
   detectPackageManager,
   installUsql,
   installPgcli,
   installMycli,
+  installLitecli,
   getUsqlManualInstructions,
   getPgcliManualInstructions,
   getMycliManualInstructions,
+  getLitecliManualInstructions,
 } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
 import { getEngine } from '../../../engines'
@@ -66,10 +69,11 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
 
-  const [usqlInstalled, pgcliInstalled, mycliInstalled] = await Promise.all([
+  const [usqlInstalled, pgcliInstalled, mycliInstalled, litecliInstalled] = await Promise.all([
     isUsqlInstalled(),
     isPgcliInstalled(),
     isMycliInstalled(),
+    isLitecliInstalled(),
   ])
 
   shellCheckSpinner.stop()
@@ -84,12 +88,36 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     | 'install-pgcli'
     | 'mycli'
     | 'install-mycli'
+    | 'litecli'
+    | 'install-litecli'
     | 'back'
 
-  const defaultShellName = config.engine === 'mysql' ? 'mysql' : 'psql'
-  const engineSpecificCli = config.engine === 'mysql' ? 'mycli' : 'pgcli'
-  const engineSpecificInstalled =
-    config.engine === 'mysql' ? mycliInstalled : pgcliInstalled
+  // Engine-specific shell names
+  let defaultShellName: string
+  let engineSpecificCli: string
+  let engineSpecificInstalled: boolean
+  let engineSpecificValue: ShellChoice
+  let engineSpecificInstallValue: ShellChoice
+
+  if (config.engine === 'sqlite') {
+    defaultShellName = 'sqlite3'
+    engineSpecificCli = 'litecli'
+    engineSpecificInstalled = litecliInstalled
+    engineSpecificValue = 'litecli'
+    engineSpecificInstallValue = 'install-litecli'
+  } else if (config.engine === 'mysql') {
+    defaultShellName = 'mysql'
+    engineSpecificCli = 'mycli'
+    engineSpecificInstalled = mycliInstalled
+    engineSpecificValue = 'mycli'
+    engineSpecificInstallValue = 'install-mycli'
+  } else {
+    defaultShellName = 'psql'
+    engineSpecificCli = 'pgcli'
+    engineSpecificInstalled = pgcliInstalled
+    engineSpecificValue = 'pgcli'
+    engineSpecificInstallValue = 'install-pgcli'
+  }
 
   const choices: Array<{ name: string; value: ShellChoice } | inquirer.Separator> = [
     {
@@ -101,15 +129,16 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   if (engineSpecificInstalled) {
     choices.push({
       name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
-      value: config.engine === 'mysql' ? 'mycli' : 'pgcli',
+      value: engineSpecificValue,
     })
   } else {
     choices.push({
       name: `↓ Install ${engineSpecificCli} (enhanced features, recommended)`,
-      value: config.engine === 'mysql' ? 'install-mycli' : 'install-pgcli',
+      value: engineSpecificInstallValue,
     })
   }
 
+  // usql supports SQLite too
   if (usqlInstalled) {
     choices.push({
       name: '⚡ Use usql (universal SQL client)',
@@ -241,6 +270,39 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
+  if (shellChoice === 'install-litecli') {
+    console.log()
+    console.log(info('Installing litecli for enhanced SQLite shell...'))
+    const pm = await detectPackageManager()
+    if (pm) {
+      const result = await installLitecli(pm)
+      if (result.success) {
+        console.log(success('litecli installed successfully!'))
+        console.log()
+        await launchShell(containerName, config, connectionString, 'litecli')
+      } else {
+        console.error(error(`Failed to install litecli: ${result.error}`))
+        console.log()
+        console.log(chalk.gray('Manual installation:'))
+        for (const instruction of getLitecliManualInstructions()) {
+          console.log(chalk.cyan(`  ${instruction}`))
+        }
+        console.log()
+        await pressEnterToContinue()
+      }
+    } else {
+      console.error(error('No supported package manager found'))
+      console.log()
+      console.log(chalk.gray('Manual installation:'))
+      for (const instruction of getLitecliManualInstructions()) {
+        console.log(chalk.cyan(`  ${instruction}`))
+      }
+      console.log()
+      await pressEnterToContinue()
+    }
+    return
+  }
+
   await launchShell(containerName, config, connectionString, shellChoice)
 }
 
@@ -248,7 +310,7 @@ async function launchShell(
   containerName: string,
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
   connectionString: string,
-  shellType: 'default' | 'usql' | 'pgcli' | 'mycli',
+  shellType: 'default' | 'usql' | 'pgcli' | 'mycli' | 'litecli',
 ): Promise<void> {
   console.log(info(`Connecting to ${containerName}...`))
   console.log()
@@ -275,11 +337,21 @@ async function launchShell(
       config.database,
     ]
     installHint = 'brew install mycli'
+  } else if (shellType === 'litecli') {
+    // litecli takes the database file path directly
+    shellCmd = 'litecli'
+    shellArgs = [config.database]
+    installHint = 'brew install litecli'
   } else if (shellType === 'usql') {
-    // usql accepts connection strings directly for both PostgreSQL and MySQL
+    // usql accepts connection strings directly for PostgreSQL, MySQL, and SQLite
     shellCmd = 'usql'
     shellArgs = [connectionString]
     installHint = 'brew tap xo/xo && brew install xo/xo/usql'
+  } else if (config.engine === 'sqlite') {
+    // Default SQLite shell
+    shellCmd = 'sqlite3'
+    shellArgs = [config.database]
+    installHint = 'brew install sqlite3'
   } else if (config.engine === 'mysql') {
     shellCmd = 'mysql'
     shellArgs = [
@@ -302,19 +374,31 @@ async function launchShell(
     stdio: 'inherit',
   })
 
-  shellProcess.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'ENOENT') {
-      console.log(warning(`${shellCmd} not found on your system.`))
-      console.log()
-      console.log(chalk.gray('  Connect manually with:'))
-      console.log(chalk.cyan(`  ${connectionString}`))
-      console.log()
-      console.log(chalk.gray(`  Install ${shellCmd}:`))
-      console.log(chalk.cyan(`  ${installHint}`))
-    }
-  })
-
   await new Promise<void>((resolve) => {
-    shellProcess.on('close', () => resolve())
+    let settled = false
+
+    const settle = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+
+    shellProcess.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        console.log(warning(`${shellCmd} not found on your system.`))
+        console.log()
+        console.log(chalk.gray('  Connect manually with:'))
+        console.log(chalk.cyan(`  ${connectionString}`))
+        console.log()
+        console.log(chalk.gray(`  Install ${shellCmd}:`))
+        console.log(chalk.cyan(`  ${installHint}`))
+      } else {
+        console.log(error(`Failed to start ${shellCmd}: ${err.message}`))
+      }
+      settle()
+    })
+
+    shellProcess.on('close', settle)
   })
 }

@@ -71,19 +71,19 @@ export async function handleCreateForRestore(): Promise<{
   }
 
   const binarySpinner = createSpinner(
-    `Checking PostgreSQL ${version} binaries...`,
+    `Checking ${dbEngine.displayName} ${version} binaries...`,
   )
   binarySpinner.start()
 
   const isInstalled = await dbEngine.isBinaryInstalled(version)
   if (isInstalled) {
-    binarySpinner.succeed(`PostgreSQL ${version} binaries ready (cached)`)
+    binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries ready (cached)`)
   } else {
-    binarySpinner.text = `Downloading PostgreSQL ${version} binaries...`
+    binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
     await dbEngine.ensureBinaries(version, ({ message }) => {
       binarySpinner.text = message
     })
-    binarySpinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+    binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries downloaded`)
   }
 
   while (await containerManager.exists(containerName)) {
@@ -112,7 +112,7 @@ export async function handleCreateForRestore(): Promise<{
 
   initSpinner.succeed('Database cluster initialized')
 
-  const startSpinner = createSpinner('Starting PostgreSQL...')
+  const startSpinner = createSpinner(`Starting ${dbEngine.displayName}...`)
   startSpinner.start()
 
   const config = await containerManager.getConfig(containerName)
@@ -124,7 +124,7 @@ export async function handleCreateForRestore(): Promise<{
   await dbEngine.start(config)
   await containerManager.updateConfig(containerName, { status: 'running' })
 
-  startSpinner.succeed('PostgreSQL started')
+  startSpinner.succeed(`${dbEngine.displayName} started`)
 
   if (database !== 'postgres') {
     const dbSpinner = createSpinner(`Creating database "${database}"...`)
@@ -259,11 +259,18 @@ export async function handleRestore(): Promise<void> {
         message: 'Connection string:',
         validate: (input: string) => {
           if (!input) return true
-          if (
-            !input.startsWith('postgresql://') &&
-            !input.startsWith('postgres://')
-          ) {
-            return 'Connection string must start with postgresql:// or postgres://'
+          if (config.engine === 'mysql') {
+            if (!input.startsWith('mysql://')) {
+              return 'Connection string must start with mysql://'
+            }
+          } else {
+            // PostgreSQL
+            if (
+              !input.startsWith('postgresql://') &&
+              !input.startsWith('postgres://')
+            ) {
+              return 'Connection string must start with postgresql:// or postgres://'
+            }
           }
           return true
         },
@@ -300,15 +307,21 @@ export async function handleRestore(): Promise<void> {
 
         if (
           e.message.includes('pg_dump not found') ||
+          e.message.includes('mysqldump not found') ||
           e.message.includes('ENOENT')
         ) {
-          const installed = await promptInstallDependencies('pg_dump')
+          const missingTool = e.message.includes('mysqldump')
+            ? 'mysqldump'
+            : 'pg_dump'
+          const toolEngine = missingTool === 'mysqldump' ? 'mysql' : 'postgresql'
+          const installed = await promptInstallDependencies(missingTool, toolEngine as Engine)
           if (installed) {
             continue
           }
         } else {
+          const dumpTool = config.engine === 'mysql' ? 'mysqldump' : 'pg_dump'
           console.log()
-          console.log(error('pg_dump error:'))
+          console.log(error(`${dumpTool} error:`))
           console.log(chalk.gray(`  ${e.message}`))
           console.log()
         }
