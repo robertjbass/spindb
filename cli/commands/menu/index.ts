@@ -13,7 +13,7 @@ import {
 } from './container-handlers'
 import { handleBackup, handleRestore, handleClone } from './backup-handlers'
 import { handleEngines } from './engine-handlers'
-import { handleCheckUpdate } from './update-handlers'
+import { handleCheckUpdate, handleDoctor } from './update-handlers'
 import { type MenuChoice } from './shared'
 
 async function showMainMenu(): Promise<void> {
@@ -97,6 +97,7 @@ async function showMainMenu(): Promise<void> {
       disabled: hasEngines ? false : 'No engines installed',
     },
     new inquirer.Separator(),
+    { name: `${chalk.bgRed.white('+')} System health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
     { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
   ]
@@ -135,6 +136,9 @@ async function showMainMenu(): Promise<void> {
       break
     case 'engines':
       await handleEngines()
+      break
+    case 'doctor':
+      await handleDoctor()
       break
     case 'check-update':
       await handleCheckUpdate()

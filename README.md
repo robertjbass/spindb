@@ -364,11 +364,12 @@ spindb clone source-db new-db
 spindb start new-db
 ```
 
-#### `edit` - Rename, change port, or edit database config
+#### `edit` - Rename, change port, relocate, or edit database config
 
 ```bash
 spindb edit mydb --name newname              # Must be stopped
 spindb edit mydb --port 5433
+spindb edit mydb --relocate ~/new/path       # Move SQLite database file
 spindb edit mydb --set-config max_connections=300   # PostgreSQL config
 spindb edit mydb                             # Interactive mode
 ```

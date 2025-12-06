@@ -6,7 +6,7 @@
  */
 
 import { describe, it, before, after } from 'node:test'
-import { join, dirname, resolve } from 'path'
+import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync, renameSync } from 'fs'
 import { rm, mkdir } from 'fs/promises'
@@ -117,8 +117,6 @@ describe('SQLite Integration Tests', () => {
     await runScriptFile(containerName, SEED_FILE)
 
     // Query row count directly via sqlite3
-    const engine = getEngine(ENGINE)
-    const config = await containerManager.getConfig(containerName)
     const { exec } = await import('child_process')
     const { promisify } = await import('util')
     const execAsync = promisify(exec)

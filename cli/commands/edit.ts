@@ -1,12 +1,14 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, renameSync, mkdirSync } from 'fs'
-import { dirname, resolve } from 'path'
+import { existsSync, renameSync, mkdirSync, statSync } from 'fs'
+import { dirname, resolve, basename, join } from 'path'
+import { homedir } from 'os'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { getEngine } from '../../engines'
+import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
@@ -399,7 +401,38 @@ export const editCommand = new Command('edit')
             process.exit(1)
           }
 
-          const newPath = resolve(options.relocate)
+          // Expand ~ to home directory
+          let expandedPath = options.relocate
+          if (options.relocate === '~') {
+            expandedPath = homedir()
+          } else if (options.relocate.startsWith('~/')) {
+            expandedPath = join(homedir(), options.relocate.slice(2))
+          }
+
+          // Convert relative paths to absolute
+          if (!expandedPath.startsWith('/')) {
+            expandedPath = resolve(process.cwd(), expandedPath)
+          }
+
+          // Check if path looks like a file (has db extension) or directory
+          const hasDbExtension = /\.(sqlite3?|db)$/i.test(expandedPath)
+
+          // Treat as directory if:
+          // - ends with /
+          // - exists and is a directory
+          // - doesn't have a database file extension
+          const isDirectory = expandedPath.endsWith('/') ||
+            (existsSync(expandedPath) && statSync(expandedPath).isDirectory()) ||
+            !hasDbExtension
+
+          let newPath: string
+          if (isDirectory) {
+            const dirPath = expandedPath.endsWith('/') ? expandedPath.slice(0, -1) : expandedPath
+            const currentFileName = basename(config.database)
+            newPath = join(dirPath, currentFileName)
+          } else {
+            newPath = expandedPath
+          }
 
           // Check source file exists
           if (!existsSync(config.database)) {
@@ -409,10 +442,19 @@ export const editCommand = new Command('edit')
             process.exit(1)
           }
 
+          // Check if destination already exists
+          if (existsSync(newPath)) {
+            console.error(
+              error(`Destination file already exists: ${newPath}`),
+            )
+            process.exit(1)
+          }
+
           // Ensure target directory exists
           const targetDir = dirname(newPath)
           if (!existsSync(targetDir)) {
             mkdirSync(targetDir, { recursive: true })
+            console.log(info(`Created directory: ${targetDir}`))
           }
 
           const spinner = createSpinner(
@@ -424,10 +466,11 @@ export const editCommand = new Command('edit')
             // Move the file
             renameSync(config.database, newPath)
 
-            // Update the container config
+            // Update the container config and SQLite registry
             await containerManager.updateConfig(containerName, {
               database: newPath,
             })
+            await sqliteRegistry.update(containerName, { filePath: newPath })
 
             spinner.succeed(`Database relocated to ${newPath}`)
           } catch (err) {

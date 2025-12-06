@@ -48,6 +48,7 @@ See [Engines](#engines) section below for full engine status and details.
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
 - [ ] **Overwrite existing databases on restore** - Add `--force` or `--drop-existing` flag to restore/create commands to drop and recreate tables that already exist (currently fails if tables exist)
+- [ ] **Update doctor tool** - Add checks for database file permissions, container health, and engines
 
 ### Security (Pro)
 - [ ] **Password authentication** - Set passwords on container creation
@@ -142,8 +143,8 @@ pnpm test:mysql     # MySQL integration
 - MySQL: 3333-3335
 
 ### Test Coverage
-- **Unit tests:** 352 tests covering validation, error handling, version compatibility, SQLite registry
-- **Integration tests:** 28 tests (14 PostgreSQL + 14 MySQL) covering full container lifecycle
+- **Unit tests:** 358 tests covering validation, error handling, version compatibility, SQLite registry, relocation
+- **Integration tests:** 38 tests (14 PostgreSQL + 14 MySQL + 10 SQLite) covering full container lifecycle
 
 ---
 
@@ -242,7 +243,7 @@ Engine Emojis:
 |--------|-------------|--------------|-------|
 | PostgreSQL | `psql` | `pgcli` | Auto-completion, syntax highlighting |
 | MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
-| SQLite | `sqlite3` | `litecli` | Planned for v1.2 |
+| SQLite | `sqlite3` | `litecli` | Available in v0.9 |
 | Redis | `redis-cli` | `iredis` | Planned for v1.2 |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |

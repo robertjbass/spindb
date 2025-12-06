@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-12-06
+
 ### Added
 - **SQLite engine support** - File-based database engine, no server process required
   - Databases stored in project directories (CWD by default), not ~/.spindb/
   - Registry system at `~/.spindb/sqlite-registry.json` to track database file locations
-  - Full lifecycle support: create, delete, connect, backup, restore
+  - Full lifecycle support: create, delete, connect, backup, restore, rename
   - Create with `--path` option for custom file location
   - Enhanced CLI support with `litecli`
+  - Relocate databases with `spindb edit mydb --relocate ~/new/path`
+  - Status shows "available"/"missing" instead of "running"/"stopped"
 - **`doctor` command** - System health checks and diagnostics
   - Checks configuration validity and binary cache staleness
   - Reports container status across all engines
@@ -21,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verifies database tool availability
   - Interactive action menu to fix issues
   - JSON output with `--json` flag
+  - Available in both CLI (`spindb doctor`) and interactive menu
 - `logs` command to view container logs (`--follow`, `-n`, `--editor` options)
 - `--json` flag for `config show` and `url` commands
 - `status` alias for `info` command
@@ -30,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--set-config` flag for `edit` command to modify PostgreSQL config values
 - Interactive config editing in `edit` menu for PostgreSQL containers
 - Higher default `max_connections` (200) for new PostgreSQL and MySQL containers to support parallel builds (Next.js, etc.)
+- `--relocate` flag for `edit` command to move SQLite database files
+  - Supports tilde expansion (`~/path`), relative paths, and directories
+  - Auto-creates destination directories if needed
+  - Updates both container config and SQLite registry
 
 ### Changed
 - Refactored interactive menu from single 2749-line file into modular handler structure
@@ -37,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracted: `container-handlers.ts`, `backup-handlers.ts`, `shell-handlers.ts`, `sql-handlers.ts`, `engine-handlers.ts`, `update-handlers.ts`
   - Shared utilities in `shared.ts` (`MenuChoice` type, `pressEnterToContinue`)
 - Converted dynamic imports to static top-level imports across codebase for better maintainability
+- SQLite containers now properly rename via registry instead of container directories
+- Container list display improved for narrow terminals with emoji width handling
+
+### Fixed
+- SQLite container deletion now properly cleans up container directories in `~/.spindb/containers/sqlite/`
+- SQLite relocation now updates both container config and registry (prevents "missing" status)
+- Tilde expansion in paths (`~/path` now correctly expands to home directory)
+- SQLite creation no longer prompts for port
+- SQLite shell options now show sqlite3/litecli instead of psql/pgcli
+- Container rename now works correctly for SQLite containers
 
 ### Documentation
 - Comprehensive engine documentation in TODO.md (backup formats, binary sizes)

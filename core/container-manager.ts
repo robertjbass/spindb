@@ -297,13 +297,19 @@ export class ContainerManager {
 
     const { engine } = config
 
-    // SQLite: delete file and remove from registry
+    // SQLite: delete file, remove from registry, and clean up container directory
     if (engine === Engine.SQLite) {
       const entry = await sqliteRegistry.get(name)
       if (entry && existsSync(entry.filePath)) {
         await unlink(entry.filePath)
       }
       await sqliteRegistry.remove(name)
+
+      // Also remove the container directory (created by containerManager.create)
+      const containerPath = paths.getContainerPath(name, { engine })
+      if (existsSync(containerPath)) {
+        await rm(containerPath, { recursive: true, force: true })
+      }
       return
     }
 

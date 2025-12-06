@@ -4,7 +4,8 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
+import { rm } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
@@ -105,6 +106,26 @@ export async function cleanupTestContainers(): Promise<string[]> {
       deleted.push(container.name)
     } catch {
       // Ignore errors during cleanup
+    }
+  }
+
+  // Also clean up orphaned SQLite container directories
+  // (directories that exist but aren't in the registry)
+  const sqliteContainersDir = paths.getEngineContainersPath('sqlite')
+  if (existsSync(sqliteContainersDir)) {
+    const dirs = readdirSync(sqliteContainersDir, { withFileTypes: true })
+    for (const dir of dirs) {
+      if (dir.isDirectory() && dir.name.includes('-test')) {
+        try {
+          const dirPath = `${sqliteContainersDir}/${dir.name}`
+          await rm(dirPath, { recursive: true, force: true })
+          if (!deleted.includes(dir.name)) {
+            deleted.push(dir.name)
+          }
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
     }
   }
 
