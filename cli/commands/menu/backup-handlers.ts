@@ -259,11 +259,18 @@ export async function handleRestore(): Promise<void> {
         message: 'Connection string:',
         validate: (input: string) => {
           if (!input) return true
-          if (
-            !input.startsWith('postgresql://') &&
-            !input.startsWith('postgres://')
-          ) {
-            return 'Connection string must start with postgresql:// or postgres://'
+          if (config.engine === 'mysql') {
+            if (!input.startsWith('mysql://')) {
+              return 'Connection string must start with mysql://'
+            }
+          } else {
+            // PostgreSQL
+            if (
+              !input.startsWith('postgresql://') &&
+              !input.startsWith('postgres://')
+            ) {
+              return 'Connection string must start with postgresql:// or postgres://'
+            }
           }
           return true
         },
