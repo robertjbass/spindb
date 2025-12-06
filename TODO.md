@@ -2,6 +2,9 @@
 
 ## Roadmap
 
+### Maintenance
+- [ ] Review and update `EVALUATION.md` periodically (last updated: 2025-12-06, v0.9.0)
+
 ### v1.0 - Core Features (Complete)
 - [x] PostgreSQL container management (create, start, stop, delete)
 - [x] MySQL/MariaDB engine support
