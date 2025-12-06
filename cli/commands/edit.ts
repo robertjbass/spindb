@@ -1,6 +1,8 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
+import { existsSync, renameSync, mkdirSync } from 'fs'
+import { dirname, resolve } from 'path'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
@@ -9,6 +11,7 @@ import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { error, warning, success, info } from '../ui/theme'
+import { Engine } from '../../types'
 
 function isValidName(name: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
@@ -19,11 +22,17 @@ function isValidName(name: string): boolean {
  */
 async function promptEditAction(
   engine: string,
-): Promise<'name' | 'port' | 'config' | null> {
+): Promise<'name' | 'port' | 'config' | 'relocate' | null> {
   const choices = [
     { name: 'Rename container', value: 'name' },
-    { name: 'Change port', value: 'port' },
   ]
+
+  // SQLite: show relocate instead of port
+  if (engine === Engine.SQLite) {
+    choices.push({ name: 'Relocate database file', value: 'relocate' })
+  } else {
+    choices.push({ name: 'Change port', value: 'port' })
+  }
 
   // Only show config option for engines that support it
   if (engine === 'postgresql') {
@@ -42,7 +51,7 @@ async function promptEditAction(
   ])
 
   if (action === 'cancel') return null
-  return action as 'name' | 'port' | 'config'
+  return action as 'name' | 'port' | 'config' | 'relocate'
 }
 
 async function promptNewName(currentName: string): Promise<string | null> {
@@ -173,11 +182,67 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
   return newPort
 }
 
+/**
+ * Prompt for new file location (SQLite relocate)
+ */
+async function promptNewLocation(currentPath: string): Promise<string | null> {
+  console.log()
+  console.log(chalk.gray(`  Current location: ${currentPath}`))
+  console.log(chalk.gray('  Enter an absolute path or relative to current directory.'))
+  console.log()
+
+  const { newPath } = await inquirer.prompt<{ newPath: string }>([
+    {
+      type: 'input',
+      name: 'newPath',
+      message: 'New file location:',
+      default: currentPath,
+      validate: (input: string) => {
+        if (!input.trim()) return 'Path is required'
+        const resolvedPath = resolve(input)
+        if (!resolvedPath.endsWith('.sqlite') && !resolvedPath.endsWith('.db') && !resolvedPath.endsWith('.sqlite3')) {
+          return 'Path should end with .sqlite, .sqlite3, or .db'
+        }
+        return true
+      },
+    },
+  ])
+
+  const resolvedPath = resolve(newPath)
+
+  if (resolvedPath === currentPath) {
+    console.log(warning('Location unchanged'))
+    return null
+  }
+
+  // Check if target already exists
+  if (existsSync(resolvedPath)) {
+    const { overwrite } = await inquirer.prompt<{ overwrite: boolean }>([
+      {
+        type: 'confirm',
+        name: 'overwrite',
+        message: `File already exists at ${resolvedPath}. Overwrite?`,
+        default: false,
+      },
+    ])
+    if (!overwrite) {
+      console.log(warning('Relocate cancelled'))
+      return null
+    }
+  }
+
+  return resolvedPath
+}
+
 export const editCommand = new Command('edit')
-  .description('Edit container properties (rename, port, or database config)')
+  .description('Edit container properties (rename, port, relocate, or database config)')
   .argument('[name]', 'Container name')
   .option('-n, --name <newName>', 'New container name')
   .option('-p, --port <port>', 'New port number', parseInt)
+  .option(
+    '--relocate <path>',
+    'New file location for SQLite database (moves the file)',
+  )
   .option(
     '--set-config <setting>',
     'Set a database config value (e.g., max_connections=200)',
@@ -185,7 +250,7 @@ export const editCommand = new Command('edit')
   .action(
     async (
       name: string | undefined,
-      options: { name?: string; port?: number; setConfig?: string },
+      options: { name?: string; port?: number; relocate?: string; setConfig?: string },
     ) => {
       try {
         let containerName = name
@@ -216,6 +281,7 @@ export const editCommand = new Command('edit')
         if (
           options.name === undefined &&
           options.port === undefined &&
+          options.relocate === undefined &&
           options.setConfig === undefined
         ) {
           const action = await promptEditAction(config.engine)
@@ -232,6 +298,13 @@ export const editCommand = new Command('edit')
             const newPort = await promptNewPort(config.port)
             if (newPort) {
               options.port = newPort
+            } else {
+              return
+            }
+          } else if (action === 'relocate') {
+            const newLocation = await promptNewLocation(config.database)
+            if (newLocation) {
+              options.relocate = newLocation
             } else {
               return
             }
@@ -315,6 +388,52 @@ export const editCommand = new Command('edit')
               '  Note: Port change takes effect on next container start.',
             ),
           )
+        }
+
+        // Handle SQLite relocate
+        if (options.relocate) {
+          if (config.engine !== Engine.SQLite) {
+            console.error(
+              error('Relocate is only available for SQLite containers'),
+            )
+            process.exit(1)
+          }
+
+          const newPath = resolve(options.relocate)
+
+          // Check source file exists
+          if (!existsSync(config.database)) {
+            console.error(
+              error(`Source database file not found: ${config.database}`),
+            )
+            process.exit(1)
+          }
+
+          // Ensure target directory exists
+          const targetDir = dirname(newPath)
+          if (!existsSync(targetDir)) {
+            mkdirSync(targetDir, { recursive: true })
+          }
+
+          const spinner = createSpinner(
+            `Moving database to ${newPath}...`,
+          )
+          spinner.start()
+
+          try {
+            // Move the file
+            renameSync(config.database, newPath)
+
+            // Update the container config
+            await containerManager.updateConfig(containerName, {
+              database: newPath,
+            })
+
+            spinner.succeed(`Database relocated to ${newPath}`)
+          } catch (err) {
+            spinner.fail('Failed to relocate database')
+            throw err
+          }
         }
 
         // Handle config change

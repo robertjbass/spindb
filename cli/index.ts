@@ -24,6 +24,7 @@ import { selfUpdateCommand } from './commands/self-update'
 import { versionCommand } from './commands/version'
 import { runCommand } from './commands/run'
 import { logsCommand } from './commands/logs'
+import { doctorCommand } from './commands/doctor'
 import { updateManager } from '../core/update-manager'
 
 /**
@@ -123,6 +124,7 @@ export async function run(): Promise<void> {
   program.addCommand(versionCommand)
   program.addCommand(runCommand)
   program.addCommand(logsCommand)
+  program.addCommand(doctorCommand)
 
   // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {

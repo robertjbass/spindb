@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { spawn } from 'child_process'
+import { existsSync } from 'fs'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -7,18 +8,22 @@ import {
   isUsqlInstalled,
   isPgcliInstalled,
   isMycliInstalled,
+  isLitecliInstalled,
   detectPackageManager,
   installUsql,
   installPgcli,
   installMycli,
+  installLitecli,
   getUsqlManualInstructions,
   getPgcliManualInstructions,
   getMycliManualInstructions,
+  getLitecliManualInstructions,
 } from '../../core/dependency-manager'
 import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { error, warning, info, success } from '../ui/theme'
+import { Engine } from '../../types'
 
 export const connectCommand = new Command('connect')
   .alias('shell')
@@ -37,6 +42,11 @@ export const connectCommand = new Command('connect')
     'Use mycli for enhanced MySQL shell (dropdown auto-completion)',
   )
   .option('--install-mycli', 'Install mycli if not present, then connect')
+  .option(
+    '--litecli',
+    'Use litecli for enhanced SQLite shell (auto-completion, syntax highlighting)',
+  )
+  .option('--install-litecli', 'Install litecli if not present, then connect')
   .action(
     async (
       name: string | undefined,
@@ -48,6 +58,8 @@ export const connectCommand = new Command('connect')
         installPgcli?: boolean
         mycli?: boolean
         installMycli?: boolean
+        litecli?: boolean
+        installLitecli?: boolean
       },
     ) => {
       try {
@@ -55,9 +67,15 @@ export const connectCommand = new Command('connect')
 
         if (!containerName) {
           const containers = await containerManager.list()
-          const running = containers.filter((c) => c.status === 'running')
+          // SQLite containers are always "available" if file exists, server containers need to be running
+          const connectable = containers.filter((c) => {
+            if (c.engine === Engine.SQLite) {
+              return existsSync(c.database)
+            }
+            return c.status === 'running'
+          })
 
-          if (running.length === 0) {
+          if (connectable.length === 0) {
             if (containers.length === 0) {
               console.log(
                 warning('No containers found. Create one with: spindb create'),
@@ -73,7 +91,7 @@ export const connectCommand = new Command('connect')
           }
 
           const selected = await promptContainerSelect(
-            running,
+            connectable,
             'Select container to connect to:',
           )
           if (!selected) return
@@ -92,16 +110,29 @@ export const connectCommand = new Command('connect')
         const database =
           options.database ?? config.database ?? engineDefaults.superuser
 
-        const running = await processManager.isRunning(containerName, {
-          engine: engineName,
-        })
-        if (!running) {
-          console.error(
-            error(
-              `Container "${containerName}" is not running. Start it first.`,
-            ),
-          )
-          process.exit(1)
+        // SQLite: check file exists instead of running status
+        if (engineName === Engine.SQLite) {
+          if (!existsSync(config.database)) {
+            console.error(
+              error(
+                `SQLite database file not found: ${config.database}`,
+              ),
+            )
+            process.exit(1)
+          }
+        } else {
+          // Server databases need to be running
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          if (!running) {
+            console.error(
+              error(
+                `Container "${containerName}" is not running. Start it first.`,
+              ),
+            )
+            process.exit(1)
+          }
         }
 
         const engine = getEngine(engineName)
@@ -275,13 +306,74 @@ export const connectCommand = new Command('connect')
           }
         }
 
+        const useLitecli = options.litecli || options.installLitecli
+        if (useLitecli) {
+          if (engineName !== Engine.SQLite) {
+            console.error(error('litecli is only available for SQLite containers'))
+            if (engineName === 'postgresql') {
+              console.log(chalk.gray('For PostgreSQL, use: spindb connect --pgcli'))
+            } else if (engineName === 'mysql') {
+              console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
+            }
+            process.exit(1)
+          }
+
+          const litecliInstalled = await isLitecliInstalled()
+
+          if (!litecliInstalled) {
+            if (options.installLitecli) {
+              console.log(info('Installing litecli for enhanced SQLite shell...'))
+              const pm = await detectPackageManager()
+              if (pm) {
+                const result = await installLitecli(pm)
+                if (result.success) {
+                  console.log(success('litecli installed successfully!'))
+                  console.log()
+                } else {
+                  console.error(
+                    error(`Failed to install litecli: ${result.error}`),
+                  )
+                  console.log()
+                  console.log(chalk.gray('Manual installation:'))
+                  for (const instruction of getLitecliManualInstructions()) {
+                    console.log(chalk.cyan(`  ${instruction}`))
+                  }
+                  process.exit(1)
+                }
+              } else {
+                console.error(error('No supported package manager found'))
+                console.log()
+                console.log(chalk.gray('Manual installation:'))
+                for (const instruction of getLitecliManualInstructions()) {
+                  console.log(chalk.cyan(`  ${instruction}`))
+                }
+                process.exit(1)
+              }
+            } else {
+              console.error(error('litecli is not installed'))
+              console.log()
+              console.log(chalk.gray('Install litecli for enhanced SQLite shell:'))
+              console.log(chalk.cyan('  spindb connect --install-litecli'))
+              console.log()
+              console.log(chalk.gray('Or install manually:'))
+              for (const instruction of getLitecliManualInstructions()) {
+                console.log(chalk.cyan(`  ${instruction}`))
+              }
+              process.exit(1)
+            }
+          }
+        }
+
         console.log(info(`Connecting to ${containerName}:${database}...`))
         console.log()
 
         let clientCmd: string
         let clientArgs: string[]
 
-        if (usePgcli) {
+        if (useLitecli) {
+          clientCmd = 'litecli'
+          clientArgs = [config.database]
+        } else if (usePgcli) {
           clientCmd = 'pgcli'
           clientArgs = [connectionString]
         } else if (useMycli) {
@@ -298,6 +390,9 @@ export const connectCommand = new Command('connect')
         } else if (useUsql) {
           clientCmd = 'usql'
           clientArgs = [connectionString]
+        } else if (engineName === Engine.SQLite) {
+          clientCmd = 'sqlite3'
+          clientArgs = [config.database]
         } else if (engineName === 'mysql') {
           clientCmd = 'mysql'
           clientArgs = [
@@ -339,6 +434,12 @@ export const connectCommand = new Command('connect')
             } else if (clientCmd === 'mycli') {
               console.log(chalk.gray('  Install mycli:'))
               console.log(chalk.cyan('  brew install mycli'))
+            } else if (clientCmd === 'litecli') {
+              console.log(chalk.gray('  Install litecli:'))
+              console.log(chalk.cyan('  brew install litecli'))
+            } else if (clientCmd === 'sqlite3') {
+              console.log(chalk.gray('  sqlite3 comes with macOS.'))
+              console.log(chalk.gray('  If not available, check your PATH.'))
             } else if (engineName === 'mysql') {
               console.log(chalk.gray('  On macOS with Homebrew:'))
               console.log(chalk.cyan('  brew install mysql-client'))

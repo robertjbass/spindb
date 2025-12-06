@@ -290,6 +290,42 @@ const mysqlDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// SQLite Dependencies
+// =============================================================================
+
+const sqliteDependencies: EngineDependencies = {
+  engine: 'sqlite',
+  displayName: 'SQLite',
+  dependencies: [
+    {
+      name: 'sqlite3',
+      binary: 'sqlite3',
+      description: 'SQLite command-line interface',
+      packages: {
+        brew: { package: 'sqlite' },
+        apt: { package: 'sqlite3' },
+        yum: { package: 'sqlite' },
+        dnf: { package: 'sqlite' },
+        pacman: { package: 'sqlite' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install sqlite',
+          'Note: macOS includes sqlite3 by default in /usr/bin/sqlite3',
+        ],
+        linux: [
+          'Debian/Ubuntu: sudo apt install sqlite3',
+          'CentOS/RHEL: sudo yum install sqlite',
+          'Fedora: sudo dnf install sqlite',
+          'Arch: sudo pacman -S sqlite',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -381,6 +417,35 @@ export const mycliDependency: Dependency = {
   },
 }
 
+/**
+ * litecli - SQLite CLI with auto-completion and syntax highlighting
+ * https://github.com/dbcli/litecli
+ */
+export const litecliDependency: Dependency = {
+  name: 'litecli',
+  binary: 'litecli',
+  description:
+    'SQLite CLI with intelligent auto-completion and syntax highlighting',
+  packages: {
+    brew: { package: 'litecli' },
+    apt: { package: 'litecli' },
+    dnf: { package: 'litecli' },
+    yum: { package: 'litecli' },
+    pacman: { package: 'litecli' },
+  },
+  manualInstall: {
+    darwin: [
+      'Install with Homebrew: brew install litecli',
+      'Or with pip: pip install litecli',
+    ],
+    linux: [
+      'Debian/Ubuntu: sudo apt install litecli',
+      'Fedora: sudo dnf install litecli',
+      'Or with pip: pip install litecli',
+    ],
+  },
+}
+
 // =============================================================================
 // Registry
 // =============================================================================
@@ -391,6 +456,7 @@ export const mycliDependency: Dependency = {
 export const engineDependencies: EngineDependencies[] = [
   postgresqlDependencies,
   mysqlDependencies,
+  sqliteDependencies,
 ]
 
 /**

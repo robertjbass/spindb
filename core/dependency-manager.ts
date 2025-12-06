@@ -18,6 +18,7 @@ import {
   usqlDependency,
   pgcliDependency,
   mycliDependency,
+  litecliDependency,
 } from '../config/os-dependencies'
 import { platformService } from './platform-service'
 import { configManager } from './config-manager'
@@ -397,4 +398,21 @@ export function getMycliManualInstructions(
   platform: Platform = getCurrentPlatform(),
 ): string[] {
   return getManualInstallInstructions(mycliDependency, platform)
+}
+
+export async function isLitecliInstalled(): Promise<boolean> {
+  const status = await checkDependency(litecliDependency)
+  return status.installed
+}
+
+export async function installLitecli(
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult> {
+  return installDependency(litecliDependency, packageManager)
+}
+
+export function getLitecliManualInstructions(
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  return getManualInstallInstructions(litecliDependency, platform)
 }

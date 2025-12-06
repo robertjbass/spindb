@@ -17,6 +17,7 @@ export type ContainerConfig = {
 export enum Engine {
   PostgreSQL = 'postgresql',
   MySQL = 'mysql',
+  SQLite = 'sqlite',
 }
 
 export type ProgressCallback = (progress: {
@@ -100,9 +101,12 @@ export type BinaryTool =
   | 'mysqlpump'
   | 'mysqld'
   | 'mysqladmin'
+  // SQLite tools
+  | 'sqlite3'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
+  | 'litecli'
   | 'usql'
 
 /**
@@ -137,9 +141,12 @@ export type SpinDBConfig = {
     mysqlpump?: BinaryConfig
     mysqld?: BinaryConfig
     mysqladmin?: BinaryConfig
+    // SQLite tools
+    sqlite3?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig
+    litecli?: BinaryConfig
     usql?: BinaryConfig
   }
   // Default settings
@@ -156,4 +163,23 @@ export type SpinDBConfig = {
     latestVersion?: string // Latest version found from registry
     autoCheckEnabled?: boolean // Default true, user can disable
   }
+}
+
+/**
+ * SQLite registry entry - tracks external database files
+ * Unlike PostgreSQL/MySQL, SQLite databases are stored in user project directories
+ */
+export type SQLiteRegistryEntry = {
+  name: string // Container name (used in spindb commands)
+  filePath: string // Absolute path to .sqlite file
+  created: string // ISO timestamp
+  lastVerified?: string // ISO timestamp of last existence check
+}
+
+/**
+ * SQLite registry stored at ~/.spindb/sqlite-registry.json
+ */
+export type SQLiteRegistry = {
+  version: 1
+  entries: SQLiteRegistryEntry[]
 }

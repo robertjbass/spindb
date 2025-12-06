@@ -1,13 +1,14 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
+import { existsSync } from 'fs'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
 import { error, info, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import type { ContainerConfig } from '../../types'
+import { Engine, type ContainerConfig } from '../../types'
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -16,7 +17,13 @@ function formatDate(dateString: string): string {
 
 async function getActualStatus(
   config: ContainerConfig,
-): Promise<'running' | 'stopped'> {
+): Promise<'running' | 'stopped' | 'available' | 'missing'> {
+  // SQLite: check file existence instead of running status
+  if (config.engine === Engine.SQLite) {
+    const fileExists = existsSync(config.database)
+    return fileExists ? 'available' : 'missing'
+  }
+
   const running = await processManager.isRunning(config.name, {
     engine: config.engine,
   })
@@ -51,10 +58,21 @@ async function displayContainerInfo(
   }
 
   const icon = getEngineIcon(config.engine)
-  const statusDisplay =
-    actualStatus === 'running'
-      ? chalk.green('● running')
-      : chalk.gray('○ stopped')
+  const isSQLite = config.engine === Engine.SQLite
+
+  // Status display based on engine type
+  let statusDisplay: string
+  if (isSQLite) {
+    statusDisplay =
+      actualStatus === 'available'
+        ? chalk.blue('🔵 available')
+        : chalk.gray('⚪ missing')
+  } else {
+    statusDisplay =
+      actualStatus === 'running'
+        ? chalk.green('● running')
+        : chalk.gray('○ stopped')
+  }
 
   console.log()
   console.log(header(`Container: ${config.name}`))
@@ -67,26 +85,41 @@ async function displayContainerInfo(
   console.log(
     chalk.gray('  ') + chalk.white('Status:'.padEnd(14)) + statusDisplay,
   )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Port:'.padEnd(14)) +
-      chalk.green(String(config.port)),
-  )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Database:'.padEnd(14)) +
-      chalk.yellow(config.database),
-  )
+
+  // Show file path for SQLite, port for server databases
+  if (isSQLite) {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('File:'.padEnd(14)) +
+        chalk.green(config.database),
+    )
+  } else {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Port:'.padEnd(14)) +
+        chalk.green(String(config.port)),
+    )
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Database:'.padEnd(14)) +
+        chalk.yellow(config.database),
+    )
+  }
+
   console.log(
     chalk.gray('  ') +
       chalk.white('Created:'.padEnd(14)) +
       chalk.gray(formatDate(config.created)),
   )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Data Dir:'.padEnd(14)) +
-      chalk.gray(dataDir),
-  )
+
+  // Don't show data dir for SQLite (file path is already shown)
+  if (!isSQLite) {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Data Dir:'.padEnd(14)) +
+        chalk.gray(dataDir),
+    )
+  }
   if (config.clonedFrom) {
     console.log(
       chalk.gray('  ') +
@@ -142,20 +175,40 @@ async function displayAllContainersInfo(
 
   for (const container of containers) {
     const actualStatus = await getActualStatus(container)
-    const statusDisplay =
-      actualStatus === 'running'
-        ? chalk.green('● running')
-        : chalk.gray('○ stopped')
+    const isSQLite = container.engine === Engine.SQLite
+
+    // Status display based on engine type
+    let statusDisplay: string
+    if (isSQLite) {
+      statusDisplay =
+        actualStatus === 'available'
+          ? chalk.blue('🔵 available')
+          : chalk.gray('⚪ missing')
+    } else {
+      statusDisplay =
+        actualStatus === 'running'
+          ? chalk.green('● running')
+          : chalk.gray('○ stopped')
+    }
 
     const icon = getEngineIcon(container.engine)
     const engineDisplay = `${icon} ${container.engine}`
+
+    // Show truncated file path for SQLite instead of port
+    let portOrPath: string
+    if (isSQLite) {
+      const fileName = container.database.split('/').pop() || container.database
+      portOrPath = fileName.length > 7 ? fileName.slice(0, 6) + '…' : fileName
+    } else {
+      portOrPath = String(container.port)
+    }
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(container.name.padEnd(18)) +
         chalk.white(engineDisplay.padEnd(13)) +
         chalk.yellow(container.version.padEnd(10)) +
-        chalk.green(String(container.port).padEnd(8)) +
+        chalk.green(portOrPath.padEnd(8)) +
         chalk.gray(container.database.padEnd(16)) +
         statusDisplay,
     )

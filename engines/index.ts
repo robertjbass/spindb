@@ -1,5 +1,6 @@
 import { postgresqlEngine } from './postgresql'
 import { mysqlEngine } from './mysql'
+import { sqliteEngine } from './sqlite'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
@@ -14,6 +15,9 @@ export const engines: Record<string, BaseEngine> = {
   // MySQL and aliases
   mysql: mysqlEngine,
   mariadb: mysqlEngine, // MariaDB is MySQL-compatible
+  // SQLite and aliases
+  sqlite: sqliteEngine,
+  lite: sqliteEngine,
 }
 
 /**

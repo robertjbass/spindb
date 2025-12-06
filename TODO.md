@@ -142,7 +142,7 @@ pnpm test:mysql     # MySQL integration
 - MySQL: 3333-3335
 
 ### Test Coverage
-- **Unit tests:** 141 tests covering validation, error handling, version compatibility
+- **Unit tests:** 352 tests covering validation, error handling, version compatibility, SQLite registry
 - **Integration tests:** 28 tests (14 PostgreSQL + 14 MySQL) covering full container lifecycle
 
 ---
@@ -155,12 +155,12 @@ pnpm test:mysql     # MySQL integration
 |--------|--------|---------------|-------------|-------|
 | 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-17 |
 | 🐬 **MySQL** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Also supports MariaDB as drop-in replacement |
+| 🪶 **SQLite** | ✅ Complete | System | N/A (system) | File-based, stores in project directories |
 
 ### Planned
 
 | Engine | Status | Type | Binary Size | Notes |
 |--------|--------|------|-------------|-------|
-| 🪶 **SQLite** | 🔜 Planned | File-based | ~500 KB | Extremely lightweight, embedded library |
 | 🔴 **Redis** | 🔜 Planned | In-memory | ~3-5 MB | Lightweight server binary |
 | 🍃 **MongoDB** | 🔜 Planned | Document DB | ~200-300 MB | Large binary, may use system install like MySQL |
 
@@ -228,6 +228,14 @@ Currently MariaDB is treated as a drop-in replacement for MySQL on Linux systems
 
 For now, the MySQL engine's MariaDB support is sufficient for most use cases.
 
+Engine Emojis:
+🦭 MariaDB
+🐬 MySQL
+🐘 Postgres
+🍃 MongoDB
+🔴 Redis
+🪶 SQLite
+
 ### Enhanced CLI Tools
 
 | Engine | Standard CLI | Enhanced CLI | Notes |
@@ -239,3 +247,5 @@ For now, the MySQL engine's MariaDB support is sufficient for most use cases.
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
 
+### Packaging
+- [ ] Consider Bun support for binaries to create smaller, faster distribution packages for faster startup and smaller downloads

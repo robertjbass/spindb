@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SQLite engine support** - File-based database engine, no server process required
+  - Databases stored in project directories (CWD by default), not ~/.spindb/
+  - Registry system at `~/.spindb/sqlite-registry.json` to track database file locations
+  - Full lifecycle support: create, delete, connect, backup, restore
+  - Create with `--path` option for custom file location
+  - Enhanced CLI support with `litecli`
+- **`doctor` command** - System health checks and diagnostics
+  - Checks configuration validity and binary cache staleness
+  - Reports container status across all engines
+  - Detects orphaned SQLite registry entries (files deleted outside SpinDB)
+  - Verifies database tool availability
+  - Interactive action menu to fix issues
+  - JSON output with `--json` flag
 - `logs` command to view container logs (`--follow`, `-n`, `--editor` options)
 - `--json` flag for `config show` and `url` commands
 - `status` alias for `info` command

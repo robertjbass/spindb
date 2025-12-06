@@ -59,6 +59,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
+  sqlite: {
+    defaultVersion: '3',
+    defaultPort: 0, // File-based, no port
+    portRange: { start: 0, end: 0 }, // N/A
+    supportedVersions: ['3'],
+    latestVersion: '3',
+    superuser: '', // No authentication
+    connectionScheme: 'sqlite',
+    logFileName: '', // No log file
+    pidFileName: '', // No PID file (no server process)
+    dataSubdir: '', // File is the data
+    clientTools: ['sqlite3'],
+    maxConnections: 0, // N/A - file-based
+  },
 }
 
 /**
