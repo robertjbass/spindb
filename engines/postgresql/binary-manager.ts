@@ -2,7 +2,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import chalk from 'chalk'
 import { createSpinner } from '../../cli/ui/spinner'
-import { warning, error as themeError, success } from '../../cli/ui/theme'
+import { uiWarning, uiError, uiSuccess } from '../../cli/ui/theme'
 import {
   detectPackageManager as detectPM,
   installEngineDependencies,
@@ -311,7 +311,7 @@ export async function installPostgresBinaries(): Promise<boolean> {
   const packageManager = await detectPM()
   if (!packageManager) {
     spinner.fail('No supported package manager found')
-    console.log(themeError('Please install PostgreSQL client tools manually:'))
+    console.log(uiError('Please install PostgreSQL client tools manually:'))
 
     // Show platform-specific instructions from the registry
     const platform = getCurrentPlatform()
@@ -348,21 +348,21 @@ export async function installPostgresBinaries(): Promise<boolean> {
 
     if (allSuccess) {
       console.log()
-      console.log(success('PostgreSQL client tools installed successfully'))
+      console.log(uiSuccess('PostgreSQL client tools installed successfully'))
       return true
     } else {
       const failed = results.filter((r) => !r.success)
       console.log()
-      console.log(themeError('Some installations failed:'))
+      console.log(uiError('Some installations failed:'))
       for (const f of failed) {
-        console.log(themeError(`  ${f.dependency.name}: ${f.error}`))
+        console.log(uiError(`  ${f.dependency.name}: ${f.error}`))
       }
       return false
     }
   } catch (error: unknown) {
     console.log()
-    console.log(themeError('Failed to install PostgreSQL client tools'))
-    console.log(warning('Please install manually'))
+    console.log(uiError('Failed to install PostgreSQL client tools'))
+    console.log(uiWarning('Please install manually'))
     if (error instanceof Error) {
       console.log(chalk.gray(`Error details: ${error.message}`))
     }
@@ -408,7 +408,7 @@ export async function updatePostgresClientTools(): Promise<boolean> {
 
       spinner.succeed('PostgreSQL client tools updated')
       console.log(
-        success(
+        uiSuccess(
           `Client tools successfully linked to PostgreSQL ${latestMajor}`,
         ),
       )
@@ -418,13 +418,13 @@ export async function updatePostgresClientTools(): Promise<boolean> {
       // For other package managers, use the standard update
       await execWithTimeout(packageManager.updateCommand('postgresql'), 120000)
       spinner.succeed('PostgreSQL client tools updated')
-      console.log(success('Update completed successfully'))
+      console.log(uiSuccess('Update completed successfully'))
       return true
     }
   } catch (error: unknown) {
     spinner.fail('Update failed')
-    console.log(themeError('Failed to update PostgreSQL client tools'))
-    console.log(warning('Please update manually:'))
+    console.log(uiError('Failed to update PostgreSQL client tools'))
+    console.log(uiWarning('Please update manually:'))
 
     if (packageManager.name === 'brew') {
       const olderVersions = ['14', '15', '16'].filter((v) => v !== latestMajor)
@@ -473,12 +473,12 @@ export async function updatePostgresBinaries(): Promise<boolean> {
   try {
     await execWithTimeout(packageManager.updateCommand('postgresql'), 120000) // 2 minute timeout
     updateSpinner.succeed('PostgreSQL client tools updated')
-    console.log(success('Update completed successfully'))
+    console.log(uiSuccess('Update completed successfully'))
     return true
   } catch (error: unknown) {
     updateSpinner.fail('Update failed')
-    console.log(themeError('Failed to update PostgreSQL client tools'))
-    console.log(warning('Please update manually:'))
+    console.log(uiError('Failed to update PostgreSQL client tools'))
+    console.log(uiWarning('Please update manually:'))
     console.log(`  ${packageManager.updateCommand('postgresql')}`)
     if (error instanceof Error) {
       console.log(chalk.gray(`Error details: ${error.message}`))
@@ -505,7 +505,7 @@ export async function ensurePostgresBinary(
       return { success: false, info: null, action: 'install_required' }
     }
 
-    console.log(warning(`${binary} not found on your system`))
+    console.log(uiWarning(`${binary} not found on your system`))
     const success = await installPostgresBinaries()
     if (!success) {
       return { success: false, info: null, action: 'install_failed' }
@@ -527,13 +527,13 @@ export async function ensurePostgresBinary(
     }
 
     console.log(
-      warning(
+      uiWarning(
         `Your ${binary} version (${info.version}) is incompatible with the dump file`,
       ),
     )
     if (info.requiredVersion) {
       console.log(
-        warning(`Required version: ${info.requiredVersion} or compatible`),
+        uiWarning(`Required version: ${info.requiredVersion} or compatible`),
       )
     }
 

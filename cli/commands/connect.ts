@@ -22,7 +22,7 @@ import {
 import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
-import { error, warning, info, success } from '../ui/theme'
+import { uiError, uiWarning, uiInfo, uiSuccess } from '../ui/theme'
 import { Engine } from '../../types'
 
 export const connectCommand = new Command('connect')
@@ -78,11 +78,13 @@ export const connectCommand = new Command('connect')
           if (connectable.length === 0) {
             if (containers.length === 0) {
               console.log(
-                warning('No containers found. Create one with: spindb create'),
+                uiWarning(
+                  'No containers found. Create one with: spindb create',
+                ),
               )
             } else {
               console.log(
-                warning(
+                uiWarning(
                   'No running containers. Start one first with: spindb start',
                 ),
               )
@@ -100,7 +102,7 @@ export const connectCommand = new Command('connect')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -114,9 +116,7 @@ export const connectCommand = new Command('connect')
         if (engineName === Engine.SQLite) {
           if (!existsSync(config.database)) {
             console.error(
-              error(
-                `SQLite database file not found: ${config.database}`,
-              ),
+              uiError(`SQLite database file not found: ${config.database}`),
             )
             process.exit(1)
           }
@@ -127,7 +127,7 @@ export const connectCommand = new Command('connect')
           })
           if (!running) {
             console.error(
-              error(
+              uiError(
                 `Container "${containerName}" is not running. Start it first.`,
               ),
             )
@@ -145,17 +145,17 @@ export const connectCommand = new Command('connect')
           if (!usqlInstalled) {
             if (options.installTui) {
               console.log(
-                info('Installing usql for enhanced shell experience...'),
+                uiInfo('Installing usql for enhanced shell experience...'),
               )
               const pm = await detectPackageManager()
               if (pm) {
                 const result = await installUsql(pm)
                 if (result.success) {
-                  console.log(success('usql installed successfully!'))
+                  console.log(uiSuccess('usql installed successfully!'))
                   console.log()
                 } else {
                   console.error(
-                    error(`Failed to install usql: ${result.error}`),
+                    uiError(`Failed to install usql: ${result.error}`),
                   )
                   console.log()
                   console.log(chalk.gray('Manual installation:'))
@@ -165,7 +165,7 @@ export const connectCommand = new Command('connect')
                   process.exit(1)
                 }
               } else {
-                console.error(error('No supported package manager found'))
+                console.error(uiError('No supported package manager found'))
                 console.log()
                 console.log(chalk.gray('Manual installation:'))
                 for (const instruction of getUsqlManualInstructions()) {
@@ -174,7 +174,7 @@ export const connectCommand = new Command('connect')
                 process.exit(1)
               }
             } else {
-              console.error(error('usql is not installed'))
+              console.error(uiError('usql is not installed'))
               console.log()
               console.log(
                 chalk.gray('Install usql for enhanced shell experience:'),
@@ -194,7 +194,7 @@ export const connectCommand = new Command('connect')
         if (usePgcli) {
           if (engineName !== 'postgresql') {
             console.error(
-              error('pgcli is only available for PostgreSQL containers'),
+              uiError('pgcli is only available for PostgreSQL containers'),
             )
             console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
             process.exit(1)
@@ -205,17 +205,17 @@ export const connectCommand = new Command('connect')
           if (!pgcliInstalled) {
             if (options.installPgcli) {
               console.log(
-                info('Installing pgcli for enhanced PostgreSQL shell...'),
+                uiInfo('Installing pgcli for enhanced PostgreSQL shell...'),
               )
               const pm = await detectPackageManager()
               if (pm) {
                 const result = await installPgcli(pm)
                 if (result.success) {
-                  console.log(success('pgcli installed successfully!'))
+                  console.log(uiSuccess('pgcli installed successfully!'))
                   console.log()
                 } else {
                   console.error(
-                    error(`Failed to install pgcli: ${result.error}`),
+                    uiError(`Failed to install pgcli: ${result.error}`),
                   )
                   console.log()
                   console.log(chalk.gray('Manual installation:'))
@@ -225,7 +225,7 @@ export const connectCommand = new Command('connect')
                   process.exit(1)
                 }
               } else {
-                console.error(error('No supported package manager found'))
+                console.error(uiError('No supported package manager found'))
                 console.log()
                 console.log(chalk.gray('Manual installation:'))
                 for (const instruction of getPgcliManualInstructions()) {
@@ -234,7 +234,7 @@ export const connectCommand = new Command('connect')
                 process.exit(1)
               }
             } else {
-              console.error(error('pgcli is not installed'))
+              console.error(uiError('pgcli is not installed'))
               console.log()
               console.log(
                 chalk.gray('Install pgcli for enhanced PostgreSQL shell:'),
@@ -253,7 +253,9 @@ export const connectCommand = new Command('connect')
         const useMycli = options.mycli || options.installMycli
         if (useMycli) {
           if (engineName !== 'mysql') {
-            console.error(error('mycli is only available for MySQL containers'))
+            console.error(
+              uiError('mycli is only available for MySQL containers'),
+            )
             console.log(
               chalk.gray('For PostgreSQL, use: spindb connect --pgcli'),
             )
@@ -264,16 +266,18 @@ export const connectCommand = new Command('connect')
 
           if (!mycliInstalled) {
             if (options.installMycli) {
-              console.log(info('Installing mycli for enhanced MySQL shell...'))
+              console.log(
+                uiInfo('Installing mycli for enhanced MySQL shell...'),
+              )
               const pm = await detectPackageManager()
               if (pm) {
                 const result = await installMycli(pm)
                 if (result.success) {
-                  console.log(success('mycli installed successfully!'))
+                  console.log(uiSuccess('mycli installed successfully!'))
                   console.log()
                 } else {
                   console.error(
-                    error(`Failed to install mycli: ${result.error}`),
+                    uiError(`Failed to install mycli: ${result.error}`),
                   )
                   console.log()
                   console.log(chalk.gray('Manual installation:'))
@@ -283,7 +287,7 @@ export const connectCommand = new Command('connect')
                   process.exit(1)
                 }
               } else {
-                console.error(error('No supported package manager found'))
+                console.error(uiError('No supported package manager found'))
                 console.log()
                 console.log(chalk.gray('Manual installation:'))
                 for (const instruction of getMycliManualInstructions()) {
@@ -292,7 +296,7 @@ export const connectCommand = new Command('connect')
                 process.exit(1)
               }
             } else {
-              console.error(error('mycli is not installed'))
+              console.error(uiError('mycli is not installed'))
               console.log()
               console.log(chalk.gray('Install mycli for enhanced MySQL shell:'))
               console.log(chalk.cyan('  spindb connect --install-mycli'))
@@ -309,9 +313,13 @@ export const connectCommand = new Command('connect')
         const useLitecli = options.litecli || options.installLitecli
         if (useLitecli) {
           if (engineName !== Engine.SQLite) {
-            console.error(error('litecli is only available for SQLite containers'))
+            console.error(
+              uiError('litecli is only available for SQLite containers'),
+            )
             if (engineName === 'postgresql') {
-              console.log(chalk.gray('For PostgreSQL, use: spindb connect --pgcli'))
+              console.log(
+                chalk.gray('For PostgreSQL, use: spindb connect --pgcli'),
+              )
             } else if (engineName === 'mysql') {
               console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
             }
@@ -322,16 +330,18 @@ export const connectCommand = new Command('connect')
 
           if (!litecliInstalled) {
             if (options.installLitecli) {
-              console.log(info('Installing litecli for enhanced SQLite shell...'))
+              console.log(
+                uiInfo('Installing litecli for enhanced SQLite shell...'),
+              )
               const pm = await detectPackageManager()
               if (pm) {
                 const result = await installLitecli(pm)
                 if (result.success) {
-                  console.log(success('litecli installed successfully!'))
+                  console.log(uiSuccess('litecli installed successfully!'))
                   console.log()
                 } else {
                   console.error(
-                    error(`Failed to install litecli: ${result.error}`),
+                    uiError(`Failed to install litecli: ${result.error}`),
                   )
                   console.log()
                   console.log(chalk.gray('Manual installation:'))
@@ -341,7 +351,7 @@ export const connectCommand = new Command('connect')
                   process.exit(1)
                 }
               } else {
-                console.error(error('No supported package manager found'))
+                console.error(uiError('No supported package manager found'))
                 console.log()
                 console.log(chalk.gray('Manual installation:'))
                 for (const instruction of getLitecliManualInstructions()) {
@@ -350,9 +360,11 @@ export const connectCommand = new Command('connect')
                 process.exit(1)
               }
             } else {
-              console.error(error('litecli is not installed'))
+              console.error(uiError('litecli is not installed'))
               console.log()
-              console.log(chalk.gray('Install litecli for enhanced SQLite shell:'))
+              console.log(
+                chalk.gray('Install litecli for enhanced SQLite shell:'),
+              )
               console.log(chalk.cyan('  spindb connect --install-litecli'))
               console.log()
               console.log(chalk.gray('Or install manually:'))
@@ -364,7 +376,7 @@ export const connectCommand = new Command('connect')
           }
         }
 
-        console.log(info(`Connecting to ${containerName}:${database}...`))
+        console.log(uiInfo(`Connecting to ${containerName}:${database}...`))
         console.log()
 
         let clientCmd: string
@@ -415,7 +427,7 @@ export const connectCommand = new Command('connect')
 
         clientProcess.on('error', (err: NodeJS.ErrnoException) => {
           if (err.code === 'ENOENT') {
-            console.log(warning(`${clientCmd} not found on your system.`))
+            console.log(uiWarning(`${clientCmd} not found on your system.`))
             console.log()
             console.log(
               chalk.gray('  Install client tools or connect manually:'),
@@ -451,16 +463,16 @@ export const connectCommand = new Command('connect')
             }
             console.log()
           } else {
-            console.error(error(err.message))
+            console.error(uiError(err.message))
           }
         })
 
         await new Promise<void>((resolve) => {
           clientProcess.on('close', () => resolve())
         })
-      } catch (err) {
-        const e = err as Error
-        console.error(error(e.message))
+      } catch (error) {
+        const e = error as Error
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

@@ -11,7 +11,7 @@ import {
   promptInstallDependencies,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { success, error, warning } from '../ui/theme'
+import { uiSuccess, uiError, uiWarning } from '../ui/theme'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
@@ -50,11 +50,13 @@ export const restoreCommand = new Command('restore')
           if (running.length === 0) {
             if (containers.length === 0) {
               console.log(
-                warning('No containers found. Create one with: spindb create'),
+                uiWarning(
+                  'No containers found. Create one with: spindb create',
+                ),
               )
             } else {
               console.log(
-                warning(
+                uiWarning(
                   'No running containers. Start one first with: spindb start',
                 ),
               )
@@ -72,7 +74,7 @@ export const restoreCommand = new Command('restore')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -83,7 +85,7 @@ export const restoreCommand = new Command('restore')
         })
         if (!running) {
           console.error(
-            error(
+            uiError(
               `Container "${containerName}" is not running. Start it first.`,
             ),
           )
@@ -113,7 +115,7 @@ export const restoreCommand = new Command('restore')
           missingDeps = await getMissingDependencies(config.engine)
           if (missingDeps.length > 0) {
             console.error(
-              error(
+              uiError(
                 `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
               ),
             )
@@ -134,7 +136,7 @@ export const restoreCommand = new Command('restore')
 
           if (engineName === 'postgresql' && !isPgUrl) {
             console.error(
-              error(
+              uiError(
                 'Connection string must start with postgresql:// or postgres:// for PostgreSQL containers',
               ),
             )
@@ -143,7 +145,7 @@ export const restoreCommand = new Command('restore')
 
           if (engineName === 'mysql' && !isMysqlUrl) {
             console.error(
-              error(
+              uiError(
                 'Connection string must start with mysql:// for MySQL containers',
               ),
             )
@@ -152,7 +154,7 @@ export const restoreCommand = new Command('restore')
 
           if (!isPgUrl && !isMysqlUrl) {
             console.error(
-              error(
+              uiError(
                 'Connection string must start with postgresql://, postgres://, or mysql://',
               ),
             )
@@ -181,8 +183,8 @@ export const restoreCommand = new Command('restore')
               dumpSpinner.succeed('Dump created from remote database')
               backupPath = tempDumpPath
               dumpSuccess = true
-            } catch (err) {
-              const e = err as Error
+            } catch (error) {
+              const e = error as Error
               dumpSpinner.fail('Failed to create dump')
 
               const dumpTool = engineName === 'mysql' ? 'mysqldump' : 'pg_dump'
@@ -201,19 +203,19 @@ export const restoreCommand = new Command('restore')
               }
 
               console.log()
-              console.error(error(`${dumpTool} error:`))
+              console.error(uiError(`${dumpTool} error:`))
               console.log(chalk.gray(`  ${e.message}`))
               process.exit(1)
             }
           }
 
           if (!dumpSuccess) {
-            console.error(error('Failed to create dump after retries'))
+            console.error(uiError('Failed to create dump after retries'))
             process.exit(1)
           }
         } else {
           if (!backupPath) {
-            console.error(error('Backup file path is required'))
+            console.error(uiError('Backup file path is required'))
             console.log(
               chalk.gray('  Usage: spindb restore <container> <backup-file>'),
             )
@@ -226,7 +228,7 @@ export const restoreCommand = new Command('restore')
           }
 
           if (!existsSync(backupPath)) {
-            console.error(error(`Backup file not found: ${backupPath}`))
+            console.error(uiError(`Backup file not found: ${backupPath}`))
             process.exit(1)
           }
         }
@@ -237,7 +239,7 @@ export const restoreCommand = new Command('restore')
         }
 
         if (!backupPath) {
-          console.error(error('No backup path specified'))
+          console.error(uiError('No backup path specified'))
           process.exit(1)
         }
 
@@ -347,7 +349,7 @@ export const restoreCommand = new Command('restore')
           databaseName,
         )
         console.log()
-        console.log(success(`Database "${databaseName}" restored`))
+        console.log(uiSuccess(`Database "${databaseName}" restored`))
         console.log()
         console.log(chalk.gray('  Connection string:'))
         console.log(chalk.cyan(`  ${connectionString}`))
@@ -365,8 +367,8 @@ export const restoreCommand = new Command('restore')
           chalk.cyan(`  spindb connect ${containerName} -d ${databaseName}`),
         )
         console.log()
-      } catch (err) {
-        const e = err as Error
+      } catch (error) {
+        const e = error as Error
 
         const missingToolPatterns = [
           'pg_restore not found',
@@ -391,7 +393,7 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
-        console.error(error(e.message))
+        console.error(uiError(e.message))
         process.exit(1)
       } finally {
         if (tempDumpPath) {

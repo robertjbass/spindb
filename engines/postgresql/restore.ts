@@ -219,8 +219,8 @@ export async function restoreBackup(
         format: detectedFormat,
         ...result,
       }
-    } catch (err) {
-      const e = err as Error & { stdout?: string; stderr?: string }
+    } catch (error) {
+      const e = error as Error & { stdout?: string; stderr?: string }
       // pg_restore often returns non-zero even on partial success
       return {
         format: detectedFormat,

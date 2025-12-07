@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2025-12-07
+
+### Added
+- STYLEGUIDE.md documenting coding conventions for OSS contributors
+- ESLint rule `@typescript-eslint/consistent-type-imports` to enforce type import conventions
+
+### Changed
+- Renamed UI theme helper functions from generic names to `ui*` prefix for clarity:
+  - `success` → `uiSuccess`
+  - `error` → `uiError`
+  - `warning` → `uiWarning`
+  - `info` → `uiInfo`
+- Standardized error variable naming: all catch blocks now use `error` instead of `err`
+
 ## [0.9.1] - 2025-12-06
 
 ### Added

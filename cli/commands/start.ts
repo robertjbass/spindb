@@ -7,7 +7,7 @@ import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning } from '../ui/theme'
+import { uiError, uiWarning } from '../ui/theme'
 
 export const startCommand = new Command('start')
   .description('Start a container')
@@ -23,10 +23,10 @@ export const startCommand = new Command('start')
         if (stopped.length === 0) {
           if (containers.length === 0) {
             console.log(
-              warning('No containers found. Create one with: spindb create'),
+              uiWarning('No containers found. Create one with: spindb create'),
             )
           } else {
-            console.log(warning('All containers are already running'))
+            console.log(uiWarning('All containers are already running'))
           }
           return
         }
@@ -41,7 +41,7 @@ export const startCommand = new Command('start')
 
       const config = await containerManager.getConfig(containerName)
       if (!config) {
-        console.error(error(`Container "${containerName}" not found`))
+        console.error(uiError(`Container "${containerName}" not found`))
         process.exit(1)
       }
 
@@ -51,7 +51,9 @@ export const startCommand = new Command('start')
         engine: engineName,
       })
       if (running) {
-        console.log(warning(`Container "${containerName}" is already running`))
+        console.log(
+          uiWarning(`Container "${containerName}" is already running`),
+        )
         return
       }
 
@@ -72,7 +74,7 @@ export const startCommand = new Command('start')
       if (!result.success) {
         spinner.fail(`Failed to start "${containerName}"`)
         if (result.error) {
-          console.error(error(result.error.message))
+          console.error(uiError(result.error.message))
         }
         process.exit(1)
       }
@@ -110,9 +112,9 @@ export const startCommand = new Command('start')
       console.log(chalk.gray('  Connect with:'))
       console.log(chalk.cyan(`  spindb connect ${containerName}`))
       console.log()
-    } catch (err) {
-      const e = err as Error
-      console.error(error(e.message))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })

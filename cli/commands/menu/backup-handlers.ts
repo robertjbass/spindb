@@ -25,9 +25,9 @@ import {
 import { createSpinner } from '../../ui/spinner'
 import {
   header,
-  success,
-  error,
-  warning,
+  uiSuccess,
+  uiError,
+  uiWarning,
   connectionBox,
   formatBytes,
 } from '../../ui/theme'
@@ -65,7 +65,7 @@ export async function handleCreateForRestore(): Promise<{
   const portAvailable = await portManager.isPortAvailable(port)
   if (!portAvailable) {
     console.log(
-      error(`Port ${port} is in use. Please choose a different port.`),
+      uiError(`Port ${port} is in use. Please choose a different port.`),
     )
     return null
   }
@@ -77,13 +77,17 @@ export async function handleCreateForRestore(): Promise<{
 
   const isInstalled = await dbEngine.isBinaryInstalled(version)
   if (isInstalled) {
-    binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries ready (cached)`)
+    binarySpinner.succeed(
+      `${dbEngine.displayName} ${version} binaries ready (cached)`,
+    )
   } else {
     binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
     await dbEngine.ensureBinaries(version, ({ message }) => {
       binarySpinner.text = message
     })
-    binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries downloaded`)
+    binarySpinner.succeed(
+      `${dbEngine.displayName} ${version} binaries downloaded`,
+    )
   }
 
   while (await containerManager.exists(containerName)) {
@@ -136,7 +140,7 @@ export async function handleCreateForRestore(): Promise<{
   }
 
   console.log()
-  console.log(success('Container ready for restore'))
+  console.log(uiSuccess('Container ready for restore'))
   console.log()
 
   return { name: containerName, config }
@@ -184,7 +188,7 @@ export async function handleRestore(): Promise<void> {
     containerName = selectedContainer
     config = await containerManager.getConfig(containerName)
     if (!config) {
-      console.error(error(`Container "${containerName}" not found`))
+      console.error(uiError(`Container "${containerName}" not found`))
       return
     }
   }
@@ -210,7 +214,7 @@ export async function handleRestore(): Promise<void> {
     missingDeps = await getMissingDependencies(config.engine)
     if (missingDeps.length > 0) {
       console.log(
-        error(
+        uiError(
           `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
         ),
       )
@@ -301,8 +305,8 @@ export async function handleRestore(): Promise<void> {
         backupPath = tempDumpPath
         isTempFile = true
         dumpSuccess = true
-      } catch (err) {
-        const e = err as Error
+      } catch (error) {
+        const e = error as Error
         dumpSpinner.fail('Failed to create dump')
 
         if (
@@ -313,15 +317,19 @@ export async function handleRestore(): Promise<void> {
           const missingTool = e.message.includes('mysqldump')
             ? 'mysqldump'
             : 'pg_dump'
-          const toolEngine = missingTool === 'mysqldump' ? 'mysql' : 'postgresql'
-          const installed = await promptInstallDependencies(missingTool, toolEngine as Engine)
+          const toolEngine =
+            missingTool === 'mysqldump' ? 'mysql' : 'postgresql'
+          const installed = await promptInstallDependencies(
+            missingTool,
+            toolEngine as Engine,
+          )
           if (installed) {
             continue
           }
         } else {
           const dumpTool = config.engine === 'mysql' ? 'mysqldump' : 'pg_dump'
           console.log()
-          console.log(error(`${dumpTool} error:`))
+          console.log(uiError(`${dumpTool} error:`))
           console.log(chalk.gray(`  ${e.message}`))
           console.log()
         }
@@ -344,7 +352,7 @@ export async function handleRestore(): Promise<void> {
     }
 
     if (!dumpSuccess) {
-      console.log(error('Failed to create dump after retries'))
+      console.log(uiError('Failed to create dump after retries'))
       return
     }
   } else {
@@ -415,9 +423,9 @@ export async function handleRestore(): Promise<void> {
     ) {
       restoreSpinner.fail('Version compatibility detected')
       console.log()
-      console.log(error('PostgreSQL version incompatibility detected:'))
+      console.log(uiError('PostgreSQL version incompatibility detected:'))
       console.log(
-        warning('Your pg_restore version is too old for this backup file.'),
+        uiWarning('Your pg_restore version is too old for this backup file.'),
       )
 
       console.log(chalk.yellow('Cleaning up failed database...'))
@@ -467,7 +475,7 @@ export async function handleRestore(): Promise<void> {
             upgradeSpinner.succeed('PostgreSQL client tools upgraded')
             console.log()
             console.log(
-              success('Please try the restore again with the updated tools.'),
+              uiSuccess('Please try the restore again with the updated tools.'),
             )
             await new Promise((resolve) => {
               console.log(chalk.gray('Press Enter to continue...'))
@@ -478,12 +486,12 @@ export async function handleRestore(): Promise<void> {
             upgradeSpinner.fail('Upgrade failed')
             console.log()
             console.log(
-              error('Automatic upgrade failed. Please upgrade manually:'),
+              uiError('Automatic upgrade failed. Please upgrade manually:'),
             )
             const pgPackage = getPostgresHomebrewPackage()
             const latestMajor = pgPackage.split('@')[1]
             console.log(
-              warning(
+              uiWarning(
                 `  macOS: brew install ${pgPackage} && brew link --force ${pgPackage}`,
               ),
             )
@@ -493,7 +501,7 @@ export async function handleRestore(): Promise<void> {
               ),
             )
             console.log(
-              warning(
+              uiWarning(
                 `  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-${latestMajor}`,
               ),
             )
@@ -510,7 +518,7 @@ export async function handleRestore(): Promise<void> {
           }
         } catch {
           upgradeSpinner.fail('Upgrade failed')
-          console.log(error('Failed to upgrade PostgreSQL client tools'))
+          console.log(uiError('Failed to upgrade PostgreSQL client tools'))
           console.log(
             chalk.gray(
               'Manual upgrade may be required for pg_restore, pg_dump, and psql',
@@ -525,7 +533,7 @@ export async function handleRestore(): Promise<void> {
       } else {
         console.log()
         console.log(
-          warning(
+          uiWarning(
             'Restore cancelled. Please upgrade PostgreSQL client tools manually and try again.',
           ),
         )
@@ -555,7 +563,7 @@ export async function handleRestore(): Promise<void> {
   if (result.code === 0) {
     const connectionString = engine.getConnectionString(config, databaseName)
     console.log()
-    console.log(success(`Database "${databaseName}" restored`))
+    console.log(uiSuccess(`Database "${databaseName}" restored`))
     console.log(chalk.gray('  Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
 
@@ -591,7 +599,7 @@ export async function handleBackup(): Promise<void> {
   const running = containers.filter((c) => c.status === 'running')
 
   if (running.length === 0) {
-    console.log(warning('No running containers. Start a container first.'))
+    console.log(uiWarning('No running containers. Start a container first.'))
     await inquirer.prompt([
       {
         type: 'input',
@@ -611,7 +619,7 @@ export async function handleBackup(): Promise<void> {
 
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.log(error(`Container "${containerName}" not found`))
+    console.log(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -638,7 +646,7 @@ export async function handleBackup(): Promise<void> {
     missingDeps = await getMissingDependencies(config.engine)
     if (missingDeps.length > 0) {
       console.log(
-        error(
+        uiError(
           `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
         ),
       )
@@ -685,17 +693,17 @@ export async function handleBackup(): Promise<void> {
     backupSpinner.succeed('Backup created successfully')
 
     console.log()
-    console.log(success('Backup complete'))
+    console.log(uiSuccess('Backup complete'))
     console.log()
     console.log(chalk.gray('  File:'), chalk.cyan(result.path))
     console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
     console.log(chalk.gray('  Format:'), chalk.white(result.format))
     console.log()
-  } catch (err) {
-    const e = err as Error
+  } catch (error) {
+    const e = error as Error
     backupSpinner.fail('Backup failed')
     console.log()
-    console.log(error(e.message))
+    console.log(uiError(e.message))
     console.log()
   }
 
@@ -713,13 +721,13 @@ export async function handleClone(): Promise<void> {
   const stopped = containers.filter((c) => c.status !== 'running')
 
   if (containers.length === 0) {
-    console.log(warning('No containers found'))
+    console.log(uiWarning('No containers found'))
     return
   }
 
   if (stopped.length === 0) {
     console.log(
-      warning(
+      uiWarning(
         'All containers are running. Stop a container first to clone it.',
       ),
     )
@@ -735,7 +743,7 @@ export async function handleClone(): Promise<void> {
 
   const sourceConfig = await containerManager.getConfig(sourceName)
   if (!sourceConfig) {
-    console.log(error(`Container "${sourceName}" not found`))
+    console.log(uiError(`Container "${sourceName}" not found`))
     return
   }
 
@@ -756,8 +764,10 @@ export async function handleClone(): Promise<void> {
   ])
 
   // Check if target container already exists
-  if (await containerManager.exists(targetName, { engine: sourceConfig.engine })) {
-    console.log(error(`Container "${targetName}" already exists`))
+  if (
+    await containerManager.exists(targetName, { engine: sourceConfig.engine })
+  ) {
+    console.log(uiError(`Container "${targetName}" already exists`))
     return
   }
 
@@ -774,9 +784,9 @@ export async function handleClone(): Promise<void> {
 
     console.log()
     console.log(connectionBox(targetName, connectionString, newConfig.port))
-  } catch (err) {
-    const e = err as Error
+  } catch (error) {
+    const e = error as Error
     spinner.fail(`Failed to clone "${sourceName}"`)
-    console.log(error(e.message))
+    console.log(uiError(e.message))
   }
 }

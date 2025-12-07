@@ -36,9 +36,9 @@ export type RollbackAction = {
  *   })
  *
  *   tx.commit() // Success - clear rollback stack
- * } catch (err) {
+ * } catch (error) {
  *   await tx.rollback() // Error - undo everything
- *   throw err
+ *   throw error
  * }
  * ```
  */
@@ -85,14 +85,14 @@ export class TransactionManager {
         logDebug(`Executing rollback: ${action.description}`)
         await action.execute()
         logDebug(`Rollback successful: ${action.description}`)
-      } catch (err) {
+      } catch (error) {
         // Log error but continue with other rollbacks
         logError({
           code: ErrorCodes.ROLLBACK_FAILED,
           message: `Failed to rollback: ${action.description}`,
           severity: 'warning',
           context: {
-            error: err instanceof Error ? err.message : String(err),
+            error: error instanceof Error ? error.message : String(error),
           },
         })
       }
@@ -155,8 +155,8 @@ export async function withTransaction<T>(
     const result = await operation(tx)
     tx.commit()
     return result
-  } catch (err) {
+  } catch (error) {
     await tx.rollback()
-    throw err
+    throw error
   }
 }

@@ -174,13 +174,13 @@ export async function restoreBackup(
   if (validateVersion) {
     try {
       await validateRestoreCompatibility({ dumpPath: backupPath })
-    } catch (err) {
+    } catch (error) {
       // Re-throw SpinDBError, log and continue for other errors
-      if (err instanceof Error && err.name === 'SpinDBError') {
-        throw err
+      if (error instanceof Error && error.name === 'SpinDBError') {
+        throw error
       }
       logDebug('Version validation failed, proceeding anyway', {
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       })
     }
   }

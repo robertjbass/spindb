@@ -124,7 +124,9 @@ describe('PostgreSQL Integration Tests', () => {
   })
 
   it('should seed the database with test data using runScript', async () => {
-    console.log(`\n🌱 Seeding database with test data using engine.runScript...`)
+    console.log(
+      `\n🌱 Seeding database with test data using engine.runScript...`,
+    )
 
     // Use runScriptFile which internally calls engine.runScript
     // This tests the `spindb run` command functionality
@@ -243,7 +245,9 @@ describe('PostgreSQL Integration Tests', () => {
   })
 
   it('should modify data using runScript inline SQL', async () => {
-    console.log(`\n✏️  Deleting one row using engine.runScript with inline SQL...`)
+    console.log(
+      `\n✏️  Deleting one row using engine.runScript with inline SQL...`,
+    )
 
     // Use runScriptSQL which internally calls engine.runScript with --sql option
     // This tests the `spindb run --sql` command functionality
@@ -261,7 +265,9 @@ describe('PostgreSQL Integration Tests', () => {
     )
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
-    console.log(`   ✓ Row deleted using engine.runScript, now have ${rowCount} rows`)
+    console.log(
+      `   ✓ Row deleted using engine.runScript, now have ${rowCount} rows`,
+    )
   })
 
   it('should stop, rename container, and change port', async () => {

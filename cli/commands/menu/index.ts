@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { containerManager } from '../../../core/container-manager'
 import { promptInstallDependencies } from '../../ui/prompts'
-import { header, error } from '../../ui/theme'
+import { header, uiError } from '../../ui/theme'
 import { getInstalledEngines } from '../../helpers'
 import {
   handleCreate,
@@ -156,8 +156,8 @@ export const menuCommand = new Command('menu')
   .action(async () => {
     try {
       await showMainMenu()
-    } catch (err) {
-      const e = err as Error
+    } catch (error) {
+      const e = error as Error
 
       // Check if this is a missing tool error
       if (
@@ -177,7 +177,7 @@ export const menuCommand = new Command('menu')
         process.exit(1)
       }
 
-      console.error(error(e.message))
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })

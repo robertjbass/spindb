@@ -5,7 +5,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptInstallDependencies } from '../ui/prompts'
-import { error, warning } from '../ui/theme'
+import { uiError, uiWarning } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { Engine } from '../../types'
 
@@ -26,7 +26,7 @@ export const runCommand = new Command('run')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -36,9 +36,7 @@ export const runCommand = new Command('run')
         if (engineName === Engine.SQLite) {
           if (!existsSync(config.database)) {
             console.error(
-              error(
-                `SQLite database file not found: ${config.database}`,
-              ),
+              uiError(`SQLite database file not found: ${config.database}`),
             )
             process.exit(1)
           }
@@ -49,7 +47,7 @@ export const runCommand = new Command('run')
           })
           if (!running) {
             console.error(
-              error(
+              uiError(
                 `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
               ),
             )
@@ -59,16 +57,16 @@ export const runCommand = new Command('run')
 
         if (file && options.sql) {
           console.error(
-            error('Cannot specify both a file and --sql option. Choose one.'),
+            uiError('Cannot specify both a file and --sql option. Choose one.'),
           )
           process.exit(1)
         }
 
         if (!file && !options.sql) {
-          console.error(error('Must provide either a SQL file or --sql option'))
-          console.log(
-            chalk.gray('  Usage: spindb run <container> <file.sql>'),
+          console.error(
+            uiError('Must provide either a SQL file or --sql option'),
           )
+          console.log(chalk.gray('  Usage: spindb run <container> <file.sql>'))
           console.log(
             chalk.gray('     or: spindb run <container> --sql "SELECT ..."'),
           )
@@ -76,7 +74,7 @@ export const runCommand = new Command('run')
         }
 
         if (file && !existsSync(file)) {
-          console.error(error(`SQL file not found: ${file}`))
+          console.error(uiError(`SQL file not found: ${file}`))
           process.exit(1)
         }
 
@@ -85,7 +83,7 @@ export const runCommand = new Command('run')
         let missingDeps = await getMissingDependencies(engineName)
         if (missingDeps.length > 0) {
           console.log(
-            warning(
+            uiWarning(
               `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
             ),
           )
@@ -102,7 +100,7 @@ export const runCommand = new Command('run')
           missingDeps = await getMissingDependencies(engineName)
           if (missingDeps.length > 0) {
             console.error(
-              error(
+              uiError(
                 `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
               ),
             )
@@ -120,8 +118,8 @@ export const runCommand = new Command('run')
           sql: options.sql,
           database,
         })
-      } catch (err) {
-        const e = err as Error
+      } catch (error) {
+        const e = error as Error
 
         const missingToolPatterns = [
           'psql not found',
@@ -138,8 +136,12 @@ export const runCommand = new Command('run')
             .replace(' not found', '')
             .replace(' client', '')
           // Determine engine from the missing tool name
-          const toolEngine = missingTool === 'mysql' ? Engine.MySQL : Engine.PostgreSQL
-          const installed = await promptInstallDependencies(missingTool, toolEngine)
+          const toolEngine =
+            missingTool === 'mysql' ? Engine.MySQL : Engine.PostgreSQL
+          const installed = await promptInstallDependencies(
+            missingTool,
+            toolEngine,
+          )
           if (installed) {
             console.log(
               chalk.yellow('  Please re-run your command to continue.'),
@@ -148,7 +150,7 @@ export const runCommand = new Command('run')
           process.exit(1)
         }
 
-        console.error(error(e.message))
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

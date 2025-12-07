@@ -15,7 +15,10 @@ describe('Doctor Command', () => {
       }
 
       assert(typeof result.name === 'string', 'Should have name')
-      assert(['ok', 'warning', 'error'].includes(result.status), 'Should have valid status')
+      assert(
+        ['ok', 'warning', 'error'].includes(result.status),
+        'Should have valid status',
+      )
       assert(typeof result.message === 'string', 'Should have message')
     })
 
@@ -44,8 +47,14 @@ describe('Doctor Command', () => {
         },
       }
 
-      assert(typeof result.action.label === 'string', 'Action should have label')
-      assert(typeof result.action.handler === 'function', 'Action should have handler')
+      assert(
+        typeof result.action.label === 'string',
+        'Action should have label',
+      )
+      assert(
+        typeof result.action.handler === 'function',
+        'Action should have handler',
+      )
     })
   })
 
@@ -102,10 +111,16 @@ describe('Doctor Command', () => {
       const result = {
         name: 'Containers',
         status: 'ok' as const,
-        message: containers.length === 0 ? 'No containers (create one with: spindb create)' : '',
+        message:
+          containers.length === 0
+            ? 'No containers (create one with: spindb create)'
+            : '',
       }
 
-      assert(result.message.includes('No containers'), 'Should indicate no containers')
+      assert(
+        result.message.includes('No containers'),
+        'Should indicate no containers',
+      )
     })
 
     it('should group containers by engine', () => {
@@ -161,7 +176,10 @@ describe('Doctor Command', () => {
             : `${entries.length} database(s) registered`,
       }
 
-      assert(result.message.includes('No SQLite databases'), 'Should indicate empty registry')
+      assert(
+        result.message.includes('No SQLite databases'),
+        'Should indicate empty registry',
+      )
     })
 
     it('should detect orphaned entries', () => {
@@ -177,7 +195,10 @@ describe('Doctor Command', () => {
       }
 
       assertEqual(result.status, 'warning', 'Orphans should trigger warning')
-      assert(result.details[0].includes('old-project'), 'Should include orphan name')
+      assert(
+        result.details[0].includes('old-project'),
+        'Should include orphan name',
+      )
     })
 
     it('should pluralize orphan message correctly', () => {
@@ -187,16 +208,23 @@ describe('Doctor Command', () => {
       const singularMsg = `${singularCount} orphaned entry found`
       const pluralMsg = `${pluralCount} orphaned entries found`
 
-      assert(!singularMsg.includes('entries'), 'Singular should not have "entries"')
+      assert(
+        !singularMsg.includes('entries'),
+        'Singular should not have "entries"',
+      )
       assert(pluralMsg.includes('entries'), 'Plural should have "entries"')
     })
 
     it('should offer cleanup action for orphans', () => {
       const orphans = [{ name: 'old' }]
 
-      const action = orphans.length > 0
-        ? { label: 'Remove orphaned entries from registry', handler: async () => {} }
-        : undefined
+      const action =
+        orphans.length > 0
+          ? {
+              label: 'Remove orphaned entries from registry',
+              handler: async () => {},
+            }
+          : undefined
 
       assert(action !== undefined, 'Should offer action when orphans exist')
       assert(action?.label.includes('Remove'), 'Action should mention removal')
@@ -241,7 +269,10 @@ describe('Doctor Command', () => {
           ? `${engine}: ${installed}/${total} tools installed`
           : `${engine}: all ${total} tools available`
 
-      assert(message.includes('all 4 tools'), 'Should indicate all tools available')
+      assert(
+        message.includes('all 4 tools'),
+        'Should indicate all tools available',
+      )
     })
   })
 

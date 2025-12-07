@@ -5,7 +5,7 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect, promptContainerName } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning, connectionBox } from '../ui/theme'
+import { uiError, uiWarning, connectionBox } from '../ui/theme'
 
 export const cloneCommand = new Command('clone')
   .description('Clone a container with all its data')
@@ -22,14 +22,14 @@ export const cloneCommand = new Command('clone')
 
         if (containers.length === 0) {
           console.log(
-            warning('No containers found. Create one with: spindb create'),
+            uiWarning('No containers found. Create one with: spindb create'),
           )
           return
         }
 
         if (stopped.length === 0) {
           console.log(
-            warning(
+            uiWarning(
               'All containers are running. Stop a container first to clone it.',
             ),
           )
@@ -51,7 +51,7 @@ export const cloneCommand = new Command('clone')
 
       const sourceConfig = await containerManager.getConfig(sourceName)
       if (!sourceConfig) {
-        console.error(error(`Container "${sourceName}" not found`))
+        console.error(uiError(`Container "${sourceName}" not found`))
         process.exit(1)
       }
 
@@ -60,7 +60,7 @@ export const cloneCommand = new Command('clone')
       })
       if (running) {
         console.error(
-          error(
+          uiError(
             `Container "${sourceName}" is running. Stop it first to clone.`,
           ),
         )
@@ -72,8 +72,12 @@ export const cloneCommand = new Command('clone')
       }
 
       // Check if target container already exists
-      if (await containerManager.exists(targetName, { engine: sourceConfig.engine })) {
-        console.error(error(`Container "${targetName}" already exists`))
+      if (
+        await containerManager.exists(targetName, {
+          engine: sourceConfig.engine,
+        })
+      ) {
+        console.error(uiError(`Container "${targetName}" already exists`))
         process.exit(1)
       }
 
@@ -95,9 +99,9 @@ export const cloneCommand = new Command('clone')
       console.log(chalk.gray('  Start the cloned container:'))
       console.log(chalk.cyan(`  spindb start ${targetName}`))
       console.log()
-    } catch (err) {
-      const e = err as Error
-      console.error(error(e.message))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })

@@ -3,7 +3,7 @@ import { containerManager } from '../../core/container-manager'
 import { platformService } from '../../core/platform-service'
 import { getEngine } from '../../engines'
 import { promptContainerSelect } from '../ui/prompts'
-import { error, warning, success } from '../ui/theme'
+import { uiError, uiWarning, uiSuccess } from '../ui/theme'
 
 export const urlCommand = new Command('url')
   .alias('connection-string')
@@ -24,7 +24,7 @@ export const urlCommand = new Command('url')
           const containers = await containerManager.list()
 
           if (containers.length === 0) {
-            console.log(warning('No containers found'))
+            console.log(uiWarning('No containers found'))
             return
           }
 
@@ -38,13 +38,16 @@ export const urlCommand = new Command('url')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
         const engine = getEngine(config.engine)
         const databaseName = options.database || config.database
-        const connectionString = engine.getConnectionString(config, databaseName)
+        const connectionString = engine.getConnectionString(
+          config,
+          databaseName,
+        )
 
         if (options.json) {
           const jsonOutput =
@@ -72,10 +75,10 @@ export const urlCommand = new Command('url')
           const copied = await platformService.copyToClipboard(connectionString)
           if (copied) {
             console.log(connectionString)
-            console.error(success('Copied to clipboard'))
+            console.error(uiSuccess('Copied to clipboard'))
           } else {
             console.log(connectionString)
-            console.error(warning('Could not copy to clipboard'))
+            console.error(uiWarning('Could not copy to clipboard'))
           }
         } else {
           process.stdout.write(connectionString)
@@ -83,9 +86,9 @@ export const urlCommand = new Command('url')
             console.log()
           }
         }
-      } catch (err) {
-        const e = err as Error
-        console.error(error(e.message))
+      } catch (error) {
+        const e = error as Error
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

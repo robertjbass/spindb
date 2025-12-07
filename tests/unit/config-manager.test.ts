@@ -31,9 +31,11 @@ describe('ConfigManager', () => {
     it('should include Homebrew paths for macOS', () => {
       const configManager = new ConfigManager()
       // Access private method via type assertion for testing
-      const getPaths = (configManager as unknown as {
-        getCommonBinaryPaths: (tool: string) => string[]
-      }).getCommonBinaryPaths.bind(configManager)
+      const getPaths = (
+        configManager as unknown as {
+          getCommonBinaryPaths: (tool: string) => string[]
+        }
+      ).getCommonBinaryPaths.bind(configManager)
 
       const paths = getPaths('psql')
 
@@ -49,9 +51,11 @@ describe('ConfigManager', () => {
 
     it('should include PostgreSQL-specific paths for psql', () => {
       const configManager = new ConfigManager()
-      const getPaths = (configManager as unknown as {
-        getCommonBinaryPaths: (tool: string) => string[]
-      }).getCommonBinaryPaths.bind(configManager)
+      const getPaths = (
+        configManager as unknown as {
+          getCommonBinaryPaths: (tool: string) => string[]
+        }
+      ).getCommonBinaryPaths.bind(configManager)
 
       const paths = getPaths('psql')
 
@@ -67,9 +71,11 @@ describe('ConfigManager', () => {
 
     it('should include MySQL-specific paths for mysql', () => {
       const configManager = new ConfigManager()
-      const getPaths = (configManager as unknown as {
-        getCommonBinaryPaths: (tool: string) => string[]
-      }).getCommonBinaryPaths.bind(configManager)
+      const getPaths = (
+        configManager as unknown as {
+          getCommonBinaryPaths: (tool: string) => string[]
+        }
+      ).getCommonBinaryPaths.bind(configManager)
 
       const paths = getPaths('mysql')
 
@@ -81,9 +87,11 @@ describe('ConfigManager', () => {
 
     it('should include Linux paths for pg_dump', () => {
       const configManager = new ConfigManager()
-      const getPaths = (configManager as unknown as {
-        getCommonBinaryPaths: (tool: string) => string[]
-      }).getCommonBinaryPaths.bind(configManager)
+      const getPaths = (
+        configManager as unknown as {
+          getCommonBinaryPaths: (tool: string) => string[]
+        }
+      ).getCommonBinaryPaths.bind(configManager)
 
       const paths = getPaths('pg_dump')
 
@@ -101,10 +109,7 @@ describe('ConfigManager', () => {
       await configManager.load()
       // The config might have updatedAt set, but the concept should hold
       const isStale = await configManager.isStale()
-      assert(
-        typeof isStale === 'boolean',
-        'isStale should return a boolean',
-      )
+      assert(typeof isStale === 'boolean', 'isStale should return a boolean')
     })
 
     it('should compare dates correctly', () => {
@@ -116,7 +121,10 @@ describe('ConfigManager', () => {
       const freshElapsed = Date.now() - freshDate.getTime()
       const staleElapsed = Date.now() - staleDate.getTime()
 
-      assert(freshElapsed < CACHE_STALENESS_MS, 'Fresh date should not be stale')
+      assert(
+        freshElapsed < CACHE_STALENESS_MS,
+        'Fresh date should not be stale',
+      )
       assert(staleElapsed > CACHE_STALENESS_MS, 'Stale date should be stale')
     })
   })
@@ -128,7 +136,10 @@ describe('ConfigManager', () => {
       assert(Array.isArray(POSTGRESQL_TOOLS), 'Should be an array')
       assert(POSTGRESQL_TOOLS.includes('psql'), 'Should include psql')
       assert(POSTGRESQL_TOOLS.includes('pg_dump'), 'Should include pg_dump')
-      assert(POSTGRESQL_TOOLS.includes('pg_restore'), 'Should include pg_restore')
+      assert(
+        POSTGRESQL_TOOLS.includes('pg_restore'),
+        'Should include pg_restore',
+      )
     })
 
     it('should export MySQL tools', async () => {
@@ -197,16 +208,16 @@ describe('ConfigManager', () => {
       for (const { output, expected } of versionOutputs) {
         const match = output.match(/\d+\.\d+/)
         assert(match !== null, `Should match version in: ${output}`)
-        assertEqual(match![0], expected, `Should extract ${expected} from: ${output}`)
+        assertEqual(
+          match![0],
+          expected,
+          `Should extract ${expected} from: ${output}`,
+        )
       }
     })
 
     it('should handle version detection failure gracefully', () => {
-      const invalidOutputs = [
-        'no version here',
-        '',
-        'error: command not found',
-      ]
+      const invalidOutputs = ['no version here', '', 'error: command not found']
 
       for (const output of invalidOutputs) {
         const match = output.match(/\d+\.\d+/)
@@ -234,7 +245,9 @@ describe('ConfigManager', () => {
     it('should handle missing binary path gracefully', async () => {
       const configManager = new ConfigManager()
       // Request a non-existent tool (if it's not installed)
-      const path = await configManager.getBinaryPath('nonexistent-tool' as 'psql')
+      const path = await configManager.getBinaryPath(
+        'nonexistent-tool' as 'psql',
+      )
 
       // If tool doesn't exist, should return null
       assert(

@@ -126,11 +126,23 @@ describe('UpdateManager', () => {
         lastChecked: new Date().toISOString(),
       }
 
-      assert(typeof result.currentVersion === 'string', 'Should have currentVersion')
-      assert(typeof result.latestVersion === 'string', 'Should have latestVersion')
-      assert(typeof result.updateAvailable === 'boolean', 'Should have updateAvailable')
+      assert(
+        typeof result.currentVersion === 'string',
+        'Should have currentVersion',
+      )
+      assert(
+        typeof result.latestVersion === 'string',
+        'Should have latestVersion',
+      )
+      assert(
+        typeof result.updateAvailable === 'boolean',
+        'Should have updateAvailable',
+      )
       assert(typeof result.lastChecked === 'string', 'Should have lastChecked')
-      assert(result.updateAvailable === true, 'updateAvailable should be true when versions differ')
+      assert(
+        result.updateAvailable === true,
+        'updateAvailable should be true when versions differ',
+      )
     })
 
     it('should have correct structure for no update', () => {
@@ -141,7 +153,11 @@ describe('UpdateManager', () => {
         lastChecked: new Date().toISOString(),
       }
 
-      assertEqual(result.updateAvailable, false, 'updateAvailable should be false when same version')
+      assertEqual(
+        result.updateAvailable,
+        false,
+        'updateAvailable should be false when same version',
+      )
     })
   })
 
@@ -159,9 +175,15 @@ describe('UpdateManager', () => {
       }
 
       assert(result.success === true, 'success should be true')
-      assert(typeof result.previousVersion === 'string', 'Should have previousVersion')
+      assert(
+        typeof result.previousVersion === 'string',
+        'Should have previousVersion',
+      )
       assert(typeof result.newVersion === 'string', 'Should have newVersion')
-      assert(result.error === undefined, 'error should not be present on success')
+      assert(
+        result.error === undefined,
+        'error should not be present on success',
+      )
     })
 
     it('should have correct failure structure', () => {
@@ -186,7 +208,8 @@ describe('UpdateManager', () => {
     })
 
     it('should provide actionable error for permission issues', () => {
-      const errorMessage = 'Permission denied. Try: sudo npm install -g spindb@latest'
+      const errorMessage =
+        'Permission denied. Try: sudo npm install -g spindb@latest'
 
       assert(
         errorMessage.includes('sudo'),
@@ -203,21 +226,33 @@ describe('UpdateManager', () => {
     it('should calculate throttle period correctly', () => {
       const CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
-      assertEqual(CHECK_THROTTLE_MS, 86400000, 'Throttle should be 24 hours in ms')
+      assertEqual(
+        CHECK_THROTTLE_MS,
+        86400000,
+        'Throttle should be 24 hours in ms',
+      )
 
       const lastCheck = new Date(Date.now() - 60000).toISOString() // 1 minute ago
       const elapsed = Date.now() - new Date(lastCheck).getTime()
 
-      assert(elapsed < CHECK_THROTTLE_MS, 'Recent check should be within throttle')
+      assert(
+        elapsed < CHECK_THROTTLE_MS,
+        'Recent check should be within throttle',
+      )
     })
 
     it('should identify stale checks', () => {
       const CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
-      const staleCheck = new Date(Date.now() - (CHECK_THROTTLE_MS + 1000)).toISOString()
+      const staleCheck = new Date(
+        Date.now() - (CHECK_THROTTLE_MS + 1000),
+      ).toISOString()
       const elapsed = Date.now() - new Date(staleCheck).getTime()
 
-      assert(elapsed > CHECK_THROTTLE_MS, 'Old check should be outside throttle')
+      assert(
+        elapsed > CHECK_THROTTLE_MS,
+        'Old check should be outside throttle',
+      )
     })
   })
 
@@ -238,7 +273,8 @@ describe('UpdateManager', () => {
       const info = await updateManager.getCachedUpdateInfo()
 
       assert(
-        info.latestVersion === undefined || typeof info.latestVersion === 'string',
+        info.latestVersion === undefined ||
+          typeof info.latestVersion === 'string',
         'latestVersion should be string or undefined',
       )
     })
@@ -263,7 +299,11 @@ describe('UpdateManager', () => {
 
       const latestVersion = invalidResponse?.['dist-tags']?.latest
 
-      assertEqual(latestVersion, undefined, 'Missing dist-tags should return undefined')
+      assertEqual(
+        latestVersion,
+        undefined,
+        'Missing dist-tags should return undefined',
+      )
     })
   })
 
@@ -279,10 +319,7 @@ describe('UpdateManager', () => {
         const isPermissionError =
           msg.includes('EACCES') || msg.includes('permission')
 
-        assert(
-          isPermissionError,
-          `Should detect permission error in: ${msg}`,
-        )
+        assert(isPermissionError, `Should detect permission error in: ${msg}`)
       }
     })
 
@@ -317,7 +354,11 @@ describe('UpdateManager', () => {
 
       const version = mockNpmListOutput.dependencies?.spindb?.version
 
-      assertEqual(version, '2.0.0', 'Should extract version from npm list output')
+      assertEqual(
+        version,
+        '2.0.0',
+        'Should extract version from npm list output',
+      )
     })
 
     it('should handle missing dependencies in npm list output', () => {

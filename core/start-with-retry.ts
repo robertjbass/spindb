@@ -26,8 +26,8 @@ export type StartWithRetryResult = {
   error?: Error
 }
 
-function isPortInUseError(err: unknown): boolean {
-  const message = (err as Error)?.message?.toLowerCase() || ''
+function isPortInUseError(error: unknown): boolean {
+  const message = (error as Error)?.message?.toLowerCase() || ''
   return (
     message.includes('address already in use') ||
     message.includes('eaddrinuse') ||
@@ -62,14 +62,14 @@ export async function startWithRetry(
         finalPort: config.port,
         retriesUsed: attempt - 1,
       }
-    } catch (err) {
-      const isPortError = isPortInUseError(err)
+    } catch (error) {
+      const isPortError = isPortInUseError(error)
 
       logDebug(`Start attempt ${attempt} failed`, {
         containerName: config.name,
         port: config.port,
         isPortError,
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       })
 
       if (isPortError && attempt < maxRetries) {
@@ -101,7 +101,7 @@ export async function startWithRetry(
         success: false,
         finalPort: config.port,
         retriesUsed: attempt - 1,
-        error: err instanceof Error ? err : new Error(String(err)),
+        error: error instanceof Error ? error : new Error(String(error)),
       }
     }
   }

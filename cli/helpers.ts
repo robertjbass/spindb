@@ -57,7 +57,9 @@ async function getPostgresVersion(binPath: string): Promise<string | null> {
   }
 }
 
-export async function getInstalledPostgresEngines(): Promise<InstalledPostgresEngine[]> {
+export async function getInstalledPostgresEngines(): Promise<
+  InstalledPostgresEngine[]
+> {
   const binDir = paths.bin
 
   if (!existsSync(binDir)) {
@@ -144,7 +146,9 @@ async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null>
       return null
     }
 
-    const { stdout: versionOutput } = await execAsync(`"${sqlitePath}" --version`)
+    const { stdout: versionOutput } = await execAsync(
+      `"${sqlitePath}" --version`,
+    )
     // sqlite3 --version outputs: "3.43.2 2023-10-10 12:14:04 ..."
     const versionMatch = versionOutput.match(/^([\d.]+)/)
     const version = versionMatch ? versionMatch[1] : 'unknown'

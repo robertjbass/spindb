@@ -326,7 +326,11 @@ describe('resolveHomeDir', () => {
         defaultHome: '/root',
       })
 
-      assertEqual(result, '/root', 'Should return default home even with getent')
+      assertEqual(
+        result,
+        '/root',
+        'Should return default home even with getent',
+      )
     })
   })
 
@@ -368,7 +372,8 @@ describe('resolveHomeDir', () => {
     it('should handle custom home directories', () => {
       const result = resolveHomeDir({
         sudoUser: 'service',
-        getentResult: 'service:x:999:999:Service Account:/var/lib/service:/bin/false',
+        getentResult:
+          'service:x:999:999:Service Account:/var/lib/service:/bin/false',
         platform: 'linux',
         defaultHome: '/root',
       })
@@ -454,7 +459,11 @@ describe('resolveHomeDir', () => {
         defaultHome: '/root',
       })
 
-      assertEqual(result, '/Users/bob-bass', 'Should handle hyphenated username')
+      assertEqual(
+        result,
+        '/Users/bob-bass',
+        'Should handle hyphenated username',
+      )
     })
 
     it('should handle usernames with underscores', () => {
@@ -465,7 +474,11 @@ describe('resolveHomeDir', () => {
         defaultHome: '/root',
       })
 
-      assertEqual(result, '/home/bob_bass', 'Should handle underscored username')
+      assertEqual(
+        result,
+        '/home/bob_bass',
+        'Should handle underscored username',
+      )
     })
 
     it('should prevent using root home when sudo is detected', () => {

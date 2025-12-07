@@ -5,7 +5,7 @@ import { readFile } from 'fs/promises'
 import { containerManager } from '../../core/container-manager'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
-import { error, warning, info } from '../ui/theme'
+import { uiError, uiWarning, uiInfo } from '../ui/theme'
 
 function getLastNLines(content: string, n: number): string {
   const lines = content.split('\n')
@@ -32,7 +32,7 @@ export const logsCommand = new Command('logs')
           const containers = await containerManager.list()
 
           if (containers.length === 0) {
-            console.log(warning('No containers found'))
+            console.log(uiWarning('No containers found'))
             return
           }
 
@@ -46,7 +46,7 @@ export const logsCommand = new Command('logs')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -56,7 +56,7 @@ export const logsCommand = new Command('logs')
 
         if (!existsSync(logPath)) {
           console.log(
-            info(
+            uiInfo(
               `No log file found for "${containerName}". The container may not have been started yet.`,
             ),
           )
@@ -84,9 +84,13 @@ export const logsCommand = new Command('logs')
 
         if (options.follow) {
           const lineCount = parseInt(options.lines || '50', 10)
-          const child = spawn('tail', ['-n', String(lineCount), '-f', logPath], {
-            stdio: 'inherit',
-          })
+          const child = spawn(
+            'tail',
+            ['-n', String(lineCount), '-f', logPath],
+            {
+              stdio: 'inherit',
+            },
+          )
 
           // Use named handler so we can remove it to prevent listener leaks
           const sigintHandler = () => {
@@ -109,15 +113,15 @@ export const logsCommand = new Command('logs')
         const content = await readFile(logPath, 'utf-8')
 
         if (content.trim() === '') {
-          console.log(info('Log file is empty'))
+          console.log(uiInfo('Log file is empty'))
           return
         }
 
         const output = getLastNLines(content, lineCount)
         console.log(output)
-      } catch (err) {
-        const e = err as Error
-        console.error(error(e.message))
+      } catch (error) {
+        const e = error as Error
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

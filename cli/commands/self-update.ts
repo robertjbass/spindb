@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { updateManager } from '../../core/update-manager'
 import { createSpinner } from '../ui/spinner'
-import { success, error, info, header } from '../ui/theme'
+import { uiSuccess, uiError, uiInfo, header } from '../ui/theme'
 
 export const selfUpdateCommand = new Command('self-update')
   .alias('update')
@@ -24,7 +24,7 @@ export const selfUpdateCommand = new Command('self-update')
       if (!result) {
         checkSpinner.fail('Could not reach npm registry')
         console.log()
-        console.log(info('Check your internet connection and try again.'))
+        console.log(uiInfo('Check your internet connection and try again.'))
         console.log(chalk.gray('  Manual update: npm install -g spindb@latest'))
         process.exit(1)
       }
@@ -84,7 +84,7 @@ export const selfUpdateCommand = new Command('self-update')
         updateSpinner.succeed('Update complete')
         console.log()
         console.log(
-          success(
+          uiSuccess(
             `Updated from ${updateResult.previousVersion} to ${updateResult.newVersion}`,
           ),
         )
@@ -100,9 +100,9 @@ export const selfUpdateCommand = new Command('self-update')
       } else {
         updateSpinner.fail('Update failed')
         console.log()
-        console.log(error(updateResult.error || 'Unknown error'))
+        console.log(uiError(updateResult.error || 'Unknown error'))
         console.log()
-        console.log(info('Manual update: npm install -g spindb@latest'))
+        console.log(uiInfo('Manual update: npm install -g spindb@latest'))
         process.exit(1)
       }
     },

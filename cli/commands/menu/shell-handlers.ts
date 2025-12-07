@@ -20,7 +20,7 @@ import {
 import { platformService } from '../../../core/platform-service'
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
-import { error, warning, info, success } from '../../ui/theme'
+import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 
 export async function handleCopyConnectionString(
@@ -28,7 +28,7 @@ export async function handleCopyConnectionString(
 ): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -39,10 +39,10 @@ export async function handleCopyConnectionString(
 
   console.log()
   if (copied) {
-    console.log(success('Connection string copied to clipboard'))
+    console.log(uiSuccess('Connection string copied to clipboard'))
     console.log(chalk.gray(`  ${connectionString}`))
   } else {
-    console.log(warning('Could not copy to clipboard. Connection string:'))
+    console.log(uiWarning('Could not copy to clipboard. Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
   }
   console.log()
@@ -59,7 +59,7 @@ export async function handleCopyConnectionString(
 export async function handleOpenShell(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -69,12 +69,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
 
-  const [usqlInstalled, pgcliInstalled, mycliInstalled, litecliInstalled] = await Promise.all([
-    isUsqlInstalled(),
-    isPgcliInstalled(),
-    isMycliInstalled(),
-    isLitecliInstalled(),
-  ])
+  const [usqlInstalled, pgcliInstalled, mycliInstalled, litecliInstalled] =
+    await Promise.all([
+      isUsqlInstalled(),
+      isPgcliInstalled(),
+      isMycliInstalled(),
+      isLitecliInstalled(),
+    ])
 
   shellCheckSpinner.stop()
   // Clear the spinner line
@@ -119,7 +120,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstallValue = 'install-pgcli'
   }
 
-  const choices: Array<{ name: string; value: ShellChoice } | inquirer.Separator> = [
+  const choices: Array<
+    { name: string; value: ShellChoice } | inquirer.Separator
+  > = [
     {
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
@@ -173,16 +176,16 @@ export async function handleOpenShell(containerName: string): Promise<void> {
 
   if (shellChoice === 'install-pgcli') {
     console.log()
-    console.log(info('Installing pgcli for enhanced PostgreSQL shell...'))
+    console.log(uiInfo('Installing pgcli for enhanced PostgreSQL shell...'))
     const pm = await detectPackageManager()
     if (pm) {
       const result = await installPgcli(pm)
       if (result.success) {
-        console.log(success('pgcli installed successfully!'))
+        console.log(uiSuccess('pgcli installed successfully!'))
         console.log()
         await launchShell(containerName, config, connectionString, 'pgcli')
       } else {
-        console.error(error(`Failed to install pgcli: ${result.error}`))
+        console.error(uiError(`Failed to install pgcli: ${result.error}`))
         console.log()
         console.log(chalk.gray('Manual installation:'))
         for (const instruction of getPgcliManualInstructions()) {
@@ -192,7 +195,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
         await pressEnterToContinue()
       }
     } else {
-      console.error(error('No supported package manager found'))
+      console.error(uiError('No supported package manager found'))
       console.log()
       console.log(chalk.gray('Manual installation:'))
       for (const instruction of getPgcliManualInstructions()) {
@@ -206,16 +209,16 @@ export async function handleOpenShell(containerName: string): Promise<void> {
 
   if (shellChoice === 'install-mycli') {
     console.log()
-    console.log(info('Installing mycli for enhanced MySQL shell...'))
+    console.log(uiInfo('Installing mycli for enhanced MySQL shell...'))
     const pm = await detectPackageManager()
     if (pm) {
       const result = await installMycli(pm)
       if (result.success) {
-        console.log(success('mycli installed successfully!'))
+        console.log(uiSuccess('mycli installed successfully!'))
         console.log()
         await launchShell(containerName, config, connectionString, 'mycli')
       } else {
-        console.error(error(`Failed to install mycli: ${result.error}`))
+        console.error(uiError(`Failed to install mycli: ${result.error}`))
         console.log()
         console.log(chalk.gray('Manual installation:'))
         for (const instruction of getMycliManualInstructions()) {
@@ -225,7 +228,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
         await pressEnterToContinue()
       }
     } else {
-      console.error(error('No supported package manager found'))
+      console.error(uiError('No supported package manager found'))
       console.log()
       console.log(chalk.gray('Manual installation:'))
       for (const instruction of getMycliManualInstructions()) {
@@ -239,16 +242,16 @@ export async function handleOpenShell(containerName: string): Promise<void> {
 
   if (shellChoice === 'install-usql') {
     console.log()
-    console.log(info('Installing usql for enhanced shell experience...'))
+    console.log(uiInfo('Installing usql for enhanced shell experience...'))
     const pm = await detectPackageManager()
     if (pm) {
       const result = await installUsql(pm)
       if (result.success) {
-        console.log(success('usql installed successfully!'))
+        console.log(uiSuccess('usql installed successfully!'))
         console.log()
         await launchShell(containerName, config, connectionString, 'usql')
       } else {
-        console.error(error(`Failed to install usql: ${result.error}`))
+        console.error(uiError(`Failed to install usql: ${result.error}`))
         console.log()
         console.log(chalk.gray('Manual installation:'))
         for (const instruction of getUsqlManualInstructions()) {
@@ -258,7 +261,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
         await pressEnterToContinue()
       }
     } else {
-      console.error(error('No supported package manager found'))
+      console.error(uiError('No supported package manager found'))
       console.log()
       console.log(chalk.gray('Manual installation:'))
       for (const instruction of getUsqlManualInstructions()) {
@@ -272,16 +275,16 @@ export async function handleOpenShell(containerName: string): Promise<void> {
 
   if (shellChoice === 'install-litecli') {
     console.log()
-    console.log(info('Installing litecli for enhanced SQLite shell...'))
+    console.log(uiInfo('Installing litecli for enhanced SQLite shell...'))
     const pm = await detectPackageManager()
     if (pm) {
       const result = await installLitecli(pm)
       if (result.success) {
-        console.log(success('litecli installed successfully!'))
+        console.log(uiSuccess('litecli installed successfully!'))
         console.log()
         await launchShell(containerName, config, connectionString, 'litecli')
       } else {
-        console.error(error(`Failed to install litecli: ${result.error}`))
+        console.error(uiError(`Failed to install litecli: ${result.error}`))
         console.log()
         console.log(chalk.gray('Manual installation:'))
         for (const instruction of getLitecliManualInstructions()) {
@@ -291,7 +294,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
         await pressEnterToContinue()
       }
     } else {
-      console.error(error('No supported package manager found'))
+      console.error(uiError('No supported package manager found'))
       console.log()
       console.log(chalk.gray('Manual installation:'))
       for (const instruction of getLitecliManualInstructions()) {
@@ -312,7 +315,7 @@ async function launchShell(
   connectionString: string,
   shellType: 'default' | 'usql' | 'pgcli' | 'mycli' | 'litecli',
 ): Promise<void> {
-  console.log(info(`Connecting to ${containerName}...`))
+  console.log(uiInfo(`Connecting to ${containerName}...`))
   console.log()
 
   let shellCmd: string
@@ -386,7 +389,7 @@ async function launchShell(
 
     shellProcess.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
-        console.log(warning(`${shellCmd} not found on your system.`))
+        console.log(uiWarning(`${shellCmd} not found on your system.`))
         console.log()
         console.log(chalk.gray('  Connect manually with:'))
         console.log(chalk.cyan(`  ${connectionString}`))
@@ -394,7 +397,7 @@ async function launchShell(
         console.log(chalk.gray(`  Install ${shellCmd}:`))
         console.log(chalk.cyan(`  ${installHint}`))
       } else {
-        console.log(error(`Failed to start ${shellCmd}: ${err.message}`))
+        console.log(uiError(`Failed to start ${shellCmd}: ${err.message}`))
       }
       settle()
     })

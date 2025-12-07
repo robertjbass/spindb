@@ -113,11 +113,17 @@ describe('DependencyManager', () => {
 
       const status = await checkDependency(mockDep)
 
-      assert(typeof status.installed === 'boolean', 'Should have installed boolean')
+      assert(
+        typeof status.installed === 'boolean',
+        'Should have installed boolean',
+      )
       assertEqual(status.dependency, mockDep, 'Should include dependency')
 
       if (status.installed) {
-        assert(typeof status.path === 'string', 'Should have path when installed')
+        assert(
+          typeof status.path === 'string',
+          'Should have path when installed',
+        )
       }
     })
 
@@ -202,7 +208,11 @@ describe('DependencyManager', () => {
       const commands = buildInstallCommand(mockDep, mockPm)
 
       assertEqual(commands.length, 2, 'Should have pre-install + install')
-      assertEqual(commands[0], 'brew tap test/tap', 'Pre-install should be first')
+      assertEqual(
+        commands[0],
+        'brew tap test/tap',
+        'Pre-install should be first',
+      )
       assert(commands[1].includes('install'), 'Install should be second')
     })
 
@@ -292,17 +302,15 @@ describe('DependencyManager', () => {
       const linuxInstructions = getManualInstallInstructions(mockDep, 'linux')
 
       assert(Array.isArray(darwinInstructions), 'Should return array')
-      assertEqual(darwinInstructions.length, 1, 'Should have darwin instructions')
-      assert(
-        darwinInstructions[0].includes('brew'),
-        'Darwin should use brew',
+      assertEqual(
+        darwinInstructions.length,
+        1,
+        'Should have darwin instructions',
       )
+      assert(darwinInstructions[0].includes('brew'), 'Darwin should use brew')
 
       assertEqual(linuxInstructions.length, 1, 'Should have linux instructions')
-      assert(
-        linuxInstructions[0].includes('apt'),
-        'Linux should use apt',
-      )
+      assert(linuxInstructions[0].includes('apt'), 'Linux should use apt')
     })
 
     it('should return empty array for missing platform', () => {
@@ -319,7 +327,11 @@ describe('DependencyManager', () => {
       const instructions = getManualInstallInstructions(mockDep, 'linux')
 
       assert(Array.isArray(instructions), 'Should return array')
-      assertEqual(instructions.length, 0, 'Should be empty for missing platform')
+      assertEqual(
+        instructions.length,
+        0,
+        'Should be empty for missing platform',
+      )
     })
   })
 
@@ -355,7 +367,13 @@ describe('DependencyManager', () => {
     it('should have correct success structure', () => {
       const result: {
         success: boolean
-        dependency: { name: string; binary: string; description: string; packages: Record<string, unknown>; manualInstall: Record<string, unknown> }
+        dependency: {
+          name: string
+          binary: string
+          description: string
+          packages: Record<string, unknown>
+          manualInstall: Record<string, unknown>
+        }
         error?: string
       } = {
         success: true,
@@ -388,10 +406,7 @@ describe('DependencyManager', () => {
 
       assert(result.success === false, 'Should be failure')
       assert(typeof result.error === 'string', 'Should have error message')
-      assert(
-        result.error.length > 0,
-        'Error message should be descriptive',
-      )
+      assert(result.error.length > 0, 'Error message should be descriptive')
     })
   })
 })
@@ -399,18 +414,12 @@ describe('DependencyManager', () => {
 describe('TTY and Sudo Handling', () => {
   it('should check for TTY availability', () => {
     const hasTTY = process.stdin.isTTY === true
-    assert(
-      typeof hasTTY === 'boolean',
-      'Should be able to check TTY status',
-    )
+    assert(typeof hasTTY === 'boolean', 'Should be able to check TTY status')
   })
 
   it('should check for root privileges', () => {
     const isRoot = process.getuid?.() === 0
-    assert(
-      typeof isRoot === 'boolean',
-      'Should be able to check root status',
-    )
+    assert(typeof isRoot === 'boolean', 'Should be able to check root status')
   })
 })
 
@@ -447,7 +456,10 @@ describe('Error Messages', () => {
       caughtError = error as Error
     }
 
-    assert(threw, 'buildInstallCommand should throw when package definition is missing')
+    assert(
+      threw,
+      'buildInstallCommand should throw when package definition is missing',
+    )
     assert(caughtError instanceof Error, 'Should throw Error')
     assert(
       caughtError!.message.includes(mockDep.name),

@@ -60,28 +60,28 @@ ${chalk.cyan('└' + line + '┘')}
 /**
  * Format a success message
  */
-export function success(message: string): string {
+export function uiSuccess(message: string): string {
   return `${theme.icons.success} ${message}`
 }
 
 /**
  * Format an error message
  */
-export function error(message: string): string {
+export function uiError(message: string): string {
   return `${theme.icons.error} ${chalk.red(message)}`
 }
 
 /**
  * Format a warning message
  */
-export function warning(message: string): string {
+export function uiWarning(message: string): string {
   return `${theme.icons.warning} ${chalk.yellow(message)}`
 }
 
 /**
  * Format an info message
  */
-export function info(message: string): string {
+export function uiInfo(message: string): string {
   return `${theme.icons.info} ${message}`
 }
 

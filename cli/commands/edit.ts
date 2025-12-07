@@ -1,7 +1,14 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, renameSync, mkdirSync, statSync, unlinkSync, copyFileSync } from 'fs'
+import {
+  existsSync,
+  renameSync,
+  mkdirSync,
+  statSync,
+  unlinkSync,
+  copyFileSync,
+} from 'fs'
 import { dirname, resolve, basename, join } from 'path'
 import { homedir } from 'os'
 import { containerManager } from '../../core/container-manager'
@@ -12,7 +19,7 @@ import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning, success, info } from '../ui/theme'
+import { uiError, uiWarning, uiSuccess, uiInfo } from '../ui/theme'
 import { Engine } from '../../types'
 
 function isValidName(name: string): boolean {
@@ -25,9 +32,7 @@ function isValidName(name: string): boolean {
 async function promptEditAction(
   engine: string,
 ): Promise<'name' | 'port' | 'config' | 'relocate' | null> {
-  const choices = [
-    { name: 'Rename container', value: 'name' },
-  ]
+  const choices = [{ name: 'Rename container', value: 'name' }]
 
   // SQLite: show relocate instead of port
   if (engine === Engine.SQLite) {
@@ -38,7 +43,10 @@ async function promptEditAction(
 
   // Only show config option for engines that support it
   if (engine === Engine.PostgreSQL) {
-    choices.push({ name: 'Edit database config (postgresql.conf)', value: 'config' })
+    choices.push({
+      name: 'Edit database config (postgresql.conf)',
+      value: 'config',
+    })
   }
 
   choices.push({ name: chalk.gray('Cancel'), value: 'cancel' })
@@ -74,7 +82,7 @@ async function promptNewName(currentName: string): Promise<string | null> {
   ])
 
   if (newName === currentName) {
-    console.log(warning('Name unchanged'))
+    console.log(uiWarning('Name unchanged'))
     return null
   }
 
@@ -83,17 +91,36 @@ async function promptNewName(currentName: string): Promise<string | null> {
 
 // Common PostgreSQL config settings that users might want to edit
 const COMMON_PG_SETTINGS = [
-  { name: 'max_connections', description: 'Maximum concurrent connections', default: '200' },
-  { name: 'shared_buffers', description: 'Memory for shared buffers', default: '128MB' },
+  {
+    name: 'max_connections',
+    description: 'Maximum concurrent connections',
+    default: '200',
+  },
+  {
+    name: 'shared_buffers',
+    description: 'Memory for shared buffers',
+    default: '128MB',
+  },
   { name: 'work_mem', description: 'Memory per operation', default: '4MB' },
-  { name: 'maintenance_work_mem', description: 'Memory for maintenance ops', default: '64MB' },
-  { name: 'effective_cache_size', description: 'Planner cache size estimate', default: '4GB' },
+  {
+    name: 'maintenance_work_mem',
+    description: 'Memory for maintenance ops',
+    default: '64MB',
+  },
+  {
+    name: 'effective_cache_size',
+    description: 'Planner cache size estimate',
+    default: '4GB',
+  },
 ]
 
 /**
  * Prompt for PostgreSQL config setting to edit
  */
-async function promptConfigSetting(): Promise<{ key: string; value: string } | null> {
+async function promptConfigSetting(): Promise<{
+  key: string
+  value: string
+} | null> {
   const choices = COMMON_PG_SETTINGS.map((s) => ({
     name: `${s.name.padEnd(25)} ${chalk.gray(s.description)}`,
     value: s.name,
@@ -121,7 +148,8 @@ async function promptConfigSetting(): Promise<{ key: string; value: string } | n
         message: 'Setting name:',
         validate: (input: string) => {
           if (!input.trim()) return 'Setting name is required'
-          if (!/^[a-z_]+$/.test(input)) return 'Setting names are lowercase with underscores'
+          if (!/^[a-z_]+$/.test(input))
+            return 'Setting names are lowercase with underscores'
           return true
         },
       },
@@ -129,7 +157,8 @@ async function promptConfigSetting(): Promise<{ key: string; value: string } | n
     key = customKey
   }
 
-  const defaultValue = COMMON_PG_SETTINGS.find((s) => s.name === key)?.default || ''
+  const defaultValue =
+    COMMON_PG_SETTINGS.find((s) => s.name === key)?.default || ''
   const { value } = await inquirer.prompt<{ value: string }>([
     {
       type: 'input',
@@ -168,14 +197,14 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
   ])
 
   if (newPort === currentPort) {
-    console.log(warning('Port unchanged'))
+    console.log(uiWarning('Port unchanged'))
     return null
   }
 
   const portAvailable = await portManager.isPortAvailable(newPort)
   if (!portAvailable) {
     console.log(
-      warning(
+      uiWarning(
         `Note: Port ${newPort} is currently in use. It will be used when the container starts.`,
       ),
     )
@@ -190,7 +219,9 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
 async function promptNewLocation(currentPath: string): Promise<string | null> {
   console.log()
   console.log(chalk.gray(`  Current location: ${currentPath}`))
-  console.log(chalk.gray('  Enter an absolute path or relative to current directory.'))
+  console.log(
+    chalk.gray('  Enter an absolute path or relative to current directory.'),
+  )
   console.log()
 
   const { newPath } = await inquirer.prompt<{ newPath: string }>([
@@ -202,7 +233,11 @@ async function promptNewLocation(currentPath: string): Promise<string | null> {
       validate: (input: string) => {
         if (!input.trim()) return 'Path is required'
         const resolvedPath = resolve(input).toLowerCase()
-        if (!resolvedPath.endsWith('.sqlite') && !resolvedPath.endsWith('.db') && !resolvedPath.endsWith('.sqlite3')) {
+        if (
+          !resolvedPath.endsWith('.sqlite') &&
+          !resolvedPath.endsWith('.db') &&
+          !resolvedPath.endsWith('.sqlite3')
+        ) {
           return 'Path should end with .sqlite, .sqlite3, or .db'
         }
         return true
@@ -213,7 +248,7 @@ async function promptNewLocation(currentPath: string): Promise<string | null> {
   const resolvedPath = resolve(newPath)
 
   if (resolvedPath === currentPath) {
-    console.log(warning('Location unchanged'))
+    console.log(uiWarning('Location unchanged'))
     return null
   }
 
@@ -228,7 +263,7 @@ async function promptNewLocation(currentPath: string): Promise<string | null> {
       },
     ])
     if (!overwrite) {
-      console.log(warning('Relocate cancelled'))
+      console.log(uiWarning('Relocate cancelled'))
       return null
     }
   }
@@ -237,7 +272,9 @@ async function promptNewLocation(currentPath: string): Promise<string | null> {
 }
 
 export const editCommand = new Command('edit')
-  .description('Edit container properties (rename, port, relocate, or database config)')
+  .description(
+    'Edit container properties (rename, port, relocate, or database config)',
+  )
   .argument('[name]', 'Container name')
   .option('-n, --name <newName>', 'New container name')
   .option('-p, --port <port>', 'New port number', parseInt)
@@ -256,7 +293,13 @@ export const editCommand = new Command('edit')
   .action(
     async (
       name: string | undefined,
-      options: { name?: string; port?: number; relocate?: string; overwrite?: boolean; setConfig?: string },
+      options: {
+        name?: string
+        port?: number
+        relocate?: string
+        overwrite?: boolean
+        setConfig?: string
+      },
     ) => {
       try {
         let containerName = name
@@ -265,7 +308,7 @@ export const editCommand = new Command('edit')
           const containers = await containerManager.list()
 
           if (containers.length === 0) {
-            console.log(warning('No containers found'))
+            console.log(uiWarning('No containers found'))
             return
           }
 
@@ -279,7 +322,7 @@ export const editCommand = new Command('edit')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -327,7 +370,7 @@ export const editCommand = new Command('edit')
         if (options.name) {
           if (!isValidName(options.name)) {
             console.error(
-              error(
+              uiError(
                 'Name must start with a letter and contain only letters, numbers, hyphens, and underscores',
               ),
             )
@@ -338,7 +381,7 @@ export const editCommand = new Command('edit')
             engine: config.engine,
           })
           if (exists) {
-            console.error(error(`Container "${options.name}" already exists`))
+            console.error(uiError(`Container "${options.name}" already exists`))
             process.exit(1)
           }
 
@@ -347,7 +390,7 @@ export const editCommand = new Command('edit')
           })
           if (running) {
             console.error(
-              error(
+              uiError(
                 `Container "${containerName}" is running. Stop it first to rename.`,
               ),
             )
@@ -368,14 +411,14 @@ export const editCommand = new Command('edit')
 
         if (options.port !== undefined) {
           if (options.port < 1 || options.port > 65535) {
-            console.error(error('Port must be between 1 and 65535'))
+            console.error(uiError('Port must be between 1 and 65535'))
             process.exit(1)
           }
 
           const portAvailable = await portManager.isPortAvailable(options.port)
           if (!portAvailable) {
             console.log(
-              warning(
+              uiWarning(
                 `Port ${options.port} is currently in use. The container will use this port on next start.`,
               ),
             )
@@ -400,7 +443,7 @@ export const editCommand = new Command('edit')
         if (options.relocate) {
           if (config.engine !== Engine.SQLite) {
             console.error(
-              error('Relocate is only available for SQLite containers'),
+              uiError('Relocate is only available for SQLite containers'),
             )
             process.exit(1)
           }
@@ -425,13 +468,17 @@ export const editCommand = new Command('edit')
           // - ends with /
           // - exists and is a directory
           // - doesn't have a database file extension
-          const isDirectory = expandedPath.endsWith('/') ||
-            (existsSync(expandedPath) && statSync(expandedPath).isDirectory()) ||
+          const isDirectory =
+            expandedPath.endsWith('/') ||
+            (existsSync(expandedPath) &&
+              statSync(expandedPath).isDirectory()) ||
             !hasDbExtension
 
           let newPath: string
           if (isDirectory) {
-            const dirPath = expandedPath.endsWith('/') ? expandedPath.slice(0, -1) : expandedPath
+            const dirPath = expandedPath.endsWith('/')
+              ? expandedPath.slice(0, -1)
+              : expandedPath
             const currentFileName = basename(config.database)
             newPath = join(dirPath, currentFileName)
           } else {
@@ -441,7 +488,7 @@ export const editCommand = new Command('edit')
           // Check source file exists
           if (!existsSync(config.database)) {
             console.error(
-              error(`Source database file not found: ${config.database}`),
+              uiError(`Source database file not found: ${config.database}`),
             )
             process.exit(1)
           }
@@ -451,12 +498,14 @@ export const editCommand = new Command('edit')
             if (options.overwrite) {
               // Remove existing file before move
               unlinkSync(newPath)
-              console.log(warning(`Overwriting existing file: ${newPath}`))
+              console.log(uiWarning(`Overwriting existing file: ${newPath}`))
             } else {
               console.error(
-                error(`Destination file already exists: ${newPath}`),
+                uiError(`Destination file already exists: ${newPath}`),
               )
-              console.log(info('Use --overwrite to replace the existing file'))
+              console.log(
+                uiInfo('Use --overwrite to replace the existing file'),
+              )
               process.exit(1)
             }
           }
@@ -465,12 +514,10 @@ export const editCommand = new Command('edit')
           const targetDir = dirname(newPath)
           if (!existsSync(targetDir)) {
             mkdirSync(targetDir, { recursive: true })
-            console.log(info(`Created directory: ${targetDir}`))
+            console.log(uiInfo(`Created directory: ${targetDir}`))
           }
 
-          const spinner = createSpinner(
-            `Moving database to ${newPath}...`,
-          )
+          const spinner = createSpinner(`Moving database to ${newPath}...`)
           spinner.start()
 
           try {
@@ -509,9 +556,9 @@ export const editCommand = new Command('edit')
             await sqliteRegistry.update(containerName, { filePath: newPath })
 
             spinner.succeed(`Database relocated to ${newPath}`)
-          } catch (err) {
+          } catch (error) {
             spinner.fail('Failed to relocate database')
-            throw err
+            throw error
           }
         }
 
@@ -520,7 +567,9 @@ export const editCommand = new Command('edit')
           // Only PostgreSQL supports config editing for now
           if (config.engine !== Engine.PostgreSQL) {
             console.error(
-              error(`Config editing is only supported for PostgreSQL containers`),
+              uiError(
+                `Config editing is only supported for PostgreSQL containers`,
+              ),
             )
             process.exit(1)
           }
@@ -529,7 +578,7 @@ export const editCommand = new Command('edit')
           const match = options.setConfig.match(/^([a-z_]+)=(.+)$/)
           if (!match) {
             console.error(
-              error(
+              uiError(
                 'Invalid config format. Use: --set-config key=value (e.g., max_connections=200)',
               ),
             )
@@ -551,11 +600,15 @@ export const editCommand = new Command('edit')
 
           // Use the PostgreSQL engine's setConfigValue method
           if ('setConfigValue' in engine) {
-            await (engine as { setConfigValue: (dataDir: string, key: string, value: string) => Promise<void> }).setConfigValue(
-              dataDir,
-              configKey,
-              configValue,
-            )
+            await (
+              engine as {
+                setConfigValue: (
+                  dataDir: string,
+                  key: string,
+                  value: string,
+                ) => Promise<void>
+              }
+            ).setConfigValue(dataDir, configKey, configValue)
             spinner.succeed(`Set ${configKey} = ${configValue}`)
           } else {
             spinner.fail('Config editing not supported for this engine')
@@ -568,7 +621,7 @@ export const editCommand = new Command('edit')
           })
           if (running) {
             console.log(
-              info(
+              uiInfo(
                 '  Note: Restart the container for changes to take effect.',
               ),
             )
@@ -587,10 +640,10 @@ export const editCommand = new Command('edit')
         }
 
         console.log()
-        console.log(success('Container updated successfully'))
-      } catch (err) {
-        const e = err as Error
-        console.error(error(e.message))
+        console.log(uiSuccess('Container updated successfully'))
+      } catch (error) {
+        const e = error as Error
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

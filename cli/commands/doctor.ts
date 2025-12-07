@@ -18,7 +18,7 @@ import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { paths } from '../../config/paths'
 import { getSupportedEngines } from '../../config/engine-defaults'
 import { checkEngineDependencies } from '../../core/dependency-manager'
-import { header, success } from '../ui/theme'
+import { header, uiSuccess } from '../ui/theme'
 import { Engine } from '../../types'
 
 type HealthCheckResult = {
@@ -61,7 +61,7 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
           label: 'Refresh binary cache',
           handler: async () => {
             await configManager.refreshAllBinaries()
-            console.log(success('Binary cache refreshed'))
+            console.log(uiSuccess('Binary cache refreshed'))
           },
         },
       }
@@ -73,12 +73,12 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
       message: 'Configuration valid',
       details: [`Binary tools cached: ${binaryCount}`],
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'Configuration',
       status: 'error',
       message: 'Configuration file is corrupted',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
@@ -125,12 +125,12 @@ async function checkContainers(): Promise<HealthCheckResult> {
       message: `${containers.length} container(s)`,
       details,
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'Containers',
       status: 'error',
       message: 'Failed to list containers',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
@@ -162,7 +162,7 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
           label: 'Remove orphaned entries from registry',
           handler: async () => {
             const count = await sqliteRegistry.removeOrphans()
-            console.log(success(`Removed ${count} orphaned entries`))
+            console.log(uiSuccess(`Removed ${count} orphaned entries`))
           },
         },
       }
@@ -173,12 +173,12 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
       status: 'ok',
       message: `${entries.length} database(s) registered, all files exist`,
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'SQLite Registry',
       status: 'warning',
       message: 'Could not check registry',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
@@ -211,12 +211,12 @@ async function checkBinaries(): Promise<HealthCheckResult> {
       message: hasWarning ? 'Some tools missing' : 'All tools available',
       details: results,
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'Database Tools',
       status: 'error',
       message: 'Failed to check tools',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
