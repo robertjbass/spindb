@@ -653,16 +653,13 @@ rm -rf ~/.spindb
 
 ## Contributing
 
-See [CLAUDE.md](CLAUDE.md) for development setup and architecture documentation.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and distribution info.
 
-### Running Tests
+See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture and comprehensive CLI command examples.
 
-```bash
-pnpm test           # All tests
-pnpm test:unit      # Unit tests only
-pnpm test:pg        # PostgreSQL integration
-pnpm test:mysql     # MySQL integration
-```
+See [CLAUDE.md](CLAUDE.md) for AI-assisted development context.
+
+See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, planned engines, etc.).
 
 ---
 

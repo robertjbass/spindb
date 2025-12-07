@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
   "type": "module",
   "bin": {
@@ -9,11 +9,12 @@
   "scripts": {
     "start": "tsx cli/bin.ts",
     "dev": "tsx watch cli/bin.ts",
-    "test": "pnpm test:pg && pnpm test:mysql",
+    "test": "pnpm test:pg && pnpm test:mysql && pnpm test:sqlite",
     "test:pg": "node --import tsx --test tests/integration/postgresql.test.ts",
     "test:mysql": "node --import tsx --test tests/integration/mysql.test.ts",
+    "test:sqlite": "node --import tsx --test tests/integration/sqlite.test.ts",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts",
-    "test:integration": "pnpm test:pg && pnpm test:mysql",
+    "test:integration": "pnpm test:pg && pnpm test:mysql && pnpm test:sqlite",
     "test:all": "pnpm test:unit && pnpm test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",

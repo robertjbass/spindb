@@ -149,6 +149,8 @@ export type SpinDBConfig = {
     litecli?: BinaryConfig
     usql?: BinaryConfig
   }
+  // Engine registries (for file-based databases like SQLite)
+  registry?: EngineRegistries
   // Default settings
   defaults?: {
     engine?: Engine
@@ -177,7 +179,25 @@ export type SQLiteRegistryEntry = {
 }
 
 /**
- * SQLite registry stored at ~/.spindb/sqlite-registry.json
+ * SQLite engine registry stored in config.json under registry.sqlite
+ * Includes entries and folder ignore list for CWD scanning
+ */
+export type SQLiteEngineRegistry = {
+  version: 1
+  entries: SQLiteRegistryEntry[]
+  ignoreFolders: Record<string, true> // O(1) lookup for ignored folders
+}
+
+/**
+ * Engine registries stored in config.json
+ * Currently only SQLite uses this (file-based databases)
+ */
+export type EngineRegistries = {
+  sqlite?: SQLiteEngineRegistry
+}
+
+/**
+ * @deprecated Use SQLiteEngineRegistry instead - now stored in config.json
  */
 export type SQLiteRegistry = {
   version: 1

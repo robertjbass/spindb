@@ -141,8 +141,9 @@ async function checkContainers(): Promise<HealthCheckResult> {
 async function checkSqliteRegistry(): Promise<HealthCheckResult> {
   try {
     const entries = await sqliteRegistry.list()
+    const ignoredFolders = await sqliteRegistry.listIgnoredFolders()
 
-    if (entries.length === 0) {
+    if (entries.length === 0 && ignoredFolders.length === 0) {
       return {
         name: 'SQLite Registry',
         status: 'ok',
@@ -153,11 +154,18 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
     const orphans = await sqliteRegistry.findOrphans()
 
     if (orphans.length > 0) {
+      const details = [
+        ...orphans.map((o) => `"${o.name}" → ${o.filePath}`),
+        ...(ignoredFolders.length > 0
+          ? [`${ignoredFolders.length} folder(s) ignored`]
+          : []),
+      ]
+
       return {
         name: 'SQLite Registry',
         status: 'warning',
         message: `${orphans.length} orphaned entr${orphans.length === 1 ? 'y' : 'ies'} found`,
-        details: orphans.map((o) => `"${o.name}" → ${o.filePath}`),
+        details,
         action: {
           label: 'Remove orphaned entries from registry',
           handler: async () => {
@@ -168,10 +176,16 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
       }
     }
 
+    const details = [`${entries.length} database(s) registered, all files exist`]
+    if (ignoredFolders.length > 0) {
+      details.push(`${ignoredFolders.length} folder(s) ignored`)
+    }
+
     return {
       name: 'SQLite Registry',
       status: 'ok',
       message: `${entries.length} database(s) registered, all files exist`,
+      details: ignoredFolders.length > 0 ? details : undefined,
     }
   } catch (error) {
     return {

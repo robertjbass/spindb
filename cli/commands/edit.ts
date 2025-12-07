@@ -521,6 +521,11 @@ export const editCommand = new Command('edit')
           spinner.start()
 
           try {
+            // Track if we need to delete source file after registry update
+            // (for cross-device moves where rename doesn't work)
+            let needsSourceCleanup = false
+            const originalPath = config.database
+
             // Try rename first (fast, same filesystem)
             try {
               renameSync(config.database, newPath)
@@ -531,8 +536,8 @@ export const editCommand = new Command('edit')
                 try {
                   // Copy file preserving mode/permissions
                   copyFileSync(config.database, newPath)
-                  // Only delete source after successful copy
-                  unlinkSync(config.database)
+                  // Don't delete source yet - wait for registry update to succeed
+                  needsSourceCleanup = true
                 } catch (copyErr) {
                   // Clean up partial target on failure
                   if (existsSync(newPath)) {
@@ -554,6 +559,11 @@ export const editCommand = new Command('edit')
               database: newPath,
             })
             await sqliteRegistry.update(containerName, { filePath: newPath })
+
+            // Now safe to delete source file for cross-device moves
+            if (needsSourceCleanup && existsSync(originalPath)) {
+              unlinkSync(originalPath)
+            }
 
             spinner.succeed(`Database relocated to ${newPath}`)
           } catch (error) {

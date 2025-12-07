@@ -93,7 +93,7 @@ spindb/
 1. **Split large command files** (`create.ts`, `edit.ts`, `connect.ts`) into smaller focused modules
 2. **Add integration test CI badge** to README
 3. **Consider dependency injection** for managers to improve testability
-4. **Document the architecture** with a diagram in README or ARCHITECTURE.md
+4. ~~**Document the architecture** with a diagram in README or ARCHITECTURE.md~~ ✅ Completed—see `ARCHITECTURE.md`
 
 ---
 

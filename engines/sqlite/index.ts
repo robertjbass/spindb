@@ -446,15 +446,17 @@ export class SQLiteEngine extends BaseEngine {
       throw new Error('sqlite3 not found')
     }
 
-    // Pipe .dump output to file (avoids shell injection)
-    await this.dumpToFile(sqlite3, filePath, outputPath)
+    try {
+      // Pipe .dump output to file (avoids shell injection)
+      await this.dumpToFile(sqlite3, filePath, outputPath)
 
-    // Clean up temp file if we downloaded it
-    if (tempFile && existsSync(tempFile)) {
-      await unlink(tempFile)
+      return { filePath: outputPath }
+    } finally {
+      // Clean up temp file if we downloaded it (even on error)
+      if (tempFile && existsSync(tempFile)) {
+        await unlink(tempFile)
+      }
     }
-
-    return { filePath: outputPath }
   }
 
   /**

@@ -2,6 +2,9 @@
 # https://docs.coderabbit.ai/guides/configure-coderabbit
 
 reviews:
+  path_filters:
+    - '!node_modules/**'
+    - '!pnpm-lock.yaml'
   path_instructions:
     - path: '**/*'
       instructions: |
@@ -12,8 +15,3 @@ reviews:
         - Windows-specific file path handling
         - Windows shell compatibility
         - Any cross-platform compatibility concerns related to Windows
-
-  auto_review:
-    ignore_paths:
-      - 'node_modules/**'
-      - 'pnpm-lock.yaml'

@@ -200,7 +200,9 @@ export async function handleCreate(): Promise<void> {
 
     startSpinner.succeed(`${dbEngine.displayName} started`)
 
-    if (config && database !== 'postgres') {
+    // Skip creating 'postgres' database for PostgreSQL - it's created by initdb
+    // For other engines (MySQL, SQLite), allow creating a database named 'postgres'
+    if (config && !(config.engine === 'postgresql' && database === 'postgres')) {
       const dbSpinner = createSpinner(`Creating database "${database}"...`)
       dbSpinner.start()
 
@@ -532,6 +534,14 @@ export async function showContainerSubmenu(
     })
   }
 
+  // Detach - only for SQLite (unregisters without deleting file)
+  if (isSQLite) {
+    actionChoices.push({
+      name: `${chalk.yellow('⊘')} Detach from SpinDB`,
+      value: 'detach',
+    })
+  }
+
   // Delete container - SQLite can always delete, server databases must be stopped
   const canDelete = isSQLite ? true : !isRunning
   actionChoices.push({
@@ -606,6 +616,9 @@ export async function showContainerSubmenu(
       await handleCopyConnectionString(containerName)
       await showContainerSubmenu(containerName, showMainMenu)
       return
+    case 'detach':
+      await handleDetachContainer(containerName, showMainMenu)
+      return // Return to list after detach
     case 'delete':
       await handleDelete(containerName)
       return // Don't show submenu again after delete
@@ -1133,6 +1146,36 @@ async function handleCloneFromSubmenu(
     console.log(uiError((error as Error).message))
     await pressEnterToContinue()
   }
+}
+
+async function handleDetachContainer(
+  containerName: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const confirmed = await promptConfirm(
+    `Detach "${containerName}" from SpinDB? (file will be kept on disk)`,
+    true,
+  )
+
+  if (!confirmed) {
+    console.log(uiWarning('Cancelled'))
+    await pressEnterToContinue()
+    await showContainerSubmenu(containerName, showMainMenu)
+    return
+  }
+
+  const entry = await sqliteRegistry.get(containerName)
+  await sqliteRegistry.remove(containerName)
+
+  console.log(uiSuccess(`Detached "${containerName}" from SpinDB`))
+  if (entry?.filePath) {
+    console.log(chalk.gray(`  File remains at: ${entry.filePath}`))
+    console.log()
+    console.log(chalk.gray('  Re-attach with:'))
+    console.log(chalk.cyan(`    spindb attach ${entry.filePath}`))
+  }
+  await pressEnterToContinue()
+  await handleList(showMainMenu)
 }
 
 async function handleDelete(containerName: string): Promise<void> {

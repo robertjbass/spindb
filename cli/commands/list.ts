@@ -1,12 +1,18 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
+import inquirer from 'inquirer'
+import { dirname, basename } from 'path'
 import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { uiInfo, uiError, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { Engine } from '../../types'
-import { basename } from 'path'
 import type { ContainerConfig } from '../../types'
+import { sqliteRegistry } from '../../engines/sqlite/registry'
+import {
+  scanForUnregisteredSqliteFiles,
+  deriveContainerName,
+} from '../../engines/sqlite/scanner'
 
 /**
  * Pad string to width, accounting for emoji taking 2 display columns
@@ -15,6 +21,88 @@ function padWithEmoji(str: string, width: number): string {
   // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
   const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
+}
+
+/**
+ * Prompt user about unregistered SQLite files in CWD
+ * Returns true if user registered any files (refresh needed)
+ */
+async function promptUnregisteredFiles(): Promise<boolean> {
+  const unregistered = await scanForUnregisteredSqliteFiles()
+
+  if (unregistered.length === 0) {
+    return false
+  }
+
+  let anyRegistered = false
+
+  for (let i = 0; i < unregistered.length; i++) {
+    const file = unregistered[i]
+    const prompt =
+      unregistered.length > 1 ? `[${i + 1} of ${unregistered.length}] ` : ''
+
+    const { action } = await inquirer.prompt<{ action: string }>([
+      {
+        type: 'list',
+        name: 'action',
+        message: `${prompt}Unregistered SQLite database "${file.fileName}" found in current directory. Register with SpinDB?`,
+        choices: [
+          { name: 'Yes', value: 'yes' },
+          { name: 'No', value: 'no' },
+          { name: "No - don't ask again for this folder", value: 'ignore' },
+        ],
+      },
+    ])
+
+    if (action === 'yes') {
+      const suggestedName = deriveContainerName(file.fileName)
+      const { containerName } = await inquirer.prompt<{
+        containerName: string
+      }>([
+        {
+          type: 'input',
+          name: 'containerName',
+          message: 'Container name:',
+          default: suggestedName,
+          validate: (input: string) => {
+            if (!input) return 'Name is required'
+            if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(input)) {
+              return 'Name must start with a letter and contain only letters, numbers, hyphens, and underscores'
+            }
+            return true
+          },
+        },
+      ])
+
+      // Check if name already exists
+      if (await sqliteRegistry.exists(containerName)) {
+        console.log(
+          chalk.yellow(`  Container "${containerName}" already exists. Skipping.`),
+        )
+        continue
+      }
+
+      await sqliteRegistry.add({
+        name: containerName,
+        filePath: file.absolutePath,
+        created: new Date().toISOString(),
+      })
+      console.log(
+        chalk.green(`  Registered "${file.fileName}" as "${containerName}"`),
+      )
+      anyRegistered = true
+    } else if (action === 'ignore') {
+      await sqliteRegistry.addIgnoreFolder(dirname(file.absolutePath))
+      console.log(chalk.gray('  Folder will be ignored in future scans.'))
+      break // Exit early
+    }
+  }
+
+  if (anyRegistered) {
+    console.log() // Add spacing before list
+  }
+
+  return anyRegistered
 }
 
 async function getContainerSize(
@@ -46,8 +134,14 @@ export const listCommand = new Command('list')
   .alias('ls')
   .description('List all containers')
   .option('--json', 'Output as JSON')
-  .action(async (options: { json?: boolean }) => {
+  .option('--no-scan', 'Skip scanning for unregistered SQLite files in CWD')
+  .action(async (options: { json?: boolean; scan?: boolean }) => {
     try {
+      // Scan for unregistered SQLite files in CWD (unless JSON mode or --no-scan)
+      if (!options.json && options.scan !== false) {
+        await promptUnregisteredFiles()
+      }
+
       const containers = await containerManager.list()
 
       if (options.json) {

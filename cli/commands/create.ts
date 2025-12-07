@@ -100,6 +100,12 @@ async function createSqliteContainer(
         restoreSpinner.succeed('Backup restored successfully')
       } catch (error) {
         restoreSpinner.fail('Failed to restore backup')
+        // Clean up the created container on restore failure
+        try {
+          await containerManager.delete(containerName, { force: true })
+        } catch {
+          // Ignore cleanup errors - still throw the original restore error
+        }
         throw error
       }
     }
