@@ -10,6 +10,7 @@ import type {
   BinaryConfig,
   BinaryTool,
   BinarySource,
+  SQLiteEngineRegistry,
 } from '../types'
 
 const execAsync = promisify(exec)
@@ -347,6 +348,37 @@ export class ConfigManager {
   async clearAllBinaries(): Promise<void> {
     const config = await this.load()
     config.binaries = {}
+    await this.save()
+  }
+
+  // ============================================================
+  // SQLite Registry Methods
+  // ============================================================
+
+  /**
+   * Get the SQLite registry from config
+   * Returns empty registry if none exists
+   */
+  async getSqliteRegistry(): Promise<SQLiteEngineRegistry> {
+    const config = await this.load()
+    return (
+      config.registry?.sqlite ?? {
+        version: 1,
+        entries: [],
+        ignoreFolders: {},
+      }
+    )
+  }
+
+  /**
+   * Save the SQLite registry to config
+   */
+  async saveSqliteRegistry(registry: SQLiteEngineRegistry): Promise<void> {
+    const config = await this.load()
+    if (!config.registry) {
+      config.registry = {}
+    }
+    config.registry.sqlite = registry
     await this.save()
   }
 }

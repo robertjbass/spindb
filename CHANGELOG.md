@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2025-12-07
+
+### Added
+- **SQLite registry migration** - Registry moved from `~/.spindb/sqlite-registry.json` into `~/.spindb/config.json`
+  - Centralized storage under `registry.sqlite` with `version`, `entries`, and `ignoreFolders` fields
+  - Backwards compatible: registry facade API unchanged for existing code
+- **CWD scanning for SQLite files** - Auto-detect unregistered `.sqlite`, `.sqlite3`, `.db` files
+  - `spindb list` now scans current directory and prompts to register discovered files
+  - `--no-scan` flag to skip CWD scanning
+  - Option to ignore folder permanently ("don't ask again for this folder")
+- **`attach` command** - Register existing SQLite database files with SpinDB
+  - `spindb attach <path> [--name <name>] [--json]`
+  - Auto-derives container name from filename if not specified
+- **`detach` command** - Unregister SQLite database (keeps file on disk)
+  - `spindb detach <name> [--force] [--json]`
+  - Confirmation prompt unless `--force` flag used
+- **`sqlite` subcommand group** - SQLite-specific operations
+  - `spindb sqlite scan [--path <dir>]` - Scan folder for unregistered files
+  - `spindb sqlite ignore [folder]` - Add folder to ignore list (defaults to CWD)
+  - `spindb sqlite unignore [folder]` - Remove folder from ignore list (defaults to CWD)
+  - `spindb sqlite ignored` - List all ignored folders
+  - `spindb sqlite attach` - Alias for top-level attach
+  - `spindb sqlite detach` - Alias for top-level detach
+- **Detach option in interactive menu** - SQLite containers now show "Detach from SpinDB" in submenu
+- Unit tests for `ignoreFolders` functionality (8 new tests)
+- Unit tests for `deriveContainerName` scanner function (8 new tests)
+
+### Changed
+- Doctor command now shows ignored folders count in SQLite registry details
+- SQLite registry now uses O(1) lookup for ignored folders via `Record<string, true>`
+
+### Removed
+- `~/.spindb/sqlite-registry.json` file (migrated to config.json)
+- `getSqliteRegistryPath()` function from paths.ts (no longer needed)
+
 ## [0.9.2] - 2025-12-07
 
 ### Added

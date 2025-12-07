@@ -4,52 +4,33 @@
  * Unlike PostgreSQL/MySQL which store containers in ~/.spindb/containers/,
  * SQLite databases are stored in user project directories. This registry
  * tracks the file paths of all SQLite databases managed by SpinDB.
+ *
+ * The registry is now stored in ~/.spindb/config.json under registry.sqlite
  */
 
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { dirname } from 'path'
-import { paths } from '../../config/paths'
-import type { SQLiteRegistry, SQLiteRegistryEntry } from '../../types'
+import { configManager } from '../../core/config-manager'
+import type { SQLiteEngineRegistry, SQLiteRegistryEntry } from '../../types'
 
 /**
  * SQLite Registry Manager
- * Manages the JSON registry that tracks external SQLite database files
+ * Manages the registry that tracks external SQLite database files
+ * Data is stored in config.json under registry.sqlite
  */
 class SQLiteRegistryManager {
-  private registryPath: string
-
-  constructor() {
-    this.registryPath = paths.getSqliteRegistryPath()
+  /**
+   * Load the registry from config.json
+   * Returns an empty registry if none exists
+   */
+  async load(): Promise<SQLiteEngineRegistry> {
+    return configManager.getSqliteRegistry()
   }
 
   /**
-   * Load the registry from disk
-   * Returns an empty registry if the file doesn't exist
+   * Save the registry to config.json
    */
-  async load(): Promise<SQLiteRegistry> {
-    if (!existsSync(this.registryPath)) {
-      return { version: 1, entries: [] }
-    }
-    try {
-      const content = await readFile(this.registryPath, 'utf8')
-      return JSON.parse(content) as SQLiteRegistry
-    } catch {
-      // If file is corrupted, return empty registry
-      return { version: 1, entries: [] }
-    }
-  }
-
-  /**
-   * Save the registry to disk
-   * Creates the parent directory if it doesn't exist
-   */
-  async save(registry: SQLiteRegistry): Promise<void> {
-    const dir = dirname(this.registryPath)
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true })
-    }
-    await writeFile(this.registryPath, JSON.stringify(registry, null, 2))
+  async save(registry: SQLiteEngineRegistry): Promise<void> {
+    await configManager.saveSqliteRegistry(registry)
   }
 
   /**
@@ -178,6 +159,49 @@ class SQLiteRegistryManager {
   async getByPath(filePath: string): Promise<SQLiteRegistryEntry | null> {
     const registry = await this.load()
     return registry.entries.find((e) => e.filePath === filePath) || null
+  }
+
+  // ============================================================
+  // Folder Ignore Methods
+  // ============================================================
+
+  /**
+   * Check if a folder is in the ignore list
+   */
+  async isFolderIgnored(folderPath: string): Promise<boolean> {
+    const registry = await this.load()
+    return folderPath in registry.ignoreFolders
+  }
+
+  /**
+   * Add a folder to the ignore list
+   */
+  async addIgnoreFolder(folderPath: string): Promise<void> {
+    const registry = await this.load()
+    registry.ignoreFolders[folderPath] = true
+    await this.save(registry)
+  }
+
+  /**
+   * Remove a folder from the ignore list
+   * Returns true if the folder was in the list and removed, false otherwise
+   */
+  async removeIgnoreFolder(folderPath: string): Promise<boolean> {
+    const registry = await this.load()
+    if (folderPath in registry.ignoreFolders) {
+      delete registry.ignoreFolders[folderPath]
+      await this.save(registry)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * List all ignored folders
+   */
+  async listIgnoredFolders(): Promise<string[]> {
+    const registry = await this.load()
+    return Object.keys(registry.ignoreFolders)
   }
 }
 

@@ -25,6 +25,9 @@ import { versionCommand } from './commands/version'
 import { runCommand } from './commands/run'
 import { logsCommand } from './commands/logs'
 import { doctorCommand } from './commands/doctor'
+import { attachCommand } from './commands/attach'
+import { detachCommand } from './commands/detach'
+import { sqliteCommand } from './commands/sqlite'
 import { updateManager } from '../core/update-manager'
 
 /**
@@ -125,6 +128,9 @@ export async function run(): Promise<void> {
   program.addCommand(runCommand)
   program.addCommand(logsCommand)
   program.addCommand(doctorCommand)
+  program.addCommand(attachCommand)
+  program.addCommand(detachCommand)
+  program.addCommand(sqliteCommand)
 
   // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {

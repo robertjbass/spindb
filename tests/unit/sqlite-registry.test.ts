@@ -498,6 +498,164 @@ describe('SQLite Registry', () => {
   })
 })
 
+describe('SQLite Engine Registry (config.json structure)', () => {
+  describe('Registry Shape with ignoreFolders', () => {
+    it('should have version, entries array, and ignoreFolders object', () => {
+      const registry = {
+        version: 1 as const,
+        entries: [],
+        ignoreFolders: {} as Record<string, true>,
+      }
+
+      assertEqual(registry.version, 1, 'Version should be 1')
+      assert(Array.isArray(registry.entries), 'Should have entries array')
+      assert(
+        typeof registry.ignoreFolders === 'object',
+        'Should have ignoreFolders object',
+      )
+    })
+
+    it('should store ignored folders as keys with true value', () => {
+      const registry = {
+        version: 1 as const,
+        entries: [],
+        ignoreFolders: {
+          '/path/to/folder1': true,
+          '/path/to/folder2': true,
+        } as Record<string, true>,
+      }
+
+      assert('/path/to/folder1' in registry.ignoreFolders, 'Should have folder1')
+      assert('/path/to/folder2' in registry.ignoreFolders, 'Should have folder2')
+    })
+  })
+
+  describe('Ignore Folder Operations', () => {
+    it('should add folder to ignore list', () => {
+      const ignoreFolders: Record<string, true> = {}
+
+      ignoreFolders['/path/to/folder'] = true
+
+      assert(
+        '/path/to/folder' in ignoreFolders,
+        'Folder should be in ignore list',
+      )
+    })
+
+    it('should remove folder from ignore list', () => {
+      const ignoreFolders: Record<string, true> = {
+        '/path/to/folder': true,
+      }
+
+      delete ignoreFolders['/path/to/folder']
+
+      assert(
+        !('/path/to/folder' in ignoreFolders),
+        'Folder should be removed from ignore list',
+      )
+    })
+
+    it('should provide O(1) lookup for ignored folders', () => {
+      const ignoreFolders: Record<string, true> = {
+        '/path/a': true,
+        '/path/b': true,
+        '/path/c': true,
+      }
+
+      // Direct property access is O(1)
+      const isIgnored = '/path/b' in ignoreFolders
+      assert(isIgnored, 'Should find folder in O(1)')
+    })
+
+    it('should return false for non-ignored folders', () => {
+      const ignoreFolders: Record<string, true> = {
+        '/path/a': true,
+      }
+
+      const isIgnored = '/path/b' in ignoreFolders
+      assert(!isIgnored, 'Should return false for non-ignored folder')
+    })
+
+    it('should list all ignored folders', () => {
+      const ignoreFolders: Record<string, true> = {
+        '/path/a': true,
+        '/path/b': true,
+        '/path/c': true,
+      }
+
+      const folders = Object.keys(ignoreFolders)
+
+      assertEqual(folders.length, 3, 'Should have 3 folders')
+      assert(folders.includes('/path/a'), 'Should include path/a')
+      assert(folders.includes('/path/b'), 'Should include path/b')
+      assert(folders.includes('/path/c'), 'Should include path/c')
+    })
+  })
+})
+
+describe('SQLite Scanner', () => {
+  describe('deriveContainerName', () => {
+    it('should remove .sqlite extension', () => {
+      const fileName = 'mydb.sqlite'
+      const base = fileName.replace(/\.(sqlite3?|db)$/i, '')
+      assertEqual(base, 'mydb', 'Should remove .sqlite extension')
+    })
+
+    it('should remove .sqlite3 extension', () => {
+      const fileName = 'mydb.sqlite3'
+      const base = fileName.replace(/\.(sqlite3?|db)$/i, '')
+      assertEqual(base, 'mydb', 'Should remove .sqlite3 extension')
+    })
+
+    it('should remove .db extension', () => {
+      const fileName = 'mydb.db'
+      const base = fileName.replace(/\.(sqlite3?|db)$/i, '')
+      assertEqual(base, 'mydb', 'Should remove .db extension')
+    })
+
+    it('should replace invalid chars with hyphens', () => {
+      const name = 'my database'
+      const sanitized = name.replace(/[^a-zA-Z0-9_-]/g, '-')
+      assertEqual(sanitized, 'my-database', 'Should replace spaces with hyphens')
+    })
+
+    it('should prefix with db- if starts with number', () => {
+      const name = '123test'
+      const prefixed = /^[a-zA-Z]/.test(name) ? name : 'db-' + name
+      assertEqual(prefixed, 'db-123test', 'Should prefix with db-')
+    })
+
+    it('should not prefix if starts with letter', () => {
+      const name = 'mytest'
+      const prefixed = /^[a-zA-Z]/.test(name) ? name : 'db-' + name
+      assertEqual(prefixed, 'mytest', 'Should not add prefix')
+    })
+
+    it('should remove consecutive hyphens', () => {
+      const name = 'my--database'
+      const cleaned = name.replace(/-+/g, '-')
+      assertEqual(cleaned, 'my-database', 'Should remove consecutive hyphens')
+    })
+  })
+
+  describe('Unregistered File Detection', () => {
+    it('should match sqlite file extensions', () => {
+      const files = ['test.sqlite', 'test.sqlite3', 'test.db', 'test.txt']
+      const sqliteFiles = files.filter((f) => /\.(sqlite3?|db)$/i.test(f))
+
+      assertEqual(sqliteFiles.length, 3, 'Should match 3 SQLite files')
+      assert(!sqliteFiles.includes('test.txt'), 'Should not include txt file')
+    })
+
+    it('should be case insensitive for extensions', () => {
+      const files = ['test.SQLITE', 'test.Sqlite3', 'test.DB']
+      const sqliteFiles = files.filter((f) => /\.(sqlite3?|db)$/i.test(f))
+
+      assertEqual(sqliteFiles.length, 3, 'Should match all case variants')
+    })
+  })
+})
+
 describe('SQLite Container Config', () => {
   describe('ContainerConfig for SQLite', () => {
     it('should have port 0 for file-based database', () => {

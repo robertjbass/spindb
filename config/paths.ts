@@ -114,12 +114,4 @@ export const paths = {
   getEngineContainersPath(engine: string): string {
     return join(this.containers, engine)
   },
-
-  /**
-   * Get path for SQLite registry file
-   * SQLite uses a registry (not container directories) since databases are stored externally
-   */
-  getSqliteRegistryPath(): string {
-    return join(this.root, 'sqlite-registry.json')
-  },
 }

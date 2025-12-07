@@ -48,7 +48,7 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
 - [ ] **Overwrite existing databases on restore** - Add `--force` or `--drop-existing` flag to restore/create commands to drop and recreate tables that already exist (currently fails if tables exist)
-- [ ] **Update doctor tool** - Add checks for database file permissions, container health, and engines
+- [x] **Update doctor tool** - Add checks for database file permissions, container health, and engines
 
 ### Chained Command Ideas
 
