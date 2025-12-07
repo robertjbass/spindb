@@ -201,7 +201,7 @@ async function promptNewLocation(currentPath: string): Promise<string | null> {
       default: currentPath,
       validate: (input: string) => {
         if (!input.trim()) return 'Path is required'
-        const resolvedPath = resolve(input)
+        const resolvedPath = resolve(input).toLowerCase()
         if (!resolvedPath.endsWith('.sqlite') && !resolvedPath.endsWith('.db') && !resolvedPath.endsWith('.sqlite3')) {
           return 'Path should end with .sqlite, .sqlite3, or .db'
         }
@@ -518,7 +518,7 @@ export const editCommand = new Command('edit')
         // Handle config change
         if (options.setConfig) {
           // Only PostgreSQL supports config editing for now
-          if (config.engine !== 'postgresql') {
+          if (config.engine !== Engine.PostgreSQL) {
             console.error(
               error(`Config editing is only supported for PostgreSQL containers`),
             )
@@ -556,9 +556,11 @@ export const editCommand = new Command('edit')
               configKey,
               configValue,
             )
+            spinner.succeed(`Set ${configKey} = ${configValue}`)
+          } else {
+            spinner.fail('Config editing not supported for this engine')
+            process.exit(1)
           }
-
-          spinner.succeed(`Set ${configKey} = ${configValue}`)
 
           // Check if container is running and warn about restart
           const running = await processManager.isRunning(containerName, {

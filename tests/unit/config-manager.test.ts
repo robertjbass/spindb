@@ -176,9 +176,12 @@ describe('ConfigManager', () => {
 
       assertEqual(binaryConfig.tool, 'psql', 'Should have tool name')
       assert(typeof binaryConfig.path === 'string', 'Should have path')
+      // BinarySource is 'bundled' | 'system' | 'custom'
       assert(
-        binaryConfig.source === 'system' || binaryConfig.source === 'downloaded',
-        'Source should be system or downloaded',
+        binaryConfig.source === 'system' ||
+          binaryConfig.source === 'bundled' ||
+          binaryConfig.source === 'custom',
+        'Source should be system, bundled, or custom',
       )
     })
   })

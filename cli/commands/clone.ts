@@ -71,6 +71,12 @@ export const cloneCommand = new Command('clone')
         targetName = await promptContainerName(`${sourceName}-copy`)
       }
 
+      // Check if target container already exists
+      if (await containerManager.exists(targetName, { engine: sourceConfig.engine })) {
+        console.error(error(`Container "${targetName}" already exists`))
+        process.exit(1)
+      }
+
       const cloneSpinner = createSpinner(
         `Cloning ${sourceName} to ${targetName}...`,
       )

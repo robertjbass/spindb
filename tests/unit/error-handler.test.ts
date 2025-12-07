@@ -299,11 +299,6 @@ describe('Database Name Validation', () => {
         assert(isValidDatabaseName('v2'), 'v2 should be valid')
       })
 
-      it('should accept names with hyphens', () => {
-        assert(isValidDatabaseName('my-db'), 'my-db should be valid')
-        assert(isValidDatabaseName('test-db-1'), 'test-db-1 should be valid')
-      })
-
       it('should accept names with underscores', () => {
         assert(isValidDatabaseName('my_db'), 'my_db should be valid')
         assert(isValidDatabaseName('test_db_1'), 'test_db_1 should be valid')
@@ -311,10 +306,10 @@ describe('Database Name Validation', () => {
 
       it('should accept names with mixed allowed characters', () => {
         assert(
-          isValidDatabaseName('my-test_db123'),
-          'my-test_db123 should be valid',
+          isValidDatabaseName('my_test_db123'),
+          'my_test_db123 should be valid',
         )
-        assert(isValidDatabaseName('A1_b-2'), 'A1_b-2 should be valid')
+        assert(isValidDatabaseName('A1_b_2'), 'A1_b_2 should be valid')
       })
     })
 
@@ -362,6 +357,17 @@ describe('Database Name Validation', () => {
         )
       })
 
+      it('should reject names with hyphens (require quoting in SQL)', () => {
+        assert(
+          !isValidDatabaseName('my-db'),
+          'Names with hyphens should be invalid',
+        )
+        assert(
+          !isValidDatabaseName('test-db-1'),
+          'test-db-1 should be invalid',
+        )
+      })
+
       it('should reject names with special characters', () => {
         assert(!isValidDatabaseName('my@db'), 'Names with @ should be invalid')
         assert(
@@ -384,7 +390,7 @@ describe('Database Name Validation', () => {
       // Should not throw
       assertValidDatabaseName('mydb')
       assertValidDatabaseName('test_db')
-      assertValidDatabaseName('my-database-123')
+      assertValidDatabaseName('my_database_123')
     })
 
     it('should throw SpinDBError for invalid names', () => {

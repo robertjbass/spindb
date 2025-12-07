@@ -312,7 +312,7 @@ export const restoreCommand = new Command('restore')
             throw new Error(result.stderr || 'Restore failed with fatal error')
           }
 
-          if (result.code === 0 || !result.stderr) {
+          if (result.code === 0) {
             restoreSpinner.succeed('Backup restored successfully')
           } else {
             // pg_restore often returns warnings even on success

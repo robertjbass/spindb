@@ -117,11 +117,11 @@ describe('SQLite Integration Tests', () => {
     await runScriptFile(containerName, SEED_FILE)
 
     // Query row count directly via sqlite3
-    const { exec } = await import('child_process')
+    const { execFile } = await import('child_process')
     const { promisify } = await import('util')
-    const execAsync = promisify(exec)
+    const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execAsync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM test_user"`)
+    const { stdout } = await execFileAsync('sqlite3', [dbPath, 'SELECT COUNT(*) FROM test_user'])
     const rowCount = parseInt(stdout.trim(), 10)
 
     assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Should have correct row count after seeding')
@@ -136,11 +136,11 @@ describe('SQLite Integration Tests', () => {
     await runScriptSQL(containerName, "DELETE FROM test_user WHERE email = 'eve@example.com'")
 
     // Verify deletion
-    const { exec } = await import('child_process')
+    const { execFile } = await import('child_process')
     const { promisify } = await import('util')
-    const execAsync = promisify(exec)
+    const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execAsync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM test_user"`)
+    const { stdout } = await execFileAsync('sqlite3', [dbPath, 'SELECT COUNT(*) FROM test_user'])
     const rowCount = parseInt(stdout.trim(), 10)
 
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
@@ -196,11 +196,11 @@ describe('SQLite Integration Tests', () => {
     await engine.restore(backupConfig!, backupPath)
 
     // Verify restored data
-    const { exec } = await import('child_process')
+    const { execFile } = await import('child_process')
     const { promisify } = await import('util')
-    const execAsync = promisify(exec)
+    const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execAsync(`sqlite3 "${backupDbPath}" "SELECT COUNT(*) FROM test_user"`)
+    const { stdout } = await execFileAsync('sqlite3', [backupDbPath, 'SELECT COUNT(*) FROM test_user'])
     const rowCount = parseInt(stdout.trim(), 10)
 
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Restored data should match source')
@@ -253,11 +253,11 @@ describe('SQLite Integration Tests', () => {
     assertEqual(ourContainer?.status, 'running', 'Container should still be available after relocation')
 
     // Verify data is intact
-    const { exec } = await import('child_process')
+    const { execFile } = await import('child_process')
     const { promisify } = await import('util')
-    const execAsync = promisify(exec)
+    const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execAsync(`sqlite3 "${newDbPath}" "SELECT COUNT(*) FROM test_user"`)
+    const { stdout } = await execFileAsync('sqlite3', [newDbPath, 'SELECT COUNT(*) FROM test_user'])
     const rowCount = parseInt(stdout.trim(), 10)
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Data should be intact after relocation')
 

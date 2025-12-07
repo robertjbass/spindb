@@ -144,8 +144,9 @@ function detectLocationType(location: string): {
   }
 
   if (existsSync(location)) {
-    // Check if it's a SQLite file
-    if (location.endsWith('.sqlite') || location.endsWith('.db') || location.endsWith('.sqlite3')) {
+    // Check if it's a SQLite file (case-insensitive)
+    const lowerLocation = location.toLowerCase()
+    if (lowerLocation.endsWith('.sqlite') || lowerLocation.endsWith('.db') || lowerLocation.endsWith('.sqlite3')) {
       return { type: 'file', inferredEngine: Engine.SQLite }
     }
     return { type: 'file' }
@@ -581,7 +582,7 @@ export const createCommand = new Command('create')
             createDatabase: false,
           })
 
-          if (result.code === 0 || !result.stderr) {
+          if (result.code === 0) {
             restoreSpinner.succeed('Backup restored successfully')
           } else {
             restoreSpinner.warn('Restore completed with warnings')

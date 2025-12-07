@@ -313,12 +313,15 @@ export function createDependencyMissingError(
 /**
  * Validate a database name to prevent SQL injection.
  * Database names must start with a letter and contain only
- * alphanumeric characters, hyphens, and underscores.
+ * alphanumeric characters and underscores.
+ *
+ * Note: Hyphens are excluded because they require quoted identifiers
+ * in SQL, which is error-prone for users.
  */
 export function isValidDatabaseName(name: string): boolean {
-  // Same validation as container names - alphanumeric, hyphens, underscores
   // Must start with a letter to be valid in all database systems
-  return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
+  // Hyphens excluded to avoid requiring quoted identifiers in SQL
+  return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)
 }
 
 /**
@@ -331,7 +334,7 @@ export function assertValidDatabaseName(name: string): void {
       ErrorCodes.INVALID_DATABASE_NAME,
       `Invalid database name: "${name}"`,
       'error',
-      'Database names must start with a letter and contain only letters, numbers, hyphens, and underscores',
+      'Database names must start with a letter and contain only letters, numbers, and underscores',
       { databaseName: name },
     )
   }

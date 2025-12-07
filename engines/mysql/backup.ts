@@ -122,66 +122,55 @@ async function createCompressedBackup(
   database: string,
   outputPath: string,
 ): Promise<BackupResult> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const safeResolve = (value: BackupResult) => {
-      if (!settled) {
-        settled = true
-        resolve(value)
-      }
-    }
-    const safeReject = (err: Error) => {
-      if (!settled) {
-        settled = true
-        reject(err)
-      }
-    }
+  const args = [
+    '-h',
+    '127.0.0.1',
+    '-P',
+    String(port),
+    '-u',
+    engineDef.superuser,
+    database,
+  ]
 
-    const args = [
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(port),
-      '-u',
-      engineDef.superuser,
-      database,
-    ]
+  const proc = spawn(mysqldump, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
 
-    const proc = spawn(mysqldump, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
+  const gzip = createGzip()
+  const output = createWriteStream(outputPath)
 
-    const gzip = createGzip()
-    const output = createWriteStream(outputPath)
+  let stderr = ''
 
-    let stderr = ''
+  proc.stderr?.on('data', (data: Buffer) => {
+    stderr += data.toString()
+  })
 
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
+  // Create promise for pipeline completion
+  const pipelinePromise = pipeline(proc.stdout!, gzip, output)
 
-    // Pipe mysqldump stdout -> gzip -> file
-    pipeline(proc.stdout!, gzip, output)
-      .then(async () => {
-        const stats = await stat(outputPath)
-        safeResolve({
-          path: outputPath,
-          format: 'compressed',
-          size: stats.size,
-        })
-      })
-      .catch(safeReject)
-
+  // Create promise for process exit
+  const exitPromise = new Promise<void>((resolve, reject) => {
     proc.on('error', (err: NodeJS.ErrnoException) => {
-      safeReject(err)
+      reject(err)
     })
 
     proc.on('close', (code) => {
-      if (code !== 0) {
+      if (code === 0) {
+        resolve()
+      } else {
         const errorMessage = stderr || `mysqldump exited with code ${code}`
-        safeReject(new Error(errorMessage))
+        reject(new Error(errorMessage))
       }
-      // If code is 0, the pipeline promise will resolve
     })
   })
+
+  // Wait for both pipeline AND process exit to succeed
+  await Promise.all([pipelinePromise, exitPromise])
+
+  const stats = await stat(outputPath)
+  return {
+    path: outputPath,
+    format: 'compressed',
+    size: stats.size,
+  }
 }

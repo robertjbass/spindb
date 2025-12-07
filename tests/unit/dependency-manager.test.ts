@@ -437,18 +437,25 @@ describe('Error Messages', () => {
       },
     }
 
+    let threw = false
+    let caughtError: Error | null = null
+
     try {
       buildInstallCommand(mockDep, mockPm)
     } catch (error) {
-      assert(error instanceof Error, 'Should throw Error')
-      assert(
-        error.message.includes(mockDep.name),
-        'Error should include dependency name',
-      )
-      assert(
-        error.message.includes(mockPm.name),
-        'Error should include package manager name',
-      )
+      threw = true
+      caughtError = error as Error
     }
+
+    assert(threw, 'buildInstallCommand should throw when package definition is missing')
+    assert(caughtError instanceof Error, 'Should throw Error')
+    assert(
+      caughtError!.message.includes(mockDep.name),
+      'Error should include dependency name',
+    )
+    assert(
+      caughtError!.message.includes(mockPm.name),
+      'Error should include package manager name',
+    )
   })
 })
