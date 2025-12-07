@@ -11,12 +11,22 @@ import {
   getInstalledEngines,
   type InstalledPostgresEngine,
   type InstalledMysqlEngine,
+  type InstalledSqliteEngine,
 } from '../../helpers'
 import {
   getMysqlVersion,
   getMysqlInstallInfo,
 } from '../../../engines/mysql/binary-detection'
+
 import { type MenuChoice } from './shared'
+
+/**
+ * Pad string to width, accounting for emoji taking 2 display columns
+ */
+function padWithEmoji(str: string, width: number): string {
+  const emojiCount = (str.match(/[\u{1F300}-\u{1F9FF}]/gu) || []).length
+  return str.padEnd(width + emojiCount)
+}
 
 export async function handleEngines(): Promise<void> {
   console.clear()
@@ -46,6 +56,9 @@ export async function handleEngines(): Promise<void> {
   const mysqlEngine = engines.find(
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
   )
+  const sqliteEngine = engines.find(
+    (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
+  )
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
@@ -62,10 +75,11 @@ export async function handleEngines(): Promise<void> {
   for (const engine of pgEngines) {
     const icon = getEngineIcon(engine.engine)
     const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} ${engine.engine}`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(`${icon} ${engine.engine}`.padEnd(13)) +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -75,11 +89,25 @@ export async function handleEngines(): Promise<void> {
   if (mysqlEngine) {
     const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
+    const engineDisplay = `${icon} ${displayName}`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(`${icon} ${displayName}`.padEnd(13)) +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(mysqlEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  if (sqliteEngine) {
+    const icon = ENGINE_ICONS.sqlite
+    const engineDisplay = `${icon} sqlite`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(sqliteEngine.version.padEnd(12)) +
         chalk.gray('system'.padEnd(18)) +
         chalk.gray('(system-installed)'),
     )
@@ -98,6 +126,9 @@ export async function handleEngines(): Promise<void> {
   if (mysqlEngine) {
     console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
   }
+  if (sqliteEngine) {
+    console.log(chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`))
+  }
   console.log()
 
   const choices: MenuChoice[] = []
@@ -114,6 +145,13 @@ export async function handleEngines(): Promise<void> {
     choices.push({
       name: `${chalk.blue('ℹ')} ${displayName} ${mysqlEngine.version} ${chalk.gray('(system-installed)')}`,
       value: `mysql-info:${mysqlEngine.path}`,
+    })
+  }
+
+  if (sqliteEngine) {
+    choices.push({
+      name: `${chalk.blue('ℹ')} SQLite ${sqliteEngine.version} ${chalk.gray('(system-installed)')}`,
+      value: `sqlite-info:${sqliteEngine.path}`,
     })
   }
 
@@ -143,6 +181,12 @@ export async function handleEngines(): Promise<void> {
   if (action.startsWith('mysql-info:')) {
     const mysqldPath = action.replace('mysql-info:', '')
     await handleMysqlInfo(mysqldPath)
+    await handleEngines()
+  }
+
+  if (action.startsWith('sqlite-info:')) {
+    const sqlitePath = action.replace('sqlite-info:', '')
+    await handleSqliteInfo(sqlitePath)
     await handleEngines()
   }
 }
@@ -350,6 +394,78 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
     console.log(chalk.gray(`  The binary is located at: ${mysqldPath}`))
   }
 
+  console.log()
+
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to go back...'),
+    },
+  ])
+}
+
+async function handleSqliteInfo(sqlitePath: string): Promise<void> {
+  console.clear()
+
+  console.log(header('SQLite Information'))
+  console.log()
+
+  // Get version
+  let version = 'unknown'
+  try {
+    const { exec } = await import('child_process')
+    const { promisify } = await import('util')
+    const execAsync = promisify(exec)
+    const { stdout } = await execAsync(`"${sqlitePath}" --version`)
+    const match = stdout.match(/^([\d.]+)/)
+    if (match) {
+      version = match[1]
+    }
+  } catch {
+    // Ignore
+  }
+
+  const containers = await containerManager.list()
+  const sqliteContainers = containers.filter((c) => c.engine === 'sqlite')
+
+  if (sqliteContainers.length > 0) {
+    console.log(info(`${sqliteContainers.length} SQLite database(s) registered:`))
+    console.log()
+    for (const c of sqliteContainers) {
+      const status =
+        c.status === 'running'
+          ? chalk.blue('🔵 available')
+          : chalk.gray('⚪ missing')
+      console.log(chalk.gray(`  • ${c.name} ${status}`))
+    }
+    console.log()
+  }
+
+  console.log(chalk.white('  Installation Details:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Version:'.padEnd(18)) +
+      chalk.yellow(version),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Binary Path:'.padEnd(18)) +
+      chalk.gray(sqlitePath),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Type:'.padEnd(18)) +
+      chalk.cyan('Embedded (file-based)'),
+  )
+  console.log()
+
+  console.log(chalk.white('  Notes:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+  console.log(chalk.gray('  • SQLite is typically pre-installed on macOS and most Linux distributions'))
+  console.log(chalk.gray('  • No server process - databases are just files'))
+  console.log(chalk.gray('  • Use "spindb delete <name>" to unregister a database'))
   console.log()
 
   await inquirer.prompt([

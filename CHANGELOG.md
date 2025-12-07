@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2025-12-06
+
+### Added
+- `--start` flag for `create` command to start container immediately after creation (skip prompt)
+- `--no-start` flag for `create` command to skip starting container after creation
+- `--connect` flag for `create` command to open shell connection after creation (implies `--start`)
+- SQLite now appears in `engines` list (CLI and interactive menu)
+- `handleSqliteInfo()` function in interactive menu to display SQLite installation details
+- Database name validation functions (`isValidDatabaseName`, `assertValidDatabaseName`) for SQL injection prevention
+- Unit tests for database name validation (15 new tests)
+
+### Fixed
+- Column alignment in engines list now properly handles emoji width with `padWithEmoji()` helper
+- SQL injection vulnerability via unsanitized database names in PostgreSQL and MySQL engines
+- Resource leak in port manager where socket wasn't closed on non-EADDRINUSE errors
+- MySQL start promise that could hang indefinitely when `mysqladmin` path is null
+- MySQL backup pipeline double-rejection causing unhandled rejection errors
+- Restore command now uses TransactionManager for proper rollback on failure
+- Clone and rename operations now use TransactionManager for atomicity
+- Init cleanup now properly removes data directory on initialization failure
+
+### Changed
+- Engines list display now uses consistent `padWithEmoji()` function across CLI and menu
+
 ## [0.9.0] - 2025-12-06
 
 ### Added

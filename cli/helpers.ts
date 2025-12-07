@@ -30,7 +30,17 @@ export type InstalledMysqlEngine = {
   isMariaDB: boolean
 }
 
-export type InstalledEngine = InstalledPostgresEngine | InstalledMysqlEngine
+export type InstalledSqliteEngine = {
+  engine: 'sqlite'
+  version: string
+  path: string
+  source: 'system'
+}
+
+export type InstalledEngine =
+  | InstalledPostgresEngine
+  | InstalledMysqlEngine
+  | InstalledSqliteEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const postgresPath = join(binPath, 'bin', 'postgres')
@@ -125,6 +135,30 @@ async function getInstalledMysqlEngine(): Promise<InstalledMysqlEngine | null> {
   }
 }
 
+async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null> {
+  try {
+    const { stdout: whichOutput } = await execAsync('which sqlite3')
+    const sqlitePath = whichOutput.trim()
+    if (!sqlitePath) {
+      return null
+    }
+
+    const { stdout: versionOutput } = await execAsync(`"${sqlitePath}" --version`)
+    // sqlite3 --version outputs: "3.43.2 2023-10-10 12:14:04 ..."
+    const versionMatch = versionOutput.match(/^([\d.]+)/)
+    const version = versionMatch ? versionMatch[1] : 'unknown'
+
+    return {
+      engine: 'sqlite',
+      version,
+      path: sqlitePath,
+      source: 'system',
+    }
+  } catch {
+    return null
+  }
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -146,6 +180,11 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
   const mysqlEngine = await getInstalledMysqlEngine()
   if (mysqlEngine) {
     engines.push(mysqlEngine)
+  }
+
+  const sqliteEngine = await getInstalledSqliteEngine()
+  if (sqliteEngine) {
+    engines.push(sqliteEngine)
   }
 
   return engines
