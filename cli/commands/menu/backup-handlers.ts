@@ -403,7 +403,7 @@ export async function handleRestore(): Promise<void> {
     createDatabase: false,
   })
 
-  if (result.code === 0 || !result.stderr) {
+  if (result.code === 0) {
     restoreSpinner.succeed('Backup restored successfully')
   } else {
     const stderr = result.stderr || ''
@@ -552,7 +552,7 @@ export async function handleRestore(): Promise<void> {
     }
   }
 
-  if (result.code === 0 || !result.stderr) {
+  if (result.code === 0) {
     const connectionString = engine.getConnectionString(config, databaseName)
     console.log()
     console.log(success(`Database "${databaseName}" restored`))
@@ -733,6 +733,12 @@ export async function handleClone(): Promise<void> {
   )
   if (!sourceName) return
 
+  const sourceConfig = await containerManager.getConfig(sourceName)
+  if (!sourceConfig) {
+    console.log(error(`Container "${sourceName}" not found`))
+    return
+  }
+
   const { targetName } = await inquirer.prompt<{ targetName: string }>([
     {
       type: 'input',
@@ -749,16 +755,28 @@ export async function handleClone(): Promise<void> {
     },
   ])
 
+  // Check if target container already exists
+  if (await containerManager.exists(targetName, { engine: sourceConfig.engine })) {
+    console.log(error(`Container "${targetName}" already exists`))
+    return
+  }
+
   const spinner = createSpinner(`Cloning ${sourceName} to ${targetName}...`)
   spinner.start()
 
-  const newConfig = await containerManager.clone(sourceName, targetName)
+  try {
+    const newConfig = await containerManager.clone(sourceName, targetName)
 
-  spinner.succeed(`Cloned "${sourceName}" to "${targetName}"`)
+    spinner.succeed(`Cloned "${sourceName}" to "${targetName}"`)
 
-  const engine = getEngine(newConfig.engine)
-  const connectionString = engine.getConnectionString(newConfig)
+    const engine = getEngine(newConfig.engine)
+    const connectionString = engine.getConnectionString(newConfig)
 
-  console.log()
-  console.log(connectionBox(targetName, connectionString, newConfig.port))
+    console.log()
+    console.log(connectionBox(targetName, connectionString, newConfig.port))
+  } catch (err) {
+    const e = err as Error
+    spinner.fail(`Failed to clone "${sourceName}"`)
+    console.log(error(e.message))
+  }
 }

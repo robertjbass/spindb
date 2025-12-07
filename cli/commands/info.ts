@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { existsSync } from 'fs'
+import { basename } from 'path'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
@@ -197,8 +198,9 @@ async function displayAllContainersInfo(
     // Show truncated file path for SQLite instead of port
     let portOrPath: string
     if (isSQLite) {
-      const fileName = container.database.split('/').pop() || container.database
-      portOrPath = fileName.length > 7 ? fileName.slice(0, 6) + '…' : fileName
+      const fileName = basename(container.database)
+      // Truncate if longer than 8 chars to fit in 8-char column
+      portOrPath = fileName.length > 8 ? fileName.slice(0, 7) + '…' : fileName
     } else {
       portOrPath = String(container.port)
     }

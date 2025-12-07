@@ -27,6 +27,8 @@ export class PortManager {
       const server = net.createServer()
 
       server.once('error', (err: NodeJS.ErrnoException) => {
+        // Always close the server to prevent resource leaks
+        server.close()
         if (err.code === 'EADDRINUSE') {
           resolve(false)
         } else {

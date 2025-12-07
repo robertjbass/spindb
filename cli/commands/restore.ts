@@ -16,6 +16,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
+import { TransactionManager } from '../../core/transaction-manager'
+import { logDebug } from '../../core/error-handler'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
@@ -245,41 +247,99 @@ export const restoreCommand = new Command('restore')
         const format = await engine.detectBackupFormat(backupPath)
         detectSpinner.succeed(`Detected: ${format.description}`)
 
+        // Use TransactionManager to ensure database is cleaned up on restore failure
+        const tx = new TransactionManager()
+        let databaseCreated = false
+
         const dbSpinner = createSpinner(
           `Creating database "${databaseName}"...`,
         )
         dbSpinner.start()
 
-        await engine.createDatabase(config, databaseName)
-        dbSpinner.succeed(`Database "${databaseName}" ready`)
+        try {
+          await engine.createDatabase(config, databaseName)
+          databaseCreated = true
+          dbSpinner.succeed(`Database "${databaseName}" ready`)
 
-        await containerManager.addDatabase(containerName, databaseName)
-
-        const restoreSpinner = createSpinner('Restoring backup...')
-        restoreSpinner.start()
-
-        const result = await engine.restore(config, backupPath, {
-          database: databaseName,
-          createDatabase: false,
-        })
-
-        if (result.code === 0 || !result.stderr) {
-          restoreSpinner.succeed('Backup restored successfully')
-        } else {
-          // pg_restore often returns warnings even on success
-          restoreSpinner.warn('Restore completed with warnings')
-          if (result.stderr) {
-            console.log(chalk.yellow('\n  Warnings:'))
-            const lines = result.stderr.split('\n').slice(0, 5)
-            lines.forEach((line) => {
-              if (line.trim()) {
-                console.log(chalk.gray(`    ${line}`))
+          // Register rollback to drop database if restore fails
+          tx.addRollback({
+            description: `Drop database "${databaseName}"`,
+            execute: async () => {
+              try {
+                await engine.dropDatabase(config, databaseName)
+                logDebug(`Rolled back: dropped database "${databaseName}"`)
+              } catch (dropErr) {
+                logDebug(
+                  `Failed to drop database during rollback: ${dropErr instanceof Error ? dropErr.message : String(dropErr)}`,
+                )
               }
-            })
-            if (result.stderr.split('\n').length > 5) {
-              console.log(chalk.gray('    ...'))
+            },
+          })
+
+          await containerManager.addDatabase(containerName, databaseName)
+
+          // Register rollback to remove database from container tracking
+          tx.addRollback({
+            description: `Remove "${databaseName}" from container tracking`,
+            execute: async () => {
+              try {
+                await containerManager.removeDatabase(
+                  containerName,
+                  databaseName,
+                )
+                logDebug(
+                  `Rolled back: removed "${databaseName}" from container tracking`,
+                )
+              } catch (removeErr) {
+                logDebug(
+                  `Failed to remove database from tracking during rollback: ${removeErr instanceof Error ? removeErr.message : String(removeErr)}`,
+                )
+              }
+            },
+          })
+
+          const restoreSpinner = createSpinner('Restoring backup...')
+          restoreSpinner.start()
+
+          const result = await engine.restore(config, backupPath, {
+            database: databaseName,
+            createDatabase: false,
+          })
+
+          // Check if restore completely failed (non-zero code with no data restored)
+          if (result.code !== 0 && result.stderr?.includes('FATAL')) {
+            restoreSpinner.fail('Restore failed')
+            throw new Error(result.stderr || 'Restore failed with fatal error')
+          }
+
+          if (result.code === 0) {
+            restoreSpinner.succeed('Backup restored successfully')
+          } else {
+            // pg_restore often returns warnings even on success
+            restoreSpinner.warn('Restore completed with warnings')
+            if (result.stderr) {
+              console.log(chalk.yellow('\n  Warnings:'))
+              const lines = result.stderr.split('\n').slice(0, 5)
+              lines.forEach((line) => {
+                if (line.trim()) {
+                  console.log(chalk.gray(`    ${line}`))
+                }
+              })
+              if (result.stderr.split('\n').length > 5) {
+                console.log(chalk.gray('    ...'))
+              }
             }
           }
+
+          // Restore succeeded - commit transaction (clear rollback actions)
+          tx.commit()
+        } catch (restoreErr) {
+          // Restore failed - execute rollbacks to clean up created database
+          if (databaseCreated) {
+            console.log(chalk.yellow('\n  Cleaning up after failed restore...'))
+            await tx.rollback()
+          }
+          throw restoreErr
         }
 
         const connectionString = engine.getConnectionString(

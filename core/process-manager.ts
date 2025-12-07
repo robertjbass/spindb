@@ -1,7 +1,7 @@
 import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
-import { readFile } from 'fs/promises'
+import { readFile, rm } from 'fs/promises'
 import { paths } from '../config/paths'
 import { logDebug } from './error-handler'
 import type { ProcessResult, StatusResult } from '../types'
@@ -42,6 +42,9 @@ export class ProcessManager {
   ): Promise<ProcessResult> {
     const { superuser = 'postgres' } = options
 
+    // Track if directory existed before initdb (to know if we should clean up)
+    const dirExistedBefore = existsSync(dataDir)
+
     const args = [
       '-D',
       dataDir,
@@ -51,6 +54,21 @@ export class ProcessManager {
       '--encoding=UTF8',
       '--no-locale',
     ]
+
+    // Helper to clean up data directory on failure
+    const cleanupOnFailure = async () => {
+      // Only clean up if initdb created the directory (it didn't exist before)
+      if (!dirExistedBefore && existsSync(dataDir)) {
+        try {
+          await rm(dataDir, { recursive: true, force: true })
+          logDebug(`Cleaned up data directory after initdb failure: ${dataDir}`)
+        } catch (cleanupErr) {
+          logDebug(
+            `Failed to clean up data directory: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
+          )
+        }
+      }
+    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(initdbPath, args, {
@@ -67,15 +85,19 @@ export class ProcessManager {
         stderr += data.toString()
       })
 
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
+          await cleanupOnFailure()
           reject(new Error(`initdb failed with code ${code}: ${stderr}`))
         }
       })
 
-      proc.on('error', reject)
+      proc.on('error', async (err) => {
+        await cleanupOnFailure()
+        reject(err)
+      })
     })
   }
 

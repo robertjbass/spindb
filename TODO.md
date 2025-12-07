@@ -53,6 +53,24 @@ See [Engines](#engines) section below for full engine status and details.
 - [ ] **Overwrite existing databases on restore** - Add `--force` or `--drop-existing` flag to restore/create commands to drop and recreate tables that already exist (currently fails if tables exist)
 - [ ] **Update doctor tool** - Add checks for database file permissions, container health, and engines
 
+### Chained Command Ideas
+
+Combine common multi-step workflows into single commands. These should remain intuitive and not bloat the CLI.
+
+| Proposed Command | Steps Combined | Example |
+|------------------|----------------|---------|
+| `spindb db create <container> <dbname> [--seed file.sql] [--connect]` | Create database + run seed file + open shell | `spindb db create myapp users --seed schema.sql --connect` |
+| `spindb clone <container> <new-name> --start` | Clone container + start it | `spindb clone prod-backup local-test --start` |
+| `spindb restore <container> <backup> --start` | Restore backup + start container | `spindb restore mydb backup.dump --start` |
+| `spindb create <name> --start [--connect]` | Create + start + optionally connect | `spindb create mydb --start --connect` |
+| `spindb backup <container> --stop` | Stop container + create backup | `spindb backup mydb --stop` (for consistent backups) |
+
+**Guidelines:**
+- Flags should be additive (each flag adds one step)
+- Order of operations should be intuitive (create → seed → start → connect)
+- Don't combine conflicting operations
+- Keep documentation clear about what each flag does
+
 ### Security (Pro)
 - [ ] **Password authentication** - Set passwords on container creation
 - [ ] **Encrypted backups** - GPG/OpenSSL encryption for dumps

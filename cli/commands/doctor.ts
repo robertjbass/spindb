@@ -247,10 +247,6 @@ export const doctorCommand = new Command('doctor')
   .description('Check system health and fix common issues')
   .option('--json', 'Output as JSON')
   .action(async (options: { json?: boolean }) => {
-    console.log()
-    console.log(header('SpinDB Health Check'))
-    console.log()
-
     const checks = [
       await checkConfiguration(),
       await checkContainers(),
@@ -264,6 +260,11 @@ export const doctorCommand = new Command('doctor')
       console.log(JSON.stringify(jsonChecks, null, 2))
       return
     }
+
+    // Human-readable output - print header first
+    console.log()
+    console.log(header('SpinDB Health Check'))
+    console.log()
 
     // Display results
     for (const check of checks) {

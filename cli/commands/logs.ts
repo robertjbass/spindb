@@ -88,13 +88,19 @@ export const logsCommand = new Command('logs')
             stdio: 'inherit',
           })
 
-          process.on('SIGINT', () => {
+          // Use named handler so we can remove it to prevent listener leaks
+          const sigintHandler = () => {
+            process.removeListener('SIGINT', sigintHandler)
             child.kill('SIGTERM')
             process.exit(0)
-          })
+          }
+          process.on('SIGINT', sigintHandler)
 
           await new Promise<void>((resolve) => {
-            child.on('close', () => resolve())
+            child.on('close', () => {
+              process.removeListener('SIGINT', sigintHandler)
+              resolve()
+            })
           })
           return
         }

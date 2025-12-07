@@ -12,8 +12,8 @@ import type { ContainerConfig } from '../../types'
  * Pad string to width, accounting for emoji taking 2 display columns
  */
 function padWithEmoji(str: string, width: number): string {
-  // Count emojis (they take 2 display columns but count as 1-2 chars)
-  const emojiCount = (str.match(/[\u{1F300}-\u{1F9FF}]/gu) || []).length
+  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
+  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
 }
 
@@ -107,8 +107,8 @@ export const listCommand = new Command('list')
         let portOrPath: string
         if (container.engine === Engine.SQLite) {
           const fileName = basename(container.database)
-          // Truncate if longer than 7 chars to fit in 8-char column
-          portOrPath = fileName.length > 7 ? fileName.slice(0, 6) + '…' : fileName
+          // Truncate if longer than 8 chars to fit in 8-char column
+          portOrPath = fileName.length > 8 ? fileName.slice(0, 7) + '…' : fileName
         } else {
           portOrPath = String(container.port)
         }

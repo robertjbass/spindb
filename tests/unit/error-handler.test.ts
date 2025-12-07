@@ -10,6 +10,8 @@ import {
   createContainerNotFoundError,
   createVersionMismatchError,
   createDependencyMissingError,
+  isValidDatabaseName,
+  assertValidDatabaseName,
 } from '../../core/error-handler'
 import { assert, assertEqual } from '../integration/helpers'
 
@@ -273,5 +275,168 @@ describe('ErrorCodes', () => {
 
     // Rollback errors
     assert('ROLLBACK_FAILED' in ErrorCodes, 'Should have ROLLBACK_FAILED')
+
+    // Database validation errors
+    assert(
+      'INVALID_DATABASE_NAME' in ErrorCodes,
+      'Should have INVALID_DATABASE_NAME',
+    )
+  })
+})
+
+describe('Database Name Validation', () => {
+  describe('isValidDatabaseName', () => {
+    describe('valid names', () => {
+      it('should accept simple alphabetic names', () => {
+        assert(isValidDatabaseName('mydb'), 'mydb should be valid')
+        assert(isValidDatabaseName('test'), 'test should be valid')
+        assert(isValidDatabaseName('Users'), 'Users should be valid')
+      })
+
+      it('should accept names with numbers after first character', () => {
+        assert(isValidDatabaseName('db1'), 'db1 should be valid')
+        assert(isValidDatabaseName('test123'), 'test123 should be valid')
+        assert(isValidDatabaseName('v2'), 'v2 should be valid')
+      })
+
+      it('should accept names with underscores', () => {
+        assert(isValidDatabaseName('my_db'), 'my_db should be valid')
+        assert(isValidDatabaseName('test_db_1'), 'test_db_1 should be valid')
+      })
+
+      it('should accept names with mixed allowed characters', () => {
+        assert(
+          isValidDatabaseName('my_test_db123'),
+          'my_test_db123 should be valid',
+        )
+        assert(isValidDatabaseName('A1_b_2'), 'A1_b_2 should be valid')
+      })
+    })
+
+    describe('invalid names (SQL injection prevention)', () => {
+      it('should reject names starting with numbers', () => {
+        assert(
+          !isValidDatabaseName('1db'),
+          'Names starting with numbers should be invalid',
+        )
+        assert(!isValidDatabaseName('123'), '123 should be invalid')
+      })
+
+      it('should reject names starting with special characters', () => {
+        assert(
+          !isValidDatabaseName('-db'),
+          'Names starting with hyphen should be invalid',
+        )
+        assert(
+          !isValidDatabaseName('_db'),
+          'Names starting with underscore should be invalid',
+        )
+      })
+
+      it('should reject names with spaces', () => {
+        assert(!isValidDatabaseName('my db'), 'Names with spaces should be invalid')
+        assert(
+          !isValidDatabaseName('test database'),
+          'test database should be invalid',
+        )
+      })
+
+      it('should reject names with SQL injection characters', () => {
+        assert(
+          !isValidDatabaseName("db'; DROP TABLE users;--"),
+          'SQL injection should be invalid',
+        )
+        assert(!isValidDatabaseName('db"'), 'Names with quotes should be invalid')
+        assert(
+          !isValidDatabaseName('db`'),
+          'Names with backticks should be invalid',
+        )
+        assert(
+          !isValidDatabaseName("db'"),
+          'Names with single quotes should be invalid',
+        )
+      })
+
+      it('should reject names with hyphens (require quoting in SQL)', () => {
+        assert(
+          !isValidDatabaseName('my-db'),
+          'Names with hyphens should be invalid',
+        )
+        assert(
+          !isValidDatabaseName('test-db-1'),
+          'test-db-1 should be invalid',
+        )
+      })
+
+      it('should reject names with special characters', () => {
+        assert(!isValidDatabaseName('my@db'), 'Names with @ should be invalid')
+        assert(
+          !isValidDatabaseName('test.db'),
+          'Names with periods should be invalid',
+        )
+        assert(!isValidDatabaseName('db!'), 'Names with ! should be invalid')
+        assert(!isValidDatabaseName('db$var'), 'Names with $ should be invalid')
+        assert(!isValidDatabaseName('db;'), 'Names with ; should be invalid')
+      })
+
+      it('should reject empty names', () => {
+        assert(!isValidDatabaseName(''), 'Empty names should be invalid')
+      })
+    })
+  })
+
+  describe('assertValidDatabaseName', () => {
+    it('should not throw for valid names', () => {
+      // Should not throw
+      assertValidDatabaseName('mydb')
+      assertValidDatabaseName('test_db')
+      assertValidDatabaseName('my_database_123')
+    })
+
+    it('should throw SpinDBError for invalid names', () => {
+      let threw = false
+      try {
+        assertValidDatabaseName("db'; DROP TABLE users;--")
+      } catch (error) {
+        threw = true
+        assert(error instanceof SpinDBError, 'Should throw SpinDBError')
+        assertEqual(
+          (error as SpinDBError).code,
+          ErrorCodes.INVALID_DATABASE_NAME,
+          'Error code should be INVALID_DATABASE_NAME',
+        )
+        assert(
+          (error as SpinDBError).message.includes("db'; DROP TABLE users;--"),
+          'Error message should include the invalid name',
+        )
+        assert(
+          (error as SpinDBError).suggestion !== undefined,
+          'Error should include suggestion',
+        )
+      }
+      assert(threw, 'Should have thrown an error')
+    })
+
+    it('should throw for empty name', () => {
+      let threw = false
+      try {
+        assertValidDatabaseName('')
+      } catch (error) {
+        threw = true
+        assert(error instanceof SpinDBError, 'Should throw SpinDBError')
+      }
+      assert(threw, 'Should have thrown an error for empty name')
+    })
+
+    it('should throw for name starting with number', () => {
+      let threw = false
+      try {
+        assertValidDatabaseName('123db')
+      } catch (error) {
+        threw = true
+        assert(error instanceof SpinDBError, 'Should throw SpinDBError')
+      }
+      assert(threw, 'Should have thrown an error for name starting with number')
+    })
   })
 })

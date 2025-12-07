@@ -12,8 +12,17 @@ import {
   getInstalledPostgresEngines,
   type InstalledPostgresEngine,
   type InstalledMysqlEngine,
+  type InstalledSqliteEngine,
 } from '../helpers'
 
+/**
+ * Pad string to width, accounting for emoji taking 2 display columns
+ */
+function padWithEmoji(str: string, width: number): string {
+  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
+  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
+  return str.padEnd(width + emojiCount)
+}
 
 /**
  * List subcommand action
@@ -41,12 +50,15 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     return
   }
 
-  // Separate PostgreSQL and MySQL
+  // Separate engines by type
   const pgEngines = engines.filter(
     (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
   )
   const mysqlEngine = engines.find(
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
+  )
+  const sqliteEngine = engines.find(
+    (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
   )
 
   // Calculate total size for PostgreSQL
@@ -67,10 +79,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   for (const engine of pgEngines) {
     const icon = getEngineIcon(engine.engine)
     const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} ${engine.engine}`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(`${icon} ${engine.engine}`.padEnd(13)) +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -81,11 +94,26 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   if (mysqlEngine) {
     const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
+    const engineDisplay = `${icon} ${displayName}`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(`${icon} ${displayName}`.padEnd(13)) +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(mysqlEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  // SQLite row
+  if (sqliteEngine) {
+    const icon = ENGINE_ICONS.sqlite
+    const engineDisplay = `${icon} sqlite`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(sqliteEngine.version.padEnd(12)) +
         chalk.gray('system'.padEnd(18)) +
         chalk.gray('(system-installed)'),
     )
@@ -104,6 +132,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   }
   if (mysqlEngine) {
     console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
+  }
+  if (sqliteEngine) {
+    console.log(chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`))
   }
   console.log()
 }

@@ -227,6 +227,9 @@ spindb create mydb --port 5433               # Custom port
 spindb create mydb --database my_app         # Custom database name
 spindb create mydb --no-start                # Create without starting
 
+# Create, start, and connect in one command
+spindb create mydb --start --connect
+
 # SQLite with custom path
 spindb create mydb --engine sqlite --path ./data/app.sqlite
 ```
@@ -250,7 +253,9 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 | `--path` | File path for SQLite databases |
 | `--max-connections` | Maximum database connections (default: 200) |
 | `--from` | Restore from backup file or connection string |
+| `--start` | Start container after creation (skip prompt) |
 | `--no-start` | Create without starting |
+| `--connect` | Open a shell connection after creation |
 
 </details>
 
@@ -400,10 +405,12 @@ ENGINE        VERSION     SOURCE            SIZE
 🐘 postgresql 17.7        darwin-arm64      45.2 MB
 🐘 postgresql 16.8        darwin-arm64      44.8 MB
 🐬 mysql      8.0.35      system            (system-installed)
+🪶 sqlite     3.43.2      system            (system-installed)
 ────────────────────────────────────────────────────────
 
 PostgreSQL: 2 version(s), 90.0 MB
 MySQL: system-installed at /opt/homebrew/bin/mysqld
+SQLite: system-installed at /usr/bin/sqlite3
 ```
 
 #### `deps` - Manage client tools

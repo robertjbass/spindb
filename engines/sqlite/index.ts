@@ -98,6 +98,7 @@ export class SQLiteEngine extends BaseEngine {
 
     // Check system PATH
     try {
+      // TODO - update when windows support is added
       const { stdout } = await execFileAsync('which', ['sqlite3'])
       const path = stdout.trim()
       return path || null
@@ -184,7 +185,9 @@ export class SQLiteEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const entry = await sqliteRegistry.get(container.name)
     if (!entry) {
-      throw new Error(`SQLite container "${container.name}" not found in registry`)
+      throw new Error(
+        `SQLite container "${container.name}" not found in registry`,
+      )
     }
     if (!existsSync(entry.filePath)) {
       throw new Error(`SQLite database file not found: ${entry.filePath}`)
@@ -243,7 +246,9 @@ export class SQLiteEngine extends BaseEngine {
   async connect(container: ContainerConfig, _database?: string): Promise<void> {
     const entry = await sqliteRegistry.get(container.name)
     if (!entry) {
-      throw new Error(`SQLite container "${container.name}" not found in registry`)
+      throw new Error(
+        `SQLite container "${container.name}" not found in registry`,
+      )
     }
     if (!existsSync(entry.filePath)) {
       throw new Error(`SQLite database file not found: ${entry.filePath}`)
@@ -521,7 +526,9 @@ export class SQLiteEngine extends BaseEngine {
         if (code === 0) {
           resolve()
         } else {
-          reject(new Error(`sqlite3 script execution failed with exit code ${code}`))
+          reject(
+            new Error(`sqlite3 script execution failed with exit code ${code}`),
+          )
         }
       })
     })
@@ -533,7 +540,9 @@ export class SQLiteEngine extends BaseEngine {
   private async downloadFile(url: string, destPath: string): Promise<void> {
     const response = await fetch(url)
     if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status} ${response.statusText}`)
+      throw new Error(
+        `Failed to download: ${response.status} ${response.statusText}`,
+      )
     }
 
     const buffer = await response.arrayBuffer()

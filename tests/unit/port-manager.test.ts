@@ -209,18 +209,28 @@ describe('PortManager', () => {
 describe('Port Error Messages', () => {
   it('should provide actionable error message with port range', async () => {
     const portManager = new PortManager()
+    const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
     portManager.isPortAvailable = async () => false
+
+    let threw = false
+    let caughtError: Error | null = null
 
     try {
       await portManager.findAvailablePort({
         portRange: { start: 5432, end: 5440 },
       })
     } catch (error) {
-      assert(error instanceof Error, 'Should throw Error')
-      assert(
-        error.message.includes('5432-5440'),
-        'Error should include the specific port range tried',
-      )
+      threw = true
+      caughtError = error as Error
+    } finally {
+      portManager.isPortAvailable = originalIsPortAvailable
     }
+
+    assert(threw, 'findAvailablePort should throw when no ports available')
+    assert(caughtError instanceof Error, 'Should throw Error')
+    assert(
+      caughtError!.message.includes('5432-5440'),
+      'Error should include the specific port range tried',
+    )
   })
 })

@@ -258,7 +258,8 @@ export async function promptContainerSelect(
  */
 function sanitizeDatabaseName(name: string): string {
   // Replace invalid characters with underscores
-  let sanitized = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+  // Note: hyphens are excluded because they require quoting in SQL
+  let sanitized = name.replace(/[^a-zA-Z0-9_]/g, '_')
   // Ensure it starts with a letter or underscore
   if (sanitized && !/^[a-zA-Z_]/.test(sanitized)) {
     sanitized = '_' + sanitized
@@ -267,6 +268,10 @@ function sanitizeDatabaseName(name: string): string {
   sanitized = sanitized.replace(/_+/g, '_')
   // Trim trailing underscores
   sanitized = sanitized.replace(/_+$/, '')
+  // Fallback if result is empty (e.g., input was "---")
+  if (!sanitized) {
+    sanitized = 'db'
+  }
   return sanitized
 }
 
@@ -295,8 +300,9 @@ export async function promptDatabaseName(
       validate: (input: string) => {
         if (!input) return 'Database name is required'
         // PostgreSQL database naming rules (also valid for MySQL)
-        if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(input)) {
-          return 'Database name must start with a letter or underscore and contain only letters, numbers, underscores, and hyphens'
+        // Hyphens excluded to avoid requiring quoted identifiers in SQL
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(input)) {
+          return 'Database name must start with a letter or underscore and contain only letters, numbers, and underscores'
         }
         if (input.length > 63) {
           return 'Database name must be 63 characters or less'

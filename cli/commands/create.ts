@@ -20,6 +20,7 @@ import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
+import { isValidDatabaseName } from '../../core/error-handler'
 import { Engine } from '../../types'
 import type { BaseEngine } from '../../engines/base-engine'
 import { resolve } from 'path'
@@ -32,9 +33,9 @@ async function createSqliteContainer(
   containerName: string,
   dbEngine: BaseEngine,
   version: string,
-  options: { path?: string; from?: string | null },
+  options: { path?: string; from?: string | null; connect?: boolean },
 ): Promise<void> {
-  const { path: filePath, from: restoreLocation } = options
+  const { path: filePath, from: restoreLocation, connect } = options
 
   // Check dependencies
   const depsSpinner = createSpinner('Checking required tools...')
@@ -107,9 +108,20 @@ async function createSqliteContainer(
   console.log(chalk.gray('  Connection string:'))
   console.log(chalk.cyan(`    sqlite:///${absolutePath}`))
   console.log()
-  console.log(chalk.gray('  Connect with:'))
-  console.log(chalk.cyan(`    spindb connect ${containerName}`))
-  console.log()
+
+  // Connect if requested
+  if (connect) {
+    const config = await containerManager.getConfig(containerName)
+    if (config) {
+      console.log(chalk.gray('  Opening shell...'))
+      console.log()
+      await dbEngine.connect(config)
+    }
+  } else {
+    console.log(chalk.gray('  Connect with:'))
+    console.log(chalk.cyan(`    spindb connect ${containerName}`))
+    console.log()
+  }
 }
 
 function detectLocationType(location: string): {
@@ -132,8 +144,9 @@ function detectLocationType(location: string): {
   }
 
   if (existsSync(location)) {
-    // Check if it's a SQLite file
-    if (location.endsWith('.sqlite') || location.endsWith('.db') || location.endsWith('.sqlite3')) {
+    // Check if it's a SQLite file (case-insensitive)
+    const lowerLocation = location.toLowerCase()
+    if (lowerLocation.endsWith('.sqlite') || lowerLocation.endsWith('.db') || lowerLocation.endsWith('.sqlite3')) {
       return { type: 'file', inferredEngine: Engine.SQLite }
     }
     return { type: 'file' }
@@ -157,7 +170,9 @@ export const createCommand = new Command('create')
     '--max-connections <number>',
     'Maximum number of database connections (default: 200)',
   )
+  .option('--start', 'Start the container after creation (skip prompt)')
   .option('--no-start', 'Do not start the container after creation')
+  .option('--connect', 'Open a shell connection after creation')
   .option(
     '--from <location>',
     'Restore from a dump file or connection string after creation',
@@ -172,7 +187,8 @@ export const createCommand = new Command('create')
         port?: string
         path?: string
         maxConnections?: string
-        start: boolean
+        start?: boolean
+        connect?: boolean
         from?: string
       },
     ) => {
@@ -238,6 +254,16 @@ export const createCommand = new Command('create')
 
         database = database ?? containerName
 
+        // Validate database name to prevent SQL injection
+        if (!isValidDatabaseName(database)) {
+          console.error(
+            error(
+              'Database name must start with a letter and contain only letters, numbers, hyphens, and underscores',
+            ),
+          )
+          process.exit(1)
+        }
+
         console.log(header('Creating Database Container'))
         console.log()
 
@@ -248,8 +274,19 @@ export const createCommand = new Command('create')
           await createSqliteContainer(containerName, dbEngine, version, {
             path: options.path,
             from: restoreLocation,
+            connect: options.connect,
           })
           return
+        }
+
+        // For server databases, validate --connect with --no-start
+        if (options.connect && options.start === false) {
+          console.error(
+            error(
+              'Cannot use --no-start with --connect (connection requires running container)',
+            ),
+          )
+          process.exit(1)
         }
 
         const depsSpinner = createSpinner('Checking required tools...')
@@ -384,9 +421,12 @@ export const createCommand = new Command('create')
           throw err
         }
 
-        // --from requires start, --no-start skips, otherwise ask user
+        // --from requires start, --start forces start, --no-start skips, otherwise ask user
+        // --connect implies --start for server databases
         let shouldStart = false
-        if (restoreLocation) {
+        if (restoreLocation || options.connect) {
+          shouldStart = true
+        } else if (options.start === true) {
           shouldStart = true
         } else if (options.start === false) {
           shouldStart = false
@@ -542,7 +582,7 @@ export const createCommand = new Command('create')
             createDatabase: false,
           })
 
-          if (result.code === 0 || !result.stderr) {
+          if (result.code === 0) {
             restoreSpinner.succeed('Backup restored successfully')
           } else {
             restoreSpinner.warn('Restore completed with warnings')
@@ -573,7 +613,17 @@ export const createCommand = new Command('create')
           )
           console.log()
 
-          if (shouldStart) {
+          if (options.connect && shouldStart) {
+            // --connect flag: open shell directly
+            const copied =
+              await platformService.copyToClipboard(connectionString)
+            if (copied) {
+              console.log(chalk.gray('  Connection string copied to clipboard'))
+            }
+            console.log(chalk.gray('  Opening shell...'))
+            console.log()
+            await dbEngine.connect(finalConfig, database)
+          } else if (shouldStart) {
             console.log(chalk.gray('  Connect with:'))
             console.log(chalk.cyan(`  spindb connect ${containerName}`))
 
@@ -582,12 +632,12 @@ export const createCommand = new Command('create')
             if (copied) {
               console.log(chalk.gray('  Connection string copied to clipboard'))
             }
+            console.log()
           } else {
             console.log(chalk.gray('  Start the container:'))
             console.log(chalk.cyan(`  spindb start ${containerName}`))
+            console.log()
           }
-
-          console.log()
         }
       } catch (err) {
         const e = err as Error

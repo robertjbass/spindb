@@ -56,6 +56,7 @@ export const ErrorCodes = {
   CONTAINER_CREATE_FAILED: 'CONTAINER_CREATE_FAILED',
   INIT_FAILED: 'INIT_FAILED',
   DATABASE_CREATE_FAILED: 'DATABASE_CREATE_FAILED',
+  INVALID_DATABASE_NAME: 'INVALID_DATABASE_NAME',
 
   // Dependency errors
   DEPENDENCY_MISSING: 'DEPENDENCY_MISSING',
@@ -307,4 +308,34 @@ export function createDependencyMissingError(
     suggestions[toolName] || `Install ${engine} client tools`,
     { toolName, engine },
   )
+}
+
+/**
+ * Validate a database name to prevent SQL injection.
+ * Database names must start with a letter and contain only
+ * alphanumeric characters and underscores.
+ *
+ * Note: Hyphens are excluded because they require quoted identifiers
+ * in SQL, which is error-prone for users.
+ */
+export function isValidDatabaseName(name: string): boolean {
+  // Must start with a letter to be valid in all database systems
+  // Hyphens excluded to avoid requiring quoted identifiers in SQL
+  return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)
+}
+
+/**
+ * Assert that a database name is valid, throwing SpinDBError if not.
+ * Use this at the entry points where database names are accepted.
+ */
+export function assertValidDatabaseName(name: string): void {
+  if (!isValidDatabaseName(name)) {
+    throw new SpinDBError(
+      ErrorCodes.INVALID_DATABASE_NAME,
+      `Invalid database name: "${name}"`,
+      'error',
+      'Database names must start with a letter and contain only letters, numbers, and underscores',
+      { databaseName: name },
+    )
+  }
 }
