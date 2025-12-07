@@ -450,8 +450,8 @@ export class MySQLEngine extends BaseEngine {
         await this.cleanupPidFile(pidFile)
         return null
       }
-    } catch (err) {
-      const e = err as NodeJS.ErrnoException
+    } catch (error) {
+      const e = error as NodeJS.ErrnoException
       if (e.code !== 'ENOENT') {
         logWarning(`Failed to read PID file: ${e.message}`, {
           pidFile,
@@ -479,8 +479,8 @@ export class MySQLEngine extends BaseEngine {
           `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root shutdown`,
           { timeout: 5000 },
         )
-      } catch (err) {
-        const e = err as Error
+      } catch (error) {
+        const e = error as Error
         logDebug(`mysqladmin shutdown failed: ${e.message}`)
         // Continue to wait for process to die or send SIGTERM
       }
@@ -542,8 +542,8 @@ export class MySQLEngine extends BaseEngine {
         await this.cleanupPidFile(pidFile)
         return
       }
-    } catch (err) {
-      const e = err as NodeJS.ErrnoException
+    } catch (error) {
+      const e = error as NodeJS.ErrnoException
       if (e.code === 'ESRCH') {
         // Process already dead
         await this.cleanupPidFile(pidFile)
@@ -575,9 +575,9 @@ export class MySQLEngine extends BaseEngine {
         logDebug(`Process ${pid} terminated after SIGKILL`)
         await this.cleanupPidFile(pidFile)
       }
-    } catch (err) {
-      if (err instanceof SpinDBError) throw err
-      const e = err as NodeJS.ErrnoException
+    } catch (error) {
+      if (error instanceof SpinDBError) throw error
+      const e = error as NodeJS.ErrnoException
       if (e.code === 'ESRCH') {
         // Process already dead
         await this.cleanupPidFile(pidFile)
@@ -594,8 +594,8 @@ export class MySQLEngine extends BaseEngine {
     try {
       await unlink(pidFile)
       logDebug('PID file cleaned up')
-    } catch (err) {
-      const e = err as NodeJS.ErrnoException
+    } catch (error) {
+      const e = error as NodeJS.ErrnoException
       if (e.code !== 'ENOENT') {
         logDebug(`Failed to clean up PID file: ${e.message}`)
       }

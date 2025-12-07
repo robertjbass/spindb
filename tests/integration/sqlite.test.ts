@@ -99,13 +99,20 @@ describe('SQLite Integration Tests', () => {
     const containers = await containerManager.list()
     const sqliteContainers = containers.filter((c) => c.engine === ENGINE)
 
-    assert(sqliteContainers.length > 0, 'Should have at least one SQLite container')
+    assert(
+      sqliteContainers.length > 0,
+      'Should have at least one SQLite container',
+    )
 
     const ourContainer = sqliteContainers.find((c) => c.name === containerName)
     assert(ourContainer !== undefined, 'Should find our test container')
 
     // SQLite uses 'running' status to indicate file exists
-    assertEqual(ourContainer?.status, 'running', 'Status should be "running" (file exists)')
+    assertEqual(
+      ourContainer?.status,
+      'running',
+      'Status should be "running" (file exists)',
+    )
 
     console.log(`   ✓ Found ${sqliteContainers.length} SQLite container(s)`)
   })
@@ -121,10 +128,17 @@ describe('SQLite Integration Tests', () => {
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execFileAsync('sqlite3', [dbPath, 'SELECT COUNT(*) FROM test_user'])
+    const { stdout } = await execFileAsync('sqlite3', [
+      dbPath,
+      'SELECT COUNT(*) FROM test_user',
+    ])
     const rowCount = parseInt(stdout.trim(), 10)
 
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Should have correct row count after seeding')
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Should have correct row count after seeding',
+    )
 
     console.log(`   ✓ Seeded ${rowCount} rows`)
   })
@@ -133,14 +147,20 @@ describe('SQLite Integration Tests', () => {
     console.log(`\n✏️  Running inline SQL...`)
 
     // Delete one row
-    await runScriptSQL(containerName, "DELETE FROM test_user WHERE email = 'eve@example.com'")
+    await runScriptSQL(
+      containerName,
+      "DELETE FROM test_user WHERE email = 'eve@example.com'",
+    )
 
     // Verify deletion
     const { execFile } = await import('child_process')
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execFileAsync('sqlite3', [dbPath, 'SELECT COUNT(*) FROM test_user'])
+    const { stdout } = await execFileAsync('sqlite3', [
+      dbPath,
+      'SELECT COUNT(*) FROM test_user',
+    ])
     const rowCount = parseInt(stdout.trim(), 10)
 
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
@@ -157,7 +177,10 @@ describe('SQLite Integration Tests', () => {
     const engine = getEngine(ENGINE)
     const backupPath = join(TEST_DIR, 'backup.sql')
 
-    const result = await engine.backup(config!, backupPath, { format: 'sql', database: config!.database })
+    const result = await engine.backup(config!, backupPath, {
+      format: 'sql',
+      database: config!.database,
+    })
 
     assert(existsSync(result.path), 'Backup file should exist')
     assertEqual(result.format, 'sql', 'Backup format should be SQL')
@@ -178,7 +201,10 @@ describe('SQLite Integration Tests', () => {
     const backupPath = join(TEST_DIR, 'backup.sqlite')
 
     // Create binary backup
-    const result = await engine.backup(config!, backupPath, { format: 'dump', database: config!.database })
+    const result = await engine.backup(config!, backupPath, {
+      format: 'dump',
+      database: config!.database,
+    })
     assert(existsSync(result.path), 'Backup file should exist')
 
     // Create new container and restore
@@ -200,10 +226,17 @@ describe('SQLite Integration Tests', () => {
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execFileAsync('sqlite3', [backupDbPath, 'SELECT COUNT(*) FROM test_user'])
+    const { stdout } = await execFileAsync('sqlite3', [
+      backupDbPath,
+      'SELECT COUNT(*) FROM test_user',
+    ])
     const rowCount = parseInt(stdout.trim(), 10)
 
-    assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Restored data should match source')
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Restored data should match source',
+    )
 
     // Clean up backup file
     await rm(backupPath, { force: true })
@@ -237,29 +270,51 @@ describe('SQLite Integration Tests', () => {
 
     // Verify file exists at new location
     assert(existsSync(newDbPath), 'File should exist at new location')
-    assert(!existsSync(originalPath), 'File should not exist at original location')
+    assert(
+      !existsSync(originalPath),
+      'File should not exist at original location',
+    )
 
     // Verify container config is updated
     const updatedConfig = await containerManager.getConfig(containerName)
-    assertEqual(updatedConfig?.database, newDbPath, 'Container config should have new path')
+    assertEqual(
+      updatedConfig?.database,
+      newDbPath,
+      'Container config should have new path',
+    )
 
     // Verify registry is updated
     const registryEntry = await sqliteRegistry.get(containerName)
-    assertEqual(registryEntry?.filePath, newDbPath, 'Registry should have new path')
+    assertEqual(
+      registryEntry?.filePath,
+      newDbPath,
+      'Registry should have new path',
+    )
 
     // Verify container still shows as available (not missing)
     const containers = await containerManager.list()
     const ourContainer = containers.find((c) => c.name === containerName)
-    assertEqual(ourContainer?.status, 'running', 'Container should still be available after relocation')
+    assertEqual(
+      ourContainer?.status,
+      'running',
+      'Container should still be available after relocation',
+    )
 
     // Verify data is intact
     const { execFile } = await import('child_process')
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
 
-    const { stdout } = await execFileAsync('sqlite3', [newDbPath, 'SELECT COUNT(*) FROM test_user'])
+    const { stdout } = await execFileAsync('sqlite3', [
+      newDbPath,
+      'SELECT COUNT(*) FROM test_user',
+    ])
     const rowCount = parseInt(stdout.trim(), 10)
-    assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Data should be intact after relocation')
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Data should be intact after relocation',
+    )
 
     // Update dbPath for subsequent tests
     dbPath = newDbPath
@@ -279,7 +334,11 @@ describe('SQLite Integration Tests', () => {
 
     const newConfig = await containerManager.getConfig(renamedContainerName)
     assert(newConfig !== null, 'Renamed container should exist')
-    assertEqual(newConfig?.database, dbPath, 'Database path should be unchanged')
+    assertEqual(
+      newConfig?.database,
+      dbPath,
+      'Database path should be unchanged',
+    )
 
     console.log(`   ✓ Renamed to "${renamedContainerName}"`)
   })
@@ -289,11 +348,17 @@ describe('SQLite Integration Tests', () => {
 
     // Delete backup container first
     await containerManager.delete(backupContainerName, { force: true })
-    assert(!sqliteFileExists(backupDbPath), 'Backup database file should be deleted')
+    assert(
+      !sqliteFileExists(backupDbPath),
+      'Backup database file should be deleted',
+    )
 
     // Delete renamed container
     await containerManager.delete(renamedContainerName, { force: true })
-    assert(!sqliteFileExists(dbPath), 'Original database file should be deleted')
+    assert(
+      !sqliteFileExists(dbPath),
+      'Original database file should be deleted',
+    )
 
     // Verify containers are removed from list
     const containers = await containerManager.list()

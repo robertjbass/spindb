@@ -397,12 +397,12 @@ export class ContainerManager {
       await this.saveConfig(targetName, { engine }, config)
 
       return config
-    } catch (err) {
+    } catch (error) {
       // Clean up the copied directory on failure
       await rm(targetPath, { recursive: true, force: true }).catch(() => {
         // Ignore cleanup errors
       })
-      throw err
+      throw error
     }
   }
 
@@ -497,8 +497,8 @@ export class ContainerManager {
     try {
       // Try atomic rename first (only works on same filesystem)
       await fsRename(sourcePath, targetPath)
-    } catch (err) {
-      const e = err as NodeJS.ErrnoException
+    } catch (error) {
+      const e = error as NodeJS.ErrnoException
       if (e.code === 'EXDEV') {
         // Cross-filesystem move - fall back to copy+delete
         await cp(sourcePath, targetPath, { recursive: true })
@@ -514,7 +514,7 @@ export class ContainerManager {
           )
         }
       } else {
-        throw err
+        throw error
       }
     }
   }

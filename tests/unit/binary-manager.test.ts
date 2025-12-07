@@ -64,10 +64,7 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
       const url = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
 
-      assert(
-        url.includes('repo1.maven.org'),
-        'URL should use Maven Central',
-      )
+      assert(url.includes('repo1.maven.org'), 'URL should use Maven Central')
       assert(
         url.includes('embedded-postgres-binaries'),
         'URL should reference embedded-postgres',
@@ -141,10 +138,7 @@ describe('BinaryManager', () => {
       )
 
       assert(path.includes('bin/postgres'), 'Path should include bin/postgres')
-      assert(
-        path.includes('17.7.0'),
-        'Path should use full version',
-      )
+      assert(path.includes('17.7.0'), 'Path should use full version')
     })
 
     it('should return correct path for pg_ctl binary', () => {
@@ -186,7 +180,6 @@ describe('BinaryManager', () => {
         assert(typeof binary.arch === 'string', 'Should have arch')
       }
     })
-
   })
 
   describe('isInstalled', () => {
@@ -237,24 +230,36 @@ describe('BinaryManager', () => {
         assertEqual(match![1], expected, `Should extract version ${expected}`)
       }
     })
-
   })
 
   describe('ensureInstalled', () => {
     it('should invoke progress callback with cached stage when already installed', async () => {
       const binaryManager = new BinaryManager()
-      const isInstalled = await binaryManager.isInstalled('17', 'darwin', 'arm64')
+      const isInstalled = await binaryManager.isInstalled(
+        '17',
+        'darwin',
+        'arm64',
+      )
 
       if (isInstalled) {
         const progressCalls: Array<{ stage: string; message: string }> = []
 
         // Actually call ensureInstalled and verify the callback
-        await binaryManager.ensureInstalled('17', 'darwin', 'arm64', (progress) => {
-          progressCalls.push(progress)
-        })
+        await binaryManager.ensureInstalled(
+          '17',
+          'darwin',
+          'arm64',
+          (progress) => {
+            progressCalls.push(progress)
+          },
+        )
 
         assert(progressCalls.length > 0, 'Progress callback should be invoked')
-        assertEqual(progressCalls[0].stage, 'cached', 'Should report cached stage')
+        assertEqual(
+          progressCalls[0].stage,
+          'cached',
+          'Should report cached stage',
+        )
         assert(
           progressCalls[0].message.includes('cached'),
           'Message should mention cached',
@@ -264,10 +269,18 @@ describe('BinaryManager', () => {
 
     it('should return path to binary directory', async () => {
       const binaryManager = new BinaryManager()
-      const isInstalled = await binaryManager.isInstalled('17', 'darwin', 'arm64')
+      const isInstalled = await binaryManager.isInstalled(
+        '17',
+        'darwin',
+        'arm64',
+      )
 
       if (isInstalled) {
-        const binPath = await binaryManager.ensureInstalled('17', 'darwin', 'arm64')
+        const binPath = await binaryManager.ensureInstalled(
+          '17',
+          'darwin',
+          'arm64',
+        )
 
         assert(typeof binPath === 'string', 'Should return path string')
         assert(binPath.includes('17.7.0'), 'Path should include full version')
@@ -303,4 +316,3 @@ describe('BinaryManager', () => {
     })
   })
 })
-

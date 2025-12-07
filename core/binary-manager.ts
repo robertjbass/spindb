@@ -6,7 +6,11 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { defaults } from '../config/defaults'
-import { Engine, type ProgressCallback, type InstalledBinary } from '../types'
+import {
+  type Engine,
+  type ProgressCallback,
+  type InstalledBinary,
+} from '../types'
 
 const execAsync = promisify(exec)
 

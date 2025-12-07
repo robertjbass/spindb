@@ -1,6 +1,13 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, renameSync, statSync, mkdirSync, copyFileSync, unlinkSync } from 'fs'
+import {
+  existsSync,
+  renameSync,
+  statSync,
+  mkdirSync,
+  copyFileSync,
+  unlinkSync,
+} from 'fs'
 import { dirname, basename, join, resolve } from 'path'
 import { homedir } from 'os'
 import { containerManager } from '../../../core/container-manager'
@@ -22,10 +29,10 @@ import {
 import { createSpinner } from '../../ui/spinner'
 import {
   header,
-  success,
-  error,
-  warning,
-  info,
+  uiSuccess,
+  uiError,
+  uiWarning,
+  uiInfo,
   connectionBox,
   formatBytes,
 } from '../../ui/theme'
@@ -69,7 +76,7 @@ export async function handleCreate(): Promise<void> {
     missingDeps = await getMissingDependencies(engine)
     if (missingDeps.length > 0) {
       console.log(
-        error(
+        uiError(
           `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
         ),
       )
@@ -94,13 +101,17 @@ export async function handleCreate(): Promise<void> {
 
     const isInstalled = await dbEngine.isBinaryInstalled(version)
     if (isInstalled) {
-      binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries ready (cached)`)
+      binarySpinner.succeed(
+        `${dbEngine.displayName} ${version} binaries ready (cached)`,
+      )
     } else {
       binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
       await dbEngine.ensureBinaries(version, ({ message }) => {
         binarySpinner.text = message
       })
-      binarySpinner.succeed(`${dbEngine.displayName} ${version} binaries downloaded`)
+      binarySpinner.succeed(
+        `${dbEngine.displayName} ${version} binaries downloaded`,
+      )
     }
   }
 
@@ -131,7 +142,9 @@ export async function handleCreate(): Promise<void> {
     path: sqlitePath, // SQLite file path (undefined for server databases)
   })
 
-  initSpinner.succeed(isSQLite ? 'Database file created' : 'Database cluster initialized')
+  initSpinner.succeed(
+    isSQLite ? 'Database file created' : 'Database cluster initialized',
+  )
 
   // SQLite: show file path, no start needed
   if (isSQLite) {
@@ -139,13 +152,13 @@ export async function handleCreate(): Promise<void> {
     if (config) {
       const connectionString = dbEngine.getConnectionString(config)
       console.log()
-      console.log(success('Database Created'))
+      console.log(uiSuccess('Database Created'))
       console.log()
       console.log(chalk.gray(`  Container: ${containerName}`))
       console.log(chalk.gray(`  Engine: ${dbEngine.displayName} ${version}`))
       console.log(chalk.gray(`  File: ${config.database}`))
       console.log()
-      console.log(success(`Available at ${config.database}`))
+      console.log(uiSuccess(`Available at ${config.database}`))
       console.log()
       console.log(chalk.gray('  Connection string:'))
       console.log(chalk.cyan(`  ${connectionString}`))
@@ -199,14 +212,14 @@ export async function handleCreate(): Promise<void> {
     if (config) {
       const connectionString = dbEngine.getConnectionString(config)
       console.log()
-      console.log(success('Database Created'))
+      console.log(uiSuccess('Database Created'))
       console.log()
       console.log(chalk.gray(`  Container: ${containerName}`))
       console.log(chalk.gray(`  Engine: ${dbEngine.displayName} ${version}`))
       console.log(chalk.gray(`  Database: ${database}`))
       console.log(chalk.gray(`  Port: ${port}`))
       console.log()
-      console.log(success(`Running on port ${port}`))
+      console.log(uiSuccess(`Running on port ${port}`))
       console.log()
       console.log(chalk.gray('  Connection string:'))
       console.log(chalk.cyan(`  ${connectionString}`))
@@ -235,12 +248,12 @@ export async function handleCreate(): Promise<void> {
   } else {
     console.log()
     console.log(
-      warning(
+      uiWarning(
         `Port ${port} is currently in use. Container created but not started.`,
       ),
     )
     console.log(
-      info(
+      uiInfo(
         `Start it later with: ${chalk.cyan(`spindb start ${containerName}`)}`,
       ),
     )
@@ -257,7 +270,7 @@ export async function handleList(
 
   if (containers.length === 0) {
     console.log(
-      info('No containers found. Create one with the "Create" option.'),
+      uiInfo('No containers found. Create one with the "Create" option.'),
     )
     console.log()
 
@@ -302,19 +315,20 @@ export async function handleList(
 
     // SQLite uses available/missing, server databases use running/stopped
     const statusDisplay = isSQLite
-      ? (container.status === 'running'
-          ? chalk.blue('● available')
-          : chalk.gray('○ missing'))
-      : (container.status === 'running'
-          ? chalk.green('● running')
-          : chalk.gray('○ stopped'))
+      ? container.status === 'running'
+        ? chalk.blue('● available')
+        : chalk.gray('○ missing')
+      : container.status === 'running'
+        ? chalk.green('● running')
+        : chalk.gray('○ stopped')
 
     const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
     // Truncate name if too long
-    const displayName = container.name.length > 15
-      ? container.name.slice(0, 14) + '…'
-      : container.name
+    const displayName =
+      container.name.length > 15
+        ? container.name.slice(0, 14) + '…'
+        : container.name
 
     // SQLite shows dash instead of port
     const portDisplay = isSQLite ? '—' : String(container.port)
@@ -338,7 +352,9 @@ export async function handleList(
 
   const running = serverContainers.filter((c) => c.status === 'running').length
   const stopped = serverContainers.filter((c) => c.status !== 'running').length
-  const available = sqliteContainers.filter((c) => c.status === 'running').length
+  const available = sqliteContainers.filter(
+    (c) => c.status === 'running',
+  ).length
   const missing = sqliteContainers.filter((c) => c.status !== 'running').length
 
   const parts: string[] = []
@@ -346,13 +362,13 @@ export async function handleList(
     parts.push(`${running} running, ${stopped} stopped`)
   }
   if (sqliteContainers.length > 0) {
-    parts.push(`${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`)
+    parts.push(
+      `${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`,
+    )
   }
 
   console.log(
-    chalk.gray(
-      `  ${containers.length} container(s): ${parts.join('; ')}`,
-    ),
+    chalk.gray(`  ${containers.length} container(s): ${parts.join('; ')}`),
   )
 
   console.log()
@@ -361,8 +377,12 @@ export async function handleList(
       // Simpler selector - table already shows details
       const statusLabel =
         c.engine === Engine.SQLite
-          ? (c.status === 'running' ? chalk.blue('● available') : chalk.gray('○ missing'))
-          : (c.status === 'running' ? chalk.green('● running') : chalk.gray('○ stopped'))
+          ? c.status === 'running'
+            ? chalk.blue('● available')
+            : chalk.gray('○ missing')
+          : c.status === 'running'
+            ? chalk.green('● running')
+            : chalk.gray('○ stopped')
 
       return {
         name: `${c.name} ${statusLabel}`,
@@ -400,7 +420,7 @@ export async function showContainerSubmenu(
 ): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -458,7 +478,11 @@ export async function showContainerSubmenu(
       ? `${chalk.blue('⌘')} Open shell`
       : chalk.gray('⌘ Open shell'),
     value: 'shell',
-    disabled: canOpenShell ? false : (isSQLite ? 'Database file missing' : 'Start container first'),
+    disabled: canOpenShell
+      ? false
+      : isSQLite
+        ? 'Database file missing'
+        : 'Start container first',
   })
 
   // Run SQL - always enabled for SQLite (if file exists), server databases need to be running
@@ -468,7 +492,11 @@ export async function showContainerSubmenu(
       ? `${chalk.yellow('▷')} Run SQL file`
       : chalk.gray('▷ Run SQL file'),
     value: 'run-sql',
-    disabled: canRunSql ? false : (isSQLite ? 'Database file missing' : 'Start container first'),
+    disabled: canRunSql
+      ? false
+      : isSQLite
+        ? 'Database file missing'
+        : 'Start container first',
   })
 
   // Edit container - SQLite can always edit (no running state), server databases must be stopped
@@ -491,9 +519,10 @@ export async function showContainerSubmenu(
     disabled: canClone ? false : 'Stop container first',
   })
 
-  actionChoices.push(
-    { name: `${chalk.magenta('⎘')} Copy connection string`, value: 'copy' },
-  )
+  actionChoices.push({
+    name: `${chalk.magenta('⎘')} Copy connection string`,
+    value: 'copy',
+  })
 
   // View logs - not available for SQLite (no log file)
   if (!isSQLite) {
@@ -596,7 +625,7 @@ export async function handleStart(): Promise<void> {
   )
 
   if (stopped.length === 0) {
-    console.log(warning('All containers are already running'))
+    console.log(uiWarning('All containers are already running'))
     return
   }
 
@@ -609,7 +638,7 @@ export async function handleStart(): Promise<void> {
 
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -617,7 +646,7 @@ export async function handleStart(): Promise<void> {
   if (!portAvailable) {
     const { port: newPort } = await portManager.findAvailablePort()
     console.log(
-      warning(`Port ${config.port} is in use, switching to port ${newPort}`),
+      uiWarning(`Port ${config.port} is in use, switching to port ${newPort}`),
     )
     config.port = newPort
     await containerManager.updateConfig(containerName, { port: newPort })
@@ -647,7 +676,7 @@ export async function handleStop(): Promise<void> {
   )
 
   if (running.length === 0) {
-    console.log(warning('No running containers'))
+    console.log(uiWarning('No running containers'))
     return
   }
 
@@ -660,7 +689,7 @@ export async function handleStop(): Promise<void> {
 
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -678,25 +707,25 @@ export async function handleStop(): Promise<void> {
 async function handleStartContainer(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
     console.log(
-      warning(
+      uiWarning(
         `Port ${config.port} is in use. Stop the process using it or change this container's port.`,
       ),
     )
     console.log()
     console.log(
-      info(
+      uiInfo(
         'Tip: If you installed MariaDB via apt, it may have started a system service.',
       ),
     )
     console.log(
-      info(
+      uiInfo(
         'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
       ),
     )
@@ -718,18 +747,18 @@ async function handleStartContainer(containerName: string): Promise<void> {
     console.log()
     console.log(chalk.gray('  Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
-  } catch (err) {
+  } catch (error) {
     spinner.fail(`Failed to start "${containerName}"`)
-    const e = err as Error
+    const e = error as Error
     console.log()
-    console.log(error(e.message))
+    console.log(uiError(e.message))
 
     const logPath = paths.getContainerLogPath(containerName, {
       engine: config.engine,
     })
     if (existsSync(logPath)) {
       console.log()
-      console.log(info(`Check the log file for details: ${logPath}`))
+      console.log(uiInfo(`Check the log file for details: ${logPath}`))
     }
   }
 }
@@ -737,7 +766,7 @@ async function handleStartContainer(containerName: string): Promise<void> {
 async function handleStopContainer(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -757,7 +786,7 @@ async function handleEditContainer(
 ): Promise<string | null> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return null
   }
 
@@ -767,7 +796,9 @@ async function handleEditContainer(
   console.log(header(`Edit: ${containerName}`))
   console.log()
 
-  const editChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
+  const editChoices: Array<
+    { name: string; value: string } | inquirer.Separator
+  > = [
     {
       name: `Name: ${chalk.white(containerName)}`,
       value: 'name',
@@ -833,12 +864,12 @@ async function handleEditContainer(
     ])
 
     if (newName === containerName) {
-      console.log(info('Name unchanged'))
+      console.log(uiInfo('Name unchanged'))
       return await handleEditContainer(containerName)
     }
 
     if (await containerManager.exists(newName)) {
-      console.log(error(`Container "${newName}" already exists`))
+      console.log(uiError(`Container "${newName}" already exists`))
       return await handleEditContainer(containerName)
     }
 
@@ -872,21 +903,21 @@ async function handleEditContainer(
     ])
 
     if (newPort === config.port) {
-      console.log(info('Port unchanged'))
+      console.log(uiInfo('Port unchanged'))
       return await handleEditContainer(containerName)
     }
 
     const portAvailable = await portManager.isPortAvailable(newPort)
     if (!portAvailable) {
       console.log(
-        warning(
+        uiWarning(
           `Port ${newPort} is currently in use. You'll need to stop the process using it before starting this container.`,
         ),
       )
     }
 
     await containerManager.updateConfig(containerName, { port: newPort })
-    console.log(success(`Changed port from ${config.port} to ${newPort}`))
+    console.log(uiSuccess(`Changed port from ${config.port} to ${newPort}`))
 
     // Continue editing
     return await handleEditContainer(containerName)
@@ -928,40 +959,43 @@ async function handleEditContainer(
     // - ends with /
     // - exists and is a directory
     // - doesn't have a database file extension (assume it's a directory path)
-    const isDirectory = expandedPath.endsWith('/') ||
+    const isDirectory =
+      expandedPath.endsWith('/') ||
       (existsSync(expandedPath) && statSync(expandedPath).isDirectory()) ||
       !hasDbExtension
 
     let finalPath: string
     if (isDirectory) {
       // Remove trailing slash if present, then append filename
-      const dirPath = expandedPath.endsWith('/') ? expandedPath.slice(0, -1) : expandedPath
+      const dirPath = expandedPath.endsWith('/')
+        ? expandedPath.slice(0, -1)
+        : expandedPath
       finalPath = join(dirPath, currentFileName)
     } else {
       finalPath = expandedPath
     }
 
     if (finalPath === config.database) {
-      console.log(info('Location unchanged'))
+      console.log(uiInfo('Location unchanged'))
       return await handleEditContainer(containerName)
     }
 
     // Check if source file exists
     if (!existsSync(config.database)) {
-      console.log(error(`Source file not found: ${config.database}`))
+      console.log(uiError(`Source file not found: ${config.database}`))
       return await handleEditContainer(containerName)
     }
 
     // Check if destination already exists
     if (existsSync(finalPath)) {
-      console.log(error(`Destination file already exists: ${finalPath}`))
+      console.log(uiError(`Destination file already exists: ${finalPath}`))
       return await handleEditContainer(containerName)
     }
 
     // Check if destination directory exists
     const destDir = dirname(finalPath)
     if (!existsSync(destDir)) {
-      console.log(warning(`Directory does not exist: ${destDir}`))
+      console.log(uiWarning(`Directory does not exist: ${destDir}`))
       const { createDir } = await inquirer.prompt<{ createDir: string }>([
         {
           type: 'list',
@@ -980,9 +1014,13 @@ async function handleEditContainer(
 
       try {
         mkdirSync(destDir, { recursive: true })
-        console.log(success(`Created directory: ${destDir}`))
-      } catch (err) {
-        console.log(error(`Failed to create directory: ${(err as Error).message}`))
+        console.log(uiSuccess(`Created directory: ${destDir}`))
+      } catch (mkdirError) {
+        console.log(
+          uiError(
+            `Failed to create directory: ${(mkdirError as Error).message}`,
+          ),
+        )
         return await handleEditContainer(containerName)
       }
     }
@@ -1020,15 +1058,17 @@ async function handleEditContainer(
       }
 
       // Update the container config and SQLite registry
-      await containerManager.updateConfig(containerName, { database: finalPath })
+      await containerManager.updateConfig(containerName, {
+        database: finalPath,
+      })
       await sqliteRegistry.update(containerName, { filePath: finalPath })
       spinner.succeed(`Moved database to ${finalPath}`)
 
       // Wait for user to see success message before refreshing
       await pressEnterToContinue()
-    } catch (err) {
+    } catch (error) {
       spinner.fail('Failed to move database file')
-      console.log(error((err as Error).message))
+      console.log(uiError((error as Error).message))
       await pressEnterToContinue()
     }
 
@@ -1045,7 +1085,7 @@ async function handleCloneFromSubmenu(
 ): Promise<void> {
   const sourceConfig = await containerManager.getConfig(sourceName)
   if (!sourceConfig) {
-    console.log(error(`Container "${sourceName}" not found`))
+    console.log(uiError(`Container "${sourceName}" not found`))
     return
   }
 
@@ -1066,8 +1106,10 @@ async function handleCloneFromSubmenu(
   ])
 
   // Check if target container already exists
-  if (await containerManager.exists(targetName, { engine: sourceConfig.engine })) {
-    console.log(error(`Container "${targetName}" already exists`))
+  if (
+    await containerManager.exists(targetName, { engine: sourceConfig.engine })
+  ) {
+    console.log(uiError(`Container "${targetName}" already exists`))
     return
   }
 
@@ -1086,9 +1128,9 @@ async function handleCloneFromSubmenu(
     console.log(connectionBox(targetName, connectionString, newConfig.port))
 
     await showContainerSubmenu(targetName, showMainMenu)
-  } catch (err) {
+  } catch (error) {
     spinner.fail(`Failed to clone "${sourceName}"`)
-    console.log(error((err as Error).message))
+    console.log(uiError((error as Error).message))
     await pressEnterToContinue()
   }
 }
@@ -1096,7 +1138,7 @@ async function handleCloneFromSubmenu(
 async function handleDelete(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -1106,7 +1148,7 @@ async function handleDelete(containerName: string): Promise<void> {
   )
 
   if (!confirmed) {
-    console.log(warning('Deletion cancelled'))
+    console.log(uiWarning('Deletion cancelled'))
     return
   }
 

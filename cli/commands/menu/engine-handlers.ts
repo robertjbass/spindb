@@ -4,7 +4,7 @@ import { rm } from 'fs/promises'
 import { containerManager } from '../../../core/container-manager'
 import { processManager } from '../../../core/process-manager'
 import { createSpinner } from '../../ui/spinner'
-import { header, error, warning, info, formatBytes } from '../../ui/theme'
+import { header, uiError, uiWarning, uiInfo, formatBytes } from '../../ui/theme'
 import { promptConfirm } from '../../ui/prompts'
 import { getEngineIcon, ENGINE_ICONS } from '../../constants'
 import {
@@ -37,7 +37,7 @@ export async function handleEngines(): Promise<void> {
   const engines = await getInstalledEngines()
 
   if (engines.length === 0) {
-    console.log(info('No engines installed yet.'))
+    console.log(uiInfo('No engines installed yet.'))
     console.log(
       chalk.gray(
         '  PostgreSQL engines are downloaded automatically when you create a container.',
@@ -128,7 +128,9 @@ export async function handleEngines(): Promise<void> {
     console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
   }
   if (sqliteEngine) {
-    console.log(chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`))
+    console.log(
+      chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+    )
   }
   console.log()
 
@@ -212,7 +214,7 @@ async function handleDeleteEngine(
   if (usingContainers.length > 0) {
     console.log()
     console.log(
-      error(
+      uiError(
         `Cannot delete: ${usingContainers.length} container(s) are using ${engineName} ${engineVersion}`,
       ),
     )
@@ -238,7 +240,7 @@ async function handleDeleteEngine(
   )
 
   if (!confirmed) {
-    console.log(warning('Deletion cancelled'))
+    console.log(uiWarning('Deletion cancelled'))
     return
   }
 
@@ -248,8 +250,8 @@ async function handleDeleteEngine(
   try {
     await rm(enginePath, { recursive: true, force: true })
     spinner.succeed(`Deleted ${engineName} ${engineVersion}`)
-  } catch (err) {
-    const e = err as Error
+  } catch (error) {
+    const e = error as Error
     spinner.fail(`Failed to delete: ${e.message}`)
   }
 }
@@ -272,7 +274,7 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
 
   if (mysqlContainers.length > 0) {
     console.log(
-      warning(
+      uiWarning(
         `${mysqlContainers.length} container(s) are using ${displayName}:`,
       ),
     )
@@ -438,7 +440,9 @@ async function handleSqliteInfo(sqlitePath: string): Promise<void> {
   const sqliteContainers = containers.filter((c) => c.engine === 'sqlite')
 
   if (sqliteContainers.length > 0) {
-    console.log(info(`${sqliteContainers.length} SQLite database(s) registered:`))
+    console.log(
+      uiInfo(`${sqliteContainers.length} SQLite database(s) registered:`),
+    )
     console.log()
     for (const c of sqliteContainers) {
       const status =
@@ -471,9 +475,15 @@ async function handleSqliteInfo(sqlitePath: string): Promise<void> {
 
   console.log(chalk.white('  Notes:'))
   console.log(chalk.gray('  ' + '─'.repeat(50)))
-  console.log(chalk.gray('  • SQLite is typically pre-installed on macOS and most Linux distributions'))
+  console.log(
+    chalk.gray(
+      '  • SQLite is typically pre-installed on macOS and most Linux distributions',
+    ),
+  )
   console.log(chalk.gray('  • No server process - databases are just files'))
-  console.log(chalk.gray('  • Use "spindb delete <name>" to unregister a database'))
+  console.log(
+    chalk.gray('  • Use "spindb delete <name>" to unregister a database'),
+  )
   console.log()
 
   await inquirer.prompt([

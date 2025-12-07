@@ -135,11 +135,11 @@ export async function parseDumpVersion(
         }
       }
     }
-  } catch (err) {
+  } catch (error) {
     logDebug('Failed to parse dump version', {
       dumpPath,
       format,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     })
   }
 

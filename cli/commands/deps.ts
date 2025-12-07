@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { header, success, warning, error } from '../ui/theme'
+import { header, uiSuccess, uiWarning, uiError } from '../ui/theme'
 import { createSpinner } from '../ui/spinner'
 import {
   detectPackageManager,
@@ -84,7 +84,7 @@ depsCommand
       // Check specific engine
       const engineConfig = getEngineDependencies(options.engine)
       if (!engineConfig) {
-        console.error(error(`Unknown engine: ${options.engine}`))
+        console.error(uiError(`Unknown engine: ${options.engine}`))
         console.log(
           chalk.gray(
             `  Available engines: ${engineDependencies.map((e) => e.engine).join(', ')}`,
@@ -104,9 +104,9 @@ depsCommand
       const total = statuses.length
       console.log()
       if (installed === total) {
-        console.log(success(`All ${total} dependencies installed`))
+        console.log(uiSuccess(`All ${total} dependencies installed`))
       } else {
-        console.log(warning(`${installed}/${total} dependencies installed`))
+        console.log(uiWarning(`${installed}/${total} dependencies installed`))
         console.log()
         console.log(
           chalk.gray(`  Run: spindb deps install --engine ${options.engine}`),
@@ -132,7 +132,7 @@ depsCommand
     const packageManager = await detectPackageManager()
 
     if (!packageManager) {
-      console.log(error('No supported package manager detected'))
+      console.log(uiError('No supported package manager detected'))
       console.log()
 
       const platform = getCurrentPlatform()
@@ -161,7 +161,7 @@ depsCommand
       const missing = await getAllMissingDependencies()
 
       if (missing.length === 0) {
-        console.log(success('All dependencies are already installed'))
+        console.log(uiSuccess('All dependencies are already installed'))
         return
       }
 
@@ -182,14 +182,14 @@ depsCommand
         spinner.warn('Some dependencies failed to install')
         console.log()
         for (const f of failed) {
-          console.log(error(`  ${f.dependency.name}: ${f.error}`))
+          console.log(uiError(`  ${f.dependency.name}: ${f.error}`))
         }
       }
 
       if (succeeded.length > 0) {
         console.log()
         console.log(
-          success(
+          uiSuccess(
             `Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`,
           ),
         )
@@ -198,7 +198,7 @@ depsCommand
       // Install dependencies for specific engine
       const engineConfig = getEngineDependencies(options.engine)
       if (!engineConfig) {
-        console.error(error(`Unknown engine: ${options.engine}`))
+        console.error(uiError(`Unknown engine: ${options.engine}`))
         console.log(
           chalk.gray(
             `  Available engines: ${engineDependencies.map((e) => e.engine).join(', ')}`,
@@ -211,7 +211,9 @@ depsCommand
 
       if (missing.length === 0) {
         console.log(
-          success(`All ${engineConfig.displayName} dependencies are installed`),
+          uiSuccess(
+            `All ${engineConfig.displayName} dependencies are installed`,
+          ),
         )
         return
       }
@@ -241,7 +243,7 @@ depsCommand
         spinner.warn('Some dependencies failed to install')
         console.log()
         for (const f of failed) {
-          console.log(error(`  ${f.dependency.name}: ${f.error}`))
+          console.log(uiError(`  ${f.dependency.name}: ${f.error}`))
         }
 
         // Show manual instructions
@@ -259,7 +261,7 @@ depsCommand
       if (succeeded.length > 0) {
         console.log()
         console.log(
-          success(
+          uiSuccess(
             `Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`,
           ),
         )
@@ -276,7 +278,7 @@ depsCommand
       const missing = await getMissingDependencies('postgresql')
 
       if (missing.length === 0) {
-        console.log(success('All PostgreSQL dependencies are installed'))
+        console.log(uiSuccess('All PostgreSQL dependencies are installed'))
         return
       }
 
@@ -300,14 +302,14 @@ depsCommand
         spinner.warn('Some dependencies failed to install')
         console.log()
         for (const f of failed) {
-          console.log(error(`  ${f.dependency.name}: ${f.error}`))
+          console.log(uiError(`  ${f.dependency.name}: ${f.error}`))
         }
       }
 
       if (succeeded.length > 0) {
         console.log()
         console.log(
-          success(
+          uiSuccess(
             `Installed: ${succeeded.map((r) => r.dependency.name).join(', ')}`,
           ),
         )

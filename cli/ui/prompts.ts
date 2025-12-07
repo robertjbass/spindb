@@ -289,7 +289,9 @@ export async function promptDatabaseName(
     engine === 'mysql' ? 'Database (schema) name:' : 'Database name:'
 
   // Sanitize the default name to ensure it's valid
-  const sanitizedDefault = defaultName ? sanitizeDatabaseName(defaultName) : undefined
+  const sanitizedDefault = defaultName
+    ? sanitizeDatabaseName(defaultName)
+    : undefined
 
   const { database } = await inquirer.prompt<{ database: string }>([
     {
@@ -420,7 +422,11 @@ export async function promptSqlitePath(
 ): Promise<string | undefined> {
   const defaultPath = `./${containerName}.sqlite`
 
-  console.log(chalk.gray('  SQLite databases are stored as files in your project directory.'))
+  console.log(
+    chalk.gray(
+      '  SQLite databases are stored as files in your project directory.',
+    ),
+  )
   console.log(chalk.gray(`  Default: ${defaultPath}`))
   console.log()
 
@@ -496,7 +502,8 @@ export async function promptSqlitePath(
       {
         type: 'list',
         name: 'overwrite',
-        message: 'A file already exists at this location. What would you like to do?',
+        message:
+          'A file already exists at this location. What would you like to do?',
         choices: [
           { name: 'Choose a different path', value: 'different' },
           { name: 'Cancel', value: 'cancel' },
@@ -702,8 +709,8 @@ export async function promptInstallDependencies(
 
       return false
     }
-  } catch (err) {
-    const e = err as Error
+  } catch (error) {
+    const e = error as Error
     console.log()
     console.log(chalk.red(`  Installation failed: ${e.message}`))
     console.log()

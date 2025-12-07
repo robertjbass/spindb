@@ -27,10 +27,10 @@ export async function withSpinner<T>(
     })
     spinner.succeed()
     return result
-  } catch (err) {
-    const error = err as Error
-    spinner.fail(error.message)
-    throw error
+  } catch (error) {
+    const e = error as Error
+    spinner.fail(e.message)
+    throw e
   }
 }
 

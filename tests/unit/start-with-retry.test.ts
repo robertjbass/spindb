@@ -39,10 +39,7 @@ describe('Port Error Detection', () => {
         lower.includes('could not bind') ||
         lower.includes('socket already in use')
 
-      assert(
-        isPortError,
-        `Should recognize "${msg}" as port-in-use error`,
-      )
+      assert(isPortError, `Should recognize "${msg}" as port-in-use error`)
     }
   })
 
@@ -56,10 +53,7 @@ describe('Port Error Detection', () => {
         lower.includes('could not bind') ||
         lower.includes('socket already in use')
 
-      assert(
-        !isPortError,
-        `Should NOT recognize "${msg}" as port-in-use error`,
-      )
+      assert(!isPortError, `Should NOT recognize "${msg}" as port-in-use error`)
     }
   })
 })
@@ -79,8 +73,15 @@ describe('StartWithRetryResult', () => {
 
     assert(successResult.success === true, 'success should be true')
     assertEqual(successResult.finalPort, 5432, 'finalPort should be set')
-    assertEqual(successResult.retriesUsed, 0, 'retriesUsed should be 0 on first try')
-    assert(successResult.error === undefined, 'error should be undefined on success')
+    assertEqual(
+      successResult.retriesUsed,
+      0,
+      'retriesUsed should be 0 on first try',
+    )
+    assert(
+      successResult.error === undefined,
+      'error should be undefined on success',
+    )
   })
 
   it('should have correct failure result shape', () => {
@@ -92,8 +93,16 @@ describe('StartWithRetryResult', () => {
     }
 
     assert(failureResult.success === false, 'success should be false')
-    assertEqual(failureResult.finalPort, 5433, 'finalPort should be last attempted port')
-    assertEqual(failureResult.retriesUsed, 3, 'retriesUsed should reflect attempts')
+    assertEqual(
+      failureResult.finalPort,
+      5433,
+      'finalPort should be last attempted port',
+    )
+    assertEqual(
+      failureResult.retriesUsed,
+      3,
+      'retriesUsed should reflect attempts',
+    )
     assert(failureResult.error instanceof Error, 'error should be an Error')
     assert(
       failureResult.error.message.includes('retries'),
@@ -179,7 +188,9 @@ describe('Port Change Callback', () => {
 
   it('should not call onPortChange if not provided', () => {
     // This tests that undefined callback doesn't crash
-    const onPortChange: ((oldPort: number, newPort: number) => void) | undefined = undefined
+    const onPortChange:
+      | ((oldPort: number, newPort: number) => void)
+      | undefined = undefined
 
     // The concept being tested is that the code handles undefined callbacks gracefully
     // In actual code: if (onPortChange) { onPortChange(oldPort, newPort) }
@@ -196,29 +207,47 @@ describe('Engine Port Range Resolution', () => {
       mysql: { start: 3306, end: 3400 },
     }
 
-    assertEqual(enginePortRanges.postgresql.start, 5432, 'PostgreSQL should start at 5432')
-    assertEqual(enginePortRanges.mysql.start, 3306, 'MySQL should start at 3306')
+    assertEqual(
+      enginePortRanges.postgresql.start,
+      5432,
+      'PostgreSQL should start at 5432',
+    )
+    assertEqual(
+      enginePortRanges.mysql.start,
+      3306,
+      'MySQL should start at 3306',
+    )
   })
 })
 
 describe('Error Conversion', () => {
   it('should convert unknown errors to Error objects', () => {
     const unknownError: unknown = 'string error'
-    const converted = unknownError instanceof Error
-      ? unknownError
-      : new Error(String(unknownError))
+    const converted =
+      unknownError instanceof Error
+        ? unknownError
+        : new Error(String(unknownError))
 
     assert(converted instanceof Error, 'Should be converted to Error')
-    assertEqual(converted.message, 'string error', 'Message should be preserved')
+    assertEqual(
+      converted.message,
+      'string error',
+      'Message should be preserved',
+    )
   })
 
   it('should preserve Error objects', () => {
     const originalError: unknown = new Error('original message')
-    const converted = originalError instanceof Error
-      ? originalError
-      : new Error(String(originalError))
+    const converted =
+      originalError instanceof Error
+        ? originalError
+        : new Error(String(originalError))
 
     assert(converted instanceof Error, 'Should preserve original Error')
-    assertEqual(converted.message, 'original message', 'Message should be preserved')
+    assertEqual(
+      converted.message,
+      'original message',
+      'Message should be preserved',
+    )
   })
 })

@@ -7,14 +7,17 @@ import { containerManager } from '../../../core/container-manager'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { getEngine } from '../../../engines'
 import { paths } from '../../../config/paths'
-import { promptInstallDependencies, promptDatabaseSelect } from '../../ui/prompts'
-import { error, warning, info, success } from '../../ui/theme'
+import {
+  promptInstallDependencies,
+  promptDatabaseSelect,
+} from '../../ui/prompts'
+import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 
 export async function handleRunSql(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -23,7 +26,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
   let missingDeps = await getMissingDependencies(config.engine)
   if (missingDeps.length > 0) {
     console.log(
-      warning(`Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
+      uiWarning(`Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`),
     )
 
     const installed = await promptInstallDependencies(
@@ -38,7 +41,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
     missingDeps = await getMissingDependencies(config.engine)
     if (missingDeps.length > 0) {
       console.log(
-        error(
+        uiError(
           `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
         ),
       )
@@ -50,11 +53,14 @@ export async function handleRunSql(containerName: string): Promise<void> {
   }
 
   // Strip quotes that terminals add when drag-and-dropping files
-  const stripQuotes = (path: string) =>
-    path.replace(/^['"]|['"]$/g, '').trim()
+  const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
   // Prompt for file path (empty input = go back)
-  console.log(chalk.gray('  Drag & drop, enter path (abs or rel), or press Enter to go back'))
+  console.log(
+    chalk.gray(
+      '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+    ),
+  )
   const { filePath: rawFilePath } = await inquirer.prompt<{
     filePath: string
   }>([
@@ -90,7 +96,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
   }
 
   console.log()
-  console.log(info(`Running SQL file against "${databaseName}"...`))
+  console.log(uiInfo(`Running SQL file against "${databaseName}"...`))
   console.log()
 
   try {
@@ -99,11 +105,11 @@ export async function handleRunSql(containerName: string): Promise<void> {
       database: databaseName,
     })
     console.log()
-    console.log(success('SQL file executed successfully'))
-  } catch (err) {
-    const e = err as Error
+    console.log(uiSuccess('SQL file executed successfully'))
+  } catch (error) {
+    const e = error as Error
     console.log()
-    console.log(error(`SQL execution failed: ${e.message}`))
+    console.log(uiError(`SQL execution failed: ${e.message}`))
   }
 
   console.log()
@@ -116,7 +122,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
 export async function handleViewLogs(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
-    console.error(error(`Container "${containerName}" not found`))
+    console.error(uiError(`Container "${containerName}" not found`))
     return
   }
 
@@ -126,7 +132,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
 
   if (!existsSync(logPath)) {
     console.log(
-      info(
+      uiInfo(
         `No log file found for "${containerName}". The container may not have been started yet.`,
       ),
     )
@@ -194,7 +200,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
   const lineCount = action === 'tail-100' ? 100 : 50
   const content = await readFile(logPath, 'utf-8')
   if (content.trim() === '') {
-    console.log(info('Log file is empty'))
+    console.log(uiInfo('Log file is empty'))
   } else {
     const lines = content.split('\n')
     const nonEmptyLines =

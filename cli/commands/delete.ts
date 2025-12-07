@@ -4,7 +4,7 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning } from '../ui/theme'
+import { uiError, uiWarning } from '../ui/theme'
 
 export const deleteCommand = new Command('delete')
   .alias('rm')
@@ -24,7 +24,7 @@ export const deleteCommand = new Command('delete')
           const containers = await containerManager.list()
 
           if (containers.length === 0) {
-            console.log(warning('No containers found'))
+            console.log(uiWarning('No containers found'))
             return
           }
 
@@ -38,7 +38,7 @@ export const deleteCommand = new Command('delete')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -48,7 +48,7 @@ export const deleteCommand = new Command('delete')
             false,
           )
           if (!confirmed) {
-            console.log(warning('Deletion cancelled'))
+            console.log(uiWarning('Deletion cancelled'))
             return
           }
         }
@@ -67,7 +67,7 @@ export const deleteCommand = new Command('delete')
             stopSpinner.succeed(`Stopped "${containerName}"`)
           } else {
             console.error(
-              error(
+              uiError(
                 `Container "${containerName}" is running. Stop it first or use --force`,
               ),
             )
@@ -81,9 +81,9 @@ export const deleteCommand = new Command('delete')
         await containerManager.delete(containerName, { force: true })
 
         deleteSpinner.succeed(`Container "${containerName}" deleted`)
-      } catch (err) {
-        const e = err as Error
-        console.error(error(e.message))
+      } catch (error) {
+        const e = error as Error
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

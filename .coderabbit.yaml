@@ -1,0 +1,19 @@
+# CodeRabbit Configuration
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+reviews:
+  path_instructions:
+    - path: '**/*'
+      instructions: |
+        Windows is not currently supported. Please ignore any warnings or suggestions
+        related to Windows-specific issues including:
+        - Path separators (backslash vs forward slash)
+        - Line endings (CRLF vs LF)
+        - Windows-specific file path handling
+        - Windows shell compatibility
+        - Any cross-platform compatibility concerns related to Windows
+
+  auto_review:
+    ignore_paths:
+      - 'node_modules/**'
+      - 'pnpm-lock.yaml'

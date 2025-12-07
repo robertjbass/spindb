@@ -4,7 +4,7 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { success, error, warning } from '../ui/theme'
+import { uiSuccess, uiError, uiWarning } from '../ui/theme'
 
 export const stopCommand = new Command('stop')
   .description('Stop a container')
@@ -17,7 +17,7 @@ export const stopCommand = new Command('stop')
         const running = containers.filter((c) => c.status === 'running')
 
         if (running.length === 0) {
-          console.log(warning('No running containers found'))
+          console.log(uiWarning('No running containers found'))
           return
         }
 
@@ -34,7 +34,7 @@ export const stopCommand = new Command('stop')
           spinner.succeed(`Stopped "${container.name}"`)
         }
 
-        console.log(success(`Stopped ${running.length} container(s)`))
+        console.log(uiSuccess(`Stopped ${running.length} container(s)`))
         return
       }
 
@@ -45,7 +45,7 @@ export const stopCommand = new Command('stop')
         const running = containers.filter((c) => c.status === 'running')
 
         if (running.length === 0) {
-          console.log(warning('No running containers found'))
+          console.log(uiWarning('No running containers found'))
           return
         }
 
@@ -59,7 +59,7 @@ export const stopCommand = new Command('stop')
 
       const config = await containerManager.getConfig(containerName)
       if (!config) {
-        console.error(error(`Container "${containerName}" not found`))
+        console.error(uiError(`Container "${containerName}" not found`))
         process.exit(1)
       }
 
@@ -67,7 +67,7 @@ export const stopCommand = new Command('stop')
         engine: config.engine,
       })
       if (!running) {
-        console.log(warning(`Container "${containerName}" is not running`))
+        console.log(uiWarning(`Container "${containerName}" is not running`))
         return
       }
 
@@ -80,9 +80,9 @@ export const stopCommand = new Command('stop')
       await containerManager.updateConfig(containerName, { status: 'stopped' })
 
       spinner.succeed(`Container "${containerName}" stopped`)
-    } catch (err) {
-      const e = err as Error
-      console.error(error(e.message))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })

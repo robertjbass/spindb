@@ -5,7 +5,7 @@ import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { error, warning, info, formatBytes } from '../ui/theme'
+import { uiError, uiWarning, uiInfo, formatBytes } from '../ui/theme'
 import { getEngineIcon, ENGINE_ICONS } from '../constants'
 import {
   getInstalledEngines,
@@ -36,7 +36,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   }
 
   if (engines.length === 0) {
-    console.log(info('No engines installed yet.'))
+    console.log(uiInfo('No engines installed yet.'))
     console.log(
       chalk.gray(
         '  PostgreSQL engines are downloaded automatically when you create a container.',
@@ -134,7 +134,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
   }
   if (sqliteEngine) {
-    console.log(chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`))
+    console.log(
+      chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+    )
   }
   console.log()
 }
@@ -151,7 +153,7 @@ async function deleteEngine(
   const pgEngines = await getInstalledPostgresEngines()
 
   if (pgEngines.length === 0) {
-    console.log(warning('No deletable engines found.'))
+    console.log(uiWarning('No deletable engines found.'))
     console.log(
       chalk.gray(
         '  MySQL is system-installed and cannot be deleted via spindb.',
@@ -190,7 +192,7 @@ async function deleteEngine(
   )
 
   if (!targetEngine) {
-    console.error(error(`Engine "${engineName} ${engineVersion}" not found`))
+    console.error(uiError(`Engine "${engineName} ${engineVersion}" not found`))
     process.exit(1)
   }
 
@@ -202,7 +204,7 @@ async function deleteEngine(
 
   if (usingContainers.length > 0) {
     console.error(
-      error(
+      uiError(
         `Cannot delete: ${usingContainers.length} container(s) are using ${engineName} ${engineVersion}`,
       ),
     )
@@ -224,7 +226,7 @@ async function deleteEngine(
     )
 
     if (!confirmed) {
-      console.log(warning('Deletion cancelled'))
+      console.log(uiWarning('Deletion cancelled'))
       return
     }
   }
@@ -236,8 +238,8 @@ async function deleteEngine(
   try {
     await rm(targetEngine.path, { recursive: true, force: true })
     spinner.succeed(`Deleted ${engineName} ${engineVersion}`)
-  } catch (err) {
-    const e = err as Error
+  } catch (error) {
+    const e = error as Error
     spinner.fail(`Failed to delete: ${e.message}`)
     process.exit(1)
   }
@@ -250,9 +252,9 @@ export const enginesCommand = new Command('engines')
   .action(async (options: { json?: boolean }) => {
     try {
       await listEngines(options)
-    } catch (err) {
-      const e = err as Error
-      console.error(error(e.message))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })
@@ -270,9 +272,9 @@ enginesCommand
     ) => {
       try {
         await deleteEngine(engine, version, options)
-      } catch (err) {
-        const e = err as Error
-        console.error(error(e.message))
+      } catch (error) {
+        const e = error as Error
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

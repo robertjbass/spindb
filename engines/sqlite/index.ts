@@ -538,15 +538,28 @@ export class SQLiteEngine extends BaseEngine {
    * Download a file from HTTP/HTTPS URL
    */
   private async downloadFile(url: string, destPath: string): Promise<void> {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download: ${response.status} ${response.statusText}`,
-      )
-    }
+    const controller = new AbortController()
+    const timeoutMs = 5 * 60 * 1000 // 5 minutes
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
-    const buffer = await response.arrayBuffer()
-    await writeFile(destPath, Buffer.from(buffer))
+    try {
+      const response = await fetch(url, { signal: controller.signal })
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download: ${response.status} ${response.statusText}`,
+        )
+      }
+
+      const buffer = await response.arrayBuffer()
+      await writeFile(destPath, Buffer.from(buffer))
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Download timed out after 5 minutes')
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 
   /**

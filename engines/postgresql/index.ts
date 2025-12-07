@@ -155,8 +155,13 @@ export class PostgreSQLEngine extends BaseEngine {
 
     // Configure max_connections after initdb creates postgresql.conf
     const maxConnections =
-      (options.maxConnections as number) || getEngineDefaults('postgresql').maxConnections
-    await this.setConfigValue(dataDir, 'max_connections', String(maxConnections))
+      (options.maxConnections as number) ||
+      getEngineDefaults('postgresql').maxConnections
+    await this.setConfigValue(
+      dataDir,
+      'max_connections',
+      String(maxConnections),
+    )
 
     return dataDir
   }

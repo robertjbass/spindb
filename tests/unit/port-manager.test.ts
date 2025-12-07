@@ -34,7 +34,10 @@ describe('PortManager', () => {
       })
 
       assert(typeof result.port === 'number', 'Should return port number')
-      assert(typeof result.isDefault === 'boolean', 'Should return isDefault flag')
+      assert(
+        typeof result.isDefault === 'boolean',
+        'Should return isDefault flag',
+      )
       assert(result.port >= 59990, 'Port should be in range')
       assert(result.port <= 59999, 'Port should be in range')
     })
@@ -42,7 +45,8 @@ describe('PortManager', () => {
     it('should throw error when no ports available in range', async () => {
       const portManager = new PortManager()
       // Create a mock that always returns false (all ports in use)
-      const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
+      const originalIsPortAvailable =
+        portManager.isPortAvailable.bind(portManager)
       portManager.isPortAvailable = async () => {
         return false
       }
@@ -71,7 +75,8 @@ describe('PortManager', () => {
     it('should skip preferred port if already tried', async () => {
       const portManager = new PortManager()
       const triedPorts: number[] = []
-      const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
+      const originalIsPortAvailable =
+        portManager.isPortAvailable.bind(portManager)
 
       portManager.isPortAvailable = async (port: number) => {
         triedPorts.push(port)
@@ -85,11 +90,17 @@ describe('PortManager', () => {
           portRange: { start: 59990, end: 59995 },
         })
 
-        assert(result.port !== 59990, 'Should not return the unavailable preferred port')
+        assert(
+          result.port !== 59990,
+          'Should not return the unavailable preferred port',
+        )
         assert(result.isDefault === false, 'Should not be marked as default')
         // Should try preferred once, then scan range (skipping preferred)
         assertEqual(triedPorts[0], 59990, 'Should try preferred port first')
-        assert(!triedPorts.slice(1).includes(59990), 'Should not retry preferred port in scan')
+        assert(
+          !triedPorts.slice(1).includes(59990),
+          'Should not retry preferred port in scan',
+        )
       } finally {
         portManager.isPortAvailable = originalIsPortAvailable
       }
@@ -144,8 +155,10 @@ describe('PortManager', () => {
   describe('findAvailablePortExcludingContainers', () => {
     it('should skip ports used by containers', async () => {
       const portManager = new PortManager()
-      const originalGetContainerPorts = portManager.getContainerPorts.bind(portManager)
-      const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
+      const originalGetContainerPorts =
+        portManager.getContainerPorts.bind(portManager)
+      const originalIsPortAvailable =
+        portManager.isPortAvailable.bind(portManager)
 
       // Mock container ports
       portManager.getContainerPorts = async () => [59990, 59991]
@@ -179,8 +192,10 @@ describe('PortManager', () => {
 
     it('should throw error when all ports in range are used', async () => {
       const portManager = new PortManager()
-      const originalGetContainerPorts = portManager.getContainerPorts.bind(portManager)
-      const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
+      const originalGetContainerPorts =
+        portManager.getContainerPorts.bind(portManager)
+      const originalIsPortAvailable =
+        portManager.isPortAvailable.bind(portManager)
 
       // All ports used by containers
       portManager.getContainerPorts = async () => [59990, 59991, 59992]
@@ -209,7 +224,8 @@ describe('PortManager', () => {
 describe('Port Error Messages', () => {
   it('should provide actionable error message with port range', async () => {
     const portManager = new PortManager()
-    const originalIsPortAvailable = portManager.isPortAvailable.bind(portManager)
+    const originalIsPortAvailable =
+      portManager.isPortAvailable.bind(portManager)
     portManager.isPortAvailable = async () => false
 
     let threw = false

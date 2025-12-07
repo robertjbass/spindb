@@ -51,7 +51,10 @@ describe('SQLite Registry', () => {
         lastVerified: new Date().toISOString(),
       }
 
-      assert(typeof entry.lastVerified === 'string', 'Should support lastVerified')
+      assert(
+        typeof entry.lastVerified === 'string',
+        'Should support lastVerified',
+      )
     })
   })
 
@@ -71,7 +74,11 @@ describe('SQLite Registry', () => {
     it('should create registry with empty entries on first load', async () => {
       const emptyRegistry = {
         version: 1 as const,
-        entries: [] as Array<{ name: string; filePath: string; created: string }>,
+        entries: [] as Array<{
+          name: string
+          filePath: string
+          created: string
+        }>,
       }
 
       // Write to test path
@@ -88,7 +95,11 @@ describe('SQLite Registry', () => {
         JSON.parse('invalid json')
       } catch {
         // Should return empty registry on parse error
-        assertEqual(fallback.entries.length, 0, 'Should return empty entries on error')
+        assertEqual(
+          fallback.entries.length,
+          0,
+          'Should return empty entries on error',
+        )
       }
     })
   })
@@ -97,7 +108,11 @@ describe('SQLite Registry', () => {
     it('should add entries to registry', () => {
       const registry = {
         version: 1 as const,
-        entries: [] as Array<{ name: string; filePath: string; created: string }>,
+        entries: [] as Array<{
+          name: string
+          filePath: string
+          created: string
+        }>,
       }
 
       const newEntry = {
@@ -136,8 +151,16 @@ describe('SQLite Registry', () => {
       const nameToRemove = 'testdb'
       registry.entries = registry.entries.filter((e) => e.name !== nameToRemove)
 
-      assertEqual(registry.entries.length, 1, 'Should have one entry after removal')
-      assertEqual(registry.entries[0].name, 'other', 'Remaining entry should be "other"')
+      assertEqual(
+        registry.entries.length,
+        1,
+        'Should have one entry after removal',
+      )
+      assertEqual(
+        registry.entries[0].name,
+        'other',
+        'Remaining entry should be "other"',
+      )
     })
 
     it('should find entry by name', () => {
@@ -155,7 +178,11 @@ describe('SQLite Registry', () => {
 
     it('should return null for non-existent entry', () => {
       const registry = {
-        entries: [] as Array<{ name: string; filePath: string; created: string }>,
+        entries: [] as Array<{
+          name: string
+          filePath: string
+          created: string
+        }>,
       }
 
       const found = registry.entries.find((e) => e.name === 'nonexistent')
@@ -168,7 +195,11 @@ describe('SQLite Registry', () => {
     it('should detect entries where file does not exist', async () => {
       const entries = [
         { name: 'exists', filePath: testRegistryPath, created: '2024-01-01' },
-        { name: 'missing', filePath: '/nonexistent/path.sqlite', created: '2024-01-01' },
+        {
+          name: 'missing',
+          filePath: '/nonexistent/path.sqlite',
+          created: '2024-01-01',
+        },
       ]
 
       // Create one file that exists
@@ -177,7 +208,11 @@ describe('SQLite Registry', () => {
       const orphans = entries.filter((e) => !existsSync(e.filePath))
 
       assertEqual(orphans.length, 1, 'Should find one orphan')
-      assertEqual(orphans[0].name, 'missing', 'Orphan should be the missing file')
+      assertEqual(
+        orphans[0].name,
+        'missing',
+        'Orphan should be the missing file',
+      )
     })
 
     it('should return empty array when all files exist', async () => {
@@ -200,7 +235,11 @@ describe('SQLite Registry', () => {
       const registry = {
         entries: [
           { name: 'exists', filePath: existingFile, created: '2024-01-01' },
-          { name: 'missing', filePath: '/nonexistent/path.sqlite', created: '2024-01-01' },
+          {
+            name: 'missing',
+            filePath: '/nonexistent/path.sqlite',
+            created: '2024-01-01',
+          },
         ],
       }
 
@@ -210,7 +249,11 @@ describe('SQLite Registry', () => {
 
       assertEqual(removedCount, 1, 'Should remove one orphan')
       assertEqual(registry.entries.length, 1, 'Should have one entry left')
-      assertEqual(registry.entries[0].name, 'exists', 'Remaining entry should exist')
+      assertEqual(
+        registry.entries[0].name,
+        'exists',
+        'Remaining entry should exist',
+      )
     })
   })
 
@@ -218,7 +261,11 @@ describe('SQLite Registry', () => {
     it('should detect if path is already registered', () => {
       const registry = {
         entries: [
-          { name: 'testdb', filePath: '/path/to/test.sqlite', created: '2024-01-01' },
+          {
+            name: 'testdb',
+            filePath: '/path/to/test.sqlite',
+            created: '2024-01-01',
+          },
         ],
       }
 
@@ -231,7 +278,11 @@ describe('SQLite Registry', () => {
     it('should find entry by file path', () => {
       const registry = {
         entries: [
-          { name: 'testdb', filePath: '/path/to/test.sqlite', created: '2024-01-01' },
+          {
+            name: 'testdb',
+            filePath: '/path/to/test.sqlite',
+            created: '2024-01-01',
+          },
         ],
       }
 
@@ -276,7 +327,11 @@ describe('SQLite Registry', () => {
     it('should update filePath when relocating database', () => {
       const registry = {
         entries: [
-          { name: 'testdb', filePath: '/old/path/test.sqlite', created: '2024-01-01' },
+          {
+            name: 'testdb',
+            filePath: '/old/path/test.sqlite',
+            created: '2024-01-01',
+          },
         ],
       }
 
@@ -286,7 +341,11 @@ describe('SQLite Registry', () => {
         entry.filePath = newPath
       }
 
-      assertEqual(registry.entries[0].filePath, newPath, 'File path should be updated')
+      assertEqual(
+        registry.entries[0].filePath,
+        newPath,
+        'File path should be updated',
+      )
     })
 
     it('should preserve other entry fields when updating path', () => {
@@ -307,9 +366,21 @@ describe('SQLite Registry', () => {
       // Simulate relocation update
       registry.entries[0].filePath = '/new/location/test.sqlite'
 
-      assertEqual(registry.entries[0].name, 'testdb', 'Name should be preserved')
-      assertEqual(registry.entries[0].created, originalCreated, 'Created should be preserved')
-      assertEqual(registry.entries[0].lastVerified, originalLastVerified, 'LastVerified should be preserved')
+      assertEqual(
+        registry.entries[0].name,
+        'testdb',
+        'Name should be preserved',
+      )
+      assertEqual(
+        registry.entries[0].created,
+        originalCreated,
+        'Created should be preserved',
+      )
+      assertEqual(
+        registry.entries[0].lastVerified,
+        originalLastVerified,
+        'LastVerified should be preserved',
+      )
     })
 
     it('should handle relocation to different directory', () => {
@@ -323,7 +394,10 @@ describe('SQLite Registry', () => {
       entry.filePath = '/Users/bob/project-b/data.sqlite'
 
       assert(entry.filePath.includes('project-b'), 'Should be in new directory')
-      assert(!entry.filePath.includes('project-a'), 'Should not be in old directory')
+      assert(
+        !entry.filePath.includes('project-a'),
+        'Should not be in old directory',
+      )
     })
 
     it('should handle relocation with filename change', () => {
@@ -336,7 +410,10 @@ describe('SQLite Registry', () => {
       // Relocate with new filename
       entry.filePath = '/path/new-name.sqlite'
 
-      assert(entry.filePath.endsWith('new-name.sqlite'), 'Should have new filename')
+      assert(
+        entry.filePath.endsWith('new-name.sqlite'),
+        'Should have new filename',
+      )
     })
 
     it('should handle relocation to home directory', () => {
@@ -349,7 +426,10 @@ describe('SQLite Registry', () => {
       // Simulate ~ expansion (already expanded when stored)
       entry.filePath = '/Users/bob/sqlite-tests/test.sqlite'
 
-      assert(entry.filePath.startsWith('/Users/bob'), 'Should be in home directory')
+      assert(
+        entry.filePath.startsWith('/Users/bob'),
+        'Should be in home directory',
+      )
     })
 
     it('should not affect other entries when updating one', () => {
@@ -367,9 +447,21 @@ describe('SQLite Registry', () => {
         entry.filePath = '/new/path/db2.sqlite'
       }
 
-      assertEqual(registry.entries[0].filePath, '/path/db1.sqlite', 'db1 should be unchanged')
-      assertEqual(registry.entries[1].filePath, '/new/path/db2.sqlite', 'db2 should be updated')
-      assertEqual(registry.entries[2].filePath, '/path/db3.sqlite', 'db3 should be unchanged')
+      assertEqual(
+        registry.entries[0].filePath,
+        '/path/db1.sqlite',
+        'db1 should be unchanged',
+      )
+      assertEqual(
+        registry.entries[1].filePath,
+        '/new/path/db2.sqlite',
+        'db2 should be updated',
+      )
+      assertEqual(
+        registry.entries[2].filePath,
+        '/path/db3.sqlite',
+        'db3 should be unchanged',
+      )
     })
   })
 
@@ -378,7 +470,10 @@ describe('SQLite Registry', () => {
       const filePath = '/Users/test/mydb.sqlite'
       const connectionString = `sqlite://${filePath}`
 
-      assert(connectionString.startsWith('sqlite://'), 'Should start with sqlite://')
+      assert(
+        connectionString.startsWith('sqlite://'),
+        'Should start with sqlite://',
+      )
       assert(connectionString.includes(filePath), 'Should include file path')
     })
 
@@ -394,7 +489,10 @@ describe('SQLite Registry', () => {
     it('should provide clear error for duplicate name', () => {
       const errorMessage = 'SQLite container "testdb" already exists'
 
-      assert(errorMessage.includes('already exists'), 'Should indicate duplicate')
+      assert(
+        errorMessage.includes('already exists'),
+        'Should indicate duplicate',
+      )
       assert(errorMessage.includes('testdb'), 'Should include name')
     })
   })
@@ -424,17 +522,28 @@ describe('SQLite Container Config', () => {
         database: filePath,
       }
 
-      assert(config.database.endsWith('.sqlite'), 'Database should be file path')
+      assert(
+        config.database.endsWith('.sqlite'),
+        'Database should be file path',
+      )
     })
 
     it('should use "running" status when file exists', () => {
       const status = 'running' // file exists
-      assertEqual(status, 'running', 'Status should be running when file exists')
+      assertEqual(
+        status,
+        'running',
+        'Status should be running when file exists',
+      )
     })
 
     it('should use "stopped" status when file is missing', () => {
       const status = 'stopped' // file missing
-      assertEqual(status, 'stopped', 'Status should be stopped when file missing')
+      assertEqual(
+        status,
+        'stopped',
+        'Status should be stopped when file missing',
+      )
     })
   })
 })

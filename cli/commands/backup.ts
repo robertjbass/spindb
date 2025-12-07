@@ -12,7 +12,7 @@ import {
   promptInstallDependencies,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { success, error, warning, formatBytes } from '../ui/theme'
+import { uiSuccess, uiError, uiWarning, formatBytes } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
 
 function generateTimestamp(): string {
@@ -70,11 +70,13 @@ export const backupCommand = new Command('backup')
           if (running.length === 0) {
             if (containers.length === 0) {
               console.log(
-                warning('No containers found. Create one with: spindb create'),
+                uiWarning(
+                  'No containers found. Create one with: spindb create',
+                ),
               )
             } else {
               console.log(
-                warning(
+                uiWarning(
                   'No running containers. Start one first with: spindb start',
                 ),
               )
@@ -92,7 +94,7 @@ export const backupCommand = new Command('backup')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(error(`Container "${containerName}" not found`))
+          console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
         }
 
@@ -103,7 +105,7 @@ export const backupCommand = new Command('backup')
         })
         if (!running) {
           console.error(
-            error(
+            uiError(
               `Container "${containerName}" is not running. Start it first.`,
             ),
           )
@@ -133,7 +135,7 @@ export const backupCommand = new Command('backup')
           missingDeps = await getMissingDependencies(config.engine)
           if (missingDeps.length > 0) {
             console.error(
-              error(
+              uiError(
                 `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
               ),
             )
@@ -169,7 +171,7 @@ export const backupCommand = new Command('backup')
           format = 'dump'
         } else if (options.format) {
           if (options.format !== 'sql' && options.format !== 'dump') {
-            console.error(error('Format must be "sql" or "dump"'))
+            console.error(uiError('Format must be "sql" or "dump"'))
             process.exit(1)
           }
           format = options.format as 'sql' | 'dump'
@@ -204,7 +206,7 @@ export const backupCommand = new Command('backup')
         backupSpinner.succeed('Backup created successfully')
 
         console.log()
-        console.log(success('Backup complete'))
+        console.log(uiSuccess('Backup complete'))
         console.log()
         console.log(chalk.gray('  File:'), chalk.cyan(result.path))
         console.log(
@@ -213,8 +215,8 @@ export const backupCommand = new Command('backup')
         )
         console.log(chalk.gray('  Format:'), chalk.white(result.format))
         console.log()
-      } catch (err) {
-        const e = err as Error
+      } catch (error) {
+        const e = error as Error
 
         const missingToolPatterns = ['pg_dump not found', 'mysqldump not found']
 
@@ -233,7 +235,7 @@ export const backupCommand = new Command('backup')
           process.exit(1)
         }
 
-        console.error(error(e.message))
+        console.error(uiError(e.message))
         process.exit(1)
       }
     },

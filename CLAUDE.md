@@ -1,5 +1,9 @@
 # CLAUDE.md - Project Context for Claude Code
 
+## Style Guide
+
+See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
+
 ## Project Overview
 
 SpinDB is a CLI tool for running local PostgreSQL and MySQL databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL. With support for several engines including SQLite, PostgreSQL, and MySQL.

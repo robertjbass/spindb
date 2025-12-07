@@ -9,7 +9,7 @@ import { paths } from '../../../config/paths'
 import { getSupportedEngines } from '../../../config/engine-defaults'
 import { checkEngineDependencies } from '../../../core/dependency-manager'
 import { createSpinner } from '../../ui/spinner'
-import { header, success, error, warning, info } from '../../ui/theme'
+import { header, uiSuccess, uiError, uiWarning, uiInfo } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { Engine } from '../../../types'
 
@@ -26,7 +26,7 @@ export async function handleCheckUpdate(): Promise<void> {
   if (!result) {
     spinner.fail('Could not reach npm registry')
     console.log()
-    console.log(info('Check your internet connection and try again.'))
+    console.log(uiInfo('Check your internet connection and try again.'))
     console.log(chalk.gray('  Manual update: npm install -g spindb@latest'))
     console.log()
     await pressEnterToContinue()
@@ -66,27 +66,29 @@ export async function handleCheckUpdate(): Promise<void> {
         updateSpinner.succeed('Update complete')
         console.log()
         console.log(
-          success(
+          uiSuccess(
             `Updated from ${updateResult.previousVersion} to ${updateResult.newVersion}`,
           ),
         )
         console.log()
         if (updateResult.previousVersion !== updateResult.newVersion) {
-          console.log(warning('Please restart spindb to use the new version.'))
+          console.log(
+            uiWarning('Please restart spindb to use the new version.'),
+          )
           console.log()
         }
       } else {
         updateSpinner.fail('Update failed')
         console.log()
-        console.log(error(updateResult.error || 'Unknown error'))
+        console.log(uiError(updateResult.error || 'Unknown error'))
         console.log()
-        console.log(info('Manual update: npm install -g spindb@latest'))
+        console.log(uiInfo('Manual update: npm install -g spindb@latest'))
       }
       await pressEnterToContinue()
     } else if (action === 'disable') {
       await updateManager.setAutoCheckEnabled(false)
       console.log()
-      console.log(info('Update checks disabled on startup.'))
+      console.log(uiInfo('Update checks disabled on startup.'))
       console.log(chalk.gray('  Re-enable with: spindb config update-check on'))
       console.log()
       await pressEnterToContinue()
@@ -138,7 +140,7 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
           label: 'Refresh binary cache',
           handler: async () => {
             await configManager.refreshAllBinaries()
-            console.log(success('Binary cache refreshed'))
+            console.log(uiSuccess('Binary cache refreshed'))
           },
         },
       }
@@ -150,12 +152,12 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
       message: 'Configuration valid',
       details: [`Binary tools cached: ${binaryCount}`],
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'Configuration',
       status: 'error',
       message: 'Configuration file is corrupted',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
@@ -199,12 +201,12 @@ async function checkContainers(): Promise<HealthCheckResult> {
       message: `${containers.length} container(s)`,
       details,
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'Containers',
       status: 'error',
       message: 'Failed to list containers',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
@@ -233,7 +235,7 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
           label: 'Remove orphaned entries from registry',
           handler: async () => {
             const count = await sqliteRegistry.removeOrphans()
-            console.log(success(`Removed ${count} orphaned entries`))
+            console.log(uiSuccess(`Removed ${count} orphaned entries`))
           },
         },
       }
@@ -244,12 +246,12 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
       status: 'ok',
       message: `${entries.length} database(s) registered, all files exist`,
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'SQLite Registry',
       status: 'warning',
       message: 'Could not check registry',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }
@@ -279,12 +281,12 @@ async function checkBinaries(): Promise<HealthCheckResult> {
       message: hasWarning ? 'Some tools missing' : 'All tools available',
       details: results,
     }
-  } catch (err) {
+  } catch (error) {
     return {
       name: 'Database Tools',
       status: 'error',
       message: 'Failed to check tools',
-      details: [(err as Error).message],
+      details: [(error as Error).message],
     }
   }
 }

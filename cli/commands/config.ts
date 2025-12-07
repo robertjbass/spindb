@@ -9,7 +9,7 @@ import {
   ALL_TOOLS,
 } from '../../core/config-manager'
 import { updateManager } from '../../core/update-manager'
-import { error, success, header, info } from '../ui/theme'
+import { uiError, uiSuccess, header, uiInfo } from '../ui/theme'
 import { createSpinner } from '../ui/spinner'
 import type { BinaryTool } from '../../types'
 
@@ -95,9 +95,9 @@ export const configCommand = new Command('config')
             )
             console.log()
           }
-        } catch (err) {
-          const e = err as Error
-          console.error(error(e.message))
+        } catch (error) {
+          const e = error as Error
+          console.error(uiError(e.message))
           process.exit(1)
         }
       }),
@@ -208,9 +208,9 @@ export const configCommand = new Command('config')
             }
             console.log()
           }
-        } catch (err) {
-          const e = err as Error
-          console.error(error(e.message))
+        } catch (error) {
+          const e = error as Error
+          console.error(uiError(e.message))
           process.exit(1)
         }
       }),
@@ -224,14 +224,14 @@ export const configCommand = new Command('config')
         try {
           // Validate tool name
           if (!ALL_TOOLS.includes(tool as BinaryTool)) {
-            console.error(error(`Invalid tool: ${tool}`))
+            console.error(uiError(`Invalid tool: ${tool}`))
             console.log(chalk.gray(`  Valid tools: ${ALL_TOOLS.join(', ')}`))
             process.exit(1)
           }
 
           // Validate path exists
           if (!existsSync(path)) {
-            console.error(error(`File not found: ${path}`))
+            console.error(uiError(`File not found: ${path}`))
             process.exit(1)
           }
 
@@ -240,10 +240,10 @@ export const configCommand = new Command('config')
           const config = await configManager.getBinaryConfig(tool as BinaryTool)
           const versionLabel = config?.version ? ` (v${config.version})` : ''
 
-          console.log(success(`Set ${tool} to: ${path}${versionLabel}`))
-        } catch (err) {
-          const e = err as Error
-          console.error(error(e.message))
+          console.log(uiSuccess(`Set ${tool} to: ${path}${versionLabel}`))
+        } catch (error) {
+          const e = error as Error
+          console.error(uiError(e.message))
           process.exit(1)
         }
       }),
@@ -256,16 +256,16 @@ export const configCommand = new Command('config')
         try {
           // Validate tool name
           if (!ALL_TOOLS.includes(tool as BinaryTool)) {
-            console.error(error(`Invalid tool: ${tool}`))
+            console.error(uiError(`Invalid tool: ${tool}`))
             console.log(chalk.gray(`  Valid tools: ${ALL_TOOLS.join(', ')}`))
             process.exit(1)
           }
 
           await configManager.clearBinaryPath(tool as BinaryTool)
-          console.log(success(`Removed ${tool} configuration`))
-        } catch (err) {
-          const e = err as Error
-          console.error(error(e.message))
+          console.log(uiSuccess(`Removed ${tool} configuration`))
+        } catch (error) {
+          const e = error as Error
+          console.error(uiError(e.message))
           process.exit(1)
         }
       }),
@@ -278,7 +278,7 @@ export const configCommand = new Command('config')
         try {
           // Validate tool name
           if (!ALL_TOOLS.includes(tool as BinaryTool)) {
-            console.error(error(`Invalid tool: ${tool}`))
+            console.error(uiError(`Invalid tool: ${tool}`))
             console.log(chalk.gray(`  Valid tools: ${ALL_TOOLS.join(', ')}`))
             process.exit(1)
           }
@@ -287,15 +287,15 @@ export const configCommand = new Command('config')
           if (path) {
             console.log(path)
           } else {
-            console.error(error(`${tool} not found`))
+            console.error(uiError(`${tool} not found`))
             console.log(
               chalk.gray(`  Run 'spindb config detect' to auto-detect tools`),
             )
             process.exit(1)
           }
-        } catch (err) {
-          const e = err as Error
-          console.error(error(e.message))
+        } catch (error) {
+          const e = error as Error
+          console.error(uiError(e.message))
           process.exit(1)
         }
       }),
@@ -328,7 +328,7 @@ export const configCommand = new Command('config')
           }
 
           if (state !== 'on' && state !== 'off') {
-            console.error(error('Invalid state. Use "on" or "off"'))
+            console.error(uiError('Invalid state. Use "on" or "off"'))
             process.exit(1)
           }
 
@@ -336,18 +336,18 @@ export const configCommand = new Command('config')
           await updateManager.setAutoCheckEnabled(enabled)
 
           if (enabled) {
-            console.log(success('Update checks enabled on startup'))
+            console.log(uiSuccess('Update checks enabled on startup'))
           } else {
-            console.log(info('Update checks disabled on startup'))
+            console.log(uiInfo('Update checks disabled on startup'))
             console.log(
               chalk.gray(
                 '  You can still manually check with: spindb version --check',
               ),
             )
           }
-        } catch (err) {
-          const e = err as Error
-          console.error(error(e.message))
+        } catch (error) {
+          const e = error as Error
+          console.error(uiError(e.message))
           process.exit(1)
         }
       }),

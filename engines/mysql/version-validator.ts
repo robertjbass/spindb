@@ -197,10 +197,10 @@ export async function parseDumpVersion(dumpPath: string): Promise<DumpInfo> {
     }
 
     return { version: null, variant }
-  } catch (err) {
+  } catch (error) {
     logDebug('Failed to parse dump version', {
       dumpPath,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     })
     return { version: null, variant: 'unknown' }
   }

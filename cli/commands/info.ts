@@ -7,7 +7,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
-import { error, info, header } from '../ui/theme'
+import { uiError, uiInfo, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { Engine, type ContainerConfig } from '../../types'
 
@@ -255,14 +255,16 @@ export const infoCommand = new Command('info')
       const containers = await containerManager.list()
 
       if (containers.length === 0) {
-        console.log(info('No containers found. Create one with: spindb create'))
+        console.log(
+          uiInfo('No containers found. Create one with: spindb create'),
+        )
         return
       }
 
       if (name) {
         const config = await containerManager.getConfig(name)
         if (!config) {
-          console.error(error(`Container "${name}" not found`))
+          console.error(uiError(`Container "${name}" not found`))
           process.exit(1)
         }
         await displayContainerInfo(config, options)
@@ -299,9 +301,9 @@ export const infoCommand = new Command('info')
       }
 
       await displayAllContainersInfo(containers, options)
-    } catch (err) {
-      const e = err as Error
-      console.error(error(e.message))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })

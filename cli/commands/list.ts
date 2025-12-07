@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
-import { info, error, formatBytes } from '../ui/theme'
+import { uiInfo, uiError, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { Engine } from '../../types'
 import { basename } from 'path'
@@ -62,7 +62,9 @@ export const listCommand = new Command('list')
       }
 
       if (containers.length === 0) {
-        console.log(info('No containers found. Create one with: spindb create'))
+        console.log(
+          uiInfo('No containers found. Create one with: spindb create'),
+        )
         return
       }
 
@@ -108,7 +110,8 @@ export const listCommand = new Command('list')
         if (container.engine === Engine.SQLite) {
           const fileName = basename(container.database)
           // Truncate if longer than 8 chars to fit in 8-char column
-          portOrPath = fileName.length > 8 ? fileName.slice(0, 7) + '…' : fileName
+          portOrPath =
+            fileName.length > 8 ? fileName.slice(0, 7) + '…' : fileName
         } else {
           portOrPath = String(container.port)
         }
@@ -126,31 +129,43 @@ export const listCommand = new Command('list')
 
       console.log()
 
-      const serverContainers = containers.filter((c) => c.engine !== Engine.SQLite)
-      const sqliteContainers = containers.filter((c) => c.engine === Engine.SQLite)
+      const serverContainers = containers.filter(
+        (c) => c.engine !== Engine.SQLite,
+      )
+      const sqliteContainers = containers.filter(
+        (c) => c.engine === Engine.SQLite,
+      )
 
-      const running = serverContainers.filter((c) => c.status === 'running').length
-      const stopped = serverContainers.filter((c) => c.status !== 'running').length
-      const available = sqliteContainers.filter((c) => c.status === 'running').length
-      const missing = sqliteContainers.filter((c) => c.status !== 'running').length
+      const running = serverContainers.filter(
+        (c) => c.status === 'running',
+      ).length
+      const stopped = serverContainers.filter(
+        (c) => c.status !== 'running',
+      ).length
+      const available = sqliteContainers.filter(
+        (c) => c.status === 'running',
+      ).length
+      const missing = sqliteContainers.filter(
+        (c) => c.status !== 'running',
+      ).length
 
       const parts: string[] = []
       if (serverContainers.length > 0) {
         parts.push(`${running} running, ${stopped} stopped`)
       }
       if (sqliteContainers.length > 0) {
-        parts.push(`${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`)
+        parts.push(
+          `${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`,
+        )
       }
 
       console.log(
-        chalk.gray(
-          `  ${containers.length} container(s): ${parts.join('; ')}`,
-        ),
+        chalk.gray(`  ${containers.length} container(s): ${parts.join('; ')}`),
       )
       console.log()
-    } catch (err) {
-      const e = err as Error
-      console.error(error(e.message))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
       process.exit(1)
     }
   })

@@ -334,7 +334,10 @@ describe('Database Name Validation', () => {
       })
 
       it('should reject names with spaces', () => {
-        assert(!isValidDatabaseName('my db'), 'Names with spaces should be invalid')
+        assert(
+          !isValidDatabaseName('my db'),
+          'Names with spaces should be invalid',
+        )
         assert(
           !isValidDatabaseName('test database'),
           'test database should be invalid',
@@ -346,7 +349,10 @@ describe('Database Name Validation', () => {
           !isValidDatabaseName("db'; DROP TABLE users;--"),
           'SQL injection should be invalid',
         )
-        assert(!isValidDatabaseName('db"'), 'Names with quotes should be invalid')
+        assert(
+          !isValidDatabaseName('db"'),
+          'Names with quotes should be invalid',
+        )
         assert(
           !isValidDatabaseName('db`'),
           'Names with backticks should be invalid',
@@ -362,10 +368,7 @@ describe('Database Name Validation', () => {
           !isValidDatabaseName('my-db'),
           'Names with hyphens should be invalid',
         )
-        assert(
-          !isValidDatabaseName('test-db-1'),
-          'test-db-1 should be invalid',
-        )
+        assert(!isValidDatabaseName('test-db-1'), 'test-db-1 should be invalid')
       })
 
       it('should reject names with special characters', () => {

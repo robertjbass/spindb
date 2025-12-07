@@ -55,9 +55,18 @@ describe('ContainerManager', () => {
     it('should require name to start with a letter', () => {
       const containerManager = new ContainerManager()
 
-      assert(containerManager.isValidName('a123'), 'Should allow letter followed by numbers')
-      assert(!containerManager.isValidName('1abc'), 'Should reject number at start')
-      assert(!containerManager.isValidName('-abc'), 'Should reject hyphen at start')
+      assert(
+        containerManager.isValidName('a123'),
+        'Should allow letter followed by numbers',
+      )
+      assert(
+        !containerManager.isValidName('1abc'),
+        'Should reject number at start',
+      )
+      assert(
+        !containerManager.isValidName('-abc'),
+        'Should reject hyphen at start',
+      )
     })
   })
 
@@ -80,7 +89,10 @@ describe('ContainerManager', () => {
       assert(typeof config.port === 'number', 'Should have port')
       assert(typeof config.database === 'string', 'Should have database')
       assert(Array.isArray(config.databases), 'Should have databases array')
-      assert(typeof config.created === 'string', 'Should have created timestamp')
+      assert(
+        typeof config.created === 'string',
+        'Should have created timestamp',
+      )
       assert(typeof config.status === 'string', 'Should have status')
     })
 
@@ -97,7 +109,11 @@ describe('ContainerManager', () => {
         clonedFrom: 'original-db',
       }
 
-      assertEqual(clonedConfig.clonedFrom, 'original-db', 'Should track clone source')
+      assertEqual(
+        clonedConfig.clonedFrom,
+        'original-db',
+        'Should track clone source',
+      )
     })
   })
 
@@ -127,13 +143,15 @@ describe('ContainerManager', () => {
         'Error should mention allowed characters',
       )
       assert(
-        invalidNameError.includes('hyphens') && invalidNameError.includes('underscores'),
+        invalidNameError.includes('hyphens') &&
+          invalidNameError.includes('underscores'),
         'Error should mention allowed special characters',
       )
     })
 
     it('should provide clear error for existing container', () => {
-      const existingError = 'Container "mydb" already exists for engine postgresql'
+      const existingError =
+        'Container "mydb" already exists for engine postgresql'
 
       assert(
         existingError.includes('mydb'),
@@ -159,20 +177,23 @@ describe('ContainerManager', () => {
     })
 
     it('should provide actionable error for running container delete', () => {
-      const runningError = 'Container "mydb" is running. Stop it first or use --force'
+      const runningError =
+        'Container "mydb" is running. Stop it first or use --force'
 
       assert(
         runningError.includes('running'),
         'Error should indicate container is running',
       )
       assert(
-        runningError.includes('Stop it first') || runningError.includes('--force'),
+        runningError.includes('Stop it first') ||
+          runningError.includes('--force'),
         'Error should suggest how to resolve',
       )
     })
 
     it('should provide actionable error for running container clone', () => {
-      const runningCloneError = 'Source container "mydb" is running. Stop it first'
+      const runningCloneError =
+        'Source container "mydb" is running. Stop it first'
 
       assert(
         runningCloneError.includes('running'),
@@ -196,7 +217,8 @@ describe('ContainerManager', () => {
 
   describe('Database Management', () => {
     it('should prevent removing primary database', () => {
-      const errorMessage = 'Cannot remove primary database "testdb" from tracking'
+      const errorMessage =
+        'Cannot remove primary database "testdb" from tracking'
 
       assert(
         errorMessage.includes('Cannot remove primary database'),
@@ -244,7 +266,11 @@ describe('ContainerManager', () => {
       }
 
       // Migration logic should prepend primary
-      if (!configWithMissingPrimary.databases.includes(configWithMissingPrimary.database)) {
+      if (
+        !configWithMissingPrimary.databases.includes(
+          configWithMissingPrimary.database,
+        )
+      ) {
         configWithMissingPrimary.databases = [
           configWithMissingPrimary.database,
           ...configWithMissingPrimary.databases,
@@ -267,17 +293,18 @@ describe('ContainerManager', () => {
         created: new Date().toISOString(),
       }
 
-      assertEqual(cloneConfig.clonedFrom, 'source-db', 'Should track source container')
+      assertEqual(
+        cloneConfig.clonedFrom,
+        'source-db',
+        'Should track source container',
+      )
     })
 
     it('should update created timestamp', () => {
       const originalCreated = '2024-01-01T00:00:00Z'
       const newCreated = new Date().toISOString()
 
-      assert(
-        newCreated > originalCreated,
-        'Clone should have newer timestamp',
-      )
+      assert(newCreated > originalCreated, 'Clone should have newer timestamp')
     })
   })
 
@@ -323,10 +350,7 @@ describe('ContainerManager', () => {
         expectedFormat.includes('postgresql://'),
         'Should use postgresql:// protocol',
       )
-      assert(
-        expectedFormat.includes('127.0.0.1'),
-        'Should use localhost',
-      )
+      assert(expectedFormat.includes('127.0.0.1'), 'Should use localhost')
       assert(
         expectedFormat.includes(String(config.port)),
         'Should include port',
@@ -351,10 +375,7 @@ describe('ContainerManager', () => {
         expectedFormat.includes('mysql://'),
         'Should use mysql:// protocol',
       )
-      assert(
-        expectedFormat.includes('root@'),
-        'MySQL should use root user',
-      )
+      assert(expectedFormat.includes('root@'), 'MySQL should use root user')
     })
 
     it('should allow override database in connection string', () => {
@@ -409,10 +430,7 @@ describe('ContainerManager', () => {
       for (const engine of engines) {
         const path = `~/.spindb/containers/${engine}/${containerName}`
 
-        assert(
-          path.includes(engine),
-          `Path should include engine: ${engine}`,
-        )
+        assert(path.includes(engine), `Path should include engine: ${engine}`)
         assert(
           path.includes(containerName),
           'Path should include container name',
@@ -438,10 +456,7 @@ describe('Container Paths', () => {
   it('should use ~/.spindb/containers as base', async () => {
     const { paths } = await import('../../config/paths')
 
-    assert(
-      paths.containers.includes('.spindb'),
-      'Should use .spindb directory',
-    )
+    assert(paths.containers.includes('.spindb'), 'Should use .spindb directory')
     assert(
       paths.containers.includes('containers'),
       'Should use containers subdirectory',

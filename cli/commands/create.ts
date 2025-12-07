@@ -13,7 +13,7 @@ import {
   promptConfirm,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { header, error, connectionBox } from '../ui/theme'
+import { header, uiError, connectionBox } from '../ui/theme'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
@@ -21,9 +21,9 @@ import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
 import { isValidDatabaseName } from '../../core/error-handler'
+import { resolve } from 'path'
 import { Engine } from '../../types'
 import type { BaseEngine } from '../../engines/base-engine'
-import { resolve } from 'path'
 
 /**
  * Simplified SQLite container creation flow
@@ -43,8 +43,13 @@ async function createSqliteContainer(
 
   const missingDeps = await getMissingDependencies('sqlite')
   if (missingDeps.length > 0) {
-    depsSpinner.warn(`Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`)
-    const installed = await promptInstallDependencies(missingDeps[0].binary, 'sqlite')
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      'sqlite',
+    )
     if (!installed) {
       process.exit(1)
     }
@@ -64,7 +69,7 @@ async function createSqliteContainer(
 
   // Check if file already exists
   if (existsSync(absolutePath)) {
-    console.error(error(`File already exists: ${absolutePath}`))
+    console.error(uiError(`File already exists: ${absolutePath}`))
     process.exit(1)
   }
 
@@ -75,9 +80,9 @@ async function createSqliteContainer(
     // Initialize the SQLite database file and register in registry
     await dbEngine.initDataDir(containerName, version, { path: absolutePath })
     createSpinnerInstance.succeed('SQLite database created')
-  } catch (err) {
+  } catch (error) {
     createSpinnerInstance.fail('Failed to create SQLite database')
-    throw err
+    throw error
   }
 
   // Handle --from restore
@@ -85,15 +90,17 @@ async function createSqliteContainer(
     const config = await containerManager.getConfig(containerName)
     if (config) {
       const format = await dbEngine.detectBackupFormat(restoreLocation)
-      const restoreSpinner = createSpinner(`Restoring from ${format.description}...`)
+      const restoreSpinner = createSpinner(
+        `Restoring from ${format.description}...`,
+      )
       restoreSpinner.start()
 
       try {
         await dbEngine.restore(config, restoreLocation)
         restoreSpinner.succeed('Backup restored successfully')
-      } catch (err) {
+      } catch (error) {
         restoreSpinner.fail('Failed to restore backup')
-        throw err
+        throw error
       }
     }
   }
@@ -146,7 +153,11 @@ function detectLocationType(location: string): {
   if (existsSync(location)) {
     // Check if it's a SQLite file (case-insensitive)
     const lowerLocation = location.toLowerCase()
-    if (lowerLocation.endsWith('.sqlite') || lowerLocation.endsWith('.db') || lowerLocation.endsWith('.sqlite3')) {
+    if (
+      lowerLocation.endsWith('.sqlite') ||
+      lowerLocation.endsWith('.db') ||
+      lowerLocation.endsWith('.sqlite3')
+    ) {
       return { type: 'file', inferredEngine: Engine.SQLite }
     }
     return { type: 'file' }
@@ -158,7 +169,10 @@ function detectLocationType(location: string): {
 export const createCommand = new Command('create')
   .description('Create a new database container')
   .argument('[name]', 'Container name')
-  .option('-e, --engine <engine>', 'Database engine (postgresql, mysql, sqlite)')
+  .option(
+    '-e, --engine <engine>',
+    'Database engine (postgresql, mysql, sqlite)',
+  )
   .option('-v, --version <version>', 'Database version')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
@@ -207,7 +221,7 @@ export const createCommand = new Command('create')
           const locationInfo = detectLocationType(options.from)
 
           if (locationInfo.type === 'not_found') {
-            console.error(error(`Location not found: ${options.from}`))
+            console.error(uiError(`Location not found: ${options.from}`))
             console.log(
               chalk.gray(
                 '  Provide a valid file path or connection string (postgresql://, mysql://)',
@@ -230,7 +244,7 @@ export const createCommand = new Command('create')
 
           if (options.start === false) {
             console.error(
-              error(
+              uiError(
                 'Cannot use --no-start with --from (restore requires running container)',
               ),
             )
@@ -257,7 +271,7 @@ export const createCommand = new Command('create')
         // Validate database name to prevent SQL injection
         if (!isValidDatabaseName(database)) {
           console.error(
-            error(
+            uiError(
               'Database name must start with a letter and contain only letters, numbers, hyphens, and underscores',
             ),
           )
@@ -282,11 +296,24 @@ export const createCommand = new Command('create')
         // For server databases, validate --connect with --no-start
         if (options.connect && options.start === false) {
           console.error(
-            error(
+            uiError(
               'Cannot use --no-start with --connect (connection requires running container)',
             ),
           )
           process.exit(1)
+        }
+
+        // Validate --max-connections if provided
+        if (options.maxConnections) {
+          const parsed = parseInt(options.maxConnections, 10)
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            console.error(
+              uiError(
+                'Invalid --max-connections value: must be a positive integer',
+              ),
+            )
+            process.exit(1)
+          }
         }
 
         const depsSpinner = createSpinner('Checking required tools...')
@@ -310,7 +337,7 @@ export const createCommand = new Command('create')
           missingDeps = await getMissingDependencies(engine)
           if (missingDeps.length > 0) {
             console.error(
-              error(
+              uiError(
                 `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
               ),
             )
@@ -399,9 +426,9 @@ export const createCommand = new Command('create')
           })
 
           createSpinnerInstance.succeed('Container created')
-        } catch (err) {
+        } catch (error) {
           createSpinnerInstance.fail('Failed to create container')
-          throw err
+          throw error
         }
 
         const initSpinner = createSpinner('Initializing database cluster...')
@@ -415,10 +442,10 @@ export const createCommand = new Command('create')
               : undefined,
           })
           initSpinner.succeed('Database cluster initialized')
-        } catch (err) {
+        } catch (error) {
           initSpinner.fail('Failed to initialize database cluster')
           await tx.rollback()
-          throw err
+          throw error
         }
 
         // --from requires start, --start forces start, --no-start skips, otherwise ask user
@@ -484,14 +511,14 @@ export const createCommand = new Command('create')
             } else {
               startSpinner.succeed(`${dbEngine.displayName} started`)
             }
-          } catch (err) {
+          } catch (error) {
             if (!startSpinner.isSpinning) {
               // Error was already handled above
             } else {
               startSpinner.fail(`Failed to start ${dbEngine.displayName}`)
             }
             await tx.rollback()
-            throw err
+            throw error
           }
 
           const defaultDb = engineDefaults.superuser
@@ -504,10 +531,10 @@ export const createCommand = new Command('create')
             try {
               await dbEngine.createDatabase(config, database)
               dbSpinner.succeed(`Database "${database}" created`)
-            } catch (err) {
+            } catch (error) {
               dbSpinner.fail(`Failed to create database "${database}"`)
               await tx.rollback()
-              throw err
+              throw error
             }
           }
         }
@@ -538,8 +565,8 @@ export const createCommand = new Command('create')
                 dumpSpinner.succeed('Dump created from remote database')
                 backupPath = tempDumpPath
                 dumpSuccess = true
-              } catch (err) {
-                const e = err as Error
+              } catch (error) {
+                const e = error as Error
                 dumpSpinner.fail('Failed to create dump')
 
                 if (
@@ -554,14 +581,14 @@ export const createCommand = new Command('create')
                 }
 
                 console.log()
-                console.error(error('pg_dump error:'))
+                console.error(uiError('pg_dump error:'))
                 console.log(chalk.gray(`  ${e.message}`))
                 process.exit(1)
               }
             }
 
             if (!dumpSuccess) {
-              console.error(error('Failed to create dump after retries'))
+              console.error(uiError('Failed to create dump after retries'))
               process.exit(1)
             }
           } else {
@@ -639,8 +666,8 @@ export const createCommand = new Command('create')
             console.log()
           }
         }
-      } catch (err) {
-        const e = err as Error
+      } catch (error) {
+        const e = error as Error
 
         const missingToolPatterns = [
           'pg_restore not found',
@@ -666,7 +693,7 @@ export const createCommand = new Command('create')
           process.exit(1)
         }
 
-        console.error(error(e.message))
+        console.error(uiError(e.message))
         process.exit(1)
       } finally {
         if (tempDumpPath) {
