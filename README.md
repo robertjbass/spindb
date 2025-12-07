@@ -655,7 +655,9 @@ rm -rf ~/.spindb
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and distribution info.
 
-See [CLAUDE.md](CLAUDE.md) for architecture documentation.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture and comprehensive CLI command examples.
+
+See [CLAUDE.md](CLAUDE.md) for AI-assisted development context.
 
 See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, planned engines, etc.).
 

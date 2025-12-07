@@ -35,7 +35,7 @@ class SQLiteRegistryManager {
 
   /**
    * Add a new entry to the registry
-   * @throws Error if a container with the same name already exists
+   * @throws Error if a container with the same name or file path already exists
    */
   async add(entry: SQLiteRegistryEntry): Promise<void> {
     const registry = await this.load()
@@ -43,6 +43,13 @@ class SQLiteRegistryManager {
     // Check for duplicate name
     if (registry.entries.some((e) => e.name === entry.name)) {
       throw new Error(`SQLite container "${entry.name}" already exists`)
+    }
+
+    // Check for duplicate file path
+    if (registry.entries.some((e) => e.filePath === entry.filePath)) {
+      throw new Error(
+        `SQLite container for path "${entry.filePath}" already exists`,
+      )
     }
 
     registry.entries.push(entry)

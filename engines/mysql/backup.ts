@@ -98,12 +98,20 @@ async function createSqlBackup(
 
     proc.on('close', async (code) => {
       if (code === 0) {
-        const stats = await stat(outputPath)
-        safeResolve({
-          path: outputPath,
-          format: 'sql',
-          size: stats.size,
-        })
+        try {
+          const stats = await stat(outputPath)
+          safeResolve({
+            path: outputPath,
+            format: 'sql',
+            size: stats.size,
+          })
+        } catch (error) {
+          safeReject(
+            new Error(
+              `Backup completed but failed to read output file: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          )
+        }
       } else {
         const errorMessage = stderr || `mysqldump exited with code ${code}`
         safeReject(new Error(errorMessage))
@@ -164,13 +172,29 @@ async function createCompressedBackup(
     })
   })
 
-  // Wait for both pipeline AND process exit to succeed
-  await Promise.all([pipelinePromise, exitPromise])
+  // Wait for both pipeline AND process exit to complete
+  // Use allSettled to handle case where both reject (avoids unhandled rejection)
+  const results = await Promise.allSettled([pipelinePromise, exitPromise])
 
-  const stats = await stat(outputPath)
-  return {
-    path: outputPath,
-    format: 'compressed',
-    size: stats.size,
+  // Check for any rejections - prefer exitPromise error as it has more context
+  const [pipelineResult, exitResult] = results
+  if (exitResult.status === 'rejected') {
+    throw exitResult.reason
+  }
+  if (pipelineResult.status === 'rejected') {
+    throw pipelineResult.reason
+  }
+
+  try {
+    const stats = await stat(outputPath)
+    return {
+      path: outputPath,
+      format: 'compressed',
+      size: stats.size,
+    }
+  } catch (error) {
+    throw new Error(
+      `Backup completed but failed to read output file: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
 }
