@@ -11,7 +11,7 @@
  */
 
 import { homedir, platform as osPlatform, arch as osArch } from 'os'
-import { execSync, exec, spawn } from 'child_process'
+import { execSync, execFileSync, exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 
@@ -205,7 +205,7 @@ class DarwinPlatformService extends BasePlatformService {
     let getentResult: string | null = null
     if (sudoUser) {
       try {
-        getentResult = execSync(`getent passwd ${sudoUser}`, {
+        getentResult = execFileSync('getent', ['passwd', sudoUser], {
           encoding: 'utf-8',
         })
       } catch {
@@ -347,7 +347,7 @@ class LinuxPlatformService extends BasePlatformService {
     let getentResult: string | null = null
     if (sudoUser) {
       try {
-        getentResult = execSync(`getent passwd ${sudoUser}`, {
+        getentResult = execFileSync('getent', ['passwd', sudoUser], {
           encoding: 'utf-8',
         })
       } catch {

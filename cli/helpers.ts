@@ -1,7 +1,7 @@
 import { existsSync } from 'fs'
 import { readdir, lstat } from 'fs/promises'
 import { join } from 'path'
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../config/paths'
 import {
@@ -11,6 +11,7 @@ import {
 } from '../engines/mysql/binary-detection'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 export type InstalledPostgresEngine = {
   engine: 'postgresql'
@@ -49,7 +50,7 @@ async function getPostgresVersion(binPath: string): Promise<string | null> {
   }
 
   try {
-    const { stdout } = await execAsync(`"${postgresPath}" --version`)
+    const { stdout } = await execFileAsync(postgresPath, ['--version'])
     const match = stdout.match(/\(PostgreSQL\)\s+([\d.]+)/)
     return match ? match[1] : null
   } catch {
@@ -146,9 +147,9 @@ async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null>
       return null
     }
 
-    const { stdout: versionOutput } = await execAsync(
-      `"${sqlitePath}" --version`,
-    )
+    const { stdout: versionOutput } = await execFileAsync(sqlitePath, [
+      '--version',
+    ])
     // sqlite3 --version outputs: "3.43.2 2023-10-10 12:14:04 ..."
     const versionMatch = versionOutput.match(/^([\d.]+)/)
     const version = versionMatch ? versionMatch[1] : 'unknown'

@@ -21,9 +21,9 @@ import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
 import { isValidDatabaseName } from '../../core/error-handler'
+import { resolve } from 'path'
 import { Engine } from '../../types'
 import type { BaseEngine } from '../../engines/base-engine'
-import { resolve } from 'path'
 
 /**
  * Simplified SQLite container creation flow
@@ -301,6 +301,19 @@ export const createCommand = new Command('create')
             ),
           )
           process.exit(1)
+        }
+
+        // Validate --max-connections if provided
+        if (options.maxConnections) {
+          const parsed = parseInt(options.maxConnections, 10)
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            console.error(
+              uiError(
+                'Invalid --max-connections value: must be a positive integer',
+              ),
+            )
+            process.exit(1)
+          }
         }
 
         const depsSpinner = createSpinner('Checking required tools...')

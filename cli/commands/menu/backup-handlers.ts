@@ -33,6 +33,7 @@ import {
 } from '../../ui/theme'
 import { getEngineIcon } from '../../constants'
 import { type Engine } from '../../../types'
+import { pressEnterToContinue } from './shared'
 
 function generateBackupTimestamp(): string {
   const now = new Date()
@@ -477,10 +478,7 @@ export async function handleRestore(): Promise<void> {
             console.log(
               uiSuccess('Please try the restore again with the updated tools.'),
             )
-            await new Promise((resolve) => {
-              console.log(chalk.gray('Press Enter to continue...'))
-              process.stdin.once('data', resolve)
-            })
+            await pressEnterToContinue()
             return
           } else {
             upgradeSpinner.fail('Upgrade failed')
@@ -510,10 +508,7 @@ export async function handleRestore(): Promise<void> {
                 `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
               ),
             )
-            await new Promise((resolve) => {
-              console.log(chalk.gray('Press Enter to continue...'))
-              process.stdin.once('data', resolve)
-            })
+            await pressEnterToContinue()
             return
           }
         } catch {
