@@ -268,6 +268,10 @@ function sanitizeDatabaseName(name: string): string {
   sanitized = sanitized.replace(/_+/g, '_')
   // Trim trailing underscores
   sanitized = sanitized.replace(/_+$/, '')
+  // Fallback if result is empty (e.g., input was "---")
+  if (!sanitized) {
+    sanitized = 'db'
+  }
   return sanitized
 }
 

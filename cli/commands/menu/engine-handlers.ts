@@ -24,8 +24,8 @@ import { type MenuChoice } from './shared'
  * Pad string to width, accounting for emoji taking 2 display columns
  */
 function padWithEmoji(str: string, width: number): string {
-  // Count emojis using Unicode property escape (covers all emoji ranges)
-  const emojiCount = (str.match(/\p{Emoji}/gu) || []).length
+  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
+  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
 }
 
@@ -174,19 +174,26 @@ export async function handleEngines(): Promise<void> {
   }
 
   if (action.startsWith('delete:')) {
-    const [, enginePath, engineName, engineVersion] = action.split(':')
+    // Parse from the end to preserve colons in path
+    // Format: delete:path:engineName:engineVersion
+    const withoutPrefix = action.slice('delete:'.length)
+    const lastColon = withoutPrefix.lastIndexOf(':')
+    const secondLastColon = withoutPrefix.lastIndexOf(':', lastColon - 1)
+    const enginePath = withoutPrefix.slice(0, secondLastColon)
+    const engineName = withoutPrefix.slice(secondLastColon + 1, lastColon)
+    const engineVersion = withoutPrefix.slice(lastColon + 1)
     await handleDeleteEngine(enginePath, engineName, engineVersion)
     await handleEngines()
   }
 
   if (action.startsWith('mysql-info:')) {
-    const mysqldPath = action.replace('mysql-info:', '')
+    const mysqldPath = action.slice('mysql-info:'.length)
     await handleMysqlInfo(mysqldPath)
     await handleEngines()
   }
 
   if (action.startsWith('sqlite-info:')) {
-    const sqlitePath = action.replace('sqlite-info:', '')
+    const sqlitePath = action.slice('sqlite-info:'.length)
     await handleSqliteInfo(sqlitePath)
     await handleEngines()
   }

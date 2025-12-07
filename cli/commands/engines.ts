@@ -19,8 +19,8 @@ import {
  * Pad string to width, accounting for emoji taking 2 display columns
  */
 function padWithEmoji(str: string, width: number): string {
-  // Count emojis using Unicode property escape (covers all emoji ranges)
-  const emojiCount = (str.match(/\p{Emoji}/gu) || []).length
+  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
+  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
 }
 

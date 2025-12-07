@@ -1043,6 +1043,12 @@ async function handleCloneFromSubmenu(
   sourceName: string,
   showMainMenu: () => Promise<void>,
 ): Promise<void> {
+  const sourceConfig = await containerManager.getConfig(sourceName)
+  if (!sourceConfig) {
+    console.log(error(`Container "${sourceName}" not found`))
+    return
+  }
+
   const { targetName } = await inquirer.prompt<{ targetName: string }>([
     {
       type: 'input',
@@ -1059,20 +1065,32 @@ async function handleCloneFromSubmenu(
     },
   ])
 
+  // Check if target container already exists
+  if (await containerManager.exists(targetName, { engine: sourceConfig.engine })) {
+    console.log(error(`Container "${targetName}" already exists`))
+    return
+  }
+
   const spinner = createSpinner(`Cloning ${sourceName} to ${targetName}...`)
   spinner.start()
 
-  const newConfig = await containerManager.clone(sourceName, targetName)
+  try {
+    const newConfig = await containerManager.clone(sourceName, targetName)
 
-  spinner.succeed(`Cloned "${sourceName}" to "${targetName}"`)
+    spinner.succeed(`Cloned "${sourceName}" to "${targetName}"`)
 
-  const engine = getEngine(newConfig.engine)
-  const connectionString = engine.getConnectionString(newConfig)
+    const engine = getEngine(newConfig.engine)
+    const connectionString = engine.getConnectionString(newConfig)
 
-  console.log()
-  console.log(connectionBox(targetName, connectionString, newConfig.port))
+    console.log()
+    console.log(connectionBox(targetName, connectionString, newConfig.port))
 
-  await showContainerSubmenu(targetName, showMainMenu)
+    await showContainerSubmenu(targetName, showMainMenu)
+  } catch (err) {
+    spinner.fail(`Failed to clone "${sourceName}"`)
+    console.log(error((err as Error).message))
+    await pressEnterToContinue()
+  }
 }
 
 async function handleDelete(containerName: string): Promise<void> {

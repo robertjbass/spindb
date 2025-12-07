@@ -85,7 +85,7 @@ export class ContainerManager {
 
     if (engine) {
       // SQLite uses registry instead of filesystem
-      if (engine === 'sqlite') {
+      if (engine === Engine.SQLite) {
         return this.getSqliteConfig(name)
       }
 
@@ -210,7 +210,7 @@ export class ContainerManager {
 
     if (engine) {
       // SQLite uses registry
-      if (engine === 'sqlite') {
+      if (engine === Engine.SQLite) {
         return sqliteRegistry.exists(name)
       }
       const configPath = paths.getContainerConfigPath(name, { engine })
@@ -437,7 +437,15 @@ export class ContainerManager {
         throw new Error(`SQLite container "${oldName}" not found in registry`)
       }
 
-      // Remove old entry and add new one with updated name
+      // Move container directory first (if it exists) - do filesystem ops before registry
+      // This way if the move fails, registry is unchanged
+      const oldContainerPath = paths.getContainerPath(oldName, { engine })
+      const newContainerPath = paths.getContainerPath(newName, { engine })
+      if (existsSync(oldContainerPath)) {
+        await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
+      }
+
+      // Now update registry - remove old entry and add new one with updated name
       await sqliteRegistry.remove(oldName)
       await sqliteRegistry.add({
         name: newName,
@@ -445,13 +453,6 @@ export class ContainerManager {
         created: entry.created,
         lastVerified: entry.lastVerified,
       })
-
-      // Rename container directory if it exists (created by containerManager.create)
-      const oldContainerPath = paths.getContainerPath(oldName, { engine })
-      const newContainerPath = paths.getContainerPath(newName, { engine })
-      if (existsSync(oldContainerPath)) {
-        await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
-      }
 
       // Return updated config
       return {

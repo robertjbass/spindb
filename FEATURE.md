@@ -15,24 +15,39 @@ When adding a new database engine to SpinDB, ALL features below must be implemen
 Every engine must implement these methods from `engines/base-engine.ts`:
 
 ```typescript
+// Properties
 abstract name: string                    // e.g., 'postgresql', 'mysql', 'sqlite'
 abstract displayName: string             // e.g., 'PostgreSQL', 'MySQL', 'SQLite'
-abstract supportedVersions: string[]     // e.g., ['14', '15', '16', '17']
 abstract defaultPort: number             // e.g., 5432, 3306, 0 (for file-based)
-abstract defaultUser: string             // e.g., 'postgres', 'root'
+abstract supportedVersions: string[]     // e.g., ['14', '15', '16', '17']
 
-abstract start(container: ContainerConfig): Promise<void>
+// Binary management
+abstract getBinaryUrl(version: string, platform: string, arch: string): string
+abstract verifyBinary(binPath: string): Promise<boolean>
+abstract isBinaryInstalled(version: string): Promise<boolean>
+abstract ensureBinaries(version: string, onProgress?: ProgressCallback): Promise<string>
+
+// Lifecycle
+abstract initDataDir(name: string, version: string, options?: Record<string, unknown>): Promise<string>
+abstract start(container: ContainerConfig, onProgress?: ProgressCallback): Promise<{ port: number; connectionString: string }>
 abstract stop(container: ContainerConfig): Promise<void>
-abstract isRunning(container: ContainerConfig): Promise<boolean>
-abstract initDataDir(name: string, version: string, options: InitOptions): Promise<void>
+abstract status(container: ContainerConfig): Promise<StatusResult>
+
+// Connection
 abstract getConnectionString(container: ContainerConfig, database?: string): string
+abstract connect(container: ContainerConfig, database?: string): Promise<void>
+
+// Database operations
 abstract createDatabase(container: ContainerConfig, database: string): Promise<void>
-abstract deleteDatabase(container: ContainerConfig, database: string): Promise<void>
-abstract listDatabases(container: ContainerConfig): Promise<string[]>
-abstract runScript(container: ContainerConfig, script: string, options?: RunScriptOptions): Promise<string>
-abstract backup(container: ContainerConfig, options: BackupOptions): Promise<string>
-abstract restore(container: ContainerConfig, backupPath: string, options?: RestoreOptions): Promise<void>
-abstract getLogPath(containerName: string): string
+abstract dropDatabase(container: ContainerConfig, database: string): Promise<void>
+abstract runScript(container: ContainerConfig, options: { file?: string; sql?: string; database?: string }): Promise<void>
+abstract getDatabaseSize(container: ContainerConfig): Promise<number | null>
+
+// Backup & restore
+abstract detectBackupFormat(filePath: string): Promise<BackupFormat>
+abstract backup(container: ContainerConfig, outputPath: string, options: BackupOptions): Promise<BackupResult>
+abstract restore(container: ContainerConfig, backupPath: string, options?: Record<string, unknown>): Promise<RestoreResult>
+abstract dumpFromConnectionString(connectionString: string, outputPath: string): Promise<DumpResult>
 ```
 
 ---

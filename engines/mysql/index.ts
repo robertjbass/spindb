@@ -898,6 +898,7 @@ export class MySQLEngine extends BaseEngine {
   ): Promise<void> {
     const { port } = container
     const db = options.database || container.database || 'mysql'
+    assertValidDatabaseName(db)
 
     const mysql = await getMysqlClientPath()
     if (!mysql) {

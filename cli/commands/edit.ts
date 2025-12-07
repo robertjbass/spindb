@@ -37,7 +37,7 @@ async function promptEditAction(
   }
 
   // Only show config option for engines that support it
-  if (engine === 'postgresql') {
+  if (engine === Engine.PostgreSQL) {
     choices.push({ name: 'Edit database config (postgresql.conf)', value: 'config' })
   }
 

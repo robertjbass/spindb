@@ -137,6 +137,7 @@ async function getInstalledMysqlEngine(): Promise<InstalledMysqlEngine | null> {
 
 async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null> {
   try {
+    // TODO: Use 'where sqlite3' on Windows when adding Windows support
     const { stdout: whichOutput } = await execAsync('which sqlite3')
     const sqlitePath = whichOutput.trim()
     if (!sqlitePath) {
