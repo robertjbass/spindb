@@ -11,15 +11,15 @@
  * - mongorestore: Restore utility
  */
 
-import { exec, spawn, ChildProcess } from 'child_process'
+import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
-import { mkdir, rm, writeFile, readFile, stat, readdir, cp } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, cp } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
-import { BaseEngine, type InitOptions, type RunScriptOptions } from '../base-engine'
+import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
-import { getEngineDefaults } from '../../config/engine-defaults'
-import { getBinaryPath, detectAllBinaries } from './binary-detection'
+import { getEngineDefaults } from '../../config/defaults'
+import { getBinaryPath } from './binary-detection'
 import { validateVersion, getSupportedVersions } from './version-validator'
 import {
   createBackup,
@@ -32,25 +32,59 @@ import {
 import type {
   ContainerConfig,
   ProgressCallback,
-  ProcessResult,
   BackupFormat,
-  RestoreResult,
   BackupOptions,
   BackupResult,
+  RestoreResult,
   DumpResult,
+  StatusResult,
 } from '../../types'
 
+// Re-export modules for external access
+export * from './version-validator'
+export * from './restore'
+
 const execAsync = promisify(exec)
+
+const ENGINE = 'mongodb'
+const engineDef = getEngineDefaults(ENGINE)
+
+/**
+ * Get installation instructions for MongoDB
+ */
+function getInstallInstructions(): string {
+  return (
+    'MongoDB not found. Install MongoDB:\n' +
+    '  macOS: brew tap mongodb/brew && brew install mongodb-community\n' +
+    '  Ubuntu/Debian: See https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/\n' +
+    '  Other Linux: See https://www.mongodb.com/docs/manual/installation/'
+  )
+}
 
 /**
  * MongoDB Engine class
  */
 export class MongoDBEngine extends BaseEngine {
-  name = 'mongodb'
+  name = ENGINE
   displayName = 'MongoDB'
+  defaultPort = engineDef.defaultPort
+  supportedVersions = engineDef.supportedVersions
 
-  get supportedVersions(): string[] {
-    return getSupportedVersions()
+  /**
+   * Get binary download URL - not applicable for MongoDB (uses system binaries)
+   */
+  getBinaryUrl(_version: string, _platform: string, _arch: string): string {
+    throw new Error(
+      'MongoDB uses system-installed binaries. ' + getInstallInstructions(),
+    )
+  }
+
+  /**
+   * Verify that MongoDB binaries are available
+   */
+  async verifyBinary(_binPath: string): Promise<boolean> {
+    const mongod = await getBinaryPath('mongod')
+    return mongod !== null
   }
 
   /**
@@ -68,15 +102,27 @@ export class MongoDBEngine extends BaseEngine {
   async ensureBinaries(
     _version: string,
     _onProgress?: ProgressCallback,
-  ): Promise<void> {
+  ): Promise<string> {
     const mongodPath = await getBinaryPath('mongod')
     if (!mongodPath) {
-      throw new Error(
-        'MongoDB server (mongod) not found. Install MongoDB:\n' +
-          '  macOS: brew tap mongodb/brew && brew install mongodb-community\n' +
-          '  Linux: See https://www.mongodb.com/docs/manual/installation/',
-      )
+      throw new Error(getInstallInstructions())
     }
+    return mongodPath
+  }
+
+  /**
+   * Fetch available versions from system
+   * Unlike PostgreSQL which downloads binaries, MongoDB uses system-installed versions
+   */
+  async fetchAvailableVersions(): Promise<Record<string, string[]>> {
+    const versions: Record<string, string[]> = {}
+
+    // For MongoDB, we return the supported versions since we use system binaries
+    for (const v of this.supportedVersions) {
+      versions[v] = [v]
+    }
+
+    return versions
   }
 
   /**
@@ -85,8 +131,8 @@ export class MongoDBEngine extends BaseEngine {
   async initDataDir(
     containerName: string,
     version: string,
-    options: InitOptions = {},
-  ): Promise<void> {
+    options: Record<string, unknown> = {},
+  ): Promise<string> {
     validateVersion(version)
 
     const containerPath = paths.getContainerPath(containerName, {
@@ -100,8 +146,8 @@ export class MongoDBEngine extends BaseEngine {
     await mkdir(dataPath, { recursive: true })
 
     // Get defaults
-    const defaults = getEngineDefaults(this.name)
-    const maxConnections = options.maxConnections ?? defaults.maxConnections
+    const maxConnections =
+      (options.maxConnections as number) ?? engineDef.maxConnections
 
     // Create MongoDB config file
     const configPath = join(containerPath, 'mongod.conf')
@@ -142,43 +188,41 @@ processManagement:
 `
 
     await writeFile(configPath, config, 'utf-8')
+
+    return dataPath
   }
 
   /**
    * Start a MongoDB container
    */
-  async start(container: ContainerConfig): Promise<void> {
+  async start(
+    container: ContainerConfig,
+    onProgress?: ProgressCallback,
+  ): Promise<{ port: number; connectionString: string }> {
+    const { name, port } = container
+
     const mongodPath = await getBinaryPath('mongod')
     if (!mongodPath) {
-      throw new Error('mongod not found. Please install MongoDB.')
+      throw new Error(getInstallInstructions())
     }
 
-    const containerPath = paths.getContainerPath(container.name, {
-      engine: this.name,
-    })
-    const dataPath = paths.getContainerDataPath(container.name, {
-      engine: this.name,
-    })
-    const logPath = paths.getContainerLogPath(container.name, {
-      engine: this.name,
-    })
-    const pidPath = paths.getContainerPidPath(container.name, {
-      engine: this.name,
-    })
-    const configPath = join(containerPath, 'mongod.conf')
+    const dataPath = paths.getContainerDataPath(name, { engine: ENGINE })
+    const logPath = paths.getContainerLogPath(name, { engine: ENGINE })
+    const pidPath = paths.getContainerPidPath(name, { engine: ENGINE })
 
     // Ensure directories exist
     if (!existsSync(dataPath)) {
       await mkdir(dataPath, { recursive: true })
     }
 
-    // Build mongod command
-    // We'll use command-line args instead of config file for more control
+    onProgress?.({ stage: 'starting', message: 'Starting MongoDB...' })
+
+    // Build mongod command arguments
     const args: string[] = [
       '--dbpath',
       dataPath,
       '--port',
-      String(container.port),
+      String(port),
       '--bind_ip',
       '127.0.0.1',
       '--logpath',
@@ -195,6 +239,11 @@ processManagement:
 
       // Wait for MongoDB to be ready
       await this.waitForReady(container, 30000)
+
+      return {
+        port,
+        connectionString: this.getConnectionString(container),
+      }
     } catch (err) {
       const e = err as Error
       throw new Error(`Failed to start MongoDB: ${e.message}`)
@@ -205,17 +254,20 @@ processManagement:
    * Stop a MongoDB container
    */
   async stop(container: ContainerConfig): Promise<void> {
-    const mongoshPath = await getBinaryPath('mongosh')
+    const { name, port } = container
+    const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
 
     // Try graceful shutdown using mongosh admin command
+    const mongoshPath = await getBinaryPath('mongosh')
     if (mongoshPath) {
       try {
         await execAsync(
-          `"${mongoshPath}" --port ${container.port} --eval "db.adminCommand({ shutdown: 1 })" admin`,
+          `"${mongoshPath}" --port ${port} --eval "db.adminCommand({ shutdown: 1 })" admin`,
           { timeout: 10000 },
         )
         // Wait for process to actually stop
         await this.waitForStop(container, 10000)
+        await this.cleanupPidFile(pidFile)
         return
       } catch {
         // Shutdown command failed, try alternate methods
@@ -223,37 +275,155 @@ processManagement:
     }
 
     // Try using the PID file
-    const pidPath = paths.getContainerPidPath(container.name, {
-      engine: this.name,
-    })
-
-    if (existsSync(pidPath)) {
+    const pid = await this.getValidatedPid(pidFile)
+    if (pid !== null) {
+      // Try SIGTERM first for graceful shutdown
       try {
-        const pid = (await readFile(pidPath, 'utf-8')).trim()
-        if (pid) {
-          // Send SIGTERM for graceful shutdown
-          await execAsync(`kill ${pid}`).catch(() => {})
-          await this.waitForStop(container, 10000)
-          return
-        }
+        process.kill(pid, 'SIGTERM')
+        await this.waitForStop(container, 10000)
+        await this.cleanupPidFile(pidFile)
+        return
       } catch {
-        // PID file read failed
+        // SIGTERM failed, try SIGKILL
+        try {
+          process.kill(pid, 'SIGKILL')
+          await this.sleep(1000)
+          await this.cleanupPidFile(pidFile)
+          return
+        } catch {
+          // Process may already be dead
+        }
       }
     }
 
     // Last resort: kill by port
     try {
-      const { stdout } = await execAsync(
-        `lsof -ti :${container.port} | head -1`,
-      )
-      const pid = stdout.trim()
-      if (pid) {
-        await execAsync(`kill ${pid}`)
-        await this.waitForStop(container, 10000)
+      const { stdout } = await execAsync(`lsof -ti :${port} | head -1`)
+      const portPid = stdout.trim()
+      if (portPid) {
+        await execAsync(`kill ${portPid}`)
+        await this.waitForStop(container, 5000)
       }
     } catch {
       // No process found on port
     }
+
+    await this.cleanupPidFile(pidFile)
+  }
+
+  /**
+   * Get MongoDB server status
+   */
+  async status(container: ContainerConfig): Promise<StatusResult> {
+    const { name, port } = container
+    const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
+
+    // Check if PID file exists
+    if (!existsSync(pidFile)) {
+      return { running: false, message: 'MongoDB is not running' }
+    }
+
+    // Try to ping MongoDB
+    const mongoshPath = await getBinaryPath('mongosh')
+    if (mongoshPath) {
+      try {
+        await execAsync(
+          `"${mongoshPath}" --port ${port} --eval "db.runCommand({ ping: 1 })" --quiet`,
+          { timeout: 5000 },
+        )
+        return { running: true, message: 'MongoDB is running' }
+      } catch {
+        return { running: false, message: 'MongoDB is not responding' }
+      }
+    }
+
+    // Fall back to checking PID
+    const pid = await this.getValidatedPid(pidFile)
+    if (pid !== null) {
+      return { running: true, message: `MongoDB is running (PID: ${pid})` }
+    }
+
+    return { running: false, message: 'MongoDB is not running' }
+  }
+
+  /**
+   * Open mongosh interactive shell
+   */
+  async connect(container: ContainerConfig, database?: string): Promise<void> {
+    const { port } = container
+    const db = database || container.database || 'test'
+
+    const mongosh = await getBinaryPath('mongosh')
+    if (!mongosh) {
+      throw new Error(
+        'mongosh not found. Install MongoDB shell:\n' +
+          '  macOS: brew install mongosh\n' +
+          '  Ubuntu/Debian: See https://www.mongodb.com/docs/mongodb-shell/install/',
+      )
+    }
+
+    const uri = `mongodb://127.0.0.1:${port}/${db}`
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mongosh, [uri], { stdio: 'inherit' })
+
+      proc.on('error', reject)
+      proc.on('close', () => resolve())
+    })
+  }
+
+  /**
+   * Get and validate PID from PID file
+   * Returns null if PID file doesn't exist, is corrupt, or references dead process
+   */
+  private async getValidatedPid(pidFile: string): Promise<number | null> {
+    if (!existsSync(pidFile)) {
+      return null
+    }
+
+    try {
+      const content = await readFile(pidFile, 'utf8')
+      const pid = parseInt(content.trim(), 10)
+
+      if (isNaN(pid) || pid <= 0) {
+        // Clean up corrupt PID file
+        await this.cleanupPidFile(pidFile)
+        return null
+      }
+
+      // Verify process exists
+      try {
+        process.kill(pid, 0) // Signal 0 = check existence
+        return pid
+      } catch {
+        // Process is gone, clean up stale PID file
+        await this.cleanupPidFile(pidFile)
+        return null
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Clean up PID file
+   */
+  private async cleanupPidFile(pidFile: string): Promise<void> {
+    try {
+      await unlink(pidFile)
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException
+      if (e.code !== 'ENOENT') {
+        // Ignore "file not found" errors
+      }
+    }
+  }
+
+  /**
+   * Sleep helper
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   /**
@@ -271,7 +441,9 @@ processManagement:
       }
 
       // Fallback: check if something is listening on the port
-      const { stdout } = await execAsync(`lsof -i :${container.port} | grep LISTEN`)
+      const { stdout } = await execAsync(
+        `lsof -i :${container.port} | grep LISTEN`,
+      )
       return stdout.includes('mongod')
     } catch {
       return false
@@ -300,7 +472,7 @@ processManagement:
       } catch {
         // Not ready yet
       }
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await this.sleep(500)
     }
 
     throw new Error(`MongoDB did not become ready within ${timeoutMs}ms`)
@@ -320,7 +492,7 @@ processManagement:
       if (!running) {
         return
       }
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await this.sleep(500)
     }
   }
 
@@ -413,11 +585,12 @@ processManagement:
 
   /**
    * Get the size of all databases in bytes
+   * Returns null if container is not running or query fails
    */
-  async getDatabaseSize(container: ContainerConfig): Promise<number> {
+  async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const mongoshPath = await getBinaryPath('mongosh')
     if (!mongoshPath) {
-      return 0
+      return null
     }
 
     try {
@@ -427,9 +600,9 @@ processManagement:
       )
 
       const size = parseInt(stdout.trim(), 10)
-      return isNaN(size) ? 0 : size
+      return isNaN(size) ? null : size
     } catch {
-      return 0
+      return null
     }
   }
 
@@ -438,41 +611,59 @@ processManagement:
    */
   async runScript(
     container: ContainerConfig,
-    options: RunScriptOptions,
-  ): Promise<ProcessResult> {
+    options: { file?: string; sql?: string; database?: string },
+  ): Promise<void> {
     const mongoshPath = await getBinaryPath('mongosh')
     if (!mongoshPath) {
       throw new Error('mongosh not found. Please install MongoDB shell.')
     }
 
+    const { port } = container
     const database = options.database || container.database || 'test'
-    const uri = `mongodb://127.0.0.1:${container.port}/${database}`
+    const uri = `mongodb://127.0.0.1:${port}/${database}`
 
-    let command: string
-
-    if (options.file) {
-      // Run a file
-      command = `"${mongoshPath}" "${uri}" "${options.file}"`
-    } else if (options.sql) {
+    if (options.sql) {
       // Run inline JavaScript (note: MongoDB uses JS, not SQL, but we keep the interface consistent)
-      // Escape quotes in the script
-      const script = options.sql.replace(/"/g, '\\"')
-      command = `"${mongoshPath}" "${uri}" --eval "${script}"`
+      const args = [uri, '--eval', options.sql]
+
+      return new Promise((resolve, reject) => {
+        const proc = spawn(mongoshPath, args, { stdio: 'inherit' })
+
+        proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`mongosh exited with code ${code}`))
+          }
+        })
+      })
+    } else if (options.file) {
+      // Run a JavaScript file
+      const args = [uri, options.file]
+
+      return new Promise((resolve, reject) => {
+        const proc = spawn(mongoshPath, args, { stdio: 'inherit' })
+
+        proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`mongosh exited with code ${code}`))
+          }
+        })
+      })
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
 
-    try {
-      const { stdout, stderr } = await execAsync(command, { timeout: 60000 })
-      return { stdout, stderr, code: 0 }
-    } catch (err) {
-      const e = err as Error & { code?: number; stdout?: string; stderr?: string }
-      return {
-        stdout: e.stdout || '',
-        stderr: e.stderr || e.message,
-        code: e.code || 1,
-      }
-    }
+  /**
+   * Detect backup format
+   */
+  async detectBackupFormat(filePath: string): Promise<BackupFormat> {
+    return detectFormat(filePath)
   }
 
   /**
@@ -495,16 +686,17 @@ processManagement:
   async restore(
     container: ContainerConfig,
     backupPath: string,
-    options: { database?: string; createDatabase?: boolean },
+    options: Record<string, unknown> = {},
   ): Promise<RestoreResult> {
-    return restoreBackup(container, backupPath, options)
-  }
+    const database = (options.database as string) || container.database
+    const createDatabase = options.createDatabase !== false
+    const drop = options.drop !== false
 
-  /**
-   * Detect backup format
-   */
-  async detectBackupFormat(backupPath: string): Promise<BackupFormat> {
-    return detectFormat(backupPath)
+    return restoreBackup(container, backupPath, {
+      database,
+      createDatabase,
+      drop,
+    })
   }
 
   /**
@@ -515,24 +707,6 @@ processManagement:
     outputPath: string,
   ): Promise<DumpResult> {
     return dumpFromConnStr(connectionString, outputPath)
-  }
-
-  /**
-   * Fetch available versions
-   * For MongoDB, we just return the supported versions since we use system binaries
-   */
-  async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    const supported = getSupportedVersions()
-    const result: Record<string, string[]> = {}
-
-    // For each major.minor version, we just return the base version
-    // since MongoDB uses system-installed binaries and we can't easily
-    // enumerate all available patch versions
-    for (const version of supported) {
-      result[version] = [version]
-    }
-
-    return result
   }
 
   /**

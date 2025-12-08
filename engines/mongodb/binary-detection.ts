@@ -223,7 +223,7 @@ export async function getBinaryPath(
   binary: MongoDBBinary,
 ): Promise<string | undefined> {
   // Check config cache first
-  const config = await configManager.get()
+  const config = await configManager.getConfig()
   const cached = config.binaries[binary as BinaryTool] as
     | BinaryConfig
     | undefined
@@ -237,12 +237,7 @@ export async function getBinaryPath(
 
   if (result.found && result.path) {
     // Cache the result
-    await configManager.setBinary(binary as BinaryTool, {
-      tool: binary as BinaryTool,
-      path: result.path,
-      source: 'system',
-      version: result.version,
-    })
+    await configManager.setBinaryPath(binary as BinaryTool, result.path, 'system')
 
     return result.path
   }
@@ -307,12 +302,7 @@ export async function refreshBinaryCache(): Promise<void> {
   for (const binary of binaries) {
     const result = await detectBinary(binary)
     if (result.found && result.path) {
-      await configManager.setBinary(binary as BinaryTool, {
-        tool: binary as BinaryTool,
-        path: result.path,
-        source: 'system',
-        version: result.version,
-      })
+      await configManager.setBinaryPath(binary as BinaryTool, result.path, 'system')
     }
   }
 }
