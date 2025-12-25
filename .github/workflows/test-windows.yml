@@ -1,11 +1,10 @@
 name: Windows Tests
 
 on:
-  push:
-    branches: [main, feature/windows]
   pull_request:
-    branches: [main]
-  workflow_dispatch:  # Allows manual triggering from GitHub UI
+    # TODO - remove feature/windows
+    branches: [main, feature/windows]
+  workflow_dispatch: # Allows manual triggering from GitHub UI
 
 jobs:
   test-unit:
@@ -21,14 +20,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
         run: pnpm test:unit
+        timeout-minutes: 15
 
   test-postgresql:
     name: PostgreSQL Tests (Windows)
@@ -44,8 +44,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -78,6 +78,7 @@ jobs:
 
       - name: Run PostgreSQL tests
         run: pnpm test:pg
+        timeout-minutes: 15
 
   test-mysql:
     name: MySQL Tests (Windows)
@@ -93,8 +94,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -125,6 +126,7 @@ jobs:
 
       - name: Run MySQL tests
         run: pnpm test:mysql
+        timeout-minutes: 15
 
   test-sqlite:
     name: SQLite Tests (Windows)
@@ -140,8 +142,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -162,3 +164,4 @@ jobs:
 
       - name: Run SQLite tests
         run: pnpm test:sqlite
+        timeout-minutes: 15
