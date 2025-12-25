@@ -96,11 +96,22 @@ describe('BinaryManager', () => {
       )
     })
 
+    it('should return EDB URL for Windows platform', () => {
+      const binaryManager = new BinaryManager()
+      const url = binaryManager.getDownloadUrl('17', 'win32', 'x64')
+
+      assert(
+        url.includes('sbp.enterprisedb.com'),
+        'Windows URL should use EDB domain',
+      )
+      assert(url.includes('fileid='), 'Windows URL should include file ID')
+    })
+
     it('should throw error for unsupported platform', () => {
       const binaryManager = new BinaryManager()
 
       try {
-        binaryManager.getDownloadUrl('17', 'win32', 'x64')
+        binaryManager.getDownloadUrl('17', 'freebsd', 'x64')
         assert(false, 'Should have thrown an error')
       } catch (error) {
         assert(error instanceof Error, 'Should throw Error')
@@ -109,7 +120,7 @@ describe('BinaryManager', () => {
           `Error should mention unsupported platform: ${error.message}`,
         )
         assert(
-          error.message.includes('win32-x64'),
+          error.message.includes('freebsd-x64'),
           `Error should include the platform key: ${error.message}`,
         )
       }

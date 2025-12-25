@@ -7,11 +7,19 @@
  * Download page: https://www.enterprisedb.com/download-postgresql-binaries
  */
 
+import {
+  POSTGRESQL_VERSION_MAP,
+  SUPPORTED_MAJOR_VERSIONS,
+} from './version-maps'
+
 /**
  * Mapping of PostgreSQL versions to EDB file IDs
  * These IDs are from the EDB download page and need to be updated when new versions are released.
  *
  * Format: 'version' -> 'fileId'
+ *
+ * IMPORTANT: When updating POSTGRESQL_VERSION_MAP in version-maps.ts,
+ * also update this map with the corresponding EDB file IDs.
  */
 export const EDB_FILE_IDS: Record<string, string> = {
   // PostgreSQL 17.x
@@ -31,21 +39,8 @@ export const EDB_FILE_IDS: Record<string, string> = {
   '14': '1259900', // Alias for latest 14.x
 }
 
-/**
- * Fallback version map for major versions
- * Used when only major version is specified
- */
-export const EDB_VERSION_MAP: Record<string, string> = {
-  '14': '14.20.0',
-  '15': '15.15.0',
-  '16': '16.11.0',
-  '17': '17.7.0',
-}
-
-/**
- * Supported major versions for Windows
- */
-export const WINDOWS_SUPPORTED_VERSIONS = ['14', '15', '16', '17']
+// Re-export for backwards compatibility
+export { SUPPORTED_MAJOR_VERSIONS as WINDOWS_SUPPORTED_VERSIONS }
 
 /**
  * Get the EDB download URL for a PostgreSQL version on Windows
@@ -62,7 +57,7 @@ export function getEDBBinaryUrl(version: string): string {
   if (!fileId) {
     // Try major version
     const major = version.split('.')[0]
-    const fullVersion = EDB_VERSION_MAP[major]
+    const fullVersion = POSTGRESQL_VERSION_MAP[major]
     if (fullVersion) {
       fileId = EDB_FILE_IDS[fullVersion]
     }
@@ -71,7 +66,7 @@ export function getEDBBinaryUrl(version: string): string {
   if (!fileId) {
     throw new Error(
       `Unsupported PostgreSQL version for Windows: ${version}. ` +
-        `Supported versions: ${WINDOWS_SUPPORTED_VERSIONS.join(', ')}`,
+        `Supported versions: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
     )
   }
 
@@ -85,24 +80,29 @@ export function getEDBBinaryUrl(version: string): string {
  * @returns Full version string (e.g., '17.7.0') or null if not supported
  */
 export function getWindowsFullVersion(majorVersion: string): string | null {
-  return EDB_VERSION_MAP[majorVersion] || null
+  return POSTGRESQL_VERSION_MAP[majorVersion] || null
 }
 
 /**
  * Check if a version is supported on Windows
  *
  * @param version - Version to check (major or full)
- * @returns true if the version is supported
+ * @returns true if the version is supported AND has an EDB file ID
  */
 export function isWindowsVersionSupported(version: string): boolean {
-  // Check if we have a file ID for this version
+  // Check if we have a file ID for this version directly
   if (EDB_FILE_IDS[version]) {
     return true
   }
 
-  // Check if it's a major version we support
+  // Check if it's a major version that maps to a full version with a file ID
   const major = version.split('.')[0]
-  return WINDOWS_SUPPORTED_VERSIONS.includes(major)
+  const fullVersion = POSTGRESQL_VERSION_MAP[major]
+  if (fullVersion && EDB_FILE_IDS[fullVersion]) {
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -112,9 +112,10 @@ export function isWindowsVersionSupported(version: string): boolean {
  */
 export function getAvailableWindowsVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
-  for (const major of WINDOWS_SUPPORTED_VERSIONS) {
-    const fullVersion = EDB_VERSION_MAP[major]
-    if (fullVersion) {
+  for (const major of SUPPORTED_MAJOR_VERSIONS) {
+    const fullVersion = POSTGRESQL_VERSION_MAP[major]
+    // Only include if we have a file ID for it
+    if (fullVersion && EDB_FILE_IDS[fullVersion]) {
       grouped[major] = [fullVersion]
     }
   }

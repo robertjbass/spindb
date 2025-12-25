@@ -9,6 +9,7 @@ import { paths } from '../config/paths'
 import { defaults } from '../config/defaults'
 import { platformService } from './platform-service'
 import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
+import { normalizeVersion } from '../engines/postgresql/version-maps'
 import {
   type Engine,
   type ProgressCallback,
@@ -46,33 +47,13 @@ export class BinaryManager {
   }
 
   /**
-   * Convert version to full version format (e.g., "16" -> "16.6.0", "16.9" -> "16.9.0")
+   * Convert version to full version format (e.g., "16" -> "16.11.0", "16.9" -> "16.9.0")
    *
-   * Uses the same version mappings for both zonky.io and EDB (they sync versions)
+   * Uses the shared version mappings from version-maps.ts.
+   * Both zonky.io (macOS/Linux) and EDB (Windows) use the same PostgreSQL versions.
    */
   getFullVersion(version: string): string {
-    // Map major versions to latest stable patch versions
-    // Updated from: https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/
-    // EDB versions should match these (they use the same PostgreSQL releases)
-    const versionMap: Record<string, string> = {
-      '14': '14.20.0',
-      '15': '15.15.0',
-      '16': '16.11.0',
-      '17': '17.7.0',
-    }
-
-    // If it's a major version only, use the map
-    if (versionMap[version]) {
-      return versionMap[version]
-    }
-
-    // Normalize to X.Y.Z format
-    const parts = version.split('.')
-    if (parts.length === 2) {
-      return `${version}.0`
-    }
-
-    return version
+    return normalizeVersion(version)
   }
 
   /**
