@@ -1,16 +1,16 @@
 import { existsSync } from 'fs'
 import { readdir, lstat } from 'fs/promises'
 import { join } from 'path'
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../config/paths'
+import { platformService } from '../core/platform-service'
 import {
   getMysqldPath,
   getMysqlVersion,
   isMariaDB,
 } from '../engines/mysql/binary-detection'
 
-const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
 export type InstalledPostgresEngine = {
@@ -140,9 +140,8 @@ async function getInstalledMysqlEngine(): Promise<InstalledMysqlEngine | null> {
 
 async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null> {
   try {
-    // TODO: Use 'where sqlite3' on Windows when adding Windows support
-    const { stdout: whichOutput } = await execAsync('which sqlite3')
-    const sqlitePath = whichOutput.trim()
+    // Use platform service for cross-platform binary detection
+    const sqlitePath = await platformService.findToolPath('sqlite3')
     if (!sqlitePath) {
       return null
     }

@@ -1,11 +1,14 @@
-import { createWriteStream, existsSync } from 'fs'
+import { createWriteStream, existsSync, createReadStream } from 'fs'
 import { mkdir, readdir, rm, chmod } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import unzipper from 'unzipper'
 import { paths } from '../config/paths'
 import { defaults } from '../config/defaults'
+import { platformService } from './platform-service'
+import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
 import {
   type Engine,
   type ProgressCallback,
@@ -17,9 +20,20 @@ const execAsync = promisify(exec)
 export class BinaryManager {
   /**
    * Get the download URL for a PostgreSQL version
+   *
+   * - macOS/Linux: Uses zonky.io Maven Central binaries (JAR format)
+   * - Windows: Uses EDB (EnterpriseDB) official binaries (ZIP format)
    */
   getDownloadUrl(version: string, platform: string, arch: string): string {
     const platformKey = `${platform}-${arch}`
+
+    // Windows uses EDB binaries instead of zonky.io
+    if (platform === 'win32') {
+      const fullVersion = this.getFullVersion(version)
+      return getEDBBinaryUrl(fullVersion)
+    }
+
+    // macOS/Linux use zonky.io binaries
     const zonkyPlatform = defaults.platformMappings[platformKey]
 
     if (!zonkyPlatform) {
@@ -33,10 +47,13 @@ export class BinaryManager {
 
   /**
    * Convert version to full version format (e.g., "16" -> "16.6.0", "16.9" -> "16.9.0")
+   *
+   * Uses the same version mappings for both zonky.io and EDB (they sync versions)
    */
   getFullVersion(version: string): string {
     // Map major versions to latest stable patch versions
     // Updated from: https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/
+    // EDB versions should match these (they use the same PostgreSQL releases)
     const versionMap: Record<string, string> = {
       '14': '14.20.0',
       '15': '15.15.0',
@@ -74,7 +91,8 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const postgresPath = join(binPath, 'bin', 'postgres')
+    const ext = platformService.getExecutableExtension()
+    const postgresPath = join(binPath, 'bin', `postgres${ext}`)
     return existsSync(postgresPath)
   }
 
@@ -110,8 +128,9 @@ export class BinaryManager {
   /**
    * Download and extract PostgreSQL binaries
    *
-   * The zonky.io JAR files are ZIP archives containing a .txz (tar.xz) file.
-   * We need to: 1) unzip the JAR, 2) extract the .txz inside
+   * - macOS/Linux (zonky.io): JAR files are ZIP archives containing a .txz (tar.xz) file.
+   *   We need to: 1) unzip the JAR, 2) extract the .txz inside
+   * - Windows (EDB): ZIP files extract directly to a PostgreSQL directory structure
    */
   async download(
     version: string,
@@ -128,7 +147,7 @@ export class BinaryManager {
       arch,
     })
     const tempDir = join(paths.bin, `temp-${fullVersion}-${platform}-${arch}`)
-    const jarFile = join(tempDir, 'postgres.jar')
+    const archiveFile = join(tempDir, platform === 'win32' ? 'postgres.zip' : 'postgres.jar')
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -136,7 +155,7 @@ export class BinaryManager {
     await mkdir(binPath, { recursive: true })
 
     try {
-      // Download the JAR file
+      // Download the archive
       onProgress?.({
         stage: 'downloading',
         message: 'Downloading PostgreSQL binaries...',
@@ -149,42 +168,26 @@ export class BinaryManager {
         )
       }
 
-      const fileStream = createWriteStream(jarFile)
+      const fileStream = createWriteStream(archiveFile)
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      // Extract the JAR (it's a ZIP file)
-      onProgress?.({
-        stage: 'extracting',
-        message: 'Extracting binaries (step 1/2)...',
-      })
-
-      await execAsync(`unzip -q -o "${jarFile}" -d "${tempDir}"`)
-
-      // Find and extract the .txz file inside
-      onProgress?.({
-        stage: 'extracting',
-        message: 'Extracting binaries (step 2/2)...',
-      })
-
-      const { stdout: findOutput } = await execAsync(
-        `find "${tempDir}" -name "*.txz" -o -name "*.tar.xz" | head -1`,
-      )
-      const txzFile = findOutput.trim()
-
-      if (!txzFile) {
-        throw new Error('Could not find .txz file in downloaded archive')
+      if (platform === 'win32') {
+        // Windows: EDB ZIP extracts directly to PostgreSQL structure
+        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+      } else {
+        // macOS/Linux: zonky.io JAR contains .txz that needs secondary extraction
+        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
       }
 
-      // Extract the tar.xz file (no strip-components since files are at root level)
-      await execAsync(`tar -xJf "${txzFile}" -C "${binPath}"`)
-
-      // Make binaries executable
-      const binDir = join(binPath, 'bin')
-      if (existsSync(binDir)) {
-        const binaries = await readdir(binDir)
-        for (const binary of binaries) {
-          await chmod(join(binDir, binary), 0o755)
+      // Make binaries executable (on Unix-like systems)
+      if (platform !== 'win32') {
+        const binDir = join(binPath, 'bin')
+        if (existsSync(binDir)) {
+          const binaries = await readdir(binDir)
+          for (const binary of binaries) {
+            await chmod(join(binDir, binary), 0o755)
+          }
         }
       }
 
@@ -197,6 +200,116 @@ export class BinaryManager {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
     }
+  }
+
+  /**
+   * Extract Windows binaries from EDB ZIP file
+   * EDB ZIPs contain a pgsql/ directory with bin/, lib/, share/ etc.
+   */
+  private async extractWindowsBinaries(
+    zipFile: string,
+    binPath: string,
+    tempDir: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries...',
+    })
+
+    // Extract ZIP to temp directory first
+    await new Promise<void>((resolve, reject) => {
+      createReadStream(zipFile)
+        .pipe(unzipper.Extract({ path: tempDir }))
+        .on('close', resolve)
+        .on('error', reject)
+    })
+
+    // EDB ZIPs have a pgsql/ directory - find it and move contents to binPath
+    const entries = await readdir(tempDir, { withFileTypes: true })
+    const pgsqlDir = entries.find(
+      (e) => e.isDirectory() && (e.name === 'pgsql' || e.name.startsWith('postgresql-')),
+    )
+
+    if (pgsqlDir) {
+      // Move contents from pgsql/ to binPath
+      const sourceDir = join(tempDir, pgsqlDir.name)
+      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        // Use rename if on same filesystem, otherwise copy
+        try {
+          await execAsync(`mv "${sourcePath}" "${destPath}"`)
+        } catch {
+          // Fallback for cross-filesystem or Windows
+          if (entry.isDirectory()) {
+            await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
+          } else {
+            await execAsync(`copy /Y "${sourcePath}" "${destPath}"`)
+          }
+        }
+      }
+    } else {
+      // No pgsql directory, extract contents directly
+      throw new Error('Unexpected EDB archive structure - no pgsql directory found')
+    }
+  }
+
+  /**
+   * Extract Unix binaries from zonky.io JAR file
+   * JAR contains a .txz (tar.xz) file that needs secondary extraction
+   */
+  private async extractUnixBinaries(
+    jarFile: string,
+    binPath: string,
+    tempDir: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    // Extract the JAR (it's a ZIP file) using unzipper
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries (step 1/2)...',
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      createReadStream(jarFile)
+        .pipe(unzipper.Extract({ path: tempDir }))
+        .on('close', resolve)
+        .on('error', reject)
+    })
+
+    // Find the .txz file inside
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries (step 2/2)...',
+    })
+
+    const txzFile = await this.findTxzFile(tempDir)
+    if (!txzFile) {
+      throw new Error('Could not find .txz file in downloaded archive')
+    }
+
+    // Extract the tar.xz file (no strip-components since files are at root level)
+    await execAsync(`tar -xJf "${txzFile}" -C "${binPath}"`)
+  }
+
+  /**
+   * Recursively find a .txz or .tar.xz file in a directory
+   */
+  private async findTxzFile(dir: string): Promise<string | null> {
+    const entries = await readdir(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name)
+      if (entry.isFile() && (entry.name.endsWith('.txz') || entry.name.endsWith('.tar.xz'))) {
+        return fullPath
+      }
+      if (entry.isDirectory()) {
+        const found = await this.findTxzFile(fullPath)
+        if (found) return found
+      }
+    }
+    return null
   }
 
   /**
@@ -214,7 +327,8 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const postgresPath = join(binPath, 'bin', 'postgres')
+    const ext = platformService.getExecutableExtension()
+    const postgresPath = join(binPath, 'bin', `postgres${ext}`)
 
     if (!existsSync(postgresPath)) {
       throw new Error(`PostgreSQL binary not found at ${postgresPath}`)
@@ -271,7 +385,8 @@ export class BinaryManager {
       platform,
       arch,
     })
-    return join(binPath, 'bin', binary)
+    const ext = platformService.getExecutableExtension()
+    return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   /**

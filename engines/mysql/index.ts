@@ -11,6 +11,7 @@ import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
+import { platformService } from '../../core/platform-service'
 import {
   logDebug,
   logWarning,
@@ -285,10 +286,7 @@ export class MySQLEngine extends BaseEngine {
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
-    const socketFile = join(
-      paths.getContainerPath(name, { engine: ENGINE }),
-      'mysql.sock',
-    )
+    const { platform } = platformService.getPlatformInfo()
 
     onProgress?.({ stage: 'starting', message: 'Starting MySQL...' })
 
@@ -299,12 +297,20 @@ export class MySQLEngine extends BaseEngine {
     const args = [
       `--datadir=${dataDir}`,
       `--port=${port}`,
-      `--socket=${socketFile}`,
       `--pid-file=${pidFile}`,
       `--log-error=${logFile}`,
       '--bind-address=127.0.0.1',
       `--max-connections=${engineDef.maxConnections}`, // Higher than default 151 for parallel builds
     ]
+
+    // Unix sockets are not available on Windows - use TCP only
+    if (platform !== 'win32') {
+      const socketFile = join(
+        paths.getContainerPath(name, { engine: ENGINE }),
+        'mysql.sock',
+      )
+      args.push(`--socket=${socketFile}`)
+    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(mysqld, args, {
@@ -437,11 +443,10 @@ export class MySQLEngine extends BaseEngine {
       }
 
       // Verify process exists
-      try {
-        process.kill(pid, 0) // Signal 0 = check existence
+      if (platformService.isProcessRunning(pid)) {
         logDebug(`Validated PID ${pid}`)
         return pid
-      } catch {
+      } else {
         logWarning(`PID file references non-existent process ${pid}`, {
           code: ErrorCodes.PID_FILE_STALE,
           pidFile,
@@ -485,10 +490,10 @@ export class MySQLEngine extends BaseEngine {
         // Continue to wait for process to die or send SIGTERM
       }
     } else if (pid) {
-      // No mysqladmin available, send SIGTERM
-      logDebug('No mysqladmin available, sending SIGTERM')
+      // No mysqladmin available, send graceful termination signal
+      logDebug('No mysqladmin available, sending termination signal')
       try {
-        process.kill(pid, 'SIGTERM')
+        await platformService.terminateProcess(pid, false)
       } catch {
         // Process may already be dead
         return true
@@ -501,14 +506,12 @@ export class MySQLEngine extends BaseEngine {
       const checkIntervalMs = 200
 
       while (Date.now() - startTime < timeoutMs) {
-        try {
-          process.kill(pid, 0)
-          await this.sleep(checkIntervalMs)
-        } catch {
+        if (!platformService.isProcessRunning(pid)) {
           // Process is gone
           logDebug(`Process ${pid} terminated after graceful shutdown`)
           return true
         }
+        await this.sleep(checkIntervalMs)
       }
 
       logDebug(`Graceful shutdown timed out after ${timeoutMs}ms`)
@@ -520,7 +523,8 @@ export class MySQLEngine extends BaseEngine {
   }
 
   /**
-   * Force kill with signal escalation (SIGTERM -> SIGKILL)
+   * Force kill with signal escalation (graceful -> force)
+   * Uses platformService for cross-platform process termination
    */
   private async forceKillWithEscalation(
     pid: number,
@@ -528,17 +532,15 @@ export class MySQLEngine extends BaseEngine {
   ): Promise<void> {
     logWarning(`Graceful shutdown failed, force killing process ${pid}`)
 
-    // Try SIGTERM first (if not already sent in graceful shutdown)
+    // Try graceful termination first (if not already sent in graceful shutdown)
     try {
-      process.kill(pid, 'SIGTERM')
+      await platformService.terminateProcess(pid, false)
       await this.sleep(2000)
 
       // Check if still running
-      try {
-        process.kill(pid, 0)
-      } catch {
+      if (!platformService.isProcessRunning(pid)) {
         // Process terminated
-        logDebug(`Process ${pid} terminated after SIGTERM`)
+        logDebug(`Process ${pid} terminated after graceful signal`)
         await this.cleanupPidFile(pidFile)
         return
       }
@@ -549,32 +551,29 @@ export class MySQLEngine extends BaseEngine {
         await this.cleanupPidFile(pidFile)
         return
       }
-      logDebug(`SIGTERM failed: ${e.message}`)
+      logDebug(`Graceful termination failed: ${e.message}`)
     }
 
-    // Escalate to SIGKILL
-    logWarning(`SIGTERM failed, escalating to SIGKILL for process ${pid}`)
+    // Escalate to force kill
+    const { platform } = platformService.getPlatformInfo()
+    const killCmd = platform === 'win32' ? 'taskkill /F' : 'kill -9'
+    logWarning(`Graceful termination failed, escalating to force kill for process ${pid}`)
     try {
-      process.kill(pid, 'SIGKILL')
+      await platformService.terminateProcess(pid, true)
       await this.sleep(1000)
 
       // Verify process is gone
-      try {
-        process.kill(pid, 0)
-        // Process still running after SIGKILL - this is unexpected
+      if (platformService.isProcessRunning(pid)) {
+        // Process still running after force kill - this is unexpected
         throw new SpinDBError(
           ErrorCodes.PROCESS_STOP_TIMEOUT,
-          `Failed to stop MySQL process ${pid} even with SIGKILL`,
+          `Failed to stop MySQL process ${pid} even with force kill`,
           'error',
-          `Try manually killing the process: kill -9 ${pid}`,
+          `Try manually killing the process: ${killCmd} ${pid}`,
         )
-      } catch (checkErr) {
-        const checkE = checkErr as NodeJS.ErrnoException
-        if (checkE instanceof SpinDBError) throw checkE
-        // Process is gone (ESRCH)
-        logDebug(`Process ${pid} terminated after SIGKILL`)
-        await this.cleanupPidFile(pidFile)
       }
+      logDebug(`Process ${pid} terminated after force kill`)
+      await this.cleanupPidFile(pidFile)
     } catch (error) {
       if (error instanceof SpinDBError) throw error
       const e = error as NodeJS.ErrnoException
@@ -583,7 +582,7 @@ export class MySQLEngine extends BaseEngine {
         await this.cleanupPidFile(pidFile)
         return
       }
-      logDebug(`SIGKILL failed: ${e.message}`)
+      logDebug(`Force kill failed: ${e.message}`)
     }
   }
 
@@ -635,8 +634,10 @@ export class MySQLEngine extends BaseEngine {
     // Fall back to checking PID
     try {
       const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
-      process.kill(pid, 0) // Check if process exists
-      return { running: true, message: `MySQL is running (PID: ${pid})` }
+      if (platformService.isProcessRunning(pid)) {
+        return { running: true, message: `MySQL is running (PID: ${pid})` }
+      }
+      return { running: false, message: 'MySQL is not running' }
     } catch {
       return { running: false, message: 'MySQL is not running' }
     }

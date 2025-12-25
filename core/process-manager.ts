@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { readFile, rm } from 'fs/promises'
 import { paths } from '../config/paths'
 import { logDebug } from './error-handler'
+import { platformService } from './platform-service'
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
@@ -121,7 +122,7 @@ export class ProcessManager {
       '-D',
       dataDir,
       '-l',
-      logFile || '/dev/null',
+      logFile || platformService.getNullDevice(),
       '-w', // Wait for startup to complete
       '-o',
       pgOptions.join(' '),

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Windows support** - Full cross-platform support for Windows x64
+  - PostgreSQL binaries from EnterpriseDB (EDB) official distribution
+  - Platform abstraction via `Win32PlatformService` class
+  - Process management using `taskkill` instead of Unix signals
+  - MySQL skips Unix socket on Windows (TCP only)
+  - SQLite cross-platform binary detection
+  - Windows package managers: Chocolatey, winget, Scoop
+  - GitHub Actions Windows CI workflow
+- `unzipper` dependency for cross-platform ZIP extraction
+- `engines/postgresql/edb-binary-urls.ts` - EDB binary URL builder for Windows
+
+### Changed
+- Binary manager now uses `unzipper` npm package instead of shell commands for ZIP extraction
+- Platform service extended with `getNullDevice()`, `getExecutableExtension()`, `terminateProcess()`, `isProcessRunning()` methods
+- MySQL process termination now uses platform service abstraction
+- Process manager now uses `platformService.getNullDevice()` instead of hardcoded `/dev/null`
+
 ## [0.9.3] - 2025-12-07
 
 ### Added

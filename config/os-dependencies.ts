@@ -7,7 +7,7 @@
 
 import { getPostgresHomebrewPackage } from './engine-defaults'
 
-export type PackageManagerId = 'brew' | 'apt' | 'yum' | 'dnf' | 'pacman'
+export type PackageManagerId = 'brew' | 'apt' | 'yum' | 'dnf' | 'pacman' | 'choco' | 'winget' | 'scoop'
 
 export type Platform = 'darwin' | 'linux' | 'win32'
 
@@ -112,6 +112,30 @@ export const packageManagers: PackageManagerConfig[] = [
     installTemplate: 'sudo pacman -S --noconfirm {package}',
     updateTemplate: 'sudo pacman -Syu --noconfirm {package}',
   },
+  {
+    id: 'choco',
+    name: 'Chocolatey',
+    checkCommand: 'choco --version',
+    platforms: ['win32'],
+    installTemplate: 'choco install -y {package}',
+    updateTemplate: 'choco upgrade -y {package}',
+  },
+  {
+    id: 'winget',
+    name: 'Windows Package Manager',
+    checkCommand: 'winget --version',
+    platforms: ['win32'],
+    installTemplate: 'winget install {package}',
+    updateTemplate: 'winget upgrade {package}',
+  },
+  {
+    id: 'scoop',
+    name: 'Scoop',
+    checkCommand: 'scoop --version',
+    platforms: ['win32'],
+    installTemplate: 'scoop install {package}',
+    updateTemplate: 'scoop update {package}',
+  },
 ]
 
 // =============================================================================
@@ -141,6 +165,9 @@ function createPostgresDependency(
       yum: { package: 'postgresql' },
       dnf: { package: 'postgresql' },
       pacman: { package: 'postgresql-libs' },
+      choco: { package: 'postgresql' },
+      winget: { package: 'PostgreSQL.PostgreSQL' },
+      scoop: { package: 'postgresql' },
     },
     manualInstall: {
       darwin: [
@@ -153,6 +180,12 @@ function createPostgresDependency(
         'CentOS/RHEL: sudo yum install postgresql',
         'Fedora: sudo dnf install postgresql',
         'Arch: sudo pacman -S postgresql-libs',
+      ],
+      win32: [
+        'Using Chocolatey: choco install postgresql',
+        'Using winget: winget install PostgreSQL.PostgreSQL',
+        'Using Scoop: scoop install postgresql',
+        'Or download from: https://www.enterprisedb.com/downloads/postgres-postgresql-downloads',
       ],
     },
   }
@@ -197,6 +230,9 @@ const mysqlDependencies: EngineDependencies = {
         brew: { package: 'mysql' },
         // Modern Debian/Ubuntu use mariadb-server (MySQL-compatible)
         apt: { package: 'mariadb-server' },
+        choco: { package: 'mysql' },
+        winget: { package: 'Oracle.MySQL' },
+        scoop: { package: 'mysql' },
         yum: { package: 'mariadb-server' },
         dnf: { package: 'mariadb-server' },
         pacman: { package: 'mariadb' },
@@ -212,6 +248,12 @@ const mysqlDependencies: EngineDependencies = {
           'Fedora: sudo dnf install mariadb-server',
           'Arch: sudo pacman -S mariadb',
         ],
+        win32: [
+          'Using Chocolatey: choco install mysql',
+          'Using winget: winget install Oracle.MySQL',
+          'Using Scoop: scoop install mysql',
+          'Or download from: https://dev.mysql.com/downloads/mysql/',
+        ],
       },
     },
     {
@@ -224,6 +266,9 @@ const mysqlDependencies: EngineDependencies = {
         yum: { package: 'mariadb' },
         dnf: { package: 'mariadb' },
         pacman: { package: 'mariadb-clients' },
+        choco: { package: 'mysql' },
+        winget: { package: 'Oracle.MySQL' },
+        scoop: { package: 'mysql' },
       },
       manualInstall: {
         darwin: [
@@ -235,6 +280,12 @@ const mysqlDependencies: EngineDependencies = {
           'CentOS/RHEL: sudo yum install mariadb',
           'Fedora: sudo dnf install mariadb',
           'Arch: sudo pacman -S mariadb-clients',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mysql',
+          'Using winget: winget install Oracle.MySQL',
+          'Using Scoop: scoop install mysql',
+          'Or download from: https://dev.mysql.com/downloads/mysql/',
         ],
       },
     },
@@ -248,6 +299,9 @@ const mysqlDependencies: EngineDependencies = {
         yum: { package: 'mariadb' },
         dnf: { package: 'mariadb' },
         pacman: { package: 'mariadb-clients' },
+        choco: { package: 'mysql' },
+        winget: { package: 'Oracle.MySQL' },
+        scoop: { package: 'mysql' },
       },
       manualInstall: {
         darwin: [
@@ -259,6 +313,12 @@ const mysqlDependencies: EngineDependencies = {
           'CentOS/RHEL: sudo yum install mariadb',
           'Fedora: sudo dnf install mariadb',
           'Arch: sudo pacman -S mariadb-clients',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mysql',
+          'Using winget: winget install Oracle.MySQL',
+          'Using Scoop: scoop install mysql',
+          'Or download from: https://dev.mysql.com/downloads/mysql/',
         ],
       },
     },
@@ -272,6 +332,9 @@ const mysqlDependencies: EngineDependencies = {
         yum: { package: 'mariadb' },
         dnf: { package: 'mariadb' },
         pacman: { package: 'mariadb-clients' },
+        choco: { package: 'mysql' },
+        winget: { package: 'Oracle.MySQL' },
+        scoop: { package: 'mysql' },
       },
       manualInstall: {
         darwin: [
@@ -283,6 +346,12 @@ const mysqlDependencies: EngineDependencies = {
           'CentOS/RHEL: sudo yum install mariadb',
           'Fedora: sudo dnf install mariadb',
           'Arch: sudo pacman -S mariadb-clients',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mysql',
+          'Using winget: winget install Oracle.MySQL',
+          'Using Scoop: scoop install mysql',
+          'Or download from: https://dev.mysql.com/downloads/mysql/',
         ],
       },
     },
@@ -307,6 +376,9 @@ const sqliteDependencies: EngineDependencies = {
         yum: { package: 'sqlite' },
         dnf: { package: 'sqlite' },
         pacman: { package: 'sqlite' },
+        choco: { package: 'sqlite' },
+        winget: { package: 'SQLite.SQLite' },
+        scoop: { package: 'sqlite' },
       },
       manualInstall: {
         darwin: [
@@ -319,6 +391,12 @@ const sqliteDependencies: EngineDependencies = {
           'CentOS/RHEL: sudo yum install sqlite',
           'Fedora: sudo dnf install sqlite',
           'Arch: sudo pacman -S sqlite',
+        ],
+        win32: [
+          'Using Chocolatey: choco install sqlite',
+          'Using winget: winget install SQLite.SQLite',
+          'Using Scoop: scoop install sqlite',
+          'Or download from: https://www.sqlite.org/download.html',
         ],
       },
     },

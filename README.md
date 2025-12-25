@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
-[![Platform: macOS | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)](#supported-platforms)
+[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#supported-platforms)
 
 **Local databases without the Docker baggage.**
 
@@ -140,9 +140,11 @@ That's it. Your database is running on `localhost:5432`, and your data persists 
 | Versions | 14, 15, 16, 17 |
 | Default port | 5432 |
 | Default user | `postgres` |
-| Binary source | [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) |
+| Binary source | [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) (macOS/Linux), [EDB](https://www.enterprisedb.com/) (Windows) |
 
-SpinDB downloads PostgreSQL server binaries automatically. These are pre-compiled binaries from the zonky.io project, hosted on Maven Central. They're extracted from official PostgreSQL distributions and work on macOS and Linux (x64 and ARM64).
+SpinDB downloads PostgreSQL server binaries automatically:
+- **macOS/Linux:** Pre-compiled binaries from the zonky.io project, hosted on Maven Central
+- **Windows:** Official binaries from EnterpriseDB (EDB)
 
 **Why download binaries instead of using system PostgreSQL?** You might want PostgreSQL 14 for one project and 17 for another. SpinDB lets you run different versions side-by-side without conflicts.
 
@@ -169,6 +171,12 @@ brew install mysql
 
 # Ubuntu/Debian
 sudo apt install mysql-server
+
+# Windows (Chocolatey)
+choco install mysql
+
+# Windows (winget)
+winget install Oracle.MySQL
 
 # Check if SpinDB can find MySQL
 spindb deps check --engine mysql
@@ -561,11 +569,11 @@ When you stop a container:
 
 ### Binary Sources
 
-**PostgreSQL:** Server binaries are downloaded from [zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries), a project that packages official PostgreSQL releases for embedding in applications. The binaries are hosted on Maven Central and support:
-- macOS (Apple Silicon and Intel)
-- Linux (x64 and ARM64)
+**PostgreSQL:** Server binaries are downloaded automatically:
+- **macOS/Linux:** From [zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries), hosted on Maven Central
+- **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries), official PostgreSQL distributions
 
-**MySQL:** Uses your system's MySQL installation. SpinDB detects binaries from Homebrew, apt, pacman, or custom paths.
+**MySQL:** Uses your system's MySQL installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
 
 ---
 
@@ -577,15 +585,14 @@ When you stop a container:
 | macOS | Intel (x64) | ✅ Supported |
 | Linux | x64 | ✅ Supported |
 | Linux | ARM64 | ✅ Supported |
-| Windows | Any | ❌ Not supported |
+| Windows | x64 | ✅ Supported |
 
-**Why no Windows?** The zonky.io project doesn't provide Windows binaries for PostgreSQL. Windows support would require a different binary source and significant testing.
+Windows uses EnterpriseDB (EDB) official binaries for PostgreSQL. MySQL and SQLite require system installations via Chocolatey, winget, or Scoop.
 
 ---
 
 ## Limitations
 
-- **No Windows support** - zonky.io doesn't provide Windows PostgreSQL binaries
 - **Client tools required** - `psql` and `mysql` must be installed separately for some operations
 - **Local only** - Databases bind to `127.0.0.1`; remote connections planned for v1.1
 - **MySQL requires system install** - Unlike PostgreSQL, we don't download MySQL binaries

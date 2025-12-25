@@ -122,6 +122,28 @@ export abstract class BasePlatformService {
   abstract getZonkyPlatform(): string | null
 
   /**
+   * Get the null device path for this platform ('/dev/null' on Unix, 'NUL' on Windows)
+   */
+  abstract getNullDevice(): string
+
+  /**
+   * Get the executable file extension for this platform ('' on Unix, '.exe' on Windows)
+   */
+  abstract getExecutableExtension(): string
+
+  /**
+   * Terminate a process by PID
+   * @param pid - Process ID to terminate
+   * @param force - If true, force kill (SIGKILL on Unix, /F on Windows)
+   */
+  abstract terminateProcess(pid: number, force: boolean): Promise<void>
+
+  /**
+   * Check if a process is running by PID
+   */
+  abstract isProcessRunning(pid: number): boolean
+
+  /**
    * Copy text to clipboard
    */
   async copyToClipboard(text: string): Promise<boolean> {
@@ -332,6 +354,28 @@ class DarwinPlatformService extends BasePlatformService {
     return null
   }
 
+  getNullDevice(): string {
+    return '/dev/null'
+  }
+
+  getExecutableExtension(): string {
+    return ''
+  }
+
+  async terminateProcess(pid: number, force: boolean): Promise<void> {
+    const signal = force ? 'SIGKILL' : 'SIGTERM'
+    process.kill(pid, signal)
+  }
+
+  isProcessRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   protected buildToolPath(dir: string, toolName: string): string {
     return `${dir}/${toolName}`
   }
@@ -517,6 +561,28 @@ class LinuxPlatformService extends BasePlatformService {
     return null
   }
 
+  getNullDevice(): string {
+    return '/dev/null'
+  }
+
+  getExecutableExtension(): string {
+    return ''
+  }
+
+  async terminateProcess(pid: number, force: boolean): Promise<void> {
+    const signal = force ? 'SIGKILL' : 'SIGTERM'
+    process.kill(pid, signal)
+  }
+
+  isProcessRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   protected buildToolPath(dir: string, toolName: string): string {
     return `${dir}/${toolName}`
   }
@@ -619,12 +685,60 @@ class Win32PlatformService extends BasePlatformService {
       // Not winget
     }
 
+    // Try scoop
+    try {
+      await execAsync('scoop --version')
+      return {
+        id: 'scoop',
+        name: 'Scoop',
+        checkCommand: 'scoop --version',
+        installTemplate: 'scoop install {package}',
+        updateCommand: 'scoop update *',
+      }
+    } catch {
+      // Not scoop
+    }
+
     return null
   }
 
   getZonkyPlatform(): string | null {
     // zonky.io doesn't provide Windows binaries
     return null
+  }
+
+  getNullDevice(): string {
+    return 'NUL'
+  }
+
+  getExecutableExtension(): string {
+    return '.exe'
+  }
+
+  async terminateProcess(pid: number, force: boolean): Promise<void> {
+    // On Windows, use taskkill command
+    // /T = terminate child processes, /F = force termination
+    const args = force ? `/F /PID ${pid} /T` : `/PID ${pid}`
+    try {
+      await execAsync(`taskkill ${args}`)
+    } catch (error) {
+      // taskkill exits with error if process doesn't exist, which is fine
+      const e = error as { code?: number }
+      // Error code 128 means "process not found" which is acceptable
+      if (e.code !== 128) {
+        throw error
+      }
+    }
+  }
+
+  isProcessRunning(pid: number): boolean {
+    try {
+      // process.kill with signal 0 works on Windows for checking process existence
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
   }
 
   protected buildToolPath(dir: string, toolName: string): string {

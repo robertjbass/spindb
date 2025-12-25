@@ -50,12 +50,14 @@
     "commander": "^12.1.0",
     "inquirer": "^9.3.7",
     "ora": "^8.1.1",
-    "tsx": "^4.7.0"
+    "tsx": "^4.7.0",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.10.0",
+    "@types/unzipper": "^0.10.11",
     "eslint": "^9.39.1",
     "husky": "^9.1.7",
     "prettier": "^3.6.2",
