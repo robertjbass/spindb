@@ -1,7 +1,8 @@
 import { Command } from 'commander'
 import { spawn } from 'child_process'
-import { existsSync } from 'fs'
-import { readFile } from 'fs/promises'
+import { existsSync, watch, createReadStream } from 'fs'
+import { readFile, stat } from 'fs/promises'
+import { createInterface } from 'readline'
 import { containerManager } from '../../core/container-manager'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
@@ -12,6 +13,67 @@ function getLastNLines(content: string, n: number): string {
   const nonEmptyLines =
     lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
   return nonEmptyLines.slice(-n).join('\n')
+}
+
+/**
+ * Cross-platform file following (replaces Unix `tail -f`)
+ * Uses Node.js fs.watch to monitor file changes and streams new content
+ */
+async function followFile(
+  filePath: string,
+  initialLines: number,
+): Promise<void> {
+  // Read and display initial content
+  const content = await readFile(filePath, 'utf-8')
+  const initial = getLastNLines(content, initialLines)
+  if (initial) {
+    console.log(initial)
+  }
+
+  // Track file position
+  let fileSize = (await stat(filePath)).size
+
+  // Watch for changes
+  const watcher = watch(filePath, async (eventType) => {
+    if (eventType === 'change') {
+      try {
+        const newSize = (await stat(filePath)).size
+
+        if (newSize > fileSize) {
+          // Read only the new content
+          const stream = createReadStream(filePath, {
+            start: fileSize,
+            encoding: 'utf-8',
+          })
+
+          const rl = createInterface({ input: stream })
+
+          for await (const line of rl) {
+            console.log(line)
+          }
+
+          fileSize = newSize
+        } else if (newSize < fileSize) {
+          // File was truncated (log rotation), reset position
+          fileSize = newSize
+        }
+      } catch {
+        // File might be temporarily unavailable, ignore
+      }
+    }
+  })
+
+  // Handle Ctrl+C gracefully
+  const cleanup = () => {
+    watcher.close()
+    process.exit(0)
+  }
+  process.on('SIGINT', cleanup)
+
+  // Keep process alive
+  await new Promise<void>(() => {
+    // Never resolves - runs until Ctrl+C
+  })
 }
 
 export const logsCommand = new Command('logs')
@@ -84,28 +146,8 @@ export const logsCommand = new Command('logs')
 
         if (options.follow) {
           const lineCount = parseInt(options.lines || '50', 10)
-          const child = spawn(
-            'tail',
-            ['-n', String(lineCount), '-f', logPath],
-            {
-              stdio: 'inherit',
-            },
-          )
-
-          // Use named handler so we can remove it to prevent listener leaks
-          const sigintHandler = () => {
-            process.removeListener('SIGINT', sigintHandler)
-            child.kill('SIGTERM')
-            process.exit(0)
-          }
-          process.on('SIGINT', sigintHandler)
-
-          await new Promise<void>((resolve) => {
-            child.on('close', () => {
-              process.removeListener('SIGINT', sigintHandler)
-              resolve()
-            })
-          })
+          // Use cross-platform file following (works on Windows, macOS, Linux)
+          await followFile(logPath, lineCount)
           return
         }
 

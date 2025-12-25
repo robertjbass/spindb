@@ -133,12 +133,18 @@ export async function findBinaryPathFresh(
   const path = await findBinaryPath(binary)
   if (path) return path
 
-  // If not found, try to refresh PATH cache (especially after package updates)
+  // Windows doesn't need shell refresh - PATH is always current
+  if (process.platform === 'win32') {
+    return null
+  }
+
+  // If not found on Unix, try to refresh PATH cache (especially after package updates)
   try {
     // Force shell to re-evaluate PATH
     const shell = process.env.SHELL || '/bin/bash'
+    const shellConfig = shell.endsWith('zsh') ? '.zshrc' : '.bashrc'
     const { stdout } = await execWithTimeout(
-      `${shell} -c 'source ~/.${shell.endsWith('zsh') ? 'zshrc' : 'bashrc'} && which ${binary}'`,
+      `${shell} -c 'source ~/${shellConfig} && which ${binary}'`,
     )
     return stdout.trim().split('\n')[0] || null
   } catch (error) {
@@ -171,7 +177,7 @@ async function execWithTimeout(
 
     // Additional timeout safety
     setTimeout(() => {
-      child.kill('SIGTERM')
+      child.kill() // Cross-platform process termination
       reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`))
     }, timeoutMs)
   })
@@ -179,34 +185,42 @@ async function execWithTimeout(
 
 /**
  * Parse dump file to get required PostgreSQL version
+ * Cross-platform: reads file header directly using Node.js
  */
 export async function getDumpRequiredVersion(
   dumpPath: string,
 ): Promise<string | null> {
   try {
-    // Try to read pg_dump custom format header
-    const { stdout } = await execAsync(`file "${dumpPath}"`)
-    if (stdout.includes('PostgreSQL custom database dump')) {
-      // For custom format, we need to check the version in the dump
-      try {
-        const { stdout: hexdump } = await execAsync(
-          `hexdump -C "${dumpPath}" | head -5`,
-        )
-        // Look for version info in the header (simplified approach)
-        const versionMatch = hexdump.match(/(\d+)\.(\d+)/)
-        if (versionMatch) {
-          // If it's a recent dump, assume it needs the latest PostgreSQL
-          const majorVersion = parseInt(versionMatch[1])
-          if (majorVersion >= 15) {
-            return '15.0' // Minimum version for recent dumps
-          }
-        }
-      } catch (error) {
-        // If hexdump fails, fall back to checking error patterns
-        logDebug(`hexdump failed for ${dumpPath}`, {
-          error: error instanceof Error ? error.message : String(error),
-        })
+    // Read first 32 bytes of the file to check for PostgreSQL custom dump format
+    // Custom dump magic: "PGDMP" followed by version info
+    const { open } = await import('fs/promises')
+    const fileHandle = await open(dumpPath, 'r')
+    const buffer = Buffer.alloc(32)
+    await fileHandle.read(buffer, 0, 32, 0)
+    await fileHandle.close()
+
+    // Check for PostgreSQL custom dump format magic bytes: "PGDMP"
+    const header = buffer.toString('ascii', 0, 5)
+    if (header === 'PGDMP') {
+      // Bytes 5-6 contain version info in custom format
+      // Byte 5: major version, Byte 6: minor version, Byte 7: revision
+      const dumpMajor = buffer[5]
+      const dumpMinor = buffer[6]
+
+      logDebug(`Detected pg_dump custom format version: ${dumpMajor}.${dumpMinor}`)
+
+      // pg_dump version typically maps to PostgreSQL version
+      // If it's a recent dump format, require a recent PostgreSQL
+      if (dumpMajor >= 1 && dumpMinor >= 14) {
+        return '15.0' // Modern dump format needs modern PostgreSQL
       }
+    }
+
+    // For plain SQL dumps or older formats, check if file looks like SQL
+    const textHeader = buffer.toString('utf-8', 0, 20)
+    if (textHeader.includes('--') || textHeader.includes('pg_dump')) {
+      // Plain SQL dump - any PostgreSQL version should work
+      return null
     }
 
     // Fallback: if we can't determine, assume it needs a recent version
@@ -273,7 +287,7 @@ export async function getBinaryInfo(
       if (stdout.includes('postgresql') || stdout.includes('libpq')) {
         packageManager = 'brew'
       }
-    } else {
+    } else if (process.platform === 'linux') {
       // On Linux, check common package managers
       try {
         await execAsync('dpkg -S $(which pg_restore) 2>/dev/null')
@@ -287,6 +301,7 @@ export async function getBinaryInfo(
         }
       }
     }
+    // On Windows (win32), we don't detect package managers - user installs via choco/scoop/winget
   } catch {
     // Could not determine package manager
   }
