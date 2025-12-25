@@ -175,13 +175,17 @@ export abstract class BasePlatformService {
   async findToolPath(toolName: string): Promise<string | null> {
     const whichConfig = this.getWhichCommand()
 
-    // First try the which/where command
+    // First try the which/where command (with timeout to prevent hanging)
     try {
-      const { stdout } = await execAsync(`${whichConfig.command} ${toolName}`)
-      const path = stdout.trim().split('\n')[0]
-      if (path && existsSync(path)) {
-        return path
-      }
+      const cmd = [whichConfig.command, ...whichConfig.args, toolName]
+        .filter(Boolean)
+        .join(' ')
+      const { stdout } = await execAsync(cmd, { timeout: 5000 })
+      const path = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (path && existsSync(path)) return path
     } catch {
       // Not found via which, continue to search paths
     }
@@ -208,7 +212,9 @@ export abstract class BasePlatformService {
    */
   async getToolVersion(toolPath: string): Promise<string | null> {
     try {
-      const { stdout } = await execAsync(`"${toolPath}" --version`)
+      const { stdout } = await execAsync(`"${toolPath}" --version`, {
+        timeout: 5000,
+      })
       const match = stdout.match(/(\d+\.\d+(\.\d+)?)/)
       return match ? match[1] : null
     } catch {
@@ -657,9 +663,12 @@ class Win32PlatformService extends BasePlatformService {
   }
 
   async detectPackageManager(): Promise<PackageManagerInfo | null> {
+    // Timeout for package manager detection (5 seconds)
+    const timeout = 5000
+
     // Try chocolatey
     try {
-      await execAsync('choco --version')
+      await execAsync('choco --version', { timeout })
       return {
         id: 'choco',
         name: 'Chocolatey',
@@ -668,12 +677,12 @@ class Win32PlatformService extends BasePlatformService {
         updateCommand: 'choco upgrade all',
       }
     } catch {
-      // Not chocolatey
+      // Not chocolatey or timed out
     }
 
     // Try winget
     try {
-      await execAsync('winget --version')
+      await execAsync('winget --version', { timeout })
       return {
         id: 'winget',
         name: 'Windows Package Manager',
@@ -682,12 +691,12 @@ class Win32PlatformService extends BasePlatformService {
         updateCommand: 'winget upgrade --all',
       }
     } catch {
-      // Not winget
+      // Not winget or timed out
     }
 
     // Try scoop
     try {
-      await execAsync('scoop --version')
+      await execAsync('scoop --version', { timeout })
       return {
         id: 'scoop',
         name: 'Scoop',
@@ -696,7 +705,7 @@ class Win32PlatformService extends BasePlatformService {
         updateCommand: 'scoop update *',
       }
     } catch {
-      // Not scoop
+      // Not scoop or timed out
     }
 
     return null

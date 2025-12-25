@@ -7,7 +7,6 @@ import { promisify } from 'util'
 import unzipper from 'unzipper'
 import { paths } from '../config/paths'
 import { defaults } from '../config/defaults'
-import { platformService } from './platform-service'
 import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
 import { normalizeVersion } from '../engines/postgresql/version-maps'
 import {
@@ -27,6 +26,10 @@ export class BinaryManager {
    */
   getDownloadUrl(version: string, platform: string, arch: string): string {
     const platformKey = `${platform}-${arch}`
+
+    if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
+      throw new Error(`Unsupported platform: ${platformKey}`)
+    }
 
     // Windows uses EDB binaries instead of zonky.io
     if (platform === 'win32') {
@@ -72,7 +75,7 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const ext = platformService.getExecutableExtension()
+    const ext = platform === 'win32' ? '.exe' : ''
     const postgresPath = join(binPath, 'bin', `postgres${ext}`)
     return existsSync(postgresPath)
   }
@@ -128,7 +131,10 @@ export class BinaryManager {
       arch,
     })
     const tempDir = join(paths.bin, `temp-${fullVersion}-${platform}-${arch}`)
-    const archiveFile = join(tempDir, platform === 'win32' ? 'postgres.zip' : 'postgres.jar')
+    const archiveFile = join(
+      tempDir,
+      platform === 'win32' ? 'postgres.zip' : 'postgres.jar',
+    )
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -155,10 +161,20 @@ export class BinaryManager {
 
       if (platform === 'win32') {
         // Windows: EDB ZIP extracts directly to PostgreSQL structure
-        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       } else {
         // macOS/Linux: zonky.io JAR contains .txz that needs secondary extraction
-        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       }
 
       // Make binaries executable (on Unix-like systems)
@@ -209,7 +225,9 @@ export class BinaryManager {
     // EDB ZIPs have a pgsql/ directory - find it and move contents to binPath
     const entries = await readdir(tempDir, { withFileTypes: true })
     const pgsqlDir = entries.find(
-      (e) => e.isDirectory() && (e.name === 'pgsql' || e.name.startsWith('postgresql-')),
+      (e) =>
+        e.isDirectory() &&
+        (e.name === 'pgsql' || e.name.startsWith('postgresql-')),
     )
 
     if (pgsqlDir) {
@@ -233,7 +251,9 @@ export class BinaryManager {
       }
     } else {
       // No pgsql directory, extract contents directly
-      throw new Error('Unexpected EDB archive structure - no pgsql directory found')
+      throw new Error(
+        'Unexpected EDB archive structure - no pgsql directory found',
+      )
     }
   }
 
@@ -282,7 +302,10 @@ export class BinaryManager {
     const entries = await readdir(dir, { withFileTypes: true })
     for (const entry of entries) {
       const fullPath = join(dir, entry.name)
-      if (entry.isFile() && (entry.name.endsWith('.txz') || entry.name.endsWith('.tar.xz'))) {
+      if (
+        entry.isFile() &&
+        (entry.name.endsWith('.txz') || entry.name.endsWith('.tar.xz'))
+      ) {
         return fullPath
       }
       if (entry.isDirectory()) {
@@ -308,7 +331,7 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const ext = platformService.getExecutableExtension()
+    const ext = platform === 'win32' ? '.exe' : ''
     const postgresPath = join(binPath, 'bin', `postgres${ext}`)
 
     if (!existsSync(postgresPath)) {
@@ -366,7 +389,7 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const ext = platformService.getExecutableExtension()
+    const ext = platform === 'win32' ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

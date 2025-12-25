@@ -148,7 +148,10 @@ describe('BinaryManager', () => {
         'postgres',
       )
 
-      assert(path.includes('bin/postgres'), 'Path should include bin/postgres')
+      assert(
+        path.includes('bin/postgres') || path.includes('bin\\postgres'),
+        'Path should include bin/postgres',
+      )
       assert(path.includes('17.7.0'), 'Path should use full version')
     })
 
@@ -161,7 +164,10 @@ describe('BinaryManager', () => {
         'pg_ctl',
       )
 
-      assert(path.includes('bin/pg_ctl'), 'Path should include bin/pg_ctl')
+      assert(
+        path.includes('bin/pg_ctl') || path.includes('bin\\pg_ctl'),
+        'Path should include bin/pg_ctl',
+      )
     })
 
     it('should return correct path for initdb binary', () => {
@@ -173,7 +179,10 @@ describe('BinaryManager', () => {
         'initdb',
       )
 
-      assert(path.includes('bin/initdb'), 'Path should include bin/initdb')
+      assert(
+        path.includes('bin/initdb') || path.includes('bin\\initdb'),
+        'Path should include bin/initdb',
+      )
     })
   })
 
