@@ -723,7 +723,7 @@ export class MySQLEngine extends BaseEngine {
 
   /**
    * Create a new database
-   * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root -e 'CREATE DATABASE `{db}`'
+   * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root -e "CREATE DATABASE `{db}`"
    */
   async createDatabase(
     container: ContainerConfig,
@@ -742,9 +742,10 @@ export class MySQLEngine extends BaseEngine {
     }
 
     try {
-      // Use backticks for MySQL database names
+      // Use double quotes for cross-platform compatibility (single quotes don't work on Windows)
+      // Backticks are MySQL identifier quotes, not shell syntax
       await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -e 'CREATE DATABASE IF NOT EXISTS \`${database}\`'`,
+        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -e "CREATE DATABASE IF NOT EXISTS \`${database}\`"`,
       )
     } catch (error) {
       const err = error as Error
@@ -757,7 +758,7 @@ export class MySQLEngine extends BaseEngine {
 
   /**
    * Drop a database
-   * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root -e 'DROP DATABASE IF EXISTS `{db}`'
+   * CLI wrapper: mysql -h 127.0.0.1 -P {port} -u root -e "DROP DATABASE IF EXISTS `{db}`"
    */
   async dropDatabase(
     container: ContainerConfig,
@@ -772,8 +773,9 @@ export class MySQLEngine extends BaseEngine {
     }
 
     try {
+      // Use double quotes for cross-platform compatibility (single quotes don't work on Windows)
       await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -e 'DROP DATABASE IF EXISTS \`${database}\`'`,
+        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -e "DROP DATABASE IF EXISTS \`${database}\`"`,
       )
     } catch (error) {
       const err = error as Error
