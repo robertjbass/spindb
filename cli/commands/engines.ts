@@ -3,6 +3,10 @@ import chalk from 'chalk'
 import { rm } from 'fs/promises'
 import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
+import { getEngine } from '../../engines'
+import { binaryManager } from '../../core/binary-manager'
+import { paths } from '../../config/paths'
+import { platformService } from '../../core/platform-service'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiInfo, formatBytes } from '../ui/theme'
@@ -14,6 +18,7 @@ import {
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
 } from '../helpers'
+import { Engine } from '../../types'
 
 /**
  * Pad string to width, accounting for emoji taking 2 display columns
@@ -279,3 +284,59 @@ enginesCommand
       }
     },
   )
+
+// Download subcommand
+enginesCommand
+  .command('download <engine> <version>')
+  .description('Download engine binaries (PostgreSQL only)')
+  .action(async (engineName: string, version: string) => {
+    try {
+      // Validate engine name
+      const validEngines = ['postgresql', 'pg', 'postgres']
+      if (!validEngines.includes(engineName.toLowerCase())) {
+        console.error(
+          uiError(
+            `Only PostgreSQL binaries can be downloaded. MySQL and SQLite use system installations.`,
+          ),
+        )
+        process.exit(1)
+      }
+
+      const engine = getEngine(Engine.PostgreSQL)
+
+      // Check if already installed
+      const isInstalled = await engine.isBinaryInstalled(version)
+      if (isInstalled) {
+        console.log(
+          uiInfo(`PostgreSQL ${version} binaries are already installed.`),
+        )
+        return
+      }
+
+      const spinner = createSpinner(
+        `Downloading PostgreSQL ${version} binaries...`,
+      )
+      spinner.start()
+
+      await engine.ensureBinaries(version, ({ message }) => {
+        spinner.text = message
+      })
+
+      spinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+
+      // Show the path for reference
+      const { platform, arch } = platformService.getPlatformInfo()
+      const fullVersion = binaryManager.getFullVersion(version)
+      const binPath = paths.getBinaryPath({
+        engine: 'postgresql',
+        version: fullVersion,
+        platform,
+        arch,
+      })
+      console.log(chalk.gray(`  Location: ${binPath}`))
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
+      process.exit(1)
+    }
+  })

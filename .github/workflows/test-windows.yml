@@ -52,25 +52,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install PostgreSQL client tools
-        run: choco install postgresql --params '/Password:postgres' -y
+      - name: Download PostgreSQL binaries
+        run: pnpm start engines download postgresql 17
 
       - name: Add PostgreSQL to PATH
         shell: pwsh
         run: |
-          $pgPath = "C:\Program Files\PostgreSQL\17\bin"
+          # EDB binaries are downloaded to ~/.spindb/bin/postgresql-{version}-win32-x64/bin
+          $pgPath = "$env:USERPROFILE\.spindb\bin\postgresql-17.7.0-win32-x64\bin"
           if (Test-Path $pgPath) {
             echo "$pgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            echo "Found PostgreSQL at: $pgPath"
           } else {
-            # Try finding PostgreSQL in other locations
-            $versions = @("17", "16", "15", "14")
-            foreach ($v in $versions) {
-              $path = "C:\Program Files\PostgreSQL\$v\bin"
-              if (Test-Path $path) {
-                echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-                break
-              }
-            }
+            echo "ERROR: PostgreSQL binaries not found at $pgPath"
+            Get-ChildItem "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue
+            exit 1
           }
 
       - name: Verify PostgreSQL tools
