@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { dirname } from 'path'
 import { paths } from '../config/paths'
 import { logDebug, logWarning } from './error-handler'
+import { platformService } from './platform-service'
 import type {
   SpinDBConfig,
   BinaryConfig,
@@ -165,30 +166,12 @@ export class ConfigManager {
 
   /**
    * Detect a binary on the system PATH
+   * Uses platformService for cross-platform detection (handles which/where and .exe extension)
    */
   async detectSystemBinary(tool: BinaryTool): Promise<string | null> {
-    try {
-      const { stdout } = await execAsync(`which ${tool}`)
-      const path = stdout.trim()
-      if (path && existsSync(path)) {
-        return path
-      }
-    } catch (error) {
-      logDebug('which command failed for binary detection', {
-        tool,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-
-    // Check common locations
-    const commonPaths = this.getCommonBinaryPaths(tool)
-    for (const path of commonPaths) {
-      if (existsSync(path)) {
-        return path
-      }
-    }
-
-    return null
+    // Use platformService which handles cross-platform differences
+    // (which vs where, .exe extension, platform-specific search paths)
+    return platformService.findToolPath(tool)
   }
 
   /**

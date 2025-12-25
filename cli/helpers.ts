@@ -44,7 +44,8 @@ export type InstalledEngine =
   | InstalledSqliteEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
-  const postgresPath = join(binPath, 'bin', 'postgres')
+  const ext = platformService.getExecutableExtension()
+  const postgresPath = join(binPath, 'bin', `postgres${ext}`)
   if (!existsSync(postgresPath)) {
     return null
   }

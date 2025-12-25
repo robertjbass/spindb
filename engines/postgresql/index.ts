@@ -144,7 +144,8 @@ export class PostgreSQLEngine extends BaseEngine {
     options: Record<string, unknown> = {},
   ): Promise<string> {
     const binPath = this.getBinaryPath(version)
-    const initdbPath = join(binPath, 'bin', 'initdb')
+    const ext = platformService.getExecutableExtension()
+    const initdbPath = join(binPath, 'bin', `initdb${ext}`)
     const dataDir = paths.getContainerDataPath(containerName, {
       engine: this.name,
     })
@@ -231,7 +232,8 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const { name, version, port } = container
     const binPath = this.getBinaryPath(version)
-    const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
     const logFile = paths.getContainerLogPath(name, { engine: this.name })
 
@@ -254,7 +256,8 @@ export class PostgreSQLEngine extends BaseEngine {
   async stop(container: ContainerConfig): Promise<void> {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
-    const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     await processManager.stop(pgCtlPath, dataDir)
@@ -266,7 +269,8 @@ export class PostgreSQLEngine extends BaseEngine {
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
-    const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     return processManager.status(pgCtlPath, dataDir)

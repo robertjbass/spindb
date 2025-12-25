@@ -177,11 +177,13 @@ export class MySQLEngine extends BaseEngine {
 
       // MariaDB initialization
       // --auth-root-authentication-method=normal allows passwordless root login via socket
-      const args = [
-        `--datadir=${dataDir}`,
-        `--user=${process.env.USER || 'mysql'}`,
-        '--auth-root-authentication-method=normal',
-      ]
+      const { platform } = platformService.getPlatformInfo()
+      const args = [`--datadir=${dataDir}`, '--auth-root-authentication-method=normal']
+
+      // --user flag is Unix-only (process.env.USER doesn't exist on Windows)
+      if (platform !== 'win32') {
+        args.push(`--user=${process.env.USER || 'mysql'}`)
+      }
 
       return new Promise((resolve, reject) => {
         const proc = spawn(installDb, args, {
@@ -226,11 +228,13 @@ export class MySQLEngine extends BaseEngine {
 
       // MySQL initialization
       // --initialize-insecure creates root user without password (for local dev)
-      const args = [
-        '--initialize-insecure',
-        `--datadir=${dataDir}`,
-        `--user=${process.env.USER || 'mysql'}`,
-      ]
+      const { platform } = platformService.getPlatformInfo()
+      const args = ['--initialize-insecure', `--datadir=${dataDir}`]
+
+      // --user flag is Unix-only (process.env.USER doesn't exist on Windows)
+      if (platform !== 'win32') {
+        args.push(`--user=${process.env.USER || 'mysql'}`)
+      }
 
       return new Promise((resolve, reject) => {
         const proc = spawn(mysqld, args, {
