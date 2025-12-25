@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync, createReadStream } from 'fs'
-import { mkdir, readdir, rm, chmod } from 'fs/promises'
+import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
 import { exec } from 'child_process'
@@ -231,22 +231,18 @@ export class BinaryManager {
     )
 
     if (pgsqlDir) {
-      // Move contents from pgsql/ to binPath
+      // Move contents from pgsql/ to binPath using cross-platform Node.js fs methods
       const sourceDir = join(tempDir, pgsqlDir.name)
       const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
-        // Use rename if on same filesystem, otherwise copy
         try {
-          await execAsync(`mv "${sourcePath}" "${destPath}"`)
+          // Try rename first (works if on same filesystem)
+          await rename(sourcePath, destPath)
         } catch {
-          // Fallback for cross-filesystem or Windows
-          if (entry.isDirectory()) {
-            await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
-          } else {
-            await execAsync(`copy /Y "${sourcePath}" "${destPath}"`)
-          }
+          // Fallback to recursive copy for cross-filesystem moves
+          await cp(sourcePath, destPath, { recursive: true })
         }
       }
     } else {

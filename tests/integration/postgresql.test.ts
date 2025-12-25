@@ -70,6 +70,13 @@ describe('PostgreSQL Integration Tests', () => {
       `\n📦 Creating container "${containerName}" without starting...`,
     )
 
+    // Ensure PostgreSQL binaries are downloaded first
+    const engine = getEngine(ENGINE)
+    console.log('   Ensuring PostgreSQL binaries are available...')
+    await engine.ensureBinaries('17', ({ message }) => {
+      console.log(`   ${message}`)
+    })
+
     await containerManager.create(containerName, {
       engine: ENGINE,
       version: '17',
@@ -78,7 +85,6 @@ describe('PostgreSQL Integration Tests', () => {
     })
 
     // Initialize the database cluster
-    const engine = getEngine(ENGINE)
     await engine.initDataDir(containerName, '17', { superuser: 'postgres' })
 
     // Verify container exists but is not running
