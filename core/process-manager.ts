@@ -126,7 +126,35 @@ export class ProcessManager {
     options: StartOptions = {},
   ): Promise<ProcessResult> {
     const { port, logFile } = options
+    const logDest = logFile || platformService.getNullDevice()
 
+    if (isWindows()) {
+      // On Windows, build the entire command as a single string
+      // This avoids issues with shell argument parsing
+      let cmd = `"${pgCtlPath}" start -D "${dataDir}" -l "${logDest}" -w -t 30`
+      if (port) {
+        cmd += ` -o "-p ${port}"`
+      }
+
+      logDebug('pg_ctl start command (Windows)', { cmd })
+
+      return new Promise((resolve, reject) => {
+        exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
+          logDebug('pg_ctl start completed', { error: error?.message, stdout, stderr })
+          if (error) {
+            reject(
+              new Error(
+                `pg_ctl start failed with code ${error.code}: ${stderr || stdout || error.message}`,
+              ),
+            )
+          } else {
+            resolve({ stdout, stderr })
+          }
+        })
+      })
+    }
+
+    // Unix path - use spawn without shell
     const pgOptions: string[] = []
     if (port) {
       pgOptions.push(`-p ${port}`)
@@ -137,30 +165,22 @@ export class ProcessManager {
       '-D',
       dataDir,
       '-l',
-      logFile || platformService.getNullDevice(),
+      logDest,
       '-w', // Wait for startup to complete
       '-t',
-      '30', // Timeout after 30 seconds (helps on Windows)
+      '30', // Timeout after 30 seconds
     ]
 
-    // Only add -o flag if we have options to pass
     if (pgOptions.length > 0) {
-      // On Windows with shell: true, we need to quote the options string
-      // to prevent shell from splitting on spaces
-      const optionsStr = pgOptions.join(' ')
-      args.push('-o', isWindows() ? `"${optionsStr}"` : optionsStr)
+      args.push('-o', pgOptions.join(' '))
     }
 
     logDebug('pg_ctl start command', { pgCtlPath, args })
 
-    // Windows requires shell: true for proper process spawning
-    const spawnOptions: SpawnOptions = {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
-    }
-
     return new Promise((resolve, reject) => {
-      const proc = spawn(pgCtlPath, args, spawnOptions)
+      const proc = spawn(pgCtlPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
 
       let stdout = ''
       let stderr = ''
@@ -196,6 +216,29 @@ export class ProcessManager {
    * Stop PostgreSQL server using pg_ctl
    */
   async stop(pgCtlPath: string, dataDir: string): Promise<ProcessResult> {
+    if (isWindows()) {
+      // On Windows, build the entire command as a single string
+      const cmd = `"${pgCtlPath}" stop -D "${dataDir}" -m fast -w -t 30`
+
+      logDebug('pg_ctl stop command (Windows)', { cmd })
+
+      return new Promise((resolve, reject) => {
+        exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
+          logDebug('pg_ctl stop completed', { error: error?.message, stdout, stderr })
+          if (error) {
+            reject(
+              new Error(
+                `pg_ctl stop failed with code ${error.code}: ${stderr || stdout || error.message}`,
+              ),
+            )
+          } else {
+            resolve({ stdout, stderr })
+          }
+        })
+      })
+    }
+
+    // Unix path - use spawn without shell
     const args = [
       'stop',
       '-D',
@@ -209,14 +252,10 @@ export class ProcessManager {
 
     logDebug('pg_ctl stop command', { pgCtlPath, args })
 
-    // Windows requires shell: true for proper process spawning
-    const spawnOptions: SpawnOptions = {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
-    }
-
     return new Promise((resolve, reject) => {
-      const proc = spawn(pgCtlPath, args, spawnOptions)
+      const proc = spawn(pgCtlPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
 
       let stdout = ''
       let stderr = ''
