@@ -145,7 +145,10 @@ export class ProcessManager {
 
     // Only add -o flag if we have options to pass
     if (pgOptions.length > 0) {
-      args.push('-o', pgOptions.join(' '))
+      // On Windows with shell: true, we need to quote the options string
+      // to prevent shell from splitting on spaces
+      const optionsStr = pgOptions.join(' ')
+      args.push('-o', isWindows() ? `"${optionsStr}"` : optionsStr)
     }
 
     logDebug('pg_ctl start command', { pgCtlPath, args })
