@@ -288,6 +288,7 @@ export const createCommand = new Command('create')
         console.log()
 
         const dbEngine = getEngine(engine)
+        const isPostgreSQL = engine === Engine.PostgreSQL
 
         // SQLite has a simplified flow (no port, no start/stop)
         if (engine === Engine.SQLite) {
@@ -322,6 +323,60 @@ export const createCommand = new Command('create')
           }
         }
 
+        const portSpinner = createSpinner('Finding available port...')
+        portSpinner.start()
+
+        let port: number
+        if (options.port) {
+          port = parseInt(options.port, 10)
+          const available = await portManager.isPortAvailable(port)
+          if (!available) {
+            portSpinner.fail(`Port ${port} is already in use`)
+            process.exit(1)
+          }
+          portSpinner.succeed(`Using port ${port}`)
+        } else {
+          const { port: foundPort, isDefault } =
+            await portManager.findAvailablePort({
+              preferredPort: engineDefaults.defaultPort,
+              portRange: engineDefaults.portRange,
+            })
+          port = foundPort
+          if (isDefault) {
+            portSpinner.succeed(`Using default port ${port}`)
+          } else {
+            portSpinner.warn(
+              `Default port ${engineDefaults.defaultPort} is in use, using port ${port}`,
+            )
+          }
+        }
+
+        // For PostgreSQL, download binaries FIRST - they include client tools (psql, pg_dump, etc.)
+        // This avoids requiring a separate system installation of client tools
+        if (isPostgreSQL) {
+          const binarySpinner = createSpinner(
+            `Checking ${dbEngine.displayName} ${version} binaries...`,
+          )
+          binarySpinner.start()
+
+          const isInstalled = await dbEngine.isBinaryInstalled(version)
+          if (isInstalled) {
+            binarySpinner.succeed(
+              `${dbEngine.displayName} ${version} binaries ready (cached)`,
+            )
+          } else {
+            binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
+            await dbEngine.ensureBinaries(version, ({ message }) => {
+              binarySpinner.text = message
+            })
+            binarySpinner.succeed(
+              `${dbEngine.displayName} ${version} binaries downloaded`,
+            )
+          }
+        }
+
+        // Check dependencies (all engines need this)
+        // For PostgreSQL, this runs AFTER binary download so client tools are available
         const depsSpinner = createSpinner('Checking required tools...')
         depsSpinner.start()
 
@@ -356,52 +411,27 @@ export const createCommand = new Command('create')
           depsSpinner.succeed('Required tools available')
         }
 
-        const portSpinner = createSpinner('Finding available port...')
-        portSpinner.start()
+        // For MySQL (and other non-PostgreSQL server DBs), download binaries after dep check
+        if (!isPostgreSQL) {
+          const binarySpinner = createSpinner(
+            `Checking ${dbEngine.displayName} ${version} binaries...`,
+          )
+          binarySpinner.start()
 
-        let port: number
-        if (options.port) {
-          port = parseInt(options.port, 10)
-          const available = await portManager.isPortAvailable(port)
-          if (!available) {
-            portSpinner.fail(`Port ${port} is already in use`)
-            process.exit(1)
-          }
-          portSpinner.succeed(`Using port ${port}`)
-        } else {
-          const { port: foundPort, isDefault } =
-            await portManager.findAvailablePort({
-              preferredPort: engineDefaults.defaultPort,
-              portRange: engineDefaults.portRange,
-            })
-          port = foundPort
-          if (isDefault) {
-            portSpinner.succeed(`Using default port ${port}`)
+          const isInstalled = await dbEngine.isBinaryInstalled(version)
+          if (isInstalled) {
+            binarySpinner.succeed(
+              `${dbEngine.displayName} ${version} binaries ready (cached)`,
+            )
           } else {
-            portSpinner.warn(
-              `Default port ${engineDefaults.defaultPort} is in use, using port ${port}`,
+            binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
+            await dbEngine.ensureBinaries(version, ({ message }) => {
+              binarySpinner.text = message
+            })
+            binarySpinner.succeed(
+              `${dbEngine.displayName} ${version} binaries downloaded`,
             )
           }
-        }
-
-        const binarySpinner = createSpinner(
-          `Checking ${dbEngine.displayName} ${version} binaries...`,
-        )
-        binarySpinner.start()
-
-        const isInstalled = await dbEngine.isBinaryInstalled(version)
-        if (isInstalled) {
-          binarySpinner.succeed(
-            `${dbEngine.displayName} ${version} binaries ready (cached)`,
-          )
-        } else {
-          binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
-          await dbEngine.ensureBinaries(version, ({ message }) => {
-            binarySpinner.text = message
-          })
-          binarySpinner.succeed(
-            `${dbEngine.displayName} ${version} binaries downloaded`,
-          )
         }
 
         while (await containerManager.exists(containerName)) {

@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { spawn, exec } from 'child_process'
 import { promisify } from 'util'
+import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
 import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
@@ -118,13 +119,27 @@ export class PostgreSQLEngine extends BaseEngine {
 
   /**
    * Ensure PostgreSQL binaries are available
+   * Also registers client tools (psql, pg_dump, etc.) in config after download
    */
   async ensureBinaries(
     version: string,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    return binaryManager.ensureInstalled(version, p, a, onProgress)
+    const binPath = await binaryManager.ensureInstalled(version, p, a, onProgress)
+
+    // Register client tools from downloaded binaries in config
+    // This ensures dependency checks find them without requiring system installation
+    const ext = platformService.getExecutableExtension()
+    const clientTools = ['psql', 'pg_dump', 'pg_restore', 'pg_basebackup'] as const
+    for (const tool of clientTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'downloaded')
+      }
+    }
+
+    return binPath
   }
 
   /**
