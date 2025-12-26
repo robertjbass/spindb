@@ -435,6 +435,13 @@ export class MySQLEngine extends BaseEngine {
         windowsHide: true,
         shell: false,
       })
+
+      // Log spawn errors for debugging (rare - cmd.exe is a core Windows component)
+      // The mysqladmin ping timeout below will catch actual startup failures
+      cmdProc.on('error', (err) => {
+        logDebug(`Failed to spawn cmd.exe for MySQL start: ${err.message}`)
+      })
+
       cmdProc.unref()
 
       // cmd.exe exits immediately after starting mysqld.
