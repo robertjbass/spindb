@@ -53,18 +53,6 @@ export class ProcessManager {
     // Track if directory existed before initdb (to know if we should clean up)
     const dirExistedBefore = existsSync(dataDir)
 
-    const args = [
-      '-D',
-      dataDir,
-      '-U',
-      superuser,
-      '--auth=trust',
-      '--encoding=UTF8',
-      '--no-locale',
-    ]
-
-    logDebug('initdb command', { initdbPath, args })
-
     // Helper to clean up data directory on failure
     const cleanupOnFailure = async () => {
       // Only clean up if initdb created the directory (it didn't exist before)
@@ -80,14 +68,42 @@ export class ProcessManager {
       }
     }
 
-    // Windows requires shell: true for proper process spawning
-    const spawnOptions: SpawnOptions = {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
+    if (isWindows()) {
+      // On Windows, build the entire command as a single string
+      const cmd = `"${initdbPath}" -D "${dataDir}" -U ${superuser} --auth=trust --encoding=UTF8 --no-locale`
+
+      logDebug('initdb command (Windows)', { cmd })
+
+      return new Promise((resolve, reject) => {
+        exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
+          logDebug('initdb completed', { error: error?.message, stdout, stderr })
+          if (error) {
+            await cleanupOnFailure()
+            reject(new Error(`initdb failed with code ${error.code}: ${stderr || stdout || error.message}`))
+          } else {
+            resolve({ stdout, stderr })
+          }
+        })
+      })
     }
 
+    // Unix path - use spawn without shell
+    const args = [
+      '-D',
+      dataDir,
+      '-U',
+      superuser,
+      '--auth=trust',
+      '--encoding=UTF8',
+      '--no-locale',
+    ]
+
+    logDebug('initdb command', { initdbPath, args })
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(initdbPath, args, spawnOptions)
+      const proc = spawn(initdbPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
 
       let stdout = ''
       let stderr = ''
