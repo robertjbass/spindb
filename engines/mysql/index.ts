@@ -415,38 +415,27 @@ export class MySQLEngine extends BaseEngine {
       args.push(`--socket=${socketFile}`)
     }
 
-    // On Windows, use 'start /b' to run in background without visible window
-    // On Unix, use spawn with detached: true
+    // On both Windows and Unix, use spawn with detached: true
+    // Windows also uses windowsHide: true to prevent console window
     let proc: ReturnType<typeof spawn> | null = null
 
     if (isWindows()) {
-      // Use 'start /b' to run MySQL truly in background without console window.
-      // The empty title "" after /b is required when executable path contains spaces.
-      // We can't capture mysqld's stdout/stderr this way, but it logs to --log-error.
-      // MySQL writes its own PID file via --pid-file argument.
-      const argsQuoted = args.map((a) => `"${a}"`).join(' ')
-      const startCmd = `start /b "" "${mysqld}" ${argsQuoted}`
-
-      logDebug('Starting MySQL with start /b', { cmd: startCmd })
-
-      const cmdProc = spawn('cmd', ['/c', startCmd], {
-        stdio: 'ignore',
+      // Spawn mysqld detached on Windows; capture stdout/stderr briefly
+      // to surface startup errors in logs.
+      proc = spawn(mysqld, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
         windowsHide: true,
-        shell: false,
       })
 
-      // Log spawn errors for debugging (rare - cmd.exe is a core Windows component)
-      // The mysqladmin ping timeout below will catch actual startup failures
-      cmdProc.on('error', (err) => {
-        logDebug(`Failed to spawn cmd.exe for MySQL start: ${err.message}`)
+      proc.stdout?.on('data', (data: Buffer) => {
+        logDebug(`mysqld stdout: ${data.toString()}`)
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        logDebug(`mysqld stderr: ${data.toString()}`)
       })
 
-      cmdProc.unref()
-
-      // cmd.exe exits immediately after starting mysqld.
-      // We don't set proc here because cmd.exe's PID is not mysqld's PID.
-      // MySQL writes its own PID file via --pid-file argument.
+      proc.unref()
     } else {
       proc = spawn(mysqld, args, {
         stdio: ['ignore', 'ignore', 'ignore'],
