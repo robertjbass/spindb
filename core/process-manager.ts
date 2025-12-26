@@ -145,9 +145,9 @@ export class ProcessManager {
     const logDest = logFile || platformService.getNullDevice()
 
     if (isWindows()) {
-      // On Windows, build the entire command as a single string
-      // This avoids issues with shell argument parsing
-      let cmd = `"${pgCtlPath}" start -D "${dataDir}" -l "${logDest}" -w -t 30`
+      // On Windows, start without -w (wait) flag and poll for readiness
+      // The -w flag can hang indefinitely on Windows
+      let cmd = `"${pgCtlPath}" start -D "${dataDir}" -l "${logDest}"`
       if (port) {
         cmd += ` -o "-p ${port}"`
       }
@@ -155,17 +155,40 @@ export class ProcessManager {
       logDebug('pg_ctl start command (Windows)', { cmd })
 
       return new Promise((resolve, reject) => {
-        exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
-          logDebug('pg_ctl start completed', { error: error?.message, stdout, stderr })
+        exec(cmd, { timeout: 30000 }, async (error, stdout, stderr) => {
+          logDebug('pg_ctl start initiated', { error: error?.message, stdout, stderr })
+
           if (error) {
             reject(
               new Error(
                 `pg_ctl start failed with code ${error.code}: ${stderr || stdout || error.message}`,
               ),
             )
-          } else {
-            resolve({ stdout, stderr })
+            return
           }
+
+          // Poll for PostgreSQL to be ready using pg_isready or status check
+          const statusCmd = `"${pgCtlPath}" status -D "${dataDir}"`
+          let attempts = 0
+          const maxAttempts = 30
+          const pollInterval = 1000
+
+          const checkReady = () => {
+            attempts++
+            exec(statusCmd, (statusError, statusStdout) => {
+              if (!statusError && statusStdout.includes('server is running')) {
+                logDebug('pg_ctl start completed (Windows)', { attempts })
+                resolve({ stdout, stderr })
+              } else if (attempts >= maxAttempts) {
+                reject(new Error(`PostgreSQL failed to start within ${maxAttempts} seconds`))
+              } else {
+                setTimeout(checkReady, pollInterval)
+              }
+            })
+          }
+
+          // Give it a moment before starting to poll
+          setTimeout(checkReady, 500)
         })
       })
     }
