@@ -1,8 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, watch, createReadStream } from 'fs'
-import { readFile, stat } from 'fs/promises'
-import { createInterface } from 'readline'
+import { existsSync } from 'fs'
+import { readFile } from 'fs/promises'
 import { spawn } from 'child_process'
 import { containerManager } from '../../../core/container-manager'
 import { getMissingDependencies } from '../../../core/dependency-manager'
@@ -14,77 +13,7 @@ import {
 } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
-
-/**
- * Cross-platform file following (replaces Unix `tail -f`)
- * Uses Node.js fs.watch to monitor file changes
- */
-async function followLogFile(
-  filePath: string,
-  initialLines: number,
-): Promise<void> {
-  // Read and display initial content
-  const content = await readFile(filePath, 'utf-8')
-  const lines = content.split('\n')
-  const nonEmptyLines =
-    lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
-  const initial = nonEmptyLines.slice(-initialLines).join('\n')
-  if (initial) {
-    console.log(initial)
-  }
-
-  // Track file position
-  let fileSize = (await stat(filePath)).size
-
-  return new Promise((resolve) => {
-    let settled = false
-
-    // Watch for changes
-    const watcher = watch(filePath, async (eventType) => {
-      if (eventType === 'change') {
-        try {
-          const newSize = (await stat(filePath)).size
-
-          if (newSize > fileSize) {
-            // Read only the new content
-            const stream = createReadStream(filePath, {
-              start: fileSize,
-              encoding: 'utf-8',
-            })
-
-            const rl = createInterface({ input: stream })
-
-            for await (const line of rl) {
-              console.log(line)
-            }
-
-            fileSize = newSize
-          } else if (newSize < fileSize) {
-            // File was truncated, reset position
-            fileSize = newSize
-          }
-        } catch {
-          // File might be temporarily unavailable
-        }
-      }
-    })
-
-    const cleanup = () => {
-      if (!settled) {
-        settled = true
-        watcher.close()
-        process.off('SIGINT', handleSigint)
-        resolve()
-      }
-    }
-
-    const handleSigint = () => {
-      cleanup()
-    }
-
-    process.on('SIGINT', handleSigint)
-  })
-}
+import { followFile, getLastNLines } from '../../utils/file-follower'
 
 export async function handleRunSql(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
@@ -244,7 +173,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
     console.log(chalk.gray('  Press Ctrl+C to stop following logs'))
     console.log()
     // Use cross-platform file following (works on Windows, macOS, Linux)
-    await followLogFile(logPath, 50)
+    await followFile(logPath, 50)
     return
   }
 
@@ -254,10 +183,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
   if (content.trim() === '') {
     console.log(uiInfo('Log file is empty'))
   } else {
-    const lines = content.split('\n')
-    const nonEmptyLines =
-      lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
-    console.log(nonEmptyLines.slice(-lineCount).join('\n'))
+    console.log(getLastNLines(content, lineCount))
   }
   console.log()
   await pressEnterToContinue()

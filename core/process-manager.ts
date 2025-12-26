@@ -4,17 +4,10 @@ import { existsSync } from 'fs'
 import { readFile, rm } from 'fs/promises'
 import { paths } from '../config/paths'
 import { logDebug } from './error-handler'
-import { platformService } from './platform-service'
+import { platformService, isWindows } from './platform-service'
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
-
-/**
- * Check if running on Windows
- */
-function isWindows(): boolean {
-  return process.platform === 'win32'
-}
 
 export type InitdbOptions = {
   superuser?: string

@@ -175,49 +175,6 @@ export class ConfigManager {
   }
 
   /**
-   * Get common installation paths for database tools
-   */
-  private getCommonBinaryPaths(tool: BinaryTool): string[] {
-    const commonPaths: string[] = []
-
-    // Homebrew (macOS ARM)
-    commonPaths.push(`/opt/homebrew/bin/${tool}`)
-    // Homebrew (macOS Intel)
-    commonPaths.push(`/usr/local/bin/${tool}`)
-
-    // PostgreSQL-specific paths
-    if (POSTGRESQL_TOOLS.includes(tool) || tool === 'pgcli') {
-      commonPaths.push(`/opt/homebrew/opt/libpq/bin/${tool}`)
-      commonPaths.push(`/usr/local/opt/libpq/bin/${tool}`)
-      // Postgres.app (macOS)
-      commonPaths.push(
-        `/Applications/Postgres.app/Contents/Versions/latest/bin/${tool}`,
-      )
-      // Linux PostgreSQL paths
-      commonPaths.push(`/usr/lib/postgresql/17/bin/${tool}`)
-      commonPaths.push(`/usr/lib/postgresql/16/bin/${tool}`)
-      commonPaths.push(`/usr/lib/postgresql/15/bin/${tool}`)
-      commonPaths.push(`/usr/lib/postgresql/14/bin/${tool}`)
-    }
-
-    // MySQL-specific paths
-    if (MYSQL_TOOLS.includes(tool) || tool === 'mycli') {
-      commonPaths.push(`/opt/homebrew/opt/mysql/bin/${tool}`)
-      commonPaths.push(`/opt/homebrew/opt/mysql-client/bin/${tool}`)
-      commonPaths.push(`/usr/local/opt/mysql/bin/${tool}`)
-      commonPaths.push(`/usr/local/opt/mysql-client/bin/${tool}`)
-      // Linux MySQL/MariaDB paths
-      commonPaths.push(`/usr/bin/${tool}`)
-      commonPaths.push(`/usr/sbin/${tool}`)
-    }
-
-    // General Linux paths
-    commonPaths.push(`/usr/bin/${tool}`)
-
-    return commonPaths
-  }
-
-  /**
    * Detect all available client tools on the system
    */
   async detectAllTools(): Promise<Map<BinaryTool, string>> {

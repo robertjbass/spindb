@@ -10,18 +10,12 @@ import { open } from 'fs/promises'
 import { createGunzip } from 'zlib'
 import { getMysqlClientPath } from './binary-detection'
 import { validateRestoreCompatibility } from './version-validator'
+import { isWindows } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
-
-/**
- * Check if running on Windows
- */
-function isWindows(): boolean {
-  return process.platform === 'win32'
-}
 
 // =============================================================================
 // Backup Format Detection

@@ -243,9 +243,8 @@ export function isVersionCompatible(
   const current = parseFloat(currentVersion)
   const required = parseFloat(requiredVersion)
 
-  // Current version should be >= required version
-  // But not too far ahead (major version compatibility)
-  return current >= required && Math.floor(current) === Math.floor(required)
+  // PostgreSQL is forward-compatible: newer pg_restore can restore older dumps
+  return current >= required
 }
 
 /**

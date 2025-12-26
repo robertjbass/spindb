@@ -58,13 +58,17 @@ jobs:
       - name: Add PostgreSQL to PATH
         shell: pwsh
         run: |
-          # EDB binaries are downloaded to ~/.spindb/bin/postgresql-{version}-win32-x64/bin
-          $pgPath = "$env:USERPROFILE\.spindb\bin\postgresql-17.7.0-win32-x64\bin"
-          if (Test-Path $pgPath) {
+          # Find postgresql-17.* directory dynamically (version-agnostic)
+          $pgDir = Get-ChildItem "$env:USERPROFILE\.spindb\bin" -Directory |
+            Where-Object { $_.Name -match '^postgresql-17\.' } |
+            Select-Object -First 1
+
+          if ($pgDir) {
+            $pgPath = Join-Path $pgDir.FullName "bin"
             echo "$pgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
             echo "Found PostgreSQL at: $pgPath"
           } else {
-            echo "ERROR: PostgreSQL binaries not found at $pgPath"
+            echo "ERROR: PostgreSQL 17.x binaries not found"
             Get-ChildItem "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue
             exit 1
           }

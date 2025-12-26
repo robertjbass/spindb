@@ -10,17 +10,11 @@ import { stat } from 'fs/promises'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
 import { getMysqldumpPath } from './binary-detection'
+import { isWindows } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
-
-/**
- * Check if running on Windows
- */
-function isWindows(): boolean {
-  return process.platform === 'win32'
-}
 
 /**
  * Create a backup of a MySQL database

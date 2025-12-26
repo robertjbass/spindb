@@ -8,17 +8,10 @@ import { promisify } from 'util'
 import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { join } from 'path'
-
-/**
- * Check if running on Windows
- */
-function isWindows(): boolean {
-  return process.platform === 'win32'
-}
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
-import { platformService } from '../../core/platform-service'
+import { platformService, isWindows } from '../../core/platform-service'
 import {
   logDebug,
   logWarning,

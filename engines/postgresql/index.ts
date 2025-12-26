@@ -3,18 +3,11 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
-
-/**
- * Check if running on Windows
- */
-function isWindows(): boolean {
-  return process.platform === 'win32'
-}
 import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
-import { platformService } from '../../core/platform-service'
+import { platformService, isWindows } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import {

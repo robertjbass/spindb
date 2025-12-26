@@ -343,10 +343,10 @@ export class BinaryManager {
       }
 
       const reportedVersion = match[1]
-      // Normalize both versions for comparison (16.9.0 -> 16.9, 16 -> 16)
-      const normalizeVersion = (v: string) => v.replace(/\.0$/, '')
-      const expectedNormalized = normalizeVersion(version)
-      const reportedNormalized = normalizeVersion(reportedVersion)
+      // Strip trailing .0 for comparison (16.9.0 -> 16.9, 16 -> 16)
+      const stripTrailingZero = (v: string) => v.replace(/\.0$/, '')
+      const expectedNormalized = stripTrailingZero(version)
+      const reportedNormalized = stripTrailingZero(reportedVersion)
 
       // Check if versions match (after normalization)
       if (reportedNormalized === expectedNormalized) {

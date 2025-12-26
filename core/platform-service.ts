@@ -775,3 +775,10 @@ export function createPlatformService(): BasePlatformService {
 
 // Export singleton instance for convenience
 export const platformService = createPlatformService()
+
+/**
+ * Check if running on Windows
+ */
+export function isWindows(): boolean {
+  return process.platform === 'win32'
+}
