@@ -40,8 +40,9 @@ export async function followFile(
     console.log(initial)
   }
 
-  // Track file position
-  let fileSize = (await stat(filePath)).size
+  // Track file position - use byte length of content we already read
+  // This eliminates race condition: we start exactly where the initial read ended
+  let fileSize = Buffer.byteLength(content, 'utf-8')
 
   return new Promise((resolve) => {
     let settled = false
