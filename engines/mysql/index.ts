@@ -3,11 +3,18 @@
  * Manages MySQL database containers using system-installed MySQL binaries
  */
 
-import { spawn, exec } from 'child_process'
+import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { join } from 'path'
+
+/**
+ * Check if running on Windows
+ */
+function isWindows(): boolean {
+  return process.platform === 'win32'
+}
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -185,18 +192,22 @@ export class MySQLEngine extends BaseEngine {
         args.push(`--user=${process.env.USER || 'mysql'}`)
       }
 
+      // Windows requires shell: true for proper process spawning
+      const spawnOptions: SpawnOptions = {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...(isWindows() && { shell: true }),
+      }
+
       return new Promise((resolve, reject) => {
-        const proc = spawn(installDb, args, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+        const proc = spawn(installDb, args, spawnOptions)
 
         let stdout = ''
         let stderr = ''
 
-        proc.stdout.on('data', (data: Buffer) => {
+        proc.stdout?.on('data', (data: Buffer) => {
           stdout += data.toString()
         })
-        proc.stderr.on('data', (data: Buffer) => {
+        proc.stderr?.on('data', (data: Buffer) => {
           stderr += data.toString()
         })
 
@@ -236,18 +247,22 @@ export class MySQLEngine extends BaseEngine {
         args.push(`--user=${process.env.USER || 'mysql'}`)
       }
 
+      // Windows requires shell: true for proper process spawning
+      const spawnOptions: SpawnOptions = {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...(isWindows() && { shell: true }),
+      }
+
       return new Promise((resolve, reject) => {
-        const proc = spawn(mysqld, args, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+        const proc = spawn(mysqld, args, spawnOptions)
 
         let stdout = ''
         let stderr = ''
 
-        proc.stdout.on('data', (data: Buffer) => {
+        proc.stdout?.on('data', (data: Buffer) => {
           stdout += data.toString()
         })
-        proc.stderr.on('data', (data: Buffer) => {
+        proc.stderr?.on('data', (data: Buffer) => {
           stderr += data.toString()
         })
 
@@ -316,11 +331,15 @@ export class MySQLEngine extends BaseEngine {
       args.push(`--socket=${socketFile}`)
     }
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      detached: true,
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(mysqld, args, {
-        stdio: ['ignore', 'ignore', 'ignore'],
-        detached: true,
-      })
+      const proc = spawn(mysqld, args, spawnOptions)
 
       proc.unref()
 
@@ -709,11 +728,17 @@ export class MySQLEngine extends BaseEngine {
       )
     }
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
       const proc = spawn(
         mysql,
         ['-h', '127.0.0.1', '-P', String(port), '-u', engineDef.superuser, db],
-        { stdio: 'inherit' },
+        spawnOptions,
       )
 
       proc.on('error', reject)
@@ -851,10 +876,14 @@ export class MySQLEngine extends BaseEngine {
 
     args.push(database)
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(mysqldump, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
+      const proc = spawn(mysqldump, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
@@ -929,8 +958,15 @@ export class MySQLEngine extends BaseEngine {
     if (options.sql) {
       // For inline SQL, use -e flag
       args.push('-e', options.sql)
+
+      // Windows requires shell: true for proper process spawning
+      const spawnOptions: SpawnOptions = {
+        stdio: 'inherit',
+        ...(isWindows() && { shell: true }),
+      }
+
       return new Promise((resolve, reject) => {
-        const proc = spawn(mysql, args, { stdio: 'inherit' })
+        const proc = spawn(mysql, args, spawnOptions)
 
         proc.on('error', reject)
         proc.on('close', (code) => {
@@ -943,13 +979,17 @@ export class MySQLEngine extends BaseEngine {
       })
     } else if (options.file) {
       // For file input, pipe the file to mysql stdin
+      // Windows requires shell: true for proper process spawning
+      const spawnOptions: SpawnOptions = {
+        stdio: ['pipe', 'inherit', 'inherit'],
+        ...(isWindows() && { shell: true }),
+      }
+
       return new Promise((resolve, reject) => {
         const fileStream = createReadStream(options.file!)
-        const proc = spawn(mysql, args, {
-          stdio: ['pipe', 'inherit', 'inherit'],
-        })
+        const proc = spawn(mysql, args, spawnOptions)
 
-        fileStream.pipe(proc.stdin)
+        fileStream.pipe(proc.stdin!)
 
         fileStream.on('error', (err) => {
           proc.kill()

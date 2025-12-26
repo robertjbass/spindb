@@ -1,4 +1,4 @@
-import { exec, spawn } from 'child_process'
+import { exec, spawn, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile, rm } from 'fs/promises'
@@ -8,6 +8,13 @@ import { platformService } from './platform-service'
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
+
+/**
+ * Check if running on Windows
+ */
+function isWindows(): boolean {
+  return process.platform === 'win32'
+}
 
 export type InitdbOptions = {
   superuser?: string
@@ -56,6 +63,8 @@ export class ProcessManager {
       '--no-locale',
     ]
 
+    logDebug('initdb command', { initdbPath, args })
+
     // Helper to clean up data directory on failure
     const cleanupOnFailure = async () => {
       // Only clean up if initdb created the directory (it didn't exist before)
@@ -71,22 +80,27 @@ export class ProcessManager {
       }
     }
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(initdbPath, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      const proc = spawn(initdbPath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
       proc.on('close', async (code) => {
+        logDebug('initdb completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
@@ -96,6 +110,7 @@ export class ProcessManager {
       })
 
       proc.on('error', async (err) => {
+        logDebug('initdb error', { error: err.message })
         await cleanupOnFailure()
         reject(err)
       })
@@ -124,26 +139,38 @@ export class ProcessManager {
       '-l',
       logFile || platformService.getNullDevice(),
       '-w', // Wait for startup to complete
-      '-o',
-      pgOptions.join(' '),
+      '-t',
+      '30', // Timeout after 30 seconds (helps on Windows)
     ]
 
+    // Only add -o flag if we have options to pass
+    if (pgOptions.length > 0) {
+      args.push('-o', pgOptions.join(' '))
+    }
+
+    logDebug('pg_ctl start command', { pgCtlPath, args })
+
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(pgCtlPath, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      const proc = spawn(pgCtlPath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
       proc.on('close', (code) => {
+        logDebug('pg_ctl start completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
@@ -155,7 +182,10 @@ export class ProcessManager {
         }
       })
 
-      proc.on('error', reject)
+      proc.on('error', (err) => {
+        logDebug('pg_ctl start error', { error: err.message })
+        reject(err)
+      })
     })
   }
 
@@ -170,24 +200,33 @@ export class ProcessManager {
       '-m',
       'fast',
       '-w', // Wait for shutdown to complete
+      '-t',
+      '30', // Timeout after 30 seconds
     ]
 
+    logDebug('pg_ctl stop command', { pgCtlPath, args })
+
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(pgCtlPath, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      const proc = spawn(pgCtlPath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
       proc.on('close', (code) => {
+        logDebug('pg_ctl stop completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
@@ -199,7 +238,10 @@ export class ProcessManager {
         }
       })
 
-      proc.on('error', reject)
+      proc.on('error', (err) => {
+        logDebug('pg_ctl stop error', { error: err.message })
+        reject(err)
+      })
     })
   }
 
@@ -304,9 +346,13 @@ export class ProcessManager {
       args.push('-c', command)
     }
 
+    // Windows requires shell: true for proper process spawning
+    const baseOptions = isWindows() ? { shell: true as const } : {}
+
     return new Promise((resolve, reject) => {
       const proc = spawn(psqlPath, args, {
         stdio: command ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+        ...baseOptions,
       })
 
       if (command) {
@@ -366,18 +412,22 @@ export class ProcessManager {
 
     args.push(backupFile)
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(pgRestorePath, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      const proc = spawn(pgRestorePath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 

@@ -1,8 +1,15 @@
 import { join } from 'path'
-import { spawn, exec } from 'child_process'
+import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
+
+/**
+ * Check if running on Windows
+ */
+function isWindows(): boolean {
+  return process.platform === 'win32'
+}
 import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
 import { processManager } from '../../core/process-manager'
@@ -389,6 +396,12 @@ export class PostgreSQLEngine extends BaseEngine {
     const db = database || 'postgres'
     const psqlPath = await this.getPsqlPath()
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
       const proc = spawn(
         psqlPath,
@@ -402,7 +415,7 @@ export class PostgreSQLEngine extends BaseEngine {
           '-d',
           db,
         ],
-        { stdio: 'inherit' },
+        spawnOptions,
       )
 
       proc.on('error', (err: NodeJS.ErrnoException) => {
@@ -499,13 +512,17 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<DumpResult> {
     const pgDumpPath = await this.getPgDumpPath()
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
       // Use custom format (-Fc) for best compatibility and compression
       const args = [connectionString, '-Fc', '-f', outputPath]
 
-      const proc = spawn(pgDumpPath, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
+      const proc = spawn(pgDumpPath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
@@ -582,8 +599,14 @@ export class PostgreSQLEngine extends BaseEngine {
       throw new Error('Either file or sql option must be provided')
     }
 
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+      ...(isWindows() && { shell: true }),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(psqlPath, args, { stdio: 'inherit' })
+      const proc = spawn(psqlPath, args, spawnOptions)
 
       proc.on('error', (err: NodeJS.ErrnoException) => {
         reject(err)

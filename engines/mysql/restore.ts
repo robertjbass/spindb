@@ -4,7 +4,7 @@
  * Handles detecting backup formats and restoring MySQL dumps.
  */
 
-import { spawn } from 'child_process'
+import { spawn, type SpawnOptions } from 'child_process'
 import { createReadStream } from 'fs'
 import { open } from 'fs/promises'
 import { createGunzip } from 'zlib'
@@ -15,6 +15,13 @@ import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
+
+/**
+ * Check if running on Windows
+ */
+function isWindows(): boolean {
+  return process.platform === 'win32'
+}
 
 // =============================================================================
 // Backup Format Detection
@@ -202,12 +209,17 @@ export async function restoreBackup(
   // Restore using mysql client
   // CLI: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
   // For compressed files: gunzip -c {file} | mysql ...
+
+  // Windows requires shell: true for proper process spawning
+  const spawnOptions: SpawnOptions = {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    ...(isWindows() && { shell: true }),
+  }
+
   return new Promise((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
 
-    const proc = spawn(mysql, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
+    const proc = spawn(mysql, args, spawnOptions)
 
     // Pipe backup file to stdin, decompressing if necessary
     const fileStream = createReadStream(backupPath)
@@ -215,23 +227,27 @@ export async function restoreBackup(
     if (format.format === 'compressed') {
       // Decompress gzipped file before piping to mysql
       const gunzip = createGunzip()
-      fileStream.pipe(gunzip).pipe(proc.stdin)
+      if (proc.stdin) {
+        fileStream.pipe(gunzip).pipe(proc.stdin)
+      }
 
       // Handle gunzip errors
       gunzip.on('error', (err) => {
         reject(new Error(`Failed to decompress backup file: ${err.message}`))
       })
     } else {
-      fileStream.pipe(proc.stdin)
+      if (proc.stdin) {
+        fileStream.pipe(proc.stdin)
+      }
     }
 
     let stdout = ''
     let stderr = ''
 
-    proc.stdout.on('data', (data: Buffer) => {
+    proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
     })
-    proc.stderr.on('data', (data: Buffer) => {
+    proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
 

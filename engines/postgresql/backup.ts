@@ -4,11 +4,18 @@
  * Creates database backups in SQL or custom (.dump) format using pg_dump.
  */
 
-import { spawn } from 'child_process'
+import { spawn, type SpawnOptions } from 'child_process'
 import { stat } from 'fs/promises'
 import { configManager } from '../../core/config-manager'
 import { defaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+
+/**
+ * Check if running on Windows
+ */
+function isWindows(): boolean {
+  return process.platform === 'win32'
+}
 
 /**
  * Get pg_dump path from config, with helpful error message
@@ -61,9 +68,13 @@ export async function createBackup(
       outputPath,
     ]
 
-    const proc = spawn(pgDumpPath, args, {
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-    })
+      ...(isWindows() && { shell: true }),
+    }
+
+    const proc = spawn(pgDumpPath, args, spawnOptions)
 
     let stderr = ''
 

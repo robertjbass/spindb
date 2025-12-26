@@ -4,7 +4,7 @@
  * Creates database backups in SQL or compressed (.dump = gzipped SQL) format using mysqldump.
  */
 
-import { spawn } from 'child_process'
+import { spawn, type SpawnOptions } from 'child_process'
 import { createWriteStream } from 'fs'
 import { stat } from 'fs/promises'
 import { createGzip } from 'zlib'
@@ -14,6 +14,13 @@ import { getEngineDefaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
+
+/**
+ * Check if running on Windows
+ */
+function isWindows(): boolean {
+  return process.platform === 'win32'
+}
 
 /**
  * Create a backup of a MySQL database
@@ -82,9 +89,13 @@ async function createSqlBackup(
       database,
     ]
 
-    const proc = spawn(mysqldump, args, {
+    // Windows requires shell: true for proper process spawning
+    const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-    })
+      ...(isWindows() && { shell: true }),
+    }
+
+    const proc = spawn(mysqldump, args, spawnOptions)
 
     let stderr = ''
 
@@ -140,9 +151,13 @@ async function createCompressedBackup(
     database,
   ]
 
-  const proc = spawn(mysqldump, args, {
+  // Windows requires shell: true for proper process spawning
+  const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-  })
+    ...(isWindows() && { shell: true }),
+  }
+
+  const proc = spawn(mysqldump, args, spawnOptions)
 
   const gzip = createGzip()
   const output = createWriteStream(outputPath)
