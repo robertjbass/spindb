@@ -125,6 +125,21 @@ await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
 - [ ] **Replace shell commands with Node.js APIs** - Use `fs.rename()` and `fs.cp()` instead
 - [ ] **Validate paths** - Ensure paths are within expected directories before operations
 
+### Medium: SQLite Container Creation Doesn't Validate Path
+
+**File:** `engines/sqlite/index.ts`
+
+Creating an SQLite container with a non-existent path succeeds without error, and the container is not rolled back on failure.
+
+```bash
+spindb create mydb --engine sqlite --path /nonexistent/path/db.sqlite
+# Container is created but unusable, no rollback occurs
+```
+
+- [ ] **Validate path exists** - Check that parent directory exists before container creation
+- [ ] **Add rollback on failure** - Use `TransactionManager` to clean up container if path validation fails
+- [ ] **Add `--create-path` flag** - Optionally create parent directories if they don't exist
+
 ### Medium: No File Locking for Concurrent Access
 
 Multiple CLI instances can corrupt `container.json` or SQLite registry.
