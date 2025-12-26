@@ -660,6 +660,8 @@ rm -rf ~/.spindb
 
 ## Contributing
 
+Note: This repo currently assumes `pnpm` for running tests. `npm test` will shell out to `pnpm` and fail if `pnpm` isn't installed.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and distribution info.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture and comprehensive CLI command examples.

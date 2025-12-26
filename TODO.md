@@ -83,12 +83,14 @@ Combine common multi-step workflows into single commands. These should remain in
 
 - [x] **Windows support** - Added in v0.9.4 using EDB binaries for PostgreSQL
 - [ ] **Offline mode** - Bundle binaries for air-gapped environments
+- [ ] **Expand GitHub Actions coverage** - Add CI tests that validate major features across macOS, Linux, and Windows (not just unit tests), so cross-platform regressions are caught early
 
 ### Distribution
 
 - [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
   - Platforms: darwin-arm64, darwin-x64, linux-x64, win32-x64
+- [ ] **Fix package-manager mismatch for tests** - `npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed; either compile/build before publish or make scripts detect the package manager and run the appropriate commands
 
 ---
 
