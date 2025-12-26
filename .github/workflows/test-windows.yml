@@ -1,9 +1,6 @@
 name: Windows Tests
 
 on:
-  # TODO: Remove push trigger after Windows tests pass once
-  push:
-    branches: [feature/windows]
   pull_request:
     branches: [main]
   workflow_dispatch: # Allows manual triggering from GitHub UI
