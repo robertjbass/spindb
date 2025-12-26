@@ -227,18 +227,22 @@ export async function restoreBackup(
     if (format.format === 'compressed') {
       // Decompress gzipped file before piping to mysql
       const gunzip = createGunzip()
-      if (proc.stdin) {
-        fileStream.pipe(gunzip).pipe(proc.stdin)
+      if (!proc.stdin) {
+        reject(new Error('MySQL process stdin is not available, cannot restore backup'))
+        return
       }
+      fileStream.pipe(gunzip).pipe(proc.stdin)
 
       // Handle gunzip errors
       gunzip.on('error', (err) => {
         reject(new Error(`Failed to decompress backup file: ${err.message}`))
       })
     } else {
-      if (proc.stdin) {
-        fileStream.pipe(proc.stdin)
+      if (!proc.stdin) {
+        reject(new Error('MySQL process stdin is not available, cannot restore backup'))
+        return
       }
+      fileStream.pipe(proc.stdin)
     }
 
     let stdout = ''

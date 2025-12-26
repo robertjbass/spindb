@@ -185,21 +185,37 @@ export class MySQLEngine extends BaseEngine {
       // MariaDB initialization
       // --auth-root-authentication-method=normal allows passwordless root login via socket
       const { platform } = platformService.getPlatformInfo()
-      const args = [`--datadir=${dataDir}`, '--auth-root-authentication-method=normal']
 
-      // --user flag is Unix-only (process.env.USER doesn't exist on Windows)
+      if (isWindows()) {
+        // On Windows, use exec with properly quoted command
+        const cmd = `"${installDb}" --datadir="${dataDir}" --auth-root-authentication-method=normal`
+
+        return new Promise((resolve, reject) => {
+          exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
+            if (error) {
+              await cleanupOnFailure()
+              reject(
+                new Error(
+                  `MariaDB initialization failed with code ${error.code}: ${stderr || stdout || error.message}`,
+                ),
+              )
+            } else {
+              resolve(dataDir)
+            }
+          })
+        })
+      }
+
+      // Unix path - use spawn without shell
+      const args = [`--datadir=${dataDir}`, '--auth-root-authentication-method=normal']
       if (platform !== 'win32') {
         args.push(`--user=${process.env.USER || 'mysql'}`)
       }
 
-      // Windows requires shell: true for proper process spawning
-      const spawnOptions: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        ...(isWindows() && { shell: true }),
-      }
-
       return new Promise((resolve, reject) => {
-        const proc = spawn(installDb, args, spawnOptions)
+        const proc = spawn(installDb, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
 
         let stdout = ''
         let stderr = ''
@@ -240,21 +256,37 @@ export class MySQLEngine extends BaseEngine {
       // MySQL initialization
       // --initialize-insecure creates root user without password (for local dev)
       const { platform } = platformService.getPlatformInfo()
-      const args = ['--initialize-insecure', `--datadir=${dataDir}`]
 
-      // --user flag is Unix-only (process.env.USER doesn't exist on Windows)
+      if (isWindows()) {
+        // On Windows, use exec with properly quoted command
+        const cmd = `"${mysqld}" --initialize-insecure --datadir="${dataDir}"`
+
+        return new Promise((resolve, reject) => {
+          exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
+            if (error) {
+              await cleanupOnFailure()
+              reject(
+                new Error(
+                  `MySQL initialization failed with code ${error.code}: ${stderr || stdout || error.message}`,
+                ),
+              )
+            } else {
+              resolve(dataDir)
+            }
+          })
+        })
+      }
+
+      // Unix path - use spawn without shell
+      const args = ['--initialize-insecure', `--datadir=${dataDir}`]
       if (platform !== 'win32') {
         args.push(`--user=${process.env.USER || 'mysql'}`)
       }
 
-      // Windows requires shell: true for proper process spawning
-      const spawnOptions: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        ...(isWindows() && { shell: true }),
-      }
-
       return new Promise((resolve, reject) => {
-        const proc = spawn(mysqld, args, spawnOptions)
+        const proc = spawn(mysqld, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
 
         let stdout = ''
         let stderr = ''
@@ -331,26 +363,38 @@ export class MySQLEngine extends BaseEngine {
       args.push(`--socket=${socketFile}`)
     }
 
-    // Windows requires shell: true for proper process spawning
-    const spawnOptions: SpawnOptions = {
-      stdio: ['ignore', 'ignore', 'ignore'],
-      detached: true,
-      ...(isWindows() && { shell: true }),
+    // On Windows, use exec with start command to run in background
+    // On Unix, use spawn with detached: true
+    let proc: ReturnType<typeof spawn> | null = null
+
+    if (isWindows()) {
+      // Use 'start' command to run mysqld in background on Windows
+      // 'start ""' runs the command in a new window (minimized or hidden)
+      const argsStr = args.map(a => `"${a}"`).join(' ')
+      const cmd = `start "" /B "${mysqld}" ${argsStr}`
+      exec(cmd)
+      // We can't easily get the PID on Windows with start command
+      // MySQL will write its own PID file
+    } else {
+      proc = spawn(mysqld, args, {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        detached: true,
+      })
+      proc.unref()
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(mysqld, args, spawnOptions)
-
-      proc.unref()
-
       // Give MySQL a moment to start
       setTimeout(async () => {
-        // Write PID file manually since we're running detached
-        try {
-          await writeFile(pidFile, String(proc.pid))
-        } catch (error) {
-          // PID file might be written by mysqld itself
-          logDebug(`Could not write PID file (mysqld may write it): ${error}`)
+        // Write PID file manually on Unix since we're running detached
+        // On Windows, MySQL writes its own PID file
+        if (proc && proc.pid) {
+          try {
+            await writeFile(pidFile, String(proc.pid))
+          } catch (error) {
+            // PID file might be written by mysqld itself
+            logDebug(`Could not write PID file (mysqld may write it): ${error}`)
+          }
         }
 
         // Wait for MySQL to be ready
@@ -392,7 +436,10 @@ export class MySQLEngine extends BaseEngine {
         checkReady()
       }, 1000)
 
-      proc.on('error', reject)
+      // Only attach error handler on Unix where we have a proc object
+      if (proc) {
+        proc.on('error', reject)
+      }
     })
   }
 
