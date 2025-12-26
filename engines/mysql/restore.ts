@@ -10,7 +10,6 @@ import { open } from 'fs/promises'
 import { createGunzip } from 'zlib'
 import { getMysqlClientPath } from './binary-detection'
 import { validateRestoreCompatibility } from './version-validator'
-import { isWindows } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
@@ -204,14 +203,17 @@ export async function restoreBackup(
   // CLI: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
   // For compressed files: gunzip -c {file} | mysql ...
 
-  // Windows requires shell: true for proper process spawning
+  // Use plain spawn (no shell) so the executable path can be quoted when
+  // it contains spaces (e.g., 'C:\Program Files\...'). Using shell:true
+  // previously caused quoting issues on Windows.
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-    ...(isWindows() && { shell: true }),
   }
 
   return new Promise((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
+
+    logDebug('Restoring backup with mysql', { mysql, args, spawnOptions })
 
     const proc = spawn(mysql, args, spawnOptions)
 

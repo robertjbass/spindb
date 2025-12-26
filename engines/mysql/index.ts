@@ -12,6 +12,7 @@ import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
+import { configManager } from '../../core/config-manager'
 import {
   logDebug,
   logWarning,
@@ -21,8 +22,8 @@ import {
 } from '../../core/error-handler'
 import {
   getMysqldPath,
-  getMysqlClientPath,
-  getMysqladminPath,
+  getMysqlClientPath as findMysqlClientPath,
+  getMysqladminPath as findMysqladminPath,
   getMysqldumpPath,
   getMysqlInstallDbPath,
   getMariadbInstallDbPath,
@@ -52,6 +53,34 @@ export * from './version-validator'
 export * from './restore'
 
 const execAsync = promisify(exec)
+
+/**
+ * Build a Windows-safe mysql command string for either a file or inline SQL.
+ * This is exported for unit testing.
+ */
+export function buildWindowsMysqlCommand(
+  mysqlPath: string,
+  port: number,
+  user: string,
+  db: string,
+  options: { file?: string; sql?: string },
+): string {
+  if (!options.file && !options.sql) {
+    throw new Error('Either file or sql option must be provided')
+  }
+
+  let cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u ${user} ${db}`
+
+  if (options.file) {
+    // Redirection requires shell, so use < operator
+    cmd += ` < "${options.file}"`
+  } else if (options.sql) {
+    const escaped = options.sql.replace(/"/g, '\\"')
+    cmd += ` -e "${escaped}"`
+  }
+
+  return cmd
+}
 
 const ENGINE = 'mysql'
 const engineDef = getEngineDefaults(ENGINE)
@@ -361,13 +390,22 @@ export class MySQLEngine extends BaseEngine {
     let proc: ReturnType<typeof spawn> | null = null
 
     if (isWindows()) {
-      // Use 'start' command to run mysqld in background on Windows
-      // 'start ""' runs the command in a new window (minimized or hidden)
-      const argsStr = args.map(a => `"${a}"`).join(' ')
-      const cmd = `start "" /B "${mysqld}" ${argsStr}`
-      exec(cmd)
-      // We can't easily get the PID on Windows with start command
-      // MySQL will write its own PID file
+      // Spawn mysqld detached on Windows as well; capture stdout/stderr briefly
+      // to surface startup errors in logs.
+      proc = spawn(mysqld, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
+        windowsHide: true,
+      })
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        logDebug(`mysqld stdout: ${data.toString()}`)
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        logDebug(`mysqld stderr: ${data.toString()}`)
+      })
+
+      proc.unref()
     } else {
       proc = spawn(mysqld, args, {
         stdio: ['ignore', 'ignore', 'ignore'],
@@ -398,7 +436,7 @@ export class MySQLEngine extends BaseEngine {
         const checkReady = async () => {
           attempts++
           try {
-            const mysqladmin = await getMysqladminPath()
+            const mysqladmin = await this.getMysqladminPath()
             if (mysqladmin) {
               await execAsync(
                 `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
@@ -451,7 +489,7 @@ export class MySQLEngine extends BaseEngine {
     if (pid === null) {
       // No valid PID file - check if process might still be running on port
       logDebug('No valid PID, checking if MySQL is responding on port')
-      const mysqladmin = await getMysqladminPath()
+      const mysqladmin = await this.getMysqladminPath()
       if (mysqladmin) {
         try {
           await execAsync(
@@ -538,7 +576,7 @@ export class MySQLEngine extends BaseEngine {
     pid?: number,
     timeoutMs = 10000,
   ): Promise<boolean> {
-    const mysqladmin = await getMysqladminPath()
+    const mysqladmin = await this.getMysqladminPath()
 
     if (mysqladmin) {
       try {
@@ -684,7 +722,7 @@ export class MySQLEngine extends BaseEngine {
     }
 
     // Try to ping MySQL
-    const mysqladmin = await getMysqladminPath()
+    const mysqladmin = await this.getMysqladminPath()
     if (mysqladmin) {
       try {
         await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
@@ -752,6 +790,47 @@ export class MySQLEngine extends BaseEngine {
   }
 
   /**
+   * Get path to mysql client, using config manager to find it
+   */
+  async getMysqlClientPath(): Promise<string> {
+    // Prefer explicit config if the user set a path via spindb config
+    const configPath = await configManager.getBinaryPath('mysql')
+    if (configPath) return configPath
+
+    // Fallback to platform detection helper
+    const detected = await findMysqlClientPath()
+    if (!detected) {
+      throw new Error(
+        'mysql client not found. Install MySQL client tools:\n' +
+          '  macOS: brew install mysql-client\n' +
+          '  Ubuntu/Debian: sudo apt install mysql-client\n\n' +
+          'Or configure manually: spindb config set mysql /path/to/mysql',
+      )
+    }
+    return detected
+  }
+
+  /**
+   * Get path to mysqladmin (used for readiness checks)
+   */
+  async getMysqladminPath(): Promise<string> {
+    const cfg = await configManager.getBinaryPath('mysqladmin')
+    if (cfg) return cfg
+
+    const detected = await findMysqladminPath()
+    if (!detected) {
+      throw new Error(
+        'mysqladmin not found. Install MySQL client tools:\n' +
+          '  macOS: brew install mysql-client\n' +
+          '  Ubuntu/Debian: sudo apt install mysql-client\n\n' +
+          'Or configure manually: spindb config set mysqladmin /path/to/mysqladmin',
+      )
+    }
+
+    return detected
+  }
+
+  /**
    * Open mysql interactive shell
    * Spawn interactive: mysql -h 127.0.0.1 -P {port} -u root {db}
    */
@@ -759,7 +838,7 @@ export class MySQLEngine extends BaseEngine {
     const { port } = container
     const db = database || container.database || 'mysql'
 
-    const mysql = await getMysqlClientPath()
+    const mysql = await this.getMysqlClientPath()
     if (!mysql) {
       throw new Error(
         'mysql client not found. Install MySQL client tools:\n' +
@@ -797,7 +876,7 @@ export class MySQLEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
 
-    const mysql = await getMysqlClientPath()
+    const mysql = await this.getMysqlClientPath()
     if (!mysql) {
       throw new Error(
         'mysql client not found. Install MySQL client tools:\n' +
@@ -832,7 +911,7 @@ export class MySQLEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
 
-    const mysql = await getMysqlClientPath()
+    const mysql = await this.getMysqlClientPath()
     if (!mysql) {
       throw new Error('mysql client not found.')
     }
@@ -863,7 +942,7 @@ export class MySQLEngine extends BaseEngine {
     assertValidDatabaseName(db)
 
     try {
-      const mysql = await getMysqlClientPath()
+      const mysql = await this.getMysqlClientPath()
       if (!mysql) return null
 
       // Query information_schema for total data + index size
@@ -898,6 +977,26 @@ export class MySQLEngine extends BaseEngine {
     // Parse MySQL connection string using restore module helper
     const { host, port, user, password, database } =
       parseConnectionString(connectionString)
+
+    // On Windows, build a single command string to avoid spawn + shell quoting issues
+    if (isWindows()) {
+      let cmd = `"${mysqldump}" -h ${host} -P ${port} -u ${user} --result-file "${outputPath}" ${database}`
+      if (password) {
+        cmd = `"${mysqldump}" -h ${host} -P ${port} -u ${user} -p"${password}" --result-file "${outputPath}" ${database}`
+      }
+      try {
+        logDebug('Executing mysqldump command', { cmd })
+        await execAsync(cmd)
+        return {
+          filePath: outputPath,
+          stdout: '',
+          stderr: '',
+          code: 0,
+        }
+      } catch (error) {
+        throw new Error((error as Error).message)
+      }
+    }
 
     const args = [
       '-h',
@@ -976,13 +1075,26 @@ export class MySQLEngine extends BaseEngine {
     const db = options.database || container.database || 'mysql'
     assertValidDatabaseName(db)
 
-    const mysql = await getMysqlClientPath()
+    const mysql = await this.getMysqlClientPath()
     if (!mysql) {
       throw new Error(
         'mysql client not found. Install MySQL client tools:\n' +
           '  macOS: brew install mysql-client\n' +
           '  Ubuntu/Debian: sudo apt install mysql-client',
       )
+    }
+
+    // On Windows, build a single command string and use exec to avoid
+    // passing an args array with shell:true which causes quoting issues.
+    if (isWindows()) {
+      const cmd = buildWindowsMysqlCommand(mysql, port, engineDef.superuser, db, options)
+      try {
+        await execAsync(cmd)
+        return
+      } catch (error) {
+        const err = error as Error
+        throw new Error(`mysql failed: ${err.message}`)
+      }
     }
 
     const args = [
@@ -999,10 +1111,8 @@ export class MySQLEngine extends BaseEngine {
       // For inline SQL, use -e flag
       args.push('-e', options.sql)
 
-      // Windows requires shell: true for proper process spawning
       const spawnOptions: SpawnOptions = {
         stdio: 'inherit',
-        ...(isWindows() && { shell: true }),
       }
 
       return new Promise((resolve, reject) => {
@@ -1019,10 +1129,8 @@ export class MySQLEngine extends BaseEngine {
       })
     } else if (options.file) {
       // For file input, pipe the file to mysql stdin
-      // Windows requires shell: true for proper process spawning
       const spawnOptions: SpawnOptions = {
         stdio: ['pipe', 'inherit', 'inherit'],
-        ...(isWindows() && { shell: true }),
       }
 
       return new Promise((resolve, reject) => {

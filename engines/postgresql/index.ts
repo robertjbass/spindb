@@ -33,6 +33,34 @@ import type {
 
 const execAsync = promisify(exec)
 
+/**
+ * Build a Windows-safe psql command string for either a file or inline SQL.
+ * This is exported for unit testing.
+ */
+export function buildWindowsPsqlCommand(
+  psqlPath: string,
+  port: number,
+  user: string,
+  db: string,
+  options: { file?: string; sql?: string },
+): string {
+  if (!options.file && !options.sql) {
+    throw new Error('Either file or sql option must be provided')
+  }
+
+  let cmd = `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${db}`
+
+  if (options.file) {
+    cmd += ` -f "${options.file}"`
+  } else if (options.sql) {
+    // Escape double quotes in the SQL so the outer double quotes are preserved
+    const escaped = options.sql.replace(/"/g, '\\"')
+    cmd += ` -c "${escaped}"`
+  }
+
+  return cmd
+}
+
 export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
@@ -584,6 +612,20 @@ export class PostgreSQLEngine extends BaseEngine {
     const db = options.database || container.database || 'postgres'
     const psqlPath = await this.getPsqlPath()
 
+    // On Windows, build a single command string and use exec to avoid
+    // passing an args array with shell:true (DEP0190 and quoting issues).
+    if (isWindows()) {
+      const cmd = buildWindowsPsqlCommand(psqlPath, port, defaults.superuser, db, options)
+      try {
+        await execAsync(cmd)
+        return
+      } catch (error) {
+        const err = error as Error
+        throw new Error(`psql failed: ${err.message}`)
+      }
+    }
+
+    // Non-Windows: spawn directly with args (no shell)
     const args = [
       '-h',
       '127.0.0.1',
@@ -603,10 +645,8 @@ export class PostgreSQLEngine extends BaseEngine {
       throw new Error('Either file or sql option must be provided')
     }
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
-      ...(isWindows() && { shell: true }),
     }
 
     return new Promise((resolve, reject) => {
