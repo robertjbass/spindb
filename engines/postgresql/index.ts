@@ -437,10 +437,14 @@ export class PostgreSQLEngine extends BaseEngine {
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
+    // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
+    const sql = `CREATE DATABASE "${database}"`
+    const cmd = isWindows()
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+
     try {
-      await execAsync(
-        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'CREATE DATABASE "${database}"'`,
-      )
+      await execAsync(cmd)
     } catch (error) {
       const err = error as Error
       // Ignore "database already exists" error
@@ -461,10 +465,14 @@ export class PostgreSQLEngine extends BaseEngine {
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
+    // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
+    const sql = `DROP DATABASE IF EXISTS "${database}"`
+    const cmd = isWindows()
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+
     try {
-      await execAsync(
-        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'DROP DATABASE IF EXISTS "${database}"'`,
-      )
+      await execAsync(cmd)
     } catch (error) {
       const err = error as Error
       // Ignore "database does not exist" error
@@ -489,9 +497,12 @@ export class PostgreSQLEngine extends BaseEngine {
     try {
       const psqlPath = await this.getPsqlPath()
       // Query pg_database_size for the specific database
-      const { stdout } = await execAsync(
-        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "SELECT pg_database_size('${db}')"`,
-      )
+      // On Windows, use escaped double quotes; on Unix, use single quotes
+      const sql = `SELECT pg_database_size('${db}')`
+      const cmd = isWindows()
+        ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "${sql.replace(/'/g, "''")}"`
+        : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "${sql}"`
+      const { stdout } = await execAsync(cmd)
       const size = parseInt(stdout.trim(), 10)
       return isNaN(size) ? null : size
     } catch {
