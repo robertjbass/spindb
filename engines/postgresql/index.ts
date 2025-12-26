@@ -135,7 +135,7 @@ export class PostgreSQLEngine extends BaseEngine {
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
-        await configManager.setBinaryPath(tool, toolPath, 'downloaded')
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
       }
     }
 

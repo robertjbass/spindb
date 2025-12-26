@@ -79,7 +79,14 @@ export async function findBinary(
   binary: string,
 ): Promise<{ path: string; version?: string } | null> {
   try {
-    // Use platformService to find the binary path
+    // First check if we have this binary registered in config (e.g., from downloaded PostgreSQL)
+    const configPath = await configManager.getBinaryPath(binary as Parameters<typeof configManager.getBinaryPath>[0])
+    if (configPath) {
+      const version = (await platformService.getToolVersion(configPath)) || undefined
+      return { path: configPath, version }
+    }
+
+    // Fall back to system PATH search
     const path = await platformService.findToolPath(binary)
     if (!path) return null
 
