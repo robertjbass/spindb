@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
-import { buildWindowsMysqlCommand } from '../../engines/mysql/index.js'
+import { buildWindowsMysqlCommand } from '../../engines/mysql'
 
 describe('MySQL Windows command builder', () => {
   it('builds command for SQL file with spaces in path', () => {

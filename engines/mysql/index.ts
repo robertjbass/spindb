@@ -82,6 +82,33 @@ export function buildWindowsMysqlCommand(
   return cmd
 }
 
+/**
+ * Build a platform-safe mysql command string with SQL inline.
+ * On Unix, uses single quotes to prevent shell interpretation of backticks.
+ * On Windows, uses double quotes (backticks are literal in cmd.exe).
+ * This is exported for unit testing.
+ */
+export function buildMysqlInlineCommand(
+  mysqlPath: string,
+  port: number,
+  user: string,
+  sql: string,
+  options: { database?: string } = {},
+): string {
+  const dbArg = options.database ? ` ${options.database}` : ''
+
+  if (isWindows()) {
+    // Windows: use double quotes, escape inner double quotes
+    const escaped = sql.replace(/"/g, '\\"')
+    return `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u ${user}${dbArg} -e "${escaped}"`
+  } else {
+    // Unix: use single quotes to prevent backtick interpretation
+    // Escape any single quotes in the SQL by ending the string, adding escaped quote, starting new string
+    const escaped = sql.replace(/'/g, "'\\''")
+    return `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u ${user}${dbArg} -e '${escaped}'`
+  }
+}
+
 const ENGINE = 'mysql'
 const engineDef = getEngineDefaults(ENGINE)
 
@@ -229,7 +256,10 @@ export class MySQLEngine extends BaseEngine {
       }
 
       // Unix path - use spawn without shell
-      const args = [`--datadir=${dataDir}`, '--auth-root-authentication-method=normal']
+      const args = [
+        `--datadir=${dataDir}`,
+        '--auth-root-authentication-method=normal',
+      ]
       if (platform !== 'win32') {
         args.push(`--user=${process.env.USER || 'mysql'}`)
       }
@@ -658,7 +688,9 @@ export class MySQLEngine extends BaseEngine {
     // Escalate to force kill
     const { platform } = platformService.getPlatformInfo()
     const killCmd = platform === 'win32' ? 'taskkill /F' : 'kill -9'
-    logWarning(`Graceful termination failed, escalating to force kill for process ${pid}`)
+    logWarning(
+      `Graceful termination failed, escalating to force kill for process ${pid}`,
+    )
     try {
       await platformService.terminateProcess(pid, true)
       await this.sleep(1000)
@@ -839,13 +871,6 @@ export class MySQLEngine extends BaseEngine {
     const db = database || container.database || 'mysql'
 
     const mysql = await this.getMysqlClientPath()
-    if (!mysql) {
-      throw new Error(
-        'mysql client not found. Install MySQL client tools:\n' +
-          '  macOS: brew install mysql-client\n' +
-          '  Ubuntu/Debian: sudo apt install mysql-client',
-      )
-    }
 
     // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
@@ -877,20 +902,15 @@ export class MySQLEngine extends BaseEngine {
     const { port } = container
 
     const mysql = await this.getMysqlClientPath()
-    if (!mysql) {
-      throw new Error(
-        'mysql client not found. Install MySQL client tools:\n' +
-          '  macOS: brew install mysql-client\n' +
-          '  Ubuntu/Debian: sudo apt install mysql-client',
-      )
-    }
 
     try {
-      // Use double quotes for cross-platform compatibility (single quotes don't work on Windows)
-      // Backticks are MySQL identifier quotes, not shell syntax
-      await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -e "CREATE DATABASE IF NOT EXISTS \`${database}\`"`,
+      const cmd = buildMysqlInlineCommand(
+        mysql,
+        port,
+        engineDef.superuser,
+        `CREATE DATABASE IF NOT EXISTS \`${database}\``,
       )
+      await execAsync(cmd)
     } catch (error) {
       const err = error as Error
       // Ignore "database exists" error
@@ -912,15 +932,15 @@ export class MySQLEngine extends BaseEngine {
     const { port } = container
 
     const mysql = await this.getMysqlClientPath()
-    if (!mysql) {
-      throw new Error('mysql client not found.')
-    }
 
     try {
-      // Use double quotes for cross-platform compatibility (single quotes don't work on Windows)
-      await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -e "DROP DATABASE IF EXISTS \`${database}\`"`,
+      const cmd = buildMysqlInlineCommand(
+        mysql,
+        port,
+        engineDef.superuser,
+        `DROP DATABASE IF EXISTS \`${database}\``,
       )
+      await execAsync(cmd)
     } catch (error) {
       const err = error as Error
       if (!err.message.includes("database doesn't exist")) {
@@ -943,7 +963,6 @@ export class MySQLEngine extends BaseEngine {
 
     try {
       const mysql = await this.getMysqlClientPath()
-      if (!mysql) return null
 
       // Query information_schema for total data + index size
       const { stdout } = await execAsync(
@@ -981,11 +1000,14 @@ export class MySQLEngine extends BaseEngine {
     // On Windows, build a single command string to avoid spawn + shell quoting issues
     if (isWindows()) {
       let cmd = `"${mysqldump}" -h ${host} -P ${port} -u ${user} --result-file "${outputPath}" ${database}`
+      let safeCmd = cmd
+
       if (password) {
         cmd = `"${mysqldump}" -h ${host} -P ${port} -u ${user} -p"${password}" --result-file "${outputPath}" ${database}`
+        safeCmd = `"${mysqldump}" -h ${host} -P ${port} -u ${user} -p"****" --result-file "${outputPath}" ${database}`
       }
       try {
-        logDebug('Executing mysqldump command', { cmd })
+        logDebug('Executing mysqldump command', { cmd: safeCmd })
         await execAsync(cmd)
         return {
           filePath: outputPath,
@@ -1076,18 +1098,17 @@ export class MySQLEngine extends BaseEngine {
     assertValidDatabaseName(db)
 
     const mysql = await this.getMysqlClientPath()
-    if (!mysql) {
-      throw new Error(
-        'mysql client not found. Install MySQL client tools:\n' +
-          '  macOS: brew install mysql-client\n' +
-          '  Ubuntu/Debian: sudo apt install mysql-client',
-      )
-    }
 
     // On Windows, build a single command string and use exec to avoid
     // passing an args array with shell:true which causes quoting issues.
     if (isWindows()) {
-      const cmd = buildWindowsMysqlCommand(mysql, port, engineDef.superuser, db, options)
+      const cmd = buildWindowsMysqlCommand(
+        mysql,
+        port,
+        engineDef.superuser,
+        db,
+        options,
+      )
       try {
         await execAsync(cmd)
         return
