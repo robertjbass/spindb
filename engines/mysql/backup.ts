@@ -10,7 +10,7 @@ import { stat } from 'fs/promises'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
 import { getMysqldumpPath } from './binary-detection'
-import { isWindows } from '../../core/platform-service'
+import { getWindowsSpawnOptions } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -83,10 +83,9 @@ async function createSqlBackup(
       database,
     ]
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     const proc = spawn(mysqldump, args, spawnOptions)
@@ -145,10 +144,9 @@ async function createCompressedBackup(
     database,
   ]
 
-  // Windows requires shell: true for proper process spawning
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-    ...(isWindows() && { shell: true }),
+    ...getWindowsSpawnOptions(),
   }
 
   const proc = spawn(mysqldump, args, spawnOptions)

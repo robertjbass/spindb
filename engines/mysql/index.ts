@@ -11,7 +11,11 @@ import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
-import { platformService, isWindows } from '../../core/platform-service'
+import {
+  platformService,
+  isWindows,
+  getWindowsSpawnOptions,
+} from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import {
   logDebug,
@@ -872,10 +876,9 @@ export class MySQLEngine extends BaseEngine {
 
     const mysql = await this.getMysqlClientPath()
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
@@ -1037,10 +1040,9 @@ export class MySQLEngine extends BaseEngine {
 
     args.push(database)
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {

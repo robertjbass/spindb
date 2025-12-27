@@ -12,6 +12,7 @@ import {
 import { getEngineDependencies } from '../../config/os-dependencies'
 import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import { logDebug } from '../../core/error-handler'
+import { isWindows, platformService } from '../../core/platform-service'
 
 const execAsync = promisify(exec)
 
@@ -112,7 +113,7 @@ export async function getPostgresVersion(
  */
 export async function findBinaryPath(binary: string): Promise<string | null> {
   try {
-    const command = process.platform === 'win32' ? 'where' : 'which'
+    const command = isWindows() ? 'where' : 'which'
     const { stdout } = await execAsync(`${command} ${binary}`)
     return stdout.trim().split('\n')[0] || null
   } catch (error) {
@@ -134,7 +135,7 @@ export async function findBinaryPathFresh(
   if (path) return path
 
   // Windows doesn't need shell refresh - PATH is always current
-  if (process.platform === 'win32') {
+  if (isWindows()) {
     return null
   }
 
@@ -277,8 +278,9 @@ export async function getBinaryInfo(
 
   // Try to detect which package manager installed this binary
   let packageManager: string | undefined
+  const { platform } = platformService.getPlatformInfo()
   try {
-    if (process.platform === 'darwin') {
+    if (platform === 'darwin') {
       // On macOS, check if it's from Homebrew
       const { stdout } = await execAsync(
         'brew list postgresql@* 2>/dev/null || brew list libpq 2>/dev/null || true',
@@ -286,7 +288,7 @@ export async function getBinaryInfo(
       if (stdout.includes('postgresql') || stdout.includes('libpq')) {
         packageManager = 'brew'
       }
-    } else if (process.platform === 'linux') {
+    } else if (platform === 'linux') {
       // On Linux, check common package managers
       try {
         await execAsync('dpkg -S $(which pg_restore) 2>/dev/null')

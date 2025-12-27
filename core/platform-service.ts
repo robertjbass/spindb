@@ -782,3 +782,11 @@ export const platformService = createPlatformService()
 export function isWindows(): boolean {
   return process.platform === 'win32'
 }
+
+/**
+ * Get spawn options for Windows shell requirements.
+ * Windows needs shell:true for proper command execution with quoted paths.
+ */
+export function getWindowsSpawnOptions(): { shell: true } | Record<string, never> {
+  return isWindows() ? { shell: true } : {}
+}

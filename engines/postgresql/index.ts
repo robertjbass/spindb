@@ -7,7 +7,11 @@ import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
-import { platformService, isWindows } from '../../core/platform-service'
+import {
+  platformService,
+  isWindows,
+  getWindowsSpawnOptions,
+} from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import {
@@ -417,10 +421,9 @@ export class PostgreSQLEngine extends BaseEngine {
     const db = database || 'postgres'
     const psqlPath = await this.getPsqlPath()
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
@@ -544,14 +547,12 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<DumpResult> {
     const pgDumpPath = await this.getPgDumpPath()
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
-      // Use custom format (-Fc) for best compatibility and compression
       const args = [connectionString, '-Fc', '-f', outputPath]
 
       const proc = spawn(pgDumpPath, args, spawnOptions)

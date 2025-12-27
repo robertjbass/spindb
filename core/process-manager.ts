@@ -4,7 +4,11 @@ import { existsSync } from 'fs'
 import { readFile, rm } from 'fs/promises'
 import { paths } from '../config/paths'
 import { logDebug } from './error-handler'
-import { platformService, isWindows } from './platform-service'
+import {
+  platformService,
+  isWindows,
+  getWindowsSpawnOptions,
+} from './platform-service'
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
@@ -42,13 +46,9 @@ export class ProcessManager {
     options: InitdbOptions = {},
   ): Promise<ProcessResult> {
     const { superuser = 'postgres' } = options
-
-    // Track if directory existed before initdb (to know if we should clean up)
     const dirExistedBefore = existsSync(dataDir)
 
-    // Helper to clean up data directory on failure
     const cleanupOnFailure = async () => {
-      // Only clean up if initdb created the directory (it didn't exist before)
       if (!dirExistedBefore && existsSync(dataDir)) {
         try {
           await rm(dataDir, { recursive: true, force: true })
@@ -357,8 +357,6 @@ export class ProcessManager {
     try {
       const content = await readFile(pidFile, 'utf8')
       const pid = parseInt(content.split('\n')[0], 10)
-
-      // Check if process is still running
       process.kill(pid, 0)
       return true
     } catch (error) {
@@ -420,13 +418,10 @@ export class ProcessManager {
       args.push('-c', command)
     }
 
-    // Windows requires shell: true for proper process spawning
-    const baseOptions = isWindows() ? { shell: true as const } : {}
-
     return new Promise((resolve, reject) => {
       const proc = spawn(psqlPath, args, {
         stdio: command ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-        ...baseOptions,
+        ...getWindowsSpawnOptions(),
       })
 
       if (command) {
@@ -486,10 +481,9 @@ export class ProcessManager {
 
     args.push(backupFile)
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {

@@ -7,7 +7,7 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { stat } from 'fs/promises'
 import { configManager } from '../../core/config-manager'
-import { isWindows } from '../../core/platform-service'
+import { getWindowsSpawnOptions } from '../../core/platform-service'
 import { defaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -62,10 +62,9 @@ export async function createBackup(
       outputPath,
     ]
 
-    // Windows requires shell: true for proper process spawning
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...(isWindows() && { shell: true }),
+      ...getWindowsSpawnOptions(),
     }
 
     const proc = spawn(pgDumpPath, args, spawnOptions)
