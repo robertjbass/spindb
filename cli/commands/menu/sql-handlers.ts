@@ -13,6 +13,7 @@ import {
 } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
+import { followFile, getLastNLines } from '../../utils/file-follower'
 
 export async function handleRunSql(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
@@ -171,28 +172,8 @@ export async function handleViewLogs(containerName: string): Promise<void> {
   if (action === 'follow') {
     console.log(chalk.gray('  Press Ctrl+C to stop following logs'))
     console.log()
-    const child = spawn('tail', ['-n', '50', '-f', logPath], {
-      stdio: 'inherit',
-    })
-    await new Promise<void>((resolve) => {
-      let settled = false
-
-      const cleanup = () => {
-        if (!settled) {
-          settled = true
-          process.off('SIGINT', handleSigint)
-          resolve()
-        }
-      }
-
-      const handleSigint = () => {
-        child.kill('SIGTERM')
-        cleanup()
-      }
-
-      process.on('SIGINT', handleSigint)
-      child.on('close', cleanup)
-    })
+    // Use cross-platform file following (works on Windows, macOS, Linux)
+    await followFile(logPath, 50)
     return
   }
 
@@ -202,10 +183,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
   if (content.trim() === '') {
     console.log(uiInfo('Log file is empty'))
   } else {
-    const lines = content.split('\n')
-    const nonEmptyLines =
-      lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
-    console.log(nonEmptyLines.slice(-lineCount).join('\n'))
+    console.log(getLastNLines(content, lineCount))
   }
   console.log()
   await pressEnterToContinue()

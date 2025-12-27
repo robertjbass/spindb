@@ -74,11 +74,15 @@ describe('DependencyManager', () => {
   })
 
   describe('findBinary', () => {
-    it('should find common binaries like ls', async () => {
-      const result = await findBinary('ls')
+    it('should find common binaries', async () => {
+      // Use node since it's guaranteed to exist in our test environment
+      const result = await findBinary('node')
 
-      assert(result !== null, 'Should find ls binary')
-      assert(result!.path.includes('/'), 'Should return absolute path')
+      assert(result !== null, 'Should find node binary')
+      // Windows uses \, Unix uses /
+      const hasPathSeparator =
+        result!.path.includes('/') || result!.path.includes('\\')
+      assert(hasPathSeparator, 'Should return absolute path')
     })
 
     it('should return null for non-existent binary', async () => {
@@ -88,7 +92,8 @@ describe('DependencyManager', () => {
     })
 
     it('should include version when available', async () => {
-      const result = await findBinary('ls')
+      // Use node since it supports --version
+      const result = await findBinary('node')
 
       if (result !== null) {
         // Version might be undefined if --version fails
@@ -102,13 +107,13 @@ describe('DependencyManager', () => {
 
   describe('checkDependency', () => {
     it('should return correct shape for installed dependency', async () => {
-      // Create a mock dependency that uses 'ls' (should exist on all Unix systems)
+      // Use 'node' since it's guaranteed to exist in our test environment
       const mockDep = {
-        name: 'List Command',
-        binary: 'ls',
-        description: 'List directory contents',
+        name: 'Node.js',
+        binary: 'node',
+        description: 'JavaScript runtime',
         packages: {},
-        manualInstall: { darwin: [], linux: [] },
+        manualInstall: { darwin: [], linux: [], win32: [] },
       }
 
       const status = await checkDependency(mockDep)

@@ -79,6 +79,33 @@ export abstract class BaseEngine {
   ): string
 
   /**
+   * Get the path to the psql client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured psql should override this method.
+   */
+  async getPsqlPath(): Promise<string> {
+    throw new Error('psql not found')
+  }
+
+  /**
+   * Get the path to the mysql client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured mysql should override this method.
+   */
+  async getMysqlClientPath(): Promise<string> {
+    throw new Error('mysql client not found')
+  }
+
+  /**
+   * Get the path to the mysqladmin client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured mysqladmin should override this method.
+   */
+  async getMysqladminPath(): Promise<string> {
+    throw new Error('mysqladmin not found')
+  }
+
+  /**
    * Open an interactive shell/CLI connection
    */
   abstract connect(container: ContainerConfig, database?: string): Promise<void>

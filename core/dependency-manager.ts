@@ -22,8 +22,36 @@ import {
 } from '../config/os-dependencies'
 import { platformService } from './platform-service'
 import { configManager } from './config-manager'
+import type { BinaryTool } from '../types'
 
 const execAsync = promisify(exec)
+
+/**
+ * Known binary tools that can be registered in config
+ */
+const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
+  'psql',
+  'pg_dump',
+  'pg_restore',
+  'pg_basebackup',
+  'mysql',
+  'mysqldump',
+  'mysqlpump',
+  'mysqld',
+  'mysqladmin',
+  'sqlite3',
+  'pgcli',
+  'mycli',
+  'litecli',
+  'usql',
+] as const
+
+/**
+ * Type guard to check if a string is a known BinaryTool
+ */
+function isBinaryTool(binary: string): binary is BinaryTool {
+  return KNOWN_BINARY_TOOLS.includes(binary as BinaryTool)
+}
 
 export type DependencyStatus = {
   dependency: Dependency
@@ -79,7 +107,17 @@ export async function findBinary(
   binary: string,
 ): Promise<{ path: string; version?: string } | null> {
   try {
-    // Use platformService to find the binary path
+    // First check if we have this binary registered in config (e.g., from downloaded PostgreSQL)
+    if (isBinaryTool(binary)) {
+      const configPath = await configManager.getBinaryPath(binary)
+      if (configPath) {
+        const version =
+          (await platformService.getToolVersion(configPath)) || undefined
+        return { path: configPath, version }
+      }
+    }
+
+    // Fall back to system PATH search
     const path = await platformService.findToolPath(binary)
     if (!path) return null
 

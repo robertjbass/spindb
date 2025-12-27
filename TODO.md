@@ -81,11 +81,87 @@ Combine common multi-step workflows into single commands. These should remain in
 
 ### Platform Support
 
-- [ ] **Windows support** - Requires alternative binary source (zonky.io is macOS/Linux only)
+- [x] **Windows support** - Added in v0.9.4 using EDB binaries for PostgreSQL
 - [ ] **Offline mode** - Bundle binaries for air-gapped environments
+- [ ] **Expand GitHub Actions coverage** - Add CI tests that validate major features across macOS, Linux, and Windows (not just unit tests), so cross-platform regressions are caught early
 
 ### Distribution
 
 - [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
-  - Platforms: darwin-arm64, darwin-x64, linux-x64
+  - Platforms: darwin-arm64, darwin-x64, linux-x64, win32-x64
+- [ ] **Fix package-manager mismatch for tests** - `npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed; either compile/build before publish or make scripts detect the package manager and run the appropriate commands
+
+---
+
+## Known Issues & Technical Debt
+
+### Windows Support (Added v0.9.4) - Needs Testing
+
+- [ ] **Test Windows binary download and extraction** - Verify EDB binaries download and extract correctly
+- [ ] **Test MySQL on Windows** - Verify TCP-only mode works (no Unix sockets)
+- [ ] **Test SQLite on Windows** - Verify binary detection with Chocolatey/winget/Scoop
+- [ ] **Test process termination** - Verify `taskkill` works for graceful and forced shutdown
+
+### Critical: EDB Binary URLs Will Break
+
+**File:** `engines/postgresql/edb-binary-urls.ts`
+
+The hardcoded file IDs (`'17.7.0': '1259911'`) will become stale when EDB updates their download system or releases new PostgreSQL versions.
+
+- [ ] **Add dynamic version discovery** - Scrape EDB download page or use their API
+- [ ] **Add remote config fallback** - Fetch version mappings from a remote JSON file
+- [ ] **Add download validation** - Verify HTTP 200 before proceeding, fail fast on 404
+- [ ] **Add version update monitoring** - CI job to detect new PostgreSQL releases
+
+### Critical: Shell Injection in Windows Extraction
+
+**File:** `core/binary-manager.ts` lines 243-250
+
+```typescript
+// UNSAFE: paths with special characters could execute arbitrary commands
+await execAsync(`mv "${sourcePath}" "${destPath}"`)
+await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
+```
+
+- [ ] **Replace shell commands with Node.js APIs** - Use `fs.rename()` and `fs.cp()` instead
+- [ ] **Validate paths** - Ensure paths are within expected directories before operations
+
+### Medium: SQLite Container Creation Doesn't Validate Path
+
+**File:** `engines/sqlite/index.ts`
+
+Creating an SQLite container with a non-existent path succeeds without error, and the container is not rolled back on failure.
+
+```bash
+spindb create mydb --engine sqlite --path /nonexistent/path/db.sqlite
+# Container is created but unusable, no rollback occurs
+```
+
+- [ ] **Validate path exists** - Check that parent directory exists before container creation
+- [ ] **Add rollback on failure** - Use `TransactionManager` to clean up container if path validation fails
+- [ ] **Add `--create-path` flag** - Optionally create parent directories if they don't exist
+
+### Medium: No File Locking for Concurrent Access
+
+Multiple CLI instances can corrupt `container.json` or SQLite registry.
+
+- [ ] **Add file locking** - Use `proper-lockfile` or similar for config file access
+- [ ] **Consider SQLite for config** - Atomic operations, better concurrency
+
+### Medium: Frontend Integration Gaps
+
+For potential Electron/web frontend integration:
+
+- [ ] **Wire up progress callbacks** - `ProgressCallback` exists but CLI uses spinners instead
+- [ ] **Standardize JSON output** - Only 10/24 commands have `--json`, inconsistent error formats
+- [ ] **Add `--json` to all commands** - backup, clone, connect, create, delete, logs, restore, run, start, stop
+- [ ] **Structured error format** - Standard `{ code, message, suggestion, context }` for all JSON errors
+- [ ] **Add timestamps to JSON output** - For audit trails and debugging
+- [ ] **Add event streaming mode** - WebSocket or SSE for real-time progress updates
+
+### Low: Progress Reporting
+
+- [ ] **Define progress stages enum** - Standardize stages: downloading, extracting, verifying, initializing, starting
+- [ ] **Add percentage progress** - For downloads and large file operations
+- [ ] **Stream backup/restore progress** - Currently no feedback during long operations

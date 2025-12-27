@@ -4,9 +4,10 @@
  * Creates database backups in SQL or custom (.dump) format using pg_dump.
  */
 
-import { spawn } from 'child_process'
+import { spawn, type SpawnOptions } from 'child_process'
 import { stat } from 'fs/promises'
 import { configManager } from '../../core/config-manager'
+import { getWindowsSpawnOptions } from '../../core/platform-service'
 import { defaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -61,9 +62,12 @@ export async function createBackup(
       outputPath,
     ]
 
-    const proc = spawn(pgDumpPath, args, {
+    const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-    })
+      ...getWindowsSpawnOptions(),
+    }
+
+    const proc = spawn(pgDumpPath, args, spawnOptions)
 
     let stderr = ''
 

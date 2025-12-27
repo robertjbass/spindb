@@ -49,5 +49,8 @@ export const defaults: Defaults = {
     'darwin-x64': 'darwin-amd64',
     'linux-arm64': 'linux-arm64v8',
     'linux-x64': 'linux-amd64',
+    // Windows uses EDB binaries instead of zonky.io
+    // EDB naming convention: windows-x64
+    'win32-x64': 'windows-x64',
   },
 }

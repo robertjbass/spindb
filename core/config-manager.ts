@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { dirname } from 'path'
 import { paths } from '../config/paths'
 import { logDebug, logWarning } from './error-handler'
+import { platformService } from './platform-service'
 import type {
   SpinDBConfig,
   BinaryConfig,
@@ -165,73 +166,12 @@ export class ConfigManager {
 
   /**
    * Detect a binary on the system PATH
+   * Uses platformService for cross-platform detection (handles which/where and .exe extension)
    */
   async detectSystemBinary(tool: BinaryTool): Promise<string | null> {
-    try {
-      const { stdout } = await execAsync(`which ${tool}`)
-      const path = stdout.trim()
-      if (path && existsSync(path)) {
-        return path
-      }
-    } catch (error) {
-      logDebug('which command failed for binary detection', {
-        tool,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-
-    // Check common locations
-    const commonPaths = this.getCommonBinaryPaths(tool)
-    for (const path of commonPaths) {
-      if (existsSync(path)) {
-        return path
-      }
-    }
-
-    return null
-  }
-
-  /**
-   * Get common installation paths for database tools
-   */
-  private getCommonBinaryPaths(tool: BinaryTool): string[] {
-    const commonPaths: string[] = []
-
-    // Homebrew (macOS ARM)
-    commonPaths.push(`/opt/homebrew/bin/${tool}`)
-    // Homebrew (macOS Intel)
-    commonPaths.push(`/usr/local/bin/${tool}`)
-
-    // PostgreSQL-specific paths
-    if (POSTGRESQL_TOOLS.includes(tool) || tool === 'pgcli') {
-      commonPaths.push(`/opt/homebrew/opt/libpq/bin/${tool}`)
-      commonPaths.push(`/usr/local/opt/libpq/bin/${tool}`)
-      // Postgres.app (macOS)
-      commonPaths.push(
-        `/Applications/Postgres.app/Contents/Versions/latest/bin/${tool}`,
-      )
-      // Linux PostgreSQL paths
-      commonPaths.push(`/usr/lib/postgresql/17/bin/${tool}`)
-      commonPaths.push(`/usr/lib/postgresql/16/bin/${tool}`)
-      commonPaths.push(`/usr/lib/postgresql/15/bin/${tool}`)
-      commonPaths.push(`/usr/lib/postgresql/14/bin/${tool}`)
-    }
-
-    // MySQL-specific paths
-    if (MYSQL_TOOLS.includes(tool) || tool === 'mycli') {
-      commonPaths.push(`/opt/homebrew/opt/mysql/bin/${tool}`)
-      commonPaths.push(`/opt/homebrew/opt/mysql-client/bin/${tool}`)
-      commonPaths.push(`/usr/local/opt/mysql/bin/${tool}`)
-      commonPaths.push(`/usr/local/opt/mysql-client/bin/${tool}`)
-      // Linux MySQL/MariaDB paths
-      commonPaths.push(`/usr/bin/${tool}`)
-      commonPaths.push(`/usr/sbin/${tool}`)
-    }
-
-    // General Linux paths
-    commonPaths.push(`/usr/bin/${tool}`)
-
-    return commonPaths
+    // Use platformService which handles cross-platform differences
+    // (which vs where, .exe extension, platform-specific search paths)
+    return platformService.findToolPath(tool)
   }
 
   /**

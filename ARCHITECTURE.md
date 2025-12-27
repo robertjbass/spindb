@@ -353,10 +353,12 @@ Abstracts platform-specific behavior.
 
 ### File System Layout
 
+Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
+
 ```
 ~/.spindb/
 ├── bin/                              # PostgreSQL server binaries
-│   └── postgresql-17.7.0-darwin-arm64/
+│   └── postgresql-17.7.0-{platform}/  # e.g., darwin-arm64, linux-x64, win32-x64
 │       └── bin/
 │           ├── postgres
 │           ├── initdb
@@ -560,12 +562,14 @@ Error messages include actionable fix suggestions.
 
 | Platform | PostgreSQL | MySQL | SQLite |
 |----------|------------|-------|--------|
-| macOS (ARM) | Bundled binaries | System (Homebrew) | System |
-| macOS (Intel) | Bundled binaries | System (Homebrew) | System |
-| Linux (x64) | Bundled binaries | System (apt/dnf) | System |
-| Windows | Not supported | Not supported | Not supported |
+| macOS (ARM) | Bundled binaries (zonky.io) | System (Homebrew) | System |
+| macOS (Intel) | Bundled binaries (zonky.io) | System (Homebrew) | System |
+| Linux (x64) | Bundled binaries (zonky.io) | System (apt/dnf) | System |
+| Windows (x64) | Bundled binaries (EDB) | System (choco/winget/scoop) | System |
 
-PostgreSQL binaries are downloaded from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries).
+**PostgreSQL binaries:**
+- macOS/Linux: Downloaded from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries)
+- Windows: Downloaded from [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
 
 ---
 
