@@ -30,9 +30,6 @@ export type DeleteOptions = {
 }
 
 export class ContainerManager {
-  /**
-   * Create a new container
-   */
   async create(name: string, options: CreateOptions): Promise<ContainerConfig> {
     const { engine, version, port, database } = options
 
@@ -72,11 +69,8 @@ export class ContainerManager {
     return config
   }
 
-  /**
-   * Get container configuration
-   * If engine is not provided, searches all engine directories
-   * Automatically migrates old schemas to include databases array
-   */
+  // If engine is not provided, searches all engine directories.
+  // Automatically migrates old schemas to include databases array.
   async getConfig(
     name: string,
     options?: { engine?: string },
@@ -119,9 +113,6 @@ export class ContainerManager {
     return null
   }
 
-  /**
-   * Get SQLite container config from registry
-   */
   private async getSqliteConfig(name: string): Promise<ContainerConfig | null> {
     const entry = await sqliteRegistry.get(name)
     if (!entry) {
@@ -142,10 +133,7 @@ export class ContainerManager {
     }
   }
 
-  /**
-   * Migrate old container configs to include databases array
-   * Ensures primary database is always in the databases array
-   */
+  // Migrates old container configs to include databases array.
   private async migrateConfig(
     config: ContainerConfig,
   ): Promise<ContainerConfig> {
@@ -171,9 +159,6 @@ export class ContainerManager {
     return config
   }
 
-  /**
-   * Save container configuration
-   */
   async saveConfig(
     name: string,
     options: { engine: string },
@@ -184,9 +169,6 @@ export class ContainerManager {
     await writeFile(configPath, JSON.stringify(config, null, 2))
   }
 
-  /**
-   * Update container configuration
-   */
   async updateConfig(
     name: string,
     updates: Partial<ContainerConfig>,
@@ -201,10 +183,6 @@ export class ContainerManager {
     return updatedConfig
   }
 
-  /**
-   * Check if a container exists
-   * If engine is not provided, checks all engine directories
-   */
   async exists(name: string, options?: { engine?: string }): Promise<boolean> {
     const { engine } = options || {}
 
@@ -234,9 +212,6 @@ export class ContainerManager {
     return false
   }
 
-  /**
-   * List all containers across all engines
-   */
   async list(): Promise<ContainerConfig[]> {
     const containers: ContainerConfig[] = []
 
@@ -292,9 +267,6 @@ export class ContainerManager {
     return containers
   }
 
-  /**
-   * Delete a container
-   */
   async delete(name: string, options: DeleteOptions = {}): Promise<void> {
     const { force = false } = options
 
@@ -334,9 +306,6 @@ export class ContainerManager {
     await rm(containerPath, { recursive: true, force: true })
   }
 
-  /**
-   * Clone a container
-   */
   async clone(
     sourceName: string,
     targetName: string,
@@ -406,9 +375,6 @@ export class ContainerManager {
     }
   }
 
-  /**
-   * Rename a container
-   */
   async rename(oldName: string, newName: string): Promise<ContainerConfig> {
     // Validate new name
     if (!this.isValidName(newName)) {
@@ -485,11 +451,8 @@ export class ContainerManager {
     return config
   }
 
-  /**
-   * Move a directory atomically when possible, with copy+delete fallback.
-   * Uses fs.rename which is atomic on same filesystem, falls back to
-   * copy+delete for cross-filesystem moves (with cleanup on failure).
-   */
+  // Moves a directory atomically when possible (same filesystem).
+  // Falls back to copy+delete for cross-filesystem moves.
   private async atomicMoveDirectory(
     sourcePath: string,
     targetPath: string,
@@ -519,16 +482,10 @@ export class ContainerManager {
     }
   }
 
-  /**
-   * Validate container name
-   */
   isValidName(name: string): boolean {
     return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
   }
 
-  /**
-   * Add a database to the container's databases array
-   */
   async addDatabase(containerName: string, database: string): Promise<void> {
     const config = await this.getConfig(containerName)
     if (!config) {
@@ -547,9 +504,6 @@ export class ContainerManager {
     }
   }
 
-  /**
-   * Remove a database from the container's databases array
-   */
   async removeDatabase(containerName: string, database: string): Promise<void> {
     const config = await this.getConfig(containerName)
     if (!config) {
@@ -569,10 +523,6 @@ export class ContainerManager {
     }
   }
 
-  /**
-   * Get connection string for a container
-   * Delegates to the appropriate engine
-   */
   getConnectionString(config: ContainerConfig, database?: string): string {
     const engine = getEngine(config.engine)
     return engine.getConnectionString(config, database)
