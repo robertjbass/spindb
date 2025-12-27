@@ -1,9 +1,14 @@
-import { exec, spawn } from 'child_process'
+import { exec, spawn, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile, rm } from 'fs/promises'
 import { paths } from '../config/paths'
 import { logDebug } from './error-handler'
+import {
+  platformService,
+  isWindows,
+  getWindowsSpawnOptions,
+} from './platform-service'
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
@@ -41,23 +46,9 @@ export class ProcessManager {
     options: InitdbOptions = {},
   ): Promise<ProcessResult> {
     const { superuser = 'postgres' } = options
-
-    // Track if directory existed before initdb (to know if we should clean up)
     const dirExistedBefore = existsSync(dataDir)
 
-    const args = [
-      '-D',
-      dataDir,
-      '-U',
-      superuser,
-      '--auth=trust',
-      '--encoding=UTF8',
-      '--no-locale',
-    ]
-
-    // Helper to clean up data directory on failure
     const cleanupOnFailure = async () => {
-      // Only clean up if initdb created the directory (it didn't exist before)
       if (!dirExistedBefore && existsSync(dataDir)) {
         try {
           await rm(dataDir, { recursive: true, force: true })
@@ -70,6 +61,38 @@ export class ProcessManager {
       }
     }
 
+    if (isWindows()) {
+      // On Windows, build the entire command as a single string
+      const cmd = `"${initdbPath}" -D "${dataDir}" -U ${superuser} --auth=trust --encoding=UTF8 --no-locale`
+
+      logDebug('initdb command (Windows)', { cmd })
+
+      return new Promise((resolve, reject) => {
+        exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
+          logDebug('initdb completed', { error: error?.message, stdout, stderr })
+          if (error) {
+            await cleanupOnFailure()
+            reject(new Error(`initdb failed with code ${error.code}: ${stderr || stdout || error.message}`))
+          } else {
+            resolve({ stdout, stderr })
+          }
+        })
+      })
+    }
+
+    // Unix path - use spawn without shell
+    const args = [
+      '-D',
+      dataDir,
+      '-U',
+      superuser,
+      '--auth=trust',
+      '--encoding=UTF8',
+      '--no-locale',
+    ]
+
+    logDebug('initdb command', { initdbPath, args })
+
     return new Promise((resolve, reject) => {
       const proc = spawn(initdbPath, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -78,14 +101,15 @@ export class ProcessManager {
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
       proc.on('close', async (code) => {
+        logDebug('initdb completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
@@ -95,6 +119,7 @@ export class ProcessManager {
       })
 
       proc.on('error', async (err) => {
+        logDebug('initdb error', { error: err.message })
         await cleanupOnFailure()
         reject(err)
       })
@@ -110,7 +135,58 @@ export class ProcessManager {
     options: StartOptions = {},
   ): Promise<ProcessResult> {
     const { port, logFile } = options
+    const logDest = logFile || platformService.getNullDevice()
 
+    if (isWindows()) {
+      // On Windows, start without -w (wait) flag and poll for readiness
+      // The -w flag can hang indefinitely on Windows
+      let cmd = `"${pgCtlPath}" start -D "${dataDir}" -l "${logDest}"`
+      if (port) {
+        cmd += ` -o "-p ${port}"`
+      }
+
+      logDebug('pg_ctl start command (Windows)', { cmd })
+
+      return new Promise((resolve, reject) => {
+        exec(cmd, { timeout: 30000 }, async (error, stdout, stderr) => {
+          logDebug('pg_ctl start initiated', { error: error?.message, stdout, stderr })
+
+          if (error) {
+            reject(
+              new Error(
+                `pg_ctl start failed with code ${error.code}: ${stderr || stdout || error.message}`,
+              ),
+            )
+            return
+          }
+
+          // Poll for PostgreSQL to be ready using pg_isready or status check
+          const statusCmd = `"${pgCtlPath}" status -D "${dataDir}"`
+          let attempts = 0
+          const maxAttempts = 30
+          const pollInterval = 1000
+
+          const checkReady = () => {
+            attempts++
+            exec(statusCmd, (statusError, statusStdout) => {
+              if (!statusError && statusStdout.includes('server is running')) {
+                logDebug('pg_ctl start completed (Windows)', { attempts })
+                resolve({ stdout, stderr })
+              } else if (attempts >= maxAttempts) {
+                reject(new Error(`PostgreSQL failed to start within ${maxAttempts} seconds`))
+              } else {
+                setTimeout(checkReady, pollInterval)
+              }
+            })
+          }
+
+          // Give it a moment before starting to poll
+          setTimeout(checkReady, 500)
+        })
+      })
+    }
+
+    // Unix path - use spawn without shell
     const pgOptions: string[] = []
     if (port) {
       pgOptions.push(`-p ${port}`)
@@ -121,11 +197,17 @@ export class ProcessManager {
       '-D',
       dataDir,
       '-l',
-      logFile || '/dev/null',
+      logDest,
       '-w', // Wait for startup to complete
-      '-o',
-      pgOptions.join(' '),
+      '-t',
+      '30', // Timeout after 30 seconds
     ]
+
+    if (pgOptions.length > 0) {
+      args.push('-o', pgOptions.join(' '))
+    }
+
+    logDebug('pg_ctl start command', { pgCtlPath, args })
 
     return new Promise((resolve, reject) => {
       const proc = spawn(pgCtlPath, args, {
@@ -135,14 +217,15 @@ export class ProcessManager {
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
       proc.on('close', (code) => {
+        logDebug('pg_ctl start completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
@@ -154,7 +237,10 @@ export class ProcessManager {
         }
       })
 
-      proc.on('error', reject)
+      proc.on('error', (err) => {
+        logDebug('pg_ctl start error', { error: err.message })
+        reject(err)
+      })
     })
   }
 
@@ -162,6 +248,29 @@ export class ProcessManager {
    * Stop PostgreSQL server using pg_ctl
    */
   async stop(pgCtlPath: string, dataDir: string): Promise<ProcessResult> {
+    if (isWindows()) {
+      // On Windows, build the entire command as a single string
+      const cmd = `"${pgCtlPath}" stop -D "${dataDir}" -m fast -w -t 30`
+
+      logDebug('pg_ctl stop command (Windows)', { cmd })
+
+      return new Promise((resolve, reject) => {
+        exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
+          logDebug('pg_ctl stop completed', { error: error?.message, stdout, stderr })
+          if (error) {
+            reject(
+              new Error(
+                `pg_ctl stop failed with code ${error.code}: ${stderr || stdout || error.message}`,
+              ),
+            )
+          } else {
+            resolve({ stdout, stderr })
+          }
+        })
+      })
+    }
+
+    // Unix path - use spawn without shell
     const args = [
       'stop',
       '-D',
@@ -169,7 +278,11 @@ export class ProcessManager {
       '-m',
       'fast',
       '-w', // Wait for shutdown to complete
+      '-t',
+      '30', // Timeout after 30 seconds
     ]
+
+    logDebug('pg_ctl stop command', { pgCtlPath, args })
 
     return new Promise((resolve, reject) => {
       const proc = spawn(pgCtlPath, args, {
@@ -179,14 +292,15 @@ export class ProcessManager {
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
       proc.on('close', (code) => {
+        logDebug('pg_ctl stop completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
@@ -198,7 +312,10 @@ export class ProcessManager {
         }
       })
 
-      proc.on('error', reject)
+      proc.on('error', (err) => {
+        logDebug('pg_ctl stop error', { error: err.message })
+        reject(err)
+      })
     })
   }
 
@@ -240,8 +357,6 @@ export class ProcessManager {
     try {
       const content = await readFile(pidFile, 'utf8')
       const pid = parseInt(content.split('\n')[0], 10)
-
-      // Check if process is still running
       process.kill(pid, 0)
       return true
     } catch (error) {
@@ -306,6 +421,7 @@ export class ProcessManager {
     return new Promise((resolve, reject) => {
       const proc = spawn(psqlPath, args, {
         stdio: command ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+        ...getWindowsSpawnOptions(),
       })
 
       if (command) {
@@ -365,18 +481,21 @@ export class ProcessManager {
 
     args.push(backupFile)
 
+    const spawnOptions: SpawnOptions = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...getWindowsSpawnOptions(),
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(pgRestorePath, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      const proc = spawn(pgRestorePath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
-      proc.stderr.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 

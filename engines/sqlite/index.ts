@@ -18,6 +18,7 @@ import { tmpdir } from 'os'
 import { BaseEngine } from '../base-engine'
 import { sqliteRegistry } from './registry'
 import { configManager } from '../../core/config-manager'
+import { platformService } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/engine-defaults'
 import type {
   ContainerConfig,
@@ -46,7 +47,8 @@ export class SQLiteEngine extends BaseEngine {
     throw new Error(
       'SQLite uses system-installed binaries. Install sqlite3:\n' +
         '  macOS: brew install sqlite (or use built-in /usr/bin/sqlite3)\n' +
-        '  Ubuntu/Debian: sudo apt install sqlite3',
+        '  Ubuntu/Debian: sudo apt install sqlite3\n' +
+        '  Windows: choco install sqlite or winget install SQLite.SQLite',
     )
   }
 
@@ -79,7 +81,8 @@ export class SQLiteEngine extends BaseEngine {
         'sqlite3 not found. Install SQLite:\n' +
           '  macOS: brew install sqlite (or use built-in /usr/bin/sqlite3)\n' +
           '  Ubuntu/Debian: sudo apt install sqlite3\n' +
-          '  Fedora: sudo dnf install sqlite',
+          '  Fedora: sudo dnf install sqlite\n' +
+          '  Windows: choco install sqlite or winget install SQLite.SQLite',
       )
     }
     return sqlite3Path
@@ -96,15 +99,8 @@ export class SQLiteEngine extends BaseEngine {
       return configPath
     }
 
-    // Check system PATH
-    try {
-      // TODO - update when windows support is added
-      const { stdout } = await execFileAsync('which', ['sqlite3'])
-      const path = stdout.trim()
-      return path || null
-    } catch {
-      return null
-    }
+    // Check system PATH using platform service (works on Windows, macOS, Linux)
+    return platformService.findToolPath('sqlite3')
   }
 
   /**
@@ -117,14 +113,8 @@ export class SQLiteEngine extends BaseEngine {
       return configPath
     }
 
-    // Check system PATH
-    try {
-      const { stdout } = await execFileAsync('which', ['litecli'])
-      const path = stdout.trim()
-      return path || null
-    } catch {
-      return null
-    }
+    // Check system PATH using platform service (works on Windows, macOS, Linux)
+    return platformService.findToolPath('litecli')
   }
 
   /**

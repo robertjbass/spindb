@@ -53,8 +53,37 @@ export async function handleCreate(): Promise<void> {
 
   const dbEngine = getEngine(engine)
   const isSQLite = engine === 'sqlite'
+  const isPostgreSQL = engine === 'postgresql'
+
+  // For PostgreSQL, download binaries FIRST - they include client tools (psql, pg_dump, etc.)
+  // This avoids requiring a separate system installation of client tools
+  let portAvailable = true
+  if (isPostgreSQL) {
+    portAvailable = await portManager.isPortAvailable(port)
+
+    const binarySpinner = createSpinner(
+      `Checking ${dbEngine.displayName} ${version} binaries...`,
+    )
+    binarySpinner.start()
+
+    const isInstalled = await dbEngine.isBinaryInstalled(version)
+    if (isInstalled) {
+      binarySpinner.succeed(
+        `${dbEngine.displayName} ${version} binaries ready (cached)`,
+      )
+    } else {
+      binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
+      await dbEngine.ensureBinaries(version, ({ message }) => {
+        binarySpinner.text = message
+      })
+      binarySpinner.succeed(
+        `${dbEngine.displayName} ${version} binaries downloaded`,
+      )
+    }
+  }
 
   // Check dependencies (all engines need this)
+  // For PostgreSQL, this runs AFTER binary download so client tools are available
   const depsSpinner = createSpinner('Checking required tools...')
   depsSpinner.start()
 
@@ -89,9 +118,9 @@ export async function handleCreate(): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  // Server databases: check port and binaries
-  let portAvailable = true
-  if (!isSQLite) {
+  // Server databases (MySQL): check port and binaries
+  // PostgreSQL already handled above
+  if (!isSQLite && !isPostgreSQL) {
     portAvailable = await portManager.isPortAvailable(port)
 
     const binarySpinner = createSpinner(

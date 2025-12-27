@@ -147,11 +147,17 @@ export async function executeSQL(
     const cmd = `sqlite3 "${database}" "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.MySQL) {
-    const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled mysql if available, otherwise fall back to `mysql` in PATH
+    const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
+    const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
-    const cmd = `psql "${connectionString}" -c "${sql.replace(/"/g, '\\"')}"`
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled psql if available, otherwise fall back to `psql` in PATH
+    const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+    const cmd = `"${psqlPath}" "${connectionString}" -c "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   }
 }
@@ -171,11 +177,15 @@ export async function executeSQLFile(
     const cmd = `sqlite3 "${database}" < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MySQL) {
-    const cmd = `mysql -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
+    const engineImpl = getEngine(engine)
+    const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
+    const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
-    const cmd = `psql "${connectionString}" -f "${filePath}"`
+    const engineImpl = getEngine(engine)
+    const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+    const cmd = `"${psqlPath}" "${connectionString}" -f "${filePath}"`
     return execAsync(cmd)
   }
 }
@@ -224,10 +234,17 @@ export async function waitForReady(
   while (Date.now() - startTime < timeoutMs) {
     try {
       if (engine === Engine.MySQL) {
-        await execAsync(`mysqladmin -h 127.0.0.1 -P ${port} -u root ping`)
+        // Prefer configured/bundled mysqladmin when available
+        const engineImpl = getEngine(engine)
+        const mysqladmin = await engineImpl.getMysqladminPath().catch(() => 'mysqladmin')
+        await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
       } else {
+        // Use the engine-provided psql binary when available to avoid relying
+        // on a psql in PATH (which may not exist on Windows)
+        const engineImpl = getEngine(engine)
+        const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
         await execAsync(
-          `psql "postgresql://postgres@127.0.0.1:${port}/postgres" -c "SELECT 1"`,
+          `"${psqlPath}" "postgresql://postgres@127.0.0.1:${port}/postgres" -c "SELECT 1"`,
         )
       }
       return true

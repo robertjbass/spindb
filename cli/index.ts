@@ -2,9 +2,6 @@ import { program } from 'commander'
 import { createRequire } from 'module'
 import chalk from 'chalk'
 import { createCommand } from './commands/create'
-
-const require = createRequire(import.meta.url)
-const pkg = require('../package.json') as { version: string }
 import { listCommand } from './commands/list'
 import { startCommand } from './commands/start'
 import { stopCommand } from './commands/stop'
@@ -29,6 +26,9 @@ import { attachCommand } from './commands/attach'
 import { detachCommand } from './commands/detach'
 import { sqliteCommand } from './commands/sqlite'
 import { updateManager } from '../core/update-manager'
+
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json') as { version: string }
 
 /**
  * Show update notification banner if an update is available (from cached data)

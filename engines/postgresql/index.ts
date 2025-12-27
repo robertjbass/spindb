@@ -1,12 +1,17 @@
 import { join } from 'path'
-import { spawn, exec } from 'child_process'
+import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
+import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
 import { BaseEngine } from '../base-engine'
 import { binaryManager } from '../../core/binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
-import { platformService } from '../../core/platform-service'
+import {
+  platformService,
+  isWindows,
+  getWindowsSpawnOptions,
+} from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import {
@@ -31,6 +36,34 @@ import type {
 } from '../../types'
 
 const execAsync = promisify(exec)
+
+/**
+ * Build a Windows-safe psql command string for either a file or inline SQL.
+ * This is exported for unit testing.
+ */
+export function buildWindowsPsqlCommand(
+  psqlPath: string,
+  port: number,
+  user: string,
+  db: string,
+  options: { file?: string; sql?: string },
+): string {
+  if (!options.file && !options.sql) {
+    throw new Error('Either file or sql option must be provided')
+  }
+
+  let cmd = `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${db}`
+
+  if (options.file) {
+    cmd += ` -f "${options.file}"`
+  } else if (options.sql) {
+    // Escape double quotes in the SQL so the outer double quotes are preserved
+    const escaped = options.sql.replace(/"/g, '\\"')
+    cmd += ` -c "${escaped}"`
+  }
+
+  return cmd
+}
 
 export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
@@ -118,13 +151,27 @@ export class PostgreSQLEngine extends BaseEngine {
 
   /**
    * Ensure PostgreSQL binaries are available
+   * Also registers client tools (psql, pg_dump, etc.) in config after download
    */
   async ensureBinaries(
     version: string,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    return binaryManager.ensureInstalled(version, p, a, onProgress)
+    const binPath = await binaryManager.ensureInstalled(version, p, a, onProgress)
+
+    // Register client tools from downloaded binaries in config
+    // This ensures dependency checks find them without requiring system installation
+    const ext = platformService.getExecutableExtension()
+    const clientTools = ['psql', 'pg_dump', 'pg_restore', 'pg_basebackup'] as const
+    for (const tool of clientTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
+    }
+
+    return binPath
   }
 
   /**
@@ -144,7 +191,8 @@ export class PostgreSQLEngine extends BaseEngine {
     options: Record<string, unknown> = {},
   ): Promise<string> {
     const binPath = this.getBinaryPath(version)
-    const initdbPath = join(binPath, 'bin', 'initdb')
+    const ext = platformService.getExecutableExtension()
+    const initdbPath = join(binPath, 'bin', `initdb${ext}`)
     const dataDir = paths.getContainerDataPath(containerName, {
       engine: this.name,
     })
@@ -231,7 +279,8 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const { name, version, port } = container
     const binPath = this.getBinaryPath(version)
-    const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
     const logFile = paths.getContainerLogPath(name, { engine: this.name })
 
@@ -254,7 +303,8 @@ export class PostgreSQLEngine extends BaseEngine {
   async stop(container: ContainerConfig): Promise<void> {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
-    const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     await processManager.stop(pgCtlPath, dataDir)
@@ -266,7 +316,8 @@ export class PostgreSQLEngine extends BaseEngine {
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
-    const pgCtlPath = join(binPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     return processManager.status(pgCtlPath, dataDir)
@@ -370,6 +421,11 @@ export class PostgreSQLEngine extends BaseEngine {
     const db = database || 'postgres'
     const psqlPath = await this.getPsqlPath()
 
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+      ...getWindowsSpawnOptions(),
+    }
+
     return new Promise((resolve, reject) => {
       const proc = spawn(
         psqlPath,
@@ -383,7 +439,7 @@ export class PostgreSQLEngine extends BaseEngine {
           '-d',
           db,
         ],
-        { stdio: 'inherit' },
+        spawnOptions,
       )
 
       proc.on('error', (err: NodeJS.ErrnoException) => {
@@ -405,10 +461,14 @@ export class PostgreSQLEngine extends BaseEngine {
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
+    // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
+    const sql = `CREATE DATABASE "${database}"`
+    const cmd = isWindows()
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+
     try {
-      await execAsync(
-        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'CREATE DATABASE "${database}"'`,
-      )
+      await execAsync(cmd)
     } catch (error) {
       const err = error as Error
       // Ignore "database already exists" error
@@ -429,10 +489,14 @@ export class PostgreSQLEngine extends BaseEngine {
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
+    // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
+    const sql = `DROP DATABASE IF EXISTS "${database}"`
+    const cmd = isWindows()
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+
     try {
-      await execAsync(
-        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c 'DROP DATABASE IF EXISTS "${database}"'`,
-      )
+      await execAsync(cmd)
     } catch (error) {
       const err = error as Error
       // Ignore "database does not exist" error
@@ -457,9 +521,12 @@ export class PostgreSQLEngine extends BaseEngine {
     try {
       const psqlPath = await this.getPsqlPath()
       // Query pg_database_size for the specific database
-      const { stdout } = await execAsync(
-        `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "SELECT pg_database_size('${db}')"`,
-      )
+      // On Windows, use escaped double quotes; on Unix, use single quotes
+      const sql = `SELECT pg_database_size('${db}')`
+      const cmd = isWindows()
+        ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "${sql.replace(/'/g, "''")}"`
+        : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -t -A -c "${sql}"`
+      const { stdout } = await execAsync(cmd)
       const size = parseInt(stdout.trim(), 10)
       return isNaN(size) ? null : size
     } catch {
@@ -480,13 +547,15 @@ export class PostgreSQLEngine extends BaseEngine {
   ): Promise<DumpResult> {
     const pgDumpPath = await this.getPgDumpPath()
 
+    const spawnOptions: SpawnOptions = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      ...getWindowsSpawnOptions(),
+    }
+
     return new Promise((resolve, reject) => {
-      // Use custom format (-Fc) for best compatibility and compression
       const args = [connectionString, '-Fc', '-f', outputPath]
 
-      const proc = spawn(pgDumpPath, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
+      const proc = spawn(pgDumpPath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
@@ -544,6 +613,20 @@ export class PostgreSQLEngine extends BaseEngine {
     const db = options.database || container.database || 'postgres'
     const psqlPath = await this.getPsqlPath()
 
+    // On Windows, build a single command string and use exec to avoid
+    // passing an args array with shell:true (DEP0190 and quoting issues).
+    if (isWindows()) {
+      const cmd = buildWindowsPsqlCommand(psqlPath, port, defaults.superuser, db, options)
+      try {
+        await execAsync(cmd)
+        return
+      } catch (error) {
+        const err = error as Error
+        throw new Error(`psql failed: ${err.message}`)
+      }
+    }
+
+    // Non-Windows: spawn directly with args (no shell)
     const args = [
       '-h',
       '127.0.0.1',
@@ -563,8 +646,12 @@ export class PostgreSQLEngine extends BaseEngine {
       throw new Error('Either file or sql option must be provided')
     }
 
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(psqlPath, args, { stdio: 'inherit' })
+      const proc = spawn(psqlPath, args, spawnOptions)
 
       proc.on('error', (err: NodeJS.ErrnoException) => {
         reject(err)

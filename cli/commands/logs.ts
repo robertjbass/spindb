@@ -6,13 +6,7 @@ import { containerManager } from '../../core/container-manager'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiInfo } from '../ui/theme'
-
-function getLastNLines(content: string, n: number): string {
-  const lines = content.split('\n')
-  const nonEmptyLines =
-    lines[lines.length - 1] === '' ? lines.slice(0, -1) : lines
-  return nonEmptyLines.slice(-n).join('\n')
-}
+import { followFile, getLastNLines } from '../utils/file-follower'
 
 export const logsCommand = new Command('logs')
   .description('View container logs')
@@ -84,28 +78,8 @@ export const logsCommand = new Command('logs')
 
         if (options.follow) {
           const lineCount = parseInt(options.lines || '50', 10)
-          const child = spawn(
-            'tail',
-            ['-n', String(lineCount), '-f', logPath],
-            {
-              stdio: 'inherit',
-            },
-          )
-
-          // Use named handler so we can remove it to prevent listener leaks
-          const sigintHandler = () => {
-            process.removeListener('SIGINT', sigintHandler)
-            child.kill('SIGTERM')
-            process.exit(0)
-          }
-          process.on('SIGINT', sigintHandler)
-
-          await new Promise<void>((resolve) => {
-            child.on('close', () => {
-              process.removeListener('SIGINT', sigintHandler)
-              resolve()
-            })
-          })
+          // Use cross-platform file following (works on Windows, macOS, Linux)
+          await followFile(logPath, lineCount)
           return
         }
 

@@ -122,6 +122,28 @@ export abstract class BasePlatformService {
   abstract getZonkyPlatform(): string | null
 
   /**
+   * Get the null device path for this platform ('/dev/null' on Unix, 'NUL' on Windows)
+   */
+  abstract getNullDevice(): string
+
+  /**
+   * Get the executable file extension for this platform ('' on Unix, '.exe' on Windows)
+   */
+  abstract getExecutableExtension(): string
+
+  /**
+   * Terminate a process by PID
+   * @param pid - Process ID to terminate
+   * @param force - If true, force kill (SIGKILL on Unix, /F on Windows)
+   */
+  abstract terminateProcess(pid: number, force: boolean): Promise<void>
+
+  /**
+   * Check if a process is running by PID
+   */
+  abstract isProcessRunning(pid: number): boolean
+
+  /**
    * Copy text to clipboard
    */
   async copyToClipboard(text: string): Promise<boolean> {
@@ -153,13 +175,17 @@ export abstract class BasePlatformService {
   async findToolPath(toolName: string): Promise<string | null> {
     const whichConfig = this.getWhichCommand()
 
-    // First try the which/where command
+    // First try the which/where command (with timeout to prevent hanging)
     try {
-      const { stdout } = await execAsync(`${whichConfig.command} ${toolName}`)
-      const path = stdout.trim().split('\n')[0]
-      if (path && existsSync(path)) {
-        return path
-      }
+      const cmd = [whichConfig.command, ...whichConfig.args, toolName]
+        .filter(Boolean)
+        .join(' ')
+      const { stdout } = await execAsync(cmd, { timeout: 5000 })
+      const path = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (path && existsSync(path)) return path
     } catch {
       // Not found via which, continue to search paths
     }
@@ -186,7 +212,9 @@ export abstract class BasePlatformService {
    */
   async getToolVersion(toolPath: string): Promise<string | null> {
     try {
-      const { stdout } = await execAsync(`"${toolPath}" --version`)
+      const { stdout } = await execAsync(`"${toolPath}" --version`, {
+        timeout: 5000,
+      })
       const match = stdout.match(/(\d+\.\d+(\.\d+)?)/)
       return match ? match[1] : null
     } catch {
@@ -330,6 +358,28 @@ class DarwinPlatformService extends BasePlatformService {
     if (arch === 'arm64') return 'darwin-arm64v8'
     if (arch === 'x64') return 'darwin-amd64'
     return null
+  }
+
+  getNullDevice(): string {
+    return '/dev/null'
+  }
+
+  getExecutableExtension(): string {
+    return ''
+  }
+
+  async terminateProcess(pid: number, force: boolean): Promise<void> {
+    const signal = force ? 'SIGKILL' : 'SIGTERM'
+    process.kill(pid, signal)
+  }
+
+  isProcessRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
   }
 
   protected buildToolPath(dir: string, toolName: string): string {
@@ -517,6 +567,28 @@ class LinuxPlatformService extends BasePlatformService {
     return null
   }
 
+  getNullDevice(): string {
+    return '/dev/null'
+  }
+
+  getExecutableExtension(): string {
+    return ''
+  }
+
+  async terminateProcess(pid: number, force: boolean): Promise<void> {
+    const signal = force ? 'SIGKILL' : 'SIGTERM'
+    process.kill(pid, signal)
+  }
+
+  isProcessRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   protected buildToolPath(dir: string, toolName: string): string {
     return `${dir}/${toolName}`
   }
@@ -591,9 +663,12 @@ class Win32PlatformService extends BasePlatformService {
   }
 
   async detectPackageManager(): Promise<PackageManagerInfo | null> {
+    // Timeout for package manager detection (5 seconds)
+    const timeout = 5000
+
     // Try chocolatey
     try {
-      await execAsync('choco --version')
+      await execAsync('choco --version', { timeout })
       return {
         id: 'choco',
         name: 'Chocolatey',
@@ -602,12 +677,12 @@ class Win32PlatformService extends BasePlatformService {
         updateCommand: 'choco upgrade all',
       }
     } catch {
-      // Not chocolatey
+      // Not chocolatey or timed out
     }
 
     // Try winget
     try {
-      await execAsync('winget --version')
+      await execAsync('winget --version', { timeout })
       return {
         id: 'winget',
         name: 'Windows Package Manager',
@@ -616,7 +691,21 @@ class Win32PlatformService extends BasePlatformService {
         updateCommand: 'winget upgrade --all',
       }
     } catch {
-      // Not winget
+      // Not winget or timed out
+    }
+
+    // Try scoop
+    try {
+      await execAsync('scoop --version', { timeout })
+      return {
+        id: 'scoop',
+        name: 'Scoop',
+        checkCommand: 'scoop --version',
+        installTemplate: 'scoop install {package}',
+        updateCommand: 'scoop update *',
+      }
+    } catch {
+      // Not scoop or timed out
     }
 
     return null
@@ -625,6 +714,40 @@ class Win32PlatformService extends BasePlatformService {
   getZonkyPlatform(): string | null {
     // zonky.io doesn't provide Windows binaries
     return null
+  }
+
+  getNullDevice(): string {
+    return 'NUL'
+  }
+
+  getExecutableExtension(): string {
+    return '.exe'
+  }
+
+  async terminateProcess(pid: number, force: boolean): Promise<void> {
+    // On Windows, use taskkill command
+    // /T = terminate child processes, /F = force termination
+    const args = force ? `/F /PID ${pid} /T` : `/PID ${pid}`
+    try {
+      await execAsync(`taskkill ${args}`)
+    } catch (error) {
+      // taskkill exits with error if process doesn't exist, which is fine
+      const e = error as { code?: number }
+      // Error code 128 means "process not found" which is acceptable
+      if (e.code !== 128) {
+        throw error
+      }
+    }
+  }
+
+  isProcessRunning(pid: number): boolean {
+    try {
+      // process.kill with signal 0 works on Windows for checking process existence
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
   }
 
   protected buildToolPath(dir: string, toolName: string): string {
@@ -652,3 +775,18 @@ export function createPlatformService(): BasePlatformService {
 
 // Export singleton instance for convenience
 export const platformService = createPlatformService()
+
+/**
+ * Check if running on Windows
+ */
+export function isWindows(): boolean {
+  return process.platform === 'win32'
+}
+
+/**
+ * Get spawn options for Windows shell requirements.
+ * Windows needs shell:true for proper command execution with quoted paths.
+ */
+export function getWindowsSpawnOptions(): { shell: true } | Record<string, never> {
+  return isWindows() ? { shell: true } : {}
+}

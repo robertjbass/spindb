@@ -324,10 +324,9 @@ Error messages should include actionable fix suggestions.
 
 ## Known Limitations
 
-1. **macOS/Linux only** - No Windows support (zonky.io limitation)
-2. **Client tools required** - psql/mysql must be installed separately
-3. **MySQL uses system binaries** - Unlike PostgreSQL
-4. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
+1. **Client tools required** - psql/mysql must be installed separately
+2. **MySQL uses system binaries** - Unlike PostgreSQL
+3. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
 
 ## Publishing & Versioning
 
