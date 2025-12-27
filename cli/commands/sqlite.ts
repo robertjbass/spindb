@@ -18,10 +18,7 @@ export const sqliteCommand = new Command('sqlite').description(
 sqliteCommand
   .command('scan')
   .description('Scan folder for unregistered SQLite files')
-  .option(
-    '-p, --path <dir>',
-    'Directory to scan (default: current directory)',
-  )
+  .option('-p, --path <dir>', 'Directory to scan (default: current directory)')
   .option('--json', 'Output as JSON')
   .action(async (options: { path?: string; json?: boolean }): Promise<void> => {
     const dir = options.path ? resolve(options.path) : process.cwd()
@@ -66,7 +63,10 @@ sqliteCommand
   .argument('[folder]', 'Folder path to ignore (default: current directory)')
   .option('--json', 'Output as JSON')
   .action(
-    async (folder: string | undefined, options: { json?: boolean }): Promise<void> => {
+    async (
+      folder: string | undefined,
+      options: { json?: boolean },
+    ): Promise<void> => {
       const absolutePath = resolve(folder || process.cwd())
       await sqliteRegistry.addIgnoreFolder(absolutePath)
 
@@ -85,7 +85,10 @@ sqliteCommand
   .argument('[folder]', 'Folder path to unignore (default: current directory)')
   .option('--json', 'Output as JSON')
   .action(
-    async (folder: string | undefined, options: { json?: boolean }): Promise<void> => {
+    async (
+      folder: string | undefined,
+      options: { json?: boolean },
+    ): Promise<void> => {
       const absolutePath = resolve(folder || process.cwd())
       const removed = await sqliteRegistry.removeIgnoreFolder(absolutePath)
 
@@ -128,7 +131,9 @@ sqliteCommand
 // sqlite attach (alias to top-level attach)
 sqliteCommand
   .command('attach')
-  .description('Register an existing SQLite database (alias for "spindb attach")')
+  .description(
+    'Register an existing SQLite database (alias for "spindb attach")',
+  )
   .argument('<path>', 'Path to SQLite database file')
   .option('-n, --name <name>', 'Container name')
   .option('--json', 'Output as JSON')
@@ -181,7 +186,9 @@ sqliteCommand
               }),
             )
           } else {
-            console.error(uiError(`Container "${containerName}" already exists`))
+            console.error(
+              uiError(`Container "${containerName}" already exists`),
+            )
           }
           process.exit(1)
         }

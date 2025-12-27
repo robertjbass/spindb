@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **--json flag for all data-outputting commands** - Enable scriptable, machine-readable output across the CLI
+  - `spindb backup --json` - Returns backup path, size, format, database, and container
+  - `spindb restore --json` - Returns success status, database, format, source type, and connection string
+  - `spindb create --json` - Returns container name, engine, version, port, database, and connection string
+  - `spindb start --json` - Returns container name, port, connection string, and port change status
+  - `spindb stop --json` - Returns stopped container names and count
+  - `spindb delete --json` - Returns deleted container name and engine
+  - `spindb clone --json` - Returns source, target, new port, and connection string
+  - `spindb edit --json` - Returns container name and changes made (rename, port, relocate, config)
+- **--force flag for restore command** - Overwrite existing databases without confirmation
+  - `spindb restore <container> <backup> -d <database> --force` - Drops and recreates database
+  - Interactive confirmation prompt when database exists (unless --force or --json mode)
+  - Automatic cleanup of old database before restoration
+
+### Changed
+- **Restore command now checks for existing databases** - Prevents accidental data loss
+  - Prompts user for confirmation before overwriting existing database
+  - Drops existing database and removes from tracking before restoration
+  - In --json mode, exits with error if database exists without --force flag
+
 ## [0.10.0] - 2025-12-26
 
 ### Added

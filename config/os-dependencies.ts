@@ -7,7 +7,15 @@
 
 import { getPostgresHomebrewPackage } from './engine-defaults'
 
-export type PackageManagerId = 'brew' | 'apt' | 'yum' | 'dnf' | 'pacman' | 'choco' | 'winget' | 'scoop'
+export type PackageManagerId =
+  | 'brew'
+  | 'apt'
+  | 'yum'
+  | 'dnf'
+  | 'pacman'
+  | 'choco'
+  | 'winget'
+  | 'scoop'
 
 export type Platform = 'darwin' | 'linux' | 'win32'
 

@@ -77,7 +77,9 @@ async function promptUnregisteredFiles(): Promise<boolean> {
       // Check if name already exists
       if (await sqliteRegistry.exists(containerName)) {
         console.log(
-          chalk.yellow(`  Container "${containerName}" already exists. Skipping.`),
+          chalk.yellow(
+            `  Container "${containerName}" already exists. Skipping.`,
+          ),
         )
         continue
       }

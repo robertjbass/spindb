@@ -231,7 +231,10 @@ export async function handleCreate(): Promise<void> {
 
     // Skip creating 'postgres' database for PostgreSQL - it's created by initdb
     // For other engines (MySQL, SQLite), allow creating a database named 'postgres'
-    if (config && !(config.engine === 'postgresql' && database === 'postgres')) {
+    if (
+      config &&
+      !(config.engine === 'postgresql' && database === 'postgres')
+    ) {
       const dbSpinner = createSpinner(`Creating database "${database}"...`)
       dbSpinner.start()
 
