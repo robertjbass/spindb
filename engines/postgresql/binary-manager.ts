@@ -208,7 +208,9 @@ export async function getDumpRequiredVersion(
       const dumpMajor = buffer[5]
       const dumpMinor = buffer[6]
 
-      logDebug(`Detected pg_dump custom format version: ${dumpMajor}.${dumpMinor}`)
+      logDebug(
+        `Detected pg_dump custom format version: ${dumpMajor}.${dumpMinor}`,
+      )
 
       // pg_dump version typically maps to PostgreSQL version
       // If it's a recent dump format, require a recent PostgreSQL

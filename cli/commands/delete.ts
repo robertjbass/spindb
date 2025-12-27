@@ -59,13 +59,15 @@ export const deleteCommand = new Command('delete')
         })
         if (running) {
           if (options.force) {
-            const stopSpinner = createSpinner(`Stopping ${containerName}...`)
-            stopSpinner.start()
+            const stopSpinner = options.json
+              ? null
+              : createSpinner(`Stopping ${containerName}...`)
+            stopSpinner?.start()
 
             const engine = getEngine(config.engine)
             await engine.stop(config)
 
-            stopSpinner.succeed(`Stopped "${containerName}"`)
+            stopSpinner?.succeed(`Stopped "${containerName}"`)
           } else {
             console.error(
               uiError(
@@ -76,12 +78,14 @@ export const deleteCommand = new Command('delete')
           }
         }
 
-        const deleteSpinner = createSpinner(`Deleting ${containerName}...`)
-        deleteSpinner.start()
+        const deleteSpinner = options.json
+          ? null
+          : createSpinner(`Deleting ${containerName}...`)
+        deleteSpinner?.start()
 
         await containerManager.delete(containerName, { force: true })
 
-        deleteSpinner.succeed(`Container "${containerName}" deleted`)
+        deleteSpinner?.succeed(`Container "${containerName}" deleted`)
 
         if (options.json) {
           console.log(

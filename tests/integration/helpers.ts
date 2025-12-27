@@ -236,7 +236,9 @@ export async function waitForReady(
       if (engine === Engine.MySQL) {
         // Prefer configured/bundled mysqladmin when available
         const engineImpl = getEngine(engine)
-        const mysqladmin = await engineImpl.getMysqladminPath().catch(() => 'mysqladmin')
+        const mysqladmin = await engineImpl
+          .getMysqladminPath()
+          .catch(() => 'mysqladmin')
         await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
       } else {
         // Use the engine-provided psql binary when available to avoid relying

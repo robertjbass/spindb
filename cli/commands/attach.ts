@@ -65,7 +65,9 @@ export const attachCommand = new Command('attach')
               }),
             )
           } else {
-            console.error(uiError(`Container "${containerName}" already exists`))
+            console.error(
+              uiError(`Container "${containerName}" already exists`),
+            )
           }
           process.exit(1)
         }

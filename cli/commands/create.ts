@@ -33,7 +33,12 @@ async function createSqliteContainer(
   containerName: string,
   dbEngine: BaseEngine,
   version: string,
-  options: { path?: string; from?: string | null; connect?: boolean; json?: boolean },
+  options: {
+    path?: string
+    from?: string | null
+    connect?: boolean
+    json?: boolean
+  },
 ): Promise<void> {
   const { path: filePath, from: restoreLocation, connect, json } = options
 
@@ -716,7 +721,9 @@ export const createCommand = new Command('create')
               const copied =
                 await platformService.copyToClipboard(connectionString)
               if (copied) {
-                console.log(chalk.gray('  Connection string copied to clipboard'))
+                console.log(
+                  chalk.gray('  Connection string copied to clipboard'),
+                )
               }
               console.log(chalk.gray('  Opening shell...'))
               console.log()
@@ -728,7 +735,9 @@ export const createCommand = new Command('create')
               const copied =
                 await platformService.copyToClipboard(connectionString)
               if (copied) {
-                console.log(chalk.gray('  Connection string copied to clipboard'))
+                console.log(
+                  chalk.gray('  Connection string copied to clipboard'),
+                )
               }
               console.log()
             } else {

@@ -32,16 +32,18 @@ export const restoreCommand = new Command('restore')
     '--from-url <url>',
     'Pull data from a remote database connection string',
   )
-  .option(
-    '-f, --force',
-    'Overwrite existing database without confirmation',
-  )
+  .option('-f, --force', 'Overwrite existing database without confirmation')
   .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       name: string | undefined,
       backup: string | undefined,
-      options: { database?: string; fromUrl?: string; force?: boolean; json?: boolean },
+      options: {
+        database?: string
+        fromUrl?: string
+        force?: boolean
+        json?: boolean
+      },
     ) => {
       let tempDumpPath: string | null = null
 
@@ -280,7 +282,9 @@ export const restoreCommand = new Command('restore')
               ),
             )
             console.log(
-              chalk.gray('  This operation will drop and recreate the database.'),
+              chalk.gray(
+                '  This operation will drop and recreate the database.',
+              ),
             )
             console.log()
 

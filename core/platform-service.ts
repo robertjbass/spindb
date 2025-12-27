@@ -787,6 +787,8 @@ export function isWindows(): boolean {
  * Get spawn options for Windows shell requirements.
  * Windows needs shell:true for proper command execution with quoted paths.
  */
-export function getWindowsSpawnOptions(): { shell: true } | Record<string, never> {
+export function getWindowsSpawnOptions():
+  | { shell: true }
+  | Record<string, never> {
   return isWindows() ? { shell: true } : {}
 }
