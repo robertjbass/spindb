@@ -10,7 +10,8 @@ export const stopCommand = new Command('stop')
   .description('Stop a container')
   .argument('[name]', 'Container name')
   .option('-a, --all', 'Stop all running containers')
-  .action(async (name: string | undefined, options: { all?: boolean }) => {
+  .option('-j, --json', 'Output result as JSON')
+  .action(async (name: string | undefined, options: { all?: boolean; json?: boolean }) => {
     try {
       if (options.all) {
         const containers = await containerManager.list()
@@ -20,6 +21,8 @@ export const stopCommand = new Command('stop')
           console.log(uiWarning('No running containers found'))
           return
         }
+
+        const stoppedNames: string[] = []
 
         for (const container of running) {
           const spinner = createSpinner(`Stopping ${container.name}...`)
@@ -32,9 +35,20 @@ export const stopCommand = new Command('stop')
           })
 
           spinner.succeed(`Stopped "${container.name}"`)
+          stoppedNames.push(container.name)
         }
 
-        console.log(uiSuccess(`Stopped ${running.length} container(s)`))
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              stopped: stoppedNames,
+              count: stoppedNames.length,
+            }),
+          )
+        } else {
+          console.log(uiSuccess(`Stopped ${running.length} container(s)`))
+        }
         return
       }
 
@@ -80,6 +94,16 @@ export const stopCommand = new Command('stop')
       await containerManager.updateConfig(containerName, { status: 'stopped' })
 
       spinner.succeed(`Container "${containerName}" stopped`)
+
+      if (options.json) {
+        console.log(
+          JSON.stringify({
+            success: true,
+            stopped: [containerName],
+            count: 1,
+          }),
+        )
+      }
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))

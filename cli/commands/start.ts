@@ -12,7 +12,8 @@ import { uiError, uiWarning } from '../ui/theme'
 export const startCommand = new Command('start')
   .description('Start a container')
   .argument('[name]', 'Container name')
-  .action(async (name: string | undefined) => {
+  .option('-j, --json', 'Output result as JSON')
+  .action(async (name: string | undefined, options: { json?: boolean }) => {
     try {
       let containerName = name
 
@@ -105,13 +106,27 @@ export const startCommand = new Command('start')
       }
 
       const connectionString = engine.getConnectionString(config)
-      console.log()
-      console.log(chalk.gray('  Connection string:'))
-      console.log(chalk.cyan(`  ${connectionString}`))
-      console.log()
-      console.log(chalk.gray('  Connect with:'))
-      console.log(chalk.cyan(`  spindb connect ${containerName}`))
-      console.log()
+
+      if (options.json) {
+        console.log(
+          JSON.stringify({
+            success: true,
+            name: containerName,
+            engine: config.engine,
+            port: result.finalPort,
+            connectionString,
+            portChanged: result.retriesUsed > 0,
+          }),
+        )
+      } else {
+        console.log()
+        console.log(chalk.gray('  Connection string:'))
+        console.log(chalk.cyan(`  ${connectionString}`))
+        console.log()
+        console.log(chalk.gray('  Connect with:'))
+        console.log(chalk.cyan(`  spindb connect ${containerName}`))
+        console.log()
+      }
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))

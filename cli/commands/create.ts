@@ -33,9 +33,9 @@ async function createSqliteContainer(
   containerName: string,
   dbEngine: BaseEngine,
   version: string,
-  options: { path?: string; from?: string | null; connect?: boolean },
+  options: { path?: string; from?: string | null; connect?: boolean; json?: boolean },
 ): Promise<void> {
-  const { path: filePath, from: restoreLocation, connect } = options
+  const { path: filePath, from: restoreLocation, connect, json } = options
 
   // Check dependencies
   const depsSpinner = createSpinner('Checking required tools...')
@@ -111,29 +111,46 @@ async function createSqliteContainer(
     }
   }
 
-  // Display success
-  console.log()
-  console.log(chalk.green('  ✓ SQLite database ready'))
-  console.log()
-  console.log(chalk.gray('  File path:'))
-  console.log(chalk.cyan(`    ${absolutePath}`))
-  console.log()
-  console.log(chalk.gray('  Connection string:'))
-  console.log(chalk.cyan(`    sqlite:///${absolutePath}`))
-  console.log()
+  const connectionString = `sqlite:///${absolutePath}`
 
-  // Connect if requested
-  if (connect) {
-    const config = await containerManager.getConfig(containerName)
-    if (config) {
-      console.log(chalk.gray('  Opening shell...'))
-      console.log()
-      await dbEngine.connect(config)
-    }
+  // Display success
+  if (json) {
+    console.log(
+      JSON.stringify({
+        success: true,
+        name: containerName,
+        engine: 'sqlite',
+        version,
+        path: absolutePath,
+        database: containerName,
+        connectionString,
+        restored: !!restoreLocation,
+      }),
+    )
   } else {
-    console.log(chalk.gray('  Connect with:'))
-    console.log(chalk.cyan(`    spindb connect ${containerName}`))
     console.log()
+    console.log(chalk.green('  ✓ SQLite database ready'))
+    console.log()
+    console.log(chalk.gray('  File path:'))
+    console.log(chalk.cyan(`    ${absolutePath}`))
+    console.log()
+    console.log(chalk.gray('  Connection string:'))
+    console.log(chalk.cyan(`    ${connectionString}`))
+    console.log()
+
+    // Connect if requested
+    if (connect) {
+      const config = await containerManager.getConfig(containerName)
+      if (config) {
+        console.log(chalk.gray('  Opening shell...'))
+        console.log()
+        await dbEngine.connect(config)
+      }
+    } else {
+      console.log(chalk.gray('  Connect with:'))
+      console.log(chalk.cyan(`    spindb connect ${containerName}`))
+      console.log()
+    }
   }
 }
 
@@ -197,6 +214,7 @@ export const createCommand = new Command('create')
     '--from <location>',
     'Restore from a dump file or connection string after creation',
   )
+  .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       name: string | undefined,
@@ -210,6 +228,7 @@ export const createCommand = new Command('create')
         start?: boolean
         connect?: boolean
         from?: string
+        json?: boolean
       },
     ) => {
       let tempDumpPath: string | null = null
@@ -296,6 +315,7 @@ export const createCommand = new Command('create')
             path: options.path,
             from: restoreLocation,
             connect: options.connect,
+            json: options.json,
           })
           return
         }
@@ -670,36 +690,52 @@ export const createCommand = new Command('create')
         if (finalConfig) {
           const connectionString = dbEngine.getConnectionString(finalConfig)
 
-          console.log()
-          console.log(
-            connectionBox(containerName, connectionString, finalConfig.port),
-          )
-          console.log()
-
-          if (options.connect && shouldStart) {
-            // --connect flag: open shell directly
-            const copied =
-              await platformService.copyToClipboard(connectionString)
-            if (copied) {
-              console.log(chalk.gray('  Connection string copied to clipboard'))
-            }
-            console.log(chalk.gray('  Opening shell...'))
-            console.log()
-            await dbEngine.connect(finalConfig, database)
-          } else if (shouldStart) {
-            console.log(chalk.gray('  Connect with:'))
-            console.log(chalk.cyan(`  spindb connect ${containerName}`))
-
-            const copied =
-              await platformService.copyToClipboard(connectionString)
-            if (copied) {
-              console.log(chalk.gray('  Connection string copied to clipboard'))
-            }
-            console.log()
+          if (options.json) {
+            console.log(
+              JSON.stringify({
+                success: true,
+                name: containerName,
+                engine: finalConfig.engine,
+                version: finalConfig.version,
+                port: finalConfig.port,
+                database,
+                connectionString,
+                status: finalConfig.status,
+                restored: !!restoreLocation,
+              }),
+            )
           } else {
-            console.log(chalk.gray('  Start the container:'))
-            console.log(chalk.cyan(`  spindb start ${containerName}`))
             console.log()
+            console.log(
+              connectionBox(containerName, connectionString, finalConfig.port),
+            )
+            console.log()
+
+            if (options.connect && shouldStart) {
+              // --connect flag: open shell directly
+              const copied =
+                await platformService.copyToClipboard(connectionString)
+              if (copied) {
+                console.log(chalk.gray('  Connection string copied to clipboard'))
+              }
+              console.log(chalk.gray('  Opening shell...'))
+              console.log()
+              await dbEngine.connect(finalConfig, database)
+            } else if (shouldStart) {
+              console.log(chalk.gray('  Connect with:'))
+              console.log(chalk.cyan(`  spindb connect ${containerName}`))
+
+              const copied =
+                await platformService.copyToClipboard(connectionString)
+              if (copied) {
+                console.log(chalk.gray('  Connection string copied to clipboard'))
+              }
+              console.log()
+            } else {
+              console.log(chalk.gray('  Start the container:'))
+              console.log(chalk.cyan(`  spindb start ${containerName}`))
+              console.log()
+            }
           }
         }
       } catch (error) {

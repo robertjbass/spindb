@@ -12,10 +12,11 @@ export const deleteCommand = new Command('delete')
   .argument('[name]', 'Container name')
   .option('-f, --force', 'Force delete (stop if running)')
   .option('-y, --yes', 'Skip confirmation')
+  .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       name: string | undefined,
-      options: { force?: boolean; yes?: boolean },
+      options: { force?: boolean; yes?: boolean; json?: boolean },
     ) => {
       try {
         let containerName = name
@@ -81,6 +82,17 @@ export const deleteCommand = new Command('delete')
         await containerManager.delete(containerName, { force: true })
 
         deleteSpinner.succeed(`Container "${containerName}" deleted`)
+
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              deleted: containerName,
+              container: containerName,
+              engine: config.engine,
+            }),
+          )
+        }
       } catch (error) {
         const e = error as Error
         console.error(uiError(e.message))

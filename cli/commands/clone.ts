@@ -11,7 +11,8 @@ export const cloneCommand = new Command('clone')
   .description('Clone a container with all its data')
   .argument('[source]', 'Source container name')
   .argument('[target]', 'Target container name')
-  .action(async (source: string | undefined, target: string | undefined) => {
+  .option('-j, --json', 'Output result as JSON')
+  .action(async (source: string | undefined, target: string | undefined, options: { json?: boolean }) => {
     try {
       let sourceName = source
       let targetName = target
@@ -93,12 +94,24 @@ export const cloneCommand = new Command('clone')
       const engine = getEngine(newConfig.engine)
       const connectionString = engine.getConnectionString(newConfig)
 
-      console.log()
-      console.log(connectionBox(targetName, connectionString, newConfig.port))
-      console.log()
-      console.log(chalk.gray('  Start the cloned container:'))
-      console.log(chalk.cyan(`  spindb start ${targetName}`))
-      console.log()
+      if (options.json) {
+        console.log(
+          JSON.stringify({
+            success: true,
+            source: sourceName,
+            target: targetName,
+            newPort: newConfig.port,
+            connectionString,
+          }),
+        )
+      } else {
+        console.log()
+        console.log(connectionBox(targetName, connectionString, newConfig.port))
+        console.log()
+        console.log(chalk.gray('  Start the cloned container:'))
+        console.log(chalk.cyan(`  spindb start ${targetName}`))
+        console.log()
+      }
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))
