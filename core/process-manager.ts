@@ -37,9 +37,6 @@ export type PgRestoreOptions = {
 }
 
 export class ProcessManager {
-  /**
-   * Initialize a new PostgreSQL data directory
-   */
   async initdb(
     initdbPath: string,
     dataDir: string,
@@ -134,9 +131,6 @@ export class ProcessManager {
     })
   }
 
-  /**
-   * Start PostgreSQL server using pg_ctl
-   */
   async start(
     pgCtlPath: string,
     dataDir: string,
@@ -260,9 +254,6 @@ export class ProcessManager {
     })
   }
 
-  /**
-   * Stop PostgreSQL server using pg_ctl
-   */
   async stop(pgCtlPath: string, dataDir: string): Promise<ProcessResult> {
     if (isWindows()) {
       // On Windows, build the entire command as a single string
@@ -339,9 +330,6 @@ export class ProcessManager {
     })
   }
 
-  /**
-   * Get PostgreSQL server status
-   */
   async status(pgCtlPath: string, dataDir: string): Promise<StatusResult> {
     const args = ['status', '-D', dataDir]
 
@@ -361,9 +349,6 @@ export class ProcessManager {
     }
   }
 
-  /**
-   * Check if a database server is running by looking for PID file
-   */
   async isRunning(
     containerName: string,
     options: { engine: string },
@@ -389,9 +374,6 @@ export class ProcessManager {
     }
   }
 
-  /**
-   * Get the PID of a running database server
-   */
   async getPid(
     containerName: string,
     options: { engine: string },
@@ -414,9 +396,6 @@ export class ProcessManager {
     }
   }
 
-  /**
-   * Execute psql command
-   */
   async psql(
     psqlPath: string,
     options: PsqlOptions,
@@ -472,9 +451,6 @@ export class ProcessManager {
     })
   }
 
-  /**
-   * Execute pg_restore command
-   */
   async pgRestore(
     pgRestorePath: string,
     backupFile: string,

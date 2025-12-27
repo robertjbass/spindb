@@ -10,18 +10,12 @@ import type { ContainerConfig, PortResult } from '../types'
 
 const execAsync = promisify(exec)
 
-/**
- * Options for finding an available port
- */
 type FindPortOptions = {
   preferredPort?: number
   portRange?: { start: number; end: number }
 }
 
 export class PortManager {
-  /**
-   * Check if a specific port is available
-   */
   async isPortAvailable(port: number): Promise<boolean> {
     return new Promise((resolve) => {
       const server = net.createServer()
@@ -46,10 +40,6 @@ export class PortManager {
     })
   }
 
-  /**
-   * Find the next available port starting from the preferred port
-   * Returns the port number and whether it's the default port
-   */
   async findAvailablePort(options: FindPortOptions = {}): Promise<PortResult> {
     const preferredPort = options.preferredPort ?? defaults.port
     const portRange = options.portRange ?? defaults.portRange
@@ -79,9 +69,6 @@ export class PortManager {
     )
   }
 
-  /**
-   * Get what's using a specific port (for diagnostics)
-   */
   async getPortUser(port: number): Promise<string | null> {
     try {
       const { stdout } = await execAsync(`lsof -i :${port} -P -n | head -5`)
@@ -95,9 +82,6 @@ export class PortManager {
     }
   }
 
-  /**
-   * Get all ports currently assigned to containers across all engines
-   */
   async getContainerPorts(): Promise<number[]> {
     const containersDir = paths.containers
 
@@ -137,9 +121,6 @@ export class PortManager {
     return ports
   }
 
-  /**
-   * Find an available port that's not in use by any process AND not assigned to any container
-   */
   async findAvailablePortExcludingContainers(
     options: FindPortOptions = {},
   ): Promise<PortResult> {

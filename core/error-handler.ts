@@ -124,9 +124,6 @@ function getLogPath(): string {
   return join(getSpinDBRoot(), 'spindb.log')
 }
 
-/**
- * Ensure the log directory exists
- */
 function ensureLogDirectory(): void {
   const logPath = getLogPath()
   const logDir = dirname(logPath)
@@ -135,9 +132,6 @@ function ensureLogDirectory(): void {
   }
 }
 
-/**
- * Append a structured log entry to the log file
- */
 function appendToLogFile(entry: SpinDBErrorInfo): void {
   try {
     ensureLogDirectory()
@@ -153,9 +147,6 @@ function appendToLogFile(entry: SpinDBErrorInfo): void {
   }
 }
 
-/**
- * Format severity for console output
- */
 function formatSeverity(severity: ErrorSeverity): string {
   switch (severity) {
     case 'fatal':
@@ -169,10 +160,7 @@ function formatSeverity(severity: ErrorSeverity): string {
   }
 }
 
-/**
- * Log an error to console and log file
- * This is for CLI commands - displays error and returns (no blocking)
- */
+// Logs an error to console and log file (non-blocking for CLI commands).
 export function logError(error: SpinDBErrorInfo): void {
   // Console output with colors
   const prefix = formatSeverity(error.severity)
@@ -186,9 +174,6 @@ export function logError(error: SpinDBErrorInfo): void {
   appendToLogFile(error)
 }
 
-/**
- * Log a SpinDBError instance
- */
 export function logSpinDBError(error: SpinDBError): void {
   logError({
     code: error.code,
@@ -199,9 +184,6 @@ export function logSpinDBError(error: SpinDBError): void {
   })
 }
 
-/**
- * Log a warning (non-blocking, yellow output)
- */
 export function logWarning(
   message: string,
   context?: Record<string, unknown>,
@@ -216,9 +198,6 @@ export function logWarning(
   })
 }
 
-/**
- * Log an info message
- */
 export function logInfo(
   message: string,
   context?: Record<string, unknown>,
@@ -231,9 +210,7 @@ export function logInfo(
   })
 }
 
-/**
- * Log a debug message (only to file, not console)
- */
+// Logs a debug message (only to file, not console).
 export function logDebug(
   message: string,
   context?: Record<string, unknown>,
@@ -256,9 +233,6 @@ export function createPortInUseError(port: number): SpinDBError {
   )
 }
 
-/**
- * Create a container-not-found error
- */
 export function createContainerNotFoundError(name: string): SpinDBError {
   return new SpinDBError(
     ErrorCodes.CONTAINER_NOT_FOUND,
@@ -269,9 +243,6 @@ export function createContainerNotFoundError(name: string): SpinDBError {
   )
 }
 
-/**
- * Create a version mismatch error for pg_restore
- */
 export function createVersionMismatchError(
   dumpVersion: string,
   toolVersion: string,
@@ -285,9 +256,6 @@ export function createVersionMismatchError(
   )
 }
 
-/**
- * Create a dependency missing error
- */
 export function createDependencyMissingError(
   toolName: string,
   engine: string,
@@ -310,24 +278,12 @@ export function createDependencyMissingError(
   )
 }
 
-/**
- * Validate a database name to prevent SQL injection.
- * Database names must start with a letter and contain only
- * alphanumeric characters and underscores.
- *
- * Note: Hyphens are excluded because they require quoted identifiers
- * in SQL, which is error-prone for users.
- */
+// Validates a database name to prevent SQL injection.
+// Hyphens are excluded because they require quoted identifiers in SQL.
 export function isValidDatabaseName(name: string): boolean {
-  // Must start with a letter to be valid in all database systems
-  // Hyphens excluded to avoid requiring quoted identifiers in SQL
   return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)
 }
 
-/**
- * Assert that a database name is valid, throwing SpinDBError if not.
- * Use this at the entry points where database names are accepted.
- */
 export function assertValidDatabaseName(name: string): void {
   if (!isValidDatabaseName(name)) {
     throw new SpinDBError(

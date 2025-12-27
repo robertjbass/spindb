@@ -71,17 +71,10 @@ export class PostgreSQLEngine extends BaseEngine {
   defaultPort = 5432
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
-  /**
-   * Fetch all available versions from Maven (grouped by major version)
-   * Falls back to hardcoded versions if network fails
-   */
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
   }
 
-  /**
-   * Get current platform info
-   */
   getPlatformInfo(): { platform: string; arch: string } {
     const info = platformService.getPlatformInfo()
     return {
@@ -90,11 +83,7 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Resolve a version string to a full version.
-   * If given a major version like '17', resolves to '17.7.0'.
-   * If already a full version like '17.7.0', returns as-is.
-   */
+  // Resolves version string to full version (e.g., '17' -> '17.7.0').
   resolveFullVersion(version: string): string {
     // Check if already a full version (has at least one dot with numbers after)
     if (/^\d+\.\d+/.test(version)) {
@@ -104,9 +93,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
   }
 
-  /**
-   * Resolve version asynchronously (tries network first for latest)
-   */
   async resolveFullVersionAsync(version: string): Promise<string> {
     // Check if already a full version
     if (/^\d+\.\d+/.test(version)) {
@@ -116,10 +102,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return getLatestVersion(version)
   }
 
-  /**
-   * Get binary path for current platform
-   * Uses full version for directory naming (e.g., postgresql-17.7.0-darwin-arm64)
-   */
   getBinaryPath(version: string): string {
     const fullVersion = this.resolveFullVersion(version)
     const { platform: p, arch: a } = this.getPlatformInfo()
@@ -131,16 +113,10 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Get binary download URL
-   */
   getBinaryUrl(version: string, plat: string, arc: string): string {
     return getBinaryUrl(version, plat, arc)
   }
 
-  /**
-   * Verify binary installation
-   */
   async verifyBinary(binPath: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
     // Extract version from path
@@ -149,10 +125,7 @@ export class PostgreSQLEngine extends BaseEngine {
     return binaryManager.verify(version, p, a)
   }
 
-  /**
-   * Ensure PostgreSQL binaries are available
-   * Also registers client tools (psql, pg_dump, etc.) in config after download
-   */
+  // Also registers client tools (psql, pg_dump, etc.) in config after download.
   async ensureBinaries(
     version: string,
     onProgress?: ProgressCallback,
@@ -184,17 +157,11 @@ export class PostgreSQLEngine extends BaseEngine {
     return binPath
   }
 
-  /**
-   * Check if binaries are installed
-   */
   async isBinaryInstalled(version: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
     return binaryManager.isInstalled(version, p, a)
   }
 
-  /**
-   * Initialize a new PostgreSQL data directory
-   */
   async initDataDir(
     containerName: string,
     version: string,
@@ -224,9 +191,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return dataDir
   }
 
-  /**
-   * Get the path to postgresql.conf for a container
-   */
   getConfigPath(containerName: string): string {
     const dataDir = paths.getContainerDataPath(containerName, {
       engine: this.name,
@@ -234,11 +198,7 @@ export class PostgreSQLEngine extends BaseEngine {
     return join(dataDir, 'postgresql.conf')
   }
 
-  /**
-   * Set a configuration value in postgresql.conf
-   * If the setting exists (commented or not), it updates the line.
-   * If not found, appends it to the end of the file.
-   */
+  // Updates or appends a configuration value in postgresql.conf.
   async setConfigValue(
     dataDir: string,
     key: string,
@@ -261,10 +221,6 @@ export class PostgreSQLEngine extends BaseEngine {
     await writeFile(configPath, content, 'utf8')
   }
 
-  /**
-   * Get a configuration value from postgresql.conf
-   * Returns null if not found or commented out
-   */
   async getConfigValue(dataDir: string, key: string): Promise<string | null> {
     const configPath = join(dataDir, 'postgresql.conf')
     const content = await readFile(configPath, 'utf8')
@@ -280,9 +236,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return null
   }
 
-  /**
-   * Start PostgreSQL server
-   */
   async start(
     container: ContainerConfig,
     onProgress?: ProgressCallback,
@@ -307,9 +260,6 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Stop PostgreSQL server
-   */
   async stop(container: ContainerConfig): Promise<void> {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
@@ -320,9 +270,6 @@ export class PostgreSQLEngine extends BaseEngine {
     await processManager.stop(pgCtlPath, dataDir)
   }
 
-  /**
-   * Get PostgreSQL server status
-   */
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, version } = container
     const binPath = this.getBinaryPath(version)
@@ -333,16 +280,10 @@ export class PostgreSQLEngine extends BaseEngine {
     return processManager.status(pgCtlPath, dataDir)
   }
 
-  /**
-   * Detect backup format
-   */
   async detectBackupFormat(filePath: string): Promise<BackupFormat> {
     return detectBackupFormat(filePath)
   }
 
-  /**
-   * Restore a backup
-   */
   async restore(
     container: ContainerConfig,
     backupPath: string,
@@ -366,18 +307,12 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Get connection string
-   */
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
     const db = database || container.database || 'postgres'
     return `postgresql://${defaults.superuser}@127.0.0.1:${port}/${db}`
   }
 
-  /**
-   * Get path to psql, using config manager to find it
-   */
   async getPsqlPath(): Promise<string> {
     const psqlPath = await configManager.getBinaryPath('psql')
     if (!psqlPath) {
@@ -391,9 +326,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return psqlPath
   }
 
-  /**
-   * Get path to pg_restore, using config manager to find it
-   */
   async getPgRestorePath(): Promise<string> {
     const pgRestorePath = await configManager.getBinaryPath('pg_restore')
     if (!pgRestorePath) {
@@ -407,9 +339,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return pgRestorePath
   }
 
-  /**
-   * Get path to pg_dump, using config manager to find it
-   */
   async getPgDumpPath(): Promise<string> {
     const pgDumpPath = await configManager.getBinaryPath('pg_dump')
     if (!pgDumpPath) {
@@ -423,9 +352,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return pgDumpPath
   }
 
-  /**
-   * Open psql interactive shell
-   */
   async connect(container: ContainerConfig, database?: string): Promise<void> {
     const { port } = container
     const db = database || 'postgres'
@@ -460,9 +386,6 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Create a new database
-   */
   async createDatabase(
     container: ContainerConfig,
     database: string,
@@ -488,9 +411,6 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Drop a database
-   */
   async dropDatabase(
     container: ContainerConfig,
     database: string,
@@ -516,11 +436,6 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Get the size of the container's database in bytes
-   * Uses pg_database_size() to get accurate data size
-   * Returns null if container is not running or query fails
-   */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const { port, database } = container
     const db = database || 'postgres'
@@ -545,12 +460,6 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Create a dump from a remote database using a connection string
-   * @param connectionString PostgreSQL connection string (e.g., postgresql://user:pass@host:port/dbname)
-   * @param outputPath Path where the dump file will be saved
-   * @returns DumpResult with file path and any output
-   */
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
@@ -599,9 +508,6 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Create a backup of a PostgreSQL database
-   */
   async backup(
     container: ContainerConfig,
     outputPath: string,
@@ -610,11 +516,6 @@ export class PostgreSQLEngine extends BaseEngine {
     return createBackup(container, outputPath, options)
   }
 
-  /**
-   * Run a SQL file or inline SQL statement against the database
-   * CLI wrapper: psql -h 127.0.0.1 -p {port} -U postgres -d {db} -f {file}
-   * CLI wrapper: psql -h 127.0.0.1 -p {port} -U postgres -d {db} -c "{sql}"
-   */
   async runScript(
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
