@@ -48,6 +48,7 @@ export const backupCommand = new Command('backup')
   .option('--format <format>', 'Output format: sql or dump')
   .option('--sql', 'Output as plain SQL (shorthand for --format sql)')
   .option('--dump', 'Output as dump format (shorthand for --format dump)')
+  .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       containerArg: string | undefined,
@@ -58,6 +59,7 @@ export const backupCommand = new Command('backup')
         format?: string
         sql?: boolean
         dump?: boolean
+        json?: boolean
       },
     ) => {
       try {
@@ -205,16 +207,29 @@ export const backupCommand = new Command('backup')
 
         backupSpinner.succeed('Backup created successfully')
 
-        console.log()
-        console.log(uiSuccess('Backup complete'))
-        console.log()
-        console.log(chalk.gray('  File:'), chalk.cyan(result.path))
-        console.log(
-          chalk.gray('  Size:'),
-          chalk.white(formatBytes(result.size)),
-        )
-        console.log(chalk.gray('  Format:'), chalk.white(result.format))
-        console.log()
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              path: result.path,
+              size: result.size,
+              format: result.format,
+              database: databaseName,
+              container: containerName,
+            }),
+          )
+        } else {
+          console.log()
+          console.log(uiSuccess('Backup complete'))
+          console.log()
+          console.log(chalk.gray('  File:'), chalk.cyan(result.path))
+          console.log(
+            chalk.gray('  Size:'),
+            chalk.white(formatBytes(result.size)),
+          )
+          console.log(chalk.gray('  Format:'), chalk.white(result.format))
+          console.log()
+        }
       } catch (error) {
         const e = error as Error
 

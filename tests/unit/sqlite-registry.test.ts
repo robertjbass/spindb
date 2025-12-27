@@ -525,8 +525,14 @@ describe('SQLite Engine Registry (config.json structure)', () => {
         } as Record<string, true>,
       }
 
-      assert('/path/to/folder1' in registry.ignoreFolders, 'Should have folder1')
-      assert('/path/to/folder2' in registry.ignoreFolders, 'Should have folder2')
+      assert(
+        '/path/to/folder1' in registry.ignoreFolders,
+        'Should have folder1',
+      )
+      assert(
+        '/path/to/folder2' in registry.ignoreFolders,
+        'Should have folder2',
+      )
     })
   })
 
@@ -616,7 +622,11 @@ describe('SQLite Scanner', () => {
     it('should replace invalid chars with hyphens', () => {
       const name = 'my database'
       const sanitized = name.replace(/[^a-zA-Z0-9_-]/g, '-')
-      assertEqual(sanitized, 'my-database', 'Should replace spaces with hyphens')
+      assertEqual(
+        sanitized,
+        'my-database',
+        'Should replace spaces with hyphens',
+      )
     })
 
     it('should prefix with db- if starts with number', () => {

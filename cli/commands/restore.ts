@@ -9,6 +9,7 @@ import {
   promptContainerSelect,
   promptDatabaseName,
   promptInstallDependencies,
+  promptConfirm,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning } from '../ui/theme'
@@ -31,11 +32,18 @@ export const restoreCommand = new Command('restore')
     '--from-url <url>',
     'Pull data from a remote database connection string',
   )
+  .option('-f, --force', 'Overwrite existing database without confirmation')
+  .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       name: string | undefined,
       backup: string | undefined,
-      options: { database?: string; fromUrl?: string },
+      options: {
+        database?: string
+        fromUrl?: string
+        force?: boolean
+        json?: boolean
+      },
     ) => {
       let tempDumpPath: string | null = null
 
@@ -249,6 +257,64 @@ export const restoreCommand = new Command('restore')
         const format = await engine.detectBackupFormat(backupPath)
         detectSpinner.succeed(`Detected: ${format.description}`)
 
+        // Check if database already exists
+        const databaseExists =
+          config.databases && config.databases.includes(databaseName)
+
+        if (databaseExists) {
+          if (!options.force) {
+            // In JSON mode, just error out - no interactive prompts
+            if (options.json) {
+              console.log(
+                JSON.stringify({
+                  success: false,
+                  error: `Database "${databaseName}" already exists. Use --force to overwrite.`,
+                }),
+              )
+              process.exit(1)
+            }
+
+            // Interactive mode - prompt for confirmation
+            console.log()
+            console.log(
+              chalk.yellow(
+                `  Warning: Database "${databaseName}" already exists.`,
+              ),
+            )
+            console.log(
+              chalk.gray(
+                '  This operation will drop and recreate the database.',
+              ),
+            )
+            console.log()
+
+            const confirmed = await promptConfirm(
+              'Do you want to overwrite the existing database?',
+              false,
+            )
+
+            if (!confirmed) {
+              console.log(chalk.gray('\n  Restore cancelled\n'))
+              return
+            }
+          }
+
+          // Drop existing database
+          const dropSpinner = createSpinner(
+            `Dropping existing database "${databaseName}"...`,
+          )
+          dropSpinner.start()
+
+          try {
+            await engine.dropDatabase(config, databaseName)
+            await containerManager.removeDatabase(containerName, databaseName)
+            dropSpinner.succeed(`Dropped database "${databaseName}"`)
+          } catch (dropErr) {
+            dropSpinner.fail('Failed to drop database')
+            throw dropErr
+          }
+        }
+
         // Use TransactionManager to ensure database is cleaned up on restore failure
         const tx = new TransactionManager()
         let databaseCreated = false
@@ -348,25 +414,41 @@ export const restoreCommand = new Command('restore')
           config,
           databaseName,
         )
-        console.log()
-        console.log(uiSuccess(`Database "${databaseName}" restored`))
-        console.log()
-        console.log(chalk.gray('  Connection string:'))
-        console.log(chalk.cyan(`  ${connectionString}`))
 
-        const copied = await platformService.copyToClipboard(connectionString)
-        if (copied) {
-          console.log(chalk.gray('  Connection string copied to clipboard'))
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              database: databaseName,
+              container: containerName,
+              engine: engineName,
+              format: format.description,
+              sourceType: options.fromUrl ? 'remote' : 'file',
+              connectionString,
+              overwritten: databaseExists,
+            }),
+          )
         } else {
-          console.log(chalk.gray('  (Could not copy to clipboard)'))
-        }
+          console.log()
+          console.log(uiSuccess(`Database "${databaseName}" restored`))
+          console.log()
+          console.log(chalk.gray('  Connection string:'))
+          console.log(chalk.cyan(`  ${connectionString}`))
 
-        console.log()
-        console.log(chalk.gray('  Connect with:'))
-        console.log(
-          chalk.cyan(`  spindb connect ${containerName} -d ${databaseName}`),
-        )
-        console.log()
+          const copied = await platformService.copyToClipboard(connectionString)
+          if (copied) {
+            console.log(chalk.gray('  Connection string copied to clipboard'))
+          } else {
+            console.log(chalk.gray('  (Could not copy to clipboard)'))
+          }
+
+          console.log()
+          console.log(chalk.gray('  Connect with:'))
+          console.log(
+            chalk.cyan(`  spindb connect ${containerName} -d ${databaseName}`),
+          )
+          console.log()
+        }
       } catch (error) {
         const e = error as Error
 

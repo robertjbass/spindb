@@ -176,7 +176,9 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
       }
     }
 
-    const details = [`${entries.length} database(s) registered, all files exist`]
+    const details = [
+      `${entries.length} database(s) registered, all files exist`,
+    ]
     if (ignoredFolders.length > 0) {
       details.push(`${ignoredFolders.length} folder(s) ignored`)
     }

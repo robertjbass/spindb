@@ -69,10 +69,18 @@ export class ProcessManager {
 
       return new Promise((resolve, reject) => {
         exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
-          logDebug('initdb completed', { error: error?.message, stdout, stderr })
+          logDebug('initdb completed', {
+            error: error?.message,
+            stdout,
+            stderr,
+          })
           if (error) {
             await cleanupOnFailure()
-            reject(new Error(`initdb failed with code ${error.code}: ${stderr || stdout || error.message}`))
+            reject(
+              new Error(
+                `initdb failed with code ${error.code}: ${stderr || stdout || error.message}`,
+              ),
+            )
           } else {
             resolve({ stdout, stderr })
           }
@@ -149,7 +157,11 @@ export class ProcessManager {
 
       return new Promise((resolve, reject) => {
         exec(cmd, { timeout: 30000 }, async (error, stdout, stderr) => {
-          logDebug('pg_ctl start initiated', { error: error?.message, stdout, stderr })
+          logDebug('pg_ctl start initiated', {
+            error: error?.message,
+            stdout,
+            stderr,
+          })
 
           if (error) {
             reject(
@@ -173,7 +185,11 @@ export class ProcessManager {
                 logDebug('pg_ctl start completed (Windows)', { attempts })
                 resolve({ stdout, stderr })
               } else if (attempts >= maxAttempts) {
-                reject(new Error(`PostgreSQL failed to start within ${maxAttempts} seconds`))
+                reject(
+                  new Error(
+                    `PostgreSQL failed to start within ${maxAttempts} seconds`,
+                  ),
+                )
               } else {
                 setTimeout(checkReady, pollInterval)
               }
@@ -256,7 +272,11 @@ export class ProcessManager {
 
       return new Promise((resolve, reject) => {
         exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
-          logDebug('pg_ctl stop completed', { error: error?.message, stdout, stderr })
+          logDebug('pg_ctl stop completed', {
+            error: error?.message,
+            stdout,
+            stderr,
+          })
           if (error) {
             reject(
               new Error(

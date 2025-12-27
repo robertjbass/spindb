@@ -290,6 +290,7 @@ export const editCommand = new Command('edit')
     '--set-config <setting>',
     'Set a database config value (e.g., max_connections=200)',
   )
+  .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       name: string | undefined,
@@ -299,10 +300,12 @@ export const editCommand = new Command('edit')
         relocate?: string
         overwrite?: boolean
         setConfig?: string
+        json?: boolean
       },
     ) => {
       try {
         let containerName = name
+        const changes: Record<string, unknown> = {}
 
         if (!containerName) {
           const containers = await containerManager.list()
@@ -406,6 +409,7 @@ export const editCommand = new Command('edit')
 
           spinner.succeed(`Renamed "${containerName}" to "${options.name}"`)
 
+          changes.renamed = { from: containerName, to: options.name }
           containerName = options.name
         }
 
@@ -432,11 +436,14 @@ export const editCommand = new Command('edit')
           })
 
           spinner.succeed(`Port changed to ${options.port}`)
-          console.log(
-            chalk.gray(
-              '  Note: Port change takes effect on next container start.',
-            ),
-          )
+          changes.port = { from: config.port, to: options.port }
+          if (!options.json) {
+            console.log(
+              chalk.gray(
+                '  Note: Port change takes effect on next container start.',
+              ),
+            )
+          }
         }
 
         // Handle SQLite relocate
@@ -566,6 +573,7 @@ export const editCommand = new Command('edit')
             }
 
             spinner.succeed(`Database relocated to ${newPath}`)
+            changes.relocated = { from: originalPath, to: newPath }
           } catch (error) {
             spinner.fail('Failed to relocate database')
             throw error
@@ -620,6 +628,7 @@ export const editCommand = new Command('edit')
               }
             ).setConfigValue(dataDir, configKey, configValue)
             spinner.succeed(`Set ${configKey} = ${configValue}`)
+            changes.config = { key: configKey, value: configValue }
           } else {
             spinner.fail('Config editing not supported for this engine')
             process.exit(1)
@@ -629,28 +638,40 @@ export const editCommand = new Command('edit')
           const running = await processManager.isRunning(containerName, {
             engine: config.engine,
           })
-          if (running) {
-            console.log(
-              uiInfo(
-                '  Note: Restart the container for changes to take effect.',
-              ),
-            )
-            console.log(
-              chalk.gray(
-                `    spindb stop ${containerName} && spindb start ${containerName}`,
-              ),
-            )
-          } else {
-            console.log(
-              chalk.gray(
-                '  Config change will take effect on next container start.',
-              ),
-            )
+          if (!options.json) {
+            if (running) {
+              console.log(
+                uiInfo(
+                  '  Note: Restart the container for changes to take effect.',
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  `    spindb stop ${containerName} && spindb start ${containerName}`,
+                ),
+              )
+            } else {
+              console.log(
+                chalk.gray(
+                  '  Config change will take effect on next container start.',
+                ),
+              )
+            }
           }
         }
 
-        console.log()
-        console.log(uiSuccess('Container updated successfully'))
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              container: containerName,
+              changes,
+            }),
+          )
+        } else {
+          console.log()
+          console.log(uiSuccess('Container updated successfully'))
+        }
       } catch (error) {
         const e = error as Error
         console.error(uiError(e.message))

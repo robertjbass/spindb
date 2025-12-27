@@ -12,10 +12,11 @@ export const deleteCommand = new Command('delete')
   .argument('[name]', 'Container name')
   .option('-f, --force', 'Force delete (stop if running)')
   .option('-y, --yes', 'Skip confirmation')
+  .option('-j, --json', 'Output result as JSON')
   .action(
     async (
       name: string | undefined,
-      options: { force?: boolean; yes?: boolean },
+      options: { force?: boolean; yes?: boolean; json?: boolean },
     ) => {
       try {
         let containerName = name
@@ -58,13 +59,15 @@ export const deleteCommand = new Command('delete')
         })
         if (running) {
           if (options.force) {
-            const stopSpinner = createSpinner(`Stopping ${containerName}...`)
-            stopSpinner.start()
+            const stopSpinner = options.json
+              ? null
+              : createSpinner(`Stopping ${containerName}...`)
+            stopSpinner?.start()
 
             const engine = getEngine(config.engine)
             await engine.stop(config)
 
-            stopSpinner.succeed(`Stopped "${containerName}"`)
+            stopSpinner?.succeed(`Stopped "${containerName}"`)
           } else {
             console.error(
               uiError(
@@ -75,12 +78,25 @@ export const deleteCommand = new Command('delete')
           }
         }
 
-        const deleteSpinner = createSpinner(`Deleting ${containerName}...`)
-        deleteSpinner.start()
+        const deleteSpinner = options.json
+          ? null
+          : createSpinner(`Deleting ${containerName}...`)
+        deleteSpinner?.start()
 
         await containerManager.delete(containerName, { force: true })
 
-        deleteSpinner.succeed(`Container "${containerName}" deleted`)
+        deleteSpinner?.succeed(`Container "${containerName}" deleted`)
+
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              success: true,
+              deleted: containerName,
+              container: containerName,
+              engine: config.engine,
+            }),
+          )
+        }
       } catch (error) {
         const e = error as Error
         console.error(uiError(e.message))

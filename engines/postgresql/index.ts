@@ -158,12 +158,22 @@ export class PostgreSQLEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    const binPath = await binaryManager.ensureInstalled(version, p, a, onProgress)
+    const binPath = await binaryManager.ensureInstalled(
+      version,
+      p,
+      a,
+      onProgress,
+    )
 
     // Register client tools from downloaded binaries in config
     // This ensures dependency checks find them without requiring system installation
     const ext = platformService.getExecutableExtension()
-    const clientTools = ['psql', 'pg_dump', 'pg_restore', 'pg_basebackup'] as const
+    const clientTools = [
+      'psql',
+      'pg_dump',
+      'pg_restore',
+      'pg_basebackup',
+    ] as const
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
@@ -616,7 +626,13 @@ export class PostgreSQLEngine extends BaseEngine {
     // On Windows, build a single command string and use exec to avoid
     // passing an args array with shell:true (DEP0190 and quoting issues).
     if (isWindows()) {
-      const cmd = buildWindowsPsqlCommand(psqlPath, port, defaults.superuser, db, options)
+      const cmd = buildWindowsPsqlCommand(
+        psqlPath,
+        port,
+        defaults.superuser,
+        db,
+        options,
+      )
       try {
         await execAsync(cmd)
         return
