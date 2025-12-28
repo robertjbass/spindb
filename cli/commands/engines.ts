@@ -7,9 +7,16 @@ import { getEngine } from '../../engines'
 import { binaryManager } from '../../core/binary-manager'
 import { paths } from '../../config/paths'
 import { platformService } from '../../core/platform-service'
+import {
+  detectPackageManager,
+  checkEngineDependencies,
+  installEngineDependencies,
+  getManualInstallInstructions,
+  getCurrentPlatform,
+} from '../../core/dependency-manager'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { uiError, uiWarning, uiInfo, formatBytes } from '../ui/theme'
+import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
 import { getEngineIcon, ENGINE_ICONS } from '../constants'
 import {
   getInstalledEngines,
@@ -250,6 +257,80 @@ async function deleteEngine(
   }
 }
 
+// Install an engine via system package manager
+async function installEngineViaPackageManager(
+  engine: string,
+  displayName: string,
+): Promise<void> {
+  // Check if already installed
+  const statuses = await checkEngineDependencies(engine)
+  const allInstalled = statuses.every((s) => s.installed)
+
+  if (allInstalled) {
+    console.log(uiInfo(`${displayName} is already installed.`))
+    for (const status of statuses) {
+      if (status.path) {
+        console.log(chalk.gray(`  ${status.dependency.binary}: ${status.path}`))
+      }
+    }
+    return
+  }
+
+  // Detect package manager
+  const packageManager = await detectPackageManager()
+
+  if (!packageManager) {
+    console.error(uiError('No supported package manager found.'))
+    console.log()
+    console.log(chalk.yellow('Manual installation instructions:'))
+    const platform = getCurrentPlatform()
+    const missingDeps = statuses.filter((s) => !s.installed)
+    for (const status of missingDeps) {
+      const instructions = getManualInstallInstructions(
+        status.dependency,
+        platform,
+      )
+      console.log(chalk.gray(`  ${status.dependency.name}:`))
+      for (const instruction of instructions) {
+        console.log(chalk.gray(`    ${instruction}`))
+      }
+    }
+    process.exit(1)
+  }
+
+  console.log(uiInfo(`Installing ${displayName} via ${packageManager.name}...`))
+  console.log()
+
+  // Install missing dependencies
+  const results = await installEngineDependencies(engine, packageManager)
+
+  // Report results
+  const succeeded = results.filter((r) => r.success)
+  const failed = results.filter((r) => !r.success)
+
+  if (succeeded.length > 0) {
+    console.log()
+    console.log(uiSuccess(`${displayName} installed successfully.`))
+
+    // Show installed paths
+    const newStatuses = await checkEngineDependencies(engine)
+    for (const status of newStatuses) {
+      if (status.installed && status.path) {
+        console.log(chalk.gray(`  ${status.dependency.binary}: ${status.path}`))
+      }
+    }
+  }
+
+  if (failed.length > 0) {
+    console.log()
+    console.error(uiError('Some components failed to install:'))
+    for (const result of failed) {
+      console.error(chalk.red(`  ${result.dependency.name}: ${result.error}`))
+    }
+    process.exit(1)
+  }
+}
+
 // Main engines command
 export const enginesCommand = new Command('engines')
   .description('Manage installed database engines')
@@ -287,53 +368,71 @@ enginesCommand
 
 // Download subcommand
 enginesCommand
-  .command('download <engine> <version>')
-  .description('Download engine binaries (PostgreSQL only)')
-  .action(async (engineName: string, version: string) => {
+  .command('download <engine> [version]')
+  .description('Download/install engine binaries')
+  .action(async (engineName: string, version?: string) => {
     try {
-      // Validate engine name
-      const validEngines = ['postgresql', 'pg', 'postgres']
-      if (!validEngines.includes(engineName.toLowerCase())) {
-        console.error(
-          uiError(
-            `Only PostgreSQL binaries can be downloaded. MySQL and SQLite use system installations.`,
-          ),
-        )
-        process.exit(1)
-      }
+      const normalizedEngine = engineName.toLowerCase()
 
-      const engine = getEngine(Engine.PostgreSQL)
+      // PostgreSQL: download binaries
+      if (['postgresql', 'pg', 'postgres'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('PostgreSQL requires a version (e.g., 17)'))
+          process.exit(1)
+        }
 
-      // Check if already installed
-      const isInstalled = await engine.isBinaryInstalled(version)
-      if (isInstalled) {
-        console.log(
-          uiInfo(`PostgreSQL ${version} binaries are already installed.`),
+        const engine = getEngine(Engine.PostgreSQL)
+
+        // Check if already installed
+        const isInstalled = await engine.isBinaryInstalled(version)
+        if (isInstalled) {
+          console.log(
+            uiInfo(`PostgreSQL ${version} binaries are already installed.`),
+          )
+          return
+        }
+
+        const spinner = createSpinner(
+          `Downloading PostgreSQL ${version} binaries...`,
         )
+        spinner.start()
+
+        await engine.ensureBinaries(version, ({ message }) => {
+          spinner.text = message
+        })
+
+        spinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+
+        // Show the path for reference
+        const { platform, arch } = platformService.getPlatformInfo()
+        const fullVersion = binaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'postgresql',
+          version: fullVersion,
+          platform,
+          arch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
         return
       }
 
-      const spinner = createSpinner(
-        `Downloading PostgreSQL ${version} binaries...`,
+      // MySQL and SQLite: install via system package manager
+      if (['mysql', 'mariadb'].includes(normalizedEngine)) {
+        await installEngineViaPackageManager('mysql', 'MySQL')
+        return
+      }
+
+      if (['sqlite', 'sqlite3'].includes(normalizedEngine)) {
+        await installEngineViaPackageManager('sqlite', 'SQLite')
+        return
+      }
+
+      console.error(
+        uiError(
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite`,
+        ),
       )
-      spinner.start()
-
-      await engine.ensureBinaries(version, ({ message }) => {
-        spinner.text = message
-      })
-
-      spinner.succeed(`PostgreSQL ${version} binaries downloaded`)
-
-      // Show the path for reference
-      const { platform, arch } = platformService.getPlatformInfo()
-      const fullVersion = binaryManager.getFullVersion(version)
-      const binPath = paths.getBinaryPath({
-        engine: 'postgresql',
-        version: fullVersion,
-        platform,
-        arch,
-      })
-      console.log(chalk.gray(`  Location: ${binPath}`))
+      process.exit(1)
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))

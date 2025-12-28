@@ -45,6 +45,7 @@ jobs:
 
   # ============================================
   # PostgreSQL Integration Tests
+  # Uses SpinDB to download and manage PostgreSQL
   # ============================================
   test-postgresql:
     name: PostgreSQL (${{ matrix.os }})
@@ -70,63 +71,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Download PostgreSQL server binaries via SpinDB
-      - name: Download PostgreSQL binaries
+      # Use SpinDB to download PostgreSQL binaries
+      - name: Install PostgreSQL via SpinDB
         run: pnpm start engines download postgresql 17
 
-      # Linux: Install PostgreSQL 17 client tools from PostgreSQL apt repository
-      # The downloaded binaries only include server components (postgres, initdb, pg_ctl)
-      # Client tools (psql, pg_dump) need to be installed separately
-      - name: Install PostgreSQL client (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          # Add PostgreSQL apt repository for version 17
-          sudo apt-get install -y curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          sudo apt-get update
-          # Install only client tools (not the server)
-          sudo apt-get install -y postgresql-client-17
-          # Add PostgreSQL 17 to PATH (apt installs to /usr/lib/postgresql/17/bin/)
-          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
-
-      # macOS: Install PostgreSQL 17 from Homebrew for client tools
-      # The downloaded binaries may not include client tools on macOS
-      - name: Install PostgreSQL client (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install postgresql@17
-          echo "$(brew --prefix postgresql@17)/bin" >> $GITHUB_PATH
-
-      # Windows: Add downloaded PostgreSQL binaries to PATH
-      - name: Add PostgreSQL to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $pgDir = Get-ChildItem "$env:USERPROFILE\.spindb\bin" -Directory |
-            Where-Object { $_.Name -match '^postgresql-17\.' } |
-            Select-Object -First 1
-
-          if ($pgDir) {
-            $pgPath = Join-Path $pgDir.FullName "bin"
-            echo "$pgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            echo "Found PostgreSQL at: $pgPath"
-          } else {
-            echo "ERROR: PostgreSQL 17.x binaries not found"
-            Get-ChildItem "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue
-            exit 1
-          }
-
-      - name: Verify PostgreSQL tools
-        run: |
-          psql --version
-          pg_dump --version
-
-      # Refresh SpinDB config to detect the correct binary paths from PATH
-      # This clears cached paths and re-detects tools, finding pg_dump from the updated PATH
-      - name: Refresh SpinDB config
-        run: pnpm start config detect
+      # Show what SpinDB installed
+      - name: Show installed engines
+        run: pnpm start engines list
 
       - name: Run PostgreSQL integration tests
         run: pnpm test:pg
@@ -134,9 +85,8 @@ jobs:
 
   # ============================================
   # MySQL Integration Tests
-  # NOTE: MySQL tests are skipped on Linux due to permission issues with
-  # Ubuntu's MySQL package (requires writing to /var/log/mysql/error.log).
-  # MySQL works correctly on macOS and Windows.
+  # Uses SpinDB to install MySQL via system package manager
+  # Skipped on Linux due to permission issues with Ubuntu's MySQL package
   # ============================================
   test-mysql:
     name: MySQL (${{ matrix.os }})
@@ -163,18 +113,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # macOS: Install MySQL via Homebrew
-      - name: Install MySQL (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install mysql
-          # Don't start MySQL service (we manage our own instances)
+      # Use SpinDB to install MySQL via system package manager
+      - name: Install MySQL via SpinDB
+        run: pnpm start engines download mysql
 
-      # Windows: Install MySQL via Chocolatey
-      - name: Install MySQL (Windows)
-        if: runner.os == 'Windows'
-        run: choco install mysql -y
-
+      # Windows needs MySQL added to PATH after choco install
       - name: Add MySQL to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -193,10 +136,8 @@ jobs:
             }
           }
 
-      - name: Verify MySQL tools
-        run: |
-          mysql --version
-          mysqld --version
+      - name: Show installed engines
+        run: pnpm start engines list
 
       - name: Run MySQL integration tests
         run: pnpm test:mysql
@@ -204,6 +145,7 @@ jobs:
 
   # ============================================
   # SQLite Integration Tests
+  # Uses SpinDB to install SQLite via system package manager
   # ============================================
   test-sqlite:
     name: SQLite (${{ matrix.os }})
@@ -229,23 +171,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Linux: SQLite3 is usually pre-installed, but ensure it
-      - name: Install SQLite (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3
+      # Use SpinDB to install SQLite via system package manager
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite
 
-      # macOS: SQLite3 is pre-installed on macOS
-      - name: Verify SQLite (macOS)
-        if: runner.os == 'macOS'
-        run: sqlite3 --version
-
-      # Windows: Install SQLite via Chocolatey
-      - name: Install SQLite (Windows)
-        if: runner.os == 'Windows'
-        run: choco install sqlite -y
-
+      # Windows needs SQLite added to PATH after choco install
       - name: Add SQLite to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -255,8 +185,8 @@ jobs:
             echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
 
-      - name: Verify SQLite
-        run: sqlite3 --version
+      - name: Show installed engines
+        run: pnpm start engines list
 
       - name: Run SQLite integration tests
         run: pnpm test:sqlite
@@ -289,51 +219,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Download PostgreSQL server binaries via SpinDB
-      - name: Download PostgreSQL binaries
+      # Use SpinDB to install all required engines
+      - name: Install PostgreSQL via SpinDB
         run: pnpm start engines download postgresql 17
 
-      # Linux: Install SQLite and PostgreSQL 17 client tools
-      # The downloaded binaries only include server components, not client tools
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          # Add PostgreSQL apt repository for version 17
-          sudo apt-get install -y curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          sudo apt-get update
-          # Install SQLite and PostgreSQL 17 client tools
-          sudo apt-get install -y sqlite3 postgresql-client-17
-          # Add PostgreSQL 17 to PATH (apt installs to /usr/lib/postgresql/17/bin/)
-          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite
 
-      # macOS: Install PostgreSQL 17 from Homebrew (SQLite is pre-installed)
-      - name: Install PostgreSQL client (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install postgresql@17
-          echo "$(brew --prefix postgresql@17)/bin" >> $GITHUB_PATH
-
-      # Windows: Add PostgreSQL to PATH and install SQLite
-      - name: Setup PostgreSQL (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $pgDir = Get-ChildItem "$env:USERPROFILE\.spindb\bin" -Directory |
-            Where-Object { $_.Name -match '^postgresql-17\.' } |
-            Select-Object -First 1
-
-          if ($pgDir) {
-            $pgPath = Join-Path $pgDir.FullName "bin"
-            echo "$pgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          }
-
-      - name: Install SQLite (Windows)
-        if: runner.os == 'Windows'
-        run: choco install sqlite -y
-
+      # Windows needs SQLite added to PATH after choco install
       - name: Add SQLite to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -343,15 +236,8 @@ jobs:
             echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
 
-      - name: Verify tools
-        run: |
-          psql --version
-          sqlite3 --version
-
-      # Refresh SpinDB config to detect the correct binary paths from PATH
-      # This clears cached paths and re-detects tools, finding pg_dump from the updated PATH
-      - name: Refresh SpinDB config
-        run: pnpm start config detect
+      - name: Show installed engines
+        run: pnpm start engines list
 
       - name: Run CLI E2E tests
         run: pnpm test:cli

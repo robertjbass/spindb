@@ -399,20 +399,188 @@ export class BinaryManager {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
+    let binPath: string
+
     if (await this.isInstalled(version, platform, arch)) {
       onProgress?.({
         stage: 'cached',
         message: 'Using cached PostgreSQL binaries',
       })
-      return paths.getBinaryPath({
+      binPath = paths.getBinaryPath({
         engine: 'postgresql',
         version: fullVersion,
         platform,
         arch,
       })
+    } else {
+      binPath = await this.download(version, platform, arch, onProgress)
     }
 
-    return this.download(version, platform, arch, onProgress)
+    // On Linux, zonky.io binaries don't include client tools (psql, pg_dump)
+    // Download them separately from the PostgreSQL apt repository
+    if (platform === 'linux') {
+      await this.ensureClientTools(binPath, version, onProgress)
+    }
+
+    return binPath
+  }
+
+  /**
+   * Ensure PostgreSQL client tools are available on Linux
+   * Downloads from PostgreSQL apt repository if missing
+   */
+  private async ensureClientTools(
+    binPath: string,
+    version: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    const clientTools = ['psql', 'pg_dump', 'pg_restore', 'pg_dumpall']
+    const binDir = join(binPath, 'bin')
+
+    // Check if client tools already exist
+    const missingTools = clientTools.filter(
+      (tool) => !existsSync(join(binDir, tool))
+    )
+
+    if (missingTools.length === 0) {
+      return // All client tools already present
+    }
+
+    onProgress?.({
+      stage: 'downloading',
+      message: 'Downloading PostgreSQL client tools...',
+    })
+
+    const majorVersion = version.split('.')[0]
+    const tempDir = join(paths.bin, `temp-client-${majorVersion}`)
+
+    try {
+      await mkdir(tempDir, { recursive: true })
+
+      // Get the latest client package version from apt repository
+      const debUrl = await this.getClientPackageUrl(majorVersion)
+      const debFile = join(tempDir, 'postgresql-client.deb')
+
+      // Download the .deb package
+      const response = await fetch(debUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to download client tools: ${response.status}`)
+      }
+
+      const fileStream = createWriteStream(debFile)
+      // @ts-expect-error - response.body is ReadableStream
+      await pipeline(response.body, fileStream)
+
+      onProgress?.({
+        stage: 'extracting',
+        message: 'Extracting PostgreSQL client tools...',
+      })
+
+      // Extract .deb using ar (available on Linux)
+      await execAsync(`ar -x "${debFile}"`, { cwd: tempDir })
+
+      // Find and extract data.tar.xz or data.tar.zst
+      const dataFile = await this.findDataTar(tempDir)
+      if (!dataFile) {
+        throw new Error('Could not find data archive in .deb package')
+      }
+
+      // Determine compression type and extract
+      const extractDir = join(tempDir, 'extracted')
+      await mkdir(extractDir, { recursive: true })
+
+      if (dataFile.endsWith('.xz')) {
+        await execAsync(`tar -xJf "${dataFile}" -C "${extractDir}"`)
+      } else if (dataFile.endsWith('.zst')) {
+        await execAsync(`tar --zstd -xf "${dataFile}" -C "${extractDir}"`)
+      } else if (dataFile.endsWith('.gz')) {
+        await execAsync(`tar -xzf "${dataFile}" -C "${extractDir}"`)
+      } else {
+        await execAsync(`tar -xf "${dataFile}" -C "${extractDir}"`)
+      }
+
+      // Copy client tools to the bin directory
+      const clientBinDir = join(extractDir, 'usr', 'lib', 'postgresql', majorVersion, 'bin')
+
+      if (existsSync(clientBinDir)) {
+        for (const tool of clientTools) {
+          const srcPath = join(clientBinDir, tool)
+          const destPath = join(binDir, tool)
+          if (existsSync(srcPath) && !existsSync(destPath)) {
+            await cp(srcPath, destPath)
+            await chmod(destPath, 0o755)
+          }
+        }
+      }
+
+      onProgress?.({
+        stage: 'complete',
+        message: 'PostgreSQL client tools installed',
+      })
+    } finally {
+      // Clean up temp directory
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  /**
+   * Get the download URL for PostgreSQL client package from apt repository
+   */
+  private async getClientPackageUrl(majorVersion: string): Promise<string> {
+    const baseUrl = 'https://apt.postgresql.org/pub/repos/apt/pool/main/p'
+    const packageDir = `postgresql-${majorVersion}`
+    const indexUrl = `${baseUrl}/${packageDir}/`
+
+    try {
+      const response = await fetch(indexUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch package index: ${response.status}`)
+      }
+
+      const html = await response.text()
+
+      // Find the latest postgresql-client package for amd64
+      // Pattern: postgresql-client-17_17.x.x-x.pgdg+1_amd64.deb
+      const pattern = new RegExp(
+        `href="(postgresql-client-${majorVersion}_[^"]+_amd64\\.deb)"`,
+        'g'
+      )
+
+      const matches: string[] = []
+      let match
+      while ((match = pattern.exec(html)) !== null) {
+        // Skip debug symbols and snapshot versions
+        if (!match[1].includes('dbgsym') && !match[1].includes('~')) {
+          matches.push(match[1])
+        }
+      }
+
+      if (matches.length === 0) {
+        throw new Error(`No client package found for PostgreSQL ${majorVersion}`)
+      }
+
+      // Sort to get the latest version and return the URL
+      matches.sort().reverse()
+      const latestPackage = matches[0]
+
+      return `${indexUrl}${latestPackage}`
+    } catch (error) {
+      const err = error as Error
+      throw new Error(`Failed to get client package URL: ${err.message}`)
+    }
+  }
+
+  /**
+   * Find data.tar.* file in extracted .deb
+   */
+  private async findDataTar(dir: string): Promise<string | null> {
+    const entries = await readdir(dir)
+    for (const entry of entries) {
+      if (entry.startsWith('data.tar')) {
+        return join(dir, entry)
+      }
+    }
+    return null
   }
 }
 
