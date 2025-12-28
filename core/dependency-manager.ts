@@ -201,6 +201,20 @@ function isRoot(): boolean {
 }
 
 /**
+ * Check if running in a CI environment where sudo doesn't require a password
+ */
+function isPasswordlessSudoEnvironment(): boolean {
+  // GitHub Actions, GitLab CI, CircleCI, Travis CI, etc.
+  return !!(
+    process.env.CI ||
+    process.env.GITHUB_ACTIONS ||
+    process.env.GITLAB_CI ||
+    process.env.CIRCLECI ||
+    process.env.TRAVIS
+  )
+}
+
+/**
  * Execute command with inherited stdio (for TTY support with sudo)
  * Uses spawnSync to properly connect to the terminal for password prompts
  */
@@ -213,7 +227,12 @@ function execWithInheritedStdio(command: string): void {
   }
 
   // Check if we need a TTY for sudo password prompts
-  if (!hasTTY() && cmdToRun.includes('sudo')) {
+  // Skip this check in CI environments where sudo doesn't require a password
+  if (
+    !hasTTY() &&
+    cmdToRun.includes('sudo') &&
+    !isPasswordlessSudoEnvironment()
+  ) {
     throw new Error(
       'Cannot run sudo commands without an interactive terminal. Please run the install command manually:\n' +
         `  ${command}`,

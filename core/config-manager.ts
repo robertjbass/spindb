@@ -44,9 +44,6 @@ const ALL_TOOLS: BinaryTool[] = [
 export class ConfigManager {
   private config: SpinDBConfig | null = null
 
-  /**
-   * Load config from disk, creating default if it doesn't exist
-   */
   async load(): Promise<SpinDBConfig> {
     if (this.config) {
       return this.config
@@ -77,9 +74,6 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * Save config to disk
-   */
   async save(): Promise<void> {
     const configPath = paths.config
 
@@ -92,9 +86,6 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * Get the path for a binary tool, detecting from system if not configured
-   */
   async getBinaryPath(tool: BinaryTool): Promise<string | null> {
     const config = await this.load()
 
@@ -120,9 +111,6 @@ export class ConfigManager {
     return null
   }
 
-  /**
-   * Set the path for a binary tool
-   */
   async setBinaryPath(
     tool: BinaryTool,
     path: string,
@@ -156,27 +144,17 @@ export class ConfigManager {
     await this.save()
   }
 
-  /**
-   * Get configuration for a specific binary
-   */
   async getBinaryConfig(tool: BinaryTool): Promise<BinaryConfig | null> {
     const config = await this.load()
     return config.binaries[tool] || null
   }
 
-  /**
-   * Detect a binary on the system PATH
-   * Uses platformService for cross-platform detection (handles which/where and .exe extension)
-   */
   async detectSystemBinary(tool: BinaryTool): Promise<string | null> {
     // Use platformService which handles cross-platform differences
     // (which vs where, .exe extension, platform-specific search paths)
     return platformService.findToolPath(tool)
   }
 
-  /**
-   * Detect all available client tools on the system
-   */
   async detectAllTools(): Promise<Map<BinaryTool, string>> {
     const found = new Map<BinaryTool, string>()
 
@@ -190,10 +168,6 @@ export class ConfigManager {
     return found
   }
 
-  /**
-   * Initialize config by detecting all available tools
-   * Groups results by category for better display
-   */
   async initialize(): Promise<{
     found: BinaryTool[]
     missing: BinaryTool[]
@@ -231,9 +205,6 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * Check if the config cache is stale (older than 7 days)
-   */
   async isStale(): Promise<boolean> {
     const config = await this.load()
     if (!config.updatedAt) {
@@ -245,10 +216,6 @@ export class ConfigManager {
     return now - updatedAt > CACHE_STALENESS_MS
   }
 
-  /**
-   * Refresh all tool paths if cache is stale
-   * Returns true if refresh was performed
-   */
   async refreshIfStale(): Promise<boolean> {
     if (await this.isStale()) {
       await this.refreshAllBinaries()
@@ -257,48 +224,29 @@ export class ConfigManager {
     return false
   }
 
-  /**
-   * Force refresh all binary paths
-   * Re-detects all tools and updates versions
-   */
   async refreshAllBinaries(): Promise<void> {
     await this.clearAllBinaries()
     await this.initialize()
   }
 
-  /**
-   * Get the full config
-   */
   async getConfig(): Promise<SpinDBConfig> {
     return this.load()
   }
 
-  /**
-   * Clear a binary configuration
-   */
   async clearBinaryPath(tool: BinaryTool): Promise<void> {
     const config = await this.load()
     delete config.binaries[tool]
     await this.save()
   }
 
-  /**
-   * Clear all binary configurations (useful for re-detection)
-   */
   async clearAllBinaries(): Promise<void> {
     const config = await this.load()
     config.binaries = {}
     await this.save()
   }
 
-  // ============================================================
   // SQLite Registry Methods
-  // ============================================================
 
-  /**
-   * Get the SQLite registry from config
-   * Returns empty registry if none exists
-   */
   async getSqliteRegistry(): Promise<SQLiteEngineRegistry> {
     const config = await this.load()
     return (
@@ -310,9 +258,6 @@ export class ConfigManager {
     )
   }
 
-  /**
-   * Save the SQLite registry to config
-   */
   async saveSqliteRegistry(registry: SQLiteEngineRegistry): Promise<void> {
     const config = await this.load()
     if (!config.registry) {

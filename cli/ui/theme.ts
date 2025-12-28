@@ -1,8 +1,5 @@
 import chalk from 'chalk'
 
-/**
- * Color theme for spindb CLI
- */
 export const theme = {
   // Brand colors
   primary: chalk.cyan,
@@ -45,9 +42,6 @@ export const theme = {
   },
 }
 
-/**
- * Format a header box
- */
 export function header(text: string): string {
   const line = '─'.repeat(text.length + 4)
   return `
@@ -57,61 +51,37 @@ ${chalk.cyan('└' + line + '┘')}
 `.trim()
 }
 
-/**
- * Format a success message
- */
 export function uiSuccess(message: string): string {
   return `${theme.icons.success} ${message}`
 }
 
-/**
- * Format an error message
- */
 export function uiError(message: string): string {
   return `${theme.icons.error} ${chalk.red(message)}`
 }
 
-/**
- * Format a warning message
- */
 export function uiWarning(message: string): string {
   return `${theme.icons.warning} ${chalk.yellow(message)}`
 }
 
-/**
- * Format an info message
- */
 export function uiInfo(message: string): string {
   return `${theme.icons.info} ${message}`
 }
 
-/**
- * Format a key-value pair
- */
 export function keyValue(key: string, value: string): string {
   return `${chalk.gray(key + ':')} ${value}`
 }
 
-/**
- * Strip ANSI escape codes to get actual string length
- */
 function stripAnsi(str: string): string {
   // eslint-disable-next-line no-control-regex
   return str.replace(/\x1B\[[0-9;]*m/g, '')
 }
 
-/**
- * Pad a string (accounting for ANSI codes) to a specific visible width
- */
 function padToWidth(str: string, width: number): string {
   const visibleLength = stripAnsi(str).length
   const padding = Math.max(0, width - visibleLength)
   return str + ' '.repeat(padding)
 }
 
-/**
- * Create a box with dynamic width based on content
- */
 export function box(lines: string[], padding: number = 2): string {
   // Calculate max visible width
   const maxWidth = Math.max(...lines.map((line) => stripAnsi(line).length))
@@ -136,9 +106,6 @@ export function box(lines: string[], padding: number = 2): string {
   return boxLines.join('\n')
 }
 
-/**
- * Format a connection string box
- */
 export function connectionBox(
   name: string,
   connectionString: string,
@@ -156,9 +123,6 @@ export function connectionBox(
   return box(lines)
 }
 
-/**
- * Format bytes into human-readable format (B, KB, MB, GB)
- */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']

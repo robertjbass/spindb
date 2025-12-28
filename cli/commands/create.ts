@@ -376,28 +376,26 @@ export const createCommand = new Command('create')
           }
         }
 
-        // For PostgreSQL, download binaries FIRST - they include client tools (psql, pg_dump, etc.)
-        // This avoids requiring a separate system installation of client tools
+        // For PostgreSQL, ensure binaries FIRST - they include client tools (psql, pg_dump, etc.)
+        // ensureBinaries also registers tool paths in config cache so getMissingDependencies can find them
         if (isPostgreSQL) {
           const binarySpinner = createSpinner(
             `Checking ${dbEngine.displayName} ${version} binaries...`,
           )
           binarySpinner.start()
 
-          const isInstalled = await dbEngine.isBinaryInstalled(version)
-          if (isInstalled) {
-            binarySpinner.succeed(
-              `${dbEngine.displayName} ${version} binaries ready (cached)`,
-            )
-          } else {
-            binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
-            await dbEngine.ensureBinaries(version, ({ message }) => {
+          // Always call ensureBinaries - it handles cached binaries gracefully
+          // and registers client tool paths in config (needed for dependency checks)
+          await dbEngine.ensureBinaries(version, ({ stage, message }) => {
+            if (stage === 'cached') {
+              binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
+            } else {
               binarySpinner.text = message
-            })
-            binarySpinner.succeed(
-              `${dbEngine.displayName} ${version} binaries downloaded`,
-            )
-          }
+            }
+          })
+          binarySpinner.succeed(
+            `${dbEngine.displayName} ${version} binaries ready`,
+          )
         }
 
         // Check dependencies (all engines need this)

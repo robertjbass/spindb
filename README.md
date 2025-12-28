@@ -283,8 +283,21 @@ spindb stop mydb
 
 ```bash
 spindb delete mydb
-spindb delete mydb --force    # Skip confirmation
+spindb delete mydb --yes      # Skip confirmation prompt
+spindb delete mydb --force    # Force stop if running
+spindb delete mydb -fy        # Both: force stop + skip confirmation
 ```
+
+<details>
+<summary>All options</summary>
+
+| Option | Description |
+|--------|-------------|
+| `--force`, `-f` | Force stop if container is running before deleting |
+| `--yes`, `-y` | Skip confirmation prompt (for scripts/automation) |
+| `--json`, `-j` | Output result as JSON |
+
+</details>
 
 ### Data Operations
 
@@ -345,12 +358,40 @@ spindb backup mydb --sql
 spindb backup mydb --dump
 ```
 
+<details>
+<summary>All options</summary>
+
+| Option | Description |
+|--------|-------------|
+| `--database`, `-d` | Database to backup (defaults to primary) |
+| `--name`, `-n` | Custom backup filename (without extension) |
+| `--output`, `-o` | Output directory (defaults to current directory) |
+| `--format` | Output format: `sql` or `dump` |
+| `--sql` | Shorthand for `--format sql` |
+| `--dump` | Shorthand for `--format dump` |
+| `--json`, `-j` | Output result as JSON |
+
+</details>
+
 #### `restore` - Restore from backup
 
 ```bash
 spindb restore mydb backup.dump
 spindb restore mydb backup.sql --database my_app
+spindb restore mydb --from-url "postgresql://user:pass@host/db"
 ```
+
+<details>
+<summary>All options</summary>
+
+| Option | Description |
+|--------|-------------|
+| `--database`, `-d` | Target database name |
+| `--from-url` | Pull data from a remote database connection string |
+| `--force`, `-f` | Overwrite existing database without confirmation |
+| `--json`, `-j` | Output result as JSON |
+
+</details>
 
 ### Container Management
 

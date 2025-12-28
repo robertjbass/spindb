@@ -40,9 +40,7 @@ export class SQLiteEngine extends BaseEngine {
   defaultPort = 0 // File-based, no port
   supportedVersions = engineDef.supportedVersions
 
-  /**
-   * SQLite uses system binaries - no download URL
-   */
+  // SQLite uses system binaries - no download URL.
   getBinaryUrl(): string {
     throw new Error(
       'SQLite uses system-installed binaries. Install sqlite3:\n' +
@@ -52,25 +50,15 @@ export class SQLiteEngine extends BaseEngine {
     )
   }
 
-  /**
-   * Verify sqlite3 binary exists
-   */
   async verifyBinary(): Promise<boolean> {
     return this.isBinaryInstalled('3')
   }
 
-  /**
-   * Check if sqlite3 is installed on the system
-   */
   async isBinaryInstalled(_version: string): Promise<boolean> {
     const sqlite3Path = await this.getSqlite3Path()
     return sqlite3Path !== null
   }
 
-  /**
-   * Ensure sqlite3 is available
-   * SQLite uses system binaries, so this just verifies it exists
-   */
   async ensureBinaries(
     _version: string,
     _onProgress?: ProgressCallback,
@@ -88,10 +76,6 @@ export class SQLiteEngine extends BaseEngine {
     return sqlite3Path
   }
 
-  /**
-   * Get path to sqlite3 binary
-   * First checks config manager, then falls back to system PATH
-   */
   async getSqlite3Path(): Promise<string | null> {
     // Check config manager first
     const configPath = await configManager.getBinaryPath('sqlite3')
@@ -103,9 +87,6 @@ export class SQLiteEngine extends BaseEngine {
     return platformService.findToolPath('sqlite3')
   }
 
-  /**
-   * Get path to litecli (enhanced SQLite CLI)
-   */
   async getLitecliPath(): Promise<string | null> {
     // Check config manager first
     const configPath = await configManager.getBinaryPath('litecli')
@@ -117,10 +98,6 @@ export class SQLiteEngine extends BaseEngine {
     return platformService.findToolPath('litecli')
   }
 
-  /**
-   * Initialize a new SQLite database file
-   * Creates an empty database at the specified path (or CWD)
-   */
   async initDataDir(
     containerName: string,
     _version: string,
@@ -165,10 +142,7 @@ export class SQLiteEngine extends BaseEngine {
     return absolutePath
   }
 
-  /**
-   * Start is a no-op for SQLite (file-based, no server)
-   * Just verifies the file exists
-   */
+  // Start is a no-op for SQLite (file-based, no server).
   async start(
     container: ContainerConfig,
     _onProgress?: ProgressCallback,
@@ -189,16 +163,9 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Stop is a no-op for SQLite (file-based, no server)
-   */
-  async stop(_container: ContainerConfig): Promise<void> {
-    // No-op: SQLite is file-based, no server to stop
-  }
+  // Stop is a no-op for SQLite (file-based, no server).
+  async stop(_container: ContainerConfig): Promise<void> {}
 
-  /**
-   * Get status - check if the file exists
-   */
   async status(container: ContainerConfig): Promise<StatusResult> {
     const entry = await sqliteRegistry.get(container.name)
     if (!entry) {
@@ -219,20 +186,13 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Get connection string for SQLite
-   * Returns sqlite:// URL format
-   */
   getConnectionString(container: ContainerConfig, _database?: string): string {
     // container.database stores the file path for SQLite
     const filePath = container.database
     return `sqlite:///${filePath}`
   }
 
-  /**
-   * Open interactive SQLite shell
-   * Prefers litecli if available, falls back to sqlite3
-   */
+  // Prefers litecli if available, falls back to sqlite3.
   async connect(container: ContainerConfig, _database?: string): Promise<void> {
     const entry = await sqliteRegistry.get(container.name)
     if (!entry) {
@@ -268,21 +228,12 @@ export class SQLiteEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Create database is a no-op for SQLite
-   * In SQLite, the file IS the database
-   */
+  // In SQLite, the file IS the database.
   async createDatabase(
     _container: ContainerConfig,
     _database: string,
-  ): Promise<void> {
-    // No-op: SQLite file IS the database
-    // If you need multiple "databases", create multiple containers
-  }
+  ): Promise<void> {}
 
-  /**
-   * Drop database - deletes the file and removes from registry
-   */
   async dropDatabase(
     container: ContainerConfig,
     _database: string,
@@ -294,9 +245,6 @@ export class SQLiteEngine extends BaseEngine {
     await sqliteRegistry.remove(container.name)
   }
 
-  /**
-   * Get database size by checking file size
-   */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const entry = await sqliteRegistry.get(container.name)
     if (!entry || !existsSync(entry.filePath)) {
@@ -306,10 +254,6 @@ export class SQLiteEngine extends BaseEngine {
     return stats.size
   }
 
-  /**
-   * Detect backup format
-   * SQLite backups are either .sql (dump) or .sqlite/.db (file copy)
-   */
   async detectBackupFormat(filePath: string): Promise<BackupFormat> {
     if (filePath.endsWith('.sql')) {
       return {
@@ -325,9 +269,6 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Create a backup of the SQLite database
-   */
   async backup(
     container: ContainerConfig,
     outputPath: string,
@@ -360,9 +301,6 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Restore a backup to the SQLite database
-   */
   async restore(
     container: ContainerConfig,
     backupPath: string,
@@ -392,13 +330,6 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Create a dump from a SQLite file (for clone operations)
-   * Supports:
-   * - Local file paths: ./mydb.sqlite, /path/to/db.sqlite
-   * - Local sqlite:// URLs: sqlite:///path/to/db.sqlite
-   * - Remote HTTP/HTTPS: https://example.com/backup.sqlite
-   */
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
@@ -449,10 +380,7 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Dump SQLite database to a file using spawn (avoids shell injection)
-   * Equivalent to: sqlite3 dbPath .dump > outputPath
-   */
+  // Uses spawn to avoid shell injection.
   private async dumpToFile(
     sqlite3Path: string,
     dbPath: string,
@@ -485,10 +413,7 @@ export class SQLiteEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Run a SQL file against SQLite database using spawn (avoids shell injection)
-   * Equivalent to: sqlite3 dbPath < sqlFilePath
-   */
+  // Uses spawn to avoid shell injection.
   private async runSqlFile(
     sqlite3Path: string,
     dbPath: string,
@@ -526,9 +451,6 @@ export class SQLiteEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Download a file from HTTP/HTTPS URL
-   */
   private async downloadFile(url: string, destPath: string): Promise<void> {
     const controller = new AbortController()
     const timeoutMs = 5 * 60 * 1000 // 5 minutes
@@ -554,10 +476,7 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Validate a file is a valid SQLite database
-   * SQLite files start with "SQLite format 3\0" (first 16 bytes)
-   */
+  // SQLite files start with "SQLite format 3\0" (first 16 bytes).
   private async isValidSqliteFile(filePath: string): Promise<boolean> {
     try {
       const buffer = Buffer.alloc(16)
@@ -571,9 +490,6 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Run a SQL file or inline SQL statement
-   */
   async runScript(
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
@@ -599,9 +515,6 @@ export class SQLiteEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Get available versions - SQLite uses system version
-   */
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     // SQLite uses system version, just return supported versions
     return { '3': ['3'] }
