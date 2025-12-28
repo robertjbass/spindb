@@ -74,21 +74,22 @@ jobs:
       - name: Download PostgreSQL binaries
         run: pnpm start engines download postgresql 17
 
-      # Linux: Add downloaded PostgreSQL binaries to PATH
-      # The downloaded binaries include psql, pg_dump, etc.
-      - name: Add PostgreSQL to PATH (Linux)
+      # Linux: Install PostgreSQL 17 client tools from PostgreSQL apt repository
+      # The downloaded binaries only include server components (postgres, initdb, pg_ctl)
+      # Client tools (psql, pg_dump) need to be installed separately
+      - name: Install PostgreSQL client (Linux)
         if: runner.os == 'Linux'
         run: |
-          PG_DIR=$(ls -d ~/.spindb/bin/postgresql-17.* 2>/dev/null | head -1)
-          if [ -n "$PG_DIR" ]; then
-            echo "$PG_DIR/bin" >> $GITHUB_PATH
-            echo "Found PostgreSQL at: $PG_DIR/bin"
-            ls -la "$PG_DIR/bin/" | head -10
-          else
-            echo "ERROR: PostgreSQL 17.x binaries not found"
-            ls -la ~/.spindb/bin/ || true
-            exit 1
-          fi
+          # Add PostgreSQL apt repository for version 17
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          # Install only client tools (not the server)
+          sudo apt-get install -y postgresql-client-17
+          # Add PostgreSQL 17 to PATH (apt installs to /usr/lib/postgresql/17/bin/)
+          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
 
       # macOS: Install PostgreSQL 17 from Homebrew for client tools
       # The downloaded binaries may not include client tools on macOS
@@ -292,17 +293,21 @@ jobs:
       - name: Download PostgreSQL binaries
         run: pnpm start engines download postgresql 17
 
-      # Linux: Install SQLite and add downloaded PostgreSQL binaries to PATH
+      # Linux: Install SQLite and PostgreSQL 17 client tools
+      # The downloaded binaries only include server components, not client tools
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
+          # Add PostgreSQL apt repository for version 17
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update
-          sudo apt-get install -y sqlite3
-          PG_DIR=$(ls -d ~/.spindb/bin/postgresql-17.* 2>/dev/null | head -1)
-          if [ -n "$PG_DIR" ]; then
-            echo "$PG_DIR/bin" >> $GITHUB_PATH
-            echo "Found PostgreSQL at: $PG_DIR/bin"
-          fi
+          # Install SQLite and PostgreSQL 17 client tools
+          sudo apt-get install -y sqlite3 postgresql-client-17
+          # Add PostgreSQL 17 to PATH (apt installs to /usr/lib/postgresql/17/bin/)
+          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
 
       # macOS: Install PostgreSQL 17 from Homebrew (SQLite is pre-installed)
       - name: Install PostgreSQL client (macOS)
