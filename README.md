@@ -4,7 +4,7 @@
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 [![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#supported-platforms)
 
-**Local databases without the Docker baggage.**
+**The first npm CLI for running local databases without Docker.**
 
 Spin up PostgreSQL, MySQL, and SQLite instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
@@ -25,16 +25,26 @@ SpinDB runs databases as native processes with isolated data directories. No VM,
 
 ### SpinDB vs Alternatives
 
-| Feature | SpinDB | Docker | DBngin | Postgres.app |
-|---------|--------|--------|--------|--------------|
-| No Docker required | ✅ | ❌ | ✅ | ✅ |
-| Multiple DB engines | ✅ | ✅ | ✅ | ❌ |
-| CLI-first | ✅ | ✅ | ❌ | ❌ |
-| Multiple versions | ✅ | ✅ | ✅ | ✅ |
-| Clone databases | ✅ | Manual | ✅ | ❌ |
-| Low resource usage | ✅ | ❌ | ✅ | ✅ |
-| Linux support | ✅ | ✅ | ❌ | ❌ |
-| Free | ✅ | ⚠️ | ✅ | ✅ |
+| Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
+|---------|--------|--------|--------|--------------|-------|
+| No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Multiple DB engines | ✅ | ✅ | ✅ | ❌ | ⚠️ MySQL only |
+| CLI-first | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
+| Low resource usage | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Linux support | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Free | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+
+### Platform Support vs Alternatives
+
+| Platform | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
+|----------|--------|--------|--------|--------------|-------|
+| macOS (ARM64) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| macOS (Intel) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Linux (x64) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Linux (ARM64) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Windows (x64) | ✅ | ✅ | ❌ | ❌ | ✅ |
 
 ### How It Works
 
