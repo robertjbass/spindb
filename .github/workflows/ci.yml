@@ -122,9 +122,10 @@ jobs:
           psql --version
           pg_dump --version
 
-      # Refresh SpinDB config to detect the correct binary paths
+      # Refresh SpinDB config to detect the correct binary paths from PATH
+      # This clears cached paths and re-detects tools, finding pg_dump from the updated PATH
       - name: Refresh SpinDB config
-        run: pnpm start doctor --fix || true
+        run: pnpm start config detect
 
       - name: Run PostgreSQL integration tests
         run: pnpm test:pg
@@ -342,9 +343,10 @@ jobs:
           psql --version
           sqlite3 --version
 
-      # Refresh SpinDB config to detect the correct binary paths
+      # Refresh SpinDB config to detect the correct binary paths from PATH
+      # This clears cached paths and re-detects tools, finding pg_dump from the updated PATH
       - name: Refresh SpinDB config
-        run: pnpm start doctor --fix || true
+        run: pnpm start config detect
 
       - name: Run CLI E2E tests
         run: pnpm test:cli

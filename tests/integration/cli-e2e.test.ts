@@ -97,20 +97,21 @@ describe('CLI End-to-End Tests', () => {
     it('should list available engines', async () => {
       const { stdout, exitCode } = await runCLI('engines list')
       assert(exitCode === 0, 'Engines list should succeed')
+      // Note: engines list only shows INSTALLED engines
+      // PostgreSQL is downloaded in CI, SQLite is pre-installed on all platforms
+      // MySQL may or may not be installed depending on the CI job
       assert(
         stdout.toLowerCase().includes('postgresql') ||
           stdout.toLowerCase().includes('postgres'),
-        'Should list PostgreSQL',
-      )
-      assert(
-        stdout.toLowerCase().includes('mysql'),
-        'Should list MySQL',
+        'Should list PostgreSQL (downloaded in CI)',
       )
       assert(
         stdout.toLowerCase().includes('sqlite'),
-        'Should list SQLite',
+        'Should list SQLite (pre-installed on all platforms)',
       )
-      console.log('   All engines listed')
+      // MySQL is optional - only check if it's mentioned when installed
+      const hasMysql = stdout.toLowerCase().includes('mysql')
+      console.log(`   Engines listed: PostgreSQL, SQLite${hasMysql ? ', MySQL' : ''}`)
     })
   })
 
