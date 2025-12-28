@@ -5,6 +5,13 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.4] - 2025-12-28
+
+### Changed
+- Updated tagline from "Local databases without the Docker baggage" to "The first npm CLI for running local databases without Docker"
+- Added XAMPP to feature comparison table in README
+- Added new "Platform Support vs Alternatives" comparison table showing architecture-specific support across macOS, Linux, and Windows
+
 ## [0.10.3] - 2025-12-28
 
 ### Added
