@@ -608,18 +608,34 @@ export async function promptInstallDependencies(
   const engineDeps = getEngineDependencies(engine)
   const engineName = engineDeps?.displayName || engine
 
-  const { shouldInstall } = await inquirer.prompt<{ shouldInstall: string }>([
-    {
-      type: 'list',
-      name: 'shouldInstall',
-      message: `Would you like to install ${engineName} client tools now?`,
-      choices: [
-        { name: 'Yes, install now', value: 'yes' },
-        { name: 'No, I will install manually', value: 'no' },
-      ],
-      default: 'yes',
-    },
-  ])
+  // In CI environments (no TTY or CI env var), auto-install without prompting
+  const isCI = !!(
+    process.env.CI ||
+    process.env.GITHUB_ACTIONS ||
+    !process.stdin.isTTY
+  )
+
+  let shouldInstall = 'yes'
+
+  if (!isCI) {
+    const response = await inquirer.prompt<{ shouldInstall: string }>([
+      {
+        type: 'list',
+        name: 'shouldInstall',
+        message: `Would you like to install ${engineName} client tools now?`,
+        choices: [
+          { name: 'Yes, install now', value: 'yes' },
+          { name: 'No, I will install manually', value: 'no' },
+        ],
+        default: 'yes',
+      },
+    ])
+    shouldInstall = response.shouldInstall
+  } else {
+    console.log(
+      chalk.gray(`  CI environment detected - auto-installing ${engineName} client tools...`),
+    )
+  }
 
   if (shouldInstall === 'no') {
     console.log()
