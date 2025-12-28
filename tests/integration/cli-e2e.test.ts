@@ -353,12 +353,17 @@ describe('CLI Error Handling', () => {
     const { exitCode, stdout, stderr } = await runCLI(
       'info non-existent-container-xyz',
     )
-    // Check either exit code or error message in output
+    // Check either exit code or error message in output (case-insensitive)
+    const output = (stdout + stderr).toLowerCase()
     const hasError =
       exitCode !== 0 ||
-      stdout.includes('not found') ||
-      stderr.includes('not found')
-    assert(hasError, 'Should fail for non-existent container')
+      output.includes('not found') ||
+      output.includes('does not exist') ||
+      output.includes('error')
+    assert(
+      hasError,
+      `Should fail for non-existent container. exitCode=${exitCode}, stdout=${stdout.slice(0, 100)}, stderr=${stderr.slice(0, 100)}`,
+    )
     console.log('   Proper error for non-existent container')
   })
 

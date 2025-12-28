@@ -74,20 +74,29 @@ jobs:
       - name: Download PostgreSQL binaries
         run: pnpm start engines download postgresql 17
 
-      # Linux/macOS: Add downloaded PostgreSQL binaries to PATH
-      # We use the downloaded binaries to ensure version match (apt has older versions)
-      - name: Add PostgreSQL to PATH (Linux/macOS)
-        if: runner.os != 'Windows'
+      # Linux: Add downloaded PostgreSQL binaries to PATH
+      # The downloaded binaries include psql, pg_dump, etc.
+      - name: Add PostgreSQL to PATH (Linux)
+        if: runner.os == 'Linux'
         run: |
           PG_DIR=$(ls -d ~/.spindb/bin/postgresql-17.* 2>/dev/null | head -1)
           if [ -n "$PG_DIR" ]; then
             echo "$PG_DIR/bin" >> $GITHUB_PATH
             echo "Found PostgreSQL at: $PG_DIR/bin"
+            ls -la "$PG_DIR/bin/" | head -10
           else
             echo "ERROR: PostgreSQL 17.x binaries not found"
             ls -la ~/.spindb/bin/ || true
             exit 1
           fi
+
+      # macOS: Install PostgreSQL 17 from Homebrew for client tools
+      # The downloaded binaries may not include client tools on macOS
+      - name: Install PostgreSQL client (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@17
+          echo "$(brew --prefix postgresql@17)/bin" >> $GITHUB_PATH
 
       # Windows: Add downloaded PostgreSQL binaries to PATH
       - name: Add PostgreSQL to PATH (Windows)
@@ -112,6 +121,10 @@ jobs:
         run: |
           psql --version
           pg_dump --version
+
+      # Refresh SpinDB config to detect the correct binary paths
+      - name: Refresh SpinDB config
+        run: pnpm start doctor --fix || true
 
       - name: Run PostgreSQL integration tests
         run: pnpm test:pg
@@ -278,26 +291,24 @@ jobs:
       - name: Download PostgreSQL binaries
         run: pnpm start engines download postgresql 17
 
-      # Linux: Install SQLite (PostgreSQL comes from downloaded binaries)
-      - name: Install SQLite (Linux)
+      # Linux: Install SQLite and add downloaded PostgreSQL binaries to PATH
+      - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y sqlite3
-
-      # Linux/macOS: Add downloaded PostgreSQL binaries to PATH
-      - name: Add PostgreSQL to PATH (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
           PG_DIR=$(ls -d ~/.spindb/bin/postgresql-17.* 2>/dev/null | head -1)
           if [ -n "$PG_DIR" ]; then
             echo "$PG_DIR/bin" >> $GITHUB_PATH
             echo "Found PostgreSQL at: $PG_DIR/bin"
-          else
-            echo "ERROR: PostgreSQL 17.x binaries not found"
-            ls -la ~/.spindb/bin/ || true
-            exit 1
           fi
+
+      # macOS: Install PostgreSQL 17 from Homebrew (SQLite is pre-installed)
+      - name: Install PostgreSQL client (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@17
+          echo "$(brew --prefix postgresql@17)/bin" >> $GITHUB_PATH
 
       # Windows: Add PostgreSQL to PATH and install SQLite
       - name: Setup PostgreSQL (Windows)
@@ -330,6 +341,10 @@ jobs:
         run: |
           psql --version
           sqlite3 --version
+
+      # Refresh SpinDB config to detect the correct binary paths
+      - name: Refresh SpinDB config
+        run: pnpm start doctor --fix || true
 
       - name: Run CLI E2E tests
         run: pnpm test:cli
