@@ -1,0 +1,396 @@
+name: CI
+
+on:
+  push:
+    branches: [dev] # TODO - (Temporary) trigger on dev pushes for testing
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================
+  # Unit Tests - Run first for fast feedback
+  # ============================================
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm test:unit
+        timeout-minutes: 10
+
+  # ============================================
+  # PostgreSQL Integration Tests
+  # ============================================
+  test-postgresql:
+    name: PostgreSQL (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: unit-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Download PostgreSQL server binaries via SpinDB
+      - name: Download PostgreSQL binaries
+        run: pnpm start engines download postgresql 17
+
+      # Linux: Install psql client tools
+      - name: Install PostgreSQL client (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      # macOS: Install psql client tools
+      - name: Install PostgreSQL client (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libpq
+          echo "$(brew --prefix libpq)/bin" >> $GITHUB_PATH
+
+      # Windows: Add downloaded PostgreSQL binaries to PATH
+      - name: Add PostgreSQL to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pgDir = Get-ChildItem "$env:USERPROFILE\.spindb\bin" -Directory |
+            Where-Object { $_.Name -match '^postgresql-17\.' } |
+            Select-Object -First 1
+
+          if ($pgDir) {
+            $pgPath = Join-Path $pgDir.FullName "bin"
+            echo "$pgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            echo "Found PostgreSQL at: $pgPath"
+          } else {
+            echo "ERROR: PostgreSQL 17.x binaries not found"
+            Get-ChildItem "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+      - name: Verify PostgreSQL tools
+        run: |
+          psql --version
+          pg_dump --version
+
+      - name: Run PostgreSQL integration tests
+        run: pnpm test:pg
+        timeout-minutes: 15
+
+  # ============================================
+  # MySQL Integration Tests
+  # ============================================
+  test-mysql:
+    name: MySQL (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: unit-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Linux: Install MySQL server and client
+      - name: Install MySQL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-server mysql-client
+          # Stop the default MySQL service (we manage our own instances)
+          sudo systemctl stop mysql || true
+
+      # macOS: Install MySQL via Homebrew
+      - name: Install MySQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install mysql
+          # Don't start MySQL service (we manage our own instances)
+
+      # Windows: Install MySQL via Chocolatey
+      - name: Install MySQL (Windows)
+        if: runner.os == 'Windows'
+        run: choco install mysql -y
+
+      - name: Add MySQL to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $possiblePaths = @(
+            "C:\tools\mysql\current\bin",
+            "C:\Program Files\MySQL\MySQL Server 8.0\bin",
+            "C:\Program Files\MySQL\MySQL Server 8.4\bin",
+            "C:\Program Files\MySQL\MySQL Server 9.0\bin"
+          )
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              echo "Found MySQL at: $path"
+              break
+            }
+          }
+
+      - name: Verify MySQL tools
+        run: |
+          mysql --version
+          mysqld --version
+
+      - name: Run MySQL integration tests
+        run: pnpm test:mysql
+        timeout-minutes: 15
+
+  # ============================================
+  # SQLite Integration Tests
+  # ============================================
+  test-sqlite:
+    name: SQLite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: unit-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Linux: SQLite3 is usually pre-installed, but ensure it
+      - name: Install SQLite (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+
+      # macOS: SQLite3 is pre-installed on macOS
+      - name: Verify SQLite (macOS)
+        if: runner.os == 'macOS'
+        run: sqlite3 --version
+
+      # Windows: Install SQLite via Chocolatey
+      - name: Install SQLite (Windows)
+        if: runner.os == 'Windows'
+        run: choco install sqlite -y
+
+      - name: Add SQLite to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
+          if (Test-Path $sqlitePath) {
+            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Verify SQLite
+        run: sqlite3 --version
+
+      - name: Run SQLite integration tests
+        run: pnpm test:sqlite
+        timeout-minutes: 10
+
+  # ============================================
+  # CLI End-to-End Tests (PostgreSQL + SQLite)
+  # ============================================
+  test-cli-e2e:
+    name: CLI E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: unit-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Download PostgreSQL server binaries via SpinDB
+      - name: Download PostgreSQL binaries
+        run: pnpm start engines download postgresql 17
+
+      # Linux: Install PostgreSQL client and SQLite
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client sqlite3
+
+      # macOS: Install PostgreSQL client (SQLite is pre-installed)
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libpq
+          echo "$(brew --prefix libpq)/bin" >> $GITHUB_PATH
+
+      # Windows: Add PostgreSQL to PATH and install SQLite
+      - name: Setup PostgreSQL (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pgDir = Get-ChildItem "$env:USERPROFILE\.spindb\bin" -Directory |
+            Where-Object { $_.Name -match '^postgresql-17\.' } |
+            Select-Object -First 1
+
+          if ($pgDir) {
+            $pgPath = Join-Path $pgDir.FullName "bin"
+            echo "$pgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Install SQLite (Windows)
+        if: runner.os == 'Windows'
+        run: choco install sqlite -y
+
+      - name: Add SQLite to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
+          if (Test-Path $sqlitePath) {
+            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Verify tools
+        run: |
+          psql --version
+          sqlite3 --version
+
+      - name: Run CLI E2E tests
+        run: pnpm test:cli
+        timeout-minutes: 15
+
+  # ============================================
+  # Lint and Type Check
+  # ============================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  # ============================================
+  # Summary Job - Ensures all tests pass
+  # ============================================
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs:
+      [unit-tests, test-postgresql, test-mysql, test-sqlite, test-cli-e2e, lint]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "Unit tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-postgresql.result }}" != "success" ]; then
+            echo "PostgreSQL tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mysql.result }}" != "success" ]; then
+            echo "MySQL tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
+            echo "SQLite tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
+            echo "CLI E2E tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "Lint check failed"
+            exit 1
+          fi
+          echo "All CI checks passed!"

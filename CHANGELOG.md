@@ -5,10 +5,27 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2025-12-XX
+## [0.10.2] - 2025-12-27
 
 ### Added
--
+- **Unified CI workflow** - Consolidated GitHub Actions workflow (`ci.yml`) replacing separate platform workflows
+  - Runs unit tests, PostgreSQL, MySQL, SQLite integration tests across Ubuntu, macOS, and Windows
+  - Includes lint and type checking job
+  - CLI E2E test job for full command workflow validation
+  - Concurrency controls to cancel in-progress runs on new pushes
+- **CLI end-to-end tests** (`tests/integration/cli-e2e.test.ts`) - Tests actual CLI commands rather than core modules
+  - Version, help, doctor, and engines command tests
+  - Full PostgreSQL workflow: create → list → start → info → url → run SQL → stop → delete
+  - Full SQLite workflow: create → list → info → run SQL → delete
+  - Error handling tests for invalid inputs
+- `test:cli` npm script for running CLI E2E tests independently
+
+### Changed
+- Test container name generation uses underscores instead of hyphens for PostgreSQL compatibility (database names can't contain hyphens)
+- Moved `EVALUATION.md` to `evaluations/` directory
+
+### Removed
+- Separate Windows test workflow (`test-windows.yml`) - functionality merged into unified CI workflow
 
 ## [0.10.1] - 2025-12-27
 

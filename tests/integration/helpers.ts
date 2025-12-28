@@ -26,11 +26,13 @@ export const TEST_PORTS = {
 
 /**
  * Generate a unique test container name
- * Container names must start with a letter, so we put the suffix first
+ * Container names must start with a letter.
+ * Use underscores instead of hyphens for PostgreSQL compatibility
+ * (PostgreSQL database names can't contain hyphens)
  */
 export function generateTestName(prefix = 'test'): string {
-  const uuid = randomUUID().slice(0, 8)
-  return `${prefix}-${uuid}`
+  const uuid = randomUUID().slice(0, 8).replace(/-/g, '')
+  return `${prefix}_${uuid}`
 }
 
 /**
