@@ -228,7 +228,11 @@ function execWithInheritedStdio(command: string): void {
 
   // Check if we need a TTY for sudo password prompts
   // Skip this check in CI environments where sudo doesn't require a password
-  if (!hasTTY() && cmdToRun.includes('sudo') && !isPasswordlessSudoEnvironment()) {
+  if (
+    !hasTTY() &&
+    cmdToRun.includes('sudo') &&
+    !isPasswordlessSudoEnvironment()
+  ) {
     throw new Error(
       'Cannot run sudo commands without an interactive terminal. Please run the install command manually:\n' +
         `  ${command}`,

@@ -111,7 +111,9 @@ describe('CLI End-to-End Tests', () => {
       )
       // MySQL is optional - only check if it's mentioned when installed
       const hasMysql = stdout.toLowerCase().includes('mysql')
-      console.log(`   Engines listed: PostgreSQL, SQLite${hasMysql ? ', MySQL' : ''}`)
+      console.log(
+        `   Engines listed: PostgreSQL, SQLite${hasMysql ? ', MySQL' : ''}`,
+      )
     })
   })
 
@@ -247,7 +249,9 @@ describe('CLI PostgreSQL Workflow', () => {
   it('should delete container via CLI', async () => {
     console.log(`\n Deleting container "${containerName}"...`)
 
-    const { exitCode, stderr } = await runCLI(`delete ${containerName} --force --yes`)
+    const { exitCode, stderr } = await runCLI(
+      `delete ${containerName} --force --yes`,
+    )
     assert(exitCode === 0, `Delete should succeed. stderr: ${stderr}`)
     console.log('   Container deleted')
   })
@@ -342,7 +346,9 @@ describe('CLI SQLite Workflow', () => {
   it('should delete SQLite container via CLI', async () => {
     console.log(`\n Deleting SQLite container "${containerName}"...`)
 
-    const { exitCode, stderr } = await runCLI(`delete ${containerName} --force --yes`)
+    const { exitCode, stderr } = await runCLI(
+      `delete ${containerName} --force --yes`,
+    )
     assert(exitCode === 0, `Delete should succeed. stderr: ${stderr}`)
     assert(!existsSync(dbPath), 'Database file should be deleted')
     console.log('   SQLite container and file deleted')

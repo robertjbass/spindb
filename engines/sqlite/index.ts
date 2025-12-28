@@ -164,8 +164,7 @@ export class SQLiteEngine extends BaseEngine {
   }
 
   // Stop is a no-op for SQLite (file-based, no server).
-  async stop(_container: ContainerConfig): Promise<void> {
-  }
+  async stop(_container: ContainerConfig): Promise<void> {}
 
   async status(container: ContainerConfig): Promise<StatusResult> {
     const entry = await sqliteRegistry.get(container.name)
@@ -233,8 +232,7 @@ export class SQLiteEngine extends BaseEngine {
   async createDatabase(
     _container: ContainerConfig,
     _database: string,
-  ): Promise<void> {
-  }
+  ): Promise<void> {}
 
   async dropDatabase(
     container: ContainerConfig,

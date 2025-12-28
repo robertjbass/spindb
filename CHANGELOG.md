@@ -5,6 +5,22 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2025-12-28
+
+### Added
+- **Automatic PostgreSQL client tools installation** - SpinDB now auto-installs psql, pg_dump, pg_restore when missing from zonky.io binaries
+  - macOS: Installs via Homebrew (`postgresql@17`) and registers tool paths
+  - Linux: Downloads from PostgreSQL apt repository and extracts to binary directory
+  - CI environments: Auto-installs without prompting (detects `CI`, `GITHUB_ACTIONS` env vars)
+- **`engines download` command expanded** - Now supports MySQL and SQLite installation via system package managers
+  - `spindb engines download mysql` - Installs via Homebrew (macOS), apt/mariadb (Linux), or Chocolatey (Windows)
+  - `spindb engines download sqlite` - Installs via system package manager
+  - PostgreSQL continues to download binaries from zonky.io (macOS/Linux) or EDB (Windows)
+
+### Changed
+- CI workflow now uses SpinDB for all engine installations instead of direct package manager calls
+- Dependency manager allows passwordless sudo in CI environments (GitHub Actions, GitLab CI, etc.)
+
 ## [0.10.2] - 2025-12-27
 
 ### Added

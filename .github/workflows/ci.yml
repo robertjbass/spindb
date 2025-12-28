@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [dev] # TODO - (Temporary) trigger on dev pushes for testing
   pull_request:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
 
 # Cancel in-progress runs when a new run is triggered

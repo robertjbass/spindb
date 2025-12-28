@@ -183,7 +183,12 @@ export class PostgreSQLEngine extends BaseEngine {
     arch: string,
     onProgress?: ProgressCallback,
   ): Promise<void> {
-    const clientTools = ['psql', 'pg_dump', 'pg_restore', 'pg_basebackup'] as const
+    const clientTools = [
+      'psql',
+      'pg_dump',
+      'pg_restore',
+      'pg_basebackup',
+    ] as const
 
     // Check if psql is already available (either from Homebrew or system)
     const psqlResult = await findBinary('psql')

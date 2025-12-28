@@ -439,7 +439,7 @@ export class BinaryManager {
 
     // Check if client tools already exist
     const missingTools = clientTools.filter(
-      (tool) => !existsSync(join(binDir, tool))
+      (tool) => !existsSync(join(binDir, tool)),
     )
 
     if (missingTools.length === 0) {
@@ -500,7 +500,14 @@ export class BinaryManager {
       }
 
       // Copy client tools to the bin directory
-      const clientBinDir = join(extractDir, 'usr', 'lib', 'postgresql', majorVersion, 'bin')
+      const clientBinDir = join(
+        extractDir,
+        'usr',
+        'lib',
+        'postgresql',
+        majorVersion,
+        'bin',
+      )
 
       if (existsSync(clientBinDir)) {
         for (const tool of clientTools) {
@@ -543,7 +550,7 @@ export class BinaryManager {
       // Pattern: postgresql-client-17_17.x.x-x.pgdg+1_amd64.deb
       const pattern = new RegExp(
         `href="(postgresql-client-${majorVersion}_[^"]+_amd64\\.deb)"`,
-        'g'
+        'g',
       )
 
       const matches: string[] = []
@@ -556,7 +563,9 @@ export class BinaryManager {
       }
 
       if (matches.length === 0) {
-        throw new Error(`No client package found for PostgreSQL ${majorVersion}`)
+        throw new Error(
+          `No client package found for PostgreSQL ${majorVersion}`,
+        )
       }
 
       // Sort to get the latest version and return the URL

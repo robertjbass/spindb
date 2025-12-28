@@ -633,7 +633,9 @@ export async function promptInstallDependencies(
     shouldInstall = response.shouldInstall
   } else {
     console.log(
-      chalk.gray(`  CI environment detected - auto-installing ${engineName} client tools...`),
+      chalk.gray(
+        `  CI environment detected - auto-installing ${engineName} client tools...`,
+      ),
     )
   }
 
