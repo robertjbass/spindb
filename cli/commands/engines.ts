@@ -383,25 +383,28 @@ enginesCommand
 
         const engine = getEngine(Engine.PostgreSQL)
 
-        // Check if already installed
-        const isInstalled = await engine.isBinaryInstalled(version)
-        if (isInstalled) {
-          console.log(
-            uiInfo(`PostgreSQL ${version} binaries are already installed.`),
-          )
-          return
-        }
-
         const spinner = createSpinner(
-          `Downloading PostgreSQL ${version} binaries...`,
+          `Checking PostgreSQL ${version} binaries...`,
         )
         spinner.start()
 
-        await engine.ensureBinaries(version, ({ message }) => {
-          spinner.text = message
+        // Always call ensureBinaries - it handles cached binaries gracefully
+        // and registers client tool paths in config (needed for dependency checks)
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `PostgreSQL ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
         })
 
-        spinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+        if (wasCached) {
+          spinner.succeed(`PostgreSQL ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`PostgreSQL ${version} binaries downloaded`)
+        }
 
         // Show the path for reference
         const { platform, arch } = platformService.getPlatformInfo()
