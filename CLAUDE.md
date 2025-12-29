@@ -79,16 +79,21 @@ engines/
 ├── postgresql/
 │   ├── index.ts            # PostgreSQL engine
 │   ├── binary-urls.ts      # Zonky.io URL builder
+│   ├── edb-binary-urls.ts  # Windows EDB URL builder
 │   ├── binary-manager.ts   # Client tool management
 │   ├── backup.ts           # pg_dump wrapper
 │   ├── restore.ts          # Restore logic
 │   └── version-validator.ts
-└── mysql/
-    ├── index.ts            # MySQL engine
-    ├── binary-detection.ts # System binary detection
-    ├── backup.ts           # mysqldump wrapper
-    ├── restore.ts          # Restore logic
-    └── version-validator.ts
+├── mysql/
+│   ├── index.ts            # MySQL engine
+│   ├── binary-detection.ts # System binary detection
+│   ├── backup.ts           # mysqldump wrapper
+│   ├── restore.ts          # Restore logic
+│   └── version-validator.ts
+└── sqlite/
+    ├── index.ts            # SQLite engine (file-based)
+    ├── registry.ts         # File tracking in config.json
+    └── scanner.ts          # CWD scanning for .sqlite files
 types/index.ts              # TypeScript types
 tests/
 ├── unit/                   # Unit tests (381 tests)
@@ -237,19 +242,34 @@ After completing a feature, ensure these files are updated:
 
 ### Adding a New Engine
 
-**IMPORTANT:** Before implementing a new engine, review `FEATURE.md` thoroughly. It contains the complete checklist of ALL features that must be implemented for an engine to be considered complete.
+**IMPORTANT:** [FEATURE.md](FEATURE.md) is the authoritative guide for adding new database engines. It contains the complete specification including:
 
-1. **Review `FEATURE.md`** - Exhaustive checklist of required features
-2. Create `engines/{engine}/index.ts` extending `BaseEngine`
-3. Implement ALL abstract methods (see `FEATURE.md` for full list)
-4. Register in `engines/index.ts` and `types/index.ts` (Engine enum)
-5. Add to `config/os-dependencies.ts` and `config/defaults.ts`
-6. Ensure ALL CLI commands work with new engine (see `FEATURE.md`)
-7. Add integration tests (`tests/integration/{engine}.test.ts`)
-8. Update documentation:
-   - **README.md** - Add engine to "Supported Engines" section (with version, port, binary source details), update "Enhanced CLI Tools" table, move from "Planned Engines" to supported
-   - **TODO.md** - Update engine status in roadmap and engines table
-   - **CHANGELOG.md** - Add to unreleased section
+- **Quick Start Checklist** - All files and tests that must be created
+- **BaseEngine Methods** - Full list of abstract methods with implementation guidance
+- **Configuration Files** - All files requiring updates (`types/index.ts`, `config/engine-defaults.ts`, etc.)
+- **Testing Requirements** - Integration tests (14+ tests), unit tests, CLI E2E tests, test fixtures
+- **GitHub Actions / CI** - How to add your engine to the CI workflow for all 3 OSes
+- **Binary Management** - Downloadable binaries vs system binaries approach
+- **OS Dependencies** - Package manager definitions for Homebrew, apt, choco, etc.
+- **Windows Considerations** - Command quoting, spawn options, PATH handling
+- **Pass/Fail Criteria** - Explicit verification steps before an engine is complete
+
+**Summary of what's involved:**
+1. Create `engines/{engine}/` directory with index.ts, backup.ts, restore.ts, version-validator.ts
+2. Implement ALL `BaseEngine` abstract methods
+3. Register engine in `engines/index.ts` with aliases
+4. Add to `types/index.ts` (Engine enum, BinaryTool type)
+5. Add to `config/engine-defaults.ts` and `config/os-dependencies.ts`
+6. Create test fixtures: `tests/fixtures/{engine}/seeds/sample-db.sql`
+7. Create integration tests: `tests/integration/{engine}.test.ts` (14+ tests)
+8. Update `tests/integration/helpers.ts` with engine support
+9. Add integration test job to `.github/workflows/ci.yml` for all 3 OSes
+10. Update documentation: README.md, CHANGELOG.md, TODO.md
+
+**Reference implementations:**
+- **PostgreSQL** - Server database with downloadable binaries (zonky.io/EDB)
+- **MySQL** - Server database with system binaries
+- **SQLite** - File-based database with registry tracking
 
 **Engine Types:**
 - **Server databases** (PostgreSQL, MySQL): Data in `~/.spindb/containers/`, port management, start/stop
@@ -260,14 +280,33 @@ After completing a feature, ensure these files are updated:
 When new major versions of supported engines are released (e.g., PostgreSQL 18):
 
 1. **Check binary availability:**
-   - PostgreSQL: Verify zonky.io has binaries at [Maven Central](https://mvnrepository.com/artifact/io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64)
+   - PostgreSQL (macOS/Linux): Verify zonky.io has binaries at [Maven Central](https://mvnrepository.com/artifact/io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64)
+   - PostgreSQL (Windows): Check EDB download page (see step 2b below)
    - MySQL: System-installed, no action needed
 
 2. **Update code:**
-   - `config/defaults.ts` - Add new version to `supportedVersions`, update `latestVersion`
-   - `engines/{engine}/binary-urls.ts` - Update fallback version map if needed
+   - `config/engine-defaults.ts` - Add new version to `supportedVersions`, update `defaultVersion` and `latestVersion`
+   - `engines/postgresql/version-maps.ts` - Add version mapping (e.g., `'18': '18.1.0'`)
+   - `engines/postgresql/binary-urls.ts` - Add to `SUPPORTED_MAJOR_VERSIONS` and `FALLBACK_VERSION_MAP`
+   - **Windows EDB file IDs** (required for Windows support):
+     1. Visit: https://www.enterprisedb.com/download-postgresql-binaries
+     2. Find the new version in the Windows x86-64 column
+     3. Right-click the download link and copy the URL (e.g., `?fileid=1259913`)
+     4. Extract the numeric file ID and add to `engines/postgresql/edb-binary-urls.ts`:
+        ```typescript
+        export const EDB_FILE_IDS: Record<string, string> = {
+          '18.1.0': '1259913',
+          '18': '1259913', // Alias for latest 18.x
+          // ... existing versions
+        }
+        ```
+     5. See the detailed instructions in `edb-binary-urls.ts` header comments
 
-3. **Update documentation:**
+3. **Update tests:**
+   - `tests/unit/binary-manager.test.ts` - Add test case for new version
+   - `tests/unit/version-validator.test.ts` - Add version to test arrays
+
+4. **Update documentation:**
    - **README.md** - Update "Supported Engines" section (versions list)
    - **CLAUDE.md** - Update version references in this file
    - **CHANGELOG.md** - Add to unreleased section

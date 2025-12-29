@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
   "type": "module",
   "bin": {
