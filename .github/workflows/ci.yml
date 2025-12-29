@@ -163,6 +163,15 @@ jobs:
           restore-keys: |
             homebrew-mysql-${{ runner.os }}-
 
+      # macOS needs MySQL linked or added to PATH BEFORE install check (for cache hits)
+      - name: Link MySQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [ -d "/opt/homebrew/Cellar/mysql" ]; then
+            brew link mysql 2>/dev/null || true
+            echo "MySQL linked or already linked"
+          fi
+
       # Cache Chocolatey packages for MySQL on Windows
       - name: Cache Chocolatey packages (Windows)
         if: runner.os == 'Windows'
