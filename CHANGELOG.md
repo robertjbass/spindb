@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Interactive restore "press Enter to go back" now works correctly** - Empty input at connection string and file path prompts now returns to container selection instead of exiting the wizard
-- **Fixed inaccurate navigation comments** - Updated comments to accurately describe `continue` behavior (returns to container selection, not source selection)
-- **Consistent use of `pressEnterToContinue()` helper** - Replaced 6 manual `inquirer.prompt` patterns with the shared helper for consistent UX
+## [0.11.0] - 2025-12-29
+
+### Highlights
+
+**PostgreSQL 18 is now supported and is the new default version.** PostgreSQL 18 was released on September 25, 2025 and brings significant performance improvements including up to 3x faster I/O operations, virtual generated columns, and the new `uuidv7()` function.
 
 ### Added
+- **PostgreSQL 18 support** - Added PostgreSQL 18.1.0 as a supported version (now the default for new containers)
+- **Pre-commit hook for new PostgreSQL versions** - Automatically alerts when new PostgreSQL major versions are available on zonky.io but not yet supported by SpinDB (`scripts/check-pg-versions.ts`)
 - **Unit tests for `getInstallCommand()`** - 3 new tests verifying cross-platform install command generation
 - **CLI E2E tests for backup/restore/clone** - 15 new tests covering:
   - SQL backup creation and JSON output
@@ -25,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Exported `getInstallCommand()` from `engines/postgresql/version-validator.ts` for testability
 - Added clarifying comment for retry loop behavior in restore flow
+
+### Fixed
+- **Interactive restore "press Enter to go back" now works correctly** - Empty input at connection string and file path prompts now returns to container selection instead of exiting the wizard
+- **Fixed inaccurate navigation comments** - Updated comments to accurately describe `continue` behavior (returns to container selection, not source selection)
+- **Consistent use of `pressEnterToContinue()` helper** - Replaced 6 manual `inquirer.prompt` patterns with the shared helper for consistent UX
 
 ## [0.10.6] - 2025-12-29
 

@@ -5,7 +5,7 @@ export default [
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/', 'node_modules/', 'bin/', 'eslint.config.js'],
+    ignores: ['dist/', 'node_modules/', 'bin/', 'eslint.config.js', 'scripts/'],
   },
   {
     languageOptions: {

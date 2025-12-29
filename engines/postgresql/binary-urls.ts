@@ -10,12 +10,13 @@ export const FALLBACK_VERSION_MAP: Record<string, string> = {
   '15': '15.15.0',
   '16': '16.11.0',
   '17': '17.7.0',
+  '18': '18.1.0',
 }
 
 /**
  * Supported major versions (in order of display)
  */
-export const SUPPORTED_MAJOR_VERSIONS = ['14', '15', '16', '17']
+export const SUPPORTED_MAJOR_VERSIONS = ['14', '15', '16', '17', '18']
 
 // Cache for fetched versions
 let cachedVersions: Record<string, string[]> | null = null

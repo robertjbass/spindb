@@ -32,11 +32,11 @@ export type EngineDefaults = {
 
 export const engineDefaults: Record<string, EngineDefaults> = {
   postgresql: {
-    defaultVersion: '17',
+    defaultVersion: '18',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
-    supportedVersions: ['14', '15', '16', '17'],
-    latestVersion: '17', // Update when PostgreSQL 18 is released
+    supportedVersions: ['14', '15', '16', '17', '18'],
+    latestVersion: '18',
     superuser: 'postgres',
     connectionScheme: 'postgresql',
     logFileName: 'postgres.log',

@@ -117,7 +117,7 @@ abstract class BaseEngine {
 **PostgreSQL 🐘**
 - Server binaries from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries)
 - Client tools (psql, pg_dump) from system
-- Versions: 14, 15, 16, 17
+- Versions: 14, 15, 16, 17, 18
 
 **MySQL 🐬**
 - All binaries from system (Homebrew, apt, etc.)
@@ -128,7 +128,7 @@ abstract class BaseEngine {
 ```
 ~/.spindb/
 ├── bin/                              # PostgreSQL server binaries
-│   └── postgresql-17.7.0-darwin-arm64/
+│   └── postgresql-18.1.0-darwin-arm64/
 ├── containers/
 │   ├── postgresql/
 │   │   └── mydb/

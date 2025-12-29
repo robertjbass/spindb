@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.10.6",
+  "version": "0.11.0",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
   "type": "module",
   "bin": {
@@ -19,6 +19,7 @@
     "test:all": "run-s test:unit test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
+    "check:pg-versions": "tsx scripts/check-pg-versions.ts",
     "prepare": "husky"
   },
   "keywords": [
