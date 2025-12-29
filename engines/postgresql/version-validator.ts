@@ -15,8 +15,9 @@ import {
   logWarning,
   logDebug,
 } from '../../core/error-handler'
+import { detectPackageManager } from '../../core/dependency-manager'
 import {
-  detectInstalledHomebrewPostgres,
+  detectInstalledPostgres,
   getDirectBinaryPath,
   findCompatibleVersion,
 } from '../../core/homebrew-version-manager'
@@ -70,9 +71,6 @@ export function parseToolVersion(output: string): VersionInfo {
   }
 }
 
-/**
- * Read the first N lines of a file
- */
 async function readFirstLines(
   filePath: string,
   lineCount: number,
@@ -284,9 +282,6 @@ export type DumpCompatibilityResult = {
   error?: string
 }
 
-/**
- * Get the version of pg_dump
- */
 export async function getPgDumpVersion(
   pgDumpPath: string,
 ): Promise<VersionInfo> {
@@ -364,7 +359,7 @@ export async function validateDumpCompatibility(options: {
   }
 
   // Check if we could switch Homebrew (version is installed but not as direct path)
-  const installed = await detectInstalledHomebrewPostgres()
+  const installed = await detectInstalledPostgres()
   const hasTarget = installed.some(
     (v) => parseInt(v.majorVersion, 10) >= remoteVersion.majorVersion,
   )
@@ -386,7 +381,7 @@ export async function validateDumpCompatibility(options: {
   }
 
   // Need to install - provide platform-specific instructions
-  const installCmd = getInstallCommand(targetMajor)
+  const installCmd = await getInstallCommand(targetMajor)
   return {
     compatible: false,
     localToolVersion: localVersion,
@@ -399,15 +394,22 @@ export async function validateDumpCompatibility(options: {
   }
 }
 
-/**
- * Get platform-specific install command for PostgreSQL client tools
- */
-function getInstallCommand(majorVersion: string): string {
-  const platform = process.platform
-  if (platform === 'darwin') {
-    return `brew install postgresql@${majorVersion}`
-  } else if (platform === 'linux') {
-    return `sudo apt install postgresql-client-${majorVersion}`
+async function getInstallCommand(majorVersion: string): Promise<string> {
+  const pm = await detectPackageManager()
+
+  if (!pm) {
+    return `Install PostgreSQL ${majorVersion} client tools for your platform`
   }
-  return `Install PostgreSQL ${majorVersion} client tools for your platform`
+
+  // Versioned package names per package manager
+  const packages: Record<string, string> = {
+    brew: `postgresql@${majorVersion}`,
+    apt: `postgresql-client-${majorVersion}`,
+    yum: `postgresql${majorVersion}`,
+    dnf: `postgresql${majorVersion}`,
+    pacman: 'postgresql-libs', // Arch doesn't version packages the same way
+  }
+
+  const pkg = packages[pm.id] || `postgresql-${majorVersion}`
+  return pm.config.installTemplate.replace('{package}', pkg)
 }

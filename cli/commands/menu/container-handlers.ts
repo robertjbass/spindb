@@ -235,8 +235,12 @@ export async function handleCreate(): Promise<'main' | void> {
     console.log(
       chalk.yellow(`  Container "${containerNameFinal}" already exists.`),
     )
-    const newName = await promptContainerName()
-    if (newName) containerNameFinal = newName
+    const newName = await promptContainerName(undefined, { allowBack: true })
+    if (!newName) {
+      console.log(chalk.blue('  Container creation cancelled.'))
+      return
+    }
+    containerNameFinal = newName
   }
 
   const createSpinnerInstance = createSpinner('Creating container...')

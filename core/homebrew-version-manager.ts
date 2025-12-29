@@ -27,9 +27,6 @@ export type InstalledPostgresVersion = {
   source: 'homebrew' | 'apt' | 'system' | 'unknown'
 }
 
-// Alias for backwards compatibility
-export type InstalledHomebrewPostgres = InstalledPostgresVersion
-
 export type VersionSwitchResult = {
   success: boolean
   previousVersion?: string
@@ -91,7 +88,7 @@ export async function getCurrentLinkedVersion(): Promise<string | null> {
  * Detect all PostgreSQL versions installed on the system
  * Works on both macOS (Homebrew) and Linux (APT/YUM)
  */
-export async function detectInstalledHomebrewPostgres(): Promise<
+export async function detectInstalledPostgres(): Promise<
   InstalledPostgresVersion[]
 > {
   const { platform } = platformService.getPlatformInfo()
@@ -193,8 +190,8 @@ export async function getDirectBinaryPath(
  */
 export async function findCompatibleVersion(
   targetMajor: number,
-): Promise<InstalledHomebrewPostgres | null> {
-  const installed = await detectInstalledHomebrewPostgres()
+): Promise<InstalledPostgresVersion | null> {
+  const installed = await detectInstalledPostgres()
 
   // Filter versions >= target
   const compatible = installed.filter(
@@ -253,7 +250,7 @@ async function switchHomebrewVersionMacOS(
     return { success: false, error: 'Homebrew not available' }
   }
 
-  const installed = await detectInstalledHomebrewPostgres()
+  const installed = await detectInstalledPostgres()
   const target = installed.find((v) => v.majorVersion === targetMajor)
 
   if (!target) {
@@ -303,13 +300,17 @@ async function switchHomebrewVersionMacOS(
 }
 
 /**
- * Switch PostgreSQL version on Linux using update-alternatives
- * This is best-effort - many Linux systems don't use update-alternatives for PostgreSQL
+ * "Switch" PostgreSQL version on Linux (no-op verification only)
+ *
+ * Unlike macOS where Homebrew uses symlinks that need switching, Linux installs
+ * PostgreSQL versions side-by-side in versioned paths (e.g., /usr/lib/postgresql/17/bin).
+ * We access these directly via getDirectBinaryPath(), so no symlink switching is needed.
+ * This function just verifies the target version is installed.
  */
 async function switchVersionLinux(
   targetMajor: string,
 ): Promise<VersionSwitchResult> {
-  const installed = await detectInstalledHomebrewPostgres()
+  const installed = await detectInstalledPostgres()
   const target = installed.find((v) => v.majorVersion === targetMajor)
 
   if (!target) {
@@ -319,9 +320,8 @@ async function switchVersionLinux(
     }
   }
 
-  // On Linux, we typically don't need to switch - just use the direct path
-  // Return success since the version is installed and getDirectBinaryPath will work
-  logDebug('Linux: Version available via direct path', {
+  // No action required - Linux uses versioned paths directly, no symlink switching needed
+  logDebug('Linux: Version verified, no switching required (using direct path)', {
     version: targetMajor,
     binPath: target.binPath,
   })
@@ -332,9 +332,7 @@ async function switchVersionLinux(
   }
 }
 
-/**
- * Get all client tools for a specific PostgreSQL version
- */
+// Get all client tools for a specific PostgreSQL version
 export async function getVersionedToolPaths(majorVersion: string): Promise<{
   pgDump: string | null
   pgRestore: string | null

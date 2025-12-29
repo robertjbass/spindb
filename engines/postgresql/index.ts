@@ -39,7 +39,6 @@ import {
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
-import chalk from 'chalk'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -470,7 +469,7 @@ export class PostgreSQLEngine extends BaseEngine {
 
     if (!path) {
       throw new SpinDBError(
-        ErrorCodes.MISSING_DEPENDENCY,
+        ErrorCodes.DEPENDENCY_MISSING,
         'pg_dump not found. Install PostgreSQL client tools.',
         'fatal',
         'macOS: brew install postgresql@17 && brew link --overwrite postgresql@17\n' +
@@ -507,6 +506,7 @@ export class PostgreSQLEngine extends BaseEngine {
     }
 
     // Handle incompatibility based on required action
+    // All cases that don't return will fall through to VERSION_MISMATCH error below
     switch (compatibility.requiredAction) {
       case 'use_direct_path':
         if (compatibility.alternativePath) {
@@ -519,6 +519,7 @@ export class PostgreSQLEngine extends BaseEngine {
             warnings,
           }
         }
+        // No alternative path available - fall through to VERSION_MISMATCH error
         break
 
       case 'switch_homebrew':
@@ -541,10 +542,11 @@ export class PostgreSQLEngine extends BaseEngine {
             }
           }
         }
+        // Switch failed or no target - fall through to VERSION_MISMATCH error
         break
 
       case 'install':
-        // Fall through to error
+        // User needs to install manually - fall through to VERSION_MISMATCH error
         break
     }
 
@@ -678,24 +680,10 @@ export class PostgreSQLEngine extends BaseEngine {
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
-  ): Promise<DumpResult & { warnings?: string[] }> {
+  ): Promise<DumpResult> {
     // Get compatible pg_dump path (may switch versions or use direct path)
-    const {
-      path: pgDumpPath,
-      switched,
-      warnings,
-    } = await this.getCompatiblePgDumpPath(connectionString)
-
-    // Log warnings to console
-    for (const warning of warnings) {
-      console.log(chalk.yellow(`  ${warning}`))
-    }
-
-    // Refresh config cache if we switched Homebrew versions
-    if (switched) {
-      await configManager.refreshBinaryWithVersion('pg_restore')
-      await configManager.refreshBinaryWithVersion('psql')
-    }
+    const { path: pgDumpPath, warnings } =
+      await this.getCompatiblePgDumpPath(connectionString)
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],

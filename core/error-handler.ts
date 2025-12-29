@@ -60,7 +60,6 @@ export const ErrorCodes = {
 
   // Dependency errors
   DEPENDENCY_MISSING: 'DEPENDENCY_MISSING',
-  MISSING_DEPENDENCY: 'MISSING_DEPENDENCY', // Alias for consistency
   DEPENDENCY_VERSION_INCOMPATIBLE: 'DEPENDENCY_VERSION_INCOMPATIBLE',
 
   // Connection errors

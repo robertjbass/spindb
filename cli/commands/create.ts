@@ -617,11 +617,16 @@ export const createCommand = new Command('create')
               dumpSpinner.start()
 
               try {
-                await dbEngine.dumpFromConnectionString(
+                const dumpResult = await dbEngine.dumpFromConnectionString(
                   restoreLocation,
                   tempDumpPath,
                 )
                 dumpSpinner.succeed('Dump created from remote database')
+                if (dumpResult.warnings?.length) {
+                  for (const warning of dumpResult.warnings) {
+                    console.log(chalk.yellow(`  ${warning}`))
+                  }
+                }
                 backupPath = tempDumpPath
                 dumpSuccess = true
               } catch (error) {

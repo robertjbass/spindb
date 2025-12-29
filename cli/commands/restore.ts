@@ -184,11 +184,16 @@ export const restoreCommand = new Command('restore')
             dumpSpinner.start()
 
             try {
-              await engine.dumpFromConnectionString(
+              const dumpResult = await engine.dumpFromConnectionString(
                 options.fromUrl,
                 tempDumpPath,
               )
               dumpSpinner.succeed('Dump created from remote database')
+              if (dumpResult.warnings?.length) {
+                for (const warning of dumpResult.warnings) {
+                  console.log(chalk.yellow(`  ${warning}`))
+                }
+              }
               backupPath = tempDumpPath
               dumpSuccess = true
             } catch (error) {

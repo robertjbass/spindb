@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.10.5",
+  "version": "0.10.6",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
   "type": "module",
   "bin": {
@@ -28,6 +28,8 @@
     "database",
     "local",
     "development",
+    "sqlite",
+    "tui",
     "cli"
   ],
   "author": "Bob Bass <bob@bbass.co>",

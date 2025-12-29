@@ -5,6 +5,24 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.6] - 2025-12-29
+
+### Changed
+- **Refactored `handleRestore` from recursive to loop-driven** - Back navigation now uses `while(true)` with `continue` instead of recursive calls, eliminating stack growth
+- **`dumpFromConnectionString` no longer logs warnings directly** - Warnings are now returned in the result object; CLI callers handle display (better separation of concerns)
+- **Cross-platform install command generation** - `getInstallCommand` now uses `detectPackageManager()` to generate appropriate commands for apt, yum, dnf, pacman, and brew
+- **Renamed `detectInstalledHomebrewPostgres` to `detectInstalledPostgres`** - Name now reflects cross-platform behavior (macOS Homebrew + Linux APT)
+- **Consolidated `MISSING_DEPENDENCY` error code** - Removed redundant alias, now only uses `DEPENDENCY_MISSING`
+
+### Fixed
+- **Container creation duplicate-name loop** - Users can now cancel by pressing Enter (was previously stuck requiring Ctrl+C)
+- **Added `warnings` field to `DumpResult` type** - Proper type safety for warning propagation
+
+### Improved
+- Added explicit fall-through comments in version compatibility switch statement for better code clarity
+- Improved Linux `switchVersionLinux` documentation to clarify intentional no-op behavior (Linux uses versioned paths directly)
+- Removed unused `BACK_VALUE` and `MAIN_MENU_VALUE` imports from backup-handlers.ts
+
 ## [0.10.5] - 2025-12-29
 
 ### Added

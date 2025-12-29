@@ -77,6 +77,7 @@ export type DumpResult = {
   stdout?: string
   stderr?: string
   code?: number
+  warnings?: string[]
 }
 
 export type EngineInfo = {
