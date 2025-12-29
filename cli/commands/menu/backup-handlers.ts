@@ -305,7 +305,7 @@ export async function handleRestore(): Promise<void> {
       ])
 
       if (!connectionString.trim()) {
-        return
+        continue // Return to container selection
       }
 
       const engine = getEngine(config.engine)
@@ -400,6 +400,7 @@ export async function handleRestore(): Promise<void> {
               toolEngine as Engine,
             )
             if (installed) {
+              // Installation counts toward maxAttempts - retry with newly installed tools
               continue
             }
           } else {
@@ -457,7 +458,7 @@ export async function handleRestore(): Promise<void> {
       ])
 
       if (!rawBackupPath.trim()) {
-        return
+        continue // Return to container selection
       }
 
       backupPath = stripQuotes(rawBackupPath)
@@ -500,7 +501,7 @@ export async function handleRestore(): Promise<void> {
     )
 
     if (restoreMode === '__back__') {
-      continue // Go back to source selection
+      continue // Return to container selection
     }
 
     let databaseName: string
@@ -524,7 +525,7 @@ export async function handleRestore(): Promise<void> {
       })
 
       if (result === null) {
-        continue // Go back to start
+        continue // Return to container selection
       }
       databaseName = result
     } else {
@@ -538,7 +539,7 @@ export async function handleRestore(): Promise<void> {
           { includeBack: true },
         )
         if (result === null) {
-          continue // Go back to start
+          continue // Return to container selection
         }
         databaseName = result
       }
@@ -550,7 +551,7 @@ export async function handleRestore(): Promise<void> {
       )
 
       if (!confirmed) {
-        continue // Go back to start
+        continue // Return to container selection
       }
 
       // Drop the existing database before restore
@@ -702,10 +703,7 @@ export async function handleRestore(): Promise<void> {
                 'Manual upgrade may be required for pg_restore, pg_dump, and psql',
               ),
             )
-            await new Promise((resolve) => {
-              console.log(chalk.gray('Press Enter to continue...'))
-              process.stdin.once('data', resolve)
-            })
+            await pressEnterToContinue()
             return
           }
         } else {
@@ -715,10 +713,7 @@ export async function handleRestore(): Promise<void> {
               'Restore cancelled. Please upgrade PostgreSQL client tools manually and try again.',
             ),
           )
-          await new Promise((resolve) => {
-            console.log(chalk.gray('Press Enter to continue...'))
-            process.stdin.once('data', resolve)
-          })
+          await pressEnterToContinue()
           return
         }
       } else {
