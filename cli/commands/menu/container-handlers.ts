@@ -20,12 +20,19 @@ import { sqliteRegistry } from '../../../engines/sqlite/registry'
 import { defaults } from '../../../config/defaults'
 import { paths } from '../../../config/paths'
 import {
-  promptCreateOptions,
   promptContainerName,
   promptContainerSelect,
   promptInstallDependencies,
   promptConfirm,
+  promptEngine,
+  promptVersion,
+  promptPort,
+  promptDatabaseName,
+  promptSqlitePath,
+  BACK_VALUE,
+  MAIN_MENU_VALUE,
 } from '../../ui/prompts'
+import { getEngineDefaults } from '../../../config/defaults'
 import { createSpinner } from '../../ui/spinner'
 import {
   header,
@@ -41,18 +48,98 @@ import { handleRunSql, handleViewLogs } from './sql-handlers'
 import { Engine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 
-export async function handleCreate(): Promise<void> {
+export async function handleCreate(): Promise<'main' | void> {
   console.log()
-  const answers = await promptCreateOptions()
-  let { name: containerName } = answers
-  const { engine, version, port, database, path: sqlitePath } = answers
+  console.log(header('Create New Database Container'))
+  console.log()
+
+  // Wizard state - all values start as null
+  let selectedEngine: string | null = null
+  let selectedVersion: string | null = null
+  let containerName: string | null = null
+  let selectedPort: number | null = null
+  let selectedDatabase: string | null = null
+  let sqlitePath: string | undefined = undefined
+
+  // Step 1: Engine selection (back returns to main menu)
+  while (selectedEngine === null) {
+    const result = await promptEngine({ includeBack: true })
+    if (result === MAIN_MENU_VALUE) return 'main'
+    if (result === BACK_VALUE) return // Back to parent menu
+    selectedEngine = result
+  }
+
+  // Step 2: Version selection (back returns to engine)
+  while (selectedVersion === null) {
+    // selectedEngine is guaranteed non-null here (loop doesn't exit until it's set)
+    const result = await promptVersion(selectedEngine!, { includeBack: true })
+    if (result === MAIN_MENU_VALUE) return 'main'
+    if (result === BACK_VALUE) {
+      selectedEngine = null
+      continue
+    }
+    selectedVersion = result
+  }
+
+  // Step 3: Container name (back returns to version)
+  while (containerName === null) {
+    const result = await promptContainerName(undefined, { allowBack: true })
+    if (result === null) {
+      selectedVersion = null
+      continue
+    }
+    containerName = result
+  }
+
+  // Step 4: Database name (back returns to container name)
+  while (selectedDatabase === null) {
+    // containerName and selectedEngine are guaranteed non-null here
+    const result = await promptDatabaseName(containerName!, selectedEngine!, {
+      allowBack: true,
+    })
+    if (result === null) {
+      containerName = null
+      continue
+    }
+    selectedDatabase = result
+  }
+
+  // Step 5: Port or SQLite path (back returns to database name)
+  const isSQLite = selectedEngine === 'sqlite'
+  if (isSQLite) {
+    // SQLite doesn't need a port, but needs a path
+    // containerName is guaranteed non-null here
+    sqlitePath = await promptSqlitePath(containerName!)
+    // promptSqlitePath doesn't support back yet, but file path is optional
+    selectedPort = 0
+  } else {
+    while (selectedPort === null) {
+      // selectedEngine is guaranteed non-null here
+      const engineDefaults = getEngineDefaults(selectedEngine!)
+      const result = await promptPort(engineDefaults.defaultPort, {
+        allowBack: true,
+      })
+      if (result === null) {
+        selectedDatabase = null
+        continue
+      }
+      selectedPort = result
+    }
+  }
+
+  // Now we have all values - proceed with container creation
+  // At this point, all values are guaranteed to be set (wizard doesn't exit until they are)
+  const engine = selectedEngine!
+  const version = selectedVersion!
+  const port = selectedPort!
+  const database = selectedDatabase!
+  let containerNameFinal = containerName!
 
   console.log()
   console.log(header('Creating Database Container'))
   console.log()
 
   const dbEngine = getEngine(engine)
-  const isSQLite = engine === 'sqlite'
   const isPostgreSQL = engine === 'postgresql'
 
   // For PostgreSQL, download binaries FIRST - they include client tools (psql, pg_dump, etc.)
@@ -144,15 +231,22 @@ export async function handleCreate(): Promise<void> {
     }
   }
 
-  while (await containerManager.exists(containerName)) {
-    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
-    containerName = await promptContainerName()
+  while (await containerManager.exists(containerNameFinal)) {
+    console.log(
+      chalk.yellow(`  Container "${containerNameFinal}" already exists.`),
+    )
+    const newName = await promptContainerName(undefined, { allowBack: true })
+    if (!newName) {
+      console.log(chalk.blue('  Container creation cancelled.'))
+      return
+    }
+    containerNameFinal = newName
   }
 
   const createSpinnerInstance = createSpinner('Creating container...')
   createSpinnerInstance.start()
 
-  await containerManager.create(containerName, {
+  await containerManager.create(containerNameFinal, {
     engine: dbEngine.name as Engine,
     version,
     port,
@@ -166,7 +260,7 @@ export async function handleCreate(): Promise<void> {
   )
   initSpinner.start()
 
-  await dbEngine.initDataDir(containerName, version, {
+  await dbEngine.initDataDir(containerNameFinal, version, {
     superuser: defaults.superuser,
     path: sqlitePath, // SQLite file path (undefined for server databases)
   })
@@ -177,13 +271,13 @@ export async function handleCreate(): Promise<void> {
 
   // SQLite: show file path, no start needed
   if (isSQLite) {
-    const config = await containerManager.getConfig(containerName)
+    const config = await containerManager.getConfig(containerNameFinal)
     if (config) {
       const connectionString = dbEngine.getConnectionString(config)
       console.log()
       console.log(uiSuccess('Database Created'))
       console.log()
-      console.log(chalk.gray(`  Container: ${containerName}`))
+      console.log(chalk.gray(`  Container: ${containerNameFinal}`))
       console.log(chalk.gray(`  Engine: ${dbEngine.displayName} ${version}`))
       console.log(chalk.gray(`  File: ${config.database}`))
       console.log()
@@ -221,10 +315,12 @@ export async function handleCreate(): Promise<void> {
     const startSpinner = createSpinner(`Starting ${dbEngine.displayName}...`)
     startSpinner.start()
 
-    const config = await containerManager.getConfig(containerName)
+    const config = await containerManager.getConfig(containerNameFinal)
     if (config) {
       await dbEngine.start(config)
-      await containerManager.updateConfig(containerName, { status: 'running' })
+      await containerManager.updateConfig(containerNameFinal, {
+        status: 'running',
+      })
     }
 
     startSpinner.succeed(`${dbEngine.displayName} started`)
@@ -248,7 +344,7 @@ export async function handleCreate(): Promise<void> {
       console.log()
       console.log(uiSuccess('Database Created'))
       console.log()
-      console.log(chalk.gray(`  Container: ${containerName}`))
+      console.log(chalk.gray(`  Container: ${containerNameFinal}`))
       console.log(chalk.gray(`  Engine: ${dbEngine.displayName} ${version}`))
       console.log(chalk.gray(`  Database: ${database}`))
       console.log(chalk.gray(`  Port: ${port}`))
@@ -288,7 +384,7 @@ export async function handleCreate(): Promise<void> {
     )
     console.log(
       uiInfo(
-        `Start it later with: ${chalk.cyan(`spindb start ${containerName}`)}`,
+        `Start it later with: ${chalk.cyan(`spindb start ${containerNameFinal}`)}`,
       ),
     )
   }

@@ -235,7 +235,7 @@ spindb → Create container → mydb → 5433 # Interactive
 - Submenus have "Back" and "Back to main menu" options
 - Use consistent icons:
   - Back: `${chalk.blue('←')} Back`
-  - Main menu: `${chalk.blue('🏠')} Back to main menu`
+  - Main menu: `${chalk.blue('⌂')} Back to main menu`
 
 ### Transactional Operations
 

@@ -1,6 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { rm } from 'fs/promises'
+import stringWidth from 'string-width'
 import { containerManager } from '../../../core/container-manager'
 import { processManager } from '../../../core/process-manager'
 import { createSpinner } from '../../ui/spinner'
@@ -20,13 +21,11 @@ import {
 
 import { type MenuChoice } from './shared'
 
-/**
- * Pad string to width, accounting for emoji taking 2 display columns
- */
-function padWithEmoji(str: string, width: number): string {
-  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
-  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
-  return str.padEnd(width + emojiCount)
+// Pad string to target visual width, accounting for Unicode character widths
+function padToWidth(str: string, targetWidth: number): string {
+  const currentWidth = stringWidth(str)
+  const padding = Math.max(0, targetWidth - currentWidth)
+  return str + ' '.repeat(padding)
 }
 
 export async function handleEngines(): Promise<void> {
@@ -63,12 +62,16 @@ export async function handleEngines(): Promise<void> {
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
+  const COL_ENGINE = 14
+  const COL_VERSION = 12
+  const COL_SOURCE = 18
+
   console.log()
   console.log(
     chalk.gray('  ') +
-      chalk.bold.white('ENGINE'.padEnd(14)) +
-      chalk.bold.white('VERSION'.padEnd(12)) +
-      chalk.bold.white('SOURCE'.padEnd(18)) +
+      chalk.bold.white('ENGINE'.padEnd(COL_ENGINE)) +
+      chalk.bold.white('VERSION'.padEnd(COL_VERSION)) +
+      chalk.bold.white('SOURCE'.padEnd(COL_SOURCE)) +
       chalk.bold.white('SIZE'),
   )
   console.log(chalk.gray('  ' + '─'.repeat(55)))
@@ -80,9 +83,9 @@ export async function handleEngines(): Promise<void> {
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
+        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
         chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
@@ -94,9 +97,9 @@ export async function handleEngines(): Promise<void> {
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
-        chalk.yellow(mysqlEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
+        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+        chalk.yellow(mysqlEngine.version.padEnd(COL_VERSION)) +
+        chalk.gray('system'.padEnd(COL_SOURCE)) +
         chalk.gray('(system-installed)'),
     )
   }
@@ -107,9 +110,9 @@ export async function handleEngines(): Promise<void> {
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
-        chalk.yellow(sqliteEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
+        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+        chalk.yellow(sqliteEngine.version.padEnd(COL_VERSION)) +
+        chalk.gray('system'.padEnd(COL_SOURCE)) +
         chalk.gray('(system-installed)'),
     )
   }

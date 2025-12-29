@@ -1,7 +1,3 @@
-/**
- * Unit tests for container-manager module
- */
-
 import { describe, it } from 'node:test'
 import { ContainerManager } from '../../core/container-manager'
 import { assert, assertEqual } from '../integration/helpers'

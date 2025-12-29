@@ -1112,7 +1112,9 @@ export class MySQLEngine extends BaseEngine {
         options,
       )
       try {
-        await execAsync(cmd)
+        const { stdout, stderr } = await execAsync(cmd)
+        if (stdout) process.stdout.write(stdout)
+        if (stderr) process.stderr.write(stderr)
         return
       } catch (error) {
         const err = error as Error

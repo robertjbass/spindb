@@ -1,7 +1,3 @@
-/**
- * Unit tests for config-manager module
- */
-
 import { describe, it } from 'node:test'
 import { ConfigManager } from '../../core/config-manager'
 import { assert, assertEqual } from '../integration/helpers'

@@ -5,6 +5,71 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.11.0] - 2025-12-29
+
+### Highlights
+
+**PostgreSQL 18 is now supported and is the new default version.** PostgreSQL 18 was released on September 25, 2025 and brings significant performance improvements including up to 3x faster I/O operations, virtual generated columns, and the new `uuidv7()` function.
+
+### Added
+- **PostgreSQL 18 support** - Added PostgreSQL 18.1.0 as a supported version (now the default for new containers)
+- **Pre-commit hook for new PostgreSQL versions** - Automatically alerts when new PostgreSQL major versions are available on zonky.io but not yet supported by SpinDB (`scripts/check-pg-versions.ts`)
+- **Unit tests for `getInstallCommand()`** - 3 new tests verifying cross-platform install command generation
+- **CLI E2E tests for backup/restore/clone** - 15 new tests covering:
+  - SQL backup creation and JSON output
+  - Restore to new database
+  - Restore with `--force` flag to replace existing database
+  - Data verification after restore
+  - Clone stopped container
+  - Clone metadata (`clonedFrom` field)
+
+### Changed
+- Exported `getInstallCommand()` from `engines/postgresql/version-validator.ts` for testability
+- Added clarifying comment for retry loop behavior in restore flow
+
+### Fixed
+- **Interactive restore "press Enter to go back" now works correctly** - Empty input at connection string and file path prompts now returns to container selection instead of exiting the wizard
+- **Fixed inaccurate navigation comments** - Updated comments to accurately describe `continue` behavior (returns to container selection, not source selection)
+- **Consistent use of `pressEnterToContinue()` helper** - Replaced 6 manual `inquirer.prompt` patterns with the shared helper for consistent UX
+
+## [0.10.6] - 2025-12-29
+
+### Changed
+- **Refactored `handleRestore` from recursive to loop-driven** - Back navigation now uses `while(true)` with `continue` instead of recursive calls, eliminating stack growth
+- **`dumpFromConnectionString` no longer logs warnings directly** - Warnings are now returned in the result object; CLI callers handle display (better separation of concerns)
+- **Cross-platform install command generation** - `getInstallCommand` now uses `detectPackageManager()` to generate appropriate commands for apt, yum, dnf, pacman, and brew
+- **Renamed `detectInstalledHomebrewPostgres` to `detectInstalledPostgres`** - Name now reflects cross-platform behavior (macOS Homebrew + Linux APT)
+- **Consolidated `MISSING_DEPENDENCY` error code** - Removed redundant alias, now only uses `DEPENDENCY_MISSING`
+
+### Fixed
+- **Container creation duplicate-name loop** - Users can now cancel by pressing Enter (was previously stuck requiring Ctrl+C)
+- **Added `warnings` field to `DumpResult` type** - Proper type safety for warning propagation
+
+### Improved
+- Added explicit fall-through comments in version compatibility switch statement for better code clarity
+- Improved Linux `switchVersionLinux` documentation to clarify intentional no-op behavior (Linux uses versioned paths directly)
+- Removed unused `BACK_VALUE` and `MAIN_MENU_VALUE` imports from backup-handlers.ts
+
+## [0.10.5] - 2025-12-29
+
+### Added
+- **Menu navigation improvements** - All interactive menus now have "Back" and "Back to main menu" options
+  - Container creation wizard: step-by-step flow with back navigation at each step (engine, version, name, port, database)
+  - Backup/restore flows: back options at container selection, source selection, and format prompts
+  - Consistent navigation using `←` for back and `⌂` for main menu
+- **Restore mode selection** - Interactive restore now prompts for restore mode
+  - "Create new database" - Restore into a new database without affecting existing data
+  - "Replace existing database" - Overwrite an existing database (with confirmation)
+  - Shows existing databases in container before prompting for target name
+
+### Changed
+- Standardized menu icon from `🏠` to `⌂` for consistent terminal width
+
+### Fixed
+- TypeScript function overloads added to prompt functions for proper type inference when using `allowBack` option
+
 ## [0.10.4] - 2025-12-28
 
 ### Changed

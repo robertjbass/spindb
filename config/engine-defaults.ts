@@ -4,39 +4,39 @@
  */
 
 export type EngineDefaults = {
-  /** Default version to use when not specified */
+  // Default version to use when not specified
   defaultVersion: string
-  /** Default port for this engine */
+  // Default port for this engine
   defaultPort: number
-  /** Port range to scan if default is busy */
+  // Port range to scan if default is busy
   portRange: { start: number; end: number }
-  /** Supported major versions */
+  // Supported major versions
   supportedVersions: string[]
-  /** Latest major version (used for Homebrew package names like postgresql@17) */
+  // Latest major version (used for Homebrew package names like postgresql@17)
   latestVersion: string
-  /** Default superuser name */
+  // Default superuser name
   superuser: string
-  /** Connection string scheme (e.g., 'postgresql', 'mysql') */
+  // Connection string scheme (e.g., 'postgresql', 'mysql')
   connectionScheme: string
-  /** Log file name within container directory */
+  // Log file name within container directory
   logFileName: string
-  /** PID file name (relative to data directory or container) */
+  // PID file name (relative to data directory or container)
   pidFileName: string
-  /** Subdirectory for data files within container */
+  // Subdirectory for data files within container
   dataSubdir: string
-  /** Client tools required for this engine */
+  // Client tools required for this engine
   clientTools: string[]
-  /** Default max connections (higher than PostgreSQL default of 100 for parallel builds) */
+  // Default max connections (higher than PostgreSQL default of 100 for parallel builds)
   maxConnections: number
 }
 
 export const engineDefaults: Record<string, EngineDefaults> = {
   postgresql: {
-    defaultVersion: '17',
+    defaultVersion: '18',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
-    supportedVersions: ['14', '15', '16', '17'],
-    latestVersion: '17', // Update when PostgreSQL 18 is released
+    supportedVersions: ['14', '15', '16', '17', '18'], // update edb-binary-urls.ts when adding new versions
+    latestVersion: '18',
     superuser: 'postgres',
     connectionScheme: 'postgresql',
     logFileName: 'postgres.log',

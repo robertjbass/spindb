@@ -15,6 +15,16 @@ import {
   logWarning,
   logDebug,
 } from '../../core/error-handler'
+import { detectPackageManager } from '../../core/dependency-manager'
+import {
+  detectInstalledPostgres,
+  getDirectBinaryPath,
+  findCompatibleVersion,
+} from '../../core/homebrew-version-manager'
+import {
+  detectRemotePostgresVersion,
+  type RemoteVersionResult,
+} from './remote-version'
 
 const execAsync = promisify(exec)
 
@@ -61,9 +71,6 @@ export function parseToolVersion(output: string): VersionInfo {
   }
 }
 
-/**
- * Read the first N lines of a file
- */
 async function readFirstLines(
   filePath: string,
   lineCount: number,
@@ -259,4 +266,150 @@ export async function validateRestoreCompatibility(options: {
   }
 
   return { dumpVersion, toolVersion }
+}
+
+// =============================================================================
+// Pre-Dump Compatibility Validation
+// =============================================================================
+
+export type DumpCompatibilityResult = {
+  compatible: boolean
+  localToolVersion: VersionInfo
+  remoteDbVersion: RemoteVersionResult
+  requiredAction: 'none' | 'use_direct_path' | 'switch_homebrew' | 'install'
+  alternativePath?: string // Direct path to correct version binary
+  switchTarget?: string // Major version to switch to
+  error?: string
+}
+
+export async function getPgDumpVersion(
+  pgDumpPath: string,
+): Promise<VersionInfo> {
+  const { stdout } = await execAsync(`"${pgDumpPath}" --version`)
+  return parseToolVersion(stdout)
+}
+
+/**
+ * Validate that a remote database can be dumped with the current pg_dump
+ *
+ * This checks BEFORE dumping to avoid creating incompatible dump files.
+ * Returns the recommended action if the current pg_dump is incompatible.
+ */
+export async function validateDumpCompatibility(options: {
+  connectionString: string
+  pgDumpPath: string
+}): Promise<DumpCompatibilityResult> {
+  const { connectionString, pgDumpPath } = options
+
+  // Get local pg_dump version
+  const localVersion = await getPgDumpVersion(pgDumpPath)
+  logDebug('Local pg_dump version', { version: localVersion.full })
+
+  // Detect remote database version
+  const remoteVersion = await detectRemotePostgresVersion(connectionString)
+  logDebug('Remote database version', {
+    version: remoteVersion.fullVersion,
+    serverType: remoteVersion.serverType,
+  })
+
+  // Check compatibility: local tool must be >= remote version
+  if (localVersion.major >= remoteVersion.majorVersion) {
+    return {
+      compatible: true,
+      localToolVersion: localVersion,
+      remoteDbVersion: remoteVersion,
+      requiredAction: 'none',
+    }
+  }
+
+  // Version mismatch - check if we can use a direct path
+  const targetMajor = String(remoteVersion.majorVersion)
+  const directPath = await getDirectBinaryPath('pg_dump', targetMajor)
+
+  if (directPath) {
+    // Have a direct path to the correct version
+    return {
+      compatible: false,
+      localToolVersion: localVersion,
+      remoteDbVersion: remoteVersion,
+      requiredAction: 'use_direct_path',
+      alternativePath: directPath,
+      switchTarget: targetMajor,
+    }
+  }
+
+  // Check if any compatible version is installed via Homebrew
+  const compatibleVersion = await findCompatibleVersion(
+    remoteVersion.majorVersion,
+  )
+
+  if (compatibleVersion) {
+    const altPath = await getDirectBinaryPath(
+      'pg_dump',
+      compatibleVersion.majorVersion,
+    )
+    return {
+      compatible: false,
+      localToolVersion: localVersion,
+      remoteDbVersion: remoteVersion,
+      requiredAction: 'use_direct_path',
+      alternativePath: altPath || undefined,
+      switchTarget: compatibleVersion.majorVersion,
+    }
+  }
+
+  // Check if we could switch Homebrew (version is installed but not as direct path)
+  const installed = await detectInstalledPostgres()
+  const hasTarget = installed.some(
+    (v) => parseInt(v.majorVersion, 10) >= remoteVersion.majorVersion,
+  )
+
+  if (hasTarget) {
+    const best = installed
+      .filter((v) => parseInt(v.majorVersion, 10) >= remoteVersion.majorVersion)
+      .sort(
+        (a, b) => parseInt(a.majorVersion, 10) - parseInt(b.majorVersion, 10),
+      )[0]
+
+    return {
+      compatible: false,
+      localToolVersion: localVersion,
+      remoteDbVersion: remoteVersion,
+      requiredAction: 'switch_homebrew',
+      switchTarget: best.majorVersion,
+    }
+  }
+
+  // Need to install - provide platform-specific instructions
+  const installCmd = await getInstallCommand(targetMajor)
+  return {
+    compatible: false,
+    localToolVersion: localVersion,
+    remoteDbVersion: remoteVersion,
+    requiredAction: 'install',
+    switchTarget: targetMajor,
+    error:
+      `Your pg_dump version (${localVersion.major}) cannot dump from PostgreSQL ${remoteVersion.majorVersion}. ` +
+      `Install PostgreSQL ${targetMajor} client tools: ${installCmd}`,
+  }
+}
+
+export async function getInstallCommand(majorVersion: string): Promise<string> {
+  const pm = await detectPackageManager()
+
+  if (!pm) {
+    return `Install PostgreSQL ${majorVersion} client tools for your platform`
+  }
+
+  // Versioned package names per package manager
+  const packages: Record<string, string> = {
+    brew: `postgresql@${majorVersion}`,
+    apt: `postgresql-client-${majorVersion}`,
+    yum: `postgresql${majorVersion}`,
+    dnf: `postgresql${majorVersion}`,
+    pacman: 'postgresql-libs', // Arch doesn't version packages the same way
+  }
+
+  const pkg = packages[pm.id] || `postgresql-${majorVersion}`
+  return pm.config.installTemplate.replace('{package}', pkg)
 }

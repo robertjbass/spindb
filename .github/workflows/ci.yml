@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # TODO: uncomment for testing CI on dev branch
+  # push:
+  #   branches: [dev]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -70,8 +73,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Use SpinDB to download PostgreSQL binaries
+      # NOTE: Keep this version in sync with config/engine-defaults.ts defaultVersion
+      # See CLAUDE.md "Updating Supported Engine Versions" when changing
       - name: Install PostgreSQL via SpinDB
-        run: pnpm start engines download postgresql 17
+        run: pnpm start engines download postgresql 18
 
       # Show what SpinDB installed
       - name: Show installed engines
@@ -218,8 +223,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Use SpinDB to install all required engines
+      # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
       - name: Install PostgreSQL via SpinDB
-        run: pnpm start engines download postgresql 17
+        run: pnpm start engines download postgresql 18
 
       - name: Install SQLite via SpinDB
         run: pnpm start engines download sqlite

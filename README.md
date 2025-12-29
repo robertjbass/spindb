@@ -136,7 +136,7 @@ You'll get an interactive menu with arrow-key navigation:
 
 | | |
 |---|---|
-| Versions | 14, 15, 16, 17 |
+| Versions | 14, 15, 16, 17, 18 |
 | Default port | 5432 |
 | Default user | `postgres` |
 | Binary source | [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) (macOS/Linux), [EDB](https://www.enterprisedb.com/) (Windows) |
@@ -145,7 +145,7 @@ SpinDB downloads PostgreSQL server binaries automatically:
 - **macOS/Linux:** Pre-compiled binaries from the zonky.io project, hosted on Maven Central
 - **Windows:** Official binaries from EnterpriseDB (EDB)
 
-**Why download binaries instead of using system PostgreSQL?** You might want PostgreSQL 14 for one project and 17 for another. SpinDB lets you run different versions side-by-side without conflicts.
+**Why download binaries instead of using system PostgreSQL?** You might want PostgreSQL 14 for one project and 18 for another. SpinDB lets you run different versions side-by-side without conflicts.
 
 **Client tools required:** You still need `psql`, `pg_dump`, and `pg_restore` installed on your system for some operations (connecting, backups, restores). SpinDB can install these for you:
 
@@ -380,12 +380,25 @@ spindb restore mydb backup.sql --database my_app
 spindb restore mydb --from-url "postgresql://user:pass@host/db"
 ```
 
+**Restore production data alongside existing databases:**
+
+```bash
+# Restore into a NEW database without affecting existing data
+spindb restore mydb prod-backup.dump --database prod_copy
+
+# Pull from production into a new local database
+spindb restore mydb --from-url "postgresql://user:pass@prod-host/proddb" --database prod_local
+
+# View all databases in a container
+spindb info mydb
+```
+
 <details>
 <summary>All options</summary>
 
 | Option | Description |
 |--------|-------------|
-| `--database`, `-d` | Target database name |
+| `--database`, `-d` | Target database name (creates new if doesn't exist) |
 | `--from-url` | Pull data from a remote database connection string |
 | `--force`, `-f` | Overwrite existing database without confirmation |
 | `--json`, `-j` | Output result as JSON |
@@ -450,8 +463,8 @@ Example output:
 ```
 ENGINE        VERSION     SOURCE            SIZE
 ────────────────────────────────────────────────────────
+🐘 postgresql 18.1        darwin-arm64      46.0 MB
 🐘 postgresql 17.7        darwin-arm64      45.2 MB
-🐘 postgresql 16.8        darwin-arm64      44.8 MB
 🐬 mysql      8.0.35      system            (system-installed)
 🪶 sqlite     3.43.2      system            (system-installed)
 ────────────────────────────────────────────────────────
@@ -583,7 +596,7 @@ Native processes mean instant startup and no virtualization overhead.
 ```
 ~/.spindb/
 ├── bin/                                    # Downloaded server binaries
-│   └── postgresql-17.7.0-darwin-arm64/     # ~45 MB per version
+│   └── postgresql-18.1.0-darwin-arm64/     # ~45 MB per version
 ├── containers/
 │   ├── postgresql/
 │   │   └── mydb/
@@ -595,7 +608,6 @@ Native processes mean instant startup and no virtualization overhead.
 │           ├── container.json
 │           ├── data/
 │           └── mysql.log
-├── sqlite-registry.json                    # Tracks SQLite file locations
 ├── logs/                                   # Error logs
 └── config.json                             # Tool paths cache
 

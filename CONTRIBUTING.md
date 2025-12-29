@@ -24,6 +24,12 @@ pnpm test:mysql     # MySQL integration
 pnpm test:sqlite    # SQLite integration
 ```
 
+### Why `--test-concurrency=1`?
+
+All test scripts use `--test-concurrency=1` to disable Node's test runner worker threads. This prevents a serialization bug in Node 22's test runner on macOS where worker thread IPC fails with "Unable to deserialize cloned data due to invalid or unsupported version."
+
+Running tests sequentially is slightly slower but ensures reliable cross-platform CI.
+
 ### Test Ports
 
 - PostgreSQL: 5454-5456
@@ -31,8 +37,9 @@ pnpm test:sqlite    # SQLite integration
 
 ### Test Coverage
 
-- **Unit tests:** 358 tests covering validation, error handling, version compatibility, SQLite registry, relocation
-- **Integration tests:** 38 tests (14 PostgreSQL + 14 MySQL + 10 SQLite) covering full container lifecycle
+- **Unit tests:** 381 tests covering validation, error handling, version compatibility, SQLite registry, relocation
+- **Integration tests:** 14 PostgreSQL + 14 MySQL + 10 SQLite covering full container lifecycle
+- **CLI E2E tests:** 38 tests covering full command workflows (create, list, start, stop, backup, restore, clone, delete)
 
 ## Silent Catch Blocks (By Design)
 

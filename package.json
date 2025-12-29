@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.10.4",
+  "version": "0.11.1",
   "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
   "type": "module",
   "bin": {
@@ -9,16 +9,17 @@
   "scripts": {
     "start": "tsx cli/bin.ts",
     "dev": "tsx watch cli/bin.ts",
-    "test": "pnpm test:pg && pnpm test:mysql && pnpm test:sqlite",
-    "test:pg": "node --import tsx --test tests/integration/postgresql.test.ts",
-    "test:mysql": "node --import tsx --test tests/integration/mysql.test.ts",
-    "test:sqlite": "node --import tsx --test tests/integration/sqlite.test.ts",
-    "test:unit": "node --import tsx --test tests/unit/*.test.ts",
-    "test:cli": "node --import tsx --test tests/integration/cli-e2e.test.ts",
-    "test:integration": "pnpm test:pg && pnpm test:mysql && pnpm test:sqlite",
-    "test:all": "pnpm test:unit && pnpm test:integration",
+    "test": "run-s test:all",
+    "test:pg": "node --import tsx --test --test-concurrency=1 tests/integration/postgresql.test.ts",
+    "test:mysql": "node --import tsx --test --test-concurrency=1 tests/integration/mysql.test.ts",
+    "test:sqlite": "node --import tsx --test --test-concurrency=1 tests/integration/sqlite.test.ts",
+    "test:unit": "node --import tsx --test --test-concurrency=1 tests/unit/*.test.ts",
+    "test:cli": "node --import tsx --test --test-concurrency=1 tests/integration/cli-e2e.test.ts",
+    "test:integration": "run-s test:pg test:mysql test:sqlite",
+    "test:all": "run-s test:unit test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
+    "check:pg-versions": "tsx scripts/check-pg-versions.ts",
     "prepare": "husky"
   },
   "keywords": [
@@ -28,6 +29,8 @@
     "database",
     "local",
     "development",
+    "sqlite",
+    "tui",
     "cli"
   ],
   "author": "Bob Bass <bob@bbass.co>",
@@ -51,6 +54,7 @@
     "commander": "^12.1.0",
     "inquirer": "^9.3.7",
     "ora": "^8.1.1",
+    "string-width": "^8.1.0",
     "tsx": "^4.7.0",
     "unzipper": "^0.12.3"
   },
@@ -61,6 +65,7 @@
     "@types/unzipper": "^0.10.11",
     "eslint": "^9.39.1",
     "husky": "^9.1.7",
+    "npm-run-all": "^4.1.5",
     "prettier": "^3.6.2",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.48.0"

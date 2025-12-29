@@ -29,7 +29,16 @@ import {
 } from './binary-urls'
 import { detectBackupFormat, restoreBackup } from './restore'
 import { createBackup } from './backup'
-import { assertValidDatabaseName } from '../../core/error-handler'
+import {
+  validateDumpCompatibility,
+  type DumpCompatibilityResult,
+} from './version-validator'
+import { switchHomebrewVersion } from '../../core/homebrew-version-manager'
+import {
+  assertValidDatabaseName,
+  SpinDBError,
+  ErrorCodes,
+} from '../../core/error-handler'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -438,6 +447,121 @@ export class PostgreSQLEngine extends BaseEngine {
     return pgDumpPath
   }
 
+  /**
+   * Get a compatible pg_dump path for dumping from a remote database
+   *
+   * This checks the remote database version and finds a compatible pg_dump:
+   * 1. First checks if the current pg_dump is compatible
+   * 2. If not, tries to find a direct path to a compatible version
+   * 3. If that fails, tries to switch Homebrew links
+   * 4. If all else fails, throws an error with install instructions
+   */
+  async getCompatiblePgDumpPath(connectionString: string): Promise<{
+    path: string
+    switched: boolean
+    warnings: string[]
+  }> {
+    const warnings: string[] = []
+
+    // Get current pg_dump path with version validation
+    const { path, versionMismatch, cachedVersion, actualVersion } =
+      await configManager.getBinaryPathWithVersionCheck('pg_dump')
+
+    if (!path) {
+      throw new SpinDBError(
+        ErrorCodes.DEPENDENCY_MISSING,
+        'pg_dump not found. Install PostgreSQL client tools.',
+        'fatal',
+        'macOS: brew install postgresql@17 && brew link --overwrite postgresql@17\n' +
+          'Ubuntu/Debian: apt install postgresql-client',
+      )
+    }
+
+    if (versionMismatch) {
+      warnings.push(
+        `pg_dump version changed: ${cachedVersion} -> ${actualVersion} (Homebrew link changed)`,
+      )
+    }
+
+    // Check compatibility with remote database
+    let compatibility: DumpCompatibilityResult
+    try {
+      compatibility = await validateDumpCompatibility({
+        connectionString,
+        pgDumpPath: path,
+      })
+    } catch (error) {
+      // Connection or version detection failed
+      const e = error as Error
+      throw new SpinDBError(
+        ErrorCodes.CONNECTION_FAILED,
+        `Failed to detect remote database version: ${e.message}`,
+        'fatal',
+        'Check your connection string and ensure the database is accessible.',
+      )
+    }
+
+    if (compatibility.compatible) {
+      return { path, switched: false, warnings }
+    }
+
+    // Handle incompatibility based on required action
+    // All cases that don't return will fall through to VERSION_MISMATCH error below
+    switch (compatibility.requiredAction) {
+      case 'use_direct_path':
+        if (compatibility.alternativePath) {
+          warnings.push(
+            `Using PostgreSQL ${compatibility.switchTarget} pg_dump (remote DB is v${compatibility.remoteDbVersion.majorVersion})`,
+          )
+          return {
+            path: compatibility.alternativePath,
+            switched: false,
+            warnings,
+          }
+        }
+        // No alternative path available - fall through to VERSION_MISMATCH error
+        break
+
+      case 'switch_homebrew':
+        if (compatibility.switchTarget) {
+          const switchResult = await switchHomebrewVersion(
+            compatibility.switchTarget,
+          )
+          if (switchResult.success) {
+            // Refresh config cache after switching
+            await configManager.refreshBinaryWithVersion('pg_dump')
+            await configManager.refreshBinaryWithVersion('pg_restore')
+            await configManager.refreshBinaryWithVersion('psql')
+
+            const newPath = await configManager.getBinaryPath('pg_dump')
+            if (newPath) {
+              warnings.push(
+                `Switched Homebrew from PostgreSQL ${switchResult.previousVersion} to ${switchResult.currentVersion}`,
+              )
+              return { path: newPath, switched: true, warnings }
+            }
+          }
+        }
+        // Switch failed or no target - fall through to VERSION_MISMATCH error
+        break
+
+      case 'install':
+        // User needs to install manually - fall through to VERSION_MISMATCH error
+        break
+    }
+
+    // Cannot auto-fix - throw error with install instructions
+    throw new SpinDBError(
+      ErrorCodes.VERSION_MISMATCH,
+      compatibility.error ||
+        `Your pg_dump version (${compatibility.localToolVersion.major}) cannot dump from PostgreSQL ${compatibility.remoteDbVersion.majorVersion}`,
+      'fatal',
+      `Install PostgreSQL ${compatibility.remoteDbVersion.majorVersion} client tools:\n` +
+        `  brew install postgresql@${compatibility.remoteDbVersion.majorVersion}`,
+      { compatibility },
+    )
+  }
+
   async connect(container: ContainerConfig, database?: string): Promise<void> {
     const { port } = container
     const db = database || 'postgres'
@@ -546,11 +670,20 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
+  /**
+   * Dump a remote database to a file
+   *
+   * This method automatically detects the remote database version and uses
+   * a compatible pg_dump binary. If the current pg_dump is incompatible,
+   * it will try to find or switch to a compatible version.
+   */
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult> {
-    const pgDumpPath = await this.getPgDumpPath()
+    // Get compatible pg_dump path (may switch versions or use direct path)
+    const { path: pgDumpPath, warnings } =
+      await this.getCompatiblePgDumpPath(connectionString)
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -584,6 +717,7 @@ export class PostgreSQLEngine extends BaseEngine {
             stdout,
             stderr,
             code,
+            warnings,
           })
         } else {
           // pg_dump failed
@@ -621,7 +755,9 @@ export class PostgreSQLEngine extends BaseEngine {
         options,
       )
       try {
-        await execAsync(cmd)
+        const { stdout, stderr } = await execAsync(cmd)
+        if (stdout) process.stdout.write(stdout)
+        if (stderr) process.stderr.write(stderr)
         return
       } catch (error) {
         const err = error as Error

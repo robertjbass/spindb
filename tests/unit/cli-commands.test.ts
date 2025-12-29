@@ -1,28 +1,16 @@
-/**
- * Unit tests for CLI command logic
- * Tests validation and formatting functions without requiring real containers
- */
-
 import { describe, it } from 'node:test'
 import { assert, assertEqual } from '../integration/helpers'
 
-/**
- * Container name validation (same logic as in edit.ts and prompts.ts)
- */
-function isValidContainerName(name: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
-}
-
-/**
- * Port validation
- */
 function isValidPort(port: number): boolean {
   return Number.isInteger(port) && port >= 1 && port <= 65535
 }
 
-/**
- * Version comparison (same logic as in engines.ts and menu.ts)
- */
+// Container name validation (same logic as in edit.ts and prompts.ts)
+function isValidContainerName(name: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
+}
+
+// Version comparison (same logic as in engines.ts and menu.ts)
 function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -35,9 +23,7 @@ function compareVersions(a: string, b: string): number {
   return 0
 }
 
-/**
- * Bytes formatting (same logic as in engines.ts and menu.ts)
- */
+// Bytes formatting (same logic as in engines.ts and menu.ts)
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024

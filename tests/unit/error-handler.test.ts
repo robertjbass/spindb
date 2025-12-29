@@ -1,7 +1,3 @@
-/**
- * Unit tests for error-handler module
- */
-
 import { describe, it } from 'node:test'
 import {
   SpinDBError,

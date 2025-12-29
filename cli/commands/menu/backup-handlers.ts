@@ -21,6 +21,7 @@ import {
   promptBackupFormat,
   promptBackupFilename,
   promptInstallDependencies,
+  promptConfirm,
 } from '../../ui/prompts'
 import { createSpinner } from '../../ui/spinner'
 import {
@@ -34,6 +35,7 @@ import {
 import { getEngineIcon } from '../../constants'
 import { type Engine } from '../../../types'
 import { pressEnterToContinue } from './shared'
+import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
 
 function generateBackupTimestamp(): string {
   const now = new Date()
@@ -148,445 +150,612 @@ export async function handleCreateForRestore(): Promise<{
 }
 
 export async function handleRestore(): Promise<void> {
-  const containers = await containerManager.list()
-  const running = containers.filter((c) => c.status === 'running')
+  // Use a loop instead of recursion for "back" navigation
+  while (true) {
+    const containers = await containerManager.list()
+    const running = containers.filter((c) => c.status === 'running')
 
-  const choices = [
-    ...running.map((c) => ({
-      name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
-      value: c.name,
-      short: c.name,
-    })),
-    new inquirer.Separator(),
-    {
-      name: `${chalk.green('➕')} Create new container`,
-      value: '__create_new__',
-      short: 'Create new',
-    },
-  ]
+    const choices = [
+      ...running.map((c) => ({
+        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+        value: c.name,
+        short: c.name,
+      })),
+      new inquirer.Separator(),
+      {
+        name: `${chalk.green('➕')} Create new container`,
+        value: '__create_new__',
+        short: 'Create new',
+      },
+      new inquirer.Separator(),
+      {
+        name: `${chalk.blue('←')} Back`,
+        value: '__back__',
+      },
+    ]
 
-  const { selectedContainer } = await inquirer.prompt<{
-    selectedContainer: string
-  }>([
-    {
-      type: 'list',
-      name: 'selectedContainer',
-      message: 'Select container to restore to:',
-      choices,
-      pageSize: 15,
-    },
-  ])
-
-  let containerName: string
-  let config: Awaited<ReturnType<typeof containerManager.getConfig>>
-
-  if (selectedContainer === '__create_new__') {
-    const createResult = await handleCreateForRestore()
-    if (!createResult) return
-    containerName = createResult.name
-    config = createResult.config
-  } else {
-    containerName = selectedContainer
-    config = await containerManager.getConfig(containerName)
-    if (!config) {
-      console.error(uiError(`Container "${containerName}" not found`))
-      return
-    }
-  }
-
-  const depsSpinner = createSpinner('Checking required tools...')
-  depsSpinner.start()
-
-  let missingDeps = await getMissingDependencies(config.engine)
-  if (missingDeps.length > 0) {
-    depsSpinner.warn(
-      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-    )
-
-    const installed = await promptInstallDependencies(
-      missingDeps[0].binary,
-      config.engine,
-    )
-
-    if (!installed) {
-      return
-    }
-
-    missingDeps = await getMissingDependencies(config.engine)
-    if (missingDeps.length > 0) {
-      console.log(
-        uiError(
-          `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-        ),
-      )
-      return
-    }
-
-    console.log(chalk.green('  ✓ All required tools are now available'))
-    console.log()
-  } else {
-    depsSpinner.succeed('Required tools available')
-  }
-
-  const { restoreSource } = await inquirer.prompt<{
-    restoreSource: 'file' | 'connection'
-  }>([
-    {
-      type: 'list',
-      name: 'restoreSource',
-      message: 'Restore from:',
-      choices: [
-        {
-          name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
-          value: 'file',
-        },
-        {
-          name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
-          value: 'connection',
-        },
-      ],
-    },
-  ])
-
-  let backupPath = ''
-  let isTempFile = false
-
-  if (restoreSource === 'connection') {
-    console.log(
-      chalk.gray('  Enter connection string, or press Enter to go back'),
-    )
-    const { connectionString } = await inquirer.prompt<{
-      connectionString: string
+    const { selectedContainer } = await inquirer.prompt<{
+      selectedContainer: string
     }>([
       {
-        type: 'input',
-        name: 'connectionString',
-        message: 'Connection string:',
-        validate: (input: string) => {
-          if (!input) return true
-          if (config.engine === 'mysql') {
-            if (!input.startsWith('mysql://')) {
-              return 'Connection string must start with mysql://'
-            }
-          } else {
-            // PostgreSQL
-            if (
-              !input.startsWith('postgresql://') &&
-              !input.startsWith('postgres://')
-            ) {
-              return 'Connection string must start with postgresql:// or postgres://'
-            }
-          }
-          return true
-        },
+        type: 'list',
+        name: 'selectedContainer',
+        message: 'Select container to restore to:',
+        choices,
+        pageSize: 15,
       },
     ])
 
-    if (!connectionString.trim()) {
+    if (selectedContainer === '__back__') {
       return
+    }
+
+    let containerName: string
+    let config: Awaited<ReturnType<typeof containerManager.getConfig>>
+
+    if (selectedContainer === '__create_new__') {
+      const createResult = await handleCreateForRestore()
+      if (!createResult) return
+      containerName = createResult.name
+      config = createResult.config
+    } else {
+      containerName = selectedContainer
+      config = await containerManager.getConfig(containerName)
+      if (!config) {
+        console.error(uiError(`Container "${containerName}" not found`))
+        return
+      }
+    }
+
+    const depsSpinner = createSpinner('Checking required tools...')
+    depsSpinner.start()
+
+    let missingDeps = await getMissingDependencies(config.engine)
+    if (missingDeps.length > 0) {
+      depsSpinner.warn(
+        `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+      )
+
+      const installed = await promptInstallDependencies(
+        missingDeps[0].binary,
+        config.engine,
+      )
+
+      if (!installed) {
+        return
+      }
+
+      missingDeps = await getMissingDependencies(config.engine)
+      if (missingDeps.length > 0) {
+        console.log(
+          uiError(
+            `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+          ),
+        )
+        return
+      }
+
+      console.log(chalk.green('  ✓ All required tools are now available'))
+      console.log()
+    } else {
+      depsSpinner.succeed('Required tools available')
+    }
+
+    const { restoreSource } = await inquirer.prompt<{
+      restoreSource: 'file' | 'connection' | '__back__'
+    }>([
+      {
+        type: 'list',
+        name: 'restoreSource',
+        message: 'Restore from:',
+        choices: [
+          {
+            name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+            value: 'file',
+          },
+          {
+            name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+            value: 'connection',
+          },
+          new inquirer.Separator(),
+          {
+            name: `${chalk.blue('←')} Back`,
+            value: '__back__',
+          },
+        ],
+      },
+    ])
+
+    if (restoreSource === '__back__') {
+      continue // Go back to container selection
+    }
+
+    let backupPath = ''
+    let isTempFile = false
+
+    if (restoreSource === 'connection') {
+      console.log(
+        chalk.gray('  Enter connection string, or press Enter to go back'),
+      )
+      const { connectionString } = await inquirer.prompt<{
+        connectionString: string
+      }>([
+        {
+          type: 'input',
+          name: 'connectionString',
+          message: 'Connection string:',
+          validate: (input: string) => {
+            if (!input) return true
+            if (config.engine === 'mysql') {
+              if (!input.startsWith('mysql://')) {
+                return 'Connection string must start with mysql://'
+              }
+            } else {
+              // PostgreSQL
+              if (
+                !input.startsWith('postgresql://') &&
+                !input.startsWith('postgres://')
+              ) {
+                return 'Connection string must start with postgresql:// or postgres://'
+              }
+            }
+            return true
+          },
+        },
+      ])
+
+      if (!connectionString.trim()) {
+        continue // Return to container selection
+      }
+
+      const engine = getEngine(config.engine)
+
+      const timestamp = Date.now()
+      const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+
+      let dumpSuccess = false
+      let attempts = 0
+      const maxAttempts = 2
+
+      while (!dumpSuccess && attempts < maxAttempts) {
+        attempts++
+        const dumpSpinner = createSpinner(
+          'Creating dump from remote database...',
+        )
+        dumpSpinner.start()
+
+        try {
+          const dumpResult = await engine.dumpFromConnectionString(
+            connectionString,
+            tempDumpPath,
+          )
+          dumpSpinner.succeed('Dump created from remote database')
+          if (dumpResult.warnings?.length) {
+            for (const warning of dumpResult.warnings) {
+              console.log(chalk.yellow(`  ${warning}`))
+            }
+          }
+          backupPath = tempDumpPath
+          isTempFile = true
+          dumpSuccess = true
+        } catch (error) {
+          const e = error as Error
+          dumpSpinner.fail('Failed to create dump')
+
+          // Handle version mismatch errors with helpful message
+          if (
+            e instanceof SpinDBError &&
+            e.code === ErrorCodes.VERSION_MISMATCH
+          ) {
+            console.log()
+            console.log(uiError('PostgreSQL version mismatch:'))
+            console.log(chalk.gray(`  ${e.message}`))
+            if (e.suggestion) {
+              console.log()
+              console.log(uiWarning('To fix this:'))
+              console.log(chalk.yellow(`  ${e.suggestion}`))
+            }
+            console.log()
+
+            try {
+              await rm(tempDumpPath, { force: true })
+            } catch {
+              // Ignore cleanup errors
+            }
+
+            await pressEnterToContinue()
+            return
+          }
+
+          // Handle connection errors
+          if (
+            e instanceof SpinDBError &&
+            e.code === ErrorCodes.CONNECTION_FAILED
+          ) {
+            console.log()
+            console.log(uiError('Connection failed:'))
+            console.log(chalk.gray(`  ${e.message}`))
+            if (e.suggestion) {
+              console.log(chalk.yellow(`  ${e.suggestion}`))
+            }
+            console.log()
+
+            await pressEnterToContinue()
+            return
+          }
+
+          // Handle missing tool errors
+          if (
+            e.message.includes('pg_dump not found') ||
+            e.message.includes('mysqldump not found') ||
+            e.message.includes('ENOENT')
+          ) {
+            const missingTool = e.message.includes('mysqldump')
+              ? 'mysqldump'
+              : 'pg_dump'
+            const toolEngine =
+              missingTool === 'mysqldump' ? 'mysql' : 'postgresql'
+            const installed = await promptInstallDependencies(
+              missingTool,
+              toolEngine as Engine,
+            )
+            if (installed) {
+              // Installation counts toward maxAttempts - retry with newly installed tools
+              continue
+            }
+          } else {
+            const dumpTool = config.engine === 'mysql' ? 'mysqldump' : 'pg_dump'
+            console.log()
+            console.log(uiError(`${dumpTool} error:`))
+            console.log(chalk.gray(`  ${e.message}`))
+            console.log()
+          }
+
+          try {
+            await rm(tempDumpPath, { force: true })
+          } catch {
+            // Ignore cleanup errors
+          }
+
+          await pressEnterToContinue()
+          return
+        }
+      }
+
+      if (!dumpSuccess) {
+        console.log(uiError('Failed to create dump after retries'))
+        return
+      }
+    } else {
+      const stripQuotes = (path: string) =>
+        path.replace(/^['"]|['"]$/g, '').trim()
+
+      console.log(
+        chalk.gray(
+          '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+        ),
+      )
+      const { backupPath: rawBackupPath } = await inquirer.prompt<{
+        backupPath: string
+      }>([
+        {
+          type: 'input',
+          name: 'backupPath',
+          message: 'Backup file path:',
+          validate: (input: string) => {
+            if (!input) return true
+            const cleanPath = stripQuotes(input)
+            if (!existsSync(cleanPath)) return 'File not found'
+            return true
+          },
+        },
+      ])
+
+      if (!rawBackupPath.trim()) {
+        continue // Return to container selection
+      }
+
+      backupPath = stripQuotes(rawBackupPath)
     }
 
     const engine = getEngine(config.engine)
 
-    const timestamp = Date.now()
-    const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+    // Get existing databases in this container
+    const existingDatabases = config.databases || [config.database]
 
-    let dumpSuccess = false
-    let attempts = 0
-    const maxAttempts = 2
+    // Restore mode selection
+    type RestoreMode = 'new' | 'replace' | '__back__'
+    const { restoreMode } = await inquirer.prompt<{ restoreMode: RestoreMode }>(
+      [
+        {
+          type: 'list',
+          name: 'restoreMode',
+          message: 'How would you like to restore?',
+          choices: [
+            {
+              name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
+              value: 'new',
+            },
+            {
+              name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+              value: 'replace',
+              disabled:
+                existingDatabases.length === 0
+                  ? 'No existing databases'
+                  : false,
+            },
+            new inquirer.Separator(),
+            {
+              name: `${chalk.blue('←')} Back`,
+              value: '__back__',
+            },
+          ],
+        },
+      ],
+    )
 
-    while (!dumpSuccess && attempts < maxAttempts) {
-      attempts++
-      const dumpSpinner = createSpinner('Creating dump from remote database...')
-      dumpSpinner.start()
+    if (restoreMode === '__back__') {
+      continue // Return to container selection
+    }
+
+    let databaseName: string
+
+    if (restoreMode === 'new') {
+      // Show existing databases for context
+      if (existingDatabases.length > 0) {
+        console.log()
+        console.log(chalk.gray('  Existing databases in this container:'))
+        for (const db of existingDatabases) {
+          console.log(chalk.gray(`    • ${db}`))
+        }
+        console.log()
+      }
+
+      // Prompt for new database name (must not already exist)
+      const result = await promptDatabaseName(containerName, config.engine, {
+        allowBack: true,
+        existingDatabases,
+        disallowExisting: true,
+      })
+
+      if (result === null) {
+        continue // Return to container selection
+      }
+      databaseName = result
+    } else {
+      // Replace existing database - show selection
+      if (existingDatabases.length === 1) {
+        databaseName = existingDatabases[0]
+      } else {
+        const result = await promptDatabaseSelect(
+          existingDatabases,
+          'Select database to replace:',
+          { includeBack: true },
+        )
+        if (result === null) {
+          continue // Return to container selection
+        }
+        databaseName = result
+      }
+
+      // Confirm overwrite
+      const confirmed = await promptConfirm(
+        `This will overwrite all data in "${databaseName}". Continue?`,
+        false,
+      )
+
+      if (!confirmed) {
+        continue // Return to container selection
+      }
+
+      // Drop the existing database before restore
+      console.log()
+      const dropSpinner = createSpinner(
+        `Dropping existing database "${databaseName}"...`,
+      )
+      dropSpinner.start()
 
       try {
-        await engine.dumpFromConnectionString(connectionString, tempDumpPath)
-        dumpSpinner.succeed('Dump created from remote database')
-        backupPath = tempDumpPath
-        isTempFile = true
-        dumpSuccess = true
+        await engine.dropDatabase(config, databaseName)
+        dropSpinner.succeed(`Dropped database "${databaseName}"`)
       } catch (error) {
-        const e = error as Error
-        dumpSpinner.fail('Failed to create dump')
-
-        if (
-          e.message.includes('pg_dump not found') ||
-          e.message.includes('mysqldump not found') ||
-          e.message.includes('ENOENT')
-        ) {
-          const missingTool = e.message.includes('mysqldump')
-            ? 'mysqldump'
-            : 'pg_dump'
-          const toolEngine =
-            missingTool === 'mysqldump' ? 'mysql' : 'postgresql'
-          const installed = await promptInstallDependencies(
-            missingTool,
-            toolEngine as Engine,
-          )
-          if (installed) {
-            continue
-          }
-        } else {
-          const dumpTool = config.engine === 'mysql' ? 'mysqldump' : 'pg_dump'
-          console.log()
-          console.log(uiError(`${dumpTool} error:`))
-          console.log(chalk.gray(`  ${e.message}`))
-          console.log()
-        }
-
-        try {
-          await rm(tempDumpPath, { force: true })
-        } catch {
-          // Ignore cleanup errors
-        }
-
-        await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'continue',
-            message: chalk.gray('Press Enter to continue...'),
-          },
-        ])
+        dropSpinner.fail(`Failed to drop database "${databaseName}"`)
+        console.log(uiError((error as Error).message))
+        await pressEnterToContinue()
         return
       }
     }
 
-    if (!dumpSuccess) {
-      console.log(uiError('Failed to create dump after retries'))
-      return
-    }
-  } else {
-    const stripQuotes = (path: string) =>
-      path.replace(/^['"]|['"]$/g, '').trim()
+    const detectSpinner = createSpinner('Detecting backup format...')
+    detectSpinner.start()
 
-    console.log(
-      chalk.gray(
-        '  Drag & drop, enter path (abs or rel), or press Enter to go back',
-      ),
-    )
-    const { backupPath: rawBackupPath } = await inquirer.prompt<{
-      backupPath: string
-    }>([
-      {
-        type: 'input',
-        name: 'backupPath',
-        message: 'Backup file path:',
-        validate: (input: string) => {
-          if (!input) return true
-          const cleanPath = stripQuotes(input)
-          if (!existsSync(cleanPath)) return 'File not found'
-          return true
-        },
-      },
-    ])
+    const format = await engine.detectBackupFormat(backupPath)
+    detectSpinner.succeed(`Detected: ${format.description}`)
 
-    if (!rawBackupPath.trim()) {
-      return
-    }
+    const dbSpinner = createSpinner(`Creating database "${databaseName}"...`)
+    dbSpinner.start()
 
-    backupPath = stripQuotes(rawBackupPath)
-  }
+    await engine.createDatabase(config, databaseName)
+    dbSpinner.succeed(`Database "${databaseName}" ready`)
 
-  const databaseName = await promptDatabaseName(containerName, config.engine)
+    const restoreSpinner = createSpinner('Restoring backup...')
+    restoreSpinner.start()
 
-  const engine = getEngine(config.engine)
+    const result = await engine.restore(config, backupPath, {
+      database: databaseName,
+      createDatabase: false,
+    })
 
-  const detectSpinner = createSpinner('Detecting backup format...')
-  detectSpinner.start()
+    if (result.code === 0) {
+      restoreSpinner.succeed('Backup restored successfully')
+    } else {
+      const stderr = result.stderr || ''
 
-  const format = await engine.detectBackupFormat(backupPath)
-  detectSpinner.succeed(`Detected: ${format.description}`)
-
-  const dbSpinner = createSpinner(`Creating database "${databaseName}"...`)
-  dbSpinner.start()
-
-  await engine.createDatabase(config, databaseName)
-  dbSpinner.succeed(`Database "${databaseName}" ready`)
-
-  const restoreSpinner = createSpinner('Restoring backup...')
-  restoreSpinner.start()
-
-  const result = await engine.restore(config, backupPath, {
-    database: databaseName,
-    createDatabase: false,
-  })
-
-  if (result.code === 0) {
-    restoreSpinner.succeed('Backup restored successfully')
-  } else {
-    const stderr = result.stderr || ''
-
-    if (
-      stderr.includes('unsupported version') ||
-      stderr.includes('Archive version') ||
-      stderr.includes('too old')
-    ) {
-      restoreSpinner.fail('Version compatibility detected')
-      console.log()
-      console.log(uiError('PostgreSQL version incompatibility detected:'))
-      console.log(
-        uiWarning('Your pg_restore version is too old for this backup file.'),
-      )
-
-      console.log(chalk.yellow('Cleaning up failed database...'))
-      try {
-        await engine.dropDatabase(config, databaseName)
-        console.log(chalk.gray(`✓ Removed database "${databaseName}"`))
-      } catch {
-        console.log(
-          chalk.yellow(`Warning: Could not remove database "${databaseName}"`),
-        )
-      }
-
-      console.log()
-
-      const versionMatch = stderr.match(/PostgreSQL (\d+)/)
-      const requiredVersion = versionMatch ? versionMatch[1] : '17'
-
-      console.log(
-        chalk.gray(
-          `This backup was created with PostgreSQL ${requiredVersion}`,
-        ),
-      )
-      console.log()
-
-      const { shouldUpgrade } = await inquirer.prompt({
-        type: 'list',
-        name: 'shouldUpgrade',
-        message: `Would you like to upgrade PostgreSQL client tools to support PostgreSQL ${requiredVersion}?`,
-        choices: [
-          { name: 'Yes', value: true },
-          { name: 'No', value: false },
-        ],
-        default: 0,
-      })
-
-      if (shouldUpgrade) {
+      if (
+        stderr.includes('unsupported version') ||
+        stderr.includes('Archive version') ||
+        stderr.includes('too old')
+      ) {
+        restoreSpinner.fail('Version compatibility detected')
         console.log()
-        const upgradeSpinner = createSpinner(
-          'Upgrading PostgreSQL client tools...',
+        console.log(uiError('PostgreSQL version incompatibility detected:'))
+        console.log(
+          uiWarning('Your pg_restore version is too old for this backup file.'),
         )
-        upgradeSpinner.start()
 
+        console.log(chalk.yellow('Cleaning up failed database...'))
         try {
-          const updateSuccess = await updatePostgresClientTools()
+          await engine.dropDatabase(config, databaseName)
+          console.log(chalk.gray(`✓ Removed database "${databaseName}"`))
+        } catch {
+          console.log(
+            chalk.yellow(
+              `Warning: Could not remove database "${databaseName}"`,
+            ),
+          )
+        }
 
-          if (updateSuccess) {
-            upgradeSpinner.succeed('PostgreSQL client tools upgraded')
-            console.log()
-            console.log(
-              uiSuccess('Please try the restore again with the updated tools.'),
-            )
-            await pressEnterToContinue()
-            return
-          } else {
+        console.log()
+
+        const versionMatch = stderr.match(/PostgreSQL (\d+)/)
+        const requiredVersion = versionMatch ? versionMatch[1] : '17'
+
+        console.log(
+          chalk.gray(
+            `This backup was created with PostgreSQL ${requiredVersion}`,
+          ),
+        )
+        console.log()
+
+        const { shouldUpgrade } = await inquirer.prompt({
+          type: 'list',
+          name: 'shouldUpgrade',
+          message: `Would you like to upgrade PostgreSQL client tools to support PostgreSQL ${requiredVersion}?`,
+          choices: [
+            { name: 'Yes', value: true },
+            { name: 'No', value: false },
+          ],
+          default: 0,
+        })
+
+        if (shouldUpgrade) {
+          console.log()
+          const upgradeSpinner = createSpinner(
+            'Upgrading PostgreSQL client tools...',
+          )
+          upgradeSpinner.start()
+
+          try {
+            const updateSuccess = await updatePostgresClientTools()
+
+            if (updateSuccess) {
+              upgradeSpinner.succeed('PostgreSQL client tools upgraded')
+              console.log()
+              console.log(
+                uiSuccess(
+                  'Please try the restore again with the updated tools.',
+                ),
+              )
+              await pressEnterToContinue()
+              return
+            } else {
+              upgradeSpinner.fail('Upgrade failed')
+              console.log()
+              console.log(
+                uiError('Automatic upgrade failed. Please upgrade manually:'),
+              )
+              const pgPackage = getPostgresHomebrewPackage()
+              const latestMajor = pgPackage.split('@')[1]
+              console.log(
+                uiWarning(
+                  `  macOS: brew install ${pgPackage} && brew link --force ${pgPackage}`,
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
+                ),
+              )
+              console.log(
+                uiWarning(
+                  `  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-${latestMajor}`,
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
+                ),
+              )
+              await pressEnterToContinue()
+              return
+            }
+          } catch {
             upgradeSpinner.fail('Upgrade failed')
-            console.log()
-            console.log(
-              uiError('Automatic upgrade failed. Please upgrade manually:'),
-            )
-            const pgPackage = getPostgresHomebrewPackage()
-            const latestMajor = pgPackage.split('@')[1]
-            console.log(
-              uiWarning(
-                `  macOS: brew install ${pgPackage} && brew link --force ${pgPackage}`,
-              ),
-            )
+            console.log(uiError('Failed to upgrade PostgreSQL client tools'))
             console.log(
               chalk.gray(
-                `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
-              ),
-            )
-            console.log(
-              uiWarning(
-                `  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-${latestMajor}`,
-              ),
-            )
-            console.log(
-              chalk.gray(
-                `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
+                'Manual upgrade may be required for pg_restore, pg_dump, and psql',
               ),
             )
             await pressEnterToContinue()
             return
           }
-        } catch {
-          upgradeSpinner.fail('Upgrade failed')
-          console.log(uiError('Failed to upgrade PostgreSQL client tools'))
+        } else {
+          console.log()
           console.log(
-            chalk.gray(
-              'Manual upgrade may be required for pg_restore, pg_dump, and psql',
+            uiWarning(
+              'Restore cancelled. Please upgrade PostgreSQL client tools manually and try again.',
             ),
           )
-          await new Promise((resolve) => {
-            console.log(chalk.gray('Press Enter to continue...'))
-            process.stdin.once('data', resolve)
-          })
+          await pressEnterToContinue()
           return
         }
       } else {
-        console.log()
-        console.log(
-          uiWarning(
-            'Restore cancelled. Please upgrade PostgreSQL client tools manually and try again.',
-          ),
-        )
-        await new Promise((resolve) => {
-          console.log(chalk.gray('Press Enter to continue...'))
-          process.stdin.once('data', resolve)
-        })
-        return
-      }
-    } else {
-      restoreSpinner.warn('Restore completed with warnings')
-      if (result.stderr) {
-        console.log()
-        console.log(chalk.yellow('  Warnings/Errors:'))
-        const lines = result.stderr.split('\n').filter((l) => l.trim())
-        const displayLines = lines.slice(0, 20)
-        for (const line of displayLines) {
-          console.log(chalk.gray(`  ${line}`))
-        }
-        if (lines.length > 20) {
-          console.log(chalk.gray(`  ... and ${lines.length - 20} more lines`))
+        restoreSpinner.warn('Restore completed with warnings')
+        if (result.stderr) {
+          console.log()
+          console.log(chalk.yellow('  Warnings/Errors:'))
+          const lines = result.stderr.split('\n').filter((l) => l.trim())
+          const displayLines = lines.slice(0, 20)
+          for (const line of displayLines) {
+            console.log(chalk.gray(`  ${line}`))
+          }
+          if (lines.length > 20) {
+            console.log(chalk.gray(`  ... and ${lines.length - 20} more lines`))
+          }
         }
       }
     }
-  }
 
-  if (result.code === 0) {
-    const connectionString = engine.getConnectionString(config, databaseName)
-    console.log()
-    console.log(uiSuccess(`Database "${databaseName}" restored`))
-    console.log(chalk.gray('  Connection string:'))
-    console.log(chalk.cyan(`  ${connectionString}`))
+    if (result.code === 0) {
+      const connectionString = engine.getConnectionString(config, databaseName)
+      console.log()
+      console.log(uiSuccess(`Database "${databaseName}" restored`))
+      console.log(chalk.gray('  Connection string:'))
+      console.log(chalk.cyan(`  ${connectionString}`))
 
-    const copied = await platformService.copyToClipboard(connectionString)
-    if (copied) {
-      console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
-    } else {
-      console.log(chalk.gray('  (Could not copy to clipboard)'))
+      const copied = await platformService.copyToClipboard(connectionString)
+      if (copied) {
+        console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+      } else {
+        console.log(chalk.gray('  (Could not copy to clipboard)'))
+      }
+
+      console.log()
     }
 
-    console.log()
-  }
-
-  if (isTempFile) {
-    try {
-      await rm(backupPath, { force: true })
-    } catch {
-      // Ignore cleanup errors
+    if (isTempFile) {
+      try {
+        await rm(backupPath, { force: true })
+      } catch {
+        // Ignore cleanup errors
+      }
     }
-  }
 
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'continue',
-      message: chalk.gray('Press Enter to continue...'),
-    },
-  ])
+    await pressEnterToContinue()
+
+    return // Exit the wizard loop after successful restore
+  }
 }
 
 export async function handleBackup(): Promise<void> {
@@ -595,13 +764,7 @@ export async function handleBackup(): Promise<void> {
 
   if (running.length === 0) {
     console.log(uiWarning('No running containers. Start a container first.'))
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
+    await pressEnterToContinue()
     return
   }
 
@@ -702,13 +865,7 @@ export async function handleBackup(): Promise<void> {
     console.log()
   }
 
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'continue',
-      message: chalk.gray('Press Enter to continue...'),
-    },
-  ])
+  await pressEnterToContinue()
 }
 
 export async function handleClone(): Promise<void> {
