@@ -71,9 +71,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Use SpinDB to download PostgreSQL binaries
+      # Use SpinDB to download PostgreSQL binaries (version 18 is the default)
       - name: Install PostgreSQL via SpinDB
-        run: pnpm start engines download postgresql 17
+        run: pnpm start engines download postgresql 18
 
       # Show what SpinDB installed
       - name: Show installed engines
@@ -219,9 +219,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Use SpinDB to install all required engines
+      # Use SpinDB to install all required engines (version 18 is the default)
       - name: Install PostgreSQL via SpinDB
-        run: pnpm start engines download postgresql 17
+        run: pnpm start engines download postgresql 18
 
       - name: Install SQLite via SpinDB
         run: pnpm start engines download sqlite

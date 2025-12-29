@@ -225,6 +225,8 @@ pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
 ```
 
+**Note:** All test scripts use `--test-concurrency=1` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." See CONTRIBUTING.md for details.
+
 ### Adding a New Command
 1. Create `cli/commands/{name}.ts`
 2. Export a Commander `Command` instance
