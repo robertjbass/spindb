@@ -91,7 +91,7 @@ engines/
     └── version-validator.ts
 types/index.ts              # TypeScript types
 tests/
-├── unit/                   # Unit tests (378 tests)
+├── unit/                   # Unit tests (381 tests)
 ├── integration/            # Integration tests
 └── fixtures/               # Test data
 ```

@@ -31,8 +31,9 @@ pnpm test:sqlite    # SQLite integration
 
 ### Test Coverage
 
-- **Unit tests:** 358 tests covering validation, error handling, version compatibility, SQLite registry, relocation
-- **Integration tests:** 38 tests (14 PostgreSQL + 14 MySQL + 10 SQLite) covering full container lifecycle
+- **Unit tests:** 381 tests covering validation, error handling, version compatibility, SQLite registry, relocation
+- **Integration tests:** 14 PostgreSQL + 14 MySQL + 10 SQLite covering full container lifecycle
+- **CLI E2E tests:** 38 tests covering full command workflows (create, list, start, stop, backup, restore, clone, delete)
 
 ## Silent Catch Blocks (By Design)
 

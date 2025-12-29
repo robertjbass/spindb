@@ -5,6 +5,27 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Interactive restore "press Enter to go back" now works correctly** - Empty input at connection string and file path prompts now returns to container selection instead of exiting the wizard
+- **Fixed inaccurate navigation comments** - Updated comments to accurately describe `continue` behavior (returns to container selection, not source selection)
+- **Consistent use of `pressEnterToContinue()` helper** - Replaced 6 manual `inquirer.prompt` patterns with the shared helper for consistent UX
+
+### Added
+- **Unit tests for `getInstallCommand()`** - 3 new tests verifying cross-platform install command generation
+- **CLI E2E tests for backup/restore/clone** - 15 new tests covering:
+  - SQL backup creation and JSON output
+  - Restore to new database
+  - Restore with `--force` flag to replace existing database
+  - Data verification after restore
+  - Clone stopped container
+  - Clone metadata (`clonedFrom` field)
+
+### Changed
+- Exported `getInstallCommand()` from `engines/postgresql/version-validator.ts` for testability
+- Added clarifying comment for retry loop behavior in restore flow
+
 ## [0.10.6] - 2025-12-29
 
 ### Changed
