@@ -608,7 +608,6 @@ Native processes mean instant startup and no virtualization overhead.
 │           ├── container.json
 │           ├── data/
 │           └── mysql.log
-├── sqlite-registry.json                    # Tracks SQLite file locations
 ├── logs/                                   # Error logs
 └── config.json                             # Tool paths cache
 

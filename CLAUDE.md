@@ -91,8 +91,8 @@ engines/
     └── version-validator.ts
 types/index.ts              # TypeScript types
 tests/
-├── unit/                   # Unit tests (302 tests)
-├── integration/            # Integration tests (28 tests)
+├── unit/                   # Unit tests (378 tests)
+├── integration/            # Integration tests
 └── fixtures/               # Test data
 ```
 
@@ -148,7 +148,7 @@ abstract class BaseEngine {
 ```typescript
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql'
+  engine: 'postgresql' | 'mysql' | 'sqlite'
   version: string
   port: number
   database: string        // Primary database
