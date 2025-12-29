@@ -175,11 +175,7 @@ jobs:
           restore-keys: |
             choco-mysql-
 
-      # Use SpinDB to install MySQL via system package manager
-      - name: Install MySQL via SpinDB
-        run: pnpm start engines download mysql
-
-      # Windows needs MySQL added to PATH after choco install
+      # Windows needs MySQL added to PATH BEFORE install check (for cache hits)
       - name: Add MySQL to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -193,10 +189,14 @@ jobs:
           foreach ($path in $possiblePaths) {
             if (Test-Path $path) {
               echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Found MySQL at: $path"
+              echo "Added MySQL to PATH: $path"
               break
             }
           }
+
+      # Use SpinDB to install MySQL via system package manager
+      - name: Install MySQL via SpinDB
+        run: pnpm start engines download mysql
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -243,11 +243,7 @@ jobs:
           restore-keys: |
             choco-sqlite-
 
-      # Use SpinDB to install SQLite via system package manager
-      - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
-
-      # Windows needs SQLite added to PATH after choco install
+      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
       - name: Add SQLite to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -255,7 +251,12 @@ jobs:
           $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
           if (Test-Path $sqlitePath) {
             echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            echo "Added SQLite to PATH: $sqlitePath"
           }
+
+      # Use SpinDB to install SQLite via system package manager
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -309,15 +310,7 @@ jobs:
           restore-keys: |
             choco-sqlite-
 
-      # Use SpinDB to install all required engines
-      # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
-      - name: Install PostgreSQL via SpinDB
-        run: pnpm start engines download postgresql 18
-
-      - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
-
-      # Windows needs SQLite added to PATH after choco install
+      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
       - name: Add SQLite to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -325,7 +318,16 @@ jobs:
           $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
           if (Test-Path $sqlitePath) {
             echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            echo "Added SQLite to PATH: $sqlitePath"
           }
+
+      # Use SpinDB to install all required engines
+      # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite
 
       - name: Show installed engines
         run: pnpm start engines list
