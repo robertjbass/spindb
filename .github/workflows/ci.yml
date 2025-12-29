@@ -4,6 +4,8 @@ on:
   # TODO: uncomment for testing CI on dev branch
   # push:
   #   branches: [dev]
+  push:
+    branches: [feature/test-speed]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -45,6 +47,31 @@ jobs:
         timeout-minutes: 10
 
   # ============================================
+  # Lint and Type Check - Runs in parallel with unit tests
+  # ============================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  # ============================================
   # PostgreSQL Integration Tests
   # Uses SpinDB to download and manage PostgreSQL
   # ============================================
@@ -71,6 +98,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries - these are ~100MB+ downloads
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download PostgreSQL binaries
       # NOTE: Keep this version in sync with config/engine-defaults.ts defaultVersion
@@ -115,6 +150,30 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Cache Homebrew downloads for MySQL on macOS
+      - name: Cache Homebrew packages (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar/mysql
+          key: homebrew-mysql-${{ runner.os }}-${{ runner.arch }}
+          restore-keys: |
+            homebrew-mysql-${{ runner.os }}-
+
+      # Cache Chocolatey packages for MySQL on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\ProgramData\chocolatey\lib\mysql
+            C:\tools\mysql
+          key: choco-mysql-${{ runner.os }}
+          restore-keys: |
+            choco-mysql-
 
       # Use SpinDB to install MySQL via system package manager
       - name: Install MySQL via SpinDB
@@ -174,6 +233,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Cache Chocolatey packages for SQLite on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\ProgramData\chocolatey\lib\SQLite
+          key: choco-sqlite-${{ runner.os }}
+          restore-keys: |
+            choco-sqlite-
+
       # Use SpinDB to install SQLite via system package manager
       - name: Install SQLite via SpinDB
         run: pnpm start engines download sqlite
@@ -222,6 +291,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Cache PostgreSQL binaries - these are ~100MB+ downloads
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
+
+      # Cache Chocolatey packages for SQLite on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\ProgramData\chocolatey\lib\SQLite
+          key: choco-sqlite-${{ runner.os }}
+          restore-keys: |
+            choco-sqlite-
+
       # Use SpinDB to install all required engines
       # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
       - name: Install PostgreSQL via SpinDB
@@ -246,31 +333,6 @@ jobs:
       - name: Run CLI E2E tests
         run: pnpm test:cli
         timeout-minutes: 15
-
-  # ============================================
-  # Lint and Type Check
-  # ============================================
-  lint:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run lint
-        run: pnpm lint
 
   # ============================================
   # Summary Job - Ensures all tests pass
