@@ -389,3 +389,251 @@ describe('CLI Error Handling', () => {
     console.log('   Proper error for unknown engine')
   })
 })
+
+describe('CLI Backup and Restore Workflow', () => {
+  let containerName: string
+  let testPort: number
+  let backupFilename: string
+  const testDir = join(__dirname, '../.test-cli-backup')
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+    await mkdir(testDir, { recursive: true })
+
+    const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
+    testPort = ports[0]
+    containerName = generateTestName('clipgbackup')
+    backupFilename = `${containerName}-backup`
+    console.log(`   Using container: ${containerName}, port: ${testPort}`)
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+    if (existsSync(testDir)) {
+      await rm(testDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should create and start PostgreSQL container for backup test', async () => {
+    console.log(`\n Creating container "${containerName}"...`)
+
+    const { exitCode, stderr, stdout } = await runCLI(
+      `create ${containerName} --engine postgresql --port ${testPort} --start`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Create should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+
+    // Wait for PostgreSQL to be ready
+    const ready = await waitForReady(Engine.PostgreSQL, testPort)
+    assert(ready, 'PostgreSQL should be ready')
+    console.log('   Container created and started')
+  })
+
+  it('should create test data', async () => {
+    // Create a table and insert data
+    const { exitCode: createExit, stderr: createErr } = await runCLI(
+      `run ${containerName} --sql "CREATE TABLE backup_test (id SERIAL PRIMARY KEY, name TEXT)"`,
+    )
+    assert(createExit === 0, `Create table should succeed. stderr: ${createErr}`)
+
+    const { exitCode: insertExit, stderr: insertErr } = await runCLI(
+      `run ${containerName} --sql "INSERT INTO backup_test (name) VALUES ('test1'), ('test2'), ('test3')"`,
+    )
+    assert(insertExit === 0, `Insert should succeed. stderr: ${insertErr}`)
+    console.log('   Test data created')
+  })
+
+  it('should create SQL backup via CLI', async () => {
+    console.log(`\n Creating backup to "${testDir}"...`)
+
+    const { exitCode, stderr, stdout } = await runCLI(
+      `backup ${containerName} --output "${testDir}" --name "${backupFilename}" --format sql`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Backup should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+
+    // The backup file will have .sql extension added
+    const backupPath = join(testDir, `${backupFilename}.sql`)
+    assert(existsSync(backupPath), `Backup file should exist at ${backupPath}`)
+    console.log('   SQL backup created')
+  })
+
+  it('should create backup with JSON output', async () => {
+    const jsonBackupName = `${containerName}-json`
+    const { stdout, exitCode, stderr } = await runCLI(
+      `backup ${containerName} --output "${testDir}" --name "${jsonBackupName}" --format sql --json`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Backup with --json should succeed. stderr: ${stderr}`,
+    )
+
+    // JSON output should be parseable
+    const parsed = JSON.parse(stdout)
+    assert(parsed.path !== undefined, 'JSON should contain path')
+    assert(parsed.size !== undefined, 'JSON should contain size')
+    assert(parsed.format !== undefined, 'JSON should contain format')
+    console.log('   JSON backup output verified')
+  })
+
+  it('should restore backup to new database via CLI', async () => {
+    console.log(`\n Restoring backup to new database...`)
+
+    const backupPath = join(testDir, `${backupFilename}.sql`)
+    const { exitCode, stderr, stdout } = await runCLI(
+      `restore ${containerName} "${backupPath}" --database restored_db`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Restore should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+    console.log('   Backup restored to new database')
+  })
+
+  it('should verify restored data', async () => {
+    const { stdout, exitCode, stderr } = await runCLI(
+      `run ${containerName} --database restored_db --sql "SELECT COUNT(*) as count FROM backup_test"`,
+    )
+
+    assert(exitCode === 0, `Query should succeed. stderr: ${stderr}`)
+    // The output should contain the count (psql outputs "3" for COUNT)
+    assert(
+      stdout.includes('3'),
+      `Should have 3 rows in restored database. stdout: ${stdout}`,
+    )
+    console.log('   Restored data verified')
+  })
+
+  it('should restore with --force to replace existing database', async () => {
+    console.log(`\n Restoring with --force to replace database...`)
+
+    const backupPath = join(testDir, `${backupFilename}.sql`)
+    const { exitCode, stderr, stdout } = await runCLI(
+      `restore ${containerName} "${backupPath}" --database restored_db --force`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Restore with --force should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+    console.log('   Backup restored with --force')
+  })
+
+  it('should stop container for clone test', async () => {
+    const { exitCode, stderr } = await runCLI(`stop ${containerName}`)
+    assert(exitCode === 0, `Stop should succeed. stderr: ${stderr}`)
+    console.log('   Container stopped')
+  })
+
+  it('should delete backup test container', async () => {
+    const { exitCode, stderr } = await runCLI(
+      `delete ${containerName} --force --yes`,
+    )
+    assert(exitCode === 0, `Delete should succeed. stderr: ${stderr}`)
+    console.log('   Container deleted')
+  })
+})
+
+describe('CLI Clone Workflow', () => {
+  let sourceContainer: string
+  let cloneContainer: string
+  let testPort: number
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+
+    const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
+    testPort = ports[0]
+    sourceContainer = generateTestName('clisource')
+    cloneContainer = generateTestName('cliclone')
+    console.log(`   Using source: ${sourceContainer}, clone: ${cloneContainer}`)
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+  })
+
+  it('should create source container for clone test', async () => {
+    console.log(`\n Creating source container "${sourceContainer}"...`)
+
+    const { exitCode, stderr, stdout } = await runCLI(
+      `create ${sourceContainer} --engine postgresql --port ${testPort} --no-start`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Create should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+    console.log('   Source container created')
+  })
+
+  it('should clone stopped container via CLI', async () => {
+    console.log(`\n Cloning "${sourceContainer}" to "${cloneContainer}"...`)
+
+    const { exitCode, stderr, stdout } = await runCLI(
+      `clone ${sourceContainer} ${cloneContainer}`,
+    )
+
+    assert(
+      exitCode === 0,
+      `Clone should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+    console.log('   Container cloned')
+  })
+
+  it('should show cloned container in list', async () => {
+    const { stdout, exitCode } = await runCLI('list --json')
+    assert(exitCode === 0, 'List should succeed')
+
+    const containers = JSON.parse(stdout)
+    const source = containers.find(
+      (c: { name: string }) => c.name === sourceContainer,
+    )
+    const clone = containers.find(
+      (c: { name: string }) => c.name === cloneContainer,
+    )
+
+    assert(source, 'Source container should exist')
+    assert(clone, 'Cloned container should exist')
+    assertEqual(clone.engine, 'postgresql', 'Cloned engine should be postgresql')
+    console.log('   Both containers appear in list')
+  })
+
+  it('should show clone info with clonedFrom', async () => {
+    const { stdout, exitCode } = await runCLI(`info ${cloneContainer} --json`)
+    assert(exitCode === 0, 'Info should succeed')
+
+    const info = JSON.parse(stdout)
+    assertEqual(
+      info.clonedFrom,
+      sourceContainer,
+      'clonedFrom should reference source container',
+    )
+    console.log('   Clone info shows clonedFrom field')
+  })
+
+  it('should delete source and clone containers', async () => {
+    const { exitCode: deleteSource } = await runCLI(
+      `delete ${sourceContainer} --force --yes`,
+    )
+    assert(deleteSource === 0, 'Delete source should succeed')
+
+    const { exitCode: deleteClone } = await runCLI(
+      `delete ${cloneContainer} --force --yes`,
+    )
+    assert(deleteClone === 0, 'Delete clone should succeed')
+    console.log('   Containers deleted')
+  })
+})

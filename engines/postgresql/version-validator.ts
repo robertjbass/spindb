@@ -394,7 +394,7 @@ export async function validateDumpCompatibility(options: {
   }
 }
 
-async function getInstallCommand(majorVersion: string): Promise<string> {
+export async function getInstallCommand(majorVersion: string): Promise<string> {
   const pm = await detectPackageManager()
 
   if (!pm) {

@@ -417,13 +417,7 @@ export async function handleRestore(): Promise<void> {
             // Ignore cleanup errors
           }
 
-          await inquirer.prompt([
-            {
-              type: 'input',
-              name: 'continue',
-              message: chalk.gray('Press Enter to continue...'),
-            },
-          ])
+          await pressEnterToContinue()
           return
         }
       }
@@ -758,13 +752,7 @@ export async function handleRestore(): Promise<void> {
       }
     }
 
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
+    await pressEnterToContinue()
 
     return // Exit the wizard loop after successful restore
   }
@@ -776,13 +764,7 @@ export async function handleBackup(): Promise<void> {
 
   if (running.length === 0) {
     console.log(uiWarning('No running containers. Start a container first.'))
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: chalk.gray('Press Enter to continue...'),
-      },
-    ])
+    await pressEnterToContinue()
     return
   }
 
@@ -883,13 +865,7 @@ export async function handleBackup(): Promise<void> {
     console.log()
   }
 
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'continue',
-      message: chalk.gray('Press Enter to continue...'),
-    },
-  ])
+  await pressEnterToContinue()
 }
 
 export async function handleClone(): Promise<void> {

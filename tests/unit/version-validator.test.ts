@@ -6,6 +6,7 @@ import { describe, it } from 'node:test'
 import {
   parseToolVersion,
   checkVersionCompatibility,
+  getInstallCommand,
   type VersionInfo,
 } from '../../engines/postgresql/version-validator'
 import { assert, assertEqual } from '../integration/helpers'
@@ -234,5 +235,40 @@ describe('checkVersionCompatibility', () => {
         'Should have warning when version unknown',
       )
     })
+  })
+})
+
+describe('getInstallCommand', () => {
+  it('should return generic message when no package manager detected', async () => {
+    // This test verifies the fallback behavior
+    // The actual package manager detection happens at runtime
+    const cmd = await getInstallCommand('17')
+
+    // Should return something useful regardless of platform
+    assert(typeof cmd === 'string', 'Should return a string')
+    assert(cmd.length > 0, 'Should not be empty')
+    assert(
+      cmd.includes('17') || cmd.includes('postgresql'),
+      'Should mention version or postgresql',
+    )
+  })
+
+  it('should generate version-specific command', async () => {
+    const cmd16 = await getInstallCommand('16')
+    const cmd17 = await getInstallCommand('17')
+
+    // Commands should include the version number
+    assert(cmd16.includes('16'), 'Command for v16 should include 16')
+    assert(cmd17.includes('17'), 'Command for v17 should include 17')
+  })
+
+  it('should handle different major versions', async () => {
+    const versions = ['14', '15', '16', '17']
+
+    for (const version of versions) {
+      const cmd = await getInstallCommand(version)
+      assert(typeof cmd === 'string', `Should return string for version ${version}`)
+      assert(cmd.includes(version), `Command should include version ${version}`)
+    }
   })
 })
