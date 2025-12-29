@@ -1,12 +1,33 @@
 # SpinDB
 
 [![npm version](https://img.shields.io/npm/v/spindb.svg)](https://www.npmjs.com/package/spindb)
+[![npm downloads](https://img.shields.io/npm/dm/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
-[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#supported-platforms)
+[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#platform-support-vs-alternatives)
 
-**Local databases without the Docker baggage.**
+**The first npm CLI for running local databases without Docker.**
 
 Spin up PostgreSQL, MySQL, and SQLite instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+
+---
+
+## Quick Start
+
+```bash
+# Install globally (or use pnpm/yarn)
+npm install -g spindb
+
+# Create and start a PostgreSQL database
+spindb create myapp
+
+# Connect to it
+spindb connect myapp
+
+# You're in! Run some SQL:
+# postgres=# CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+```
+
+That's it. Your database is running on `localhost:5432`, and your data persists in `~/.spindb/containers/postgresql/myapp/`.
 
 ---
 
@@ -25,55 +46,26 @@ SpinDB runs databases as native processes with isolated data directories. No VM,
 
 ### SpinDB vs Alternatives
 
-| Feature | SpinDB | Docker | DBngin | Postgres.app |
-|---------|--------|--------|--------|--------------|
-| No Docker required | ✅ | ❌ | ✅ | ✅ |
-| Multiple DB engines | ✅ | ✅ | ✅ | ❌ |
-| CLI-first | ✅ | ✅ | ❌ | ❌ |
-| Multiple versions | ✅ | ✅ | ✅ | ✅ |
-| Clone databases | ✅ | Manual | ✅ | ❌ |
-| Low resource usage | ✅ | ❌ | ✅ | ✅ |
-| Linux support | ✅ | ✅ | ❌ | ❌ |
-| Free | ✅ | ⚠️ | ✅ | ✅ |
+| Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
+|---------|--------|--------|--------|--------------|-------|
+| No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Multiple DB engines | ✅ | ✅ | ✅ | ❌ | ⚠️ MySQL only |
+| CLI-first | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
+| Low resource usage | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Linux support | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Free | ✅ | ⚠️ | ✅ | ✅ | ✅ |
 
-### How It Works
+### Platform Support vs Alternatives
 
-SpinDB uses the term "container" loosely—there's no Docker involved. When you create a container, SpinDB:
-
-1. Downloads the database server binary (or uses your system's installation)
-2. Creates an isolated data directory at `~/.spindb/containers/{engine}/{name}/`
-3. Runs the database as a native process on your machine
-
-Each "container" is just:
-- A configuration file (`container.json`)
-- A data directory (`data/`)
-- A log file (`postgres.log` or `mysql.log`)
-
-Native processes mean instant startup and no virtualization overhead.
-
----
-
-## The Interactive Menu
-
-Most of the time, you don't need to remember commands. Just run:
-
-```bash
-spindb
-```
-
-You'll get an interactive menu with arrow-key navigation:
-
-```
-? What would you like to do?
-❯ Create a new container
-  Manage containers
-  View installed engines
-  Check dependencies
-  Settings
-  Exit
-```
-
-**Everything in the menu is also available as a CLI command.** The menu is just a friendlier interface for the same operations. If you prefer typing commands or scripting, SpinDB has full CLI support.
+| Platform | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
+|----------|--------|--------|--------|--------------|-------|
+| macOS (ARM64) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| macOS (Intel) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Linux (x64) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Linux (ARM64) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Windows (x64) | ✅ | ✅ | ❌ | ❌ | ✅ |
 
 ---
 
@@ -112,20 +104,27 @@ spindb config update-check off
 
 ---
 
-## Quick Start
+## The Interactive Menu
+
+Most of the time, you don't need to remember commands. Just run:
 
 ```bash
-# Create and start a PostgreSQL database
-spindb create myapp
-
-# Connect to it
-spindb connect myapp
-
-# You're in! Run some SQL:
-# postgres=# CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+spindb
 ```
 
-That's it. Your database is running on `localhost:5432`, and your data persists in `~/.spindb/containers/postgresql/myapp/`.
+You'll get an interactive menu with arrow-key navigation:
+
+```
+? What would you like to do?
+❯ Create a new container
+  Manage containers
+  View installed engines
+  Check dependencies
+  Settings
+  Exit
+```
+
+**Everything in the menu is also available as a CLI command.** The menu is just a friendlier interface for the same operations. If you prefer typing commands or scripting, SpinDB has full CLI support.
 
 ---
 
@@ -564,6 +563,21 @@ spindb connect mydb --install-tui      # usql
 
 ## Architecture
 
+### How It Works
+
+SpinDB uses the term "container" loosely—there's no Docker involved. When you create a container, SpinDB:
+
+1. Downloads the database server binary (or uses your system's installation)
+2. Creates an isolated data directory at `~/.spindb/containers/{engine}/{name}/`
+3. Runs the database as a native process on your machine
+
+Each "container" is just:
+- A configuration file (`container.json`)
+- A data directory (`data/`)
+- A log file (`postgres.log` or `mysql.log`)
+
+Native processes mean instant startup and no virtualization overhead.
+
 ### Storage Layout
 
 ```
@@ -615,20 +629,6 @@ When you stop a container:
 - **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries), official PostgreSQL distributions
 
 **MySQL:** Uses your system's MySQL installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
-
----
-
-## Supported Platforms
-
-| Platform | Architecture | Status |
-|----------|-------------|--------|
-| macOS | Apple Silicon (ARM64) | ✅ Supported |
-| macOS | Intel (x64) | ✅ Supported |
-| Linux | x64 | ✅ Supported |
-| Linux | ARM64 | ✅ Supported |
-| Windows | x64 | ✅ Supported |
-
-Windows uses EnterpriseDB (EDB) official binaries for PostgreSQL. MySQL and SQLite require system installations via Chocolatey, winget, or Scoop.
 
 ---
 
