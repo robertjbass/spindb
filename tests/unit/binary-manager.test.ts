@@ -1,7 +1,3 @@
-/**
- * Unit tests for binary-manager module
- */
-
 import { describe, it } from 'node:test'
 import { BinaryManager } from '../../core/binary-manager'
 import { assert, assertEqual } from '../integration/helpers'

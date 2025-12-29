@@ -1,9 +1,3 @@
-/**
- * Restore Format Detection Unit Tests
- *
- * Tests backup format detection including cross-engine detection
- */
-
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { writeFile, unlink, mkdir } from 'fs/promises'

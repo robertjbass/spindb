@@ -1,7 +1,3 @@
-/**
- * Unit tests for platform-service module
- */
-
 import { describe, it } from 'node:test'
 import {
   platformService,

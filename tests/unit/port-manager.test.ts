@@ -1,7 +1,3 @@
-/**
- * Unit tests for port-manager module
- */
-
 import { describe, it } from 'node:test'
 import { PortManager } from '../../core/port-manager'
 import { assert, assertEqual } from '../integration/helpers'

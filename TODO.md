@@ -87,10 +87,20 @@ Combine common multi-step workflows into single commands. These should remain in
 
 ### Distribution
 
+- [ ] **Add build step** - Currently using `tsx` to run TypeScript directly in production. Works well but adds ~100-200ms startup overhead per invocation. Consider adding a build step that compiles to JavaScript before publishing to npm. This would:
+  - Reduce startup latency
+  - Remove tsx as a runtime dependency
+  - Shrink installed package size
+  - Enable tree-shaking and other optimizations
 - [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
   - Platforms: darwin-arm64, darwin-x64, linux-x64, win32-x64
-- [ ] **Fix package-manager mismatch for tests** - `npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed; either compile/build before publish or make scripts detect the package manager and run the appropriate commands
+- [x] **Fix package-manager mismatch for tests** - ~~`npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed~~ Fixed: now using `npm-run-all` so scripts work with any package manager
+- [ ] **Self-host compiled engine binaries** - Compile and host database engine binaries instead of relying on external sources (zonky.io for PostgreSQL). This would:
+  - Reduce dependency on third-party binary hosts
+  - Provide control over version availability and timing
+  - Enable adding platforms/versions not available upstream
+  - **Trade-offs:** Significant infrastructure (cross-platform builds, hosting costs, security responsibility). Only pursue if external sources become unreliable or project gains significant adoption. Consider intermediate step of mirroring/caching known-good binaries first.
 
 ---
 

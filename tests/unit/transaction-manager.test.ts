@@ -1,7 +1,3 @@
-/**
- * Unit tests for transaction-manager module
- */
-
 import { describe, it } from 'node:test'
 import {
   TransactionManager,

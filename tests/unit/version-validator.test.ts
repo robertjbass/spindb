@@ -1,7 +1,3 @@
-/**
- * Unit tests for version-validator module
- */
-
 import { describe, it } from 'node:test'
 import {
   parseToolVersion,

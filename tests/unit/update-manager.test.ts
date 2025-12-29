@@ -1,7 +1,3 @@
-/**
- * Unit tests for update-manager module
- */
-
 import { describe, it } from 'node:test'
 import { UpdateManager } from '../../core/update-manager'
 import { assert, assertEqual } from '../integration/helpers'

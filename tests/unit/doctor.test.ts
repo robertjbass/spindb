@@ -1,7 +1,3 @@
-/**
- * Unit tests for doctor command module
- */
-
 import { describe, it } from 'node:test'
 import { assert, assertEqual } from '../integration/helpers'
 

@@ -1,7 +1,3 @@
-/**
- * Unit tests for SQLite registry module
- */
-
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'

@@ -1,10 +1,3 @@
-/**
- * Unit tests for dependency-manager module
- *
- * Note: Install testing is deferred to GitHub Actions integration tests
- * These tests focus on detection logic and error handling
- */
-
 import { describe, it } from 'node:test'
 import {
   detectPackageManager,
