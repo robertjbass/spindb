@@ -17,19 +17,39 @@ import { getEngineDependencies } from '../../config/os-dependencies'
 import { getEngineIcon } from '../constants'
 import type { ContainerConfig } from '../../types'
 
+// Navigation sentinel values for menu navigation
+export const BACK_VALUE = '__back__'
+export const MAIN_MENU_VALUE = '__main__'
+
 /**
  * Prompt for container name
+ * @param defaultName - Default value for the container name
+ * @param options.allowBack - Allow empty input to go back (returns null)
  */
+export function promptContainerName(
+  defaultName?: string,
+  options?: { allowBack?: false },
+): Promise<string>
+export function promptContainerName(
+  defaultName: string | undefined,
+  options: { allowBack: true },
+): Promise<string | null>
 export async function promptContainerName(
   defaultName?: string,
-): Promise<string> {
+  options?: { allowBack?: boolean },
+): Promise<string | null> {
+  const message = options?.allowBack
+    ? 'Container name (empty to go back):'
+    : 'Container name:'
+
   const { name } = await inquirer.prompt<{ name: string }>([
     {
       type: 'input',
       name: 'name',
-      message: 'Container name:',
-      default: defaultName,
+      message,
+      default: options?.allowBack ? undefined : defaultName,
       validate: (input: string) => {
+        if (options?.allowBack && !input) return true // Allow empty for back
         if (!input) return 'Name is required'
         if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(input)) {
           return 'Name must start with a letter and contain only letters, numbers, hyphens, and underscores'
@@ -38,20 +58,39 @@ export async function promptContainerName(
       },
     },
   ])
+
+  if (options?.allowBack && !name) return null
   return name
 }
 
 /**
  * Prompt for database engine selection
+ * @param options.includeBack - Include back/main menu navigation options
+ * @returns Engine name, or BACK_VALUE/MAIN_MENU_VALUE for navigation
  */
-export async function promptEngine(): Promise<string> {
+export async function promptEngine(options?: {
+  includeBack?: boolean
+}): Promise<string> {
   const engines = listEngines()
 
-  const choices = engines.map((e) => ({
+  type Choice =
+    | { name: string; value: string; short?: string }
+    | inquirer.Separator
+
+  const choices: Choice[] = engines.map((e) => ({
     name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
+
+  if (options?.includeBack) {
+    choices.push(new inquirer.Separator())
+    choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
+    choices.push({
+      name: `${chalk.blue('⌂')} Back to main menu`,
+      value: MAIN_MENU_VALUE,
+    })
+  }
 
   const { engine } = await inquirer.prompt<{ engine: string }>([
     {
@@ -68,8 +107,13 @@ export async function promptEngine(): Promise<string> {
 /**
  * Prompt for database version
  * Two-step selection: first major version, then specific minor version (if available)
+ * @param options.includeBack - Include back/main menu navigation options
+ * @returns Version string, or BACK_VALUE/MAIN_MENU_VALUE for navigation
  */
-export async function promptVersion(engineName: string): Promise<string> {
+export async function promptVersion(
+  engineName: string,
+  options?: { includeBack?: boolean },
+): Promise<string> {
   const engine = getEngine(engineName)
   const majorVersions = engine.supportedVersions
 
@@ -93,11 +137,10 @@ export async function promptVersion(engineName: string): Promise<string> {
   }
 
   // Step 1: Select major version
-  type Choice = {
-    name: string
-    value: string
-    short?: string
-  }
+  type Choice =
+    | { name: string; value: string; short?: string }
+    | inquirer.Separator
+
   const majorChoices: Choice[] = []
 
   for (let i = 0; i < majorVersions.length; i++) {
@@ -119,6 +162,15 @@ export async function promptVersion(engineName: string): Promise<string> {
     })
   }
 
+  if (options?.includeBack) {
+    majorChoices.push(new inquirer.Separator())
+    majorChoices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
+    majorChoices.push({
+      name: `${chalk.blue('⌂')} Back to main menu`,
+      value: MAIN_MENU_VALUE,
+    })
+  }
+
   const { majorVersion } = await inquirer.prompt<{ majorVersion: string }>([
     {
       type: 'list',
@@ -128,6 +180,11 @@ export async function promptVersion(engineName: string): Promise<string> {
       default: majorVersions[majorVersions.length - 1], // Default to latest major
     },
   ])
+
+  // Handle navigation
+  if (majorVersion === BACK_VALUE || majorVersion === MAIN_MENU_VALUE) {
+    return majorVersion
+  }
 
   // Step 2: Select specific version within the major version
   const minorVersions = availableVersions[majorVersion] || []
@@ -143,6 +200,18 @@ export async function promptVersion(engineName: string): Promise<string> {
     short: v,
   }))
 
+  if (options?.includeBack) {
+    minorChoices.push(new inquirer.Separator())
+    minorChoices.push({
+      name: `${chalk.blue('←')} Back to major versions`,
+      value: BACK_VALUE,
+    })
+    minorChoices.push({
+      name: `${chalk.blue('⌂')} Back to main menu`,
+      value: MAIN_MENU_VALUE,
+    })
+  }
+
   const { version } = await inquirer.prompt<{ version: string }>([
     {
       type: 'list',
@@ -153,33 +222,56 @@ export async function promptVersion(engineName: string): Promise<string> {
     },
   ])
 
+  // Handle navigation from minor version selection
+  if (version === BACK_VALUE) {
+    // Go back to major version selection (recursive call)
+    return promptVersion(engineName, options)
+  }
+  if (version === MAIN_MENU_VALUE) {
+    return MAIN_MENU_VALUE
+  }
+
   return version
 }
 
 /**
  * Prompt for port
+ * @param defaultPort - Default port number
+ * @param options.allowBack - Allow empty input to go back (returns null)
  */
+export function promptPort(
+  defaultPort?: number,
+  options?: { allowBack?: false },
+): Promise<number>
+export function promptPort(
+  defaultPort: number | undefined,
+  options: { allowBack: true },
+): Promise<number | null>
 export async function promptPort(
   defaultPort: number = defaults.port,
-): Promise<number> {
-  const { port } = await inquirer.prompt<{ port: number }>([
+  options?: { allowBack?: boolean },
+): Promise<number | null> {
+  const message = options?.allowBack ? 'Port (empty to go back):' : 'Port:'
+
+  const { port } = await inquirer.prompt<{ port: string }>([
     {
       type: 'input',
       name: 'port',
-      message: 'Port:',
-      default: String(defaultPort),
+      message,
+      default: options?.allowBack ? undefined : String(defaultPort),
       validate: (input: string) => {
+        if (options?.allowBack && !input) return true // Allow empty for back
         const num = parseInt(input, 10)
         if (isNaN(num) || num < 1 || num > 65535) {
           return 'Port must be a number between 1 and 65535'
         }
         return true
       },
-      filter: (input: string) => parseInt(input, 10),
     },
   ])
 
-  return port
+  if (options?.allowBack && !port) return null
+  return parseInt(port, 10)
 }
 
 /**
@@ -279,14 +371,43 @@ function sanitizeDatabaseName(name: string): string {
  * Prompt for database name
  * @param defaultName - Default value for the database name
  * @param engine - Database engine (mysql shows "schema" terminology)
+ * @param options.allowBack - Allow empty input to go back (returns null)
+ * @param options.existingDatabases - List of existing database names for context
+ * @param options.disallowExisting - Validate that name is not in existingDatabases
  */
+export function promptDatabaseName(
+  defaultName?: string,
+  engine?: string,
+  options?: {
+    allowBack?: false
+    existingDatabases?: string[]
+    disallowExisting?: boolean
+  },
+): Promise<string>
+export function promptDatabaseName(
+  defaultName: string | undefined,
+  engine: string | undefined,
+  options: {
+    allowBack: true
+    existingDatabases?: string[]
+    disallowExisting?: boolean
+  },
+): Promise<string | null>
 export async function promptDatabaseName(
   defaultName?: string,
   engine?: string,
-): Promise<string> {
+  options?: {
+    allowBack?: boolean
+    existingDatabases?: string[]
+    disallowExisting?: boolean
+  },
+): Promise<string | null> {
   // MySQL uses "schema" terminology (database and schema are synonymous)
-  const label =
-    engine === 'mysql' ? 'Database (schema) name:' : 'Database name:'
+  const baseLabel =
+    engine === 'mysql' ? 'Database (schema) name' : 'Database name'
+  const label = options?.allowBack
+    ? `${baseLabel} (empty to go back):`
+    : `${baseLabel}:`
 
   // Sanitize the default name to ensure it's valid
   const sanitizedDefault = defaultName
@@ -298,8 +419,9 @@ export async function promptDatabaseName(
       type: 'input',
       name: 'database',
       message: label,
-      default: sanitizedDefault,
+      default: options?.allowBack ? undefined : sanitizedDefault,
       validate: (input: string) => {
+        if (options?.allowBack && !input) return true // Allow empty for back
         if (!input) return 'Database name is required'
         // PostgreSQL database naming rules (also valid for MySQL)
         // Hyphens excluded to avoid requiring quoted identifiers in SQL
@@ -309,27 +431,61 @@ export async function promptDatabaseName(
         if (input.length > 63) {
           return 'Database name must be 63 characters or less'
         }
+        if (
+          options?.disallowExisting &&
+          options.existingDatabases?.includes(input)
+        ) {
+          return `Database "${input}" already exists. Choose a different name.`
+        }
         return true
       },
     },
   ])
 
+  if (options?.allowBack && !database) return null
   return database
 }
 
 /**
  * Prompt to select a database from a list of databases in a container
+ * @param options.includeBack - Include a back option (returns null when selected)
  */
+export function promptDatabaseSelect(
+  databases: string[],
+  message?: string,
+  options?: { includeBack?: false },
+): Promise<string>
+export function promptDatabaseSelect(
+  databases: string[],
+  message: string | undefined,
+  options: { includeBack: true },
+): Promise<string | null>
 export async function promptDatabaseSelect(
   databases: string[],
   message: string = 'Select database:',
-): Promise<string> {
+  options?: { includeBack?: boolean },
+): Promise<string | null> {
   if (databases.length === 0) {
     throw new Error('No databases available to select')
   }
 
-  if (databases.length === 1) {
+  if (databases.length === 1 && !options?.includeBack) {
     return databases[0]
+  }
+
+  type Choice =
+    | { name: string; value: string; short?: string }
+    | inquirer.Separator
+
+  const choices: Choice[] = databases.map((db, index) => ({
+    name: index === 0 ? `${db} ${chalk.gray('(primary)')}` : db,
+    value: db,
+    short: db,
+  }))
+
+  if (options?.includeBack) {
+    choices.push(new inquirer.Separator())
+    choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
   }
 
   const { database } = await inquirer.prompt<{ database: string }>([
@@ -337,23 +493,30 @@ export async function promptDatabaseSelect(
       type: 'list',
       name: 'database',
       message,
-      choices: databases.map((db, index) => ({
-        name: index === 0 ? `${db} ${chalk.gray('(primary)')}` : db,
-        value: db,
-        short: db,
-      })),
+      choices,
     },
   ])
 
+  if (database === BACK_VALUE) return null
   return database
 }
 
 /**
  * Prompt for backup format selection
+ * @param options.includeBack - Include a back option (returns null when selected)
  */
+export function promptBackupFormat(
+  engine: string,
+  options?: { includeBack?: false },
+): Promise<'sql' | 'dump'>
+export function promptBackupFormat(
+  engine: string,
+  options: { includeBack: true },
+): Promise<'sql' | 'dump' | null>
 export async function promptBackupFormat(
   engine: string,
-): Promise<'sql' | 'dump'> {
+  options?: { includeBack?: boolean },
+): Promise<'sql' | 'dump' | null> {
   const sqlDescription =
     engine === 'mysql'
       ? 'Plain SQL - human-readable, larger file'
@@ -363,35 +526,62 @@ export async function promptBackupFormat(
       ? 'Compressed SQL (.sql.gz) - smaller file'
       : 'Custom format - smaller file, faster restore'
 
-  const { format } = await inquirer.prompt<{ format: 'sql' | 'dump' }>([
+  type Choice =
+    | { name: string; value: string; short?: string }
+    | inquirer.Separator
+
+  const choices: Choice[] = [
+    { name: `.sql ${chalk.gray(`- ${sqlDescription}`)}`, value: 'sql' },
+    { name: `.dump ${chalk.gray(`- ${dumpDescription}`)}`, value: 'dump' },
+  ]
+
+  if (options?.includeBack) {
+    choices.push(new inquirer.Separator())
+    choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
+  }
+
+  const { format } = await inquirer.prompt<{ format: string }>([
     {
       type: 'list',
       name: 'format',
       message: 'Select backup format:',
-      choices: [
-        { name: `.sql ${chalk.gray(`- ${sqlDescription}`)}`, value: 'sql' },
-        { name: `.dump ${chalk.gray(`- ${dumpDescription}`)}`, value: 'dump' },
-      ],
+      choices,
       default: 'sql',
     },
   ])
 
-  return format
+  if (format === BACK_VALUE) return null
+  return format as 'sql' | 'dump'
 }
 
 /**
  * Prompt for backup filename
+ * @param options.allowBack - Allow empty input to go back (returns null)
  */
+export function promptBackupFilename(
+  defaultName: string,
+  options?: { allowBack?: false },
+): Promise<string>
+export function promptBackupFilename(
+  defaultName: string,
+  options: { allowBack: true },
+): Promise<string | null>
 export async function promptBackupFilename(
   defaultName: string,
-): Promise<string> {
+  options?: { allowBack?: boolean },
+): Promise<string | null> {
+  const message = options?.allowBack
+    ? 'Backup filename (without extension, empty to go back):'
+    : 'Backup filename (without extension):'
+
   const { filename } = await inquirer.prompt<{ filename: string }>([
     {
       type: 'input',
       name: 'filename',
-      message: 'Backup filename (without extension):',
-      default: defaultName,
+      message,
+      default: options?.allowBack ? undefined : defaultName,
       validate: (input: string) => {
+        if (options?.allowBack && !input) return true // Allow empty for back
         if (!input) return 'Filename is required'
         if (!/^[a-zA-Z0-9_-]+$/.test(input)) {
           return 'Filename must contain only letters, numbers, underscores, and hyphens'
@@ -401,6 +591,7 @@ export async function promptBackupFilename(
     },
   ])
 
+  if (options?.allowBack && !filename) return null
   return filename
 }
 

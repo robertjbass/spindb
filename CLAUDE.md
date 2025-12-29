@@ -315,7 +315,7 @@ Error messages should include actionable fix suggestions.
 ### Menu Navigation
 - Submenus have "Back" and "Back to main menu" options
 - Back buttons: `${chalk.blue('←')} Back`
-- Main menu: `${chalk.blue('🏠')} Back to main menu`
+- Main menu: `${chalk.blue('⌂')} Back to main menu`
 
 ### Engine Icons
 - PostgreSQL: 🐘

@@ -5,6 +5,24 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2025-12-29
+
+### Added
+- **Menu navigation improvements** - All interactive menus now have "Back" and "Back to main menu" options
+  - Container creation wizard: step-by-step flow with back navigation at each step (engine, version, name, port, database)
+  - Backup/restore flows: back options at container selection, source selection, and format prompts
+  - Consistent navigation using `←` for back and `⌂` for main menu
+- **Restore mode selection** - Interactive restore now prompts for restore mode
+  - "Create new database" - Restore into a new database without affecting existing data
+  - "Replace existing database" - Overwrite an existing database (with confirmation)
+  - Shows existing databases in container before prompting for target name
+
+### Changed
+- Standardized menu icon from `🏠` to `⌂` for consistent terminal width
+
+### Fixed
+- TypeScript function overloads added to prompt functions for proper type inference when using `allowBack` option
+
 ## [0.10.4] - 2025-12-28
 
 ### Changed

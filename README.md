@@ -380,12 +380,25 @@ spindb restore mydb backup.sql --database my_app
 spindb restore mydb --from-url "postgresql://user:pass@host/db"
 ```
 
+**Restore production data alongside existing databases:**
+
+```bash
+# Restore into a NEW database without affecting existing data
+spindb restore mydb prod-backup.dump --database prod_copy
+
+# Pull from production into a new local database
+spindb restore mydb --from-url "postgresql://user:pass@prod-host/proddb" --database prod_local
+
+# View all databases in a container
+spindb info mydb
+```
+
 <details>
 <summary>All options</summary>
 
 | Option | Description |
 |--------|-------------|
-| `--database`, `-d` | Target database name |
+| `--database`, `-d` | Target database name (creates new if doesn't exist) |
 | `--from-url` | Pull data from a remote database connection string |
 | `--force`, `-f` | Overwrite existing database without confirmation |
 | `--json`, `-j` | Output result as JSON |

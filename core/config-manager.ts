@@ -111,6 +111,101 @@ export class ConfigManager {
     return null
   }
 
+  /**
+   * Get binary path with version validation
+   *
+   * Unlike getBinaryPath(), this also verifies the cached version matches
+   * the actual binary version. Use this for version-sensitive operations
+   * like dump/restore where using the wrong version can cause failures.
+   */
+  async getBinaryPathWithVersionCheck(tool: BinaryTool): Promise<{
+    path: string | null
+    versionMismatch: boolean
+    cachedVersion?: string
+    actualVersion?: string
+  }> {
+    const config = await this.load()
+    const binaryConfig = config.binaries[tool]
+
+    if (!binaryConfig?.path) {
+      // No cached path, try to detect
+      const systemPath = await this.detectSystemBinary(tool)
+      if (systemPath) {
+        await this.setBinaryPath(tool, systemPath, 'system')
+        return { path: systemPath, versionMismatch: false }
+      }
+      return { path: null, versionMismatch: false }
+    }
+
+    // Check if file exists
+    if (!existsSync(binaryConfig.path)) {
+      delete config.binaries[tool]
+      await this.save()
+      return { path: null, versionMismatch: false }
+    }
+
+    // Validate version matches cached version
+    if (binaryConfig.version) {
+      try {
+        const { stdout } = await execAsync(`"${binaryConfig.path}" --version`)
+        const match = stdout.match(/(\d+\.\d+)/)
+        const actualVersion = match ? match[1] : undefined
+
+        if (actualVersion && actualVersion !== binaryConfig.version) {
+          logWarning('Binary version mismatch detected', {
+            tool,
+            path: binaryConfig.path,
+            cachedVersion: binaryConfig.version,
+            actualVersion,
+          })
+
+          const cachedVersion = binaryConfig.version
+
+          // Update cache with actual version
+          binaryConfig.version = actualVersion
+          await this.save()
+
+          return {
+            path: binaryConfig.path,
+            versionMismatch: true,
+            cachedVersion,
+            actualVersion,
+          }
+        }
+      } catch (error) {
+        logDebug('Version check failed', {
+          tool,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return { path: binaryConfig.path, versionMismatch: false }
+  }
+
+  /**
+   * Force refresh a specific binary's path and version
+   *
+   * Clears the existing cache entry and re-detects from system.
+   * Use after package manager operations that may have changed binary versions.
+   */
+  async refreshBinaryWithVersion(
+    tool: BinaryTool,
+  ): Promise<BinaryConfig | null> {
+    // Clear existing cache for this tool
+    await this.clearBinaryPath(tool)
+
+    // Re-detect from system
+    const systemPath = await this.detectSystemBinary(tool)
+    if (systemPath) {
+      await this.setBinaryPath(tool, systemPath, 'system')
+      const config = await this.load()
+      return config.binaries[tool] || null
+    }
+
+    return null
+  }
+
   async setBinaryPath(
     tool: BinaryTool,
     path: string,

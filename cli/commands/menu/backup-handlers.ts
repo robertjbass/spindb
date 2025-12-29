@@ -21,6 +21,9 @@ import {
   promptBackupFormat,
   promptBackupFilename,
   promptInstallDependencies,
+  promptConfirm,
+  BACK_VALUE,
+  MAIN_MENU_VALUE,
 } from '../../ui/prompts'
 import { createSpinner } from '../../ui/spinner'
 import {
@@ -34,6 +37,7 @@ import {
 import { getEngineIcon } from '../../constants'
 import { type Engine } from '../../../types'
 import { pressEnterToContinue } from './shared'
+import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
 
 function generateBackupTimestamp(): string {
   const now = new Date()
@@ -163,6 +167,11 @@ export async function handleRestore(): Promise<void> {
       value: '__create_new__',
       short: 'Create new',
     },
+    new inquirer.Separator(),
+    {
+      name: `${chalk.blue('←')} Back`,
+      value: '__back__',
+    },
   ]
 
   const { selectedContainer } = await inquirer.prompt<{
@@ -176,6 +185,10 @@ export async function handleRestore(): Promise<void> {
       pageSize: 15,
     },
   ])
+
+  if (selectedContainer === '__back__') {
+    return
+  }
 
   let containerName: string
   let config: Awaited<ReturnType<typeof containerManager.getConfig>>
@@ -229,7 +242,7 @@ export async function handleRestore(): Promise<void> {
   }
 
   const { restoreSource } = await inquirer.prompt<{
-    restoreSource: 'file' | 'connection'
+    restoreSource: 'file' | 'connection' | '__back__'
   }>([
     {
       type: 'list',
@@ -244,9 +257,18 @@ export async function handleRestore(): Promise<void> {
           name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
           value: 'connection',
         },
+        new inquirer.Separator(),
+        {
+          name: `${chalk.blue('←')} Back`,
+          value: '__back__',
+        },
       ],
     },
   ])
+
+  if (restoreSource === '__back__') {
+    return handleRestore() // Go back to container selection
+  }
 
   let backupPath = ''
   let isTempFile = false
@@ -310,6 +332,49 @@ export async function handleRestore(): Promise<void> {
         const e = error as Error
         dumpSpinner.fail('Failed to create dump')
 
+        // Handle version mismatch errors with helpful message
+        if (
+          e instanceof SpinDBError &&
+          e.code === ErrorCodes.VERSION_MISMATCH
+        ) {
+          console.log()
+          console.log(uiError('PostgreSQL version mismatch:'))
+          console.log(chalk.gray(`  ${e.message}`))
+          if (e.suggestion) {
+            console.log()
+            console.log(uiWarning('To fix this:'))
+            console.log(chalk.yellow(`  ${e.suggestion}`))
+          }
+          console.log()
+
+          try {
+            await rm(tempDumpPath, { force: true })
+          } catch {
+            // Ignore cleanup errors
+          }
+
+          await pressEnterToContinue()
+          return
+        }
+
+        // Handle connection errors
+        if (
+          e instanceof SpinDBError &&
+          e.code === ErrorCodes.CONNECTION_FAILED
+        ) {
+          console.log()
+          console.log(uiError('Connection failed:'))
+          console.log(chalk.gray(`  ${e.message}`))
+          if (e.suggestion) {
+            console.log(chalk.yellow(`  ${e.suggestion}`))
+          }
+          console.log()
+
+          await pressEnterToContinue()
+          return
+        }
+
+        // Handle missing tool errors
         if (
           e.message.includes('pg_dump not found') ||
           e.message.includes('mysqldump not found') ||
@@ -388,9 +453,109 @@ export async function handleRestore(): Promise<void> {
     backupPath = stripQuotes(rawBackupPath)
   }
 
-  const databaseName = await promptDatabaseName(containerName, config.engine)
-
   const engine = getEngine(config.engine)
+
+  // Get existing databases in this container
+  const existingDatabases = config.databases || [config.database]
+
+  // Restore mode selection
+  type RestoreMode = 'new' | 'replace' | '__back__'
+  const { restoreMode } = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+    {
+      type: 'list',
+      name: 'restoreMode',
+      message: 'How would you like to restore?',
+      choices: [
+        {
+          name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
+          value: 'new',
+        },
+        {
+          name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+          value: 'replace',
+          disabled:
+            existingDatabases.length === 0 ? 'No existing databases' : false,
+        },
+        new inquirer.Separator(),
+        {
+          name: `${chalk.blue('←')} Back`,
+          value: '__back__',
+        },
+      ],
+    },
+  ])
+
+  if (restoreMode === '__back__') {
+    return handleRestore() // Go back to source selection
+  }
+
+  let databaseName: string
+
+  if (restoreMode === 'new') {
+    // Show existing databases for context
+    if (existingDatabases.length > 0) {
+      console.log()
+      console.log(chalk.gray('  Existing databases in this container:'))
+      for (const db of existingDatabases) {
+        console.log(chalk.gray(`    • ${db}`))
+      }
+      console.log()
+    }
+
+    // Prompt for new database name (must not already exist)
+    const result = await promptDatabaseName(containerName, config.engine, {
+      allowBack: true,
+      existingDatabases,
+      disallowExisting: true,
+    })
+
+    if (result === null) {
+      return handleRestore() // Go back
+    }
+    databaseName = result
+  } else {
+    // Replace existing database - show selection
+    if (existingDatabases.length === 1) {
+      databaseName = existingDatabases[0]
+    } else {
+      const result = await promptDatabaseSelect(
+        existingDatabases,
+        'Select database to replace:',
+        { includeBack: true },
+      )
+      if (result === null) {
+        return handleRestore() // Go back
+      }
+      databaseName = result
+    }
+
+    // Confirm overwrite
+    const confirmed = await promptConfirm(
+      `This will overwrite all data in "${databaseName}". Continue?`,
+      false,
+    )
+
+    if (!confirmed) {
+      return handleRestore() // Go back
+    }
+
+    // Drop the existing database before restore
+    console.log()
+    const dropSpinner = createSpinner(
+      `Dropping existing database "${databaseName}"...`,
+    )
+    dropSpinner.start()
+
+    try {
+      await engine.dropDatabase(config, databaseName)
+      dropSpinner.succeed(`Dropped database "${databaseName}"`)
+    } catch (error) {
+      dropSpinner.fail(`Failed to drop database "${databaseName}"`)
+      console.log(uiError((error as Error).message))
+      await pressEnterToContinue()
+      return
+    }
+  }
 
   const detectSpinner = createSpinner('Detecting backup format...')
   detectSpinner.start()
