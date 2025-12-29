@@ -1,8 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [dev] # TODO: Remove after testing CI
+  # TODO: uncomment for testing CI on dev branch
+  # push:
+  #   branches: [dev]
   pull_request:
     branches: [main]
   workflow_dispatch:
