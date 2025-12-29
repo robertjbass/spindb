@@ -22,6 +22,7 @@ export const POSTGRESQL_VERSION_MAP: Record<string, string> = {
   '15': '15.15.0',
   '16': '16.11.0',
   '17': '17.7.0',
+  '18': '18.1.0',
 }
 
 /**

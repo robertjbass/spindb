@@ -259,7 +259,7 @@ describe('getInstallCommand', () => {
   })
 
   it('should handle different major versions', async () => {
-    const versions = ['14', '15', '16', '17']
+    const versions = ['14', '15', '16', '17', '18']
 
     for (const version of versions) {
       const cmd = await getInstallCommand(version)

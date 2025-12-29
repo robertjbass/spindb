@@ -12,6 +12,7 @@ describe('BinaryManager', () => {
         { input: '15', expected: '15.15.0' },
         { input: '16', expected: '16.11.0' },
         { input: '17', expected: '17.7.0' },
+        { input: '18', expected: '18.1.0' },
       ]
 
       for (const { input, expected } of testCases) {
