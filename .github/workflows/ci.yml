@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [dev] # TODO: Remove after testing CI
   pull_request:
     branches: [main]
   workflow_dispatch:
