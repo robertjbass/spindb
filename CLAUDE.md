@@ -308,7 +308,10 @@ When new major versions of supported engines are released (e.g., PostgreSQL 18):
    - `tests/unit/binary-manager.test.ts` - Add test case for new version
    - `tests/unit/version-validator.test.ts` - Add version to test arrays
 
-4. **Update documentation:**
+4. **Update CI workflow** (if changing the default version):
+   - `.github/workflows/ci.yml` - Update `engines download postgresql <version>` in both `test-postgresql` and `test-cli-e2e` jobs to match the new default
+
+5. **Update documentation:**
    - **README.md** - Update "Supported Engines" section (versions list)
    - **CLAUDE.md** - Update version references in this file
    - **CHANGELOG.md** - Add to unreleased section

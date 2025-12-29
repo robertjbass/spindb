@@ -71,7 +71,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Use SpinDB to download PostgreSQL binaries (version 18 is the default)
+      # Use SpinDB to download PostgreSQL binaries
+      # NOTE: Keep this version in sync with config/engine-defaults.ts defaultVersion
+      # See CLAUDE.md "Updating Supported Engine Versions" when changing
       - name: Install PostgreSQL via SpinDB
         run: pnpm start engines download postgresql 18
 
@@ -219,7 +221,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Use SpinDB to install all required engines (version 18 is the default)
+      # Use SpinDB to install all required engines
+      # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
       - name: Install PostgreSQL via SpinDB
         run: pnpm start engines download postgresql 18
 
