@@ -222,15 +222,58 @@ export type ParsedConnectionString =
 
 /**
  * Parse a MongoDB connection string
- * Format: mongodb://[user:password@]host[:port]/database
- *         mongodb+srv://[user:password@]host/database
  *
- * SRV URIs use DNS to resolve hosts/ports and must be passed as --uri to mongodump/mongorestore
+ * Supported formats:
+ * - mongodb://[user:password@]host[:port]/database
+ * - mongodb+srv://[user:password@]host/database
+ *
+ * SRV URIs use DNS to resolve hosts/ports and must be passed as --uri to mongodump/mongorestore.
+ *
+ * Database name handling:
+ * - Extracted from the URL pathname (e.g., "/mydb" → "mydb")
+ * - Leading slash is stripped automatically
+ * - If no database is specified (empty pathname or just "/"), defaults to "test"
+ *   following MongoDB's convention for the default database name
+ *
+ * @param connectionString - MongoDB connection URI
+ * @returns Parsed connection details with `isSrv` discriminator
+ * @throws Error with descriptive message if:
+ *   - Input is null, undefined, or not a string
+ *   - URL is malformed (credentials are masked in error message)
+ *   - Protocol is not "mongodb://" or "mongodb+srv://"
  */
 export function parseConnectionString(
   connectionString: string,
 ): ParsedConnectionString {
-  const url = new URL(connectionString)
+  if (!connectionString || typeof connectionString !== 'string') {
+    throw new Error(
+      'Invalid MongoDB connection string: expected a non-empty string',
+    )
+  }
+
+  let url: URL
+  try {
+    url = new URL(connectionString)
+  } catch (error) {
+    // Mask credentials in error message if present
+    const sanitized = connectionString.replace(
+      /\/\/([^:]+):([^@]+)@/,
+      '//***:***@',
+    )
+    throw new Error(
+      `Invalid MongoDB connection string: "${sanitized}". ` +
+        `Expected format: mongodb://[user:password@]host[:port]/database`,
+      { cause: error },
+    )
+  }
+
+  // Validate protocol
+  if (url.protocol !== 'mongodb:' && url.protocol !== 'mongodb+srv:') {
+    throw new Error(
+      `Invalid MongoDB connection string: unsupported protocol "${url.protocol}". ` +
+        `Expected "mongodb://" or "mongodb+srv://"`,
+    )
+  }
 
   const database = url.pathname.replace(/^\//, '') || 'test'
 

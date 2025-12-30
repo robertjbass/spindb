@@ -1,7 +1,7 @@
 {
   "name": "spindb",
   "version": "0.12.0",
-  "description": "Run local database containers without Docker. Supports PostgreSQL, MySQL, SQLite, and MongoDB databases. A lightweight alternative to DBngin/Postgres.app/Atlas all-in-one database management tools with an interactive CLI.",
+  "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MongoDB, and SQLite instances.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
