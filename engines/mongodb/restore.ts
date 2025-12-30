@@ -7,7 +7,6 @@ import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { getMongorestorePath } from './binary-detection'
-import { getWindowsSpawnOptions } from '../../core/platform-service'
 import { logDebug, logWarning } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
@@ -151,9 +150,10 @@ export async function restoreBackup(
 
   logDebug(`Running mongorestore with args: ${args.join(' ')}`)
 
+  // Note: Don't use shell mode - spawn handles paths with spaces correctly
+  // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-    ...getWindowsSpawnOptions(),
   }
 
   return new Promise((resolve, reject) => {

@@ -11,11 +11,7 @@ import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
-import {
-  platformService,
-  isWindows,
-  getWindowsSpawnOptions,
-} from '../../core/platform-service'
+import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import {
   logDebug,
@@ -540,9 +536,10 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await this.getMongoshPath()
 
+    // Note: Don't use shell mode - spawn handles paths with spaces correctly
+    // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
-      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
@@ -675,9 +672,10 @@ export class MongoDBEngine extends BaseEngine {
       '--gzip',
     ]
 
+    // Note: Don't use shell mode - spawn handles paths with spaces correctly
+    // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
@@ -735,9 +733,10 @@ export class MongoDBEngine extends BaseEngine {
 
     if (options.file) {
       // Run script file
+      // Note: Don't use shell mode here - spawn handles paths with spaces correctly
+      // when shell: false (the default). Shell mode would require quoting the path.
       const spawnOptions: SpawnOptions = {
         stdio: 'inherit',
-        ...getWindowsSpawnOptions(),
       }
 
       return new Promise((resolve, reject) => {

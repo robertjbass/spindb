@@ -9,7 +9,6 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { getMongodumpPath } from './binary-detection'
-import { getWindowsSpawnOptions } from '../../core/platform-service'
 import { logDebug } from '../../core/error-handler'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -63,9 +62,10 @@ export async function createBackup(
 
   logDebug(`Running mongodump with args: ${args.join(' ')}`)
 
+  // Note: Don't use shell mode - spawn handles paths with spaces correctly
+  // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-    ...getWindowsSpawnOptions(),
   }
 
   return new Promise((resolve, reject) => {
