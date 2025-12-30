@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2025-12-29
+
+### Changed
+- CI: Parallelized test execution with caching for faster builds
+- CI: Updated to Node.js 22
+- CI: Added `--test-concurrency=1` flag to all test scripts to prevent macOS Node 22 serialization bug
+
 ## [0.11.0] - 2025-12-29
 
 ### Highlights
