@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2025-12-30
+
+### Fixed
+- **Windows MongoDB test failures** - Test helpers now use platform-aware shell quoting (double quotes on Windows, single quotes on Unix) for `mongosh --eval` commands
+
+### Changed
+- **Simplified test scripts** - Removed redundant `--test-concurrency=1` flag from all test scripts; `--experimental-test-isolation=none` is sufficient to disable worker isolation
+- **CI: Added MongoDB binary verification on Windows** - Post-install step verifies `mongod`, `mongosh`, and `mongodump` are usable before running tests
+
+## [0.12.0] - 2025-12-30
+
+### Added
+- **MongoDB support** - Full container lifecycle for MongoDB 6.0, 7.0, and 8.0
+  - Create, start, stop, delete containers
+  - Backup with `mongodump` and restore with `mongorestore`
+  - Clone containers
+  - Run JavaScript files or inline scripts via `spindb run`
+  - System binary detection for `mongod`, `mongosh`, `mongodump`, `mongorestore`
+  - Full cross-platform support (macOS, Linux, Windows) with CI integration tests
+
 ## [0.11.2] - 2025-12-29
 
 ### Changed

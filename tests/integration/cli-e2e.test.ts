@@ -439,7 +439,10 @@ describe('CLI Backup and Restore Workflow', () => {
     const { exitCode: createExit, stderr: createErr } = await runCLI(
       `run ${containerName} --sql "CREATE TABLE backup_test (id SERIAL PRIMARY KEY, name TEXT)"`,
     )
-    assert(createExit === 0, `Create table should succeed. stderr: ${createErr}`)
+    assert(
+      createExit === 0,
+      `Create table should succeed. stderr: ${createErr}`,
+    )
 
     const { exitCode: insertExit, stderr: insertErr } = await runCLI(
       `run ${containerName} --sql "INSERT INTO backup_test (name) VALUES ('test1'), ('test2'), ('test3')"`,
@@ -607,7 +610,11 @@ describe('CLI Clone Workflow', () => {
 
     assert(source, 'Source container should exist')
     assert(clone, 'Cloned container should exist')
-    assertEqual(clone.engine, 'postgresql', 'Cloned engine should be postgresql')
+    assertEqual(
+      clone.engine,
+      'postgresql',
+      'Cloned engine should be postgresql',
+    )
     console.log('   Both containers appear in list')
   })
 

@@ -253,6 +253,188 @@ jobs:
         timeout-minutes: 10
 
   # ============================================
+  # MongoDB Integration Tests
+  # Uses system-installed MongoDB via Homebrew/apt/Chocolatey
+  # ============================================
+  test-mongodb:
+    name: MongoDB (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Install MongoDB on macOS via Homebrew
+      - name: Install MongoDB (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew tap mongodb/brew
+          brew install mongodb-community mongosh mongodb-database-tools
+
+      # Install MongoDB on Ubuntu
+      - name: Install MongoDB (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Import MongoDB public GPG key
+          curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
+            sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+          # Add MongoDB repository
+          echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+          # Update and install
+          sudo apt-get update
+          sudo apt-get install -y mongodb-org mongodb-mongosh mongodb-database-tools
+
+      # Cache Chocolatey packages for MongoDB on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\ProgramData\chocolatey\lib\mongodb
+            C:\ProgramData\chocolatey\lib\mongodb-shell
+            C:\ProgramData\chocolatey\lib\mongodb-database-tools
+            C:\Program Files\MongoDB
+          key: choco-mongodb-${{ runner.os }}-v1
+          restore-keys: |
+            choco-mongodb-${{ runner.os }}-
+
+      # Windows needs MongoDB added to PATH BEFORE install check (for cache hits)
+      - name: Add MongoDB to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $possibleServerPaths = @(
+            "C:\Program Files\MongoDB\Server\8.0\bin",
+            "C:\Program Files\MongoDB\Server\7.0\bin",
+            "C:\Program Files\MongoDB\Server\6.0\bin"
+          )
+          $possibleToolsPaths = @(
+            "C:\Program Files\MongoDB\Tools\100\bin",
+            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools"
+          )
+          foreach ($path in $possibleServerPaths) {
+            if (Test-Path $path) {
+              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              echo "Added MongoDB Server to PATH: $path"
+              break
+            }
+          }
+          foreach ($path in $possibleToolsPaths) {
+            if (Test-Path $path) {
+              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              echo "Added MongoDB Tools to PATH: $path"
+              break
+            }
+          }
+
+      # Install MongoDB on Windows via Chocolatey
+      - name: Install MongoDB (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Check if MongoDB is already installed (cache hit)
+          $mongodExists = Get-Command mongod -ErrorAction SilentlyContinue
+          if (-not $mongodExists) {
+            echo "Installing MongoDB via Chocolatey..."
+            choco install mongodb --yes --no-progress
+          } else {
+            echo "MongoDB already installed (cache hit)"
+          }
+
+          # Check if mongosh is already installed
+          $mongoshExists = Get-Command mongosh -ErrorAction SilentlyContinue
+          if (-not $mongoshExists) {
+            echo "Installing mongosh via Chocolatey..."
+            choco install mongodb-shell --yes --no-progress
+          } else {
+            echo "mongosh already installed (cache hit)"
+          }
+
+          # Check if mongodump is already installed
+          $mongodumpExists = Get-Command mongodump -ErrorAction SilentlyContinue
+          if (-not $mongodumpExists) {
+            echo "Installing mongodb-database-tools via Chocolatey..."
+            choco install mongodb-database-tools --yes --no-progress
+          } else {
+            echo "mongodb-database-tools already installed (cache hit)"
+          }
+
+          # Re-add paths after install (in case they were just created)
+          $possibleServerPaths = @(
+            "C:\Program Files\MongoDB\Server\8.0\bin",
+            "C:\Program Files\MongoDB\Server\7.0\bin",
+            "C:\Program Files\MongoDB\Server\6.0\bin"
+          )
+          $possibleToolsPaths = @(
+            "C:\Program Files\MongoDB\Tools\100\bin",
+            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools"
+          )
+          foreach ($path in $possibleServerPaths) {
+            if (Test-Path $path) {
+              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              break
+            }
+          }
+          foreach ($path in $possibleToolsPaths) {
+            if (Test-Path $path) {
+              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              break
+            }
+          }
+
+      # Verify MongoDB binaries are usable after install
+      - name: Verify MongoDB installation (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Verifying MongoDB installation..."
+          try {
+            $mongodVersion = mongod --version | Select-Object -First 1
+            Write-Host "✓ mongod: $mongodVersion"
+          } catch {
+            Write-Host "✗ mongod not found or not working"
+            exit 1
+          }
+          try {
+            $mongoshVersion = mongosh --version
+            Write-Host "✓ mongosh: $mongoshVersion"
+          } catch {
+            Write-Host "✗ mongosh not found or not working"
+            exit 1
+          }
+          try {
+            $mongodumpVersion = mongodump --version | Select-Object -First 1
+            Write-Host "✓ mongodump: $mongodumpVersion"
+          } catch {
+            Write-Host "✗ mongodump not found or not working"
+            exit 1
+          }
+          Write-Host "All MongoDB binaries verified successfully"
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run MongoDB integration tests
+        run: pnpm test:mongodb
+        timeout-minutes: 15
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -329,7 +511,15 @@ jobs:
     name: CI Success
     runs-on: ubuntu-latest
     needs:
-      [unit-tests, test-postgresql, test-mysql, test-sqlite, test-cli-e2e, lint]
+      [
+        unit-tests,
+        test-postgresql,
+        test-mysql,
+        test-sqlite,
+        test-mongodb,
+        test-cli-e2e,
+        lint,
+      ]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -348,6 +538,10 @@ jobs:
           fi
           if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
             echo "SQLite tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mongodb.result }}" != "success" ]; then
+            echo "MongoDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

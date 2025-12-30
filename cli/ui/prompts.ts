@@ -38,15 +38,11 @@ export async function promptContainerName(
   defaultName?: string,
   options?: { allowBack?: boolean },
 ): Promise<string | null> {
-  const message = options?.allowBack
-    ? 'Container name (empty to go back):'
-    : 'Container name:'
-
   const { name } = await inquirer.prompt<{ name: string }>([
     {
       type: 'input',
       name: 'name',
-      message,
+      message: 'Container name:',
       default: options?.allowBack ? undefined : defaultName,
       validate: (input: string) => {
         if (options?.allowBack && !input) return true // Allow empty for back
@@ -237,41 +233,28 @@ export async function promptVersion(
 /**
  * Prompt for port
  * @param defaultPort - Default port number
- * @param options.allowBack - Allow empty input to go back (returns null)
  */
-export function promptPort(
-  defaultPort?: number,
-  options?: { allowBack?: false },
-): Promise<number>
-export function promptPort(
-  defaultPort: number | undefined,
-  options: { allowBack: true },
-): Promise<number | null>
 export async function promptPort(
   defaultPort: number = defaults.port,
-  options?: { allowBack?: boolean },
-): Promise<number | null> {
-  const message = options?.allowBack ? 'Port (empty to go back):' : 'Port:'
-
-  const { port } = await inquirer.prompt<{ port: string }>([
+): Promise<number> {
+  const { port } = await inquirer.prompt<{ port: number }>([
     {
       type: 'input',
       name: 'port',
-      message,
-      default: options?.allowBack ? undefined : String(defaultPort),
+      message: 'Port:',
+      default: String(defaultPort),
       validate: (input: string) => {
-        if (options?.allowBack && !input) return true // Allow empty for back
         const num = parseInt(input, 10)
         if (isNaN(num) || num < 1 || num > 65535) {
           return 'Port must be a number between 1 and 65535'
         }
         return true
       },
+      filter: (input: string) => parseInt(input, 10),
     },
   ])
 
-  if (options?.allowBack && !port) return null
-  return parseInt(port, 10)
+  return port
 }
 
 /**
@@ -405,14 +388,17 @@ export async function promptDatabaseName(
   // MySQL uses "schema" terminology (database and schema are synonymous)
   const baseLabel =
     engine === 'mysql' ? 'Database (schema) name' : 'Database name'
-  const label = options?.allowBack
-    ? `${baseLabel} (empty to go back):`
-    : `${baseLabel}:`
 
   // Sanitize the default name to ensure it's valid
   const sanitizedDefault = defaultName
     ? sanitizeDatabaseName(defaultName)
     : undefined
+
+  // When allowBack is true, show the default in the message (since we can't use inquirer's default)
+  const label =
+    options?.allowBack && sanitizedDefault
+      ? `${baseLabel} [${sanitizedDefault}]:`
+      : `${baseLabel}:`
 
   const { database } = await inquirer.prompt<{ database: string }>([
     {
@@ -570,9 +556,10 @@ export async function promptBackupFilename(
   defaultName: string,
   options?: { allowBack?: boolean },
 ): Promise<string | null> {
+  // Show the default in the message when allowBack is true
   const message = options?.allowBack
-    ? 'Backup filename (without extension, empty to go back):'
-    : 'Backup filename (without extension):'
+    ? `Backup filename [${defaultName}]:`
+    : 'Backup filename:'
 
   const { filename } = await inquirer.prompt<{ filename: string }>([
     {

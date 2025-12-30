@@ -56,6 +56,11 @@ export async function handleRunSql(containerName: string): Promise<void> {
   // Strip quotes that terminals add when drag-and-dropping files
   const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
+  // MongoDB uses JavaScript scripts, not SQL
+  const isMongoDB = config.engine === 'mongodb'
+  const scriptType = isMongoDB ? 'Script' : 'SQL'
+  const scriptTypeLower = isMongoDB ? 'script' : 'SQL'
+
   // Prompt for file path (empty input = go back)
   console.log(
     chalk.gray(
@@ -68,7 +73,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
     {
       type: 'input',
       name: 'filePath',
-      message: 'SQL file path:',
+      message: `${scriptType} file path:`,
       validate: (input: string) => {
         if (!input) return true // Empty = go back
         const cleanPath = stripQuotes(input)
@@ -90,14 +95,16 @@ export async function handleRunSql(containerName: string): Promise<void> {
   if (databases.length > 1) {
     databaseName = await promptDatabaseSelect(
       databases,
-      'Select database to run SQL against:',
+      `Select database to run ${scriptTypeLower} against:`,
     )
   } else {
     databaseName = databases[0]
   }
 
   console.log()
-  console.log(uiInfo(`Running SQL file against "${databaseName}"...`))
+  console.log(
+    uiInfo(`Running ${scriptTypeLower} file against "${databaseName}"...`),
+  )
   console.log()
 
   try {
@@ -106,11 +113,11 @@ export async function handleRunSql(containerName: string): Promise<void> {
       database: databaseName,
     })
     console.log()
-    console.log(uiSuccess('SQL file executed successfully'))
+    console.log(uiSuccess(`${scriptType} file executed successfully`))
   } catch (error) {
     const e = error as Error
     console.log()
-    console.log(uiError(`SQL execution failed: ${e.message}`))
+    console.log(uiError(`${scriptType} execution failed: ${e.message}`))
   }
 
   console.log()

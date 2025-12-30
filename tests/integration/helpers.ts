@@ -12,6 +12,7 @@ import { portManager } from '../../core/port-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { paths } from '../../config/paths'
+import { isWindows } from '../../core/platform-service'
 import { Engine } from '../../types'
 
 const execAsync = promisify(exec)
@@ -22,6 +23,7 @@ const execAsync = promisify(exec)
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
+  mongodb: { base: 27050, clone: 27052, renamed: 27051 },
 }
 
 /**
@@ -137,6 +139,7 @@ export async function cleanupTestContainers(): Promise<string[]> {
 /**
  * Execute SQL against a database and return the result
  * For SQLite, the database parameter is the file path
+ * For MongoDB, sql is JavaScript code
  */
 export async function executeSQL(
   engine: Engine,
@@ -154,6 +157,20 @@ export async function executeSQL(
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
+  } else if (engine === Engine.MongoDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled mongosh if available
+    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
+    // Windows uses double quotes, Unix uses single quotes for shell escaping
+    let cmd: string
+    if (isWindows()) {
+      const escaped = sql.replace(/"/g, '\\"')
+      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
+    } else {
+      const escaped = sql.replace(/'/g, "'\\''")
+      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
+    }
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -167,6 +184,7 @@ export async function executeSQL(
 /**
  * Execute a SQL file against a database
  * For SQLite, the database parameter is the file path
+ * For MongoDB, the file should be a JavaScript file
  */
 export async function executeSQLFile(
   engine: Engine,
@@ -183,6 +201,11 @@ export async function executeSQLFile(
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
+  } else if (engine === Engine.MongoDB) {
+    const engineImpl = getEngine(engine)
+    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
+    const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -193,7 +216,8 @@ export async function executeSQLFile(
 }
 
 /**
- * Query row count from a table
+ * Query row count from a table/collection
+ * For MongoDB, table is the collection name
  */
 export async function getRowCount(
   engine: Engine,
@@ -201,6 +225,21 @@ export async function getRowCount(
   database: string,
   table: string,
 ): Promise<number> {
+  if (engine === Engine.MongoDB) {
+    // MongoDB uses countDocuments() for collections
+    const { stdout } = await executeSQL(
+      engine,
+      port,
+      database,
+      `db.${table}.countDocuments()`,
+    )
+    const num = parseInt(stdout.trim(), 10)
+    if (!isNaN(num)) {
+      return num
+    }
+    throw new Error(`Could not parse document count from: ${stdout}`)
+  }
+
   const { stdout } = await executeSQL(
     engine,
     port,
@@ -242,6 +281,21 @@ export async function waitForReady(
           .getMysqladminPath()
           .catch(() => 'mysqladmin')
         await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
+      } else if (engine === Engine.MongoDB) {
+        // Use mongosh to ping MongoDB
+        const engineImpl = getEngine(engine)
+        const mongoshPath = await engineImpl
+          .getMongoshPath()
+          .catch(() => 'mongosh')
+        // Windows uses double quotes, Unix uses single quotes for shell escaping
+        const pingScript = 'db.runCommand({ping:1})'
+        let cmd: string
+        if (isWindows()) {
+          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval "${pingScript}" --quiet`
+        } else {
+          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval '${pingScript}' --quiet`
+        }
+        await execAsync(cmd, { timeout: 5000 })
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -295,6 +349,9 @@ export function getConnectionString(
 ): string {
   if (engine === Engine.MySQL) {
     return `mysql://root@127.0.0.1:${port}/${database}`
+  }
+  if (engine === Engine.MongoDB) {
+    return `mongodb://127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }
