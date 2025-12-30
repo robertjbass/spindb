@@ -337,10 +337,8 @@ export class MongoDBEngine extends BaseEngine {
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        await execAsync(
-          `"${mongosh}" --host 127.0.0.1 --port ${port} --eval "db.runCommand({ping:1})" --quiet`,
-          { timeout: 5000 },
-        )
+        const cmd = buildMongoshCommand(mongosh, port, 'admin', 'db.runCommand({ping:1})', { quiet: true })
+        await execAsync(cmd, { timeout: 5000 })
         return true
       } catch {
         await new Promise((resolve) => setTimeout(resolve, checkInterval))
@@ -451,10 +449,8 @@ export class MongoDBEngine extends BaseEngine {
     const mongosh = await getMongoshPath()
     if (mongosh) {
       try {
-        await execAsync(
-          `"${mongosh}" --host 127.0.0.1 --port ${port} --eval "db.runCommand({ping:1})" --quiet`,
-          { timeout: 5000 },
-        )
+        const cmd = buildMongoshCommand(mongosh, port, 'admin', 'db.runCommand({ping:1})', { quiet: true })
+        await execAsync(cmd, { timeout: 5000 })
         return { running: true, message: 'MongoDB is running' }
       } catch {
         // Not responding, check PID

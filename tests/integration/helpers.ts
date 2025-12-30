@@ -287,10 +287,15 @@ export async function waitForReady(
         const mongoshPath = await engineImpl
           .getMongoshPath()
           .catch(() => 'mongosh')
-        await execAsync(
-          `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval "db.runCommand({ping:1})" --quiet`,
-          { timeout: 5000 },
-        )
+        // Windows uses double quotes, Unix uses single quotes for shell escaping
+        const pingScript = 'db.runCommand({ping:1})'
+        let cmd: string
+        if (isWindows()) {
+          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval "${pingScript}" --quiet`
+        } else {
+          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval '${pingScript}' --quiet`
+        }
+        await execAsync(cmd, { timeout: 5000 })
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
