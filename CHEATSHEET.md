@@ -1,0 +1,142 @@
+# SpinDB Cheatsheet
+
+Quick reference for all commands. For detailed examples, see [EXAMPLES.md](EXAMPLES.md).
+
+## Container Lifecycle
+
+```bash
+spindb create mydb                      # Create PostgreSQL (default)
+spindb create mydb -e mysql             # Create MySQL
+spindb create mydb -e sqlite            # Create SQLite
+spindb create mydb -e mongodb           # Create MongoDB
+spindb create mydb -v 17 -p 5433        # Specific version and port
+spindb create mydb --start              # Create and start
+spindb create mydb --from backup.sql    # Create from backup
+
+spindb start mydb                       # Start container
+spindb stop mydb                        # Stop container
+spindb stop --all                       # Stop all containers
+spindb delete mydb -f -y                # Force delete without prompt
+spindb list                             # List all containers
+spindb info mydb                        # Show container details
+```
+
+## Connect & Query
+
+```bash
+spindb connect mydb                     # Open database shell
+spindb connect mydb -d otherdb          # Connect to specific database
+spindb connect mydb --pgcli             # Use pgcli (PostgreSQL)
+spindb connect mydb --mycli             # Use mycli (MySQL)
+spindb connect mydb --litecli           # Use litecli (SQLite)
+
+spindb run mydb --sql "SELECT 1"        # Run inline SQL/JS
+spindb run mydb ./schema.sql            # Run SQL file
+spindb run mydb -d analytics ./init.sql # Run on specific database
+```
+
+## Connection Strings
+
+```bash
+spindb url mydb                         # Print connection string
+spindb url mydb --copy                  # Copy to clipboard
+spindb url mydb -d analytics            # URL for specific database
+spindb url mydb --json                  # JSON with host/port/user details
+```
+
+## Backup & Restore
+
+```bash
+spindb backup mydb                      # Backup (default format)
+spindb backup mydb --sql                # Plain SQL backup
+spindb backup mydb --dump               # Binary dump format
+spindb backup mydb -o ~/backups         # Custom output directory
+spindb backup mydb -d analytics         # Backup specific database
+
+spindb restore mydb ./backup.sql        # Restore from file
+spindb restore mydb ./backup.dump -f    # Force overwrite
+spindb restore mydb --from-url "postgresql://user:pass@host/db"
+```
+
+## Clone
+
+```bash
+spindb stop mydb                        # Must stop first
+spindb clone mydb mydb-copy             # Clone container
+spindb start mydb-copy                  # Start on new port
+```
+
+## Edit & Configure
+
+```bash
+spindb edit mydb -n newname             # Rename container
+spindb edit mydb -p 5555                # Change port
+spindb edit mydb --set-config max_connections=500  # PostgreSQL config
+
+# SQLite only
+spindb edit mydb --relocate ./data/     # Move database file
+```
+
+## Logs
+
+```bash
+spindb logs mydb                        # Last 50 lines
+spindb logs mydb -n 200                 # Last 200 lines
+spindb logs mydb -f                     # Follow (tail -f)
+spindb logs mydb --editor               # Open in $EDITOR
+```
+
+## Engine Management
+
+```bash
+spindb engines list                     # List downloaded engines
+spindb engines download postgresql 18   # Download specific version
+spindb engines delete postgresql 17     # Delete engine version
+spindb deps check                       # Check required tools
+spindb deps install                     # Install missing tools
+```
+
+## Default Ports
+
+| Engine     | Default | Range         |
+|------------|---------|---------------|
+| PostgreSQL | 5432    | 5432-5500     |
+| MySQL      | 3306    | 3306-3400     |
+| MongoDB    | 27017   | 27017-27100   |
+| SQLite     | N/A     | File-based    |
+
+## Connection String Formats
+
+```
+PostgreSQL: postgresql://postgres@127.0.0.1:5432/mydb
+MySQL:      mysql://root@127.0.0.1:3306/mydb
+MongoDB:    mongodb://127.0.0.1:27017/mydb
+SQLite:     sqlite:///path/to/file.sqlite
+```
+
+## JSON Output (for scripting)
+
+Most commands support `--json` / `-j` for machine-readable output:
+
+```bash
+spindb list --json
+spindb create mydb --json
+spindb url mydb --json
+spindb backup mydb --json
+```
+
+## Common Workflows
+
+```bash
+# Dev database setup
+spindb create dev-db --start && spindb run dev-db ./schema.sql
+
+# Test with clone
+spindb stop prod && spindb clone prod test && spindb start test
+
+# Quick backup before changes
+spindb backup mydb --sql -o ~/backups
+
+# Reset database
+spindb delete mydb -f -y && spindb create mydb --start
+```

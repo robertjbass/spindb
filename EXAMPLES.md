@@ -1,6 +1,8 @@
 # SpinDB Examples
 
-A comprehensive guide showing all command permutations with practical examples for PostgreSQL, MySQL, SQLite, and MongoDB.
+Comprehensive examples and workflows for PostgreSQL, MySQL, SQLite, and MongoDB. Each section includes practical, real-world scenarios you can adapt to your projects.
+
+> **Looking for quick command reference?** See [CHEATSHEET.md](CHEATSHEET.md) for a compact one-page reference.
 
 ---
 
@@ -2059,5 +2061,7 @@ This guide covers all SpinDB commands across all four supported database engines
 4. **Automation** is easy - use `--json` for scripting and spawn databases in tests
 5. **MongoDB** uses JavaScript instead of SQL for queries
 
-For complete documentation, see [README.md](README.md).
-For implementation details, see [CLAUDE.md](CLAUDE.md).
+---
+
+**Quick reference:** [CHEATSHEET.md](CHEATSHEET.md)
+**Full documentation:** [README.md](README.md)
