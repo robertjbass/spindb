@@ -54,11 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container creation duplicate-name loop** - Users can now cancel by pressing Enter (was previously stuck requiring Ctrl+C)
 - **Added `warnings` field to `DumpResult` type** - Proper type safety for warning propagation
 
-### Improved
-- Added explicit fall-through comments in version compatibility switch statement for better code clarity
-- Improved Linux `switchVersionLinux` documentation to clarify intentional no-op behavior (Linux uses versioned paths directly)
-- Removed unused `BACK_VALUE` and `MAIN_MENU_VALUE` imports from backup-handlers.ts
-
 ## [0.10.5] - 2025-12-29
 
 ### Added
@@ -301,11 +296,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite creation no longer prompts for port
 - SQLite shell options now show sqlite3/litecli instead of psql/pgcli
 - Container rename now works correctly for SQLite containers
-
-### Documentation
-- Comprehensive engine documentation in TODO.md (backup formats, binary sizes)
-- FEATURE.md checklist for adding new engines
-- Silent catch blocks documentation in TODO.md
 
 ## [0.7.1] - 2025-11-30
 
