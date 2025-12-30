@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.4] - 2025-12-30
+
+### Added
+- **Redis engine specification** - Added REDIS-SPEC.md documenting the implementation plan for Redis support
+
 ## [0.12.3] - 2025-12-30
 
 ### Added

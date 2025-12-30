@@ -145,7 +145,7 @@ SpinDB downloads PostgreSQL server binaries automatically:
 - **macOS/Linux:** Pre-compiled binaries from the zonky.io project, hosted on Maven Central
 - **Windows:** Official binaries from EnterpriseDB (EDB)
 
-**Why download binaries instead of using system PostgreSQL?** You might want PostgreSQL 14 for one project and 18 for another. SpinDB lets you run different versions side-by-side without conflicts.
+**Why download binaries instead of using system PostgreSQL?** The [zonky.io project](https://github.com/zonkyio/embedded-postgres-binaries) provides pre-configured, portable PostgreSQL binaries—just extract and run. This lets you run PostgreSQL 14 for one project and 18 for another, side-by-side, without conflicts. No other database engine has an equivalent portable distribution.
 
 **Client tools required:** You still need `psql`, `pg_dump`, and `pg_restore` installed on your system for some operations (connecting, backups, restores). SpinDB can install these for you:
 
@@ -162,7 +162,7 @@ spindb deps install --engine postgresql
 | Default user | `root` |
 | Binary source | System installation |
 
-Unlike PostgreSQL, SpinDB uses your system's MySQL installation. This is because MySQL doesn't have a nice cross-platform binary distribution like zonky.io provides for PostgreSQL.
+Unlike PostgreSQL, SpinDB uses your system's MySQL installation. While Oracle provides MySQL binary downloads, they require system libraries and configuration—there's no "unzip and run" distribution like zonky.io provides for PostgreSQL. For most local development, a single system-installed MySQL version works well.
 
 ```bash
 # macOS
@@ -219,7 +219,7 @@ spindb connect mydb --litecli
 | Default user | None (no auth by default) |
 | Binary source | System installation |
 
-Like MySQL, SpinDB uses your system's MongoDB installation. MongoDB binaries aren't available as a single cross-platform download, so you'll need to install MongoDB via your package manager.
+Like MySQL, SpinDB uses your system's MongoDB installation. While MongoDB provides official binary downloads, they require additional configuration and system dependencies. SpinDB relies on your package manager to handle this setup.
 
 ```bash
 # macOS
