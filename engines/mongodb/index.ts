@@ -63,15 +63,39 @@ export function buildMongoshCommand(
   port: number,
   database: string,
   script: string,
+  options?: { quiet?: boolean },
 ): string {
+  const quietFlag = options?.quiet ? ' --quiet' : ''
   if (isWindows()) {
     // Windows: use double quotes
     const escaped = script.replace(/"/g, '\\"')
-    return `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}"`
+    return `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database}${quietFlag} --eval "${escaped}"`
   } else {
     // Unix: use single quotes
     const escaped = script.replace(/'/g, "'\\''")
-    return `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}'`
+    return `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database}${quietFlag} --eval '${escaped}'`
+  }
+}
+
+/**
+ * Extract JSON from mongosh output that may contain extra messages/prompts
+ * Returns the parsed JSON or null if extraction fails
+ */
+function extractJson(output: string): unknown | null {
+  const trimmed = output.trim()
+
+  // Find the first '{' and last '}' to extract JSON object
+  const firstBrace = trimmed.indexOf('{')
+  const lastBrace = trimmed.lastIndexOf('}')
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return null
+  }
+
+  try {
+    return JSON.parse(trimmed.substring(firstBrace, lastBrace + 1))
+  } catch {
+    return null
   }
 }
 
@@ -612,12 +636,14 @@ export class MongoDBEngine extends BaseEngine {
         port,
         db,
         'JSON.stringify(db.stats())',
+        { quiet: true },
       )
 
       const { stdout } = await execAsync(cmd, { timeout: 10000 })
-      // Parse the JSON output
-      const stats = JSON.parse(stdout.trim())
-      return stats.dataSize || null
+
+      // Defensively extract JSON from output (may contain extra messages)
+      const stats = extractJson(stdout) as { dataSize?: number } | null
+      return stats?.dataSize || null
     } catch {
       return null
     }
@@ -639,26 +665,19 @@ export class MongoDBEngine extends BaseEngine {
       )
     }
 
-    const { host, port, database, user, password } =
-      parseConnectionString(connectionString)
+    const parsed = parseConnectionString(connectionString)
 
+    // Always use --uri to avoid exposing credentials as separate CLI arguments
+    // The URI keeps credentials embedded (still visible in process listings,
+    // but this is MongoDB's recommended approach and handles all edge cases)
     const args = [
-      '--host',
-      host,
-      '--port',
-      port,
+      '--uri',
+      connectionString,
       '--db',
-      database,
+      parsed.database,
       '--archive=' + outputPath,
       '--gzip',
     ]
-
-    if (user) {
-      args.push('--username', user)
-    }
-    if (password) {
-      args.push('--password', password)
-    }
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],

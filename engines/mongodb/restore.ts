@@ -141,8 +141,11 @@ export async function restoreBackup(
     args.push('--archive=' + backupPath, '--gzip')
   } else if (format.format === 'archive') {
     args.push('--archive=' + backupPath)
+  } else if (format.format === 'bson') {
+    // BSON files are passed directly without --archive flag
+    args.push(backupPath)
   } else {
-    // Default to archive
+    // Default to archive for unknown formats
     args.push('--archive=' + backupPath, '--gzip')
   }
 
@@ -198,24 +201,53 @@ export async function restoreBackup(
 }
 
 /**
+ * Parsed MongoDB connection string result
+ * For SRV URIs, only `uri` and `database` are set (host/port resolved via DNS)
+ * For standard URIs, host/port are parsed directly
+ */
+export type ParsedConnectionString =
+  | {
+      isSrv: true
+      uri: string
+      database: string
+    }
+  | {
+      isSrv: false
+      host: string
+      port: string
+      database: string
+      user?: string
+      password?: string
+    }
+
+/**
  * Parse a MongoDB connection string
  * Format: mongodb://[user:password@]host[:port]/database
+ *         mongodb+srv://[user:password@]host/database
+ *
+ * SRV URIs use DNS to resolve hosts/ports and must be passed as --uri to mongodump/mongorestore
  */
-export function parseConnectionString(connectionString: string): {
-  host: string
-  port: string
-  database: string
-  user?: string
-  password?: string
-} {
-  // Handle mongodb:// and mongodb+srv:// schemes
+export function parseConnectionString(
+  connectionString: string,
+): ParsedConnectionString {
   const url = new URL(connectionString)
 
+  const database = url.pathname.replace(/^\//, '') || 'test'
+
+  // SRV URIs must be passed as-is via --uri (DNS resolves actual hosts/ports)
+  if (url.protocol === 'mongodb+srv:') {
+    return {
+      isSrv: true,
+      uri: connectionString,
+      database,
+    }
+  }
+
+  // Standard mongodb:// URIs can be parsed into host/port
   const host = url.hostname || '127.0.0.1'
   const port = url.port || '27017'
-  const database = url.pathname.replace(/^\//, '') || 'test'
   const user = url.username || undefined
   const password = url.password || undefined
 
-  return { host, port, database, user, password }
+  return { isSrv: false, host, port, database, user, password }
 }
