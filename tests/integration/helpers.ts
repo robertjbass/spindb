@@ -12,6 +12,7 @@ import { portManager } from '../../core/port-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { paths } from '../../config/paths'
+import { isWindows } from '../../core/platform-service'
 import { Engine } from '../../types'
 
 const execAsync = promisify(exec)
@@ -160,8 +161,15 @@ export async function executeSQL(
     const engineImpl = getEngine(engine)
     // Use configured/bundled mongosh if available
     const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    const escaped = sql.replace(/'/g, "'\\''")
-    const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
+    // Windows uses double quotes, Unix uses single quotes for shell escaping
+    let cmd: string
+    if (isWindows()) {
+      const escaped = sql.replace(/"/g, '\\"')
+      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
+    } else {
+      const escaped = sql.replace(/'/g, "'\\''")
+      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
+    }
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -279,10 +287,15 @@ export async function waitForReady(
         const mongoshPath = await engineImpl
           .getMongoshPath()
           .catch(() => 'mongosh')
-        await execAsync(
-          `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval "db.runCommand({ping:1})" --quiet`,
-          { timeout: 5000 },
-        )
+        // Windows uses double quotes, Unix uses single quotes for shell escaping
+        const pingScript = 'db.runCommand({ping:1})'
+        let cmd: string
+        if (isWindows()) {
+          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval "${pingScript}" --quiet`
+        } else {
+          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval '${pingScript}' --quiet`
+        }
+        await execAsync(cmd, { timeout: 5000 })
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)

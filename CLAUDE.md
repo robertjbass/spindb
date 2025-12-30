@@ -243,7 +243,7 @@ pnpm test:mysql     # MySQL integration
 pnpm test:mongodb   # MongoDB integration
 ```
 
-**Note:** All test scripts use `--test-concurrency=1` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." See CONTRIBUTING.md for details.
+**Note:** All test scripts use `--test-concurrency=1 --experimental-test-isolation=none` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." The `--test-concurrency=1` alone only limits parallelism but still uses workers for isolation; `--experimental-test-isolation=none` completely disables worker isolation.
 
 ### Adding a New Command
 1. Create `cli/commands/{name}.ts`

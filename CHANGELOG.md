@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2025-12-30
+
+### Fixed
+- **Windows MongoDB test failures** - Test helpers now use platform-aware shell quoting (double quotes on Windows, single quotes on Unix) for `mongosh --eval` commands
+
+### Changed
+- **Simplified test scripts** - Removed redundant `--test-concurrency=1` flag from all test scripts; `--experimental-test-isolation=none` is sufficient to disable worker isolation
+- **CI: Added MongoDB binary verification on Windows** - Post-install step verifies `mongod`, `mongosh`, and `mongodump` are usable before running tests
+
 ## [0.12.0] - 2025-12-30
 
 ### Added
