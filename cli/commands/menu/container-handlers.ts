@@ -57,8 +57,6 @@ export async function handleCreate(): Promise<'main' | void> {
   let selectedEngine: string | null = null
   let selectedVersion: string | null = null
   let containerName: string | null = null
-  let selectedPort: number | null = null
-  let selectedDatabase: string | null = null
   let sqlitePath: string | undefined = undefined
 
   // Step 1: Engine selection (back returns to main menu)
@@ -71,7 +69,6 @@ export async function handleCreate(): Promise<'main' | void> {
 
   // Step 2: Version selection (back returns to engine)
   while (selectedVersion === null) {
-    // selectedEngine is guaranteed non-null here (loop doesn't exit until it's set)
     const result = await promptVersion(selectedEngine!, { includeBack: true })
     if (result === MAIN_MENU_VALUE) return 'main'
     if (result === BACK_VALUE) {
@@ -91,49 +88,28 @@ export async function handleCreate(): Promise<'main' | void> {
     containerName = result
   }
 
-  // Step 4: Database name (back returns to container name)
-  while (selectedDatabase === null) {
-    // containerName and selectedEngine are guaranteed non-null here
-    const result = await promptDatabaseName(containerName!, selectedEngine!, {
-      allowBack: true,
-    })
-    if (result === null) {
-      containerName = null
-      continue
-    }
-    selectedDatabase = result
-  }
+  // At this point, all wizard values are guaranteed to be set
+  const engine = selectedEngine!
+  const version = selectedVersion!
+  const name = containerName!
 
-  // Step 5: Port or SQLite path (back returns to database name)
-  const isSQLite = selectedEngine === 'sqlite'
+  // Step 4: Database name (defaults to container name, sanitized)
+  const database = await promptDatabaseName(name, engine)
+
+  // Step 5: Port or SQLite path
+  const isSQLite = engine === 'sqlite'
+  let port: number
   if (isSQLite) {
     // SQLite doesn't need a port, but needs a path
-    // containerName is guaranteed non-null here
-    sqlitePath = await promptSqlitePath(containerName!)
-    // promptSqlitePath doesn't support back yet, but file path is optional
-    selectedPort = 0
+    sqlitePath = await promptSqlitePath(name)
+    port = 0
   } else {
-    while (selectedPort === null) {
-      // selectedEngine is guaranteed non-null here
-      const engineDefaults = getEngineDefaults(selectedEngine!)
-      const result = await promptPort(engineDefaults.defaultPort, {
-        allowBack: true,
-      })
-      if (result === null) {
-        selectedDatabase = null
-        continue
-      }
-      selectedPort = result
-    }
+    const engineDefaults = getEngineDefaults(engine)
+    port = await promptPort(engineDefaults.defaultPort)
   }
 
   // Now we have all values - proceed with container creation
-  // At this point, all values are guaranteed to be set (wizard doesn't exit until they are)
-  const engine = selectedEngine!
-  const version = selectedVersion!
-  const port = selectedPort!
-  const database = selectedDatabase!
-  let containerNameFinal = containerName!
+  let containerNameFinal = name
 
   console.log()
   console.log(header('Creating Database Container'))
@@ -186,6 +162,13 @@ export async function handleCreate(): Promise<'main' | void> {
     )
 
     if (!installed) {
+      console.log()
+      console.log(
+        uiWarning(
+          'Container creation cancelled - required tools not installed.',
+        ),
+      )
+      await pressEnterToContinue()
       return
     }
 
@@ -196,6 +179,7 @@ export async function handleCreate(): Promise<'main' | void> {
           `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
         ),
       )
+      await pressEnterToContinue()
       return
     }
 
@@ -615,12 +599,15 @@ export async function showContainerSubmenu(
         : 'Start container first',
   })
 
-  // Run SQL - always enabled for SQLite (if file exists), server databases need to be running
+  // Run SQL/script - always enabled for SQLite (if file exists), server databases need to be running
   const canRunSql = isSQLite ? existsSync(config.database) : isRunning
+  // MongoDB uses JavaScript scripts, not SQL
+  const runScriptLabel =
+    config.engine === 'mongodb' ? 'Run script file' : 'Run SQL file'
   actionChoices.push({
     name: canRunSql
-      ? `${chalk.yellow('▷')} Run SQL file`
-      : chalk.gray('▷ Run SQL file'),
+      ? `${chalk.yellow('▷')} ${runScriptLabel}`
+      : chalk.gray(`▷ ${runScriptLabel}`),
     value: 'run-sql',
     disabled: canRunSql
       ? false

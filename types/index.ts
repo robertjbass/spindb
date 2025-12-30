@@ -18,6 +18,7 @@ export enum Engine {
   PostgreSQL = 'postgresql',
   MySQL = 'mysql',
   SQLite = 'sqlite',
+  MongoDB = 'mongodb',
 }
 
 export type ProgressCallback = (progress: {
@@ -104,6 +105,11 @@ export type BinaryTool =
   | 'mysqladmin'
   // SQLite tools
   | 'sqlite3'
+  // MongoDB tools
+  | 'mongod'
+  | 'mongosh'
+  | 'mongodump'
+  | 'mongorestore'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -144,6 +150,11 @@ export type SpinDBConfig = {
     mysqladmin?: BinaryConfig
     // SQLite tools
     sqlite3?: BinaryConfig
+    // MongoDB tools
+    mongod?: BinaryConfig
+    mongosh?: BinaryConfig
+    mongodump?: BinaryConfig
+    mongorestore?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

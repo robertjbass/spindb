@@ -73,6 +73,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['sqlite3'],
     maxConnections: 0, // N/A - file-based
   },
+  mongodb: {
+    defaultVersion: '8.0',
+    defaultPort: 27017,
+    portRange: { start: 27017, end: 27100 },
+    supportedVersions: ['6.0', '7.0', '8.0'],
+    latestVersion: '8.0',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'mongodb',
+    logFileName: 'mongodb.log',
+    pidFileName: 'mongod.pid',
+    dataSubdir: 'data',
+    clientTools: ['mongosh', 'mongodump', 'mongorestore'],
+    maxConnections: 0, // Not applicable for MongoDB
+  },
 }
 
 /**

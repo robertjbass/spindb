@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2025-12-30
+
+### Added
+- **MongoDB support** - Full container lifecycle for MongoDB 6.0, 7.0, and 8.0
+  - Create, start, stop, delete containers
+  - Backup with `mongodump` and restore with `mongorestore`
+  - Clone containers
+  - Run JavaScript files or inline scripts via `spindb run`
+  - System binary detection for `mongod`, `mongosh`, `mongodump`, `mongorestore`
+  - Full cross-platform support (macOS, Linux, Windows) with CI integration tests
+
 ## [0.11.2] - 2025-12-29
 
 ### Changed

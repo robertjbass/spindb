@@ -412,6 +412,122 @@ const sqliteDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// MongoDB Dependencies
+// =============================================================================
+
+const mongodbDependencies: EngineDependencies = {
+  engine: 'mongodb',
+  displayName: 'MongoDB',
+  dependencies: [
+    {
+      name: 'mongod',
+      binary: 'mongod',
+      description: 'MongoDB server daemon',
+      packages: {
+        brew: {
+          package: 'mongodb/brew/mongodb-community',
+          preInstall: ['brew tap mongodb/brew'],
+        },
+        // MongoDB requires their own apt repository, not available in default repos
+        choco: { package: 'mongodb' },
+        winget: { package: 'MongoDB.Server' },
+        scoop: { package: 'mongodb' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Add MongoDB tap: brew tap mongodb/brew',
+          'Then run: brew install mongodb-community',
+          'For specific versions: brew install mongodb-community@7.0',
+        ],
+        linux: [
+          'MongoDB requires adding their official repository.',
+          'Ubuntu/Debian: Follow https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/',
+          'RHEL/CentOS: Follow https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-red-hat/',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mongodb',
+          'Using winget: winget install MongoDB.Server',
+          'Or download from: https://www.mongodb.com/try/download/community',
+        ],
+      },
+    },
+    {
+      name: 'mongosh',
+      binary: 'mongosh',
+      description: 'MongoDB Shell (modern interactive shell)',
+      packages: {
+        brew: { package: 'mongosh' },
+        choco: { package: 'mongodb-shell' },
+        winget: { package: 'MongoDB.Shell' },
+        scoop: { package: 'mongosh' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install mongosh',
+          'Or download from: https://www.mongodb.com/try/download/shell',
+        ],
+        linux: [
+          'Download from: https://www.mongodb.com/try/download/shell',
+          'Or install via npm: npm install -g mongosh',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mongodb-shell',
+          'Using winget: winget install MongoDB.Shell',
+          'Or download from: https://www.mongodb.com/try/download/shell',
+        ],
+      },
+    },
+    {
+      name: 'mongodump',
+      binary: 'mongodump',
+      description: 'MongoDB database backup utility',
+      packages: {
+        brew: { package: 'mongodb-database-tools' },
+        choco: { package: 'mongodb-database-tools' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install mongodb-database-tools',
+          'Or download from: https://www.mongodb.com/try/download/database-tools',
+        ],
+        linux: [
+          'Download from: https://www.mongodb.com/try/download/database-tools',
+          'Extract and add to PATH',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mongodb-database-tools',
+          'Or download from: https://www.mongodb.com/try/download/database-tools',
+        ],
+      },
+    },
+    {
+      name: 'mongorestore',
+      binary: 'mongorestore',
+      description: 'MongoDB database restore utility',
+      packages: {
+        brew: { package: 'mongodb-database-tools' },
+        choco: { package: 'mongodb-database-tools' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install mongodb-database-tools',
+          'Or download from: https://www.mongodb.com/try/download/database-tools',
+        ],
+        linux: [
+          'Download from: https://www.mongodb.com/try/download/database-tools',
+          'Extract and add to PATH',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mongodb-database-tools',
+          'Or download from: https://www.mongodb.com/try/download/database-tools',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -543,6 +659,7 @@ export const engineDependencies: EngineDependencies[] = [
   postgresqlDependencies,
   mysqlDependencies,
   sqliteDependencies,
+  mongodbDependencies,
 ]
 
 /**

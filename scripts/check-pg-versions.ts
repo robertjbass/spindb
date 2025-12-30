@@ -26,9 +26,13 @@ async function checkForNewVersions(): Promise<void> {
   console.log('Checking for new PostgreSQL versions on zonky.io...')
 
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
     if (!response.ok) {
-      console.log(`Warning: Could not fetch zonky.io versions (HTTP ${response.status}), skipping check`)
+      console.log(
+        `Warning: Could not fetch zonky.io versions (HTTP ${response.status}), skipping check`,
+      )
       process.exit(0)
     }
 
@@ -51,14 +55,18 @@ async function checkForNewVersions(): Promise<void> {
 
     // Find versions available on zonky.io but not in SUPPORTED_MAJOR_VERSIONS
     const supportedSet = new Set(SUPPORTED_MAJOR_VERSIONS)
-    const newVersions = [...majorVersions].filter((v) => !supportedSet.has(v)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
+    const newVersions = [...majorVersions]
+      .filter((v) => !supportedSet.has(v))
+      .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
 
     if (newVersions.length > 0) {
       console.error('\n' + '='.repeat(70))
       console.error('NEW POSTGRESQL VERSION(S) AVAILABLE ON ZONKY.IO!')
       console.error('='.repeat(70))
       console.error(`\nNew major version(s): ${newVersions.join(', ')}`)
-      console.error(`Currently supported:  ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`)
+      console.error(
+        `Currently supported:  ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
+      )
       console.error('\nTo add support:')
       console.error('1. Add the new version to SUPPORTED_MAJOR_VERSIONS in:')
       console.error('   engines/postgresql/binary-urls.ts')
@@ -69,7 +77,9 @@ async function checkForNewVersions(): Promise<void> {
       process.exit(1)
     }
 
-    console.log(`All available versions are supported (${SUPPORTED_MAJOR_VERSIONS.join(', ')})`)
+    console.log(
+      `All available versions are supported (${SUPPORTED_MAJOR_VERSIONS.join(', ')})`,
+    )
     process.exit(0)
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
