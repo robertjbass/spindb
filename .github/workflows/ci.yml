@@ -4,6 +4,7 @@ on:
   # TODO: uncomment for testing CI
   # push:
   #   branches: [dev]
+  # TODO: delete after testing
   push:
     branches: [feature/mongodb]
   pull_request:
@@ -399,6 +400,35 @@ jobs:
               break
             }
           }
+
+      # Verify MongoDB binaries are usable after install
+      - name: Verify MongoDB installation (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Verifying MongoDB installation..."
+          try {
+            $mongodVersion = mongod --version | Select-Object -First 1
+            Write-Host "✓ mongod: $mongodVersion"
+          } catch {
+            Write-Host "✗ mongod not found or not working"
+            exit 1
+          }
+          try {
+            $mongoshVersion = mongosh --version
+            Write-Host "✓ mongosh: $mongoshVersion"
+          } catch {
+            Write-Host "✗ mongosh not found or not working"
+            exit 1
+          }
+          try {
+            $mongodumpVersion = mongodump --version | Select-Object -First 1
+            Write-Host "✓ mongodump: $mongodumpVersion"
+          } catch {
+            Write-Host "✗ mongodump not found or not working"
+            exit 1
+          }
+          Write-Host "All MongoDB binaries verified successfully"
 
       - name: Show installed engines
         run: pnpm start engines list
