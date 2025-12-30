@@ -4,9 +4,6 @@ on:
   # TODO: uncomment for testing CI
   # push:
   #   branches: [dev]
-  # TODO: delete after testing
-  push:
-    branches: [feature/mongodb]
   pull_request:
     branches: [main]
   workflow_dispatch:
