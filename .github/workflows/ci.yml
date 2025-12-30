@@ -4,8 +4,6 @@ on:
   # TODO: uncomment for testing CI
   # push:
   #   branches: [dev]
-  push:
-    branches: [feature/test-speed]
   pull_request:
     branches: [main]
   workflow_dispatch:
