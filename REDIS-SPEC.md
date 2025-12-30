@@ -9,9 +9,10 @@ This document provides the complete specification for adding Redis support to Sp
 3. [Files to Create](#files-to-create)
 4. [Files to Modify](#files-to-modify)
 5. [Edge Cases and Special Handling](#edge-cases-and-special-handling)
-6. [Test Requirements](#test-requirements)
-7. [CI/CD Requirements](#cicd-requirements)
-8. [Pass/Fail Criteria](#passfail-criteria)
+6. [UI and Menu Integration](#ui-and-menu-integration)
+7. [Test Requirements](#test-requirements)
+8. [CI/CD Requirements](#cicd-requirements)
+9. [Pass/Fail Criteria](#passfail-criteria)
 
 ---
 
@@ -866,6 +867,49 @@ export function getConnectionString(
 
   // ... rest
 }
+
+/**
+ * Get key count for Redis (equivalent to getRowCount for SQL databases)
+ * Used to verify data in integration tests
+ */
+export async function getKeyCount(
+  port: number,
+  pattern: string = '*',
+): Promise<number> {
+  const { stdout } = await execAsync(
+    `redis-cli -h 127.0.0.1 -p ${port} KEYS "${pattern}" | wc -l`
+  )
+  return parseInt(stdout.trim(), 10)
+}
+
+// Alternative: Use DBSIZE for total key count (faster for large databases)
+export async function getDbSize(port: number): Promise<number> {
+  const { stdout } = await execAsync(
+    `redis-cli -h 127.0.0.1 -p ${port} DBSIZE`
+  )
+  // Output format: "(integer) 5"
+  const match = stdout.match(/\d+/)
+  return match ? parseInt(match[0], 10) : 0
+}
+```
+
+**Update `getRowCount` function to handle Redis:**
+```typescript
+export async function getRowCount(
+  engine: Engine,
+  port: number,
+  database: string,
+  tableOrPattern: string,
+): Promise<number> {
+  // ... existing SQL/MongoDB cases
+
+  if (engine === Engine.Redis) {
+    // For Redis, tableOrPattern is a key pattern (e.g., "user:*")
+    return getKeyCount(port, tableOrPattern)
+  }
+
+  // ... rest
+}
 ```
 
 ### 8. `package.json`
@@ -874,10 +918,12 @@ export function getConnectionString(
 ```json
 {
   "scripts": {
-    "test:redis": "node --import tsx --test --experimental-test-isolation=none tests/integration/redis.test.ts"
+    "test:redis": "node --import tsx --test --test-concurrency=1 --experimental-test-isolation=none tests/integration/redis.test.ts"
   }
 }
 ```
+
+**Note:** The `--test-concurrency=1` flag is required along with `--experimental-test-isolation=none` to prevent a macOS-specific serialization bug in Node 22 where worker thread IPC fails.
 
 ---
 
@@ -942,7 +988,21 @@ Redis on Windows:
 redis-cli -h remote DUMP key | redis-cli -h local RESTORE key 0 ...
 ```
 
-Or document that `--from` with Redis connection strings isn't fully supported.
+**Recommended approach:** Throw a clear error with guidance:
+```typescript
+async dumpFromConnectionString(
+  connectionString: string,
+  outputPath: string,
+): Promise<DumpResult> {
+  throw new SpinDBError(
+    'Redis does not support creating containers from remote connection strings.\n' +
+    'To migrate data from a remote Redis instance:\n' +
+    '  1. On remote server: redis-cli --rdb dump.rdb\n' +
+    '  2. Copy dump.rdb to local machine\n' +
+    '  3. spindb restore <container> dump.rdb'
+  )
+}
+```
 
 ### 7. Enhanced CLI (iredis)
 
@@ -950,6 +1010,267 @@ Add support for `--iredis` flag in connect command:
 - Check if iredis is installed
 - Offer to install if not
 - Add to `os-dependencies.ts`
+
+**Implementation in `cli/commands/connect.ts`:**
+```typescript
+// Add option
+.option('--iredis', 'Use iredis (Redis CLI with auto-completion and syntax highlighting)')
+
+// In connect handler, check for Redis + iredis flag
+if (config.engine === 'redis' && options.iredis) {
+  const iredisPath = await configManager.getBinaryPath('iredis')
+  if (!iredisPath) {
+    throw new SpinDBError(
+      'iredis is not installed. Install it with:\n' +
+      '  macOS: brew install iredis\n' +
+      '  pip: pip install iredis'
+    )
+  }
+  // Use iredis instead of redis-cli
+}
+```
+
+### 8. Redis Configuration File
+
+For better control over persistence and memory settings, generate a `redis.conf` file in the data directory:
+
+```typescript
+function generateRedisConfig(options: {
+  port: number
+  dataDir: string
+  logFile: string
+  pidFile: string
+}): string {
+  return `# SpinDB generated Redis configuration
+port ${options.port}
+bind 127.0.0.1
+dir ${options.dataDir}
+daemonize yes
+logfile ${options.logFile}
+pidfile ${options.pidFile}
+
+# Persistence - RDB snapshots
+save 900 1
+save 300 10
+save 60 10000
+dbfilename dump.rdb
+
+# Memory management (optional, uncomment to limit)
+# maxmemory 256mb
+# maxmemory-policy allkeys-lru
+`
+}
+```
+
+**Start command with config file:**
+```bash
+redis-server /path/to/redis.conf
+```
+
+This is preferred over command-line arguments for:
+- Easier debugging (can inspect config file)
+- More configuration options available
+- Consistent with production Redis deployments
+
+### 9. TransactionManager Usage
+
+Use `TransactionManager` for multi-step operations to ensure cleanup on failure:
+
+```typescript
+import { TransactionManager } from '../../core/transaction-manager'
+
+async initDataDir(
+  containerName: string,
+  version: string,
+  options?: Record<string, unknown>,
+): Promise<string> {
+  const tx = new TransactionManager()
+  const dataDir = paths.getContainerDataPath(containerName, { engine: 'redis' })
+
+  // Register rollback for directory creation
+  tx.addRollback(async () => {
+    if (existsSync(dataDir)) {
+      await rm(dataDir, { recursive: true })
+    }
+  })
+
+  try {
+    // Create data directory
+    await mkdir(dataDir, { recursive: true })
+
+    // Generate config file
+    const configPath = join(dataDir, 'redis.conf')
+    const configContent = generateRedisConfig({
+      port: options?.port as number || 6379,
+      dataDir,
+      logFile: join(dataDir, '..', 'redis.log'),
+      pidFile: join(dataDir, '..', 'redis.pid'),
+    })
+    await writeFile(configPath, configContent)
+
+    // Commit transaction (clears rollback handlers)
+    tx.commit()
+
+    return dataDir
+  } catch (error) {
+    await tx.rollback()
+    throw error
+  }
+}
+```
+
+### 10. Wait for Ready with Retry Loop
+
+The `status()` and `start()` methods need proper retry logic:
+
+```typescript
+/**
+ * Wait for Redis to be ready to accept connections
+ */
+async function waitForReady(
+  port: number,
+  timeoutMs = 30000,
+): Promise<boolean> {
+  const redisCli = await getRedisCliPath()
+  if (!redisCli) return false
+
+  const startTime = Date.now()
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const { stdout } = await execAsync(
+        `"${redisCli}" -h 127.0.0.1 -p ${port} PING`,
+        { timeout: 2000 }
+      )
+
+      if (stdout.trim() === 'PONG') {
+        logDebug(`Redis ready on port ${port}`)
+        return true
+      }
+    } catch {
+      // Not ready yet, continue polling
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+
+  logWarning(`Redis did not become ready within ${timeoutMs}ms`)
+  return false
+}
+
+// Usage in start():
+async start(
+  container: ContainerConfig,
+  onProgress?: ProgressCallback,
+): Promise<{ port: number; connectionString: string }> {
+  const { port, name } = container
+
+  onProgress?.('Starting Redis server...')
+
+  // Start Redis (implementation details)
+  await this.startRedisServer(container)
+
+  onProgress?.('Waiting for Redis to be ready...')
+
+  const ready = await waitForReady(port, 30000)
+  if (!ready) {
+    throw new SpinDBError(`Redis failed to start on port ${port}. Check logs at: ${paths.getContainerLogPath(name, { engine: 'redis' })}`)
+  }
+
+  return {
+    port,
+    connectionString: this.getConnectionString(container),
+  }
+}
+```
+
+---
+
+## UI and Menu Integration
+
+### Engine Icon
+
+Add Redis icon to the interactive menu system. Use 🔴 (red circle) for Redis:
+
+**Update `cli/commands/menu/container-handlers.ts` or wherever engine icons are defined:**
+```typescript
+export function getEngineIcon(engine: string): string {
+  switch (engine) {
+    case 'postgresql':
+      return '🐘'
+    case 'mysql':
+      return '🐬'
+    case 'mongodb':
+      return '🍃'
+    case 'sqlite':
+      return '🗄️'
+    case 'redis':
+      return '🔴'  // ADD THIS
+    default:
+      return '🗄️'
+  }
+}
+```
+
+### Menu Language Updates
+
+Redis uses "commands" not "SQL" or "scripts". Update menu text dynamically:
+
+**In `cli/commands/menu/sql-handlers.ts`:**
+```typescript
+// Determine script terminology based on engine
+function getScriptTerminology(engine: string): {
+  type: string
+  typeLower: string
+  fileExtension: string
+  placeholder: string
+} {
+  switch (engine) {
+    case 'mongodb':
+      return {
+        type: 'Script',
+        typeLower: 'script',
+        fileExtension: '.js',
+        placeholder: 'db.collection.find({})',
+      }
+    case 'redis':
+      return {
+        type: 'Command',
+        typeLower: 'command',
+        fileExtension: '.redis',
+        placeholder: 'SET key value',
+      }
+    default:
+      return {
+        type: 'SQL',
+        typeLower: 'SQL',
+        fileExtension: '.sql',
+        placeholder: 'SELECT * FROM table',
+      }
+  }
+}
+
+// Usage in menu
+const terms = getScriptTerminology(container.engine)
+const choices = [
+  { name: `Run ${terms.type} file`, value: 'file' },
+  { name: `Run inline ${terms.typeLower}`, value: 'inline' },
+]
+```
+
+### Connect Command Menu
+
+When showing connection options, include iredis for Redis:
+
+```typescript
+if (container.engine === 'redis') {
+  const choices = [
+    { name: 'redis-cli (default)', value: 'redis-cli' },
+    { name: 'iredis (enhanced)', value: 'iredis' },
+  ]
+  // Show menu if iredis is installed
+}
+```
 
 ---
 
@@ -995,14 +1316,48 @@ Create `tests/integration/redis.test.ts` with **14+ tests**:
 
 Create `tests/unit/redis-*.test.ts`:
 
-1. **redis-version-validator.test.ts**
+1. **redis-version-validator.test.ts** (required)
    - Test `parseVersion()` with valid/invalid versions
    - Test `isVersionSupported()` for 6.x, 7.x
    - Test `getMajorVersion()`
 
-2. **redis-binary-detection.test.ts** (if mocking is possible)
-   - Test path detection logic
-   - Test version parsing from output
+2. **redis-binary-detection.test.ts** (required)
+   - Test path detection logic with mocked filesystem
+   - Test version parsing from `redis-server --version` output
+   - Test Homebrew path detection on different architectures
+
+   ```typescript
+   import { describe, it, mock } from 'node:test'
+   import assert from 'node:assert'
+
+   describe('Redis Binary Detection', () => {
+     it('should parse version from redis-server --version output', () => {
+       const output = 'Redis server v=7.2.4 sha=00000000:0 malloc=libc bits=64 build=...'
+       const version = parseVersionFromOutput(output)
+       assert.strictEqual(version, '7.2.4')
+     })
+
+     it('should handle various version output formats', () => {
+       // Test different Redis version output formats
+       const outputs = [
+         { input: 'Redis server v=6.2.14 ...', expected: '6.2.14' },
+         { input: 'Redis server v=7.0.0 ...', expected: '7.0.0' },
+         { input: 'v=7.2.4', expected: '7.2.4' },
+       ]
+       for (const { input, expected } of outputs) {
+         assert.strictEqual(parseVersionFromOutput(input), expected)
+       }
+     })
+
+     it('should check Homebrew paths in correct order', () => {
+       // Verify ARM64 paths checked before Intel paths on Apple Silicon
+     })
+   })
+   ```
+
+3. **redis-command-builder.test.ts** (recommended)
+   - Test `buildRedisCliCommand()` for Windows vs Unix quoting
+   - Test command escaping
 
 ---
 
@@ -1146,7 +1501,12 @@ pnpm start deps check --engine redis
 - [ ] README.md - Add Redis to supported engines table
 - [ ] CHANGELOG.md - Add to unreleased section
 - [ ] TODO.md - Mark Redis as completed
-- [ ] ENGINES.md - Move Redis from "Planned" to "Supported"
+- [ ] ENGINES.md - Move Redis from "Planned" to "Supported" table:
+  ```markdown
+  ## Supported
+  | 🔴 **Redis** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Versions 6-7, in-memory data store |
+  ```
+  Also update "Planned" section to remove Redis.
 
 ---
 
@@ -1159,34 +1519,43 @@ pnpm start deps check --engine redis
 - [ ] `engines/redis/version-validator.ts` - Version parsing
 - [ ] `engines/redis/binary-detection.ts` - System binary detection
 
-### Files to Modify (12)
+### Files to Modify (14)
 - [ ] `types/index.ts` - Add Engine.Redis, BinaryTool types
 - [ ] `config/engine-defaults.ts` - Add Redis defaults
 - [ ] `config/os-dependencies.ts` - Add Redis dependencies + iredis
 - [ ] `engines/index.ts` - Register Redis engine
-- [ ] `cli/commands/menu/sql-handlers.ts` - Update language for Redis
+- [ ] `cli/commands/menu/sql-handlers.ts` - Update language for Redis ("Command" not "SQL")
+- [ ] `cli/commands/menu/container-handlers.ts` - Add Redis icon (🔴)
 - [ ] `cli/commands/create.ts` - Add redis:// detection
 - [ ] `cli/commands/connect.ts` - Add --iredis flag
-- [ ] `tests/integration/helpers.ts` - Add Redis test helpers
-- [ ] `package.json` - Add test:redis script
+- [ ] `tests/integration/helpers.ts` - Add Redis test helpers (getKeyCount, getDbSize)
+- [ ] `package.json` - Add test:redis script (with --test-concurrency=1)
 - [ ] `.github/workflows/ci.yml` - Add Redis test job
 - [ ] `README.md` - Document Redis support
 - [ ] `CHANGELOG.md` - Add to unreleased
+- [ ] `ENGINES.md` - Move Redis from Planned to Supported
 
-### Test Files to Create (2+)
+### Test Files to Create (4)
 - [ ] `tests/fixtures/redis/seeds/sample-db.redis`
-- [ ] `tests/integration/redis.test.ts`
+- [ ] `tests/integration/redis.test.ts` - 14+ integration tests
 - [ ] `tests/unit/redis-version-validator.test.ts`
+- [ ] `tests/unit/redis-binary-detection.test.ts`
 
 ### Key Implementation Notes
 
 1. **Use MongoDB as reference** - Similar system-binary pattern
 2. **Script language is Redis commands** - Not SQL or JavaScript
 3. **Numbered databases (0-15)** - Store as string in config
-4. **RDB for backups** - Binary format, starts with "REDIS"
-5. **PING/PONG for status** - Connection testing
+4. **RDB for backups** - Binary format, starts with "REDIS" magic bytes
+5. **PING/PONG for status** - Connection testing with retry loop
 6. **Update menu language** - "Command" not "SQL" for Redis
 7. **Windows limited support** - Consider skipping Windows in CI initially
+8. **TransactionManager** - Use for multi-step operations (initDataDir, restore)
+9. **Redis config file** - Generate redis.conf in data directory for persistence settings
+10. **dumpFromConnectionString** - Throw clear error (not supported for Redis)
+11. **Engine icon** - Use 🔴 (red circle) in menus
+12. **Test helpers** - Use `getKeyCount()` or `getDbSize()` instead of `getRowCount()`
+13. **Test flags** - Include `--test-concurrency=1` in test script
 
 ---
 
