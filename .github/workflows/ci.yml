@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  # TODO: uncomment for testing CI on dev branch
+  # TODO: uncomment for testing CI
   # push:
   #   branches: [dev]
   pull_request:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   # ============================================
-  # Unit Tests - Run first for fast feedback
+  # Unit Tests
   # ============================================
   unit-tests:
     name: Unit Tests (${{ matrix.os }})
@@ -45,13 +45,37 @@ jobs:
         timeout-minutes: 10
 
   # ============================================
+  # Lint and Type Check - Runs in parallel with unit tests
+  # ============================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  # ============================================
   # PostgreSQL Integration Tests
   # Uses SpinDB to download and manage PostgreSQL
   # ============================================
   test-postgresql:
     name: PostgreSQL (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +95,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries - these are ~100MB+ downloads
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download PostgreSQL binaries
       # NOTE: Keep this version in sync with config/engine-defaults.ts defaultVersion
@@ -94,7 +126,6 @@ jobs:
   test-mysql:
     name: MySQL (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -116,11 +147,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Use SpinDB to install MySQL via system package manager
-      - name: Install MySQL via SpinDB
-        run: pnpm start engines download mysql
+      # NOTE: macOS MySQL caching removed - Homebrew dependencies (protobuf, zlib)
+      # are dynamically linked and not included in Cellar cache, causing dyld errors.
+      # Fresh install is more reliable than partial caching.
 
-      # Windows needs MySQL added to PATH after choco install
+      # Cache Chocolatey packages for MySQL on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\ProgramData\chocolatey\lib\mysql
+            C:\tools\mysql
+          key: choco-mysql-${{ runner.os }}
+          restore-keys: |
+            choco-mysql-
+
+      # Windows needs MySQL added to PATH BEFORE install check (for cache hits)
       - name: Add MySQL to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -134,10 +177,14 @@ jobs:
           foreach ($path in $possiblePaths) {
             if (Test-Path $path) {
               echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Found MySQL at: $path"
+              echo "Added MySQL to PATH: $path"
               break
             }
           }
+
+      # Use SpinDB to install MySQL via system package manager
+      - name: Install MySQL via SpinDB
+        run: pnpm start engines download mysql
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -153,7 +200,6 @@ jobs:
   test-sqlite:
     name: SQLite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -174,11 +220,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Use SpinDB to install SQLite via system package manager
-      - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
+      # Cache Chocolatey packages for SQLite on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\ProgramData\chocolatey\lib\SQLite
+          key: choco-sqlite-${{ runner.os }}
+          restore-keys: |
+            choco-sqlite-
 
-      # Windows needs SQLite added to PATH after choco install
+      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
       - name: Add SQLite to PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -186,7 +238,12 @@ jobs:
           $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
           if (Test-Path $sqlitePath) {
             echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            echo "Added SQLite to PATH: $sqlitePath"
           }
+
+      # Use SpinDB to install SQLite via system package manager
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -201,7 +258,6 @@ jobs:
   test-cli-e2e:
     name: CLI E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -222,6 +278,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Cache PostgreSQL binaries - these are ~100MB+ downloads
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
+
+      # Cache Chocolatey packages for SQLite on Windows
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\ProgramData\chocolatey\lib\SQLite
+          key: choco-sqlite-${{ runner.os }}
+          restore-keys: |
+            choco-sqlite-
+
+      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
+      - name: Add SQLite to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
+          if (Test-Path $sqlitePath) {
+            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            echo "Added SQLite to PATH: $sqlitePath"
+          }
+
       # Use SpinDB to install all required engines
       # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
       - name: Install PostgreSQL via SpinDB
@@ -230,47 +315,12 @@ jobs:
       - name: Install SQLite via SpinDB
         run: pnpm start engines download sqlite
 
-      # Windows needs SQLite added to PATH after choco install
-      - name: Add SQLite to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
-          if (Test-Path $sqlitePath) {
-            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          }
-
       - name: Show installed engines
         run: pnpm start engines list
 
       - name: Run CLI E2E tests
         run: pnpm test:cli
         timeout-minutes: 15
-
-  # ============================================
-  # Lint and Type Check
-  # ============================================
-  lint:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run lint
-        run: pnpm lint
 
   # ============================================
   # Summary Job - Ensures all tests pass

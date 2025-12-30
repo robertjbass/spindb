@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2025-12-29
+
+### Changed
+- CI: Parallelized test execution with caching for faster builds
+- CI: Updated to Node.js 22
+- CI: Added `--test-concurrency=1` flag to all test scripts to prevent macOS Node 22 serialization bug
+
 ## [0.11.0] - 2025-12-29
 
 ### Highlights
@@ -46,11 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Container creation duplicate-name loop** - Users can now cancel by pressing Enter (was previously stuck requiring Ctrl+C)
 - **Added `warnings` field to `DumpResult` type** - Proper type safety for warning propagation
-
-### Improved
-- Added explicit fall-through comments in version compatibility switch statement for better code clarity
-- Improved Linux `switchVersionLinux` documentation to clarify intentional no-op behavior (Linux uses versioned paths directly)
-- Removed unused `BACK_VALUE` and `MAIN_MENU_VALUE` imports from backup-handlers.ts
 
 ## [0.10.5] - 2025-12-29
 
@@ -294,11 +296,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite creation no longer prompts for port
 - SQLite shell options now show sqlite3/litecli instead of psql/pgcli
 - Container rename now works correctly for SQLite containers
-
-### Documentation
-- Comprehensive engine documentation in TODO.md (backup formats, binary sizes)
-- FEATURE.md checklist for adding new engines
-- Silent catch blocks documentation in TODO.md
 
 ## [0.7.1] - 2025-11-30
 

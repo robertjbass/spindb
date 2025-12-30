@@ -1,7 +1,7 @@
 {
   "name": "spindb",
-  "version": "0.11.1",
-  "description": "Spin up local database containers without Docker. A DBngin-like CLI for PostgreSQL and MySQL.",
+  "version": "0.11.2",
+  "description": "Run local PostgreSQL, MySQL, and SQLite databases without Docker. A lightweight DBngin/Postgres.app alternative with an interactive CLI.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
