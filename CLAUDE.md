@@ -398,7 +398,6 @@ Error messages should include actionable fix suggestions.
 1. **Client tools required** - psql/mysql/mongosh must be installed separately
 2. **MySQL and MongoDB use system binaries** - Unlike PostgreSQL which downloads binaries
 3. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
-4. **MongoDB Windows support** - Skipped in CI due to complex installation requirements
 
 ## Publishing & Versioning
 

@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clone containers
   - Run JavaScript files or inline scripts via `spindb run`
   - System binary detection for `mongod`, `mongosh`, `mongodump`, `mongorestore`
-  - Integration tests for macOS and Linux (Windows skipped due to complex MongoDB installation)
+  - Full cross-platform support (macOS, Linux, Windows) with CI integration tests
 
 ## [0.11.2] - 2025-12-29
 

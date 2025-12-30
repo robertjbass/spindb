@@ -102,7 +102,9 @@ export async function handleRunSql(containerName: string): Promise<void> {
   }
 
   console.log()
-  console.log(uiInfo(`Running ${scriptTypeLower} file against "${databaseName}"...`))
+  console.log(
+    uiInfo(`Running ${scriptTypeLower} file against "${databaseName}"...`),
+  )
   console.log()
 
   try {
