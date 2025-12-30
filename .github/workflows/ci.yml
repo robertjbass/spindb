@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   # ============================================
-  # Unit Tests - Run first for fast feedback
+  # Unit Tests
   # ============================================
   unit-tests:
     name: Unit Tests (${{ matrix.os }})
@@ -78,7 +78,6 @@ jobs:
   test-postgresql:
     name: PostgreSQL (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -129,7 +128,6 @@ jobs:
   test-mysql:
     name: MySQL (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -204,7 +202,6 @@ jobs:
   test-sqlite:
     name: SQLite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
@@ -263,7 +260,6 @@ jobs:
   test-cli-e2e:
     name: CLI E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
       fail-fast: false
       matrix:
