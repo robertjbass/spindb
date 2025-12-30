@@ -263,7 +263,10 @@ describe('getInstallCommand', () => {
 
     for (const version of versions) {
       const cmd = await getInstallCommand(version)
-      assert(typeof cmd === 'string', `Should return string for version ${version}`)
+      assert(
+        typeof cmd === 'string',
+        `Should return string for version ${version}`,
+      )
       assert(cmd.includes(version), `Command should include version ${version}`)
     }
   })

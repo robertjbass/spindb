@@ -1,7 +1,7 @@
 {
   "name": "spindb",
-  "version": "0.11.2",
-  "description": "Run local PostgreSQL, MySQL, and SQLite databases without Docker. A lightweight DBngin/Postgres.app alternative with an interactive CLI.",
+  "version": "0.12.0",
+  "description": "Run local database containers without Docker. Supports PostgreSQL, MySQL, SQLite, and MongoDB databases. A lightweight alternative to DBngin/Postgres.app/Atlas all-in-one database management tools with an interactive CLI.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
@@ -13,9 +13,10 @@
     "test:pg": "node --import tsx --test --test-concurrency=1 tests/integration/postgresql.test.ts",
     "test:mysql": "node --import tsx --test --test-concurrency=1 tests/integration/mysql.test.ts",
     "test:sqlite": "node --import tsx --test --test-concurrency=1 tests/integration/sqlite.test.ts",
+    "test:mongodb": "node --import tsx --test --test-concurrency=1 tests/integration/mongodb.test.ts",
     "test:unit": "node --import tsx --test --test-concurrency=1 tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --test-concurrency=1 tests/integration/cli-e2e.test.ts",
-    "test:integration": "run-s test:pg test:mysql test:sqlite",
+    "test:integration": "run-s test:pg test:mysql test:sqlite test:mongodb",
     "test:all": "run-s test:unit test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",

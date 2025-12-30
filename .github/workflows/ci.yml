@@ -4,6 +4,8 @@ on:
   # TODO: uncomment for testing CI
   # push:
   #   branches: [dev]
+  push:
+    branches: [feature/mongodb]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -253,6 +255,63 @@ jobs:
         timeout-minutes: 10
 
   # ============================================
+  # MongoDB Integration Tests
+  # Uses system-installed MongoDB via Homebrew/apt
+  # Skipped on Windows due to complex MongoDB installation
+  # ============================================
+  test-mongodb:
+    name: MongoDB (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Skip Windows due to complex MongoDB installation
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Install MongoDB on macOS via Homebrew
+      - name: Install MongoDB (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew tap mongodb/brew
+          brew install mongodb-community mongosh mongodb-database-tools
+
+      # Install MongoDB on Ubuntu
+      - name: Install MongoDB (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Import MongoDB public GPG key
+          curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
+            sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+          # Add MongoDB repository
+          echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+          # Update and install
+          sudo apt-get update
+          sudo apt-get install -y mongodb-org mongodb-mongosh mongodb-database-tools
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run MongoDB integration tests
+        run: pnpm test:mongodb
+        timeout-minutes: 15
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -329,7 +388,15 @@ jobs:
     name: CI Success
     runs-on: ubuntu-latest
     needs:
-      [unit-tests, test-postgresql, test-mysql, test-sqlite, test-cli-e2e, lint]
+      [
+        unit-tests,
+        test-postgresql,
+        test-mysql,
+        test-sqlite,
+        test-mongodb,
+        test-cli-e2e,
+        lint,
+      ]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -348,6 +415,10 @@ jobs:
           fi
           if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
             echo "SQLite tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mongodb.result }}" != "success" ]; then
+            echo "MongoDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

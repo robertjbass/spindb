@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local PostgreSQL and MySQL databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL. With support for several engines including SQLite, PostgreSQL, and MySQL.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL/MongoDB. With support for several engines including SQLite, PostgreSQL, MySQL, and MongoDB.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -90,10 +90,16 @@ engines/
 │   ├── backup.ts           # mysqldump wrapper
 │   ├── restore.ts          # Restore logic
 │   └── version-validator.ts
-└── sqlite/
-    ├── index.ts            # SQLite engine (file-based)
-    ├── registry.ts         # File tracking in config.json
-    └── scanner.ts          # CWD scanning for .sqlite files
+├── sqlite/
+│   ├── index.ts            # SQLite engine (file-based)
+│   ├── registry.ts         # File tracking in config.json
+│   └── scanner.ts          # CWD scanning for .sqlite files
+└── mongodb/
+    ├── index.ts            # MongoDB engine
+    ├── binary-detection.ts # System binary detection
+    ├── backup.ts           # mongodump wrapper
+    ├── restore.ts          # mongorestore wrapper
+    └── version-validator.ts
 types/index.ts              # TypeScript types
 tests/
 ├── unit/                   # Unit tests (381 tests)
@@ -128,6 +134,12 @@ abstract class BaseEngine {
 - All binaries from system (Homebrew, apt, etc.)
 - Requires: mysqld, mysql, mysqldump, mysqladmin
 
+**MongoDB 🍃**
+- All binaries from system (Homebrew, apt, etc.)
+- Requires: mongod, mongosh, mongodump, mongorestore
+- Versions: 6.0, 7.0, 8.0
+- Uses JavaScript for queries instead of SQL
+
 ### File Structure
 
 ```
@@ -140,11 +152,16 @@ abstract class BaseEngine {
 │   │       ├── container.json
 │   │       ├── data/
 │   │       └── postgres.log
-│   └── mysql/
+│   ├── mysql/
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── mysql.log
+│   └── mongodb/
 │       └── mydb/
 │           ├── container.json
 │           ├── data/
-│           └── mysql.log
+│           └── mongodb.log
 └── config.json                       # Tool paths cache
 ```
 
@@ -153,7 +170,7 @@ abstract class BaseEngine {
 ```typescript
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite'
+  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb'
   version: string
   port: number
   database: string        // Primary database
@@ -223,6 +240,7 @@ pnpm test           # All tests
 pnpm test:unit      # Unit only
 pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
+pnpm test:mongodb   # MongoDB integration
 ```
 
 **Note:** All test scripts use `--test-concurrency=1` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." See CONTRIBUTING.md for details.
@@ -272,9 +290,10 @@ After completing a feature, ensure these files are updated:
 - **PostgreSQL** - Server database with downloadable binaries (zonky.io/EDB)
 - **MySQL** - Server database with system binaries
 - **SQLite** - File-based database with registry tracking
+- **MongoDB** - Server database with system binaries, uses JavaScript instead of SQL
 
 **Engine Types:**
-- **Server databases** (PostgreSQL, MySQL): Data in `~/.spindb/containers/`, port management, start/stop
+- **Server databases** (PostgreSQL, MySQL, MongoDB): Data in `~/.spindb/containers/`, port management, start/stop
 - **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
 
 ### Updating Supported Engine Versions
@@ -321,6 +340,7 @@ When new major versions of supported engines are released (e.g., PostgreSQL 18):
 ### Port Management
 - PostgreSQL default: 5432 (range: 5432-5500)
 - MySQL default: 3306 (range: 3306-3400)
+- MongoDB default: 27017 (range: 27017-27100)
 - Auto-increment on conflict
 
 ### Process Management
@@ -335,6 +355,12 @@ pg_ctl stop -D {dataDir} -m fast -w
 ```bash
 mysqld --datadir={dataDir} --port={port} --socket={socket} ...
 mysqladmin -h 127.0.0.1 -P {port} -u root shutdown
+```
+
+**MongoDB:**
+```bash
+mongod --dbpath {dataDir} --port {port} --logpath {logFile} --fork
+mongosh --port {port} --eval "db.adminCommand({shutdown: 1})"
 ```
 
 ### Version Resolution (PostgreSQL)
@@ -364,13 +390,15 @@ Error messages should include actionable fix suggestions.
 ### Engine Icons
 - PostgreSQL: 🐘
 - MySQL: 🐬
+- MongoDB: 🍃
 - Default: 🗄️
 
 ## Known Limitations
 
-1. **Client tools required** - psql/mysql must be installed separately
-2. **MySQL uses system binaries** - Unlike PostgreSQL
+1. **Client tools required** - psql/mysql/mongosh must be installed separately
+2. **MySQL and MongoDB use system binaries** - Unlike PostgreSQL which downloads binaries
 3. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
+4. **MongoDB Windows support** - Skipped in CI due to complex installation requirements
 
 ## Publishing & Versioning
 

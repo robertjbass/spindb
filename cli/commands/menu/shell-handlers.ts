@@ -95,10 +95,10 @@ export async function handleOpenShell(containerName: string): Promise<void> {
 
   // Engine-specific shell names
   let defaultShellName: string
-  let engineSpecificCli: string
+  let engineSpecificCli: string | null
   let engineSpecificInstalled: boolean
-  let engineSpecificValue: ShellChoice
-  let engineSpecificInstallValue: ShellChoice
+  let engineSpecificValue: ShellChoice | null
+  let engineSpecificInstallValue: ShellChoice | null
 
   if (config.engine === 'sqlite') {
     defaultShellName = 'sqlite3'
@@ -112,6 +112,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = mycliInstalled
     engineSpecificValue = 'mycli'
     engineSpecificInstallValue = 'install-mycli'
+  } else if (config.engine === 'mongodb') {
+    defaultShellName = 'mongosh'
+    // mongosh IS the enhanced shell for MongoDB (no separate enhanced CLI like pgcli/mycli)
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -129,16 +136,19 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     },
   ]
 
-  if (engineSpecificInstalled) {
-    choices.push({
-      name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
-      value: engineSpecificValue,
-    })
-  } else {
-    choices.push({
-      name: `↓ Install ${engineSpecificCli} (enhanced features, recommended)`,
-      value: engineSpecificInstallValue,
-    })
+  // Only show engine-specific CLI option if one exists (MongoDB's mongosh IS the default)
+  if (engineSpecificCli !== null) {
+    if (engineSpecificInstalled) {
+      choices.push({
+        name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
+        value: engineSpecificValue!,
+      })
+    } else {
+      choices.push({
+        name: `↓ Install ${engineSpecificCli} (enhanced features, recommended)`,
+        value: engineSpecificInstallValue!,
+      })
+    }
   }
 
   // usql supports SQLite too
@@ -367,6 +377,10 @@ async function launchShell(
       config.database,
     ]
     installHint = 'brew install mysql-client'
+  } else if (config.engine === 'mongodb') {
+    shellCmd = 'mongosh'
+    shellArgs = [connectionString]
+    installHint = 'brew install mongosh'
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]

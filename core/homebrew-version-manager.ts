@@ -321,10 +321,13 @@ async function switchVersionLinux(
   }
 
   // No action required - Linux uses versioned paths directly, no symlink switching needed
-  logDebug('Linux: Version verified, no switching required (using direct path)', {
-    version: targetMajor,
-    binPath: target.binPath,
-  })
+  logDebug(
+    'Linux: Version verified, no switching required (using direct path)',
+    {
+      version: targetMajor,
+      binPath: target.binPath,
+    },
+  )
 
   return {
     success: true,

@@ -106,6 +106,15 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the mongosh client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured mongosh should override this method.
+   */
+  async getMongoshPath(): Promise<string> {
+    throw new Error('mongosh not found')
+  }
+
+  /**
    * Open an interactive shell/CLI connection
    */
   abstract connect(container: ContainerConfig, database?: string): Promise<void>

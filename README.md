@@ -7,7 +7,7 @@
 
 **The first npm CLI for running local databases without Docker.**
 
-Spin up PostgreSQL, MySQL, and SQLite instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, SQLite, and MongoDB instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -210,12 +210,50 @@ spindb connect mydb --litecli
 
 **Note:** Unlike server databases, SQLite databases don't need to be "started" or "stopped"—they're always available as long as the file exists.
 
+#### MongoDB
+
+| | |
+|---|---|
+| Versions | 6.0, 7.0, 8.0 |
+| Default port | 27017 |
+| Default user | None (no auth by default) |
+| Binary source | System installation |
+
+Like MySQL, SpinDB uses your system's MongoDB installation. MongoDB binaries aren't available as a single cross-platform download, so you'll need to install MongoDB via your package manager.
+
+```bash
+# macOS
+brew tap mongodb/brew
+brew install mongodb-community mongosh mongodb-database-tools
+
+# Ubuntu/Debian (follow MongoDB's official guide)
+# https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/
+
+# Windows (Chocolatey)
+choco install mongodb mongodb-shell mongodb-database-tools
+
+# Check if SpinDB can find MongoDB
+spindb deps check --engine mongodb
+```
+
+MongoDB uses JavaScript for queries instead of SQL. When using `spindb run`, pass JavaScript code:
+
+```bash
+# Insert a document
+spindb run mydb --sql "db.users.insertOne({name: 'Alice', email: 'alice@example.com'})"
+
+# Query documents
+spindb run mydb --sql "db.users.find().pretty()"
+
+# Run a JavaScript file
+spindb run mydb --file ./scripts/seed.js
+```
+
 ### Planned Engines
 
 | Engine | Type | Status |
 |--------|------|--------|
 | Redis | In-memory key-value | Planned for v1.2 |
-| MongoDB | Document database | Planned for v1.2 |
 
 ---
 
@@ -317,12 +355,16 @@ spindb connect mydb --install-mycli
 spindb connect mydb --install-tui
 ```
 
-#### `run` - Execute SQL
+#### `run` - Execute SQL/scripts
 
 ```bash
 spindb run mydb script.sql                    # Run a SQL file
 spindb run mydb --sql "SELECT * FROM users"   # Run inline SQL
 spindb run mydb seed.sql --database my_app    # Target specific database
+
+# MongoDB uses JavaScript instead of SQL
+spindb run mydb seed.js                                    # Run a JavaScript file
+spindb run mydb --sql "db.users.find().pretty()"           # Run inline JavaScript
 ```
 
 #### `url` - Get connection string
@@ -553,8 +595,8 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 | PostgreSQL | `psql` | `pgcli` | `usql` |
 | MySQL | `mysql` | `mycli` | `usql` |
 | SQLite | `sqlite3` | `litecli` | `usql` |
+| MongoDB | `mongosh` | - | `usql` |
 | Redis (planned) | `redis-cli` | `iredis` | - |
-| MongoDB (planned) | `mongosh` | - | - |
 
 **pgcli / mycli** provide:
 - Intelligent auto-completion (tables, columns, keywords)
@@ -587,7 +629,7 @@ SpinDB uses the term "container" loosely—there's no Docker involved. When you 
 Each "container" is just:
 - A configuration file (`container.json`)
 - A data directory (`data/`)
-- A log file (`postgres.log` or `mysql.log`)
+- A log file (`postgres.log`, `mysql.log`, or `mongodb.log`)
 
 Native processes mean instant startup and no virtualization overhead.
 
