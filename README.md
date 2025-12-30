@@ -682,15 +682,37 @@ When you stop a container:
 - **macOS/Linux:** From [zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries), hosted on Maven Central
 - **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries), official PostgreSQL distributions
 
-**MySQL:** Uses your system's MySQL installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
+**MySQL/MongoDB:** Uses your system installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
+
+### Why Precompiled Binaries for PostgreSQL, but System Installs for Others?
+
+This isn't a preference—it's a practical reality of what's available.
+
+**PostgreSQL has an excellent embedded binary distribution.** The [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) project maintains minimal, self-contained PostgreSQL server binaries specifically designed for embedding:
+
+- Cross-platform (macOS Intel/ARM, Linux x64/ARM, Windows)
+- Hosted on Maven Central (highly reliable CDN)
+- ~45 MB per version
+- Actively maintained with new PostgreSQL releases
+
+This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? SpinDB downloads both, and they run side-by-side without conflicts.
+
+**No equivalent exists for MySQL or MongoDB.** Neither database has a comparable embedded binary project:
+
+- **MySQL:** Oracle distributes MySQL as large installers with system dependencies, not embeddable binaries. There's no "zonky.io for MySQL."
+- **MongoDB:** Server binaries are several hundred MB with complex licensing around redistribution. MongoDB Inc. doesn't provide an embedded distribution.
+
+For these databases, system packages (Homebrew, apt, choco) are the most reliable option. They handle dependencies, platform quirks, and security updates. SpinDB simply orchestrates what's already installed.
+
+**Does this limit multi-version support?** Yes, for MySQL/MongoDB you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple MySQL versions simultaneously. If zonky.io-style distributions emerged for other databases, SpinDB could adopt them.
 
 ---
 
 ## Limitations
 
-- **Client tools required** - `psql` and `mysql` must be installed separately for some operations
+- **Client tools required** - `psql`, `mysql`, and `mongosh` must be installed separately for some operations (connecting, backups, restores)
 - **Local only** - Databases bind to `127.0.0.1`; remote connections planned for v1.1
-- **MySQL requires system install** - Unlike PostgreSQL, we don't download MySQL binaries
+- **Single version for MySQL/MongoDB** - Unlike PostgreSQL, MySQL and MongoDB use system installations, so you're limited to one version per machine (see [Why Precompiled Binaries for PostgreSQL?](#why-precompiled-binaries-for-postgresql-but-system-installs-for-others))
 
 ---
 
