@@ -147,7 +147,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // SQLite row
   if (sqliteEngine) {
     const icon = ENGINE_ICONS.sqlite
-    const engineDisplay = `${icon} sqlite`
+    const engineDisplay = `${icon}  sqlite`
 
     console.log(
       chalk.gray('  ') +
