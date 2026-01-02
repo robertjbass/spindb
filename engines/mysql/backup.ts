@@ -78,6 +78,7 @@ async function createSqlBackup(
       String(port),
       '-u',
       engineDef.superuser,
+      '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
       '--result-file',
       outputPath,
       database,
@@ -141,6 +142,7 @@ async function createCompressedBackup(
     String(port),
     '-u',
     engineDef.superuser,
+    '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
     database,
   ]
 

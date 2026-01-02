@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backup/restore icon swap** - Now uses `↓` for backup (download) and `↑` for restore (upload) for intuitive visual metaphor
 - **Refactored backup handlers** - Reduced code duplication with shared `performBackupFlow` function
 - **Redis restore UX** - Skips "Create new database" prompt since Redis uses numbered databases (0-15)
+- **Redis integration tests expanded** - New tests for text format backup/restore, merge vs replace modes, and content-based format detection
+
+### Fixed
+- **Redis text backup shell escaping** - Fixed `KEYS *` and other commands with special characters being incorrectly expanded by shell
 
 ## [0.13.2] - 2026-01-01
 

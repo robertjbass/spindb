@@ -18,14 +18,26 @@ import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 const execAsync = promisify(exec)
 
 /**
- * Build a redis-cli command
+ * Build a redis-cli command with proper shell escaping
+ * Quotes arguments containing special shell characters
  */
 function buildRedisCliCommand(
   redisCli: string,
   port: number,
   command: string,
 ): string {
-  return `"${redisCli}" -h 127.0.0.1 -p ${port} ${command}`
+  // Split command into parts and quote any parts containing shell special chars
+  const parts = command.split(/\s+/)
+  const quotedParts = parts.map((part) => {
+    // If part contains shell special chars, wrap in single quotes
+    if (/[*?[\]{}$`"'\\!<>|;&()]/.test(part)) {
+      // Escape any single quotes in the part
+      const escaped = part.replace(/'/g, "'\"'\"'")
+      return `'${escaped}'`
+    }
+    return part
+  })
+  return `"${redisCli}" -h 127.0.0.1 -p ${port} ${quotedParts.join(' ')}`
 }
 
 /**

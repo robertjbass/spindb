@@ -133,12 +133,40 @@ export async function restoreBackup(
   // Handle different formats
   if (format.format === 'directory') {
     // Directory dump - look for database subdirectory
-    const dbDir = join(backupPath, database)
-    if (existsSync(dbDir)) {
-      args.push(dbDir)
+    // First try the target database name
+    const targetDbDir = join(backupPath, database)
+    if (existsSync(targetDbDir)) {
+      args.push(targetDbDir)
     } else {
-      // Try using the path directly
-      args.push(backupPath)
+      // For restores to a different database, find any database subdirectory
+      // (mongodump creates backupPath/{sourceDatabase}/)
+      const { readdirSync } = await import('fs')
+      const entries = readdirSync(backupPath, { withFileTypes: true })
+      const dbDirs = entries.filter((e) => e.isDirectory())
+
+      if (dbDirs.length === 1) {
+        // Single database directory - use it
+        const sourceDbDir = join(backupPath, dbDirs[0].name)
+        logDebug(`Using source database directory: ${sourceDbDir}`)
+        args.push(sourceDbDir)
+      } else if (dbDirs.length > 1) {
+        // Multiple directories - try to find one with BSON files
+        const dbWithBson = dbDirs.find((d) => {
+          const dirPath = join(backupPath, d.name)
+          const files = readdirSync(dirPath)
+          return files.some((f) => f.endsWith('.bson'))
+        })
+        if (dbWithBson) {
+          const sourceDbDir = join(backupPath, dbWithBson.name)
+          logDebug(`Using source database directory with BSON files: ${sourceDbDir}`)
+          args.push(sourceDbDir)
+        } else {
+          args.push(backupPath)
+        }
+      } else {
+        // No subdirectories - use path directly
+        args.push(backupPath)
+      }
     }
   } else if (format.format === 'archive-gzip') {
     args.push('--archive=' + backupPath, '--gzip')
