@@ -108,12 +108,16 @@ function generateRedisConfig(options: {
   dataDir: string
   logFile: string
   pidFile: string
+  daemonize?: boolean
 }): string {
+  // Windows Redis (tporadowski port) doesn't support daemonize
+  const daemonizeValue = options.daemonize ?? true
+
   return `# SpinDB generated Redis configuration
 port ${options.port}
 bind 127.0.0.1
 dir ${options.dataDir}
-daemonize yes
+daemonize ${daemonizeValue ? 'yes' : 'no'}
 logfile ${options.logFile}
 pidfile ${options.pidFile}
 
@@ -276,12 +280,17 @@ export class RedisEngine extends BaseEngine {
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'redis.pid')
 
+    // Windows Redis (tporadowski port) doesn't support daemonize
+    // Use detached spawn on Windows instead, similar to MongoDB
+    const useDetachedSpawn = isWindows()
+
     // Regenerate config with current port (in case it changed)
     const configContent = generateRedisConfig({
       port,
       dataDir,
       logFile,
       pidFile,
+      daemonize: !useDetachedSpawn, // Disable daemonize on Windows
     })
     await writeFile(configPath, configContent)
 
@@ -313,7 +322,46 @@ export class RedisEngine extends BaseEngine {
       return null
     }
 
-    // Redis with daemonize: yes handles its own forking
+    if (useDetachedSpawn) {
+      // Windows: spawn detached process (no daemonize support)
+      const spawnOpts: SpawnOptions = {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
+        windowsHide: true,
+      }
+
+      const proc = spawn(redisServer, [configPath], spawnOpts)
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        logDebug(`redis-server stdout: ${data.toString()}`)
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        logDebug(`redis-server stderr: ${data.toString()}`)
+      })
+
+      // Detach the process so it continues running after parent exits
+      proc.unref()
+
+      // Wait for Redis to be ready
+      const ready = await this.waitForReady(port, version)
+      if (ready) {
+        return {
+          port,
+          connectionString: this.getConnectionString(container),
+        }
+      } else {
+        // Check log for errors
+        const portError = await checkLogForPortError()
+        if (portError) {
+          throw new Error(portError)
+        }
+        throw new Error(
+          `Redis failed to start within timeout. Check logs at: ${logFile}`,
+        )
+      }
+    }
+
+    // Unix: Redis with daemonize: yes handles its own forking
     return new Promise((resolve, reject) => {
       const proc = spawn(redisServer, [configPath], {
         stdio: ['ignore', 'pipe', 'pipe'],

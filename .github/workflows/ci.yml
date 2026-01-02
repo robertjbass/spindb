@@ -406,6 +406,30 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Verifying MongoDB installation..."
+
+          # Helper function to find and add tool path
+          function Find-AndAddPath {
+            param([string]$ToolName, [string[]]$SearchPaths)
+            foreach ($path in $SearchPaths) {
+              $toolPath = Join-Path $path "$ToolName.exe"
+              if (Test-Path $toolPath) {
+                if ($env:PATH -notlike "*$path*") {
+                  $env:PATH = "$path;$env:PATH"
+                  Write-Host "  Added to PATH: $path"
+                }
+                return $true
+              }
+            }
+            return $false
+          }
+
+          # Paths where MongoDB tools might be installed
+          $toolsPaths = @(
+            "C:\Program Files\MongoDB\Tools\100\bin",
+            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools",
+            "C:\ProgramData\chocolatey\bin"
+          )
+
           try {
             $mongodVersion = mongod --version | Select-Object -First 1
             Write-Host "✓ mongod: $mongodVersion"
@@ -413,6 +437,7 @@ jobs:
             Write-Host "✗ mongod not found or not working"
             exit 1
           }
+
           try {
             $mongoshVersion = mongosh --version
             Write-Host "✓ mongosh: $mongoshVersion"
@@ -420,13 +445,48 @@ jobs:
             Write-Host "✗ mongosh not found or not working"
             exit 1
           }
+
+          # mongodump check with retry logic
+          $mongodumpFound = $false
           try {
             $mongodumpVersion = mongodump --version | Select-Object -First 1
             Write-Host "✓ mongodump: $mongodumpVersion"
+            $mongodumpFound = $true
           } catch {
+            Write-Host "mongodump not in PATH, searching known locations..."
+            if (Find-AndAddPath -ToolName "mongodump" -SearchPaths $toolsPaths) {
+              try {
+                $mongodumpVersion = mongodump --version | Select-Object -First 1
+                Write-Host "✓ mongodump: $mongodumpVersion (found via search)"
+                $mongodumpFound = $true
+              } catch {
+                Write-Host "  mongodump found but failed to run"
+              }
+            }
+          }
+
+          if (-not $mongodumpFound) {
+            Write-Host "mongodump not found, attempting reinstall..."
+            choco install mongodb-database-tools --yes --no-progress --force
+            Start-Sleep -Seconds 2
+
+            # Search again after reinstall
+            if (Find-AndAddPath -ToolName "mongodump" -SearchPaths $toolsPaths) {
+              try {
+                $mongodumpVersion = mongodump --version | Select-Object -First 1
+                Write-Host "✓ mongodump: $mongodumpVersion (after reinstall)"
+                $mongodumpFound = $true
+              } catch {
+                Write-Host "✗ mongodump still not working after reinstall"
+              }
+            }
+          }
+
+          if (-not $mongodumpFound) {
             Write-Host "✗ mongodump not found or not working"
             exit 1
           }
+
           Write-Host "All MongoDB binaries verified successfully"
 
       - name: Show installed engines
@@ -494,11 +554,19 @@ jobs:
             $url = "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
             $zip = "$env:TEMP\redis.zip"
 
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -ErrorAction Stop
 
             Write-Host "Extracting to C:\Redis..."
             Expand-Archive -Path $zip -DestinationPath "C:\Redis" -Force
             Remove-Item $zip
+
+            # Handle nested directory structure if zip extracts to subdirectory
+            $nestedDir = Get-ChildItem "C:\Redis" -Directory | Where-Object { $_.Name -like "Redis-*" } | Select-Object -First 1
+            if ($nestedDir) {
+              Write-Host "Moving files from nested directory: $($nestedDir.Name)"
+              Move-Item "$($nestedDir.FullName)\*" "C:\Redis\" -Force
+              Remove-Item $nestedDir.FullName -Force
+            }
           }
 
           # Add to PATH for subsequent steps

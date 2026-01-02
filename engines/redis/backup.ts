@@ -9,7 +9,7 @@ import { copyFile, stat, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { getRedisCliPath } from './binary-detection'
-import { logDebug } from '../../core/error-handler'
+import { logDebug, logWarning } from '../../core/error-handler'
 import { paths } from '../../config/paths'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -58,11 +58,10 @@ export async function createBackup(
     const { stdout, stderr } = await execAsync(bgsaveCmd)
     bgsaveResponse = stdout.trim()
 
-    // Check stderr for errors
+    // Log stderr as warning if present (redis-cli may emit non-fatal warnings)
+    // Actual errors are caught via non-zero exit code or Redis protocol errors in stdout
     if (stderr && stderr.trim()) {
-      throw new Error(
-        `BGSAVE failed with stderr: ${stderr.trim()}`,
-      )
+      logWarning(`redis-cli stderr: ${stderr.trim()}`)
     }
   } catch (error) {
     // execAsync throws on non-zero exit code

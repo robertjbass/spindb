@@ -39,6 +39,25 @@ function padWithEmoji(str: string, width: number): string {
 }
 
 /**
+ * Display manual installation instructions for missing dependencies
+ */
+function displayManualInstallInstructions(
+  missingDeps: Array<{ dependency: { name: string }; installed: boolean }>,
+): void {
+  const platform = getCurrentPlatform()
+  for (const status of missingDeps) {
+    const instructions = getManualInstallInstructions(
+      status.dependency as Parameters<typeof getManualInstallInstructions>[0],
+      platform,
+    )
+    console.log(chalk.gray(`  ${status.dependency.name}:`))
+    for (const instruction of instructions) {
+      console.log(chalk.gray(`    ${instruction}`))
+    }
+  }
+}
+
+/**
  * List subcommand action
  */
 async function listEngines(options: { json?: boolean }): Promise<void> {
@@ -329,18 +348,8 @@ async function installEngineViaPackageManager(
     console.error(uiError('No supported package manager found.'))
     console.log()
     console.log(chalk.yellow('Manual installation instructions:'))
-    const platform = getCurrentPlatform()
     const missingDeps = statuses.filter((s) => !s.installed)
-    for (const status of missingDeps) {
-      const instructions = getManualInstallInstructions(
-        status.dependency,
-        platform,
-      )
-      console.log(chalk.gray(`  ${status.dependency.name}:`))
-      for (const instruction of instructions) {
-        console.log(chalk.gray(`    ${instruction}`))
-      }
-    }
+    displayManualInstallInstructions(missingDeps)
     process.exit(1)
   }
 
@@ -389,17 +398,7 @@ async function installEngineViaPackageManager(
       )
       console.log()
       console.log(chalk.yellow('Manual installation required:'))
-      const platform = getCurrentPlatform()
-      for (const status of stillMissing) {
-        const instructions = getManualInstallInstructions(
-          status.dependency,
-          platform,
-        )
-        console.log(chalk.gray(`  ${status.dependency.name}:`))
-        for (const instruction of instructions) {
-          console.log(chalk.gray(`    ${instruction}`))
-        }
-      }
+      displayManualInstallInstructions(stillMissing)
       process.exit(1)
     }
   }
