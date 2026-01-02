@@ -24,6 +24,8 @@ import {
   type InstalledPostgresEngine,
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
+  type InstalledMongodbEngine,
+  type InstalledRedisEngine,
 } from '../helpers'
 import { Engine } from '../../types'
 
@@ -71,6 +73,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   )
   const sqliteEngine = engines.find(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
+  )
+  const mongodbEngine = engines.find(
+    (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
+  )
+  const redisEngine = engines.find(
+    (e): e is InstalledRedisEngine => e.engine === 'redis',
   )
 
   // Calculate total size for PostgreSQL
@@ -131,6 +139,34 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // MongoDB row
+  if (mongodbEngine) {
+    const icon = ENGINE_ICONS.mongodb
+    const engineDisplay = `${icon} mongodb`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(mongodbEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  // Redis row
+  if (redisEngine) {
+    const icon = ENGINE_ICONS.redis
+    const engineDisplay = `${icon} redis`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(redisEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -148,6 +184,16 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   if (sqliteEngine) {
     console.log(
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+    )
+  }
+  if (mongodbEngine) {
+    console.log(
+      chalk.gray(`  MongoDB: system-installed at ${mongodbEngine.path}`),
+    )
+  }
+  if (redisEngine) {
+    console.log(
+      chalk.gray(`  Redis: system-installed at ${redisEngine.path}`),
     )
   }
   console.log()
@@ -430,9 +476,19 @@ enginesCommand
         return
       }
 
+      if (['mongodb', 'mongo'].includes(normalizedEngine)) {
+        await installEngineViaPackageManager('mongodb', 'MongoDB')
+        return
+      }
+
+      if (normalizedEngine === 'redis') {
+        await installEngineViaPackageManager('redis', 'Redis')
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis`,
         ),
       )
       process.exit(1)

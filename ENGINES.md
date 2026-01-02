@@ -4,16 +4,18 @@
 
 | Engine | Status | Binary Source | Binary Size | Notes |
 |--------|--------|---------------|-------------|-------|
-| 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-17 |
+| 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-18 |
 | 🐬 **MySQL** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Also supports MariaDB as drop-in replacement |
 | 🪶 **SQLite** | ✅ Complete | System | N/A (system) | File-based, stores in project directories |
+| 🍃 **MongoDB** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Versions 6.0, 7.0, 8.0 |
+| 🔴 **Redis** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Versions 6, 7, 8 |
 
 ## Planned
 
 | Engine | Status | Type | Binary Size | Notes |
 |--------|--------|------|-------------|-------|
-| 🔴 **Redis** | 🔜 Planned | In-memory | ~3-5 MB | Lightweight server binary |
-| 🍃 **MongoDB** | 🔜 Planned | Document DB | ~200-300 MB | Large binary, may use system install like MySQL |
+| 🦭 **MariaDB** | 🔜 Planned | SQL DB | N/A (system) | Standalone engine with MariaDB-specific features |
+| 🪳 **CockroachDB** | 🔜 Planned | Distributed SQL | ~100 MB | PostgreSQL-compatible distributed database |
 
 ---
 
@@ -36,33 +38,32 @@
 
 ### 🔴 Redis
 
+- **Status:** ✅ Complete
+- **Versions:** 6, 7, 8
 - **Data location:** `~/.spindb/containers/redis/{name}/`
 - **Process:** Server process (like MySQL/PostgreSQL)
-- **Binary source:** Could download from redis.io or use system install
-- **Enhanced CLI:** `iredis`
-- **Backup formats:**
-  - **RDB** (Redis Database Backup) - Compact binary snapshot, fast recovery, recommended for backups
-  - **AOF** (Append Only File) - Change log format, larger but more durable
-  - RDB is typically smaller and faster to restore than AOF
-- **Considerations:**
-  - RDB files use LZF compression internally
-  - May want to support both RDB snapshots and AOF for different use cases
-  - `BGSAVE` for background saves, `SAVE` for synchronous
+- **Binary source:** System install via Homebrew/apt/choco
+- **Enhanced CLI:** `iredis` (use `--iredis` flag)
+- **Backup format:** RDB (Redis Database Backup) - Binary snapshot via BGSAVE
+- **Databases:** Uses numbered databases (0-15) instead of named databases
+- **Implementation notes:**
+  - Uses PING/PONG for status checks
+  - Does NOT support remote dump (dumpFromConnectionString throws an error with guidance)
+  - Generates `redis.conf` in data directory for server configuration
 
 ### 🍃 MongoDB
 
+- **Status:** ✅ Complete
+- **Versions:** 6.0, 7.0, 8.0
 - **Data location:** `~/.spindb/containers/mongodb/{name}/`
 - **Process:** Server process (`mongod`)
-- **Binary source:** System install recommended due to large binary size (~200-300 MB)
-- **Enhanced CLI:** `mongosh` (MongoDB Shell)
-- **Backup formats:**
-  - **mongodump** (BSON) - Binary format, preserves all BSON types, recommended for backups
-  - **mongoexport** (JSON/CSV) - Human-readable, but loses some BSON type fidelity
-  - **WARNING:** Avoid mongoexport for production backups (doesn't preserve all BSON types)
-- **Considerations:**
-  - Large binary size may favor system install approach (like MySQL)
-  - BSON format is more compact and faster than JSON
-  - mongodump creates directory with .bson files per collection
+- **Binary source:** System install via Homebrew/apt/choco
+- **Enhanced CLI:** `mongosh` (MongoDB Shell - built-in)
+- **Backup format:** mongodump (BSON) - preserves all BSON types
+- **Implementation notes:**
+  - Uses JavaScript for scripts instead of SQL
+  - mongodump creates gzipped archive by default
+  - Full cross-platform support (macOS, Linux, Windows)
 
 ---
 
@@ -85,7 +86,7 @@
 | PostgreSQL | `psql` | `pgcli` | Auto-completion, syntax highlighting |
 | MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
 | SQLite | `sqlite3` | `litecli` | Available in v0.9 |
-| Redis | `redis-cli` | `iredis` | Planned for v1.2 |
+| Redis | `redis-cli` | `iredis` | Auto-completion, syntax highlighting |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
 

@@ -94,7 +94,13 @@ export async function handleCreate(): Promise<'main' | void> {
   const name = containerName!
 
   // Step 4: Database name (defaults to container name, sanitized)
-  const database = await promptDatabaseName(name, engine)
+  // Redis uses numbered databases 0-15, so skip prompt and default to "0"
+  let database: string
+  if (engine === 'redis') {
+    database = '0'
+  } else {
+    database = await promptDatabaseName(name, engine)
+  }
 
   // Step 5: Port or SQLite path
   const isSQLite = engine === 'sqlite'
@@ -601,9 +607,13 @@ export async function showContainerSubmenu(
 
   // Run SQL/script - always enabled for SQLite (if file exists), server databases need to be running
   const canRunSql = isSQLite ? existsSync(config.database) : isRunning
-  // MongoDB uses JavaScript scripts, not SQL
+  // Engine-specific terminology: Redis uses commands, MongoDB uses scripts, others use SQL
   const runScriptLabel =
-    config.engine === 'mongodb' ? 'Run script file' : 'Run SQL file'
+    config.engine === 'redis'
+      ? 'Run command file'
+      : config.engine === 'mongodb'
+        ? 'Run script file'
+        : 'Run SQL file'
   actionChoices.push({
     name: canRunSql
       ? `${chalk.yellow('▷')} ${runScriptLabel}`

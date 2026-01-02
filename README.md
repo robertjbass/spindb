@@ -7,7 +7,7 @@
 
 **The first npm CLI for running local databases without Docker.**
 
-Spin up PostgreSQL, MySQL, SQLite, and MongoDB instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, SQLite, MongoDB, and Redis instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -240,20 +240,57 @@ MongoDB uses JavaScript for queries instead of SQL. When using `spindb run`, pas
 
 ```bash
 # Insert a document
-spindb run mydb --sql "db.users.insertOne({name: 'Alice', email: 'alice@example.com'})"
+spindb run mydb -c "db.users.insertOne({name: 'Alice', email: 'alice@example.com'})"
 
 # Query documents
-spindb run mydb --sql "db.users.find().pretty()"
+spindb run mydb -c "db.users.find().pretty()"
 
 # Run a JavaScript file
 spindb run mydb --file ./scripts/seed.js
 ```
 
-### Planned Engines
+#### Redis
 
-| Engine | Type | Status |
-|--------|------|--------|
-| Redis | In-memory key-value | Planned for v1.2 |
+| | |
+|---|---|
+| Versions | 6, 7, 8 |
+| Default port | 6379 |
+| Default user | None (no auth by default) |
+| Binary source | System installation |
+
+Like MySQL and MongoDB, SpinDB uses your system's Redis installation. Redis provides embeddable binaries, but system packages are more reliable for handling dependencies and platform-specific setup.
+
+```bash
+# macOS
+brew install redis
+
+# Ubuntu/Debian
+sudo apt install redis-server redis-tools
+
+# Windows (Chocolatey)
+choco install redis
+
+# Check if SpinDB can find Redis
+spindb deps check --engine redis
+```
+
+Redis uses numbered databases (0-15) instead of named databases. When using `spindb run`, pass Redis commands:
+
+```bash
+# Set a key
+spindb run myredis -c "SET mykey myvalue"
+
+# Get a key
+spindb run myredis -c "GET mykey"
+
+# Run a Redis command file
+spindb run myredis --file ./scripts/seed.redis
+
+# Use iredis for enhanced shell experience
+spindb connect myredis --iredis
+```
+
+**Note:** Redis doesn't support remote dump/restore. Creating containers from remote Redis connection strings is not supported. Use `backup` and `restore` commands for data migration.
 
 ---
 
@@ -267,7 +304,7 @@ spindb run mydb --file ./scripts/seed.js
 spindb create mydb                           # PostgreSQL (default)
 spindb create mydb --engine mysql            # MySQL
 spindb create mydb --engine sqlite           # SQLite (file-based)
-spindb create mydb --version 16              # Specific PostgreSQL version
+spindb create mydb --db-version 16           # Specific PostgreSQL version
 spindb create mydb --port 5433               # Custom port
 spindb create mydb --database my_app         # Custom database name
 spindb create mydb --no-start                # Create without starting
@@ -291,10 +328,10 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mysql`, `sqlite`) |
-| `--version`, `-v` | Engine version |
+| `--engine`, `-e` | Database engine (`postgresql`, `mysql`, `sqlite`, `mongodb`, `redis`) |
+| `--db-version` | Engine version (e.g., 17 for PostgreSQL, 8 for Redis) |
 | `--port`, `-p` | Port number (not applicable for SQLite) |
-| `--database`, `-d` | Primary database name |
+| `--database`, `-d` | Primary database name (Redis uses 0-15) |
 | `--path` | File path for SQLite databases |
 | `--max-connections` | Maximum database connections (default: 200) |
 | `--from` | Restore from backup file or connection string |
@@ -355,16 +392,20 @@ spindb connect mydb --install-mycli
 spindb connect mydb --install-tui
 ```
 
-#### `run` - Execute SQL/scripts
+#### `run` - Execute SQL/scripts/commands
 
 ```bash
-spindb run mydb script.sql                    # Run a SQL file
-spindb run mydb --sql "SELECT * FROM users"   # Run inline SQL
-spindb run mydb seed.sql --database my_app    # Target specific database
+spindb run mydb script.sql                  # Run a SQL file
+spindb run mydb -c "SELECT * FROM users"    # Run inline SQL
+spindb run mydb seed.sql --database my_app  # Target specific database
 
 # MongoDB uses JavaScript instead of SQL
-spindb run mydb seed.js                                    # Run a JavaScript file
-spindb run mydb --sql "db.users.find().pretty()"           # Run inline JavaScript
+spindb run mydb seed.js                               # Run a JavaScript file
+spindb run mydb -c "db.users.find().pretty()"         # Run inline JavaScript
+
+# Redis uses Redis commands
+spindb run myredis -c "SET foo bar"                   # Run inline command
+spindb run myredis seed.redis                         # Run command file
 ```
 
 #### `url` - Get connection string
@@ -596,7 +637,7 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 | MySQL | `mysql` | `mycli` | `usql` |
 | SQLite | `sqlite3` | `litecli` | `usql` |
 | MongoDB | `mongosh` | - | `usql` |
-| Redis (planned) | `redis-cli` | `iredis` | - |
+| Redis | `redis-cli` | `iredis` | - |
 
 **pgcli / mycli** provide:
 - Intelligent auto-completion (tables, columns, keywords)
@@ -682,7 +723,7 @@ When you stop a container:
 - **macOS/Linux:** From [zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries), hosted on Maven Central
 - **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries), official PostgreSQL distributions
 
-**MySQL/MongoDB:** Uses your system installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
+**MySQL/MongoDB/Redis:** Uses your system installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
 
 ### Why Precompiled Binaries for PostgreSQL, but System Installs for Others?
 
@@ -710,9 +751,10 @@ For these databases, system packages (Homebrew, apt, choco) are the most reliabl
 
 ## Limitations
 
-- **Client tools required** - `psql`, `mysql`, and `mongosh` must be installed separately for some operations (connecting, backups, restores)
+- **Client tools required** - `psql`, `mysql`, `mongosh`, and `redis-cli` must be installed separately for some operations (connecting, backups, restores)
 - **Local only** - Databases bind to `127.0.0.1`; remote connections planned for v1.1
-- **Single version for MySQL/MongoDB** - Unlike PostgreSQL, MySQL and MongoDB use system installations, so you're limited to one version per machine (see [Why Precompiled Binaries for PostgreSQL?](#why-precompiled-binaries-for-postgresql-but-system-installs-for-others))
+- **Single version for MySQL/MongoDB/Redis** - Unlike PostgreSQL, MySQL, MongoDB, and Redis use system installations, so you're limited to one version per machine (see [Why Precompiled Binaries for PostgreSQL?](#why-precompiled-binaries-for-postgresql-but-system-installs-for-others))
+- **Redis remote dump not supported** - Redis doesn't support creating containers from remote connection strings. Use backup/restore for data migration.
 
 ---
 
@@ -726,9 +768,8 @@ See [TODO.md](TODO.md) for the full roadmap.
 - Secrets management (macOS Keychain)
 
 ### v1.2 - Additional Engines
-- Redis (in-memory key-value)
-- MongoDB (document database)
 - MariaDB as standalone engine
+- CockroachDB (distributed SQL)
 
 ### v1.3 - Advanced Features
 - Container templates

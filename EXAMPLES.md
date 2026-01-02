@@ -12,6 +12,7 @@ Comprehensive examples and workflows for PostgreSQL, MySQL, SQLite, and MongoDB.
 - [MySQL Examples](#mysql-examples)
 - [SQLite Examples](#sqlite-examples)
 - [MongoDB Examples](#mongodb-examples)
+- [Redis Examples](#redis-examples)
 - [Automation & Testing](#automation--testing)
 
 ---
@@ -26,7 +27,7 @@ spindb create [name] [options]
 ```
 **Options:**
 - `-e, --engine <engine>` - Database engine (default: `postgresql`)
-- `-v, --version <version>` - PostgreSQL version (14, 15, 16, 17, 18)
+- `--db-version <version>` - PostgreSQL version (14, 15, 16, 17, 18)
 - `-d, --database <database>` - Primary database name
 - `-p, --port <port>` - Port number (default: 5432)
 - `--max-connections <number>` - Max connections (default: 200)
@@ -100,13 +101,13 @@ spindb connect [name] [options]
 - `--pgcli` - Use pgcli (auto-completion)
 - `--install-pgcli` - Install pgcli then connect
 
-#### `run` - Execute SQL
+#### `run` - Execute SQL/JS/Commands
 ```bash
 spindb run <name> [file] [options]
 ```
 **Options:**
 - `-d, --database <name>` - Target database
-- `--sql <statement>` - SQL statement to execute
+- `-c, --command <statement>` - Statement to execute (SQL, JavaScript, or Redis command)
 
 #### `url` - Get connection string
 ```bash
@@ -227,7 +228,7 @@ spindb connect analytics-db
 ```bash
 # Create a database with sample data
 spindb create prod-backup
-spindb run prod-backup --sql "
+spindb run prod-backup -c "
   CREATE TABLE products (
     id SERIAL PRIMARY KEY,
     name TEXT,
@@ -302,7 +303,7 @@ spindb start test-migrations
 # Runs on new port (auto-assigned): 5433
 
 # Run risky migrations on clone
-spindb run test-migrations --sql "ALTER TABLE products DROP COLUMN price;"
+spindb run test-migrations -c "ALTER TABLE products DROP COLUMN price;"
 
 # If migration works, delete clone and run on original
 spindb delete test-migrations --force
@@ -319,10 +320,10 @@ spindb delete test-migrations --force
 **Example: Run SQL from command line**
 ```bash
 # Single statement
-spindb run myapp --sql "SELECT version();"
+spindb run myapp -c "SELECT version();"
 
 # Create schema
-spindb run myapp --sql "
+spindb run myapp -c "
   CREATE SCHEMA analytics;
   CREATE TABLE analytics.events (
     id SERIAL PRIMARY KEY,
@@ -333,7 +334,7 @@ spindb run myapp --sql "
 "
 
 # Insert data
-spindb run myapp --sql "
+spindb run myapp -c "
   INSERT INTO users (email) VALUES ('alice@example.com');
 "
 ```
@@ -466,7 +467,7 @@ spindb url feature-auth --copy
 # Paste into .env: DATABASE_URL=postgresql://postgres@127.0.0.1:5444/feature-auth
 
 # 5. Develop feature, make schema changes
-spindb run feature-auth --sql "ALTER TABLE users ADD COLUMN last_login TIMESTAMP;"
+spindb run feature-auth -c "ALTER TABLE users ADD COLUMN last_login TIMESTAMP;"
 
 # 6. Create backup before testing
 spindb backup feature-auth --sql --name pre-merge-backup
@@ -552,7 +553,7 @@ spindb url inventory-service  # mysql://root@127.0.0.1:3308/inventory-service
 ```bash
 # Create database with data
 spindb create ecommerce --engine mysql
-spindb run ecommerce --sql "
+spindb run ecommerce -c "
   CREATE TABLE orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     customer_email VARCHAR(255),
@@ -600,7 +601,7 @@ spindb start ecommerce-dev
 
 # Both containers now have identical data
 # Modify dev without affecting original
-spindb run ecommerce-dev --sql "TRUNCATE TABLE orders;"
+spindb run ecommerce-dev -c "TRUNCATE TABLE orders;"
 ```
 
 ---
@@ -610,10 +611,10 @@ spindb run ecommerce-dev --sql "TRUNCATE TABLE orders;"
 **Example: Run MySQL queries**
 ```bash
 # Single query
-spindb run ecommerce --sql "SHOW TABLES;"
+spindb run ecommerce -c "SHOW TABLES;"
 
 # Multiple statements
-spindb run ecommerce --sql "
+spindb run ecommerce -c "
   USE ecommerce;
   SELECT * FROM orders WHERE status = 'pending';
   UPDATE orders SET status = 'shipped' WHERE id = 1;
@@ -742,7 +743,7 @@ EOF
 spindb run shop ./schema.sql
 
 # 3. Seed data
-spindb run shop --sql "
+spindb run shop -c "
   INSERT INTO customers (email, name) VALUES
     ('alice@example.com', 'Alice Smith'),
     ('bob@example.com', 'Bob Johnson');
@@ -884,7 +885,7 @@ spindb connect testdb
 ```bash
 # Create database with data
 spindb create notes --engine sqlite
-spindb run notes --sql "
+spindb run notes -c "
   CREATE TABLE notes (
     id INTEGER PRIMARY KEY,
     title TEXT,
@@ -932,7 +933,7 @@ spindb info notes-test
 # File: /Users/you/projects/app/notes-test.sqlite
 
 # Modify test without affecting original
-spindb run notes-test --sql "DELETE FROM notes;"
+spindb run notes-test -c "DELETE FROM notes;"
 ```
 
 ---
@@ -942,10 +943,10 @@ spindb run notes-test --sql "DELETE FROM notes;"
 **Example: Run SQLite queries**
 ```bash
 # Single query
-spindb run notes --sql "SELECT * FROM notes ORDER BY created_at DESC;"
+spindb run notes -c "SELECT * FROM notes ORDER BY created_at DESC;"
 
 # Multiple statements
-spindb run notes --sql "
+spindb run notes -c "
   CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT);
   INSERT INTO tags (name) VALUES ('work'), ('personal');
   CREATE TABLE note_tags (note_id INTEGER, tag_id INTEGER);
@@ -1066,7 +1067,7 @@ EOF
 spindb run taskapp ./schema.sql
 
 # 3. Seed test data
-spindb run taskapp --sql "
+spindb run taskapp -c "
   INSERT INTO users (username, email) VALUES
     ('alice', 'alice@example.com'),
     ('bob', 'bob@example.com');
@@ -1078,7 +1079,7 @@ spindb run taskapp --sql "
 "
 
 # 4. Query data
-spindb run taskapp --sql "
+spindb run taskapp -c "
   SELECT
     u.username,
     t.title,
@@ -1172,7 +1173,7 @@ spindb url cache-db       # mongodb://127.0.0.1:27019/cache-db
 **Example: Run MongoDB queries with JavaScript**
 ```bash
 # Insert documents
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.insertMany([
     {
       title: 'First Post',
@@ -1192,13 +1193,13 @@ spindb run blogdb --sql "
 "
 
 # Query documents
-spindb run blogdb --sql "db.posts.find().pretty()"
+spindb run blogdb -c "db.posts.find().pretty()"
 
 # Query with filter
-spindb run blogdb --sql "db.posts.find({ likes: { \$gt: 0 } }).pretty()"
+spindb run blogdb -c "db.posts.find({ likes: { \$gt: 0 } }).pretty()"
 
 # Update documents
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.updateOne(
     { title: 'First Post' },
     { \$inc: { likes: 1 } }
@@ -1206,7 +1207,7 @@ spindb run blogdb --sql "
 "
 
 # Aggregate data
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.aggregate([
     { \$unwind: '\$tags' },
     { \$group: { _id: '\$tags', count: { \$sum: 1 } } },
@@ -1309,11 +1310,11 @@ spindb start blogdb-dev
 # Runs on new port: 27018
 
 # Test destructive operations on clone
-spindb run blogdb-dev --sql "db.posts.deleteMany({ likes: { \$lt: 5 } })"
+spindb run blogdb-dev -c "db.posts.deleteMany({ likes: { \$lt: 5 } })"
 
 # Original data untouched
 spindb start blogdb
-spindb run blogdb --sql "db.posts.countDocuments()"
+spindb run blogdb -c "db.posts.countDocuments()"
 ```
 
 ---
@@ -1323,7 +1324,7 @@ spindb run blogdb --sql "db.posts.countDocuments()"
 **Example: Aggregation pipelines**
 ```bash
 # Calculate post statistics
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.aggregate([
     {
       \$group: {
@@ -1340,7 +1341,7 @@ spindb run blogdb --sql "
 "
 
 # Find posts with most comments
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.aggregate([
     {
       \$project: {
@@ -1362,7 +1363,7 @@ spindb run blogdb --sql "
 **Example: Indexes**
 ```bash
 # Create indexes for better performance
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.createIndex({ author: 1 });
   db.posts.createIndex({ tags: 1 });
   db.posts.createIndex({ createdAt: -1 });
@@ -1370,10 +1371,10 @@ spindb run blogdb --sql "
 "
 
 # List indexes
-spindb run blogdb --sql "db.posts.getIndexes()"
+spindb run blogdb -c "db.posts.getIndexes()"
 
 # Explain query plan
-spindb run blogdb --sql "
+spindb run blogdb -c "
   db.posts.find({ author: 'alice' }).explain('executionStats')
 "
 ```
@@ -1517,7 +1518,7 @@ EOF
 spindb run social-api ./seeds/users.js
 
 # 4. Query data
-spindb run social-api --sql "
+spindb run social-api -c "
   db.posts.aggregate([
     {
       \$lookup: {
@@ -1549,6 +1550,250 @@ spindb url social-api --copy
 
 # 6. Create backup
 spindb backup social-api --dump --name social-api-backup
+```
+
+---
+
+## Redis Examples
+
+### Available Commands & Flags
+
+Key differences from SQL databases:
+- Default port: **6379** (range: 6379-6400)
+- No authentication by default
+- Uses **Redis commands** instead of SQL
+- Numbered databases (0-15) instead of named databases
+- Connection string format: `redis://127.0.0.1:6379/0`
+- `spindb run` executes Redis commands, not SQL
+- Enhanced shell: Use `--iredis` for interactive experience
+
+---
+
+### Basic Redis Workflow
+
+**Example: Create and use a Redis database**
+```bash
+# Create Redis container
+spindb create cache --engine redis
+
+# Check status
+spindb list
+# cache   🔴 redis   7.2   6379   ● running
+
+# Connect with redis-cli
+spindb connect cache
+
+# Inside redis-cli:
+# SET greeting "Hello, Redis!"
+# GET greeting
+# EXPIRE greeting 3600
+# TTL greeting
+# quit
+```
+
+---
+
+### Multi-Instance Setup
+
+**Example: Separate Redis instances for different purposes**
+```bash
+# Create multiple Redis containers
+spindb create cache-main --engine redis --port 6379
+spindb create cache-sessions --engine redis --port 6380
+spindb create cache-jobs --engine redis --port 6381
+
+# List all Redis containers
+spindb list
+# cache-main      🔴 redis   7.2   6379   ● running
+# cache-sessions  🔴 redis   7.2   6380   ● running
+# cache-jobs      🔴 redis   7.2   6381   ● running
+
+# Get connection strings
+spindb url cache-main       # redis://127.0.0.1:6379/0
+spindb url cache-sessions   # redis://127.0.0.1:6380/0
+spindb url cache-jobs       # redis://127.0.0.1:6381/0
+```
+
+---
+
+### Executing Redis Commands
+
+**Example: Run Redis commands**
+```bash
+# Set and get values
+spindb run cache -c "SET user:1:name 'Alice'"
+spindb run cache -c "GET user:1:name"
+
+# Work with hashes
+spindb run cache -c "HSET user:1 name Alice email alice@example.com"
+spindb run cache -c "HGETALL user:1"
+
+# Work with lists
+spindb run cache -c "RPUSH queue:jobs job1 job2 job3"
+spindb run cache -c "LRANGE queue:jobs 0 -1"
+
+# Work with sets
+spindb run cache -c "SADD tags:post:1 redis database nosql"
+spindb run cache -c "SMEMBERS tags:post:1"
+
+# Work with sorted sets
+spindb run cache -c "ZADD leaderboard 100 alice 85 bob 92 charlie"
+spindb run cache -c "ZREVRANGE leaderboard 0 2 WITHSCORES"
+```
+
+**Example: Run Redis commands from file**
+```bash
+# Create seed script
+cat > seeds/redis-data.txt << 'EOF'
+SET app:version "1.0.0"
+SET app:environment "development"
+
+HSET user:1 id 1 name "Alice" email "alice@example.com"
+HSET user:2 id 2 name "Bob" email "bob@example.com"
+
+RPUSH notifications:1 "Welcome to the app!" "Check out new features"
+RPUSH notifications:2 "Welcome, Bob!"
+
+SADD active_users 1 2
+
+ZADD user_scores 100 1 85 2
+EOF
+
+# Run the seed script
+spindb run cache ./seeds/redis-data.txt
+```
+
+---
+
+### Backup & Restore
+
+**Example: Backup Redis database**
+```bash
+# Create backup using RDB snapshot
+spindb backup cache --dump --name cache-backup
+# Creates: cache-cache-backup-TIMESTAMP.rdb
+
+# RDB files are Redis's native binary format
+# They can be restored to any Redis instance
+```
+
+**Example: Restore Redis backup**
+```bash
+# Create new container and restore
+spindb create cache-restore --engine redis
+spindb restore cache-restore ./cache-backup.rdb
+
+# Note: Container must be stopped to restore RDB files
+spindb stop cache-restore
+spindb restore cache-restore ./cache-backup.rdb
+spindb start cache-restore
+```
+
+---
+
+### Cloning Redis Databases
+
+**Example: Clone for testing**
+```bash
+# Stop and clone
+spindb stop cache
+spindb clone cache cache-test
+
+# Start clone
+spindb start cache-test
+# Runs on new port: 6380
+
+# Test operations on clone
+spindb run cache-test -c "FLUSHDB"
+# Original data is safe!
+
+# Restart original
+spindb start cache
+```
+
+---
+
+### Connection Strings for Applications
+
+**Example: Use with Redis clients**
+```bash
+# For Node.js (ioredis)
+spindb url cache
+# Add to .env:
+# REDIS_URL=redis://127.0.0.1:6379/0
+
+# Connection code:
+# const Redis = require('ioredis');
+# const redis = new Redis(process.env.REDIS_URL);
+
+# For Python (redis-py)
+# import redis
+# r = redis.from_url('redis://127.0.0.1:6379/0')
+
+# Get JSON format with details
+spindb url cache --json
+# {
+#   "connectionString": "redis://127.0.0.1:6379/0",
+#   "host": "127.0.0.1",
+#   "port": 6379,
+#   "database": "0",
+#   "engine": "redis",
+#   "container": "cache"
+# }
+```
+
+---
+
+### Enhanced Redis Client
+
+**Example: Use iredis for better experience**
+```bash
+# Install and connect with iredis
+spindb connect cache --iredis
+
+# Features:
+# - Auto-completion for commands
+# - Syntax highlighting
+# - Command history
+# - Pretty printed output
+```
+
+---
+
+### Complete Redis Example
+
+**Example: Session store and cache**
+```bash
+# 1. Create Redis instance
+spindb create session-store --engine redis
+
+# 2. Set up session data structure
+spindb run session-store -c "
+SET session:abc123 '{\"userId\":1,\"email\":\"alice@example.com\",\"loginAt\":1234567890}'
+EXPIRE session:abc123 3600
+"
+
+# 3. Cache some data
+spindb run session-store -c "
+SET cache:user:1:profile '{\"name\":\"Alice\",\"avatar\":\"https://...\"}'
+EXPIRE cache:user:1:profile 300
+"
+
+# 4. Add rate limiting counter
+spindb run session-store -c "
+SET ratelimit:ip:192.168.1.1 1
+EXPIRE ratelimit:ip:192.168.1.1 60
+INCR ratelimit:ip:192.168.1.1
+"
+
+# 5. Check all keys
+spindb run session-store -c "KEYS *"
+
+# 6. Get connection string
+spindb url session-store --copy
+
+# 7. Create backup
+spindb backup session-store --dump --name session-store-backup
 ```
 
 ---
@@ -1612,7 +1857,7 @@ describe('Database Integration Tests', () => {
     console.log(`Test database created: ${connectionString}`);
 
     // Create test schema
-    spindb(`run ${containerName} --sql "
+    spindb(`run ${containerName} -c "
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -1634,7 +1879,7 @@ describe('Database Integration Tests', () => {
     "`);
 
     // Seed test data
-    spindb(`run ${containerName} --sql "
+    spindb(`run ${containerName} -c "
       INSERT INTO users (email, name) VALUES
         ('alice@example.com', 'Alice Smith'),
         ('bob@example.com', 'Bob Johnson'),
@@ -2028,7 +2273,7 @@ try {
   execSync(`spindb run ${TEST_CONTAINER} ./migrations/005-add-users-table.sql`);
 
   console.log('6. Verifying migration...');
-  execSync(`spindb run ${TEST_CONTAINER} --sql "SELECT * FROM users LIMIT 1"`);
+  execSync(`spindb run ${TEST_CONTAINER} -c "SELECT * FROM users LIMIT 1"`);
 
   console.log('✅ Migration successful!');
   console.log('You can now apply this migration to production.');
@@ -2053,13 +2298,13 @@ node scripts/test-migration.js
 
 ## Summary
 
-This guide covers all SpinDB commands across all four supported database engines. Key patterns:
+This guide covers all SpinDB commands across all five supported database engines. Key patterns:
 
-1. **Server databases** (PostgreSQL, MySQL, MongoDB) need start/stop, use ports
+1. **Server databases** (PostgreSQL, MySQL, MongoDB, Redis) need start/stop, use ports
 2. **File-based databases** (SQLite) are always available, use file paths
 3. **All engines** support backup, restore, clone, run, connect
 4. **Automation** is easy - use `--json` for scripting and spawn databases in tests
-5. **MongoDB** uses JavaScript instead of SQL for queries
+5. **MongoDB** uses JavaScript, **Redis** uses Redis commands instead of SQL
 
 ---
 

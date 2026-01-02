@@ -27,8 +27,8 @@
 
 See [ENGINES.md](ENGINES.md) for full engine status and details.
 
-- [ ] Redis (in-memory key-value)
-- [ ] MongoDB (document database)
+- [x] Redis (in-memory key-value)
+- [x] MongoDB (document database)
 - [ ] MariaDB as standalone engine
 
 ### v1.3 - Advanced Features
@@ -41,6 +41,21 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 ---
 
 ## Backlog
+
+### Redis Enhancements
+
+- [ ] **Redis remote dump/restore** - Support creating containers from remote Redis connection strings
+  - Unlike PostgreSQL/MySQL/MongoDB, Redis doesn't have a native remote dump tool
+  - Options to explore:
+    - Use `DUMP`/`RESTORE` commands to serialize individual keys
+    - Implement incremental key migration using `SCAN` + `DUMP`
+    - Add `--migrate` flag that copies keys from remote to local
+  - Current behavior: throws helpful error with manual migration instructions
+
+- [ ] **Windows CI/CD tests for Redis** - Add `windows-latest` to Redis CI matrix
+  - Currently skipped pending macOS/Linux verification
+  - Requires testing Redis installation via Chocolatey or Scoop
+  - Update `.github/workflows/ci.yml` test-redis job matrix
 
 ### CLI Improvements
 

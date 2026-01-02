@@ -4,6 +4,8 @@ on:
   # TODO: uncomment for testing CI
   # push:
   #   branches: [dev]
+  push:
+    branches: [feature/redis] # TODO: remove when testing is complete
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -435,6 +437,52 @@ jobs:
         timeout-minutes: 15
 
   # ============================================
+  # Redis Integration Tests
+  # Uses system-installed Redis via Homebrew/apt
+  # NOTE: Windows tests to be added after macOS/Linux verified working
+  # ============================================
+  test-redis:
+    name: Redis (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Skip Windows for now - add after macOS/Linux verified working
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Install Redis on macOS via Homebrew
+      - name: Install Redis (macOS)
+        if: runner.os == 'macOS'
+        run: brew install redis
+
+      # Install Redis on Ubuntu
+      - name: Install Redis (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Redis integration tests
+        run: pnpm test:redis
+        timeout-minutes: 15
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -517,6 +565,7 @@ jobs:
         test-mysql,
         test-sqlite,
         test-mongodb,
+        test-redis,
         test-cli-e2e,
         lint,
       ]
@@ -542,6 +591,10 @@ jobs:
           fi
           if [ "${{ needs.test-mongodb.result }}" != "success" ]; then
             echo "MongoDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-redis.result }}" != "success" ]; then
+            echo "Redis tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

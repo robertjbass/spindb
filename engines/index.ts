@@ -2,6 +2,7 @@ import { postgresqlEngine } from './postgresql'
 import { mysqlEngine } from './mysql'
 import { sqliteEngine } from './sqlite'
 import { mongodbEngine } from './mongodb'
+import { redisEngine } from './redis'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
@@ -22,6 +23,8 @@ export const engines: Record<string, BaseEngine> = {
   // MongoDB and aliases
   mongodb: mongodbEngine,
   mongo: mongodbEngine,
+  // Redis and aliases
+  redis: redisEngine,
 }
 
 /**

@@ -24,6 +24,7 @@ export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
+  redis: { base: 6399, clone: 6401, renamed: 6400 },
 }
 
 /**
@@ -171,6 +172,13 @@ export async function executeSQL(
       cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
     }
     return execAsync(cmd)
+  } else if (engine === Engine.Redis) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled redis-cli if available
+    const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+    // For Redis, sql is a Redis command
+    const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -205,6 +213,12 @@ export async function executeSQLFile(
     const engineImpl = getEngine(engine)
     const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
     const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.Redis) {
+    const engineImpl = getEngine(engine)
+    const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+    // Redis uses pipe for file input: redis-cli -n <db> < file.redis
+    const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} < "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -262,6 +276,41 @@ export async function getRowCount(
 }
 
 /**
+ * Get the count of keys matching a pattern in Redis
+ * Uses KEYS command with pattern (e.g., "user:*" to count all user keys)
+ */
+export async function getKeyCount(
+  port: number,
+  database: string,
+  pattern: string,
+): Promise<number> {
+  const engineImpl = getEngine(Engine.Redis)
+  const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  // Use KEYS to get matching keys, then count the lines
+  const { stdout } = await execAsync(
+    `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} KEYS "${pattern}"`,
+  )
+  const lines = stdout.trim().split('\n').filter((line) => line.trim() !== '')
+  return lines.length
+}
+
+/**
+ * Get the value of a key in Redis
+ */
+export async function getRedisValue(
+  port: number,
+  database: string,
+  key: string,
+): Promise<string> {
+  const engineImpl = getEngine(Engine.Redis)
+  const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  const { stdout } = await execAsync(
+    `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} GET "${key}"`,
+  )
+  return stdout.trim()
+}
+
+/**
  * Wait for a database to be ready to accept connections
  */
 export async function waitForReady(
@@ -296,6 +345,19 @@ export async function waitForReady(
           cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval '${pingScript}' --quiet`
         }
         await execAsync(cmd, { timeout: 5000 })
+      } else if (engine === Engine.Redis) {
+        // Use redis-cli to ping Redis
+        const engineImpl = getEngine(engine)
+        const redisCliPath = await engineImpl
+          .getRedisCliPath()
+          .catch(() => 'redis-cli')
+        const { stdout } = await execAsync(
+          `"${redisCliPath}" -h 127.0.0.1 -p ${port} PING`,
+          { timeout: 5000 },
+        )
+        if (stdout.trim() === 'PONG') {
+          return true
+        }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -352,6 +414,9 @@ export function getConnectionString(
   }
   if (engine === Engine.MongoDB) {
     return `mongodb://127.0.0.1:${port}/${database}`
+  }
+  if (engine === Engine.Redis) {
+    return `redis://127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-01-01
+
+### Added
+- **Redis support** - Full container lifecycle for Redis 6, 7, and 8
+  - Create, start, stop, delete containers
+  - Backup with BGSAVE/RDB and restore from RDB files
+  - Clone containers via backup/restore
+  - Run Redis commands via files or inline via `spindb run`
+  - System binary detection for `redis-server` and `redis-cli`
+  - Support for `--iredis` enhanced CLI flag
+  - Multi-version support via Homebrew versioned formulas (`redis@7`, `redis@6`)
+  - Full macOS and Linux CI integration tests (Windows to follow)
+- Redis and MongoDB added to `spindb engines` list output
+
+### Changed
+- **`run` command:** Added `-c, --command` flag for inline commands (preferred over `--sql` which is now deprecated but still works)
+- **`create` command:** Changed `--version` to `--db-version` to avoid conflict with global `-v, --version` flag
+
 ## [0.12.4] - 2025-12-30
 
 ### Added

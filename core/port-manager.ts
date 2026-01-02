@@ -48,7 +48,7 @@ export class PortManager {
     if (await this.isPortAvailable(preferredPort)) {
       return {
         port: preferredPort,
-        isDefault: preferredPort === defaults.port,
+        isDefault: true, // We got the preferred port
       }
     }
 
@@ -135,7 +135,7 @@ export class PortManager {
     ) {
       return {
         port: preferredPort,
-        isDefault: preferredPort === defaults.port,
+        isDefault: true, // We got the preferred port
       }
     }
 

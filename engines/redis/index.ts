@@ -1,0 +1,737 @@
+/**
+ * Redis Engine implementation
+ * Manages Redis database containers using system-installed Redis binaries
+ */
+
+import { spawn, exec, type SpawnOptions } from 'child_process'
+import { promisify } from 'util'
+import { existsSync } from 'fs'
+import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { join } from 'path'
+import { BaseEngine } from '../base-engine'
+import { paths } from '../../config/paths'
+import { getEngineDefaults } from '../../config/defaults'
+import { platformService, isWindows } from '../../core/platform-service'
+import { configManager } from '../../core/config-manager'
+import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  getRedisServerPath,
+  getRedisCliPath,
+  getIredisPath,
+  detectInstalledVersions,
+  getInstallInstructions,
+  getRedisServerPathForVersion,
+  getRedisCliPathForVersion,
+} from './binary-detection'
+import {
+  detectBackupFormat as detectBackupFormatImpl,
+  restoreBackup,
+} from './restore'
+import { createBackup } from './backup'
+import type {
+  ContainerConfig,
+  ProgressCallback,
+  BackupFormat,
+  BackupOptions,
+  BackupResult,
+  RestoreResult,
+  DumpResult,
+  StatusResult,
+} from '../../types'
+
+// Re-export modules for external access
+export * from './version-validator'
+export * from './restore'
+
+const execAsync = promisify(exec)
+
+const ENGINE = 'redis'
+const engineDef = getEngineDefaults(ENGINE)
+
+/**
+ * Build a redis-cli command for inline command execution
+ */
+export function buildRedisCliCommand(
+  redisCliPath: string,
+  port: number,
+  command: string,
+  options?: { database?: string },
+): string {
+  const db = options?.database || '0'
+  if (isWindows()) {
+    // Windows: use double quotes
+    const escaped = command.replace(/"/g, '\\"')
+    return `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${escaped}`
+  } else {
+    // Unix: pass command directly (Redis commands are simple)
+    return `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${command}`
+  }
+}
+
+/**
+ * Generate Redis configuration file content
+ */
+function generateRedisConfig(options: {
+  port: number
+  dataDir: string
+  logFile: string
+  pidFile: string
+}): string {
+  return `# SpinDB generated Redis configuration
+port ${options.port}
+bind 127.0.0.1
+dir ${options.dataDir}
+daemonize yes
+logfile ${options.logFile}
+pidfile ${options.pidFile}
+
+# Persistence - RDB snapshots
+save 900 1
+save 300 10
+save 60 10000
+dbfilename dump.rdb
+
+# Append Only File (disabled for local dev)
+appendonly no
+`
+}
+
+export class RedisEngine extends BaseEngine {
+  name = ENGINE
+  displayName = 'Redis'
+  defaultPort = engineDef.defaultPort
+  supportedVersions = engineDef.supportedVersions
+
+  /**
+   * Fetch available versions from system
+   * Redis uses system-installed versions
+   */
+  async fetchAvailableVersions(): Promise<Record<string, string[]>> {
+    const installed = await detectInstalledVersions()
+    const versions: Record<string, string[]> = {}
+
+    for (const [major, full] of Object.entries(installed)) {
+      versions[major] = [full]
+    }
+
+    // If no versions found, return supported versions as placeholders
+    if (Object.keys(versions).length === 0) {
+      for (const v of this.supportedVersions) {
+        versions[v] = [v]
+      }
+    }
+
+    return versions
+  }
+
+  /**
+   * Get binary download URL - not applicable for Redis (uses system binaries)
+   */
+  getBinaryUrl(_version: string, _platform: string, _arch: string): string {
+    throw new Error(
+      'Redis uses system-installed binaries. ' + getInstallInstructions(),
+    )
+  }
+
+  /**
+   * Verify that Redis binaries are available
+   */
+  async verifyBinary(_binPath: string): Promise<boolean> {
+    const redisServer = await getRedisServerPath()
+    return redisServer !== null
+  }
+
+  /**
+   * Check if Redis is installed
+   */
+  async isBinaryInstalled(_version: string): Promise<boolean> {
+    const redisServer = await getRedisServerPath()
+    return redisServer !== null
+  }
+
+  /**
+   * Ensure Redis binaries are available (just checks system installation)
+   */
+  async ensureBinaries(
+    _version: string,
+    _onProgress?: ProgressCallback,
+  ): Promise<string> {
+    const redisServer = await getRedisServerPath()
+    if (!redisServer) {
+      throw new Error(getInstallInstructions())
+    }
+    return redisServer
+  }
+
+  /**
+   * Initialize a new Redis data directory
+   * Creates the directory and generates redis.conf
+   */
+  async initDataDir(
+    containerName: string,
+    _version: string,
+    options: Record<string, unknown> = {},
+  ): Promise<string> {
+    const dataDir = paths.getContainerDataPath(containerName, {
+      engine: ENGINE,
+    })
+    const containerDir = paths.getContainerPath(containerName, {
+      engine: ENGINE,
+    })
+    const logFile = paths.getContainerLogPath(containerName, { engine: ENGINE })
+    const pidFile = join(containerDir, 'redis.pid')
+    const port = (options.port as number) || engineDef.defaultPort
+
+    // Create data directory if it doesn't exist
+    if (!existsSync(dataDir)) {
+      await mkdir(dataDir, { recursive: true })
+      logDebug(`Created Redis data directory: ${dataDir}`)
+    }
+
+    // Generate redis.conf
+    const configPath = join(containerDir, 'redis.conf')
+    const configContent = generateRedisConfig({
+      port,
+      dataDir,
+      logFile,
+      pidFile,
+    })
+    await writeFile(configPath, configContent)
+    logDebug(`Generated Redis config: ${configPath}`)
+
+    return dataDir
+  }
+
+  /**
+   * Start Redis server
+   * CLI wrapper: redis-server /path/to/redis.conf
+   */
+  async start(
+    container: ContainerConfig,
+    onProgress?: ProgressCallback,
+  ): Promise<{ port: number; connectionString: string }> {
+    const { name, port, version } = container
+
+    // Get version-specific redis-server path
+    const majorVersion = version.split('.')[0]
+    let redisServer = await getRedisServerPathForVersion(majorVersion)
+
+    // Fall back to generic path if version-specific not found
+    if (!redisServer) {
+      redisServer = await getRedisServerPath()
+    }
+
+    if (!redisServer) {
+      throw new Error(getInstallInstructions())
+    }
+
+    logDebug(`Using redis-server for version ${majorVersion}: ${redisServer}`)
+
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+    const configPath = join(containerDir, 'redis.conf')
+    const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
+    const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
+    const pidFile = join(containerDir, 'redis.pid')
+
+    // Regenerate config with current port (in case it changed)
+    const configContent = generateRedisConfig({
+      port,
+      dataDir,
+      logFile,
+      pidFile,
+    })
+    await writeFile(configPath, configContent)
+
+    onProgress?.({ stage: 'starting', message: 'Starting Redis...' })
+
+    logDebug(`Starting redis-server with config: ${configPath}`)
+
+    // Redis with daemonize: yes handles its own forking
+    return new Promise((resolve, reject) => {
+      const proc = spawn(redisServer, [configPath], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+        logDebug(`redis-server stdout: ${data.toString()}`)
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+        logDebug(`redis-server stderr: ${data.toString()}`)
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', async (code) => {
+        // Redis with daemonize: yes exits immediately after forking
+        // Exit code 0 means the parent forked successfully, but the child may still fail
+        if (code === 0 || code === null) {
+          // Give the child process a moment to start (or fail)
+          await new Promise((r) => setTimeout(r, 500))
+
+          // Check log for early startup failures (like port conflicts)
+          try {
+            const { readFile } = await import('fs/promises')
+            const logContent = await readFile(logFile, 'utf-8')
+            const recentLog = logContent.slice(-2000) // Last 2KB
+
+            // Check for port binding errors
+            if (
+              recentLog.includes('Address already in use') ||
+              recentLog.includes('bind: Address already in use')
+            ) {
+              reject(new Error(`Port ${port} is already in use (address already in use)`))
+              return
+            }
+            if (recentLog.includes('Failed listening on port')) {
+              reject(new Error(`Port ${port} is already in use`))
+              return
+            }
+          } catch {
+            // Log file might not exist yet, continue to wait for ready
+          }
+
+          // Wait for Redis to be ready
+          const ready = await this.waitForReady(port, version)
+          if (ready) {
+            resolve({
+              port,
+              connectionString: this.getConnectionString(container),
+            })
+          } else {
+            // Check log again for errors if not ready
+            try {
+              const { readFile } = await import('fs/promises')
+              const logContent = await readFile(logFile, 'utf-8')
+              const recentLog = logContent.slice(-2000)
+              if (
+                recentLog.includes('Address already in use') ||
+                recentLog.includes('bind: Address already in use')
+              ) {
+                reject(new Error(`Port ${port} is already in use (address already in use)`))
+                return
+              }
+            } catch {
+              // Continue with generic error
+            }
+            reject(
+              new Error(
+                `Redis failed to start within timeout. Check logs at: ${logFile}`,
+              ),
+            )
+          }
+        } else {
+          reject(
+            new Error(
+              stderr || stdout || `redis-server exited with code ${code}`,
+            ),
+          )
+        }
+      })
+    })
+  }
+
+  /**
+   * Wait for Redis to be ready to accept connections
+   */
+  private async waitForReady(
+    port: number,
+    version: string,
+    timeoutMs = 30000,
+  ): Promise<boolean> {
+    const startTime = Date.now()
+    const checkInterval = 500
+
+    const redisCli = await this.getRedisCliPathForVersion(version)
+    if (!redisCli) {
+      logWarning('redis-cli not found, cannot verify Redis is ready')
+      return true
+    }
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} PING`
+        const { stdout } = await execAsync(cmd, { timeout: 5000 })
+        if (stdout.trim() === 'PONG') {
+          logDebug(`Redis ready on port ${port}`)
+          return true
+        }
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, checkInterval))
+      }
+    }
+
+    logWarning(`Redis did not become ready within ${timeoutMs}ms`)
+    return false
+  }
+
+  /**
+   * Stop Redis server
+   * Uses SHUTDOWN SAVE via redis-cli to persist data before stopping
+   */
+  async stop(container: ContainerConfig): Promise<void> {
+    const { name, port, version } = container
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+    const pidFile = join(containerDir, 'redis.pid')
+
+    logDebug(`Stopping Redis container "${name}" on port ${port}`)
+
+    // Try graceful shutdown via redis-cli
+    const redisCli = await this.getRedisCliPathForVersion(version)
+    if (redisCli) {
+      try {
+        const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} SHUTDOWN SAVE`
+        await execAsync(cmd, { timeout: 10000 })
+        logDebug('Redis shutdown command sent')
+        // Wait a bit for process to exit
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      } catch (error) {
+        logDebug(`redis-cli shutdown failed: ${error}`)
+        // Continue to PID-based shutdown
+      }
+    }
+
+    // Get PID and force kill if needed
+    let pid: number | null = null
+
+    if (existsSync(pidFile)) {
+      try {
+        const content = await readFile(pidFile, 'utf8')
+        pid = parseInt(content.trim(), 10)
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Kill process if still running
+    if (pid && platformService.isProcessRunning(pid)) {
+      logDebug(`Killing Redis process ${pid}`)
+      try {
+        await platformService.terminateProcess(pid, false)
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+
+        if (platformService.isProcessRunning(pid)) {
+          logWarning(`Graceful termination failed, force killing ${pid}`)
+          await platformService.terminateProcess(pid, true)
+        }
+      } catch (error) {
+        logDebug(`Process termination error: ${error}`)
+      }
+    }
+
+    // Cleanup PID file
+    if (existsSync(pidFile)) {
+      try {
+        await unlink(pidFile)
+      } catch {
+        // Ignore
+      }
+    }
+
+    logDebug('Redis stopped')
+  }
+
+  /**
+   * Get Redis server status
+   */
+  async status(container: ContainerConfig): Promise<StatusResult> {
+    const { name, port, version } = container
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+    const pidFile = join(containerDir, 'redis.pid')
+
+    // Try pinging with redis-cli
+    const redisCli = await this.getRedisCliPathForVersion(version)
+    if (redisCli) {
+      try {
+        const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} PING`
+        const { stdout } = await execAsync(cmd, { timeout: 5000 })
+        if (stdout.trim() === 'PONG') {
+          return { running: true, message: 'Redis is running' }
+        }
+      } catch {
+        // Not responding, check PID
+      }
+    }
+
+    // Check PID file
+    if (existsSync(pidFile)) {
+      try {
+        const content = await readFile(pidFile, 'utf8')
+        const pid = parseInt(content.trim(), 10)
+        if (!isNaN(pid) && pid > 0 && platformService.isProcessRunning(pid)) {
+          return {
+            running: true,
+            message: `Redis is running (PID: ${pid})`,
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    return { running: false, message: 'Redis is not running' }
+  }
+
+  /**
+   * Detect backup format
+   */
+  async detectBackupFormat(filePath: string): Promise<BackupFormat> {
+    return detectBackupFormatImpl(filePath)
+  }
+
+  /**
+   * Restore a backup
+   * IMPORTANT: Redis must be stopped before restore
+   */
+  async restore(
+    container: ContainerConfig,
+    backupPath: string,
+    _options: Record<string, unknown> = {},
+  ): Promise<RestoreResult> {
+    const { name } = container
+    const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
+
+    return restoreBackup(backupPath, {
+      containerName: name,
+      dataDir,
+    })
+  }
+
+  /**
+   * Get connection string
+   * Format: redis://127.0.0.1:PORT/DATABASE
+   */
+  getConnectionString(container: ContainerConfig, database?: string): string {
+    const { port } = container
+    const db = database || container.database || '0'
+    return `redis://127.0.0.1:${port}/${db}`
+  }
+
+  /**
+   * Get path to redis-cli for a specific version
+   * @param version - Optional major version (e.g., "8", "7"). If not provided, uses generic path.
+   */
+  async getRedisCliPathForVersion(version?: string): Promise<string> {
+    // Try version-specific path first
+    if (version) {
+      const majorVersion = version.split('.')[0]
+      const versionSpecific = await getRedisCliPathForVersion(majorVersion)
+      if (versionSpecific) {
+        return versionSpecific
+      }
+    }
+
+    // Fall back to cached or generic path
+    const cached = await configManager.getBinaryPath('redis-cli')
+    if (cached) return cached
+
+    const detected = await getRedisCliPath()
+    if (!detected) {
+      throw new Error(
+        'redis-cli not found. Install Redis:\n' +
+          '  macOS: brew install redis\n' +
+          '  Ubuntu: sudo apt install redis-tools\n',
+      )
+    }
+    return detected
+  }
+
+  /**
+   * Open redis-cli interactive shell
+   */
+  async connect(container: ContainerConfig, database?: string): Promise<void> {
+    const { port, version } = container
+    const db = database || container.database || '0'
+
+    const redisCli = await this.getRedisCliPathForVersion(version)
+
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(
+        redisCli,
+        ['-h', '127.0.0.1', '-p', String(port), '-n', db],
+        spawnOptions,
+      )
+
+      proc.on('error', reject)
+      proc.on('close', () => resolve())
+    })
+  }
+
+  /**
+   * Connect with iredis (enhanced CLI)
+   */
+  async connectWithIredis(
+    container: ContainerConfig,
+    database?: string,
+  ): Promise<void> {
+    const { port } = container
+    const db = database || container.database || '0'
+
+    const iredis = await getIredisPath()
+    if (!iredis) {
+      throw new Error(
+        'iredis not found. Install it with:\n' +
+          '  macOS: brew install iredis\n' +
+          '  pip: pip install iredis',
+      )
+    }
+
+    const spawnOptions: SpawnOptions = {
+      stdio: 'inherit',
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(
+        iredis,
+        ['-h', '127.0.0.1', '-p', String(port), '-n', db],
+        spawnOptions,
+      )
+
+      proc.on('error', reject)
+      proc.on('close', () => resolve())
+    })
+  }
+
+  /**
+   * Create a new database
+   * Redis uses numbered databases (0-15), they always exist
+   * This is effectively a no-op
+   */
+  async createDatabase(
+    _container: ContainerConfig,
+    database: string,
+  ): Promise<void> {
+    const dbNum = parseInt(database, 10)
+    if (isNaN(dbNum) || dbNum < 0 || dbNum > 15) {
+      throw new Error(
+        `Invalid Redis database number: ${database}. Must be 0-15.`,
+      )
+    }
+    // No-op - Redis databases always exist
+    logDebug(`Redis database ${database} is available (databases 0-15 always exist)`)
+  }
+
+  /**
+   * Drop a database
+   * Uses FLUSHDB to clear all keys in the specified database
+   */
+  async dropDatabase(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<void> {
+    const { port, version } = container
+    const dbNum = parseInt(database, 10)
+    if (isNaN(dbNum) || dbNum < 0 || dbNum > 15) {
+      throw new Error(
+        `Invalid Redis database number: ${database}. Must be 0-15.`,
+      )
+    }
+
+    const redisCli = await this.getRedisCliPathForVersion(version)
+
+    // SELECT the database and FLUSHDB
+    const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} -n ${database} FLUSHDB`
+
+    try {
+      await execAsync(cmd, { timeout: 10000 })
+      logDebug(`Flushed Redis database ${database}`)
+    } catch (error) {
+      const err = error as Error
+      logDebug(`FLUSHDB result: ${err.message}`)
+    }
+  }
+
+  /**
+   * Get the size of the database in bytes
+   */
+  async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
+    const { port, database, version } = container
+    const db = database || '0'
+
+    try {
+      const redisCli = await this.getRedisCliPathForVersion(version)
+      const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} -n ${db} INFO memory`
+
+      const { stdout } = await execAsync(cmd, { timeout: 10000 })
+
+      // Parse used_memory from INFO output
+      const match = stdout.match(/used_memory:(\d+)/)
+      if (match) {
+        return parseInt(match[1], 10)
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Dump from a remote Redis connection
+   * Redis doesn't support remote dump like pg_dump/mongodump
+   * Throw an error with guidance
+   */
+  async dumpFromConnectionString(
+    _connectionString: string,
+    _outputPath: string,
+  ): Promise<DumpResult> {
+    throw new Error(
+      'Redis does not support creating containers from remote connection strings.\n' +
+        'To migrate data from a remote Redis instance:\n' +
+        '  1. On remote server: redis-cli --rdb dump.rdb\n' +
+        '  2. Copy dump.rdb to local machine\n' +
+        '  3. spindb restore <container> dump.rdb',
+    )
+  }
+
+  /**
+   * Create a backup
+   */
+  async backup(
+    container: ContainerConfig,
+    outputPath: string,
+    options: BackupOptions,
+  ): Promise<BackupResult> {
+    return createBackup(container, outputPath, options)
+  }
+
+  /**
+   * Run a Redis command file or inline command
+   */
+  async runScript(
+    container: ContainerConfig,
+    options: { file?: string; sql?: string; database?: string },
+  ): Promise<void> {
+    const { port, version } = container
+    const db = options.database || container.database || '0'
+
+    const redisCli = await this.getRedisCliPathForVersion(version)
+
+    if (options.file) {
+      // Pipe file contents to redis-cli
+      const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} -n ${db} < "${options.file}"`
+      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
+    } else if (options.sql) {
+      // Run inline command (using sql field for compatibility, but it's actually Redis commands)
+      const cmd = buildRedisCliCommand(redisCli, port, options.sql, {
+        database: db,
+      })
+      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
+    } else {
+      throw new Error('Either file or sql option must be provided')
+    }
+  }
+}
+
+export const redisEngine = new RedisEngine()

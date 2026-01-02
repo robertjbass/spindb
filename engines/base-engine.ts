@@ -115,6 +115,15 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the redis-cli client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured redis-cli should override this method.
+   */
+  async getRedisCliPath(): Promise<string> {
+    throw new Error('redis-cli not found')
+  }
+
+  /**
    * Open an interactive shell/CLI connection
    */
   abstract connect(container: ContainerConfig, database?: string): Promise<void>
