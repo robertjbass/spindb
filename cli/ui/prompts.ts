@@ -7,6 +7,8 @@ import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { installPostgresBinaries } from '../../engines/postgresql/binary-manager'
+import { portManager } from '../../core/port-manager'
+import { containerManager } from '../../core/container-manager'
 import {
   detectPackageManager,
   getManualInstallInstructions,
@@ -231,18 +233,54 @@ export async function promptVersion(
 }
 
 /**
- * Prompt for port
+ * Prompt for port with conflict detection
  * @param defaultPort - Default port number
+ * @param engine - Engine name for port range lookup
  */
 export async function promptPort(
   defaultPort: number = defaults.port,
+  engine?: string,
 ): Promise<number> {
+  // Get engine-specific port range
+  const portRange = engine
+    ? getEngineDefaults(engine).portRange
+    : defaults.portRange
+
+  // Get all existing container ports for conflict detection
+  const existingContainers = await containerManager.list()
+  const containerPorts = new Map<number, string>()
+  for (const c of existingContainers) {
+    if (c.port > 0) {
+      containerPorts.set(c.port, c.name)
+    }
+  }
+
+  // Check if default port has a conflict and find a better default
+  let suggestedPort = defaultPort
+  const defaultPortContainer = containerPorts.get(defaultPort)
+  const defaultPortInUse =
+    !defaultPortContainer && !(await portManager.isPortAvailable(defaultPort))
+
+  if (defaultPortContainer || defaultPortInUse) {
+    // Find next available port in the engine's port range
+    try {
+      const result = await portManager.findAvailablePortExcludingContainers({
+        preferredPort: defaultPort,
+        portRange,
+      })
+      suggestedPort = result.port
+    } catch {
+      // Fall back to default if no ports available
+      suggestedPort = defaultPort
+    }
+  }
+
   const { port } = await inquirer.prompt<{ port: number }>([
     {
       type: 'input',
       name: 'port',
       message: 'Port:',
-      default: String(defaultPort),
+      default: String(suggestedPort),
       validate: (input: string) => {
         const num = parseInt(input, 10)
         if (isNaN(num) || num < 1 || num > 65535) {
@@ -253,6 +291,70 @@ export async function promptPort(
       filter: (input: string) => parseInt(input, 10),
     },
   ])
+
+  // Check for conflicts after selection
+  const conflictContainer = containerPorts.get(port)
+  if (conflictContainer) {
+    console.log()
+    console.log(
+      chalk.yellow(
+        `  ⚠ Warning: Port ${port} is already assigned to container "${conflictContainer}"`,
+      ),
+    )
+    console.log(
+      chalk.gray(
+        '    Only one container can run on this port at a time.',
+      ),
+    )
+    console.log()
+
+    const { proceed } = await inquirer.prompt<{ proceed: string }>([
+      {
+        type: 'list',
+        name: 'proceed',
+        message: 'What would you like to do?',
+        choices: [
+          { name: `Use port ${port} anyway`, value: 'continue' },
+          { name: 'Choose a different port', value: 'retry' },
+        ],
+      },
+    ])
+
+    if (proceed === 'retry') {
+      return promptPort(defaultPort, engine)
+    }
+  } else {
+    // Check if port is in use by something else
+    const portAvailable = await portManager.isPortAvailable(port)
+    if (!portAvailable) {
+      console.log()
+      console.log(
+        chalk.yellow(`  ⚠ Warning: Port ${port} is currently in use`),
+      )
+      console.log(
+        chalk.gray(
+          '    The container will be created but may fail to start until the port is freed.',
+        ),
+      )
+      console.log()
+
+      const { proceed } = await inquirer.prompt<{ proceed: string }>([
+        {
+          type: 'list',
+          name: 'proceed',
+          message: 'What would you like to do?',
+          choices: [
+            { name: `Use port ${port} anyway`, value: 'continue' },
+            { name: 'Choose a different port', value: 'retry' },
+          ],
+        },
+      ])
+
+      if (proceed === 'retry') {
+        return promptPort(defaultPort, engine)
+      }
+    }
+  }
 
   return port
 }
@@ -718,7 +820,7 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
     path = await promptSqlitePath(name)
   } else {
     const engineDefaults = getEngineDefaults(engine)
-    port = await promptPort(engineDefaults.defaultPort)
+    port = await promptPort(engineDefaults.defaultPort, engine)
   }
 
   return { name, engine, version, port, database, path }

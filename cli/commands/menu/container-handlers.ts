@@ -111,7 +111,7 @@ export async function handleCreate(): Promise<'main' | void> {
     port = 0
   } else {
     const engineDefaults = getEngineDefaults(engine)
-    port = await promptPort(engineDefaults.defaultPort)
+    port = await promptPort(engineDefaults.defaultPort, engine)
   }
 
   // Now we have all values - proceed with container creation
@@ -862,22 +862,55 @@ async function handleStartContainer(containerName: string): Promise<void> {
 
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
-    console.log(
-      uiWarning(
-        `Port ${config.port} is in use. Stop the process using it or change this container's port.`,
-      ),
-    )
     console.log()
-    console.log(
-      uiInfo(
-        'Tip: If you installed MariaDB via apt, it may have started a system service.',
-      ),
+    // Check if another SpinDB container is using this port
+    const allContainers = await containerManager.list()
+    const conflictingContainer = allContainers.find(
+      (c) =>
+        c.name !== containerName &&
+        c.port === config.port &&
+        c.status === 'running',
     )
-    console.log(
-      uiInfo(
-        'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
-      ),
-    )
+
+    if (conflictingContainer) {
+      console.log(
+        uiWarning(
+          `Port ${config.port} is already in use by container "${conflictingContainer.name}"`,
+        ),
+      )
+      console.log()
+      console.log(
+        uiInfo(
+          `Stop "${conflictingContainer.name}" first, or change this container's port with:`,
+        ),
+      )
+      console.log(chalk.cyan(`    spindb edit ${containerName}`))
+    } else {
+      console.log(
+        uiWarning(
+          `Port ${config.port} is in use by another process.`,
+        ),
+      )
+      console.log()
+      console.log(
+        uiInfo(
+          'Stop the process using it or change this container\'s port.',
+        ),
+      )
+      console.log()
+      console.log(
+        uiInfo(
+          'Tip: If you installed MariaDB via apt, it may have started a system service.',
+        ),
+      )
+      console.log(
+        uiInfo(
+          'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
+        ),
+      )
+    }
+    console.log()
+    await pressEnterToContinue()
     return
   }
 
