@@ -511,6 +511,7 @@ export async function handleList(
       }
     }),
     new inquirer.Separator(),
+    { name: `${chalk.green('+')} Create new`, value: 'create' },
     { name: `${chalk.blue('←')} Back to main menu`, value: 'back' },
   ]
 
@@ -528,6 +529,16 @@ export async function handleList(
 
   if (selectedContainer === 'back') {
     await showMainMenu()
+    return
+  }
+
+  if (selectedContainer === 'create') {
+    const result = await handleCreate()
+    if (result === 'main') {
+      await showMainMenu()
+    } else {
+      await handleList(showMainMenu)
+    }
     return
   }
 
