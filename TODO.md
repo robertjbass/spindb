@@ -52,10 +52,10 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
     - Add `--migrate` flag that copies keys from remote to local
   - Current behavior: throws helpful error with manual migration instructions
 
-- [ ] **Windows CI/CD tests for Redis** - Add `windows-latest` to Redis CI matrix
-  - Currently skipped pending macOS/Linux verification
-  - Requires testing Redis installation via Chocolatey or Scoop
-  - Update `.github/workflows/ci.yml` test-redis job matrix
+- [x] **Windows CI/CD tests for Redis** - Add `windows-latest` to Redis CI matrix
+  - ~~Currently skipped pending macOS/Linux verification~~
+  - Uses Redis installation via Chocolatey (`choco install redis-64`)
+  - Updated `.github/workflows/ci.yml` test-redis job matrix
 
 ### CLI Improvements
 

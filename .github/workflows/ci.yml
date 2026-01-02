@@ -438,8 +438,7 @@ jobs:
 
   # ============================================
   # Redis Integration Tests
-  # Uses system-installed Redis via Homebrew/apt
-  # NOTE: Windows tests to be added after macOS/Linux verified working
+  # Uses system-installed Redis via Homebrew/apt/Chocolatey
   # ============================================
   test-redis:
     name: Redis (${{ matrix.os }})
@@ -447,8 +446,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Skip Windows for now - add after macOS/Linux verified working
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -474,6 +472,39 @@ jobs:
       - name: Install Redis (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
+
+      # Install Redis on Windows via Chocolatey
+      - name: Install Redis (Windows)
+        if: runner.os == 'Windows'
+        run: choco install redis-64 -y
+
+      # Add Redis to PATH on Windows
+      - name: Add Redis to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $possiblePaths = @(
+            "C:\ProgramData\chocolatey\lib\redis-64\tools",
+            "C:\Program Files\Redis"
+          )
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              echo "Added Redis to PATH: $path"
+              break
+            }
+          }
+
+      # Verify Redis installation on Windows
+      - name: Verify Redis (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Checking Redis installation..."
+          Get-Command redis-server -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          Get-Command redis-cli -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          redis-server --version
+          redis-cli --version
 
       - name: Show installed engines
         run: pnpm start engines list
