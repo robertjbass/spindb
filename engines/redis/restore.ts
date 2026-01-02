@@ -1,18 +1,82 @@
 /**
  * Redis restore module
- * Restores from RDB backup files
+ * Supports two backup formats:
+ * - RDB: Binary snapshot (restored by copying to data dir)
+ * - Text: Redis commands (.redis file, restored by piping to redis-cli)
  */
 
-import { copyFile } from 'fs/promises'
+import { spawn } from 'child_process'
+import { copyFile, readFile } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import { logDebug } from '../../core/error-handler'
+import { getRedisCliPath } from './binary-detection'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 /**
+ * Common Redis commands used to detect text-based backup files
+ * These are the commands typically found at the start of a Redis command dump
+ */
+const REDIS_COMMANDS = [
+  'SET', 'GET', 'DEL', 'MSET', 'MGET', 'SETNX', 'SETEX', 'PSETEX', 'APPEND',
+  'HSET', 'HGET', 'HMSET', 'HDEL', 'HGETALL', 'HSETNX',
+  'LPUSH', 'RPUSH', 'LPOP', 'RPOP', 'LSET', 'LINSERT', 'LREM',
+  'SADD', 'SREM', 'SMEMBERS', 'SPOP',
+  'ZADD', 'ZREM', 'ZINCRBY', 'ZRANGE',
+  'EXPIRE', 'EXPIREAT', 'PEXPIRE', 'TTL', 'PERSIST',
+  'FLUSHDB', 'FLUSHALL', 'SELECT',
+  'PFADD', 'GEOADD', 'XADD',
+]
+
+/**
+ * Check if file content looks like Redis commands
+ * Returns true if the first non-comment, non-empty lines start with valid Redis commands
+ */
+async function looksLikeRedisCommands(filePath: string): Promise<boolean> {
+  try {
+    const content = await readFile(filePath, 'utf-8')
+    const lines = content.split('\n')
+
+    let commandsFound = 0
+    const linesToCheck = 10 // Check first 10 non-empty, non-comment lines
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('#')) continue
+
+      // Get the first word (command)
+      const firstWord = trimmed.split(/\s+/)[0].toUpperCase()
+
+      if (REDIS_COMMANDS.includes(firstWord)) {
+        commandsFound++
+        if (commandsFound >= 2) {
+          // Found at least 2 valid Redis commands - likely a Redis dump
+          return true
+        }
+      } else {
+        // Found a line that doesn't start with a Redis command
+        // Could be binary data or different format
+        return false
+      }
+
+      if (commandsFound >= linesToCheck) break
+    }
+
+    // If we found at least one command and no invalid lines, treat as Redis
+    return commandsFound > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Detect backup format from file
- * Redis backups are RDB files (binary format starting with "REDIS")
+ * Supports:
+ * - RDB: Binary format starting with "REDIS"
+ * - Text: Redis commands (detected by .redis extension OR content analysis)
  */
 export async function detectBackupFormat(
   filePath: string,
@@ -26,12 +90,22 @@ export async function detectBackupFormat(
   if (stats.isDirectory()) {
     return {
       format: 'unknown',
-      description: 'Directory found - Redis uses single RDB file backups',
-      restoreCommand: 'Redis requires a single dump.rdb file for restore',
+      description: 'Directory found - Redis uses single file backups',
+      restoreCommand: 'Redis requires a single .rdb or .redis file for restore',
     }
   }
 
-  // Check file contents for RDB format
+  // Check file extension first for .redis text files
+  if (filePath.endsWith('.redis')) {
+    return {
+      format: 'redis',
+      description: 'Redis text commands',
+      restoreCommand:
+        'Pipe commands to redis-cli (spindb restore handles this)',
+    }
+  }
+
+  // Check file contents for RDB format (binary, starts with "REDIS")
   try {
     const buffer = Buffer.alloc(5)
     const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
@@ -54,7 +128,7 @@ export async function detectBackupFormat(
     logDebug(`Error reading backup file header: ${error}`)
   }
 
-  // Check file extension as fallback
+  // Check file extension as fallback for RDB
   if (filePath.endsWith('.rdb')) {
     return {
       format: 'rdb',
@@ -64,10 +138,21 @@ export async function detectBackupFormat(
     }
   }
 
+  // Content-based detection: check if file contains Redis commands
+  // This allows files like "users.txt" or "data" to be detected as Redis text dumps
+  if (await looksLikeRedisCommands(filePath)) {
+    return {
+      format: 'redis',
+      description: 'Redis text commands (detected by content)',
+      restoreCommand:
+        'Pipe commands to redis-cli (spindb restore handles this)',
+    }
+  }
+
   return {
     format: 'unknown',
     description: 'Unknown backup format',
-    restoreCommand: 'Manual restore required - copy dump.rdb to data directory',
+    restoreCommand: 'Use .rdb (RDB snapshot) or file with Redis commands',
   }
 }
 
@@ -77,34 +162,98 @@ export async function detectBackupFormat(
 export type RestoreOptions = {
   containerName: string
   dataDir?: string
+  /** Port for running Redis instance (required for text restore) */
+  port?: number
+  /** Database number to restore to (default: 0) */
+  database?: string
+  /** Clear database before restoring (FLUSHDB) */
+  flush?: boolean
+}
+
+/**
+ * Restore from text backup (.redis file)
+ * Pipes commands to redis-cli on the running Redis instance
+ */
+async function restoreTextBackup(
+  backupPath: string,
+  port: number,
+  database: string,
+  flush: boolean = false,
+): Promise<RestoreResult> {
+  const redisCli = await getRedisCliPath()
+  if (!redisCli) {
+    throw new Error(
+      'redis-cli not found. Install Redis:\n' +
+        '  macOS: brew install redis\n' +
+        '  Ubuntu: sudo apt install redis-tools\n',
+    )
+  }
+
+  // Read the backup file
+  let content = await readFile(backupPath, 'utf-8')
+
+  // Prepend FLUSHDB if requested (clear database before restore)
+  if (flush) {
+    content = 'FLUSHDB\n' + content
+    logDebug('Prepending FLUSHDB to clear database before restore')
+  }
+
+  // Pipe to redis-cli
+  return new Promise<RestoreResult>((resolve, reject) => {
+    const args = ['-h', '127.0.0.1', '-p', String(port), '-n', database]
+    const proc = spawn(redisCli, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString()
+    })
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({
+          format: 'redis',
+          stdout: stdout || 'Redis commands executed successfully',
+          stderr: stderr || undefined,
+          code: 0,
+        })
+      } else {
+        reject(
+          new Error(
+            `redis-cli exited with code ${code}${stderr ? `: ${stderr}` : ''}`,
+          ),
+        )
+      }
+    })
+
+    proc.on('error', (error) => {
+      reject(new Error(`Failed to spawn redis-cli: ${error.message}`))
+    })
+
+    // Write backup content to stdin
+    proc.stdin.write(content)
+    proc.stdin.end()
+  })
 }
 
 /**
  * Restore from RDB backup
  *
- * IMPORTANT: Redis must be stopped before restore.
+ * IMPORTANT: Redis must be stopped before RDB restore.
  * The RDB file is copied to the data directory, then Redis should be restarted.
  */
-export async function restoreBackup(
+async function restoreRdbBackup(
   backupPath: string,
-  options: RestoreOptions,
+  containerName: string,
+  dataDir?: string,
 ): Promise<RestoreResult> {
-  const { containerName, dataDir } = options
-
-  if (!existsSync(backupPath)) {
-    throw new Error(`Backup file not found: ${backupPath}`)
-  }
-
-  // Detect backup format
-  const format = await detectBackupFormat(backupPath)
-  logDebug(`Detected backup format: ${format.format}`)
-
-  if (format.format !== 'rdb') {
-    throw new Error(
-      `Invalid backup format: ${format.format}. Redis requires RDB format backups.`,
-    )
-  }
-
   const targetDir =
     dataDir || paths.getContainerDataPath(containerName, { engine: 'redis' })
   const targetPath = join(targetDir, 'dump.rdb')
@@ -119,6 +268,47 @@ export async function restoreBackup(
     stdout: `Restored RDB to ${targetPath}. Restart Redis to load the data.`,
     code: 0,
   }
+}
+
+/**
+ * Restore from backup
+ * Supports:
+ * - RDB: Copy to data directory (requires Redis to be stopped)
+ * - Text: Pipe commands to redis-cli (requires Redis to be running)
+ */
+export async function restoreBackup(
+  backupPath: string,
+  options: RestoreOptions,
+): Promise<RestoreResult> {
+  const { containerName, dataDir, port, database = '0', flush = false } = options
+
+  if (!existsSync(backupPath)) {
+    throw new Error(`Backup file not found: ${backupPath}`)
+  }
+
+  // Detect backup format
+  const format = await detectBackupFormat(backupPath)
+  logDebug(`Detected backup format: ${format.format}`)
+
+  if (format.format === 'redis') {
+    // Text format - pipe to redis-cli (Redis must be running)
+    if (!port) {
+      throw new Error(
+        'Port is required for restoring .redis text files. Redis must be running.',
+      )
+    }
+    return restoreTextBackup(backupPath, port, database, flush)
+  }
+
+  if (format.format === 'rdb') {
+    // RDB format - copy to data directory (Redis should be stopped)
+    // Note: RDB restore always replaces everything (full snapshot)
+    return restoreRdbBackup(backupPath, containerName, dataDir)
+  }
+
+  throw new Error(
+    `Invalid backup format: ${format.format}. Use .rdb (RDB snapshot) or .redis (text commands).`,
+  )
 }
 
 /**

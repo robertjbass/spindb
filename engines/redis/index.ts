@@ -581,14 +581,17 @@ export class RedisEngine extends BaseEngine {
   async restore(
     container: ContainerConfig,
     backupPath: string,
-    _options: Record<string, unknown> = {},
+    options: { database?: string; flush?: boolean } = {},
   ): Promise<RestoreResult> {
-    const { name } = container
+    const { name, port } = container
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
 
     return restoreBackup(backupPath, {
       containerName: name,
       dataDir,
+      port,
+      database: options.database || container.database || '0',
+      flush: options.flush,
     })
   }
 

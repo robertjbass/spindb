@@ -429,16 +429,23 @@ spindb backup mydb --output ./backups/      # Custom directory
 spindb backup mydb --database my_app        # Backup specific database
 ```
 
-Backup formats:
+Backup formats (vary by engine):
 
 ```bash
-spindb backup mydb --format sql     # Plain SQL (.sql)
-spindb backup mydb --format dump    # Compressed (.dump for PG, .sql.gz for MySQL)
+spindb backup mydb --format sql     # Plain SQL (.sql) or text commands (.redis)
+spindb backup mydb --format dump    # Binary format (.dump for PG, .sql.gz for MySQL, .rdb for Redis)
 
 # Shorthand
 spindb backup mydb --sql
 spindb backup mydb --dump
 ```
+
+Format by engine:
+- PostgreSQL: `.sql` (plain SQL) / `.dump` (pg_dump custom)
+- MySQL: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
+- SQLite: `.sql` (plain SQL) / `.sqlite` (binary copy)
+- MongoDB: `.bson` (BSON dump) / `.archive` (compressed archive)
+- Redis: `.redis` (text commands) / `.rdb` (RDB snapshot)
 
 <details>
 <summary>All options</summary>
@@ -452,6 +459,27 @@ spindb backup mydb --dump
 | `--sql` | Shorthand for `--format sql` |
 | `--dump` | Shorthand for `--format dump` |
 | `--json`, `-j` | Output result as JSON |
+
+</details>
+
+#### `backups` - List backup files
+
+```bash
+spindb backups                       # List backups in current directory
+spindb backups ./data                # List backups in specific directory
+spindb backups --all                 # Include ~/.spindb/backups
+spindb backups --limit 50            # Show more results
+spindb backups --json                # JSON output
+```
+
+<details>
+<summary>All options</summary>
+
+| Option | Description |
+|--------|-------------|
+| `--all`, `-a` | Include backups from `~/.spindb/backups` |
+| `--limit`, `-n` | Limit number of results (default: 20) |
+| `--json`, `-j` | Output as JSON |
 
 </details>
 
@@ -485,6 +513,78 @@ spindb info mydb
 | `--from-url` | Pull data from a remote database connection string |
 | `--force`, `-f` | Overwrite existing database without confirmation |
 | `--json`, `-j` | Output result as JSON |
+
+</details>
+
+#### Backup & Restore Format Reference
+
+Each engine has specific backup formats and restore behaviors:
+
+<details>
+<summary>PostgreSQL</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | pg_dump | Plain text SQL, human-readable |
+| Custom | `.dump` | pg_dump -Fc | Compressed, supports parallel restore |
+
+**Restore behavior:** Creates new database or replaces existing. Uses `pg_restore` for `.dump`, `psql` for `.sql`.
+
+</details>
+
+<details>
+<summary>MySQL</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | mysqldump | Plain text SQL |
+| Compressed | `.sql.gz` | mysqldump + gzip | Gzip compressed SQL |
+
+**Restore behavior:** Creates new database or replaces existing. Pipes to `mysql` client.
+
+</details>
+
+<details>
+<summary>SQLite</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | .dump | Plain text SQL |
+| Binary | `.sqlite` | File copy | Exact copy of database file |
+
+**Restore behavior:** Creates new file or replaces existing.
+
+</details>
+
+<details>
+<summary>MongoDB</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| BSON | `.bson` | mongodump | Binary JSON per collection |
+| Archive | `.archive` | mongodump --archive | Single compressed file |
+
+**Restore behavior:** Creates new database or replaces existing. Uses `mongorestore`.
+
+</details>
+
+<details>
+<summary>Redis</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
+| Text | `.redis` | Custom | Human-readable Redis commands |
+
+**Text format detection:** Files are detected as Redis text commands if they contain valid Redis commands (SET, HSET, DEL, etc.), regardless of file extension. This allows restoring files like `users.txt` or `data` without renaming.
+
+**Restore behavior:**
+- **RDB (`.rdb`):** Requires stopping Redis, copies file to data directory, restart loads data
+- **Text (`.redis`):** Pipes commands to running Redis instance. Prompts for:
+  - **Replace all:** Runs `FLUSHDB` first (clean slate)
+  - **Merge:** Adds/updates keys, keeps existing keys not in backup
+
+**Note:** Redis uses numbered databases (0-15) that always exist. "Create new database" is not applicable.
 
 </details>
 
@@ -776,6 +876,20 @@ See [TODO.md](TODO.md) for the full roadmap.
 - Container templates
 - Scheduled backups
 - Import from Docker
+
+### Possible Future Engines
+
+These engines are under consideration but not yet on the roadmap. Community interest and feasibility will determine priority:
+
+| Engine | Type | Notes |
+|--------|------|-------|
+| **DuckDB** | Embedded analytical | File-based like SQLite, popular for data/analytics work |
+| **libSQL** | Embedded relational | SQLite fork by Turso with replication and edge support |
+| **Valkey** | Key-value store | Redis fork (post-license change), growing adoption |
+| **Meilisearch** | Search engine | Developer-friendly search, good binary distribution |
+| **Elasticsearch/OpenSearch** | Search engine | Full-text search, common in web applications |
+| **Neo4j** | Graph database | Most popular graph database |
+| **InfluxDB** | Time-series | IoT, metrics, and monitoring use cases |
 
 ---
 

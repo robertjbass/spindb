@@ -70,16 +70,16 @@ async function showMainMenu(): Promise<void> {
     },
     {
       name: canRestore
-        ? `${chalk.magenta('↓')} Restore backup`
-        : chalk.gray('↓ Restore backup'),
-      value: 'restore',
+        ? `${chalk.magenta('↓')} Backup database`
+        : chalk.gray('↓ Backup database'),
+      value: 'backup',
       disabled: canRestore ? false : 'No running containers',
     },
     {
       name: canRestore
-        ? `${chalk.magenta('↑')} Backup database`
-        : chalk.gray('↑ Backup database'),
-      value: 'backup',
+        ? `${chalk.magenta('↑')} Restore backup`
+        : chalk.gray('↑ Restore backup'),
+      value: 'restore',
       disabled: canRestore ? false : 'No running containers',
     },
     {

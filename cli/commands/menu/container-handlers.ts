@@ -45,6 +45,10 @@ import {
 } from '../../ui/theme'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
+import {
+  handleBackupForContainer,
+  handleRestoreForContainer,
+} from './backup-handlers'
 import { Engine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 
@@ -662,6 +666,34 @@ export async function showContainerSubmenu(
     value: 'copy',
   })
 
+  // Backup - requires running for server databases, file exists for SQLite
+  const canBackup = isSQLite ? existsSync(config.database) : isRunning
+  actionChoices.push({
+    name: canBackup
+      ? `${chalk.magenta('↓')} Backup database`
+      : chalk.gray('↓ Backup database'),
+    value: 'backup',
+    disabled: canBackup
+      ? false
+      : isSQLite
+        ? 'Database file missing'
+        : 'Start container first',
+  })
+
+  // Restore - requires running for server databases, file exists for SQLite
+  const canRestore = isSQLite ? existsSync(config.database) : isRunning
+  actionChoices.push({
+    name: canRestore
+      ? `${chalk.magenta('↑')} Restore from backup`
+      : chalk.gray('↑ Restore from backup'),
+    value: 'restore',
+    disabled: canRestore
+      ? false
+      : isSQLite
+        ? 'Database file missing'
+        : 'Start container first',
+  })
+
   // View logs - not available for SQLite (no log file)
   if (!isSQLite) {
     actionChoices.push({
@@ -750,6 +782,14 @@ export async function showContainerSubmenu(
       return
     case 'copy':
       await handleCopyConnectionString(containerName)
+      await showContainerSubmenu(containerName, showMainMenu)
+      return
+    case 'backup':
+      await handleBackupForContainer(containerName)
+      await showContainerSubmenu(containerName, showMainMenu)
+      return
+    case 'restore':
+      await handleRestoreForContainer(containerName)
       await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'detach':

@@ -56,6 +56,10 @@ spindb backup mydb --dump               # Binary dump format
 spindb backup mydb -o ~/backups         # Custom output directory
 spindb backup mydb -d analytics         # Backup specific database
 
+spindb backups                          # List backups in current directory
+spindb backups --all                    # Include ~/.spindb/backups
+spindb backups ./data --limit 50        # List backups in specific directory
+
 spindb restore mydb ./backup.sql        # Restore from file
 spindb restore mydb ./backup.dump -f    # Force overwrite
 spindb restore mydb --from-url "postgresql://user:pass@host/db"
@@ -128,6 +132,7 @@ spindb list --json
 spindb create mydb --json
 spindb url mydb --json
 spindb backup mydb --json
+spindb backups --json
 ```
 
 ## Common Workflows

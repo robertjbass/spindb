@@ -591,6 +591,7 @@ export async function promptDatabaseSelect(
 
 /**
  * Prompt for backup format selection
+ * Uses centralized format configuration from config/backup-formats.ts
  * @param options.includeBack - Include a back option (returns null when selected)
  */
 export function promptBackupFormat(
@@ -605,22 +606,33 @@ export async function promptBackupFormat(
   engine: string,
   options?: { includeBack?: boolean },
 ): Promise<'sql' | 'dump' | null> {
-  const sqlDescription =
-    engine === 'mysql'
-      ? 'Plain SQL - human-readable, larger file'
-      : 'Plain SQL - human-readable, larger file'
-  const dumpDescription =
-    engine === 'mysql'
-      ? 'Compressed SQL (.sql.gz) - smaller file'
-      : 'Custom format - smaller file, faster restore'
+  // Import here to avoid circular dependencies
+  const {
+    BACKUP_FORMATS,
+    supportsFormatChoice,
+    getDefaultFormat,
+  } = await import('../../config/backup-formats')
+
+  // If engine doesn't support format choice (e.g., Redis), return default
+  if (!supportsFormatChoice(engine)) {
+    return getDefaultFormat(engine)
+  }
+
+  const formats = BACKUP_FORMATS[engine] || BACKUP_FORMATS.postgresql
 
   type Choice =
     | { name: string; value: string; short?: string }
     | inquirer.Separator
 
   const choices: Choice[] = [
-    { name: `.sql ${chalk.gray(`- ${sqlDescription}`)}`, value: 'sql' },
-    { name: `.dump ${chalk.gray(`- ${dumpDescription}`)}`, value: 'dump' },
+    {
+      name: `${formats.sql.label} ${chalk.gray(`- ${formats.sql.description}`)}`,
+      value: 'sql',
+    },
+    {
+      name: `${formats.dump.label} ${chalk.gray(`- ${formats.dump.description}`)}`,
+      value: 'dump',
+    },
   ]
 
   if (options?.includeBack) {
@@ -634,12 +646,68 @@ export async function promptBackupFormat(
       name: 'format',
       message: 'Select backup format:',
       choices,
-      default: 'sql',
+      default: formats.defaultFormat,
     },
   ])
 
   if (format === BACK_VALUE) return null
   return format as 'sql' | 'dump'
+}
+
+/**
+ * Prompt for backup output directory
+ * @returns Directory path or null if cancelled
+ */
+export async function promptBackupDirectory(): Promise<string | null> {
+  const cwd = process.cwd()
+
+  const { choice } = await inquirer.prompt<{ choice: string }>([
+    {
+      type: 'list',
+      name: 'choice',
+      message: 'Where to save the backup?',
+      choices: [
+        {
+          name: `${chalk.cyan('.')} Current directory ${chalk.gray(`(${cwd})`)}`,
+          value: 'cwd',
+        },
+        {
+          name: `${chalk.yellow('...')} Choose different directory`,
+          value: 'custom',
+        },
+        new inquirer.Separator(),
+        { name: `${chalk.blue('←')} Back`, value: BACK_VALUE },
+      ],
+    },
+  ])
+
+  if (choice === BACK_VALUE) return null
+  if (choice === 'cwd') return cwd
+
+  const { customPath } = await inquirer.prompt<{ customPath: string }>([
+    {
+      type: 'input',
+      name: 'customPath',
+      message: 'Enter directory path:',
+      default: cwd,
+      validate: (input: string) => {
+        if (!input.trim()) return 'Directory path is required'
+        const { existsSync, statSync } = require('fs')
+        const { resolve } = require('path')
+        const resolved = resolve(input.replace(/^~/, process.env.HOME || ''))
+        if (existsSync(resolved)) {
+          if (!statSync(resolved).isDirectory()) {
+            return 'Path is not a directory'
+          }
+        }
+        // Directory will be created if it doesn't exist
+        return true
+      },
+    },
+  ])
+
+  const { resolve } = await import('path')
+  return resolve(customPath.replace(/^~/, process.env.HOME || ''))
 }
 
 /**
