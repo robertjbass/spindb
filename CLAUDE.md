@@ -393,6 +393,29 @@ Tool paths cached in `~/.spindb/config.json` with 7-day staleness. Refresh after
 await configManager.refreshAllBinaries()
 ```
 
+### Binary Sources by Engine
+
+SpinDB uses different binary sourcing strategies by engine:
+
+**PostgreSQL (Downloadable Binaries):**
+- macOS/Linux: [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) via Maven Central
+- Windows: [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
+- Enables multi-version support (14, 15, 16, 17, 18 side-by-side)
+- ~45 MB per version
+
+**MySQL, MongoDB, Redis (System Binaries):**
+- Uses system-installed binaries via Homebrew, apt, choco, etc.
+- Single version per machine (whatever the package manager provides)
+- SpinDB detects and orchestrates, doesn't download
+
+**Why the difference?**
+PostgreSQL is unique in having zonky.io—a well-maintained, cross-platform embedded binary distribution hosted on Maven Central. No equivalent exists for other databases:
+- MySQL: Oracle provides installers with system dependencies, not embeddable binaries
+- MongoDB: Binaries are ~300-500 MB with no portable distribution
+- Redis: No official portable distribution; macOS has no options at all
+
+**Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
+
 ## Error Handling
 
 **Interactive mode:** Log error, show "Press Enter to continue"

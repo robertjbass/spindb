@@ -738,14 +738,15 @@ This isn't a preference—it's a practical reality of what's available.
 
 This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? SpinDB downloads both, and they run side-by-side without conflicts.
 
-**No equivalent exists for MySQL or MongoDB.** Neither database has a comparable embedded binary project:
+**No equivalent exists for MySQL, MongoDB, or Redis.** None of these databases have a comparable embedded binary project:
 
 - **MySQL:** Oracle distributes MySQL as large installers with system dependencies, not embeddable binaries. There's no "zonky.io for MySQL."
-- **MongoDB:** Server binaries are several hundred MB with complex licensing around redistribution. MongoDB Inc. doesn't provide an embedded distribution.
+- **MongoDB:** Server binaries are several hundred MB and aren't designed for portable distribution.
+- **Redis:** While Redis is small (~6-12 MB), there's no official portable distribution. Community Windows ports exist, but macOS/Linux rely on system packages.
 
 For these databases, system packages (Homebrew, apt, choco) are the most reliable option. They handle dependencies, platform quirks, and security updates. SpinDB simply orchestrates what's already installed.
 
-**Does this limit multi-version support?** Yes, for MySQL/MongoDB you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple MySQL versions simultaneously. If zonky.io-style distributions emerged for other databases, SpinDB could adopt them.
+**Does this limit multi-version support?** Yes, for MySQL/MongoDB/Redis you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple versions of these databases simultaneously. If zonky.io-style distributions emerged for other databases, SpinDB could adopt them.
 
 ---
 
