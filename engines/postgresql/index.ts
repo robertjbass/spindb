@@ -336,6 +336,18 @@ export class PostgreSQLEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, version, port } = container
+
+    // Check if already running (idempotent behavior)
+    const alreadyRunning = await processManager.isRunning(name, {
+      engine: this.name,
+    })
+    if (alreadyRunning) {
+      return {
+        port,
+        connectionString: this.getConnectionString(container),
+      }
+    }
+
     const binPath = this.getBinaryPath(version)
     const ext = platformService.getExecutableExtension()
     const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)

@@ -6,7 +6,7 @@ import {
   type ClipboardConfig,
   type PackageManagerInfo,
 } from '../../core/platform-service'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('PlatformService', () => {
   describe('getPlatformInfo', () => {

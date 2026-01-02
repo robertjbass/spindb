@@ -9,7 +9,7 @@ import {
   isValidDatabaseName,
   assertValidDatabaseName,
 } from '../../core/error-handler'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('SpinDBError', () => {
   it('should create error with all properties', () => {

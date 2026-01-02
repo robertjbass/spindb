@@ -528,6 +528,77 @@ const mongodbDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// Redis Dependencies
+// =============================================================================
+
+const redisDependencies: EngineDependencies = {
+  engine: 'redis',
+  displayName: 'Redis',
+  dependencies: [
+    {
+      name: 'redis-server',
+      binary: 'redis-server',
+      description: 'Redis in-memory data store server',
+      packages: {
+        brew: { package: 'redis' },
+        apt: { package: 'redis-server' },
+        yum: { package: 'redis' },
+        dnf: { package: 'redis' },
+        pacman: { package: 'redis' },
+        winget: { package: 'tporadowski.redis' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install redis',
+          'To start as service: brew services start redis',
+        ],
+        linux: [
+          'Debian/Ubuntu: sudo apt install redis-server',
+          'CentOS/RHEL: sudo yum install redis',
+          'Fedora: sudo dnf install redis',
+          'Arch: sudo pacman -S redis',
+        ],
+        win32: [
+          'Using winget (recommended): winget install tporadowski.redis',
+          'Or download from: https://github.com/tporadowski/redis/releases',
+          'Note: Redis on Windows is community-maintained (tporadowski/redis port).',
+        ],
+      },
+    },
+    {
+      name: 'redis-cli',
+      binary: 'redis-cli',
+      description: 'Redis command-line interface client',
+      packages: {
+        brew: { package: 'redis' },
+        apt: { package: 'redis-tools' },
+        yum: { package: 'redis' },
+        dnf: { package: 'redis' },
+        pacman: { package: 'redis' },
+        winget: { package: 'tporadowski.redis' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install redis',
+        ],
+        linux: [
+          'Debian/Ubuntu: sudo apt install redis-tools',
+          'CentOS/RHEL: sudo yum install redis',
+          'Fedora: sudo dnf install redis',
+          'Arch: sudo pacman -S redis',
+        ],
+        win32: [
+          'Using winget (recommended): winget install tporadowski.redis',
+          'Or download from: https://github.com/tporadowski/redis/releases',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -648,6 +719,29 @@ export const litecliDependency: Dependency = {
   },
 }
 
+/**
+ * iredis - Redis CLI with auto-completion and syntax highlighting
+ * https://github.com/laixintao/iredis
+ */
+export const iredisDependency: Dependency = {
+  name: 'iredis',
+  binary: 'iredis',
+  description:
+    'Redis CLI with intelligent auto-completion and syntax highlighting',
+  packages: {
+    brew: { package: 'iredis' },
+    // Most platforms use pip install
+  },
+  manualInstall: {
+    darwin: [
+      'Install with Homebrew: brew install iredis',
+      'Or with pip: pip install iredis',
+    ],
+    linux: ['Install with pip: pip install iredis'],
+    win32: ['Install with pip: pip install iredis'],
+  },
+}
+
 // =============================================================================
 // Registry
 // =============================================================================
@@ -660,6 +754,7 @@ export const engineDependencies: EngineDependencies[] = [
   mysqlDependencies,
   sqliteDependencies,
   mongodbDependencies,
+  redisDependencies,
 ]
 
 /**

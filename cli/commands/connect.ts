@@ -9,15 +9,18 @@ import {
   isPgcliInstalled,
   isMycliInstalled,
   isLitecliInstalled,
+  isIredisInstalled,
   detectPackageManager,
   installUsql,
   installPgcli,
   installMycli,
   installLitecli,
+  installIredis,
   getUsqlManualInstructions,
   getPgcliManualInstructions,
   getMycliManualInstructions,
   getLitecliManualInstructions,
+  getIredisManualInstructions,
 } from '../../core/dependency-manager'
 import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
@@ -47,6 +50,11 @@ export const connectCommand = new Command('connect')
     'Use litecli for enhanced SQLite shell (auto-completion, syntax highlighting)',
   )
   .option('--install-litecli', 'Install litecli if not present, then connect')
+  .option(
+    '--iredis',
+    'Use iredis for enhanced Redis shell (auto-completion, syntax highlighting)',
+  )
+  .option('--install-iredis', 'Install iredis if not present, then connect')
   .action(
     async (
       name: string | undefined,
@@ -60,6 +68,8 @@ export const connectCommand = new Command('connect')
         installMycli?: boolean
         litecli?: boolean
         installLitecli?: boolean
+        iredis?: boolean
+        installIredis?: boolean
       },
     ) => {
       try {
@@ -376,6 +386,76 @@ export const connectCommand = new Command('connect')
           }
         }
 
+        const useIredis = options.iredis || options.installIredis
+        if (useIredis) {
+          if (engineName !== Engine.Redis) {
+            console.error(
+              uiError('iredis is only available for Redis containers'),
+            )
+            if (engineName === 'postgresql') {
+              console.log(
+                chalk.gray('For PostgreSQL, use: spindb connect --pgcli'),
+              )
+            } else if (engineName === 'mysql') {
+              console.log(chalk.gray('For MySQL, use: spindb connect --mycli'))
+            } else if (engineName === Engine.SQLite) {
+              console.log(
+                chalk.gray('For SQLite, use: spindb connect --litecli'),
+              )
+            }
+            process.exit(1)
+          }
+
+          const iredisInstalled = await isIredisInstalled()
+
+          if (!iredisInstalled) {
+            if (options.installIredis) {
+              console.log(
+                uiInfo('Installing iredis for enhanced Redis shell...'),
+              )
+              const pm = await detectPackageManager()
+              if (pm) {
+                const result = await installIredis(pm)
+                if (result.success) {
+                  console.log(uiSuccess('iredis installed successfully!'))
+                  console.log()
+                } else {
+                  console.error(
+                    uiError(`Failed to install iredis: ${result.error}`),
+                  )
+                  console.log()
+                  console.log(chalk.gray('Manual installation:'))
+                  for (const instruction of getIredisManualInstructions()) {
+                    console.log(chalk.cyan(`  ${instruction}`))
+                  }
+                  process.exit(1)
+                }
+              } else {
+                console.error(uiError('No supported package manager found'))
+                console.log()
+                console.log(chalk.gray('Manual installation:'))
+                for (const instruction of getIredisManualInstructions()) {
+                  console.log(chalk.cyan(`  ${instruction}`))
+                }
+                process.exit(1)
+              }
+            } else {
+              console.error(uiError('iredis is not installed'))
+              console.log()
+              console.log(
+                chalk.gray('Install iredis for enhanced Redis shell:'),
+              )
+              console.log(chalk.cyan('  spindb connect --install-iredis'))
+              console.log()
+              console.log(chalk.gray('Or install manually:'))
+              for (const instruction of getIredisManualInstructions()) {
+                console.log(chalk.cyan(`  ${instruction}`))
+              }
+              process.exit(1)
+            }
+          }
+        }
+
         console.log(uiInfo(`Connecting to ${containerName}:${database}...`))
         console.log()
 
@@ -385,6 +465,9 @@ export const connectCommand = new Command('connect')
         if (useLitecli) {
           clientCmd = 'litecli'
           clientArgs = [config.database]
+        } else if (useIredis) {
+          clientCmd = 'iredis'
+          clientArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
         } else if (usePgcli) {
           clientCmd = 'pgcli'
           clientArgs = [connectionString]
@@ -405,6 +488,9 @@ export const connectCommand = new Command('connect')
         } else if (engineName === Engine.SQLite) {
           clientCmd = 'sqlite3'
           clientArgs = [config.database]
+        } else if (engineName === Engine.Redis) {
+          clientCmd = 'redis-cli'
+          clientArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
         } else if (engineName === 'mysql') {
           clientCmd = 'mysql'
           clientArgs = [
@@ -449,6 +535,12 @@ export const connectCommand = new Command('connect')
             } else if (clientCmd === 'litecli') {
               console.log(chalk.gray('  Install litecli:'))
               console.log(chalk.cyan('  brew install litecli'))
+            } else if (clientCmd === 'iredis') {
+              console.log(chalk.gray('  Install iredis:'))
+              console.log(chalk.cyan('  pip install iredis'))
+            } else if (clientCmd === 'redis-cli') {
+              console.log(chalk.gray('  Install Redis:'))
+              console.log(chalk.cyan('  brew install redis'))
             } else if (clientCmd === 'sqlite3') {
               console.log(chalk.gray('  sqlite3 comes with macOS.'))
               console.log(chalk.gray('  If not available, check your PATH.'))

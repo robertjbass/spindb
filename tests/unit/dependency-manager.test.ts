@@ -8,7 +8,7 @@ import {
   getManualInstallInstructions,
   type DetectedPackageManager,
 } from '../../core/dependency-manager'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('DependencyManager', () => {
   describe('detectPackageManager', () => {

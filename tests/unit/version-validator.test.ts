@@ -5,7 +5,7 @@ import {
   getInstallCommand,
   type VersionInfo,
 } from '../../engines/postgresql/version-validator'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('parseToolVersion', () => {
   it('should parse standard PostgreSQL version', () => {

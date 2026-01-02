@@ -178,6 +178,10 @@ function detectLocationType(location: string): {
     return { type: 'connection', inferredEngine: Engine.SQLite }
   }
 
+  if (location.startsWith('redis://') || location.startsWith('rediss://')) {
+    return { type: 'connection', inferredEngine: Engine.Redis }
+  }
+
   if (existsSync(location)) {
     // Check if it's a SQLite file (case-insensitive)
     const lowerLocation = location.toLowerCase()
@@ -199,9 +203,9 @@ export const createCommand = new Command('create')
   .argument('[name]', 'Container name')
   .option(
     '-e, --engine <engine>',
-    'Database engine (postgresql, mysql, sqlite)',
+    'Database engine (postgresql, mysql, sqlite, mongodb, redis)',
   )
-  .option('-v, --version <version>', 'Database version')
+  .option('--db-version <version>', 'Database version (e.g., 17, 8.0)')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
   .option(
@@ -225,7 +229,7 @@ export const createCommand = new Command('create')
       name: string | undefined,
       options: {
         engine?: string
-        version?: string
+        dbVersion?: string
         database?: string
         port?: string
         path?: string
@@ -241,7 +245,7 @@ export const createCommand = new Command('create')
       try {
         let containerName = name
         let engine: Engine = (options.engine as Engine) || Engine.PostgreSQL
-        let version = options.version
+        let version = options.dbVersion
         let database = options.database
 
         let restoreLocation: string | null = null
@@ -296,10 +300,17 @@ export const createCommand = new Command('create')
           database = answers.database
         }
 
-        database = database ?? containerName
+        // Redis uses numbered databases (0-15), default to "0"
+        // Other engines default to container name
+        if (engine === Engine.Redis) {
+          database = database ?? '0'
+        } else {
+          database = database ?? containerName
+        }
 
         // Validate database name to prevent SQL injection
-        if (!isValidDatabaseName(database)) {
+        // Skip for Redis which uses numbered databases (0-15)
+        if (engine !== Engine.Redis && !isValidDatabaseName(database)) {
           console.error(
             uiError(
               'Database name must start with a letter and contain only letters, numbers, hyphens, and underscores',

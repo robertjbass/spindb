@@ -18,6 +18,7 @@ import {
   logWarning,
   assertValidDatabaseName,
 } from '../../core/error-handler'
+import { processManager } from '../../core/process-manager'
 import {
   getMongodPath,
   getMongoshPath,
@@ -193,6 +194,17 @@ export class MongoDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port } = container
+
+    // Check if already running (idempotent behavior)
+    const alreadyRunning = await processManager.isRunning(name, {
+      engine: ENGINE,
+    })
+    if (alreadyRunning) {
+      return {
+        port,
+        connectionString: this.getConnectionString(container),
+      }
+    }
 
     const mongod = await getMongodPath()
     if (!mongod) {

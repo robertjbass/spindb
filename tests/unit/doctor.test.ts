@@ -1,5 +1,5 @@
 import { describe, it } from 'node:test'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('Doctor Command', () => {
   describe('Health Check Result Shape', () => {

@@ -1,5 +1,5 @@
 import { describe, it } from 'node:test'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 function isValidPort(port: number): boolean {
   return Number.isInteger(port) && port >= 1 && port <= 65535

@@ -10,6 +10,14 @@ import {
   getMysqlVersion,
   isMariaDB,
 } from '../engines/mysql/binary-detection'
+import {
+  getMongodPath,
+  getMongodVersion,
+} from '../engines/mongodb/binary-detection'
+import {
+  getRedisServerPath,
+  getRedisVersion,
+} from '../engines/redis/binary-detection'
 
 const execFileAsync = promisify(execFile)
 
@@ -38,10 +46,26 @@ export type InstalledSqliteEngine = {
   source: 'system'
 }
 
+export type InstalledMongodbEngine = {
+  engine: 'mongodb'
+  version: string
+  path: string
+  source: 'system'
+}
+
+export type InstalledRedisEngine = {
+  engine: 'redis'
+  version: string
+  path: string
+  source: 'system'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMysqlEngine
   | InstalledSqliteEngine
+  | InstalledMongodbEngine
+  | InstalledRedisEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -165,6 +189,44 @@ async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null>
   }
 }
 
+async function getInstalledMongodbEngine(): Promise<InstalledMongodbEngine | null> {
+  const mongodPath = await getMongodPath()
+  if (!mongodPath) {
+    return null
+  }
+
+  const version = await getMongodVersion(mongodPath)
+  if (!version) {
+    return null
+  }
+
+  return {
+    engine: 'mongodb',
+    version,
+    path: mongodPath,
+    source: 'system',
+  }
+}
+
+async function getInstalledRedisEngine(): Promise<InstalledRedisEngine | null> {
+  const redisServerPath = await getRedisServerPath()
+  if (!redisServerPath) {
+    return null
+  }
+
+  const version = await getRedisVersion(redisServerPath)
+  if (!version) {
+    return null
+  }
+
+  return {
+    engine: 'redis',
+    version,
+    path: redisServerPath,
+    source: 'system',
+  }
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -191,6 +253,16 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
   const sqliteEngine = await getInstalledSqliteEngine()
   if (sqliteEngine) {
     engines.push(sqliteEngine)
+  }
+
+  const mongodbEngine = await getInstalledMongodbEngine()
+  if (mongodbEngine) {
+    engines.push(mongodbEngine)
+  }
+
+  const redisEngine = await getInstalledRedisEngine()
+  if (redisEngine) {
+    engines.push(redisEngine)
   }
 
   return engines
