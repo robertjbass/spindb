@@ -35,8 +35,13 @@ export async function detectBackupFormat(
   try {
     const buffer = Buffer.alloc(16)
     const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
-    await fd.read(buffer, 0, 16, 0)
-    await fd.close()
+    let header: string
+    try {
+      await fd.read(buffer, 0, 16, 0)
+      header = buffer.toString('utf8', 0, 6)
+    } finally {
+      await fd.close().catch(() => {})
+    }
 
     // Check for gzip magic number
     if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
@@ -48,7 +53,6 @@ export async function detectBackupFormat(
     }
 
     // Check for uncompressed archive (starts with "mtools")
-    const header = buffer.toString('utf8', 0, 6)
     if (header === 'mtools' || header.includes('mongo')) {
       return {
         format: 'archive',

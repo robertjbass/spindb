@@ -170,9 +170,35 @@ export async function getRedisVersion(
 }
 
 /**
- * Cache of detected version -> binary path mappings
+ * Cache entry for version path lookups
  */
-const versionPathCache: Record<string, string> = {}
+type VersionCacheEntry = {
+  path: string | null // null means "not found"
+  timestamp: number
+}
+
+/**
+ * Cache of detected version -> binary path mappings
+ * Entries include timestamp for TTL-based invalidation
+ */
+const versionPathCache: Record<string, VersionCacheEntry> = {}
+
+/**
+ * TTL for negative cache entries (version not found)
+ * Positive entries are validated via existsSync, so they don't need TTL
+ */
+const NEGATIVE_CACHE_TTL_MS = 60_000 // 1 minute
+
+/**
+ * Clear the version path cache
+ * Call this after installing new Redis versions to force re-detection
+ */
+export function clearVersionCache(): void {
+  for (const key of Object.keys(versionPathCache)) {
+    delete versionPathCache[key]
+  }
+  logDebug('Cleared Redis version path cache')
+}
 
 /**
  * Detect all installed Redis versions
@@ -185,6 +211,7 @@ export async function detectInstalledVersions(): Promise<
   const versions: Record<string, string> = {}
 
   // Check all Homebrew paths (including versioned formulas)
+  const now = Date.now()
   for (const dir of HOMEBREW_REDIS_PATHS) {
     const redisServerPath = `${dir}/redis-server`
     if (existsSync(redisServerPath)) {
@@ -195,7 +222,7 @@ export async function detectInstalledVersions(): Promise<
         // (prefer versioned formula paths over generic ones)
         if (!versions[major]) {
           versions[major] = version
-          versionPathCache[major] = dir
+          versionPathCache[major] = { path: dir, timestamp: now }
           logDebug(`Detected Redis ${version} at ${redisServerPath}`)
         }
       }
@@ -211,7 +238,7 @@ export async function detectInstalledVersions(): Promise<
       versions[major] = version
       // Store the directory containing the binary
       const dir = defaultRedis.replace(/\/redis-server$/, '')
-      versionPathCache[major] = dir
+      versionPathCache[major] = { path: dir, timestamp: now }
     }
   }
 
@@ -225,11 +252,29 @@ export async function detectInstalledVersions(): Promise<
 export async function getBinaryPathForVersion(
   majorVersion: string,
 ): Promise<string | null> {
+  const now = Date.now()
+
   // Check cache first
-  if (versionPathCache[majorVersion]) {
-    const cachedPath = `${versionPathCache[majorVersion]}/redis-server`
-    if (existsSync(cachedPath)) {
-      return versionPathCache[majorVersion]
+  if (majorVersion in versionPathCache) {
+    const cached = versionPathCache[majorVersion]
+
+    if (cached.path === null) {
+      // Negative cache - check if TTL expired
+      if (now - cached.timestamp < NEGATIVE_CACHE_TTL_MS) {
+        // Still fresh, return cached "not found"
+        return null
+      }
+      // TTL expired, clear and re-detect
+      logDebug(`Negative cache expired for Redis ${majorVersion}, re-detecting`)
+      delete versionPathCache[majorVersion]
+    } else {
+      // Positive cache - validate path still exists
+      const cachedPath = `${cached.path}/redis-server`
+      if (existsSync(cachedPath)) {
+        return cached.path
+      }
+      // Cached path no longer valid, clear it and re-detect
+      delete versionPathCache[majorVersion]
     }
   }
 
@@ -237,8 +282,9 @@ export async function getBinaryPathForVersion(
   await detectInstalledVersions()
 
   // Check cache again
-  if (versionPathCache[majorVersion]) {
-    return versionPathCache[majorVersion]
+  const entry = versionPathCache[majorVersion]
+  if (entry?.path) {
+    return entry.path
   }
 
   // Fall back to checking version-specific paths
@@ -248,11 +294,15 @@ export async function getBinaryPathForVersion(
     if (existsSync(redisServerPath)) {
       const version = await getRedisVersion(redisServerPath)
       if (version && version.split('.')[0] === majorVersion) {
-        versionPathCache[majorVersion] = dir
+        versionPathCache[majorVersion] = { path: dir, timestamp: now }
         return dir
       }
     }
   }
+
+  // Cache the negative result to avoid repeated detection
+  versionPathCache[majorVersion] = { path: null, timestamp: now }
+  logDebug(`Redis version ${majorVersion} not found, cached negative result`)
 
   return null
 }

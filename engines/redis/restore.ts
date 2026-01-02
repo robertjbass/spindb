@@ -35,18 +35,20 @@ export async function detectBackupFormat(
   try {
     const buffer = Buffer.alloc(5)
     const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
-    await fd.read(buffer, 0, 5, 0)
-    await fd.close()
+    try {
+      await fd.read(buffer, 0, 5, 0)
+      const header = buffer.toString('ascii')
 
-    const header = buffer.toString('ascii')
-
-    if (header === 'REDIS') {
-      return {
-        format: 'rdb',
-        description: 'Redis RDB snapshot',
-        restoreCommand:
-          'Copy to data directory and restart Redis (spindb restore handles this)',
+      if (header === 'REDIS') {
+        return {
+          format: 'rdb',
+          description: 'Redis RDB snapshot',
+          restoreCommand:
+            'Copy to data directory and restart Redis (spindb restore handles this)',
+        }
       }
+    } finally {
+      await fd.close().catch(() => {})
     }
   } catch (error) {
     logDebug(`Error reading backup file header: ${error}`)

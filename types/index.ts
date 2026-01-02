@@ -65,7 +65,7 @@ export type RestoreResult = {
 
 export type BackupOptions = {
   database: string
-  format: 'sql' | 'dump'
+  format?: 'sql' | 'dump'
 }
 
 export type BackupResult = {

@@ -33,13 +33,15 @@ export function parseVersion(versionString: string): {
 
 /**
  * Compare two versions
- * Returns: -1 if a < b, 0 if a == b, 1 if a > b
+ * Returns: -1 if a < b, 0 if a == b, 1 if a > b, null if either version cannot be parsed
  */
-export function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number | null {
   const parsedA = parseVersion(a)
   const parsedB = parseVersion(b)
 
-  if (!parsedA || !parsedB) return 0
+  if (!parsedA || !parsedB) {
+    return null
+  }
 
   if (parsedA.major !== parsedB.major) {
     return parsedA.major < parsedB.major ? -1 : 1

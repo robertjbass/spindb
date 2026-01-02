@@ -545,9 +545,7 @@ const redisDependencies: EngineDependencies = {
         yum: { package: 'redis' },
         dnf: { package: 'redis' },
         pacman: { package: 'redis' },
-        choco: { package: 'redis' },
         winget: { package: 'tporadowski.redis' },
-        scoop: { package: 'redis' },
       },
       manualInstall: {
         darwin: [
@@ -562,10 +560,9 @@ const redisDependencies: EngineDependencies = {
           'Arch: sudo pacman -S redis',
         ],
         win32: [
-          'Using Chocolatey: choco install redis',
-          'Using winget: winget install tporadowski.redis',
-          'Using Scoop: scoop install redis',
-          'Note: Redis on Windows is community-maintained. Consider WSL for better support.',
+          'Using winget (recommended): winget install tporadowski.redis',
+          'Or download from: https://github.com/tporadowski/redis/releases',
+          'Note: Redis on Windows is community-maintained (tporadowski/redis port).',
         ],
       },
     },
@@ -579,9 +576,7 @@ const redisDependencies: EngineDependencies = {
         yum: { package: 'redis' },
         dnf: { package: 'redis' },
         pacman: { package: 'redis' },
-        choco: { package: 'redis' },
         winget: { package: 'tporadowski.redis' },
-        scoop: { package: 'redis' },
       },
       manualInstall: {
         darwin: [
@@ -595,9 +590,8 @@ const redisDependencies: EngineDependencies = {
           'Arch: sudo pacman -S redis',
         ],
         win32: [
-          'Using Chocolatey: choco install redis',
-          'Using winget: winget install tporadowski.redis',
-          'Using Scoop: scoop install redis',
+          'Using winget (recommended): winget install tporadowski.redis',
+          'Or download from: https://github.com/tporadowski/redis/releases',
         ],
       },
     },

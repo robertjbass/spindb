@@ -14,6 +14,7 @@ import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { processManager } from '../../core/process-manager'
 import {
   getRedisServerPath,
   getRedisCliPath,
@@ -49,6 +50,34 @@ const ENGINE = 'redis'
 const engineDef = getEngineDefaults(ENGINE)
 
 /**
+ * Shell metacharacters that indicate potential command injection
+ * These patterns shouldn't appear in valid Redis commands
+ */
+const SHELL_INJECTION_PATTERNS = [
+  /;\s*\S/, // Command chaining: ; followed by another command
+  /\$\(/, // Command substitution: $(...)
+  /\$\{/, // Variable substitution: ${...}
+  /`/, // Backtick command substitution
+  /&&/, // Logical AND chaining
+  /\|\|/, // Logical OR chaining
+  /\|\s*\S/, // Pipe to another command
+]
+
+/**
+ * Validate that a command doesn't contain shell injection patterns
+ */
+function validateCommand(command: string): void {
+  for (const pattern of SHELL_INJECTION_PATTERNS) {
+    if (pattern.test(command)) {
+      throw new Error(
+        `Command contains shell metacharacters that are not valid in Redis commands. ` +
+          `If you need complex commands, use a script file instead.`,
+      )
+    }
+  }
+}
+
+/**
  * Build a redis-cli command for inline command execution
  */
 export function buildRedisCliCommand(
@@ -57,6 +86,9 @@ export function buildRedisCliCommand(
   command: string,
   options?: { database?: string },
 ): string {
+  // Validate command doesn't contain shell injection patterns
+  validateCommand(command)
+
   const db = options?.database || '0'
   if (isWindows()) {
     // Windows: use double quotes
@@ -212,6 +244,17 @@ export class RedisEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version } = container
 
+    // Check if already running (idempotent behavior)
+    const alreadyRunning = await processManager.isRunning(name, {
+      engine: ENGINE,
+    })
+    if (alreadyRunning) {
+      return {
+        port,
+        connectionString: this.getConnectionString(container),
+      }
+    }
+
     // Get version-specific redis-server path
     const majorVersion = version.split('.')[0]
     let redisServer = await getRedisServerPathForVersion(majorVersion)
@@ -246,6 +289,30 @@ export class RedisEngine extends BaseEngine {
 
     logDebug(`Starting redis-server with config: ${configPath}`)
 
+    /**
+     * Check log file for port binding errors
+     * Returns error message if found, null otherwise
+     */
+    const checkLogForPortError = async (): Promise<string | null> => {
+      try {
+        const logContent = await readFile(logFile, 'utf-8')
+        const recentLog = logContent.slice(-2000) // Last 2KB
+
+        if (
+          recentLog.includes('Address already in use') ||
+          recentLog.includes('bind: Address already in use')
+        ) {
+          return `Port ${port} is already in use (address already in use)`
+        }
+        if (recentLog.includes('Failed listening on port')) {
+          return `Port ${port} is already in use`
+        }
+      } catch {
+        // Log file might not exist yet
+      }
+      return null
+    }
+
     // Redis with daemonize: yes handles its own forking
     return new Promise((resolve, reject) => {
       const proc = spawn(redisServer, [configPath], {
@@ -274,25 +341,10 @@ export class RedisEngine extends BaseEngine {
           await new Promise((r) => setTimeout(r, 500))
 
           // Check log for early startup failures (like port conflicts)
-          try {
-            const { readFile } = await import('fs/promises')
-            const logContent = await readFile(logFile, 'utf-8')
-            const recentLog = logContent.slice(-2000) // Last 2KB
-
-            // Check for port binding errors
-            if (
-              recentLog.includes('Address already in use') ||
-              recentLog.includes('bind: Address already in use')
-            ) {
-              reject(new Error(`Port ${port} is already in use (address already in use)`))
-              return
-            }
-            if (recentLog.includes('Failed listening on port')) {
-              reject(new Error(`Port ${port} is already in use`))
-              return
-            }
-          } catch {
-            // Log file might not exist yet, continue to wait for ready
+          const earlyError = await checkLogForPortError()
+          if (earlyError) {
+            reject(new Error(earlyError))
+            return
           }
 
           // Wait for Redis to be ready
@@ -304,19 +356,10 @@ export class RedisEngine extends BaseEngine {
             })
           } else {
             // Check log again for errors if not ready
-            try {
-              const { readFile } = await import('fs/promises')
-              const logContent = await readFile(logFile, 'utf-8')
-              const recentLog = logContent.slice(-2000)
-              if (
-                recentLog.includes('Address already in use') ||
-                recentLog.includes('bind: Address already in use')
-              ) {
-                reject(new Error(`Port ${port} is already in use (address already in use)`))
-                return
-              }
-            } catch {
-              // Continue with generic error
+            const portError = await checkLogForPortError()
+            if (portError) {
+              reject(new Error(portError))
+              return
             }
             reject(
               new Error(
@@ -645,24 +688,30 @@ export class RedisEngine extends BaseEngine {
       logDebug(`Flushed Redis database ${database}`)
     } catch (error) {
       const err = error as Error
-      logDebug(`FLUSHDB result: ${err.message}`)
+      logDebug(`FLUSHDB failed: ${err.message}`)
+      throw new Error(`Failed to flush Redis database ${database}: ${err.message}`)
     }
   }
 
   /**
-   * Get the size of the database in bytes
+   * Get the memory usage of the Redis server in bytes
+   *
+   * NOTE: Redis does not provide per-database memory statistics.
+   * This returns the total server memory (used_memory from INFO memory),
+   * not the size of a specific numbered database (0-15).
+   * This is acceptable for SpinDB since each container runs one Redis server.
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, database, version } = container
-    const db = database || '0'
+    const { port, version } = container
 
     try {
       const redisCli = await this.getRedisCliPathForVersion(version)
-      const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} -n ${db} INFO memory`
+      // INFO memory returns server-wide stats (database selection has no effect)
+      const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} INFO memory`
 
       const { stdout } = await execAsync(cmd, { timeout: 10000 })
 
-      // Parse used_memory from INFO output
+      // Parse used_memory (total server memory) from INFO output
       const match = stdout.match(/used_memory:(\d+)/)
       if (match) {
         return parseInt(match[1], 10)
@@ -715,11 +764,35 @@ export class RedisEngine extends BaseEngine {
     const redisCli = await this.getRedisCliPathForVersion(version)
 
     if (options.file) {
-      // Pipe file contents to redis-cli
-      const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} -n ${db} < "${options.file}"`
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
-      if (stdout) process.stdout.write(stdout)
-      if (stderr) process.stderr.write(stderr)
+      // Read file and pipe to redis-cli via stdin (avoids shell interpolation issues)
+      const fileContent = await readFile(options.file, 'utf-8')
+      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(redisCli, args, {
+          stdio: ['pipe', 'inherit', 'inherit'],
+        })
+
+        let rejected = false
+
+        proc.on('error', (err) => {
+          rejected = true
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          if (rejected) return
+          if (code === 0 || code === null) {
+            resolve()
+          } else {
+            reject(new Error(`redis-cli exited with code ${code}`))
+          }
+        })
+
+        // Write file content to stdin and close it
+        proc.stdin?.write(fileContent)
+        proc.stdin?.end()
+      })
     } else if (options.sql) {
       // Run inline command (using sql field for compatibility, but it's actually Redis commands)
       const cmd = buildRedisCliCommand(redisCli, port, options.sql, {

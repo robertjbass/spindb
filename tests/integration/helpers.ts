@@ -277,7 +277,7 @@ export async function getRowCount(
 
 /**
  * Get the count of keys matching a pattern in Redis
- * Uses KEYS command with pattern (e.g., "user:*" to count all user keys)
+ * Uses DBSIZE for full DB count (O(1)), KEYS for filtered patterns (O(N))
  */
 export async function getKeyCount(
   port: number,
@@ -286,11 +286,28 @@ export async function getKeyCount(
 ): Promise<number> {
   const engineImpl = getEngine(Engine.Redis)
   const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
-  // Use KEYS to get matching keys, then count the lines
+
+  // Use DBSIZE for full wildcard (O(1) vs O(N) for KEYS)
+  if (pattern === '*' || pattern === '') {
+    const { stdout } = await execAsync(
+      `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} DBSIZE`,
+    )
+    const count = parseInt(stdout.trim(), 10)
+    if (isNaN(count)) {
+      throw new Error(`Could not parse DBSIZE output: ${stdout}`)
+    }
+    return count
+  }
+
+  // Use KEYS for filtered patterns
   const { stdout } = await execAsync(
     `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} KEYS "${pattern}"`,
   )
-  const lines = stdout.trim().split('\n').filter((line) => line.trim() !== '')
+  const trimmed = stdout.trim()
+  if (trimmed === '') {
+    return 0
+  }
+  const lines = trimmed.split('\n').filter((line) => line.trim() !== '')
   return lines.length
 }
 
@@ -421,23 +438,8 @@ export function getConnectionString(
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }
 
-/**
- * Assert helper that throws with descriptive message
- */
-export function assert(condition: boolean, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(`Assertion failed: ${message}`)
-  }
-}
-
-/**
- * Assert two values are equal
- */
-export function assertEqual<T>(actual: T, expected: T, message: string): void {
-  if (actual !== expected) {
-    throw new Error(`${message}\n  Expected: ${expected}\n  Actual: ${actual}`)
-  }
-}
+// Re-export shared assertion utilities for backward compatibility
+export { assert, assertEqual } from '../utils/assertions'
 
 /**
  * Execute SQL file using engine.runScript (tests the run command functionality)

@@ -296,7 +296,7 @@ export class SQLiteEngine extends BaseEngine {
     const stats = statSync(outputPath)
     return {
       path: outputPath,
-      format: options.format,
+      format: options.format ?? 'dump',
       size: stats.size,
     }
   }

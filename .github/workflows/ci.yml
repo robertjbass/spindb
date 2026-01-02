@@ -473,110 +473,44 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
 
-      # Install Redis on Windows via Chocolatey
+      # Install Redis on Windows from tporadowski/redis GitHub releases
+      # (official Redis doesn't support Windows, this is the most maintained port)
+      - name: Cache Redis (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        id: redis-cache
+        with:
+          path: C:\Redis
+          key: redis-windows-5.0.14.1
+
       - name: Install Redis (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "Installing Redis via Chocolatey..."
-          choco install redis-64 -y --no-progress
-
-          Write-Host ""
-          Write-Host "Searching for Redis installation..."
-
-          # Find where Redis was actually installed
-          $possiblePaths = @(
-            "C:\ProgramData\chocolatey\lib\redis-64\tools",
-            "C:\ProgramData\chocolatey\lib\redis-64\tools\redis-server",
-            "C:\Program Files\Redis",
-            "C:\tools\redis"
-          )
-
-          $foundPath = $null
-          foreach ($path in $possiblePaths) {
-            Write-Host "Checking: $path"
-            if (Test-Path $path) {
-              Write-Host "  Found!"
-              # Check if redis-server.exe exists in this path
-              if (Test-Path "$path\redis-server.exe") {
-                $foundPath = $path
-                break
-              } elseif (Test-Path "$path") {
-                # Maybe it's a directory containing the exe
-                $exe = Get-ChildItem -Path $path -Filter "redis-server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                if ($exe) {
-                  $foundPath = $exe.DirectoryName
-                  break
-                }
-              }
-            }
-          }
-
-          # Also search in chocolatey lib directory
-          if (-not $foundPath) {
-            Write-Host "Searching chocolatey lib directory..."
-            $chocoLib = "C:\ProgramData\chocolatey\lib"
-            if (Test-Path $chocoLib) {
-              $exe = Get-ChildItem -Path $chocoLib -Filter "redis-server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($exe) {
-                $foundPath = $exe.DirectoryName
-                Write-Host "Found in chocolatey: $foundPath"
-              }
-            }
-          }
-
-          if ($foundPath) {
-            Write-Host "Adding to PATH: $foundPath"
-            echo "$foundPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          if (Test-Path "C:\Redis\redis-server.exe") {
+            Write-Host "Redis already installed (cache hit)"
           } else {
-            Write-Host "WARNING: Could not find redis-server.exe"
-            Write-Host "Listing chocolatey lib contents:"
-            Get-ChildItem "C:\ProgramData\chocolatey\lib" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
+            Write-Host "Downloading Redis for Windows from tporadowski/redis..."
+            $url = "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
+            $zip = "$env:TEMP\redis.zip"
+
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+
+            Write-Host "Extracting to C:\Redis..."
+            Expand-Archive -Path $zip -DestinationPath "C:\Redis" -Force
+            Remove-Item $zip
           }
 
-      # Verify Redis installation on Windows
+          # Add to PATH for subsequent steps
+          echo "C:\Redis" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Verify Redis (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "Checking Redis installation..."
-          Write-Host "Current PATH: $env:PATH"
-          Write-Host ""
-
-          # Try to find redis-server
-          $redisServer = Get-Command redis-server -ErrorAction SilentlyContinue
-          if ($redisServer) {
-            Write-Host "redis-server found at: $($redisServer.Source)"
-            & $redisServer.Source --version
-          } else {
-            Write-Host "redis-server not in PATH, searching..."
-            $exe = Get-ChildItem -Path "C:\ProgramData\chocolatey" -Filter "redis-server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($exe) {
-              Write-Host "Found at: $($exe.FullName)"
-              & $exe.FullName --version
-            } else {
-              Write-Host "ERROR: redis-server.exe not found anywhere"
-              exit 1
-            }
-          }
-
-          $redisCli = Get-Command redis-cli -ErrorAction SilentlyContinue
-          if ($redisCli) {
-            Write-Host "redis-cli found at: $($redisCli.Source)"
-            & $redisCli.Source --version
-          } else {
-            Write-Host "redis-cli not in PATH, searching..."
-            $exe = Get-ChildItem -Path "C:\ProgramData\chocolatey" -Filter "redis-cli.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($exe) {
-              Write-Host "Found at: $($exe.FullName)"
-              & $exe.FullName --version
-            } else {
-              Write-Host "ERROR: redis-cli.exe not found anywhere"
-              exit 1
-            }
-          }
-
-          Write-Host ""
+          Write-Host "Verifying Redis installation..."
+          redis-server --version
+          redis-cli --version
           Write-Host "Redis installation verified successfully"
 
       - name: Show installed engines

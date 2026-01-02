@@ -1,12 +1,12 @@
 import { describe, it, before, after } from 'node:test'
-import { writeFile, unlink, mkdir } from 'fs/promises'
+import { writeFile, mkdir, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import {
   detectBackupFormat,
   parseConnectionString,
 } from '../../engines/redis/restore'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 // Test fixtures
 const RDB_MAGIC = Buffer.from([0x52, 0x45, 0x44, 0x49, 0x53]) // "REDIS"
@@ -20,13 +20,10 @@ describe('Redis Restore', () => {
   })
 
   after(async () => {
-    const files = ['valid.rdb', 'invalid.txt', 'extension.rdb']
-    for (const file of files) {
-      try {
-        await unlink(join(testDir, file))
-      } catch {
-        // Ignore if file doesn't exist
-      }
+    try {
+      await rm(testDir, { recursive: true, force: true })
+    } catch {
+      // Ignore errors (e.g., ENOENT if already cleaned up)
     }
   })
 

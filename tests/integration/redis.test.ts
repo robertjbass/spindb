@@ -356,9 +356,22 @@ describe('Redis Integration Tests', () => {
     })
     assert(running, 'Container should already be running')
 
-    // Attempting to start again should not throw, just warn
-    // (In real CLI usage, this would show a warning message)
-    console.log('   ✓ Container is already running (would show warning in CLI)')
+    // Attempting to start again should not throw
+    const config = await containerManager.getConfig(renamedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    // This should complete without throwing (idempotent behavior)
+    await engine.start(config!)
+
+    // Should still be running
+    const stillRunning = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(stillRunning, 'Container should still be running after duplicate start')
+
+    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
   })
 
   it('should show warning when stopping already stopped container', async () => {

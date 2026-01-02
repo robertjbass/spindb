@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import { UpdateManager } from '../../core/update-manager'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('UpdateManager', () => {
   describe('getCurrentVersion', () => {

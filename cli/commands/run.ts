@@ -22,8 +22,19 @@ export const runCommand = new Command('run')
       file: string | undefined,
       options: { database?: string; command?: string; sql?: string },
     ) => {
+      // Deprecation warning for --sql option
+      if (options.sql) {
+        console.warn(
+          uiWarning(
+            'The --sql option is deprecated. Use -c/--command instead.',
+          ),
+        )
+      }
+
       // Support both --command and --sql (deprecated alias)
+      // Prefer explicit --command over deprecated --sql
       const command = options.command || options.sql
+
       try {
         const containerName = name
 
@@ -124,13 +135,17 @@ export const runCommand = new Command('run')
       } catch (error) {
         const e = error as Error
 
-        const missingToolPatterns = [
-          'psql not found',
-          'mysql not found',
-          'mysql client not found',
-        ]
+        // Map of tool patterns to their engines
+        const toolPatternToEngine: Record<string, Engine> = {
+          'psql not found': Engine.PostgreSQL,
+          'mysql not found': Engine.MySQL,
+          'mysql client not found': Engine.MySQL,
+          'redis-cli not found': Engine.Redis,
+          'mongosh not found': Engine.MongoDB,
+          'sqlite3 not found': Engine.SQLite,
+        }
 
-        const matchingPattern = missingToolPatterns.find((p) =>
+        const matchingPattern = Object.keys(toolPatternToEngine).find((p) =>
           e.message.toLowerCase().includes(p.toLowerCase()),
         )
 
@@ -138,9 +153,7 @@ export const runCommand = new Command('run')
           const missingTool = matchingPattern
             .replace(' not found', '')
             .replace(' client', '')
-          // Determine engine from the missing tool name
-          const toolEngine =
-            missingTool === 'mysql' ? Engine.MySQL : Engine.PostgreSQL
+          const toolEngine = toolPatternToEngine[matchingPattern]
           const installed = await promptInstallDependencies(
             missingTool,
             toolEngine,

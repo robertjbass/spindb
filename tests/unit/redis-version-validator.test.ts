@@ -6,7 +6,7 @@ import {
   compareVersions,
   isVersionCompatible,
 } from '../../engines/redis/version-validator'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('Redis Version Validator', () => {
   describe('parseVersion', () => {
@@ -96,19 +96,32 @@ describe('Redis Version Validator', () => {
 
   describe('compareVersions', () => {
     it('should return negative when a < b', () => {
-      assert(compareVersions('6.0.0', '7.0.0') < 0, '6.0.0 should be less than 7.0.0')
-      assert(compareVersions('7.0.0', '7.2.0') < 0, '7.0.0 should be less than 7.2.0')
-      assert(compareVersions('7.2.0', '7.2.4') < 0, '7.2.0 should be less than 7.2.4')
+      const r1 = compareVersions('6.0.0', '7.0.0')
+      const r2 = compareVersions('7.0.0', '7.2.0')
+      const r3 = compareVersions('7.2.0', '7.2.4')
+      assert(r1 !== null && r1 < 0, '6.0.0 should be less than 7.0.0')
+      assert(r2 !== null && r2 < 0, '7.0.0 should be less than 7.2.0')
+      assert(r3 !== null && r3 < 0, '7.2.0 should be less than 7.2.4')
     })
 
     it('should return positive when a > b', () => {
-      assert(compareVersions('7.0.0', '6.0.0') > 0, '7.0.0 should be greater than 6.0.0')
-      assert(compareVersions('7.2.0', '7.0.0') > 0, '7.2.0 should be greater than 7.0.0')
-      assert(compareVersions('7.2.4', '7.2.0') > 0, '7.2.4 should be greater than 7.2.0')
+      const r1 = compareVersions('7.0.0', '6.0.0')
+      const r2 = compareVersions('7.2.0', '7.0.0')
+      const r3 = compareVersions('7.2.4', '7.2.0')
+      assert(r1 !== null && r1 > 0, '7.0.0 should be greater than 6.0.0')
+      assert(r2 !== null && r2 > 0, '7.2.0 should be greater than 7.0.0')
+      assert(r3 !== null && r3 > 0, '7.2.4 should be greater than 7.2.0')
     })
 
     it('should return 0 when versions are equal', () => {
       assertEqual(compareVersions('7.2.4', '7.2.4'), 0, 'Same versions should be equal')
+    })
+
+    it('should return null when either version cannot be parsed', () => {
+      assertEqual(compareVersions('invalid', '7.0.0'), null, 'Invalid first version should return null')
+      assertEqual(compareVersions('7.0.0', 'invalid'), null, 'Invalid second version should return null')
+      assertEqual(compareVersions('invalid', 'also-invalid'), null, 'Both invalid should return null')
+      assertEqual(compareVersions('', '7.0.0'), null, 'Empty first version should return null')
     })
   })
 

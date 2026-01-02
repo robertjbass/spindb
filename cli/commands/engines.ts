@@ -375,6 +375,34 @@ async function installEngineViaPackageManager(
     }
     process.exit(1)
   }
+
+  // Check if some dependencies couldn't be installed because the package manager
+  // doesn't have a package definition for them (e.g., Redis on Windows with Chocolatey)
+  if (results.length === 0) {
+    const stillMissing = statuses.filter((s) => !s.installed)
+    if (stillMissing.length > 0) {
+      console.log()
+      console.log(
+        uiWarning(
+          `${packageManager.name} doesn't have packages for ${displayName}.`,
+        ),
+      )
+      console.log()
+      console.log(chalk.yellow('Manual installation required:'))
+      const platform = getCurrentPlatform()
+      for (const status of stillMissing) {
+        const instructions = getManualInstallInstructions(
+          status.dependency,
+          platform,
+        )
+        console.log(chalk.gray(`  ${status.dependency.name}:`))
+        for (const instruction of instructions) {
+          console.log(chalk.gray(`    ${instruction}`))
+        }
+      }
+      process.exit(1)
+    }
+  }
 }
 
 // Main engines command

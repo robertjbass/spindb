@@ -53,9 +53,47 @@ export async function createBackup(
 
   // Trigger background save
   const bgsaveCmd = buildRedisCliCommand(redisCli, port, 'BGSAVE')
-  const { stdout: bgsaveOutput } = await execAsync(bgsaveCmd)
+  let bgsaveResponse: string
+  try {
+    const { stdout, stderr } = await execAsync(bgsaveCmd)
+    bgsaveResponse = stdout.trim()
 
-  logDebug(`BGSAVE response: ${bgsaveOutput.trim()}`)
+    // Check stderr for errors
+    if (stderr && stderr.trim()) {
+      throw new Error(
+        `BGSAVE failed with stderr: ${stderr.trim()}`,
+      )
+    }
+  } catch (error) {
+    // execAsync throws on non-zero exit code
+    const execError = error as Error & { stderr?: string; code?: number }
+    throw new Error(
+      `BGSAVE command failed (exit code ${execError.code ?? 'unknown'}): ${execError.message}` +
+        (execError.stderr ? `\nstderr: ${execError.stderr}` : ''),
+    )
+  }
+
+  logDebug(`BGSAVE response: ${bgsaveResponse}`)
+
+  // Check for Redis error responses in stdout
+  // Redis returns errors like "ERR ..." or "(error) ..." in stdout
+  if (
+    bgsaveResponse.startsWith('ERR') ||
+    bgsaveResponse.startsWith('(error)')
+  ) {
+    // Special case: if a save is already in progress, we can wait for it
+    if (bgsaveResponse.includes('Background save already in progress')) {
+      logDebug('BGSAVE already in progress, waiting for it to complete')
+    } else {
+      throw new Error(`BGSAVE failed: ${bgsaveResponse}`)
+    }
+  } else if (
+    !bgsaveResponse.includes('Background saving started') &&
+    !bgsaveResponse.includes('Background save already in progress')
+  ) {
+    // Unexpected response - warn but continue (might be a different Redis version)
+    logDebug(`Unexpected BGSAVE response (continuing anyway): ${bgsaveResponse}`)
+  }
 
   // Wait for save to complete by checking rdb_bgsave_in_progress
   // This is more reliable than LASTSAVE timestamp which has 1-second resolution
@@ -128,6 +166,5 @@ export async function createCloneBackup(
 ): Promise<BackupResult> {
   return createBackup(container, outputPath, {
     database: container.database,
-    format: 'dump', // RDB is the only format for Redis
   })
 }
