@@ -24,6 +24,7 @@ import {
   SpinDBError,
   assertValidDatabaseName,
 } from '../../core/error-handler'
+import { processManager } from '../../core/process-manager'
 import {
   getMysqldPath,
   getMysqlClientPath as findMysqlClientPath,
@@ -384,6 +385,17 @@ export class MySQLEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port } = container
+
+    // Check if already running (idempotent behavior)
+    const alreadyRunning = await processManager.isRunning(name, {
+      engine: ENGINE,
+    })
+    if (alreadyRunning) {
+      return {
+        port,
+        connectionString: this.getConnectionString(container),
+      }
+    }
 
     const mysqld = await getMysqldPath()
     if (!mysqld) {

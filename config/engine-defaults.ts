@@ -87,6 +87,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mongosh', 'mongodump', 'mongorestore'],
     maxConnections: 0, // Not applicable for MongoDB
   },
+  redis: {
+    defaultVersion: '7',
+    defaultPort: 6379,
+    portRange: { start: 6379, end: 6400 },
+    supportedVersions: ['6', '7', '8'],
+    latestVersion: '7',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'redis',
+    logFileName: 'redis.log',
+    pidFileName: 'redis.pid',
+    dataSubdir: 'data',
+    clientTools: ['redis-cli'],
+    maxConnections: 0, // Not applicable for Redis
+  },
 }
 
 /**

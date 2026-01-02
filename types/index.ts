@@ -19,6 +19,7 @@ export enum Engine {
   MySQL = 'mysql',
   SQLite = 'sqlite',
   MongoDB = 'mongodb',
+  Redis = 'redis',
 }
 
 export type ProgressCallback = (progress: {
@@ -64,7 +65,7 @@ export type RestoreResult = {
 
 export type BackupOptions = {
   database: string
-  format: 'sql' | 'dump'
+  format?: 'sql' | 'dump'
 }
 
 export type BackupResult = {
@@ -110,10 +111,14 @@ export type BinaryTool =
   | 'mongosh'
   | 'mongodump'
   | 'mongorestore'
+  // Redis tools
+  | 'redis-server'
+  | 'redis-cli'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
   | 'litecli'
+  | 'iredis'
   | 'usql'
 
 /**
@@ -155,10 +160,14 @@ export type SpinDBConfig = {
     mongosh?: BinaryConfig
     mongodump?: BinaryConfig
     mongorestore?: BinaryConfig
+    // Redis tools
+    'redis-server'?: BinaryConfig
+    'redis-cli'?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig
     litecli?: BinaryConfig
+    iredis?: BinaryConfig
     usql?: BinaryConfig
   }
   // Engine registries (for file-based databases like SQLite)

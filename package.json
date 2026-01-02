@@ -1,7 +1,7 @@
 {
   "name": "spindb",
-  "version": "0.12.4",
-  "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MongoDB, and SQLite instances.",
+  "version": "0.13.2",
+  "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MongoDB, Redis, and SQLite instances.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
@@ -14,9 +14,10 @@
     "test:mysql": "node --import tsx --test --experimental-test-isolation=none tests/integration/mysql.test.ts",
     "test:sqlite": "node --import tsx --test --experimental-test-isolation=none tests/integration/sqlite.test.ts",
     "test:mongodb": "node --import tsx --test --experimental-test-isolation=none tests/integration/mongodb.test.ts",
+    "test:redis": "node --import tsx --test --experimental-test-isolation=none tests/integration/redis.test.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
-    "test:integration": "run-s test:pg test:mysql test:sqlite test:mongodb",
+    "test:integration": "run-s test:pg test:mysql test:sqlite test:mongodb test:redis",
     "test:all": "run-s test:unit test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
@@ -31,6 +32,7 @@
     "local",
     "development",
     "mongodb",
+    "redis",
     "sqlite",
     "tui",
     "cli"

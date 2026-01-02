@@ -3,7 +3,7 @@ import { mkdir, rm, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 // We need to mock paths to use a temp directory
 // For unit tests, we'll test the registry logic directly

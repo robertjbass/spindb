@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import { ConfigManager } from '../../core/config-manager'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('ConfigManager', () => {
   describe('load', () => {

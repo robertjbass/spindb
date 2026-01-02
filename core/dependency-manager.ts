@@ -19,6 +19,7 @@ import {
   pgcliDependency,
   mycliDependency,
   litecliDependency,
+  iredisDependency,
 } from '../config/os-dependencies'
 import { platformService } from './platform-service'
 import { configManager } from './config-manager'
@@ -40,9 +41,12 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'mysqld',
   'mysqladmin',
   'sqlite3',
+  'redis-server',
+  'redis-cli',
   'pgcli',
   'mycli',
   'litecli',
+  'iredis',
   'usql',
 ] as const
 
@@ -472,4 +476,21 @@ export function getLitecliManualInstructions(
   platform: Platform = getCurrentPlatform(),
 ): string[] {
   return getManualInstallInstructions(litecliDependency, platform)
+}
+
+export async function isIredisInstalled(): Promise<boolean> {
+  const status = await checkDependency(iredisDependency)
+  return status.installed
+}
+
+export async function installIredis(
+  packageManager: DetectedPackageManager,
+): Promise<InstallResult> {
+  return installDependency(iredisDependency, packageManager)
+}
+
+export function getIredisManualInstructions(
+  platform: Platform = getCurrentPlatform(),
+): string[] {
+  return getManualInstallInstructions(iredisDependency, platform)
 }

@@ -10,17 +10,31 @@ import { getMissingDependencies } from '../../core/dependency-manager'
 import { Engine } from '../../types'
 
 export const runCommand = new Command('run')
-  .description('Run SQL file or statement against a container')
+  .description('Run script file or command against a container')
   .argument('<name>', 'Container name')
-  .argument('[file]', 'Path to SQL file')
+  .argument('[file]', 'Path to script file (SQL for relational DBs, Redis commands, etc.)')
   .option('-d, --database <name>', 'Target database (defaults to primary)')
-  .option('--sql <statement>', 'SQL statement to execute (alternative to file)')
+  .option('-c, --command <cmd>', 'Command to execute (alternative to file)')
+  .option('--sql <statement>', 'Alias for --command (deprecated)')
   .action(
     async (
       name: string,
       file: string | undefined,
-      options: { database?: string; sql?: string },
+      options: { database?: string; command?: string; sql?: string },
     ) => {
+      // Deprecation warning for --sql option
+      if (options.sql) {
+        console.warn(
+          uiWarning(
+            'The --sql option is deprecated. Use -c/--command instead.',
+          ),
+        )
+      }
+
+      // Support both --command and --sql (deprecated alias)
+      // Prefer explicit --command over deprecated --sql
+      const command = options.command || options.sql
+
       try {
         const containerName = name
 
@@ -55,26 +69,26 @@ export const runCommand = new Command('run')
           }
         }
 
-        if (file && options.sql) {
+        if (file && command) {
           console.error(
-            uiError('Cannot specify both a file and --sql option. Choose one.'),
+            uiError('Cannot specify both a file and --command option. Choose one.'),
           )
           process.exit(1)
         }
 
-        if (!file && !options.sql) {
+        if (!file && !command) {
           console.error(
-            uiError('Must provide either a SQL file or --sql option'),
+            uiError('Must provide either a script file or --command option'),
           )
-          console.log(chalk.gray('  Usage: spindb run <container> <file.sql>'))
+          console.log(chalk.gray('  Usage: spindb run <container> <file>'))
           console.log(
-            chalk.gray('     or: spindb run <container> --sql "SELECT ..."'),
+            chalk.gray('     or: spindb run <container> -c "command"'),
           )
           process.exit(1)
         }
 
         if (file && !existsSync(file)) {
-          console.error(uiError(`SQL file not found: ${file}`))
+          console.error(uiError(`Script file not found: ${file}`))
           process.exit(1)
         }
 
@@ -115,19 +129,23 @@ export const runCommand = new Command('run')
 
         await engine.runScript(config, {
           file,
-          sql: options.sql,
+          sql: command,
           database,
         })
       } catch (error) {
         const e = error as Error
 
-        const missingToolPatterns = [
-          'psql not found',
-          'mysql not found',
-          'mysql client not found',
-        ]
+        // Map of tool patterns to their engines
+        const toolPatternToEngine: Record<string, Engine> = {
+          'psql not found': Engine.PostgreSQL,
+          'mysql not found': Engine.MySQL,
+          'mysql client not found': Engine.MySQL,
+          'redis-cli not found': Engine.Redis,
+          'mongosh not found': Engine.MongoDB,
+          'sqlite3 not found': Engine.SQLite,
+        }
 
-        const matchingPattern = missingToolPatterns.find((p) =>
+        const matchingPattern = Object.keys(toolPatternToEngine).find((p) =>
           e.message.toLowerCase().includes(p.toLowerCase()),
         )
 
@@ -135,9 +153,7 @@ export const runCommand = new Command('run')
           const missingTool = matchingPattern
             .replace(' not found', '')
             .replace(' client', '')
-          // Determine engine from the missing tool name
-          const toolEngine =
-            missingTool === 'mysql' ? Engine.MySQL : Engine.PostgreSQL
+          const toolEngine = toolPatternToEngine[matchingPattern]
           const installed = await promptInstallDependencies(
             missingTool,
             toolEngine,

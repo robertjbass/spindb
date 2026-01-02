@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL/MongoDB. With support for several engines including SQLite, PostgreSQL, MySQL, and MongoDB.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL/MongoDB/Redis. With support for several engines including SQLite, PostgreSQL, MySQL, MongoDB, and Redis.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -94,11 +94,17 @@ engines/
 │   ├── index.ts            # SQLite engine (file-based)
 │   ├── registry.ts         # File tracking in config.json
 │   └── scanner.ts          # CWD scanning for .sqlite files
-└── mongodb/
-    ├── index.ts            # MongoDB engine
+├── mongodb/
+│   ├── index.ts            # MongoDB engine
+│   ├── binary-detection.ts # System binary detection
+│   ├── backup.ts           # mongodump wrapper
+│   ├── restore.ts          # mongorestore wrapper
+│   └── version-validator.ts
+└── redis/
+    ├── index.ts            # Redis engine
     ├── binary-detection.ts # System binary detection
-    ├── backup.ts           # mongodump wrapper
-    ├── restore.ts          # mongorestore wrapper
+    ├── backup.ts           # BGSAVE/RDB wrapper
+    ├── restore.ts          # RDB restore
     └── version-validator.ts
 types/index.ts              # TypeScript types
 tests/
@@ -140,6 +146,13 @@ abstract class BaseEngine {
 - Versions: 6.0, 7.0, 8.0
 - Uses JavaScript for queries instead of SQL
 
+**Redis 🔴**
+- All binaries from system (Homebrew, apt, etc.)
+- Requires: redis-server, redis-cli
+- Versions: 6, 7, 8
+- Uses numbered databases (0-15) instead of named databases
+- Uses Redis commands instead of SQL
+
 ### File Structure
 
 ```
@@ -157,11 +170,16 @@ abstract class BaseEngine {
 │   │       ├── container.json
 │   │       ├── data/
 │   │       └── mysql.log
-│   └── mongodb/
+│   ├── mongodb/
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── mongodb.log
+│   └── redis/
 │       └── mydb/
 │           ├── container.json
 │           ├── data/
-│           └── mongodb.log
+│           └── redis.log
 └── config.json                       # Tool paths cache
 ```
 
@@ -170,7 +188,7 @@ abstract class BaseEngine {
 ```typescript
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb'
+  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis'
   version: string
   port: number
   database: string        // Primary database
@@ -241,6 +259,7 @@ pnpm test:unit      # Unit only
 pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
 pnpm test:mongodb   # MongoDB integration
+pnpm test:redis     # Redis integration
 ```
 
 **Note:** All test scripts use `--test-concurrency=1 --experimental-test-isolation=none` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." The `--test-concurrency=1` alone only limits parallelism but still uses workers for isolation; `--experimental-test-isolation=none` completely disables worker isolation.
@@ -341,6 +360,7 @@ When new major versions of supported engines are released (e.g., PostgreSQL 18):
 - PostgreSQL default: 5432 (range: 5432-5500)
 - MySQL default: 3306 (range: 3306-3400)
 - MongoDB default: 27017 (range: 27017-27100)
+- Redis default: 6379 (range: 6379-6400)
 - Auto-increment on conflict
 
 ### Process Management
@@ -391,12 +411,13 @@ Error messages should include actionable fix suggestions.
 - PostgreSQL: 🐘
 - MySQL: 🐬
 - MongoDB: 🍃
-- Default: 🗄️
+- Redis: 🔴
+- SQLite: 🗄️
 
 ## Known Limitations
 
-1. **Client tools required** - psql/mysql/mongosh must be installed separately
-2. **MySQL and MongoDB use system binaries** - Unlike PostgreSQL which downloads binaries
+1. **Client tools required** - psql/mysql/mongosh/redis-cli must be installed separately
+2. **MySQL, MongoDB, and Redis use system binaries** - Unlike PostgreSQL which downloads binaries
 3. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
 
 ## Publishing & Versioning

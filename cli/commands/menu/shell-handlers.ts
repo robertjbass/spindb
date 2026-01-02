@@ -7,15 +7,18 @@ import {
   isPgcliInstalled,
   isMycliInstalled,
   isLitecliInstalled,
+  isIredisInstalled,
   detectPackageManager,
   installUsql,
   installPgcli,
   installMycli,
   installLitecli,
+  installIredis,
   getUsqlManualInstructions,
   getPgcliManualInstructions,
   getMycliManualInstructions,
   getLitecliManualInstructions,
+  getIredisManualInstructions,
 } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
 import { getEngine } from '../../../engines'
@@ -69,12 +72,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
 
-  const [usqlInstalled, pgcliInstalled, mycliInstalled, litecliInstalled] =
+  const [usqlInstalled, pgcliInstalled, mycliInstalled, litecliInstalled, iredisInstalled] =
     await Promise.all([
       isUsqlInstalled(),
       isPgcliInstalled(),
       isMycliInstalled(),
       isLitecliInstalled(),
+      isIredisInstalled(),
     ])
 
   shellCheckSpinner.stop()
@@ -91,6 +95,8 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     | 'install-mycli'
     | 'litecli'
     | 'install-litecli'
+    | 'iredis'
+    | 'install-iredis'
     | 'back'
 
   // Engine-specific shell names
@@ -119,6 +125,12 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'redis') {
+    defaultShellName = 'redis-cli'
+    engineSpecificCli = 'iredis'
+    engineSpecificInstalled = iredisInstalled
+    engineSpecificValue = 'iredis'
+    engineSpecificInstallValue = 'install-iredis'
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -151,17 +163,20 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQLite too
-  if (usqlInstalled) {
-    choices.push({
-      name: '⚡ Use usql (universal SQL client)',
-      value: 'usql',
-    })
-  } else {
-    choices.push({
-      name: '↓ Install usql (universal SQL client)',
-      value: 'install-usql',
-    })
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis and MongoDB
+  const isNonSqlEngine = config.engine === 'redis' || config.engine === 'mongodb'
+  if (!isNonSqlEngine) {
+    if (usqlInstalled) {
+      choices.push({
+        name: '⚡ Use usql (universal SQL client)',
+        value: 'usql',
+      })
+    } else {
+      choices.push({
+        name: '↓ Install usql (universal SQL client)',
+        value: 'install-usql',
+      })
+    }
   }
 
   choices.push(new inquirer.Separator())
@@ -316,6 +331,39 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
+  if (shellChoice === 'install-iredis') {
+    console.log()
+    console.log(uiInfo('Installing iredis for enhanced Redis shell...'))
+    const pm = await detectPackageManager()
+    if (pm) {
+      const result = await installIredis(pm)
+      if (result.success) {
+        console.log(uiSuccess('iredis installed successfully!'))
+        console.log()
+        await launchShell(containerName, config, connectionString, 'iredis')
+      } else {
+        console.error(uiError(`Failed to install iredis: ${result.error}`))
+        console.log()
+        console.log(chalk.gray('Manual installation:'))
+        for (const instruction of getIredisManualInstructions(platformService.getPlatformInfo().platform)) {
+          console.log(chalk.cyan(`  ${instruction}`))
+        }
+        console.log()
+        await pressEnterToContinue()
+      }
+    } else {
+      console.error(uiError('No supported package manager found'))
+      console.log()
+      console.log(chalk.gray('Manual installation:'))
+      for (const instruction of getIredisManualInstructions(platformService.getPlatformInfo().platform)) {
+        console.log(chalk.cyan(`  ${instruction}`))
+      }
+      console.log()
+      await pressEnterToContinue()
+    }
+    return
+  }
+
   await launchShell(containerName, config, connectionString, shellChoice)
 }
 
@@ -323,7 +371,7 @@ async function launchShell(
   containerName: string,
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
   connectionString: string,
-  shellType: 'default' | 'usql' | 'pgcli' | 'mycli' | 'litecli',
+  shellType: 'default' | 'usql' | 'pgcli' | 'mycli' | 'litecli' | 'iredis',
 ): Promise<void> {
   console.log(uiInfo(`Connecting to ${containerName}...`))
   console.log()
@@ -381,6 +429,16 @@ async function launchShell(
     shellCmd = 'mongosh'
     shellArgs = [connectionString]
     installHint = 'brew install mongosh'
+  } else if (shellType === 'iredis') {
+    // iredis: enhanced Redis CLI
+    shellCmd = 'iredis'
+    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', config.database]
+    installHint = 'brew install iredis'
+  } else if (config.engine === 'redis') {
+    // Default Redis shell
+    shellCmd = 'redis-cli'
+    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', config.database]
+    installHint = 'brew install redis'
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]

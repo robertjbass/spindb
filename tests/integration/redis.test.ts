@@ -1,7 +1,7 @@
 /**
- * PostgreSQL System Integration Tests
+ * Redis System Integration Tests
  *
- * Tests the full container lifecycle with real PostgreSQL processes.
+ * Tests the full container lifecycle with real Redis processes.
  */
 
 import { describe, it, before, after } from 'node:test'
@@ -14,10 +14,10 @@ import {
   generateTestName,
   findConsecutiveFreePorts,
   cleanupTestContainers,
-  getRowCount,
+  getKeyCount,
+  getRedisValue,
   waitForReady,
   containerDataExists,
-  getConnectionString,
   assert,
   assertEqual,
   runScriptFile,
@@ -28,12 +28,12 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
 
-const ENGINE = Engine.PostgreSQL
-const DATABASE = 'testdb'
-const SEED_FILE = join(__dirname, '../fixtures/postgresql/seeds/sample-db.sql')
-const EXPECTED_ROW_COUNT = 5
+const ENGINE = Engine.Redis
+const DATABASE = '0' // Redis uses numbered databases 0-15
+const SEED_FILE = join(__dirname, '../fixtures/redis/seeds/sample-db.redis')
+const EXPECTED_KEY_COUNT = 6 // 5 user keys + 1 user:count key
 
-describe('PostgreSQL Integration Tests', () => {
+describe('Redis Integration Tests', () => {
   let testPorts: number[]
   let containerName: string
   let clonedContainerName: string
@@ -48,13 +48,13 @@ describe('PostgreSQL Integration Tests', () => {
     }
 
     console.log('\n🔍 Finding available test ports...')
-    testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.postgresql.base)
+    testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.redis.base)
     console.log(`   Using ports: ${testPorts.join(', ')}`)
 
-    containerName = generateTestName('pg-test')
-    clonedContainerName = generateTestName('pg-test-clone')
-    renamedContainerName = generateTestName('pg-test-renamed')
-    portConflictContainerName = generateTestName('pg-test-conflict')
+    containerName = generateTestName('redis-test')
+    clonedContainerName = generateTestName('redis-test-clone')
+    renamedContainerName = generateTestName('redis-test-renamed')
+    portConflictContainerName = generateTestName('redis-test-conflict')
   })
 
   after(async () => {
@@ -70,22 +70,16 @@ describe('PostgreSQL Integration Tests', () => {
       `\n📦 Creating container "${containerName}" without starting...`,
     )
 
-    // Ensure PostgreSQL binaries are downloaded first
-    const engine = getEngine(ENGINE)
-    console.log('   Ensuring PostgreSQL binaries are available...')
-    await engine.ensureBinaries('17', ({ message }) => {
-      console.log(`   ${message}`)
-    })
-
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '17',
+      version: '7',
       port: testPorts[0],
       database: DATABASE,
     })
 
-    // Initialize the database cluster
-    await engine.initDataDir(containerName, '17', { superuser: 'postgres' })
+    // Initialize the data directory
+    const engine = getEngine(ENGINE)
+    await engine.initDataDir(containerName, '7', {})
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -114,12 +108,9 @@ describe('PostgreSQL Integration Tests', () => {
     await engine.start(config!)
     await containerManager.updateConfig(containerName, { status: 'running' })
 
-    // Wait for PostgreSQL to be ready
+    // Wait for Redis to be ready
     const ready = await waitForReady(ENGINE, testPorts[0])
-    assert(ready, 'PostgreSQL should be ready to accept connections')
-
-    // Create the user database
-    await engine.createDatabase(config!, DATABASE)
+    assert(ready, 'Redis should be ready to accept connections')
 
     const running = await processManager.isRunning(containerName, {
       engine: ENGINE,
@@ -138,94 +129,92 @@ describe('PostgreSQL Integration Tests', () => {
     // This tests the `spindb run` command functionality
     await runScriptFile(containerName, SEED_FILE, DATABASE)
 
-    const rowCount = await getRowCount(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
-      'test_user',
-    )
+    const keyCount = await getKeyCount(testPorts[0], DATABASE, 'user:*')
     assertEqual(
-      rowCount,
-      EXPECTED_ROW_COUNT,
-      'Should have correct row count after seeding',
+      keyCount,
+      EXPECTED_KEY_COUNT,
+      'Should have correct key count after seeding',
     )
 
-    console.log(`   ✓ Seeded ${rowCount} rows using engine.runScript`)
+    console.log(`   ✓ Seeded ${keyCount} keys using engine.runScript`)
   })
 
-  it('should create a new container from connection string (dump/restore)', async () => {
+  it('should clone container using backup/restore', async () => {
     console.log(
-      `\n📋 Creating container "${clonedContainerName}" from connection string...`,
+      `\n📋 Creating container "${clonedContainerName}" via backup/restore...`,
     )
 
-    const sourceConnectionString = getConnectionString(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
-    )
-
-    // Create container
+    // Create and initialize cloned container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '17',
+      version: '7',
       port: testPorts[1],
       database: DATABASE,
     })
 
-    // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '17', {
-      superuser: 'postgres',
+    await engine.initDataDir(clonedContainerName, '7', {})
+
+    // Create backup from source
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `redis-test-backup-${Date.now()}.rdb`)
+
+    const sourceConfig = await containerManager.getConfig(containerName)
+    assert(sourceConfig !== null, 'Source container config should exist')
+
+    await engine.backup(sourceConfig!, backupPath, {
+      database: DATABASE,
+      format: 'dump',
     })
 
-    const config = await containerManager.getConfig(clonedContainerName)
-    assert(config !== null, 'Cloned container config should exist')
+    // Stop source for restore (restore needs container stopped)
+    await engine.stop(sourceConfig!)
+    await containerManager.updateConfig(containerName, { status: 'stopped' })
 
-    await engine.start(config!)
+    // Restore to cloned container
+    const clonedConfig = await containerManager.getConfig(clonedContainerName)
+    assert(clonedConfig !== null, 'Cloned container config should exist')
+
+    await engine.restore(clonedConfig!, backupPath, {
+      database: DATABASE,
+    })
+
+    // Start cloned container
+    await engine.start(clonedConfig!)
     await containerManager.updateConfig(clonedContainerName, {
       status: 'running',
     })
 
     // Wait for ready
     const ready = await waitForReady(ENGINE, testPorts[1])
-    assert(ready, 'Cloned PostgreSQL should be ready')
+    assert(ready, 'Cloned Redis should be ready')
 
-    // Create database
-    await engine.createDatabase(config!, DATABASE)
-
-    // Dump from source and restore to target
-    const { tmpdir } = await import('os')
-    const dumpPath = join(tmpdir(), `pg-test-dump-${Date.now()}.dump`)
-
-    await engine.dumpFromConnectionString(sourceConnectionString, dumpPath)
-    await engine.restore(config!, dumpPath, {
-      database: DATABASE,
-      createDatabase: false,
-    })
-
-    // Clean up dump file
+    // Clean up backup file
     const { rm } = await import('fs/promises')
-    await rm(dumpPath, { force: true })
+    await rm(backupPath, { force: true })
 
-    console.log('   ✓ Container created from connection string')
+    // Restart source container
+    await engine.start(sourceConfig!)
+    await containerManager.updateConfig(containerName, { status: 'running' })
+
+    console.log('   ✓ Container cloned via backup/restore')
   })
 
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
 
-    const rowCount = await getRowCount(
-      ENGINE,
-      testPorts[1],
-      DATABASE,
-      'test_user',
-    )
+    const keyCount = await getKeyCount(testPorts[1], DATABASE, 'user:*')
     assertEqual(
-      rowCount,
-      EXPECTED_ROW_COUNT,
-      'Restored data should have same row count',
+      keyCount,
+      EXPECTED_KEY_COUNT,
+      'Restored data should have same key count',
     )
 
-    console.log(`   ✓ Verified ${rowCount} rows in restored container`)
+    // Verify a specific value
+    const userCount = await getRedisValue(testPorts[1], DATABASE, 'user:count')
+    assertEqual(userCount, '5', 'User count should be 5')
+
+    console.log(`   ✓ Verified ${keyCount} keys in restored container`)
   })
 
   it('should stop and delete the restored container', async () => {
@@ -250,29 +239,21 @@ describe('PostgreSQL Integration Tests', () => {
     console.log('   ✓ Container deleted and filesystem cleaned up')
   })
 
-  it('should modify data using runScript inline SQL', async () => {
+  it('should modify data using runScript inline command', async () => {
     console.log(
-      `\n✏️  Deleting one row using engine.runScript with inline SQL...`,
+      `\n✏️  Deleting one key using engine.runScript with inline command...`,
     )
 
     // Use runScriptSQL which internally calls engine.runScript with --sql option
-    // This tests the `spindb run --sql` command functionality
-    await runScriptSQL(
-      containerName,
-      "DELETE FROM test_user WHERE email = 'eve@example.com'",
-      DATABASE,
-    )
+    // For Redis, the "sql" is actually a Redis command
+    await runScriptSQL(containerName, 'DEL user:5', DATABASE)
 
-    const rowCount = await getRowCount(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
-      'test_user',
-    )
-    assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
+    const keyCount = await getKeyCount(testPorts[0], DATABASE, 'user:*')
+    // Should have 5 keys now (user:count + user:1 through user:4)
+    assertEqual(keyCount, EXPECTED_KEY_COUNT - 1, 'Should have one less key')
 
     console.log(
-      `   ✓ Row deleted using engine.runScript, now have ${rowCount} rows`,
+      `   ✓ Key deleted using engine.runScript, now have ${keyCount} keys`,
     )
   })
 
@@ -321,22 +302,17 @@ describe('PostgreSQL Integration Tests', () => {
 
     // Wait for ready
     const ready = await waitForReady(ENGINE, testPorts[2])
-    assert(ready, 'Renamed PostgreSQL should be ready')
+    assert(ready, 'Renamed Redis should be ready')
 
-    // Verify row count reflects deletion
-    const rowCount = await getRowCount(
-      ENGINE,
-      testPorts[2],
-      DATABASE,
-      'test_user',
-    )
+    // Verify key count reflects deletion
+    const keyCount = await getKeyCount(testPorts[2], DATABASE, 'user:*')
     assertEqual(
-      rowCount,
-      EXPECTED_ROW_COUNT - 1,
-      'Row count should persist after rename',
+      keyCount,
+      EXPECTED_KEY_COUNT - 1,
+      'Key count should persist after rename',
     )
 
-    console.log(`   ✓ Data persisted: ${rowCount} rows`)
+    console.log(`   ✓ Data persisted: ${keyCount} keys`)
   })
 
   it('should handle port conflict gracefully', async () => {
@@ -345,15 +321,13 @@ describe('PostgreSQL Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '17',
+      version: '7',
       port: testPorts[2], // This port is in use by renamed container
-      database: 'conflictdb',
+      database: '1', // Different database to avoid confusion
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '17', {
-      superuser: 'postgres',
-    })
+    await engine.initDataDir(portConflictContainerName, '7', {})
 
     // The container should be created but when we try to start, it should detect conflict
     // In real usage, the start command would auto-assign a new port

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import { ContainerManager } from '../../core/container-manager'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('ContainerManager', () => {
   describe('isValidName', () => {

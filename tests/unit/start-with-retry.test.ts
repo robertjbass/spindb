@@ -1,5 +1,5 @@
 import { describe, it } from 'node:test'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 // Import the module to test the isPortInUseError function behavior
 // We'll test it indirectly through the exported functions

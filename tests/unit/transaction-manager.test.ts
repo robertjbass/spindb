@@ -3,7 +3,7 @@ import {
   TransactionManager,
   withTransaction,
 } from '../../core/transaction-manager'
-import { assert, assertEqual } from '../integration/helpers'
+import { assert, assertEqual } from '../utils/assertions'
 
 describe('TransactionManager', () => {
   describe('addRollback', () => {

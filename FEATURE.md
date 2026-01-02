@@ -72,6 +72,15 @@ Use this checklist to track implementation progress:
 - [ ] `types/index.ts` - Add to `Engine` enum and `BinaryTool` type
 - [ ] `config/engine-defaults.ts` - Add engine defaults
 - [ ] `config/os-dependencies.ts` - Add system dependencies
+- [ ] `cli/constants.ts` - Add engine icon
+
+### Menu/CLI Terminology
+
+- [ ] `cli/commands/menu/container-handlers.ts` - Update "Run SQL file" label if not SQL-based
+- [ ] `cli/commands/menu/container-handlers.ts` - Skip database name prompt if engine uses numbered DBs
+- [ ] `cli/commands/menu/shell-handlers.ts` - Add engine-specific shell (e.g., redis-cli, iredis)
+- [ ] `cli/commands/menu/shell-handlers.ts` - Hide usql option for non-SQL engines
+- [ ] `cli/commands/menu/sql-handlers.ts` - Update script type terminology (SQL/Script/Command)
 
 ### Testing
 
@@ -460,6 +469,36 @@ export type SpinDBConfig = {
   // ...
 }
 ```
+
+### 5. Engine Icon (`cli/constants.ts`)
+
+Add your engine's icon to the `ENGINE_ICONS` map. This icon appears in the interactive menu when selecting database engines.
+
+```typescript
+export const ENGINE_ICONS: Record<string, string> = {
+  postgresql: '🐘',
+  mysql: '🐬',
+  sqlite: '🪶',
+  mongodb: '🍃',
+  yourengine: '🔴',  // Add your engine icon
+}
+```
+
+**Icon conventions:**
+- Use an emoji that represents the database (e.g., animal mascot, related symbol)
+- Keep it simple and recognizable
+- If no obvious icon exists, check the database's official branding
+
+**Common engine icons:**
+| Engine | Icon | Reason |
+|--------|------|--------|
+| PostgreSQL | 🐘 | Elephant mascot |
+| MySQL | 🐬 | Dolphin mascot |
+| SQLite | 🪶 | Feather (lightweight) |
+| MongoDB | 🍃 | Leaf (from logo) |
+| Redis | 🔴 | Red circle (from name/logo) |
+
+If no icon is provided, the default `▣` will be used, which looks generic in the menu.
 
 ---
 

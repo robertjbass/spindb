@@ -24,6 +24,8 @@ import {
   type InstalledPostgresEngine,
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
+  type InstalledMongodbEngine,
+  type InstalledRedisEngine,
 } from '../helpers'
 import { Engine } from '../../types'
 
@@ -34,6 +36,25 @@ function padWithEmoji(str: string, width: number): string {
   // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
   const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
+}
+
+/**
+ * Display manual installation instructions for missing dependencies
+ */
+function displayManualInstallInstructions(
+  missingDeps: Array<{ dependency: { name: string }; installed: boolean }>,
+): void {
+  const platform = getCurrentPlatform()
+  for (const status of missingDeps) {
+    const instructions = getManualInstallInstructions(
+      status.dependency as Parameters<typeof getManualInstallInstructions>[0],
+      platform,
+    )
+    console.log(chalk.gray(`  ${status.dependency.name}:`))
+    for (const instruction of instructions) {
+      console.log(chalk.gray(`    ${instruction}`))
+    }
+  }
 }
 
 /**
@@ -71,6 +92,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   )
   const sqliteEngine = engines.find(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
+  )
+  const mongodbEngine = engines.find(
+    (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
+  )
+  const redisEngine = engines.find(
+    (e): e is InstalledRedisEngine => e.engine === 'redis',
   )
 
   // Calculate total size for PostgreSQL
@@ -131,6 +158,34 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // MongoDB row
+  if (mongodbEngine) {
+    const icon = ENGINE_ICONS.mongodb
+    const engineDisplay = `${icon} mongodb`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(mongodbEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  // Redis row
+  if (redisEngine) {
+    const icon = ENGINE_ICONS.redis
+    const engineDisplay = `${icon} redis`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(redisEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -148,6 +203,16 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   if (sqliteEngine) {
     console.log(
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+    )
+  }
+  if (mongodbEngine) {
+    console.log(
+      chalk.gray(`  MongoDB: system-installed at ${mongodbEngine.path}`),
+    )
+  }
+  if (redisEngine) {
+    console.log(
+      chalk.gray(`  Redis: system-installed at ${redisEngine.path}`),
     )
   }
   console.log()
@@ -283,18 +348,8 @@ async function installEngineViaPackageManager(
     console.error(uiError('No supported package manager found.'))
     console.log()
     console.log(chalk.yellow('Manual installation instructions:'))
-    const platform = getCurrentPlatform()
     const missingDeps = statuses.filter((s) => !s.installed)
-    for (const status of missingDeps) {
-      const instructions = getManualInstallInstructions(
-        status.dependency,
-        platform,
-      )
-      console.log(chalk.gray(`  ${status.dependency.name}:`))
-      for (const instruction of instructions) {
-        console.log(chalk.gray(`    ${instruction}`))
-      }
-    }
+    displayManualInstallInstructions(missingDeps)
     process.exit(1)
   }
 
@@ -328,6 +383,24 @@ async function installEngineViaPackageManager(
       console.error(chalk.red(`  ${result.dependency.name}: ${result.error}`))
     }
     process.exit(1)
+  }
+
+  // Check if some dependencies couldn't be installed because the package manager
+  // doesn't have a package definition for them (e.g., Redis on Windows with Chocolatey)
+  if (results.length === 0) {
+    const stillMissing = statuses.filter((s) => !s.installed)
+    if (stillMissing.length > 0) {
+      console.log()
+      console.log(
+        uiWarning(
+          `${packageManager.name} doesn't have packages for ${displayName}.`,
+        ),
+      )
+      console.log()
+      console.log(chalk.yellow('Manual installation required:'))
+      displayManualInstallInstructions(stillMissing)
+      process.exit(1)
+    }
   }
 }
 
@@ -430,9 +503,19 @@ enginesCommand
         return
       }
 
+      if (['mongodb', 'mongo'].includes(normalizedEngine)) {
+        await installEngineViaPackageManager('mongodb', 'MongoDB')
+        return
+      }
+
+      if (normalizedEngine === 'redis') {
+        await installEngineViaPackageManager('redis', 'Redis')
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis`,
         ),
       )
       process.exit(1)
