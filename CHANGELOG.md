@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-01-01
+
+### Added
+- **Windows CI support for Redis** - Full Redis integration tests now run on Windows
+  - Direct download from GitHub releases (memurai-io/redis) instead of Chocolatey for reliability
+  - Comprehensive path detection across multiple installation locations
+  - Enhanced error handling with detailed diagnostics when Redis binaries aren't found
+
+### Changed
+- Redis Windows installation in CI now uses direct GitHub download approach for faster, more reliable builds
+
 ## [0.13.0] - 2026-01-01
 
 ### Added
