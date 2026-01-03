@@ -6,11 +6,26 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
+import { join, dirname } from 'path'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import { logDebug } from '../../core/error-handler'
 
 const execAsync = promisify(exec)
+
+/**
+ * Get the redis-server executable name for the current platform
+ */
+function getRedisServerExe(): string {
+  return `redis-server${platformService.getExecutableExtension()}`
+}
+
+/**
+ * Get the redis-cli executable name for the current platform
+ */
+function getRedisCliExe(): string {
+  return `redis-cli${platformService.getExecutableExtension()}`
+}
 
 /**
  * Common Homebrew paths for Redis on macOS
@@ -72,12 +87,12 @@ export async function getRedisServerPath(): Promise<string | null> {
   const cached = await configManager.getBinaryPath('redis-server')
   if (cached && existsSync(cached)) return cached
 
-  // Check Homebrew paths
+  // Check Homebrew paths (Unix only - these paths don't exist on Windows)
   for (const dir of HOMEBREW_REDIS_PATHS) {
-    const path = `${dir}/redis-server`
-    if (existsSync(path)) {
-      logDebug(`Found redis-server at Homebrew path: ${path}`)
-      return path
+    const serverPath = join(dir, getRedisServerExe())
+    if (existsSync(serverPath)) {
+      logDebug(`Found redis-server at Homebrew path: ${serverPath}`)
+      return serverPath
     }
   }
 
@@ -99,12 +114,12 @@ export async function getRedisCliPath(): Promise<string | null> {
   const cached = await configManager.getBinaryPath('redis-cli')
   if (cached && existsSync(cached)) return cached
 
-  // Check Homebrew paths
+  // Check Homebrew paths (Unix only - these paths don't exist on Windows)
   for (const dir of HOMEBREW_REDIS_PATHS) {
-    const path = `${dir}/redis-cli`
-    if (existsSync(path)) {
-      logDebug(`Found redis-cli at: ${path}`)
-      return path
+    const cliPath = join(dir, getRedisCliExe())
+    if (existsSync(cliPath)) {
+      logDebug(`Found redis-cli at: ${cliPath}`)
+      return cliPath
     }
   }
 
@@ -210,10 +225,10 @@ export async function detectInstalledVersions(): Promise<
 > {
   const versions: Record<string, string> = {}
 
-  // Check all Homebrew paths (including versioned formulas)
+  // Check all Homebrew paths (including versioned formulas) - Unix only
   const now = Date.now()
   for (const dir of HOMEBREW_REDIS_PATHS) {
-    const redisServerPath = `${dir}/redis-server`
+    const redisServerPath = join(dir, getRedisServerExe())
     if (existsSync(redisServerPath)) {
       const version = await getRedisVersion(redisServerPath)
       if (version) {
@@ -236,8 +251,8 @@ export async function detectInstalledVersions(): Promise<
     if (version) {
       const major = version.split('.')[0]
       versions[major] = version
-      // Store the directory containing the binary
-      const dir = defaultRedis.replace(/\/redis-server$/, '')
+      // Store the directory containing the binary (cross-platform)
+      const dir = dirname(defaultRedis)
       versionPathCache[major] = { path: dir, timestamp: now }
     }
   }
@@ -268,8 +283,8 @@ export async function getBinaryPathForVersion(
       logDebug(`Negative cache expired for Redis ${majorVersion}, re-detecting`)
       delete versionPathCache[majorVersion]
     } else {
-      // Positive cache - validate path still exists
-      const cachedPath = `${cached.path}/redis-server`
+      // Positive cache - validate path still exists (cross-platform)
+      const cachedPath = join(cached.path, getRedisServerExe())
       if (existsSync(cachedPath)) {
         return cached.path
       }
@@ -287,10 +302,10 @@ export async function getBinaryPathForVersion(
     return entry.path
   }
 
-  // Fall back to checking version-specific paths
+  // Fall back to checking version-specific paths (Unix only - Homebrew paths)
   const paths = HOMEBREW_REDIS_VERSION_PATHS[majorVersion] || HOMEBREW_REDIS_PATHS
   for (const dir of paths) {
-    const redisServerPath = `${dir}/redis-server`
+    const redisServerPath = join(dir, getRedisServerExe())
     if (existsSync(redisServerPath)) {
       const version = await getRedisVersion(redisServerPath)
       if (version && version.split('.')[0] === majorVersion) {
@@ -315,7 +330,7 @@ export async function getRedisServerPathForVersion(
 ): Promise<string | null> {
   const binDir = await getBinaryPathForVersion(majorVersion)
   if (binDir) {
-    const serverPath = `${binDir}/redis-server`
+    const serverPath = join(binDir, getRedisServerExe())
     if (existsSync(serverPath)) {
       return serverPath
     }
@@ -331,7 +346,7 @@ export async function getRedisCliPathForVersion(
 ): Promise<string | null> {
   const binDir = await getBinaryPathForVersion(majorVersion)
   if (binDir) {
-    const cliPath = `${binDir}/redis-cli`
+    const cliPath = join(binDir, getRedisCliExe())
     if (existsSync(cliPath)) {
       return cliPath
     }
@@ -405,11 +420,14 @@ export function getVersionInstallHint(majorVersion: string): string {
 
   switch (platform) {
     case 'darwin': {
-      const minorVersion = HOMEBREW_FORMULA_VERSIONS[majorVersion]
-      if (minorVersion) {
-        return `Install Redis ${majorVersion} with: brew install redis@${minorVersion}`
+      const formulaVersion = HOMEBREW_FORMULA_VERSIONS[majorVersion]
+      if (formulaVersion) {
+        return `Install Redis ${majorVersion} with: brew install redis@${formulaVersion}`
       }
-      return `Install Redis with: brew install redis (note: no Redis ${majorVersion} formula exists)`
+      if (majorVersion === '7') {
+        return `Install Redis 7 with: brew install redis (Redis 7 is the main formula)`
+      }
+      return `Install Redis with: brew install redis`
     }
 
     case 'linux':
