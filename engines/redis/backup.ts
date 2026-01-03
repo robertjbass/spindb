@@ -12,6 +12,7 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { getRedisCliPath } from './binary-detection'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { isWindows } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -19,7 +20,7 @@ const execAsync = promisify(exec)
 
 /**
  * Build a redis-cli command with proper shell escaping
- * Quotes arguments containing special shell characters
+ * Uses different quoting strategies for Windows (cmd.exe) vs Unix shells
  */
 function buildRedisCliCommand(
   redisCli: string,
@@ -28,16 +29,30 @@ function buildRedisCliCommand(
 ): string {
   // Split command into parts and quote any parts containing shell special chars
   const parts = command.split(/\s+/)
-  const quotedParts = parts.map((part) => {
-    // If part contains shell special chars, wrap in single quotes
-    if (/[*?[\]{}$`"'\\!<>|;&()]/.test(part)) {
-      // Escape any single quotes in the part
-      const escaped = part.replace(/'/g, "'\"'\"'")
-      return `'${escaped}'`
-    }
-    return part
-  })
-  return `"${redisCli}" -h 127.0.0.1 -p ${port} ${quotedParts.join(' ')}`
+
+  if (isWindows()) {
+    // Windows cmd.exe: use double quotes, escape internal double quotes with backslash
+    const quotedParts = parts.map((part) => {
+      // If part contains shell special chars or spaces, wrap in double quotes
+      if (/[*?[\]{}$`"'\\!<>|;&()\s]/.test(part)) {
+        const escaped = part.replace(/"/g, '\\"')
+        return `"${escaped}"`
+      }
+      return part
+    })
+    return `"${redisCli}" -h 127.0.0.1 -p ${port} ${quotedParts.join(' ')}`
+  } else {
+    // Unix: use single quotes (safer for most special chars)
+    const quotedParts = parts.map((part) => {
+      if (/[*?[\]{}$`"'\\!<>|;&()]/.test(part)) {
+        // Escape any single quotes in the part
+        const escaped = part.replace(/'/g, "'\"'\"'")
+        return `'${escaped}'`
+      }
+      return part
+    })
+    return `"${redisCli}" -h 127.0.0.1 -p ${port} ${quotedParts.join(' ')}`
+  }
 }
 
 /**
