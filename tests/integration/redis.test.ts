@@ -22,6 +22,7 @@ import {
   assertEqual,
   runScriptFile,
   runScriptSQL,
+  getInstalledVersion,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -39,6 +40,7 @@ describe('Redis Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
+  let installedVersion: string
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -46,6 +48,10 @@ describe('Redis Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
+
+    console.log('\n🔍 Detecting installed Redis version...')
+    installedVersion = await getInstalledVersion(ENGINE)
+    console.log(`   Using Redis version: ${installedVersion}`)
 
     console.log('\n🔍 Finding available test ports...')
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.redis.base)
@@ -72,14 +78,14 @@ describe('Redis Integration Tests', () => {
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '7',
+      version: installedVersion,
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the data directory
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, '7', {})
+    await engine.initDataDir(containerName, installedVersion, {})
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -147,13 +153,13 @@ describe('Redis Integration Tests', () => {
     // Create and initialize cloned container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '7',
+      version: installedVersion,
       port: testPorts[1],
       database: DATABASE,
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '7', {})
+    await engine.initDataDir(clonedContainerName, installedVersion, {})
 
     // Create backup from source
     const { tmpdir } = await import('os')
@@ -487,13 +493,13 @@ describe('Redis Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '7',
+      version: installedVersion,
       port: testPorts[2], // This port is in use by renamed container
       database: '1', // Different database to avoid confusion
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '7', {})
+    await engine.initDataDir(portConflictContainerName, installedVersion, {})
 
     // The container should be created but when we try to start, it should detect conflict
     // In real usage, the start command would auto-assign a new port

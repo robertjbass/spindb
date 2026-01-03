@@ -178,25 +178,49 @@ export class RedisEngine extends BaseEngine {
   }
 
   /**
-   * Check if Redis is installed
+   * Check if a specific Redis version is installed
+   * Returns true only if the requested version is actually available
    */
-  async isBinaryInstalled(_version: string): Promise<boolean> {
-    const redisServer = await getRedisServerPath()
-    return redisServer !== null
+  async isBinaryInstalled(version: string): Promise<boolean> {
+    const majorVersion = version.split('.')[0]
+    const versionPath = await getRedisServerPathForVersion(majorVersion)
+    return versionPath !== null
   }
 
   /**
-   * Ensure Redis binaries are available (just checks system installation)
+   * Ensure Redis binaries are available for a specific version
+   * Returns the path to redis-server for the requested version
+   * Throws if the version is not available (no silent fallback)
    */
   async ensureBinaries(
-    _version: string,
+    version: string,
     _onProgress?: ProgressCallback,
   ): Promise<string> {
-    const redisServer = await getRedisServerPath()
-    if (!redisServer) {
+    const majorVersion = version.split('.')[0]
+
+    // Try to find version-specific binary
+    const versionPath = await getRedisServerPathForVersion(majorVersion)
+    if (versionPath) {
+      return versionPath
+    }
+
+    // Version not found - check what versions ARE available
+    const installed = await detectInstalledVersions()
+    const availableVersions = Object.keys(installed).sort()
+
+    if (availableVersions.length === 0) {
       throw new Error(getInstallInstructions())
     }
-    return redisServer
+
+    // Build helpful error message
+    const availableList = availableVersions
+      .map((v) => `${v} (${installed[v]})`)
+      .join(', ')
+    throw new Error(
+      `Redis ${majorVersion} is not installed. ` +
+        `Available versions: ${availableList}.\n` +
+        `Install Redis ${majorVersion} with: brew install redis@${majorVersion}`,
+    )
   }
 
   /**
@@ -246,7 +270,7 @@ export class RedisEngine extends BaseEngine {
     container: ContainerConfig,
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
-    const { name, port, version } = container
+    const { name, port, version, binaryPath } = container
 
     // Check if already running (idempotent behavior)
     const alreadyRunning = await processManager.isRunning(name, {
@@ -259,20 +283,40 @@ export class RedisEngine extends BaseEngine {
       }
     }
 
-    // Get version-specific redis-server path
-    const majorVersion = version.split('.')[0]
-    let redisServer = await getRedisServerPathForVersion(majorVersion)
+    // Use stored binary path if available (from container creation)
+    // This ensures version consistency - the container uses the same binary it was created with
+    let redisServer: string | null = null
 
-    // Fall back to generic path if version-specific not found
-    if (!redisServer) {
-      redisServer = await getRedisServerPath()
+    if (binaryPath && existsSync(binaryPath)) {
+      redisServer = binaryPath
+      logDebug(`Using stored binary path: ${redisServer}`)
+    } else {
+      // Fall back to version detection for legacy containers without binaryPath
+      const majorVersion = version.split('.')[0]
+      redisServer = await getRedisServerPathForVersion(majorVersion)
+
+      if (!redisServer) {
+        // If version-specific not found, throw error with available versions
+        const installed = await detectInstalledVersions()
+        const availableVersions = Object.keys(installed).sort()
+
+        if (availableVersions.length === 0) {
+          throw new Error(getInstallInstructions())
+        }
+
+        const availableList = availableVersions
+          .map((v) => `${v} (${installed[v]})`)
+          .join(', ')
+        throw new Error(
+          `Redis ${majorVersion} is not installed. ` +
+            `Container was created for Redis ${majorVersion} but it's no longer available.\n` +
+            `Available versions: ${availableList}.\n` +
+            `Install Redis ${majorVersion} with: brew install redis@${majorVersion}`,
+        )
+      }
     }
 
-    if (!redisServer) {
-      throw new Error(getInstallInstructions())
-    }
-
-    logDebug(`Using redis-server for version ${majorVersion}: ${redisServer}`)
+    logDebug(`Using redis-server for version ${version}: ${redisServer}`)
 
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'redis.conf')

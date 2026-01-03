@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.4] - 2026-01-02
+
+### Added
+- **Version-specific binary validation for system engines** - MySQL, MongoDB, and Redis now validate that the requested version is actually installed
+  - Container creation fails with helpful error if requested version is not available
+  - Error message lists available versions with install commands (e.g., `brew install redis@7`)
+  - Stores binary path in container config to ensure version consistency across restarts
+
+### Changed
+- **Binary path stored in container config** - System-installed engines (MySQL, MongoDB, Redis) now store the exact binary path used during creation
+  - Containers use the stored binary path when starting, preventing silent fallback to different versions
+  - Legacy containers without `binaryPath` fall back to version detection with clear error messages
+- **Version-specific Homebrew path detection** - Added comprehensive path detection for versioned Homebrew formulas:
+  - MySQL: `mysql@5.7`, `mysql@8.0`, `mysql@8.4`, `mysql@9.0`
+  - MongoDB: `mongodb-community@6.0`, `mongodb-community@7.0`, `mongodb-community@8.0`
+  - Redis: `redis@6.2`, `redis@7.0`, `redis@7.2`, `redis@8.0`, `redis@8.2`
+
+### Fixed
+- **Silent version fallback bug** - Previously, containers could silently use a different version than requested if the exact version wasn't installed. Now throws a clear error with available versions.
+- **Integration tests use dynamic versions** - Tests now detect installed engine versions instead of hardcoding, preventing failures when specific versions aren't installed
+
 ## [0.13.3] - 2026-01-02
 
 ### Added

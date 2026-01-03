@@ -22,6 +22,7 @@ import {
   assertEqual,
   runScriptFile,
   runScriptSQL,
+  getInstalledVersion,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -39,6 +40,7 @@ describe('MySQL Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
+  let installedVersion: string
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -46,6 +48,10 @@ describe('MySQL Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
+
+    console.log('\n🔍 Detecting installed MySQL version...')
+    installedVersion = await getInstalledVersion(ENGINE)
+    console.log(`   Using MySQL version: ${installedVersion}`)
 
     console.log('\n🔍 Finding available test ports...')
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.mysql.base)
@@ -72,14 +78,14 @@ describe('MySQL Integration Tests', () => {
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '9.0',
+      version: installedVersion,
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the database cluster
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, '9.0', { superuser: 'root' })
+    await engine.initDataDir(containerName, installedVersion, { superuser: 'root' })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -161,14 +167,14 @@ describe('MySQL Integration Tests', () => {
     // Create container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '9.0',
+      version: installedVersion,
       port: testPorts[1],
       database: DATABASE,
     })
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '9.0', { superuser: 'root' })
+    await engine.initDataDir(clonedContainerName, installedVersion, { superuser: 'root' })
 
     const config = await containerManager.getConfig(clonedContainerName)
     assert(config !== null, 'Cloned container config should exist')
@@ -454,7 +460,7 @@ describe('MySQL Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '9.0',
+      version: installedVersion,
       port: testPorts[2], // This port is in use by renamed container
       database: 'conflictdb',
     })

@@ -27,6 +27,7 @@ import {
 import { processManager } from '../../core/process-manager'
 import {
   getMysqldPath,
+  getMysqldPathForVersion,
   getMysqlClientPath as findMysqlClientPath,
   getMysqladminPath as findMysqladminPath,
   getMysqldumpPath,
@@ -163,25 +164,49 @@ export class MySQLEngine extends BaseEngine {
   }
 
   /**
-   * Check if MySQL is installed
+   * Check if a specific MySQL version is installed
+   * Returns true only if the requested version is actually available
    */
-  async isBinaryInstalled(_version: string): Promise<boolean> {
-    const mysqld = await getMysqldPath()
-    return mysqld !== null
+  async isBinaryInstalled(version: string): Promise<boolean> {
+    const majorVersion = version.split('.')[0]
+    const versionPath = await getMysqldPathForVersion(majorVersion)
+    return versionPath !== null
   }
 
   /**
-   * Ensure MySQL binaries are available (just checks system installation)
+   * Ensure MySQL binaries are available for a specific version
+   * Returns the path to mysqld for the requested version
+   * Throws if the version is not available (no silent fallback)
    */
   async ensureBinaries(
-    _version: string,
+    version: string,
     _onProgress?: ProgressCallback,
   ): Promise<string> {
-    const mysqld = await getMysqldPath()
-    if (!mysqld) {
+    const majorVersion = version.split('.')[0]
+
+    // Try to find version-specific binary
+    const versionPath = await getMysqldPathForVersion(majorVersion)
+    if (versionPath) {
+      return versionPath
+    }
+
+    // Version not found - check what versions ARE available
+    const installed = await detectInstalledVersions()
+    const availableVersions = Object.keys(installed).sort()
+
+    if (availableVersions.length === 0) {
       throw new Error(getInstallInstructions())
     }
-    return mysqld
+
+    // Build helpful error message
+    const availableList = availableVersions
+      .map((v) => `${v} (${installed[v]})`)
+      .join(', ')
+    throw new Error(
+      `MySQL ${majorVersion} is not installed. ` +
+        `Available versions: ${availableList}.\n` +
+        `Install MySQL ${majorVersion} with: brew install mysql@${majorVersion}.0`,
+    )
   }
 
   /**
@@ -384,7 +409,7 @@ export class MySQLEngine extends BaseEngine {
     container: ContainerConfig,
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
-    const { name, port } = container
+    const { name, port, version, binaryPath } = container
 
     // Check if already running (idempotent behavior)
     const alreadyRunning = await processManager.isRunning(name, {
@@ -397,10 +422,40 @@ export class MySQLEngine extends BaseEngine {
       }
     }
 
-    const mysqld = await getMysqldPath()
-    if (!mysqld) {
-      throw new Error(getInstallInstructions())
+    // Use stored binary path if available (from container creation)
+    // This ensures version consistency - the container uses the same binary it was created with
+    let mysqld: string | null = null
+
+    if (binaryPath && existsSync(binaryPath)) {
+      mysqld = binaryPath
+      logDebug(`Using stored binary path: ${mysqld}`)
+    } else {
+      // Fall back to version detection for legacy containers without binaryPath
+      const majorVersion = version.split('.')[0]
+      mysqld = await getMysqldPathForVersion(majorVersion)
+
+      if (!mysqld) {
+        // If version-specific not found, throw error with available versions
+        const installed = await detectInstalledVersions()
+        const availableVersions = Object.keys(installed).sort()
+
+        if (availableVersions.length === 0) {
+          throw new Error(getInstallInstructions())
+        }
+
+        const availableList = availableVersions
+          .map((v) => `${v} (${installed[v]})`)
+          .join(', ')
+        throw new Error(
+          `MySQL ${majorVersion} is not installed. ` +
+            `Container was created for MySQL ${majorVersion} but it's no longer available.\n` +
+            `Available versions: ${availableList}.\n` +
+            `Install MySQL ${majorVersion} with: brew install mysql@${majorVersion}.0`,
+        )
+      }
     }
+
+    logDebug(`Using mysqld for version ${version}: ${mysqld}`)
 
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })

@@ -215,6 +215,70 @@ export async function detectInstalledVersions(): Promise<
 }
 
 /**
+ * Version-specific Homebrew paths for MongoDB
+ * Used to find binaries for a specific major version
+ */
+const HOMEBREW_MONGODB_VERSION_PATHS: Record<string, string[]> = {
+  '8': [
+    '/opt/homebrew/opt/mongodb-community@8.0/bin',
+    '/opt/homebrew/opt/mongodb-community/bin', // Unversioned formula might be v8
+    '/usr/local/opt/mongodb-community@8.0/bin',
+    '/usr/local/opt/mongodb-community/bin',
+  ],
+  '7': [
+    '/opt/homebrew/opt/mongodb-community@7.0/bin',
+    '/opt/homebrew/opt/mongodb-community/bin', // Unversioned formula might be v7
+    '/usr/local/opt/mongodb-community@7.0/bin',
+    '/usr/local/opt/mongodb-community/bin',
+  ],
+  '6': [
+    '/opt/homebrew/opt/mongodb-community@6.0/bin',
+    '/usr/local/opt/mongodb-community@6.0/bin',
+  ],
+}
+
+/**
+ * Get mongod path for a specific major version
+ */
+export async function getMongodPathForVersion(
+  majorVersion: string,
+): Promise<string | null> {
+  const { platform } = platformService.getPlatformInfo()
+
+  // On macOS, check version-specific Homebrew paths
+  if (platform === 'darwin') {
+    const paths = HOMEBREW_MONGODB_VERSION_PATHS[majorVersion] || []
+    for (const dir of paths) {
+      const mongodPath = `${dir}/mongod`
+      if (existsSync(mongodPath)) {
+        // Verify this is the correct major version
+        const version = await getMongodVersion(mongodPath)
+        if (version) {
+          const detectedMajor = version.split('.')[0]
+          if (detectedMajor === majorVersion) {
+            return mongodPath
+          }
+        }
+      }
+    }
+  }
+
+  // Fall back to generic detection and version check
+  const genericPath = await getMongodPath()
+  if (genericPath) {
+    const version = await getMongodVersion(genericPath)
+    if (version) {
+      const detectedMajor = version.split('.')[0]
+      if (detectedMajor === majorVersion) {
+        return genericPath
+      }
+    }
+  }
+
+  return null
+}
+
+/**
  * Get installation instructions for MongoDB
  */
 export function getInstallInstructions(): string {

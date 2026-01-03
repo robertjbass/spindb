@@ -799,7 +799,7 @@ Native processes mean instant startup and no virtualization overhead.
 └── mydb.sqlite                             # Created with: spindb create mydb -e sqlite
 ```
 
-### How Data Persists
+### Data Persistence
 
 SpinDB runs databases as **native processes** on your machine. When you start a container:
 
@@ -816,6 +816,29 @@ When you stop a container:
 4. Your data remains in the `data/` directory
 
 **Your data is never deleted unless you explicitly delete the container.**
+
+#### Persistence by Engine
+
+Each database engine has its own persistence mechanism:
+
+| Engine | Mechanism | Durability |
+|--------|-----------|------------|
+| PostgreSQL | Write-Ahead Logging (WAL) | Every commit is immediately durable |
+| MySQL | InnoDB transaction logs | Every commit is immediately durable |
+| SQLite | File-based transactions | Every commit is immediately durable |
+| MongoDB | WiredTiger with journaling | Writes journaled before acknowledged |
+| Redis | RDB snapshots | Periodic snapshots (see below) |
+
+**PostgreSQL, MySQL, MongoDB:** These engines use transaction logs or journaling. Every committed write is guaranteed to survive a crash or unexpected shutdown.
+
+**SQLite:** As a file-based database, SQLite writes directly to disk on each commit. No server process means no risk of losing in-flight data.
+
+**Redis:** SpinDB configures Redis with RDB (Redis Database) snapshots:
+- Save after 900 seconds if at least 1 key changed
+- Save after 300 seconds if at least 10 keys changed
+- Save after 60 seconds if at least 10,000 keys changed
+
+This means Redis may lose up to ~60 seconds of writes on an unexpected crash. For local development, this trade-off (speed over strict durability) is typically acceptable. If you need stronger guarantees, use `spindb backup` before stopping work.
 
 ### Binary Sources
 
