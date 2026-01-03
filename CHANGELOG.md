@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Silent version fallback bug** - Previously, containers could silently use a different version than requested if the exact version wasn't installed. Now throws a clear error with available versions.
+- **Homebrew formula suggestions in error messages** - Install commands now suggest correct versioned formulas:
+  - Redis: `redis@7.2`, `redis@8.2` (was incorrectly suggesting `redis@7`, `redis@8`)
+  - MySQL: `mysql@8.0` (was incorrectly suggesting `mysql@8.0.0`)
+  - MongoDB: `mongodb-community@7.0` (was incorrectly suggesting `mongodb-community@7.0.0`)
 - **Integration tests use dynamic versions** - Tests now detect installed engine versions instead of hardcoding, preventing failures when specific versions aren't installed
 
 ## [0.13.3] - 2026-01-02
