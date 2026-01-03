@@ -223,16 +223,13 @@ export class MySQLEngine extends BaseEngine {
       engine: ENGINE,
     })
 
-    // Track if we created the directory (for cleanup on failure)
     let createdDataDir = false
 
-    // Create data directory if it doesn't exist
     if (!existsSync(dataDir)) {
       await mkdir(dataDir, { recursive: true })
       createdDataDir = true
     }
 
-    // Helper to clean up on failure
     const cleanupOnFailure = async () => {
       if (createdDataDir) {
         try {
@@ -411,7 +408,6 @@ export class MySQLEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
 
-    // Check if already running (idempotent behavior)
     const alreadyRunning = await processManager.isRunning(name, {
       engine: ENGINE,
     })

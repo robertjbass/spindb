@@ -18,9 +18,9 @@ export type BackupFormatInfo = {
 export type EngineBackupFormats = {
   sql: BackupFormatInfo
   dump: BackupFormatInfo
-  /** Whether this engine supports format selection (false = only one format) */
+  // Whether this engine supports format selection (false = only one format)
   supportsFormatChoice: boolean
-  /** Default format when not specified */
+  // Default format when not specified
   defaultFormat: 'sql' | 'dump'
 }
 

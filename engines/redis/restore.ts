@@ -36,7 +36,8 @@ const REDIS_COMMANDS = [
 async function looksLikeRedisCommands(filePath: string): Promise<boolean> {
   try {
     const content = await readFile(filePath, 'utf-8')
-    const lines = content.split('\n')
+    // Use /\r?\n/ to handle both Unix (\n) and Windows (\r\n) line endings
+    const lines = content.split(/\r?\n/)
 
     let commandsFound = 0
     const linesToCheck = 10 // Check first 10 non-empty, non-comment lines
@@ -162,11 +163,11 @@ export async function detectBackupFormat(
 export type RestoreOptions = {
   containerName: string
   dataDir?: string
-  /** Port for running Redis instance (required for text restore) */
+  // Port for running Redis instance (required for text restore)
   port?: number
-  /** Database number to restore to (default: 0) */
+  // Database number to restore to (default: 0)
   database?: string
-  /** Clear database before restoring (FLUSHDB) */
+  // Clear database before restoring (FLUSHDB)
   flush?: boolean
 }
 

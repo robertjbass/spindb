@@ -134,7 +134,6 @@ export async function run(): Promise<void> {
   program.addCommand(detachCommand)
   program.addCommand(sqliteCommand)
 
-  // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {
     await menuCommand.parseAsync([])
     return

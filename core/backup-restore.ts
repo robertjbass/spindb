@@ -78,9 +78,9 @@ export type BackupOptions = {
   format: 'sql' | 'dump'
   outputDir: string
   filename: string
-  /** Show spinner and console output */
+  // Show spinner and console output
   interactive?: boolean
-  /** Callback for progress updates */
+  // Callback for progress updates
   onProgress?: (message: string) => void
 }
 
@@ -176,13 +176,13 @@ export type RestoreOptions = {
   containerName: string
   databaseName: string
   backupPath: string
-  /** Create new database if it doesn't exist */
+  // Create new database if it doesn't exist
   createDatabase?: boolean
-  /** Force overwrite existing database */
+  // Force overwrite existing database
   force?: boolean
-  /** Show spinner and console output */
+  // Show spinner and console output
   interactive?: boolean
-  /** Callback for progress updates */
+  // Callback for progress updates
   onProgress?: (message: string) => void
 }
 

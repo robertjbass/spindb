@@ -8,7 +8,7 @@ export type ContainerConfig = {
   created: string
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string
-  /** Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis) */
+  // Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis)
   binaryPath?: string
 }
 

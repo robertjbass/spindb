@@ -143,7 +143,6 @@ async function createSqliteContainer(
     console.log(chalk.cyan(`    ${connectionString}`))
     console.log()
 
-    // Connect if requested
     if (connect) {
       const config = await containerManager.getConfig(containerName)
       if (config) {

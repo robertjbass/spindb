@@ -166,10 +166,8 @@ async function createCompressedBackup(
     stderr += data.toString()
   })
 
-  // Create promise for pipeline completion
   const pipelinePromise = pipeline(proc.stdout!, gzip, output)
 
-  // Create promise for process exit
   const exitPromise = new Promise<void>((resolve, reject) => {
     proc.on('error', (err: NodeJS.ErrnoException) => {
       reject(err)

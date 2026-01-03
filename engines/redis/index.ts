@@ -890,13 +890,34 @@ export class RedisEngine extends BaseEngine {
         proc.stdin?.end()
       })
     } else if (options.sql) {
-      // Run inline command (using sql field for compatibility, but it's actually Redis commands)
-      const cmd = buildRedisCliCommand(redisCli, port, options.sql, {
-        database: db,
+      // Run inline command by piping to redis-cli stdin (avoids shell quoting issues on Windows)
+      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(redisCli, args, {
+          stdio: ['pipe', 'inherit', 'inherit'],
+        })
+
+        let rejected = false
+
+        proc.on('error', (err) => {
+          rejected = true
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          if (rejected) return
+          if (code === 0 || code === null) {
+            resolve()
+          } else {
+            reject(new Error(`redis-cli exited with code ${code}`))
+          }
+        })
+
+        // Write command to stdin and close it
+        proc.stdin?.write(options.sql + '\n')
+        proc.stdin?.end()
       })
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
-      if (stdout) process.stdout.write(stdout)
-      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }
