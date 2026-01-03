@@ -1,8 +1,3 @@
-/**
- * Redis Engine implementation
- * Manages Redis database containers using system-installed Redis binaries
- */
-
 import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
@@ -791,7 +786,9 @@ export class RedisEngine extends BaseEngine {
       )
     }
     // No-op - Redis databases always exist
-    logDebug(`Redis database ${database} is available (databases 0-15 always exist)`)
+    logDebug(
+      `Redis database ${database} is available (databases 0-15 always exist)`,
+    )
   }
 
   /**
@@ -821,7 +818,9 @@ export class RedisEngine extends BaseEngine {
     } catch (error) {
       const err = error as Error
       logDebug(`FLUSHDB failed: ${err.message}`)
-      throw new Error(`Failed to flush Redis database ${database}: ${err.message}`)
+      throw new Error(
+        `Failed to flush Redis database ${database}: ${err.message}`,
+      )
     }
   }
 
