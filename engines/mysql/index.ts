@@ -205,7 +205,7 @@ export class MySQLEngine extends BaseEngine {
     throw new Error(
       `MySQL ${majorVersion} is not installed. ` +
         `Available versions: ${availableList}.\n` +
-        `Install MySQL ${majorVersion} with: brew install mysql@${majorVersion}.0`,
+        `Install MySQL ${majorVersion} with: brew install mysql@${majorVersion}`,
     )
   }
 
@@ -450,7 +450,7 @@ export class MySQLEngine extends BaseEngine {
           `MySQL ${majorVersion} is not installed. ` +
             `Container was created for MySQL ${majorVersion} but it's no longer available.\n` +
             `Available versions: ${availableList}.\n` +
-            `Install MySQL ${majorVersion} with: brew install mysql@${majorVersion}.0`,
+            `Install MySQL ${majorVersion} with: brew install mysql@${majorVersion}`,
         )
       }
     }

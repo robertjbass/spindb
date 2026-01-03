@@ -50,6 +50,25 @@ const ENGINE = 'redis'
 const engineDef = getEngineDefaults(ENGINE)
 
 /**
+ * Map of major versions to recommended Homebrew formula versions
+ * Homebrew uses minor-versioned formulas (e.g., redis@8.2, not redis@8)
+ */
+const HOMEBREW_FORMULA_VERSIONS: Record<string, string> = {
+  '6': '6.2',
+  '7': '7.2',
+  '8': '8.2',
+}
+
+/**
+ * Get the Homebrew formula name for a given major version
+ * Returns the appropriate minor-versioned formula (e.g., "redis@8.2" for major "8")
+ */
+function getHomebrewFormula(majorVersion: string): string {
+  const minorVersion = HOMEBREW_FORMULA_VERSIONS[majorVersion]
+  return minorVersion ? `redis@${minorVersion}` : `redis@${majorVersion}`
+}
+
+/**
  * Shell metacharacters that indicate potential command injection
  * These patterns shouldn't appear in valid Redis commands
  */
@@ -212,14 +231,15 @@ export class RedisEngine extends BaseEngine {
       throw new Error(getInstallInstructions())
     }
 
-    // Build helpful error message
+    // Build helpful error message with correct Homebrew formula name
     const availableList = availableVersions
       .map((v) => `${v} (${installed[v]})`)
       .join(', ')
+    const formula = getHomebrewFormula(majorVersion)
     throw new Error(
       `Redis ${majorVersion} is not installed. ` +
         `Available versions: ${availableList}.\n` +
-        `Install Redis ${majorVersion} with: brew install redis@${majorVersion}`,
+        `Install Redis ${majorVersion} with: brew install ${formula}`,
     )
   }
 
@@ -304,14 +324,16 @@ export class RedisEngine extends BaseEngine {
           throw new Error(getInstallInstructions())
         }
 
+        // Build helpful error message with correct Homebrew formula name
         const availableList = availableVersions
           .map((v) => `${v} (${installed[v]})`)
           .join(', ')
+        const formula = getHomebrewFormula(majorVersion)
         throw new Error(
           `Redis ${majorVersion} is not installed. ` +
             `Container was created for Redis ${majorVersion} but it's no longer available.\n` +
             `Available versions: ${availableList}.\n` +
-            `Install Redis ${majorVersion} with: brew install redis@${majorVersion}`,
+            `Install Redis ${majorVersion} with: brew install ${formula}`,
         )
       }
     }
