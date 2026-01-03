@@ -384,3 +384,41 @@ Consider using Windows Subsystem for Linux (WSL) for better Redis support.`
       return 'Redis is not installed. Visit https://redis.io/download'
   }
 }
+
+/**
+ * Map of major versions to known Homebrew versioned formulas
+ * Only includes formulas that actually exist in Homebrew
+ * Note: redis@6.2 is deprecated (disabled 2026-04-24)
+ * Note: No redis@7.x formula exists - Redis 7 users should use `redis` (main formula)
+ */
+const HOMEBREW_FORMULA_VERSIONS: Record<string, string> = {
+  '6': '6.2',
+  '8': '8.2',
+}
+
+/**
+ * Get platform-specific install hint for a specific Redis version
+ * Returns a short hint suitable for error messages
+ */
+export function getVersionInstallHint(majorVersion: string): string {
+  const { platform } = platformService.getPlatformInfo()
+
+  switch (platform) {
+    case 'darwin': {
+      const minorVersion = HOMEBREW_FORMULA_VERSIONS[majorVersion]
+      if (minorVersion) {
+        return `Install Redis ${majorVersion} with: brew install redis@${minorVersion}`
+      }
+      return `Install Redis with: brew install redis (note: no Redis ${majorVersion} formula exists)`
+    }
+
+    case 'linux':
+      return `Install Redis with your package manager (apt install redis-server, yum install redis, etc.)`
+
+    case 'win32':
+      return `Install Redis with: choco install redis, winget install tporadowski.redis, or scoop install redis`
+
+    default:
+      return 'Visit https://redis.io/download for installation instructions'
+  }
+}

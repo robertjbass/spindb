@@ -16,6 +16,7 @@ import {
   getIredisPath,
   detectInstalledVersions,
   getInstallInstructions,
+  getVersionInstallHint,
   getRedisServerPathForVersion,
   getRedisCliPathForVersion,
 } from './binary-detection'
@@ -43,34 +44,6 @@ const execAsync = promisify(exec)
 
 const ENGINE = 'redis'
 const engineDef = getEngineDefaults(ENGINE)
-
-/**
- * Map of major versions to known Homebrew versioned formulas
- * Only includes formulas that actually exist in Homebrew
- * Note: redis@6.2 is deprecated (disabled 2026-04-24)
- * Note: No redis@7.x formula exists - Redis 7 users should use `redis` (main formula)
- */
-const HOMEBREW_FORMULA_VERSIONS: Record<string, string> = {
-  '6': '6.2',
-  '8': '8.2',
-}
-
-/**
- * Get the Homebrew formula name for a given major version
- * Returns the versioned formula if available, otherwise returns 'redis' (main formula)
- * @returns Object with formula name and whether it's the exact version requested
- */
-function getHomebrewFormula(majorVersion: string): {
-  formula: string
-  isExact: boolean
-} {
-  const minorVersion = HOMEBREW_FORMULA_VERSIONS[majorVersion]
-  if (minorVersion) {
-    return { formula: `redis@${minorVersion}`, isExact: true }
-  }
-  // No versioned formula available - return main formula
-  return { formula: 'redis', isExact: false }
-}
 
 /**
  * Shell metacharacters that indicate potential command injection
@@ -235,18 +208,14 @@ export class RedisEngine extends BaseEngine {
       throw new Error(getInstallInstructions())
     }
 
-    // Build helpful error message with correct Homebrew formula name
+    // Build helpful error message with platform-specific install hint
     const availableList = availableVersions
       .map((v) => `${v} (${installed[v]})`)
       .join(', ')
-    const { formula, isExact } = getHomebrewFormula(majorVersion)
-    const installHint = isExact
-      ? `Install Redis ${majorVersion} with: brew install ${formula}`
-      : `Install Redis with: brew install ${formula} (note: no Redis ${majorVersion} formula exists)`
     throw new Error(
       `Redis ${majorVersion} is not installed. ` +
         `Available versions: ${availableList}.\n` +
-        installHint,
+        getVersionInstallHint(majorVersion),
     )
   }
 
@@ -331,19 +300,15 @@ export class RedisEngine extends BaseEngine {
           throw new Error(getInstallInstructions())
         }
 
-        // Build helpful error message with correct Homebrew formula name
+        // Build helpful error message with platform-specific install hint
         const availableList = availableVersions
           .map((v) => `${v} (${installed[v]})`)
           .join(', ')
-        const { formula, isExact } = getHomebrewFormula(majorVersion)
-        const installHint = isExact
-          ? `Install Redis ${majorVersion} with: brew install ${formula}`
-          : `Install Redis with: brew install ${formula} (note: no Redis ${majorVersion} formula exists)`
         throw new Error(
           `Redis ${majorVersion} is not installed. ` +
             `Container was created for Redis ${majorVersion} but it's no longer available.\n` +
             `Available versions: ${availableList}.\n` +
-            installHint,
+            getVersionInstallHint(majorVersion),
         )
       }
     }
