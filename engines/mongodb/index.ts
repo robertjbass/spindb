@@ -184,7 +184,7 @@ export class MongoDBEngine extends BaseEngine {
     throw new Error(
       `MongoDB ${majorVersion} is not installed. ` +
         `Available versions: ${availableList}.\n` +
-        `Install MongoDB ${majorVersion} with: brew install mongodb-community@${majorVersion}`,
+        `Install MongoDB ${majorVersion} with: brew install mongodb-community@${majorVersion}.0`,
     )
   }
 
@@ -259,7 +259,7 @@ export class MongoDBEngine extends BaseEngine {
           `MongoDB ${majorVersion} is not installed. ` +
             `Container was created for MongoDB ${majorVersion} but it's no longer available.\n` +
             `Available versions: ${availableList}.\n` +
-            `Install MongoDB ${majorVersion} with: brew install mongodb-community@${majorVersion}`,
+            `Install MongoDB ${majorVersion} with: brew install mongodb-community@${majorVersion}.0`,
         )
       }
     }

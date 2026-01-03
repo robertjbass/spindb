@@ -10,8 +10,8 @@
 
 import chalk from 'chalk'
 import { existsSync, statSync } from 'fs'
-import { mkdir, stat } from 'fs/promises'
-import { join, dirname } from 'path'
+import { mkdir } from 'fs/promises'
+import { join } from 'path'
 import { containerManager } from './container-manager'
 import { getMissingDependencies } from './dependency-manager'
 import { platformService } from './platform-service'

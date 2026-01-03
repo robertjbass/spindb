@@ -692,8 +692,6 @@ export async function promptBackupDirectory(): Promise<string | null> {
       default: cwd,
       validate: (input: string) => {
         if (!input.trim()) return 'Directory path is required'
-        const { existsSync, statSync } = require('fs')
-        const { resolve } = require('path')
         const resolved = resolve(input.replace(/^~/, process.env.HOME || ''))
         if (existsSync(resolved)) {
           if (!statSync(resolved).isDirectory()) {

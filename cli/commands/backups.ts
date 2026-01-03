@@ -7,7 +7,7 @@
 
 import { Command } from 'commander'
 import { readdirSync, statSync } from 'fs'
-import { join, extname, basename } from 'path'
+import { join, extname } from 'path'
 import chalk from 'chalk'
 import { formatBytes } from '../ui/theme'
 

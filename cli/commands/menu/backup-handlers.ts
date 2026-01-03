@@ -1,6 +1,6 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { existsSync, statSync } from 'fs'
+import { existsSync } from 'fs'
 import { rm, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -15,14 +15,11 @@ import { updatePostgresClientTools } from '../../../engines/postgresql/binary-ma
 import {
   getBackupExtension,
   getBackupSpinnerLabel,
-  LARGE_BACKUP_THRESHOLD,
-  VERY_LARGE_BACKUP_THRESHOLD,
 } from '../../../config/backup-formats'
 import {
   generateBackupTimestamp,
   estimateBackupSize,
   checkBackupSize,
-  getDefaultDatabase,
 } from '../../../core/backup-restore'
 import {
   promptCreateOptions,
@@ -42,7 +39,6 @@ import {
   uiSuccess,
   uiError,
   uiWarning,
-  uiInfo,
   connectionBox,
   formatBytes,
 } from '../../ui/theme'
