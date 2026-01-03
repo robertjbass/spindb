@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { existsSync } from 'fs'
-import { rm } from 'fs/promises'
+import { rm, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { containerManager } from '../../../core/container-manager'
@@ -13,6 +13,15 @@ import { defaults } from '../../../config/defaults'
 import { getPostgresHomebrewPackage } from '../../../config/engine-defaults'
 import { updatePostgresClientTools } from '../../../engines/postgresql/binary-manager'
 import {
+  getBackupExtension,
+  getBackupSpinnerLabel,
+} from '../../../config/backup-formats'
+import {
+  generateBackupTimestamp,
+  estimateBackupSize,
+  checkBackupSize,
+} from '../../../core/backup-restore'
+import {
   promptCreateOptions,
   promptContainerName,
   promptContainerSelect,
@@ -20,6 +29,7 @@ import {
   promptDatabaseSelect,
   promptBackupFormat,
   promptBackupFilename,
+  promptBackupDirectory,
   promptInstallDependencies,
   promptConfirm,
 } from '../../ui/prompts'
@@ -36,19 +46,6 @@ import { getEngineIcon } from '../../constants'
 import { type Engine } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
-
-function generateBackupTimestamp(): string {
-  const now = new Date()
-  return now.toISOString().replace(/:/g, '').split('.')[0]
-}
-
-function getBackupExtension(format: 'sql' | 'dump', engine: string): string {
-  if (format === 'sql') {
-    return '.sql'
-  }
-  // MySQL dump is gzipped SQL, PostgreSQL dump is custom format
-  return engine === 'mysql' ? '.sql.gz' : '.dump'
-}
 
 export async function handleCreateForRestore(): Promise<{
   name: string
@@ -463,36 +460,47 @@ export async function handleRestore(): Promise<void> {
     // Get existing databases in this container
     const existingDatabases = config.databases || [config.database]
 
+    // Redis uses numbered databases 0-15, so "create new" doesn't apply
+    const isRedis = config.engine === 'redis'
+
     // Restore mode selection
     type RestoreMode = 'new' | 'replace' | '__back__'
-    const { restoreMode } = await inquirer.prompt<{ restoreMode: RestoreMode }>(
-      [
-        {
-          type: 'list',
-          name: 'restoreMode',
-          message: 'How would you like to restore?',
-          choices: [
-            {
-              name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
-              value: 'new',
-            },
-            {
-              name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
-              value: 'replace',
-              disabled:
-                existingDatabases.length === 0
-                  ? 'No existing databases'
-                  : false,
-            },
-            new inquirer.Separator(),
-            {
-              name: `${chalk.blue('←')} Back`,
-              value: '__back__',
-            },
-          ],
-        },
-      ],
-    )
+    let restoreMode: RestoreMode
+
+    if (isRedis) {
+      // Redis: Always restore to existing database (0-15)
+      restoreMode = 'replace'
+    } else {
+      const result = await inquirer.prompt<{ restoreMode: RestoreMode }>(
+        [
+          {
+            type: 'list',
+            name: 'restoreMode',
+            message: 'How would you like to restore?',
+            choices: [
+              {
+                name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
+                value: 'new',
+              },
+              {
+                name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+                value: 'replace',
+                disabled:
+                  existingDatabases.length === 0
+                    ? 'No existing databases'
+                    : false,
+              },
+              new inquirer.Separator(),
+              {
+                name: `${chalk.blue('←')} Back`,
+                value: '__back__',
+              },
+            ],
+          },
+        ],
+      )
+      restoreMode = result.restoreMode
+    }
 
     if (restoreMode === '__back__') {
       continue // Return to container selection
@@ -548,21 +556,24 @@ export async function handleRestore(): Promise<void> {
         continue // Return to container selection
       }
 
-      // Drop the existing database before restore
-      console.log()
-      const dropSpinner = createSpinner(
-        `Dropping existing database "${databaseName}"...`,
-      )
-      dropSpinner.start()
+      // Redis doesn't need drop/create - databases 0-15 always exist
+      if (!isRedis) {
+        // Drop the existing database before restore
+        console.log()
+        const dropSpinner = createSpinner(
+          `Dropping existing database "${databaseName}"...`,
+        )
+        dropSpinner.start()
 
-      try {
-        await engine.dropDatabase(config, databaseName)
-        dropSpinner.succeed(`Dropped database "${databaseName}"`)
-      } catch (error) {
-        dropSpinner.fail(`Failed to drop database "${databaseName}"`)
-        console.log(uiError((error as Error).message))
-        await pressEnterToContinue()
-        return
+        try {
+          await engine.dropDatabase(config, databaseName)
+          dropSpinner.succeed(`Dropped database "${databaseName}"`)
+        } catch (error) {
+          dropSpinner.fail(`Failed to drop database "${databaseName}"`)
+          console.log(uiError((error as Error).message))
+          await pressEnterToContinue()
+          return
+        }
       }
     }
 
@@ -572,11 +583,39 @@ export async function handleRestore(): Promise<void> {
     const format = await engine.detectBackupFormat(backupPath)
     detectSpinner.succeed(`Detected: ${format.description}`)
 
-    const dbSpinner = createSpinner(`Creating database "${databaseName}"...`)
-    dbSpinner.start()
+    // For Redis .redis text files, ask about merge vs replace behavior
+    let flushBeforeRestore = false
+    if (isRedis && format.format === 'redis') {
+      const { restoreBehavior } = await inquirer.prompt<{
+        restoreBehavior: 'replace' | 'merge'
+      }>([
+        {
+          type: 'list',
+          name: 'restoreBehavior',
+          message: 'How should existing data be handled?',
+          choices: [
+            {
+              name: `${chalk.yellow('🔄')} Replace all ${chalk.gray('(FLUSHDB - clear database first)')}`,
+              value: 'replace',
+            },
+            {
+              name: `${chalk.green('➕')} Merge ${chalk.gray('(add/update keys, keep others)')}`,
+              value: 'merge',
+            },
+          ],
+        },
+      ])
+      flushBeforeRestore = restoreBehavior === 'replace'
+    }
 
-    await engine.createDatabase(config, databaseName)
-    dbSpinner.succeed(`Database "${databaseName}" ready`)
+    // Redis doesn't need createDatabase - databases 0-15 always exist
+    if (!isRedis) {
+      const dbSpinner = createSpinner(`Creating database "${databaseName}"...`)
+      dbSpinner.start()
+
+      await engine.createDatabase(config, databaseName)
+      dbSpinner.succeed(`Database "${databaseName}" ready`)
+    }
 
     const restoreSpinner = createSpinner('Restoring backup...')
     restoreSpinner.start()
@@ -584,6 +623,7 @@ export async function handleRestore(): Promise<void> {
     const result = await engine.restore(config, backupPath, {
       database: databaseName,
       createDatabase: false,
+      flush: flushBeforeRestore,
     })
 
     if (result.code === 0) {
@@ -758,23 +798,11 @@ export async function handleRestore(): Promise<void> {
   }
 }
 
-export async function handleBackup(): Promise<void> {
-  const containers = await containerManager.list()
-  const running = containers.filter((c) => c.status === 'running')
-
-  if (running.length === 0) {
-    console.log(uiWarning('No running containers. Start a container first.'))
-    await pressEnterToContinue()
-    return
-  }
-
-  const containerName = await promptContainerSelect(
-    running,
-    'Select container to backup:',
-    { includeBack: true },
-  )
-  if (!containerName) return
-
+/**
+ * Shared backup flow for both main menu and container submenu
+ * Reduces code duplication between handleBackup and handleBackupForContainer
+ */
+async function performBackupFlow(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
@@ -783,6 +811,7 @@ export async function handleBackup(): Promise<void> {
 
   const engine = getEngine(config.engine)
 
+  // Check dependencies
   const depsSpinner = createSpinner('Checking required tools...')
   depsSpinner.start()
 
@@ -817,6 +846,7 @@ export async function handleBackup(): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
+  // Select database (auto-select if only one)
   const databases = config.databases || [config.database]
   let databaseName: string
 
@@ -829,16 +859,37 @@ export async function handleBackup(): Promise<void> {
     databaseName = databases[0]
   }
 
+  // Show estimated size
+  const estimatedSize = await estimateBackupSize(config)
+  if (estimatedSize !== null) {
+    console.log(
+      chalk.gray(`  Estimated database size: ${formatBytes(estimatedSize)}`),
+    )
+    console.log()
+  }
+
+  // Select format
   const format = await promptBackupFormat(config.engine)
 
+  // Select output directory
+  const outputDir = await promptBackupDirectory()
+  if (!outputDir) return
+
+  // Ensure directory exists
+  if (!existsSync(outputDir)) {
+    await mkdir(outputDir, { recursive: true })
+  }
+
+  // Get filename
   const defaultFilename = `${containerName}-${databaseName}-backup-${generateBackupTimestamp()}`
   const filename = await promptBackupFilename(defaultFilename)
 
-  const extension = getBackupExtension(format, config.engine)
-  const outputPath = join(process.cwd(), `${filename}${extension}`)
+  const extension = getBackupExtension(config.engine, format)
+  const outputPath = join(outputDir, `${filename}${extension}`)
 
+  const spinnerLabel = getBackupSpinnerLabel(config.engine, format)
   const backupSpinner = createSpinner(
-    `Creating ${format === 'sql' ? 'SQL' : 'dump'} backup of "${databaseName}"...`,
+    `Creating ${spinnerLabel} backup of "${databaseName}"...`,
   )
   backupSpinner.start()
 
@@ -853,13 +904,448 @@ export async function handleBackup(): Promise<void> {
     console.log()
     console.log(uiSuccess('Backup complete'))
     console.log()
-    console.log(chalk.gray('  File:'), chalk.cyan(result.path))
+    console.log(chalk.gray('  Saved to:'), chalk.cyan(result.path))
     console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
     console.log(chalk.gray('  Format:'), chalk.white(result.format))
     console.log()
   } catch (error) {
     const e = error as Error
     backupSpinner.fail('Backup failed')
+    console.log()
+    console.log(uiError(e.message))
+    console.log()
+  }
+}
+
+export async function handleBackup(): Promise<void> {
+  const containers = await containerManager.list()
+  const running = containers.filter((c) => c.status === 'running')
+
+  if (running.length === 0) {
+    console.log(uiWarning('No running containers. Start a container first.'))
+    await pressEnterToContinue()
+    return
+  }
+
+  const containerName = await promptContainerSelect(
+    running,
+    'Select container to backup:',
+    { includeBack: true },
+  )
+  if (!containerName) return
+
+  await performBackupFlow(containerName)
+  await pressEnterToContinue()
+}
+
+/**
+ * Handle backup for a specific container (used from container submenu)
+ * Skips container selection since we already know which container
+ */
+export async function handleBackupForContainer(
+  containerName: string,
+): Promise<void> {
+  await performBackupFlow(containerName)
+  await pressEnterToContinue()
+}
+
+/**
+ * Handle restore for a specific container (used from container submenu)
+ * Skips container selection since we already know which container
+ */
+export async function handleRestoreForContainer(
+  containerName: string,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  const engine = getEngine(config.engine)
+
+  // Check dependencies
+  const depsSpinner = createSpinner('Checking required tools...')
+  depsSpinner.start()
+
+  let missingDeps = await getMissingDependencies(config.engine)
+  if (missingDeps.length > 0) {
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      config.engine,
+    )
+
+    if (!installed) {
+      return
+    }
+
+    missingDeps = await getMissingDependencies(config.engine)
+    if (missingDeps.length > 0) {
+      console.log(
+        uiError(
+          `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+        ),
+      )
+      return
+    }
+
+    console.log(chalk.green('  ✓ All required tools are now available'))
+    console.log()
+  } else {
+    depsSpinner.succeed('Required tools available')
+  }
+
+  // Restore source selection (file or URL)
+  const { restoreSource } = await inquirer.prompt<{
+    restoreSource: 'file' | 'connection' | '__back__'
+  }>([
+    {
+      type: 'list',
+      name: 'restoreSource',
+      message: 'Restore from:',
+      choices: [
+        {
+          name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+          value: 'file',
+        },
+        {
+          name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+          value: 'connection',
+        },
+        new inquirer.Separator(),
+        {
+          name: `${chalk.blue('←')} Back`,
+          value: '__back__',
+        },
+      ],
+    },
+  ])
+
+  if (restoreSource === '__back__') {
+    return
+  }
+
+  let backupPath = ''
+  let isTempFile = false
+
+  // Helper to strip quotes from paths (for drag-and-drop)
+  const stripQuotes = (path: string) =>
+    path.replace(/^['"]|['"]$/g, '').trim()
+
+  if (restoreSource === 'connection') {
+    // Handle connection string restore
+    console.log(
+      chalk.gray('  Enter connection string, or press Enter to go back'),
+    )
+    const { connectionString } = await inquirer.prompt<{
+      connectionString: string
+    }>([
+      {
+        type: 'input',
+        name: 'connectionString',
+        message: 'Connection string:',
+        validate: (input: string) => {
+          if (!input) return true
+          if (config.engine === 'mysql') {
+            if (!input.startsWith('mysql://')) {
+              return 'Connection string must start with mysql://'
+            }
+          } else if (config.engine === 'mongodb') {
+            if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
+              return 'Connection string must start with mongodb:// or mongodb+srv://'
+            }
+          } else {
+            // PostgreSQL
+            if (
+              !input.startsWith('postgresql://') &&
+              !input.startsWith('postgres://')
+            ) {
+              return 'Connection string must start with postgresql:// or postgres://'
+            }
+          }
+          return true
+        },
+      },
+    ])
+
+    if (!connectionString.trim()) {
+      return
+    }
+
+    const timestamp = Date.now()
+    const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+
+    const dumpSpinner = createSpinner('Creating dump from remote database...')
+    dumpSpinner.start()
+
+    try {
+      const dumpResult = await engine.dumpFromConnectionString(
+        connectionString,
+        tempDumpPath,
+      )
+      dumpSpinner.succeed('Dump created from remote database')
+      if (dumpResult.warnings?.length) {
+        for (const warning of dumpResult.warnings) {
+          console.log(chalk.yellow(`  ${warning}`))
+        }
+      }
+      backupPath = tempDumpPath
+      isTempFile = true
+    } catch (error) {
+      const e = error as Error
+      dumpSpinner.fail('Failed to create dump')
+      console.log(uiError(e.message))
+      await pressEnterToContinue()
+      return
+    }
+  } else {
+    // Handle file restore
+    console.log(
+      chalk.gray(
+        '  Drag and drop the backup file here, or type the path (press Enter to cancel)',
+      ),
+    )
+    const { backupPath: rawBackupPath } = await inquirer.prompt<{
+      backupPath: string
+    }>([
+      {
+        type: 'input',
+        name: 'backupPath',
+        message: 'Backup file path:',
+        validate: (input: string) => {
+          if (!input) return true
+          const cleanPath = stripQuotes(input)
+          if (!existsSync(cleanPath)) return 'File not found'
+          return true
+        },
+      },
+    ])
+
+    if (!rawBackupPath.trim()) {
+      return
+    }
+
+    backupPath = stripQuotes(rawBackupPath)
+  }
+
+  // Check backup file size and warn if large
+  const sizeCheck = checkBackupSize(backupPath)
+  if (sizeCheck.level === 'very_large') {
+    console.log()
+    console.log(
+      chalk.yellow(
+        `  ⚠ Large backup file: ${formatBytes(sizeCheck.size)}`,
+      ),
+    )
+    console.log(chalk.gray('  This restore may take a while.'))
+    console.log()
+    const confirmed = await promptConfirm('Continue with restore?', true)
+    if (!confirmed) {
+      if (isTempFile) {
+        await rm(backupPath, { force: true }).catch(() => {})
+      }
+      return
+    }
+  } else if (sizeCheck.level === 'large') {
+    console.log(
+      chalk.gray(`  Backup file size: ${formatBytes(sizeCheck.size)}`),
+    )
+  }
+
+  // Detect backup format
+  const format = await engine.detectBackupFormat(backupPath)
+  console.log(chalk.gray(`  Detected format: ${format.description}`))
+  console.log()
+
+  // Get existing databases in this container
+  const existingDatabases = config.databases || [config.database]
+
+  // Redis uses numbered databases 0-15, so "create new" doesn't apply
+  const isRedis = config.engine === 'redis'
+
+  // Restore mode selection
+  type RestoreMode = 'new' | 'replace' | '__back__'
+  let restoreMode: RestoreMode
+
+  if (isRedis) {
+    // Redis: Always restore to existing database (0-15)
+    restoreMode = 'replace'
+  } else {
+    const result = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+      {
+        type: 'list',
+        name: 'restoreMode',
+        message: 'How would you like to restore?',
+        choices: [
+          {
+            name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
+            value: 'new',
+          },
+          {
+            name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+            value: 'replace',
+            disabled:
+              existingDatabases.length === 0 ? 'No existing databases' : false,
+          },
+          new inquirer.Separator(),
+          {
+            name: `${chalk.blue('←')} Back`,
+            value: '__back__',
+          },
+        ],
+      },
+    ])
+    restoreMode = result.restoreMode
+  }
+
+  if (restoreMode === '__back__') {
+    if (isTempFile) {
+      await rm(backupPath, { force: true }).catch(() => {})
+    }
+    return
+  }
+
+  let databaseName: string
+
+  if (restoreMode === 'new') {
+    // Show existing databases for context
+    if (existingDatabases.length > 0) {
+      console.log()
+      console.log(chalk.gray('  Existing databases in this container:'))
+      for (const db of existingDatabases) {
+        console.log(chalk.gray(`    • ${db}`))
+      }
+      console.log()
+    }
+
+    // Prompt for new database name
+    const result = await promptDatabaseName(containerName, config.engine, {
+      existingDatabases,
+    })
+    if (!result) {
+      if (isTempFile) {
+        await rm(backupPath, { force: true }).catch(() => {})
+      }
+      return
+    }
+    databaseName = result
+
+    // Create the new database
+    const createDbSpinner = createSpinner(
+      `Creating database "${databaseName}"...`,
+    )
+    createDbSpinner.start()
+    try {
+      await engine.createDatabase(config, databaseName)
+      createDbSpinner.succeed(`Database "${databaseName}" created`)
+
+      // Update container config with new database
+      const updatedDbs = [...existingDatabases, databaseName]
+      await containerManager.updateConfig(containerName, {
+        databases: updatedDbs,
+      })
+    } catch (error) {
+      const e = error as Error
+      createDbSpinner.fail('Failed to create database')
+      console.log(uiError(e.message))
+      if (isTempFile) {
+        await rm(backupPath, { force: true }).catch(() => {})
+      }
+      await pressEnterToContinue()
+      return
+    }
+  } else {
+    // Replace existing database - auto-select if only one
+    if (existingDatabases.length === 1) {
+      databaseName = existingDatabases[0]
+      console.log(chalk.gray(`  Using database: ${databaseName}`))
+    } else {
+      const { database } = await inquirer.prompt<{ database: string }>([
+        {
+          type: 'list',
+          name: 'database',
+          message: 'Select database to replace:',
+          choices: existingDatabases.map((db) => ({ name: db, value: db })),
+        },
+      ])
+      databaseName = database
+    }
+  }
+
+  // For Redis .redis text files, ask about merge vs replace behavior
+  let flushBeforeRestore = false
+  if (isRedis && format.format === 'redis') {
+    const { restoreBehavior } = await inquirer.prompt<{
+      restoreBehavior: 'replace' | 'merge'
+    }>([
+      {
+        type: 'list',
+        name: 'restoreBehavior',
+        message: 'How should existing data be handled?',
+        choices: [
+          {
+            name: `${chalk.yellow('🔄')} Replace all ${chalk.gray('(FLUSHDB - clear database first)')}`,
+            value: 'replace',
+          },
+          {
+            name: `${chalk.green('➕')} Merge ${chalk.gray('(add/update keys, keep others)')}`,
+            value: 'merge',
+          },
+        ],
+      },
+    ])
+    flushBeforeRestore = restoreBehavior === 'replace'
+  }
+
+  // Perform restore
+  const restoreSpinner = createSpinner(
+    `Restoring to "${databaseName}" in ${containerName}...`,
+  )
+  restoreSpinner.start()
+
+  try {
+    const result = await engine.restore(config, backupPath, {
+      database: databaseName,
+      flush: flushBeforeRestore,
+    })
+
+    if (result.code === 0) {
+      restoreSpinner.succeed('Restore completed successfully')
+
+      const connectionString = engine.getConnectionString(config, databaseName)
+      console.log()
+      console.log(uiSuccess(`Database "${databaseName}" restored`))
+      console.log(chalk.gray('  Connection string:'))
+      console.log(chalk.cyan(`  ${connectionString}`))
+
+      const copied = await platformService.copyToClipboard(connectionString)
+      if (copied) {
+        console.log(chalk.gray('  ✓ Connection string copied to clipboard'))
+      }
+      console.log()
+    } else {
+      restoreSpinner.warn('Restore completed with warnings')
+      if (result.stderr) {
+        console.log()
+        console.log(chalk.yellow('  Warnings/Errors:'))
+        const lines = result.stderr.split('\n').filter((l) => l.trim())
+        const displayLines = lines.slice(0, 10)
+        for (const line of displayLines) {
+          console.log(chalk.gray(`  ${line}`))
+        }
+        if (lines.length > 10) {
+          console.log(chalk.gray(`  ... and ${lines.length - 10} more lines`))
+        }
+      }
+    }
+  } catch (error) {
+    const e = error as Error
+    restoreSpinner.fail('Restore failed')
     console.log()
     console.log(uiError(e.message))
     console.log()

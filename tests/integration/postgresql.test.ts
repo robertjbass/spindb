@@ -228,6 +228,116 @@ describe('PostgreSQL Integration Tests', () => {
     console.log(`   ✓ Verified ${rowCount} rows in restored container`)
   })
 
+  // ============================================
+  // Backup Format Tests
+  // ============================================
+
+  it('should backup to SQL format (.sql)', async () => {
+    console.log(`\n📦 Testing SQL format backup (.sql)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `pg-sql-backup-${Date.now()}.sql`)
+
+    // Backup with 'sql' format produces plain SQL
+    const result = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'sql',
+    })
+
+    assert(result.path === backupPath, 'Backup path should match')
+    assert(result.format === 'sql', 'Format should be sql')
+    assert(result.size > 0, 'Backup should have content')
+
+    // Verify file contains SQL statements
+    const { readFile } = await import('fs/promises')
+    const content = await readFile(backupPath, 'utf-8')
+    assert(content.includes('CREATE TABLE'), 'Backup should contain CREATE TABLE')
+    assert(content.includes('test_user'), 'Backup should contain test_user table')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ SQL backup created with ${result.size} bytes`)
+  })
+
+  it('should backup to custom format (.dump)', async () => {
+    console.log(`\n📦 Testing custom format backup (.dump)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `pg-dump-backup-${Date.now()}.dump`)
+
+    // Backup with 'dump' format produces custom binary
+    const result = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'dump',
+    })
+
+    assert(result.path === backupPath, 'Backup path should match')
+    assert(result.format === 'custom', 'Format should be custom')
+    assert(result.size > 0, 'Backup should have content')
+
+    // Verify file is binary (starts with PGDMP)
+    const { readFile } = await import('fs/promises')
+    const buffer = await readFile(backupPath)
+    const header = buffer.slice(0, 5).toString('ascii')
+    assert(header === 'PGDMP', 'Backup should have PGDMP header')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ Custom format backup created with ${result.size} bytes`)
+  })
+
+  it('should restore from SQL format and verify data', async () => {
+    console.log(`\n📥 Testing SQL format restore...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(clonedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    // Create SQL backup from source
+    const sourceConfig = await containerManager.getConfig(containerName)
+    assert(sourceConfig !== null, 'Source config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `pg-sql-restore-${Date.now()}.sql`)
+
+    await engine.backup(sourceConfig!, backupPath, {
+      database: DATABASE,
+      format: 'sql',
+    })
+
+    // Create a new database in cloned container for restore test
+    const testDb = 'restore_test_db'
+    await engine.createDatabase(config!, testDb)
+
+    // Restore SQL backup to new database
+    await engine.restore(config!, backupPath, {
+      database: testDb,
+      createDatabase: false,
+    })
+
+    // Verify data was restored
+    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
+    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ SQL restore verified with ${rowCount} rows`)
+  })
+
   it('should stop and delete the restored container', async () => {
     console.log(`\n🗑️  Deleting restored container "${clonedContainerName}"...`)
 

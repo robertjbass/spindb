@@ -153,6 +153,27 @@ abstract class BaseEngine {
 - Uses numbered databases (0-15) instead of named databases
 - Uses Redis commands instead of SQL
 
+### Backup & Restore Formats
+
+Each engine supports specific backup formats with different restore behaviors:
+
+| Engine | Format 1 | Format 2 | Notes |
+|--------|----------|----------|-------|
+| PostgreSQL | `.sql` (plain SQL) | `.dump` (pg_dump custom) | Standard pg_dump/pg_restore |
+| MySQL | `.sql` (plain SQL) | `.sql.gz` (compressed) | Standard mysqldump |
+| SQLite | `.sql` (plain SQL) | `.sqlite` (binary copy) | Direct file operations |
+| MongoDB | `.bson` (BSON) | `.archive` (compressed) | mongodump/mongorestore |
+| Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | See notes below |
+
+**Redis-specific restore behavior:**
+- **RDB (`.rdb`)**: Binary snapshot. Requires stopping Redis, copying file to data dir, then restart.
+- **Text (`.redis`)**: Human-readable Redis commands. Pipes to running Redis instance.
+  - Content-based detection: Files are recognized as Redis commands by analyzing content (looking for SET, HSET, DEL, etc.), not just extension. This allows restoring files like `users.txt` or `data.dump`.
+  - Merge vs Replace: For text restores, user chooses:
+    - **Replace all**: Runs `FLUSHDB` first (clean slate)
+    - **Merge**: Adds/updates keys, keeps existing keys not in backup
+- **No "Create new database"**: Redis uses numbered databases 0-15 that always exist.
+
 ### File Structure
 
 ```
@@ -392,6 +413,39 @@ Tool paths cached in `~/.spindb/config.json` with 7-day staleness. Refresh after
 ```typescript
 await configManager.refreshAllBinaries()
 ```
+
+### Binary Sources by Engine
+
+SpinDB uses different binary sourcing strategies by engine:
+
+**PostgreSQL (Downloadable Binaries):**
+- macOS/Linux: [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) via Maven Central
+- Windows: [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
+- Enables multi-version support (14, 15, 16, 17, 18 side-by-side)
+- ~45 MB per version
+
+**MySQL, MongoDB, Redis (System Binaries):**
+- Uses system-installed binaries via Homebrew, apt, choco, etc.
+- Single version per machine (whatever the package manager provides)
+- SpinDB detects and orchestrates, doesn't download
+
+**Why the difference?**
+PostgreSQL is the only major database with a well-maintained, current, cross-platform embedded binary distribution. While similar projects exist for other databases, none are viable:
+
+- **MySQL/MariaDB**: [MariaDB4j](https://github.com/MariaDB4j/MariaDB4j) exists but has severe limitations:
+  - Java-only (binaries in JARs, not direct downloads)
+  - Severely outdated (latest: MariaDB 10.2.11 from 2018)
+  - No Apple Silicon support (only `mac64` Intel binaries)
+  - MariaDB, not MySQL (mostly compatible but not identical)
+- **MongoDB**: [mongodb-memory-server](https://github.com/typegoose/mongodb-memory-server) downloads official binaries from `fastdl.mongodb.org`, but:
+  - Binaries are ~300-500 MB per version (vs PostgreSQL's ~45 MB)
+  - Complex platform-specific download URLs
+  - Target users likely have MongoDB installed via Homebrew/apt already
+- **Redis**: No official portable distribution; macOS has no options at all
+
+**Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
+
+**Future plans:** See [BINARY-PLANS.md](BINARY-PLANS.md) for potential approaches to providing downloadable binaries for Redis (compile from source) and MySQL (fork MariaDB4j with ARM64 support).
 
 ## Error Handling
 

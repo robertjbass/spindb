@@ -442,6 +442,24 @@ export function getConnectionString(
 export { assert, assertEqual } from '../utils/assertions'
 
 /**
+ * Get an installed version for an engine
+ * For system-installed engines (MySQL, MongoDB, Redis), returns the first available version
+ * For PostgreSQL, returns the default version from engine defaults
+ */
+export async function getInstalledVersion(engine: Engine): Promise<string> {
+  const engineImpl = getEngine(engine)
+  const versions = await engineImpl.fetchAvailableVersions()
+  const availableVersions = Object.keys(versions)
+
+  if (availableVersions.length === 0) {
+    throw new Error(`No installed versions found for ${engine}`)
+  }
+
+  // Return the first available version (highest version for system engines)
+  return availableVersions.sort().reverse()[0]
+}
+
+/**
  * Execute SQL file using engine.runScript (tests the run command functionality)
  */
 export async function runScriptFile(

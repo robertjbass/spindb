@@ -22,6 +22,7 @@ import {
   assertEqual,
   runScriptFile,
   runScriptSQL,
+  getInstalledVersion,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -39,6 +40,7 @@ describe('MySQL Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
+  let installedVersion: string
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -46,6 +48,10 @@ describe('MySQL Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
+
+    console.log('\n🔍 Detecting installed MySQL version...')
+    installedVersion = await getInstalledVersion(ENGINE)
+    console.log(`   Using MySQL version: ${installedVersion}`)
 
     console.log('\n🔍 Finding available test ports...')
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.mysql.base)
@@ -72,14 +78,14 @@ describe('MySQL Integration Tests', () => {
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '9.0',
+      version: installedVersion,
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the database cluster
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, '9.0', { superuser: 'root' })
+    await engine.initDataDir(containerName, installedVersion, { superuser: 'root' })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -161,14 +167,14 @@ describe('MySQL Integration Tests', () => {
     // Create container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '9.0',
+      version: installedVersion,
       port: testPorts[1],
       database: DATABASE,
     })
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '9.0', { superuser: 'root' })
+    await engine.initDataDir(clonedContainerName, installedVersion, { superuser: 'root' })
 
     const config = await containerManager.getConfig(clonedContainerName)
     assert(config !== null, 'Cloned container config should exist')
@@ -218,6 +224,123 @@ describe('MySQL Integration Tests', () => {
     )
 
     console.log(`   ✓ Verified ${rowCount} rows in restored container`)
+  })
+
+  // ============================================
+  // Backup Format Tests
+  // ============================================
+
+  it('should backup to SQL format (.sql)', async () => {
+    console.log(`\n📦 Testing SQL format backup (.sql)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `mysql-sql-backup-${Date.now()}.sql`)
+
+    // Backup with 'sql' format produces plain SQL
+    const result = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'sql',
+    })
+
+    assert(result.path === backupPath, 'Backup path should match')
+    assert(result.format === 'sql', 'Format should be sql')
+    assert(result.size > 0, 'Backup should have content')
+
+    // Verify file contains SQL statements
+    const { readFile } = await import('fs/promises')
+    const content = await readFile(backupPath, 'utf-8')
+    assert(content.includes('CREATE TABLE'), 'Backup should contain CREATE TABLE')
+    assert(content.includes('test_user'), 'Backup should contain test_user table')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ SQL backup created with ${result.size} bytes`)
+  })
+
+  it('should backup to compressed format (.sql.gz)', async () => {
+    console.log(`\n📦 Testing compressed format backup (.sql.gz)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `mysql-dump-backup-${Date.now()}.sql.gz`)
+
+    // Backup with 'dump' format produces compressed SQL
+    const result = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'dump',
+    })
+
+    assert(result.path === backupPath, 'Backup path should match')
+    assert(result.format === 'compressed', 'Format should be compressed')
+    assert(result.size > 0, 'Backup should have content')
+
+    // Verify file is gzipped (starts with gzip magic bytes 1f 8b)
+    const { readFile } = await import('fs/promises')
+    const buffer = await readFile(backupPath)
+    assert(buffer[0] === 0x1f && buffer[1] === 0x8b, 'Backup should have gzip header')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ Compressed backup created with ${result.size} bytes`)
+  })
+
+  it('should restore from compressed format and verify data', async () => {
+    console.log(`\n📥 Testing compressed format restore...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(clonedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    // Create compressed backup from source
+    const sourceConfig = await containerManager.getConfig(containerName)
+    assert(sourceConfig !== null, 'Source config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `mysql-gz-restore-${Date.now()}.sql.gz`)
+
+    const backupResult = await engine.backup(sourceConfig!, backupPath, {
+      database: DATABASE,
+      format: 'dump',
+    })
+    console.log(`   Backup created: ${backupResult.size} bytes`)
+
+    // Create a new database in cloned container for restore test
+    const testDb = 'restore_test_db'
+    await engine.createDatabase(config!, testDb)
+    console.log(`   Database ${testDb} created`)
+
+    // Restore compressed backup to new database
+    const restoreResult = await engine.restore(config!, backupPath, {
+      database: testDb,
+      createDatabase: false,
+    })
+    console.log(`   Restore result: code=${restoreResult.code}, stderr=${restoreResult.stderr || 'none'}`)
+
+    // Check restore result for errors
+    if (restoreResult.code !== 0 && restoreResult.code !== undefined) {
+      throw new Error(`Restore failed with code ${restoreResult.code}: ${restoreResult.stderr}`)
+    }
+
+    // Verify data was restored
+    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
+    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ Compressed restore verified with ${rowCount} rows`)
   })
 
   it('should stop and delete the restored container', async () => {
@@ -337,7 +460,7 @@ describe('MySQL Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '9.0',
+      version: installedVersion,
       port: testPorts[2], // This port is in use by renamed container
       database: 'conflictdb',
     })

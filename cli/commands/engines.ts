@@ -87,16 +87,16 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const pgEngines = engines.filter(
     (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
   )
-  const mysqlEngine = engines.find(
+  const mysqlEngines = engines.filter(
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
   )
   const sqliteEngine = engines.find(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
   )
-  const mongodbEngine = engines.find(
+  const mongodbEngines = engines.filter(
     (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
   )
-  const redisEngine = engines.find(
+  const redisEngines = engines.filter(
     (e): e is InstalledRedisEngine => e.engine === 'redis',
   )
 
@@ -129,8 +129,8 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
-  // MySQL row
-  if (mysqlEngine) {
+  // MySQL rows
+  for (const mysqlEngine of mysqlEngines) {
     const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
     const engineDisplay = `${icon} ${displayName}`
@@ -147,7 +147,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // SQLite row
   if (sqliteEngine) {
     const icon = ENGINE_ICONS.sqlite
-    const engineDisplay = `${icon} sqlite`
+    const engineDisplay = `${icon}  sqlite`
 
     console.log(
       chalk.gray('  ') +
@@ -158,8 +158,8 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
-  // MongoDB row
-  if (mongodbEngine) {
+  // MongoDB rows
+  for (const mongodbEngine of mongodbEngines) {
     const icon = ENGINE_ICONS.mongodb
     const engineDisplay = `${icon} mongodb`
 
@@ -172,8 +172,8 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
-  // Redis row
-  if (redisEngine) {
+  // Redis rows
+  for (const redisEngine of redisEngines) {
     const icon = ENGINE_ICONS.redis
     const engineDisplay = `${icon} redis`
 
@@ -197,22 +197,30 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
       ),
     )
   }
-  if (mysqlEngine) {
-    console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
+  if (mysqlEngines.length > 0) {
+    const versionCount = mysqlEngines.length
+    const versionText = versionCount === 1 ? 'version' : 'versions'
+    console.log(
+      chalk.gray(`  MySQL: ${versionCount} ${versionText} system-installed`),
+    )
   }
   if (sqliteEngine) {
     console.log(
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
     )
   }
-  if (mongodbEngine) {
+  if (mongodbEngines.length > 0) {
+    const versionCount = mongodbEngines.length
+    const versionText = versionCount === 1 ? 'version' : 'versions'
     console.log(
-      chalk.gray(`  MongoDB: system-installed at ${mongodbEngine.path}`),
+      chalk.gray(`  MongoDB: ${versionCount} ${versionText} system-installed`),
     )
   }
-  if (redisEngine) {
+  if (redisEngines.length > 0) {
+    const versionCount = redisEngines.length
+    const versionText = versionCount === 1 ? 'version' : 'versions'
     console.log(
-      chalk.gray(`  Redis: system-installed at ${redisEngine.path}`),
+      chalk.gray(`  Redis: ${versionCount} ${versionText} system-installed`),
     )
   }
   console.log()

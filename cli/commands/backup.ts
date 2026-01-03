@@ -29,11 +29,39 @@ function generateDefaultFilename(
 }
 
 function getExtension(format: 'sql' | 'dump', engine: string): string {
+  // Handle 'sql' format (human-readable option)
   if (format === 'sql') {
-    return '.sql'
+    // MongoDB uses BSON directory format for 'sql' choice
+    return engine === 'mongodb' ? '' : '.sql'
   }
-  // MySQL dump is gzipped SQL, PostgreSQL dump is custom format
-  return engine === 'mysql' ? '.sql.gz' : '.dump'
+
+  // Handle 'dump' format (binary/compressed option)
+  switch (engine) {
+    case 'mysql':
+      return '.sql.gz'
+    case 'sqlite':
+      return '.sqlite'
+    case 'mongodb':
+      return '.archive'
+    case 'redis':
+      return '.rdb'
+    case 'postgresql':
+    default:
+      return '.dump'
+  }
+}
+
+function getFormatDescription(format: 'sql' | 'dump', engine: string): string {
+  if (engine === 'redis') {
+    return 'RDB snapshot'
+  }
+  if (engine === 'mongodb') {
+    return format === 'sql' ? 'BSON directory' : 'archive'
+  }
+  if (engine === 'sqlite') {
+    return format === 'sql' ? 'SQL' : 'binary'
+  }
+  return format === 'sql' ? 'SQL' : 'dump'
 }
 
 export const backupCommand = new Command('backup')
@@ -195,8 +223,9 @@ export const backupCommand = new Command('backup')
         const outputDir = options.output || process.cwd()
         const outputPath = join(outputDir, `${filename}${extension}`)
 
+        const formatDesc = getFormatDescription(format, engineName)
         const backupSpinner = createSpinner(
-          `Creating ${format === 'sql' ? 'SQL' : 'dump'} backup of "${databaseName}"...`,
+          `Creating ${formatDesc} backup of "${databaseName}"...`,
         )
         backupSpinner.start()
 
@@ -222,11 +251,8 @@ export const backupCommand = new Command('backup')
           console.log()
           console.log(uiSuccess('Backup complete'))
           console.log()
-          console.log(chalk.gray('  File:'), chalk.cyan(result.path))
-          console.log(
-            chalk.gray('  Size:'),
-            chalk.white(formatBytes(result.size)),
-          )
+          console.log(chalk.gray('  Saved to:'), chalk.cyan(result.path))
+          console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
           console.log(chalk.gray('  Format:'), chalk.white(result.format))
           console.log()
         }

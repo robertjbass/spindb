@@ -8,6 +8,7 @@ import { stopCommand } from './commands/stop'
 import { deleteCommand } from './commands/delete'
 import { restoreCommand } from './commands/restore'
 import { backupCommand } from './commands/backup'
+import { backupsCommand } from './commands/backups'
 import { connectCommand } from './commands/connect'
 import { cloneCommand } from './commands/clone'
 import { menuCommand } from './commands/menu'
@@ -114,6 +115,7 @@ export async function run(): Promise<void> {
   program.addCommand(deleteCommand)
   program.addCommand(restoreCommand)
   program.addCommand(backupCommand)
+  program.addCommand(backupsCommand)
   program.addCommand(connectCommand)
   program.addCommand(cloneCommand)
   program.addCommand(menuCommand)
@@ -132,7 +134,6 @@ export async function run(): Promise<void> {
   program.addCommand(detachCommand)
   program.addCommand(sqliteCommand)
 
-  // If no arguments provided, show interactive menu
   if (process.argv.length <= 2) {
     await menuCommand.parseAsync([])
     return

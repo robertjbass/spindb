@@ -4,7 +4,7 @@
  */
 
 import { exec } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, realpathSync } from 'fs'
 import { promisify } from 'util'
 import { platformService } from '../../core/platform-service'
 
@@ -147,6 +147,72 @@ export async function detectInstalledVersions(): Promise<
 }
 
 /**
+ * Version-specific Homebrew paths for MySQL
+ * Used to find binaries for a specific major version
+ */
+const HOMEBREW_MYSQL_VERSION_PATHS: Record<string, string[]> = {
+  '9': [
+    '/opt/homebrew/opt/mysql@9.0/bin',
+    '/opt/homebrew/opt/mysql/bin', // Unversioned formula might be v9
+    '/usr/local/opt/mysql@9.0/bin',
+    '/usr/local/opt/mysql/bin',
+  ],
+  '8': [
+    '/opt/homebrew/opt/mysql@8.0/bin',
+    '/opt/homebrew/opt/mysql@8.4/bin',
+    '/opt/homebrew/opt/mysql/bin', // Unversioned formula might be v8
+    '/usr/local/opt/mysql@8.0/bin',
+    '/usr/local/opt/mysql@8.4/bin',
+    '/usr/local/opt/mysql/bin',
+  ],
+  '5': [
+    '/opt/homebrew/opt/mysql@5.7/bin',
+    '/usr/local/opt/mysql@5.7/bin',
+  ],
+}
+
+/**
+ * Get mysqld path for a specific major version
+ */
+export async function getMysqldPathForVersion(
+  majorVersion: string,
+): Promise<string | null> {
+  const { platform } = platformService.getPlatformInfo()
+
+  // On macOS, check version-specific Homebrew paths
+  if (platform === 'darwin') {
+    const paths = HOMEBREW_MYSQL_VERSION_PATHS[majorVersion] || []
+    for (const dir of paths) {
+      const mysqldPath = `${dir}/mysqld`
+      if (existsSync(mysqldPath)) {
+        // Verify this is the correct major version
+        const version = await getMysqlVersion(mysqldPath)
+        if (version) {
+          const detectedMajor = getMajorVersion(version).split('.')[0]
+          if (detectedMajor === majorVersion) {
+            return mysqldPath
+          }
+        }
+      }
+    }
+  }
+
+  // Fall back to generic detection and version check
+  const genericPath = await getMysqldPath()
+  if (genericPath) {
+    const version = await getMysqlVersion(genericPath)
+    if (version) {
+      const detectedMajor = getMajorVersion(version).split('.')[0]
+      if (detectedMajor === majorVersion) {
+        return genericPath
+      }
+    }
+  }
+
+  return null
+}
+
+/**
  * Get install instructions for MySQL
  */
 export function getInstallInstructions(): string {
@@ -200,36 +266,44 @@ export async function getMysqlInstallInfo(
   const { platform } = platformService.getPlatformInfo()
   const mariadb = await isMariaDB()
 
+  // Resolve symlinks to get the actual path
+  // e.g., /opt/homebrew/bin/mysqld -> /opt/homebrew/Cellar/mysql/9.5.0/bin/mysqld
+  let resolvedPath = mysqldPath
+  try {
+    resolvedPath = realpathSync(mysqldPath)
+  } catch {
+    // If symlink resolution fails, use the original path
+  }
+
   // macOS: Check if path is in Homebrew directories
   if (platform === 'darwin') {
     if (
       mysqldPath.includes('/opt/homebrew/') ||
-      mysqldPath.includes('/usr/local/Cellar/')
+      mysqldPath.includes('/usr/local/Cellar/') ||
+      resolvedPath.includes('/opt/homebrew/') ||
+      resolvedPath.includes('/usr/local/Cellar/')
     ) {
-      // Extract package name from path
+      // Extract package name from resolved path
+      // e.g., /opt/homebrew/Cellar/mysql/9.5.0/bin/mysqld -> mysql
+      // e.g., /opt/homebrew/Cellar/mysql@8.0/8.0.35/bin/mysqld -> mysql@8.0
       // e.g., /opt/homebrew/opt/mysql@8.0/bin/mysqld -> mysql@8.0
-      // e.g., /opt/homebrew/bin/mysqld -> mysql (linked)
       let packageName = mariadb ? 'mariadb' : 'mysql'
 
-      const versionMatch = mysqldPath.match(/mysql@(\d+\.\d+)/)
-      if (versionMatch) {
-        packageName = `mysql@${versionMatch[1]}`
+      // Try to extract from Cellar path first (most reliable after symlink resolution)
+      // Format: /opt/homebrew/Cellar/<formula>/<version>/bin/mysqld
+      const cellarMatch = resolvedPath.match(
+        /\/(?:opt\/homebrew|usr\/local)\/Cellar\/([^/]+)\//,
+      )
+      if (cellarMatch) {
+        packageName = cellarMatch[1]
       } else {
-        // Try to get from Homebrew directly
-        try {
-          const { stdout } = await execAsync('brew list --formula')
-          const packages = stdout.split('\n')
-          const mysqlPackage = packages.find(
-            (p) =>
-              p.startsWith('mysql') ||
-              p.startsWith('mariadb') ||
-              p === 'percona-server',
-          )
-          if (mysqlPackage) {
-            packageName = mysqlPackage
-          }
-        } catch {
-          // Ignore errors
+        // Fall back to opt path pattern
+        // Format: /opt/homebrew/opt/<formula>/bin/mysqld
+        const optMatch = resolvedPath.match(
+          /\/(?:opt\/homebrew|usr\/local)\/opt\/([^/]+)\//,
+        )
+        if (optMatch) {
+          packageName = optMatch[1]
         }
       }
 

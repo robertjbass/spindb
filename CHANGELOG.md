@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.4] - 2026-01-02
+
+### Added
+- **Version-specific binary validation for system engines** - MySQL, MongoDB, and Redis now validate that the requested version is actually installed
+  - Container creation fails with helpful error if requested version is not available
+  - Error message lists available versions with install commands (e.g., `brew install redis@7`)
+  - Stores binary path in container config to ensure version consistency across restarts
+
+### Changed
+- **Binary path stored in container config** - System-installed engines (MySQL, MongoDB, Redis) now store the exact binary path used during creation
+  - Containers use the stored binary path when starting, preventing silent fallback to different versions
+  - Legacy containers without `binaryPath` fall back to version detection with clear error messages
+- **Version-specific Homebrew path detection** - Added comprehensive path detection for versioned Homebrew formulas:
+  - MySQL: `mysql@5.7`, `mysql@8.0`, `mysql@8.4`, `mysql@9.0`
+  - MongoDB: `mongodb-community@6.0`, `mongodb-community@7.0`, `mongodb-community@8.0`
+  - Redis: `redis@6.2`, `redis@7.0`, `redis@7.2`, `redis@8.0`, `redis@8.2`
+
+### Fixed
+- **Silent version fallback bug** - Previously, containers could silently use a different version than requested if the exact version wasn't installed. Now throws a clear error with available versions.
+- **Homebrew formula suggestions in error messages** - Install commands now suggest correct versioned formulas:
+  - Redis: `redis@7.2`, `redis@8.2` (was incorrectly suggesting `redis@7`, `redis@8`)
+  - MySQL: `mysql@8.0` (was incorrectly suggesting `mysql@8.0.0`)
+  - MongoDB: `mongodb-community@7.0` (was incorrectly suggesting `mongodb-community@7.0.0`)
+- **Integration tests use dynamic versions** - Tests now detect installed engine versions instead of hardcoding, preventing failures when specific versions aren't installed
+
+## [0.13.3] - 2026-01-02
+
+### Added
+- **`backups` command** - List backup files in the current directory or a specified directory
+  - Detects backup format from file extension (`.sql`, `.dump`, `.sqlite`, `.archive`, `.rdb`, `.redis`, `.sql.gz`)
+  - Shows filename, size, modified time, format, and engine icon
+  - `--all` flag to include backups from `~/.spindb/backups`
+  - `--limit` to control number of results (default: 20)
+  - `--json` for machine-readable output
+- **Redis text backup format (`.redis`)** - New human-readable backup format for Redis
+  - Exports all keys as Redis commands that can be replayed
+  - Supports strings, hashes, lists, sets, and sorted sets
+  - Preserves TTLs on keys
+  - Can be edited manually and restored with `spindb restore`
+  - Restore pipes commands to running Redis instance (no restart required)
+  - Interactive prompt for merge vs replace behavior (FLUSHDB)
+  - Content-based detection: Files with Redis commands are recognized regardless of extension (e.g., `users.txt`, `data`)
+- **Backup/restore in container submenu** - Access backup and restore directly from a container's menu
+- **Restore from connection string in submenu** - Pull data from remote PostgreSQL, MySQL, or MongoDB databases
+- **Backup directory selection** - Choose output directory (current directory or custom path) in interactive backup flow
+- **Backup size estimate** - Shows estimated database size before backup starts
+- **Large backup confirmation** - Warns and prompts for confirmation when restoring files >1GB
+- **Auto-select single database** - Automatically selects the database when container has only one during restore
+- **Centralized backup format configuration** - New `config/backup-formats.ts` provides consistent format metadata across CLI
+
+### Changed
+- **Engine-specific backup format prompts** - Interactive backup now shows appropriate formats per engine:
+  - PostgreSQL: `.sql` / `.dump`
+  - MySQL: `.sql` / `.sql.gz`
+  - SQLite: `.sql` / `.sqlite`
+  - MongoDB: `.bson` / `.archive`
+  - Redis: `.redis` / `.rdb`
+- **Backup/restore icon swap** - Now uses `↓` for backup (download) and `↑` for restore (upload) for intuitive visual metaphor
+- **Refactored backup handlers** - Reduced code duplication with shared `performBackupFlow` function
+- **Redis restore UX** - Skips "Create new database" prompt since Redis uses numbered databases (0-15)
+- **Redis integration tests expanded** - New tests for text format backup/restore, merge vs replace modes, and content-based format detection
+
+### Fixed
+- **Redis text backup shell escaping** - Fixed `KEYS *` and other commands with special characters being incorrectly expanded by shell
+
 ## [0.13.2] - 2026-01-01
 
 ### Added

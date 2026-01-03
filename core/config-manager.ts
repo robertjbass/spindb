@@ -76,8 +76,6 @@ export class ConfigManager {
 
   async save(): Promise<void> {
     const configPath = paths.config
-
-    // Ensure directory exists
     await mkdir(dirname(configPath), { recursive: true })
 
     if (this.config) {
@@ -89,10 +87,8 @@ export class ConfigManager {
   async getBinaryPath(tool: BinaryTool): Promise<string | null> {
     const config = await this.load()
 
-    // Check if we have a configured path
     const binaryConfig = config.binaries[tool]
     if (binaryConfig?.path) {
-      // Verify it still exists
       if (existsSync(binaryConfig.path)) {
         return binaryConfig.path
       }

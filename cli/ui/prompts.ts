@@ -7,6 +7,8 @@ import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { installPostgresBinaries } from '../../engines/postgresql/binary-manager'
+import { portManager } from '../../core/port-manager'
+import { containerManager } from '../../core/container-manager'
 import {
   detectPackageManager,
   getManualInstallInstructions,
@@ -231,18 +233,54 @@ export async function promptVersion(
 }
 
 /**
- * Prompt for port
+ * Prompt for port with conflict detection
  * @param defaultPort - Default port number
+ * @param engine - Engine name for port range lookup
  */
 export async function promptPort(
   defaultPort: number = defaults.port,
+  engine?: string,
 ): Promise<number> {
+  // Get engine-specific port range
+  const portRange = engine
+    ? getEngineDefaults(engine).portRange
+    : defaults.portRange
+
+  // Get all existing container ports for conflict detection
+  const existingContainers = await containerManager.list()
+  const containerPorts = new Map<number, string>()
+  for (const c of existingContainers) {
+    if (c.port > 0) {
+      containerPorts.set(c.port, c.name)
+    }
+  }
+
+  // Check if default port has a conflict and find a better default
+  let suggestedPort = defaultPort
+  const defaultPortContainer = containerPorts.get(defaultPort)
+  const defaultPortInUse =
+    !defaultPortContainer && !(await portManager.isPortAvailable(defaultPort))
+
+  if (defaultPortContainer || defaultPortInUse) {
+    // Find next available port in the engine's port range
+    try {
+      const result = await portManager.findAvailablePortExcludingContainers({
+        preferredPort: defaultPort,
+        portRange,
+      })
+      suggestedPort = result.port
+    } catch {
+      // Fall back to default if no ports available
+      suggestedPort = defaultPort
+    }
+  }
+
   const { port } = await inquirer.prompt<{ port: number }>([
     {
       type: 'input',
       name: 'port',
       message: 'Port:',
-      default: String(defaultPort),
+      default: String(suggestedPort),
       validate: (input: string) => {
         const num = parseInt(input, 10)
         if (isNaN(num) || num < 1 || num > 65535) {
@@ -253,6 +291,70 @@ export async function promptPort(
       filter: (input: string) => parseInt(input, 10),
     },
   ])
+
+  // Check for conflicts after selection
+  const conflictContainer = containerPorts.get(port)
+  if (conflictContainer) {
+    console.log()
+    console.log(
+      chalk.yellow(
+        `  ⚠ Warning: Port ${port} is already assigned to container "${conflictContainer}"`,
+      ),
+    )
+    console.log(
+      chalk.gray(
+        '    Only one container can run on this port at a time.',
+      ),
+    )
+    console.log()
+
+    const { proceed } = await inquirer.prompt<{ proceed: string }>([
+      {
+        type: 'list',
+        name: 'proceed',
+        message: 'What would you like to do?',
+        choices: [
+          { name: `Use port ${port} anyway`, value: 'continue' },
+          { name: 'Choose a different port', value: 'retry' },
+        ],
+      },
+    ])
+
+    if (proceed === 'retry') {
+      return promptPort(defaultPort, engine)
+    }
+  } else {
+    // Check if port is in use by something else
+    const portAvailable = await portManager.isPortAvailable(port)
+    if (!portAvailable) {
+      console.log()
+      console.log(
+        chalk.yellow(`  ⚠ Warning: Port ${port} is currently in use`),
+      )
+      console.log(
+        chalk.gray(
+          '    The container will be created but may fail to start until the port is freed.',
+        ),
+      )
+      console.log()
+
+      const { proceed } = await inquirer.prompt<{ proceed: string }>([
+        {
+          type: 'list',
+          name: 'proceed',
+          message: 'What would you like to do?',
+          choices: [
+            { name: `Use port ${port} anyway`, value: 'continue' },
+            { name: 'Choose a different port', value: 'retry' },
+          ],
+        },
+      ])
+
+      if (proceed === 'retry') {
+        return promptPort(defaultPort, engine)
+      }
+    }
+  }
 
   return port
 }
@@ -489,6 +591,7 @@ export async function promptDatabaseSelect(
 
 /**
  * Prompt for backup format selection
+ * Uses centralized format configuration from config/backup-formats.ts
  * @param options.includeBack - Include a back option (returns null when selected)
  */
 export function promptBackupFormat(
@@ -503,22 +606,33 @@ export async function promptBackupFormat(
   engine: string,
   options?: { includeBack?: boolean },
 ): Promise<'sql' | 'dump' | null> {
-  const sqlDescription =
-    engine === 'mysql'
-      ? 'Plain SQL - human-readable, larger file'
-      : 'Plain SQL - human-readable, larger file'
-  const dumpDescription =
-    engine === 'mysql'
-      ? 'Compressed SQL (.sql.gz) - smaller file'
-      : 'Custom format - smaller file, faster restore'
+  // Import here to avoid circular dependencies
+  const {
+    BACKUP_FORMATS,
+    supportsFormatChoice,
+    getDefaultFormat,
+  } = await import('../../config/backup-formats')
+
+  // If engine doesn't support format choice (e.g., Redis), return default
+  if (!supportsFormatChoice(engine)) {
+    return getDefaultFormat(engine)
+  }
+
+  const formats = BACKUP_FORMATS[engine] || BACKUP_FORMATS.postgresql
 
   type Choice =
     | { name: string; value: string; short?: string }
     | inquirer.Separator
 
   const choices: Choice[] = [
-    { name: `.sql ${chalk.gray(`- ${sqlDescription}`)}`, value: 'sql' },
-    { name: `.dump ${chalk.gray(`- ${dumpDescription}`)}`, value: 'dump' },
+    {
+      name: `${formats.sql.label} ${chalk.gray(`- ${formats.sql.description}`)}`,
+      value: 'sql',
+    },
+    {
+      name: `${formats.dump.label} ${chalk.gray(`- ${formats.dump.description}`)}`,
+      value: 'dump',
+    },
   ]
 
   if (options?.includeBack) {
@@ -532,12 +646,66 @@ export async function promptBackupFormat(
       name: 'format',
       message: 'Select backup format:',
       choices,
-      default: 'sql',
+      default: formats.defaultFormat,
     },
   ])
 
   if (format === BACK_VALUE) return null
   return format as 'sql' | 'dump'
+}
+
+/**
+ * Prompt for backup output directory
+ * @returns Directory path or null if cancelled
+ */
+export async function promptBackupDirectory(): Promise<string | null> {
+  const cwd = process.cwd()
+
+  const { choice } = await inquirer.prompt<{ choice: string }>([
+    {
+      type: 'list',
+      name: 'choice',
+      message: 'Where to save the backup?',
+      choices: [
+        {
+          name: `${chalk.cyan('.')} Current directory ${chalk.gray(`(${cwd})`)}`,
+          value: 'cwd',
+        },
+        {
+          name: `${chalk.yellow('...')} Choose different directory`,
+          value: 'custom',
+        },
+        new inquirer.Separator(),
+        { name: `${chalk.blue('←')} Back`, value: BACK_VALUE },
+      ],
+    },
+  ])
+
+  if (choice === BACK_VALUE) return null
+  if (choice === 'cwd') return cwd
+
+  const { customPath } = await inquirer.prompt<{ customPath: string }>([
+    {
+      type: 'input',
+      name: 'customPath',
+      message: 'Enter directory path:',
+      default: cwd,
+      validate: (input: string) => {
+        if (!input.trim()) return 'Directory path is required'
+        const resolved = resolve(input.replace(/^~/, process.env.HOME || ''))
+        if (existsSync(resolved)) {
+          if (!statSync(resolved).isDirectory()) {
+            return 'Path is not a directory'
+          }
+        }
+        // Directory will be created if it doesn't exist
+        return true
+      },
+    },
+  ])
+
+  const { resolve } = await import('path')
+  return resolve(customPath.replace(/^~/, process.env.HOME || ''))
 }
 
 /**
@@ -718,7 +886,7 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
     path = await promptSqlitePath(name)
   } else {
     const engineDefaults = getEngineDefaults(engine)
-    port = await promptPort(engineDefaults.defaultPort)
+    port = await promptPort(engineDefaults.defaultPort, engine)
   }
 
   return { name, engine, version, port, database, path }

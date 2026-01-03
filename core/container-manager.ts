@@ -23,6 +23,8 @@ export type CreateOptions = {
   version: string
   port: number
   database: string
+  /** Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis) */
+  binaryPath?: string
 }
 
 export type DeleteOptions = {
@@ -31,7 +33,7 @@ export type DeleteOptions = {
 
 export class ContainerManager {
   async create(name: string, options: CreateOptions): Promise<ContainerConfig> {
-    const { engine, version, port, database } = options
+    const { engine, version, port, database, binaryPath } = options
 
     // Validate container name
     if (!this.isValidName(name)) {
@@ -62,6 +64,9 @@ export class ContainerManager {
       databases: [database],
       created: new Date().toISOString(),
       status: 'created',
+      // Store binary path for system-installed engines (MySQL, MongoDB, Redis)
+      // This ensures version consistency when starting the container
+      ...(binaryPath && { binaryPath }),
     }
 
     await this.saveConfig(name, { engine }, config)

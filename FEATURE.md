@@ -73,6 +73,7 @@ Use this checklist to track implementation progress:
 - [ ] `config/engine-defaults.ts` - Add engine defaults
 - [ ] `config/os-dependencies.ts` - Add system dependencies
 - [ ] `cli/constants.ts` - Add engine icon
+- [ ] `cli/helpers.ts` - Add engine type and detection function for engines list
 
 ### Menu/CLI Terminology
 
@@ -81,6 +82,7 @@ Use this checklist to track implementation progress:
 - [ ] `cli/commands/menu/shell-handlers.ts` - Add engine-specific shell (e.g., redis-cli, iredis)
 - [ ] `cli/commands/menu/shell-handlers.ts` - Hide usql option for non-SQL engines
 - [ ] `cli/commands/menu/sql-handlers.ts` - Update script type terminology (SQL/Script/Command)
+- [ ] `cli/commands/menu/engine-handlers.ts` - Add engine to "Manage Engines" menu display and info handler
 
 ### Testing
 
@@ -499,6 +501,147 @@ export const ENGINE_ICONS: Record<string, string> = {
 | Redis | 🔴 | Red circle (from name/logo) |
 
 If no icon is provided, the default `▣` will be used, which looks generic in the menu.
+
+### 6. CLI Helpers (`cli/helpers.ts`)
+
+This file provides helper functions for listing installed engines. Add support for your engine:
+
+1. **Add installed engine type:**
+   ```typescript
+   export type InstalledYourEngineType = {
+     engine: 'yourengine'
+     version: string
+     path: string
+     source: 'system'
+   }
+   ```
+
+2. **Add to `InstalledEngine` union type:**
+   ```typescript
+   export type InstalledEngine =
+     | InstalledPostgresEngine
+     | InstalledMysqlEngine
+     | InstalledSqliteEngine
+     | InstalledYourEngineType  // Add this
+   ```
+
+3. **Add detection function:**
+   ```typescript
+   async function getInstalledYourEngineEngine(): Promise<InstalledYourEngineType | null> {
+     const binaryPath = await getYourEnginePath()  // From binary-detection.ts
+     if (!binaryPath) {
+       return null
+     }
+
+     const version = await getYourEngineVersion(binaryPath)
+     if (!version) {
+       return null
+     }
+
+     return {
+       engine: 'yourengine',
+       version,
+       path: binaryPath,
+       source: 'system',
+     }
+   }
+   ```
+
+4. **Add to `getInstalledEngines()`:**
+   ```typescript
+   export async function getInstalledEngines(): Promise<InstalledEngine[]> {
+     const engines: InstalledEngine[] = []
+     // ... existing engines
+
+     const yourEngine = await getInstalledYourEngineEngine()
+     if (yourEngine) {
+       engines.push(yourEngine)
+     }
+
+     return engines
+   }
+   ```
+
+### 7. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
+
+The "Manage Engines" menu displays installed engines and provides info screens for system-installed engines. You must manually update this file to include your engine.
+
+**Required changes:**
+
+1. **Add type imports:**
+   ```typescript
+   import {
+     // ... existing types
+     type InstalledYourEngineType,
+   } from '../../helpers'
+   import { getYourEngineVersion } from '../../../engines/yourengine/binary-detection'
+   ```
+
+2. **Add engine filtering in `handleEngines()`:**
+   ```typescript
+   const yourEngine = engines.find(
+     (e): e is InstalledYourEngineType => e.engine === 'yourengine',
+   )
+   ```
+
+3. **Add engine row to the table display:**
+   ```typescript
+   if (yourEngine) {
+     const icon = ENGINE_ICONS.yourengine
+     const engineDisplay = `${icon} yourengine`
+
+     console.log(
+       chalk.gray('  ') +
+         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+         chalk.yellow(yourEngine.version.padEnd(COL_VERSION)) +
+         chalk.gray('system'.padEnd(COL_SOURCE)) +
+         chalk.gray('(system-installed)'),
+     )
+   }
+   ```
+
+4. **Add summary line:**
+   ```typescript
+   if (yourEngine) {
+     console.log(
+       chalk.gray(`  YourEngine: system-installed at ${yourEngine.path}`),
+     )
+   }
+   ```
+
+5. **Add menu choice:**
+   ```typescript
+   if (yourEngine) {
+     choices.push({
+       name: `${chalk.blue('ℹ')} YourEngine ${yourEngine.version} ${chalk.gray('(system-installed)')}`,
+       value: `yourengine-info:${yourEngine.path}`,
+     })
+   }
+   ```
+
+6. **Add action handler:**
+   ```typescript
+   if (action.startsWith('yourengine-info:')) {
+     const binaryPath = action.slice('yourengine-info:'.length)
+     await handleYourEngineInfo(binaryPath)
+     await handleEngines()
+   }
+   ```
+
+7. **Add info handler function:**
+   ```typescript
+   async function handleYourEngineInfo(binaryPath: string): Promise<void> {
+     console.clear()
+     console.log(header('YourEngine Information'))
+     // Show version, containers using this engine, uninstall instructions
+     // See handleMongodbInfo() or handleRedisInfo() as reference
+   }
+   ```
+
+**Also update `cli/helpers.ts`:**
+- Add `InstalledYourEngineType` type
+- Add `getInstalledYourEngineEngine()` function
+- Add to `getInstalledEngines()` function
 
 ---
 
@@ -1116,6 +1259,13 @@ pnpm start delete mytest-renamed --force
 pnpm start list
 pnpm start engines list
 pnpm start deps check --engine yourengine
+
+# Interactive menu - verify engine appears in "Manage Engines"
+pnpm start
+# Navigate to "Manage engines" and verify:
+# - Engine appears in the table with correct icon
+# - Engine appears in menu choices with info option
+# - Selecting info shows installation details
 ```
 
 ### Regression Check

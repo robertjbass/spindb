@@ -23,11 +23,11 @@ export type Platform = 'darwin' | 'linux' | 'win32'
  * Package definition for a specific package manager
  */
 export type PackageDefinition = {
-  /** Package name to install */
+  // Package name to install
   package: string
-  /** Optional post-install commands (e.g., brew link) */
+  // Optional post-install commands (e.g., brew link)
   postInstall?: string[]
-  /** Optional pre-install commands */
+  // Optional pre-install commands
   preInstall?: string[]
 }
 
@@ -35,15 +35,15 @@ export type PackageDefinition = {
  * A single dependency (e.g., psql, pg_dump)
  */
 export type Dependency = {
-  /** Human-readable name */
+  // Human-readable name
   name: string
-  /** Binary name to check for in PATH */
+  // Binary name to check for in PATH
   binary: string
-  /** Description of what this tool does */
+  // Description of what this tool does
   description: string
-  /** Package definitions per package manager */
+  // Package definitions per package manager
   packages: Partial<Record<PackageManagerId, PackageDefinition>>
-  /** Alternative installation instructions when no package manager is available */
+  // Alternative installation instructions when no package manager is available
   manualInstall: Partial<Record<Platform, string[]>>
 }
 
@@ -51,11 +51,11 @@ export type Dependency = {
  * Engine dependency configuration
  */
 export type EngineDependencies = {
-  /** Engine identifier */
+  // Engine identifier
   engine: string
-  /** Human-readable engine name */
+  // Human-readable engine name
   displayName: string
-  /** List of dependencies for this engine */
+  // List of dependencies for this engine
   dependencies: Dependency[]
 }
 
@@ -65,13 +65,13 @@ export type EngineDependencies = {
 export type PackageManagerConfig = {
   id: PackageManagerId
   name: string
-  /** Command to check if this package manager is installed */
+  // Command to check if this package manager is installed
   checkCommand: string
-  /** Platforms this package manager is available on */
+  // Platforms this package manager is available on
   platforms: Platform[]
-  /** Command template to install a package */
+  // Command template to install a package
   installTemplate: string
-  /** Command template to update/upgrade a package */
+  // Command template to update/upgrade a package
   updateTemplate: string
 }
 

@@ -1,8 +1,3 @@
-/**
- * Redis Engine implementation
- * Manages Redis database containers using system-installed Redis binaries
- */
-
 import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
@@ -21,6 +16,7 @@ import {
   getIredisPath,
   detectInstalledVersions,
   getInstallInstructions,
+  getVersionInstallHint,
   getRedisServerPathForVersion,
   getRedisCliPathForVersion,
 } from './binary-detection'
@@ -178,25 +174,49 @@ export class RedisEngine extends BaseEngine {
   }
 
   /**
-   * Check if Redis is installed
+   * Check if a specific Redis version is installed
+   * Returns true only if the requested version is actually available
    */
-  async isBinaryInstalled(_version: string): Promise<boolean> {
-    const redisServer = await getRedisServerPath()
-    return redisServer !== null
+  async isBinaryInstalled(version: string): Promise<boolean> {
+    const majorVersion = version.split('.')[0]
+    const versionPath = await getRedisServerPathForVersion(majorVersion)
+    return versionPath !== null
   }
 
   /**
-   * Ensure Redis binaries are available (just checks system installation)
+   * Ensure Redis binaries are available for a specific version
+   * Returns the path to redis-server for the requested version
+   * Throws if the version is not available (no silent fallback)
    */
   async ensureBinaries(
-    _version: string,
+    version: string,
     _onProgress?: ProgressCallback,
   ): Promise<string> {
-    const redisServer = await getRedisServerPath()
-    if (!redisServer) {
+    const majorVersion = version.split('.')[0]
+
+    // Try to find version-specific binary
+    const versionPath = await getRedisServerPathForVersion(majorVersion)
+    if (versionPath) {
+      return versionPath
+    }
+
+    // Version not found - check what versions ARE available
+    const installed = await detectInstalledVersions()
+    const availableVersions = Object.keys(installed).sort()
+
+    if (availableVersions.length === 0) {
       throw new Error(getInstallInstructions())
     }
-    return redisServer
+
+    // Build helpful error message with platform-specific install hint
+    const availableList = availableVersions
+      .map((v) => `${v} (${installed[v]})`)
+      .join(', ')
+    throw new Error(
+      `Redis ${majorVersion} is not installed. ` +
+        `Available versions: ${availableList}.\n` +
+        getVersionInstallHint(majorVersion),
+    )
   }
 
   /**
@@ -246,7 +266,7 @@ export class RedisEngine extends BaseEngine {
     container: ContainerConfig,
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
-    const { name, port, version } = container
+    const { name, port, version, binaryPath } = container
 
     // Check if already running (idempotent behavior)
     const alreadyRunning = await processManager.isRunning(name, {
@@ -259,20 +279,41 @@ export class RedisEngine extends BaseEngine {
       }
     }
 
-    // Get version-specific redis-server path
-    const majorVersion = version.split('.')[0]
-    let redisServer = await getRedisServerPathForVersion(majorVersion)
+    // Use stored binary path if available (from container creation)
+    // This ensures version consistency - the container uses the same binary it was created with
+    let redisServer: string | null = null
 
-    // Fall back to generic path if version-specific not found
-    if (!redisServer) {
-      redisServer = await getRedisServerPath()
+    if (binaryPath && existsSync(binaryPath)) {
+      redisServer = binaryPath
+      logDebug(`Using stored binary path: ${redisServer}`)
+    } else {
+      // Fall back to version detection for legacy containers without binaryPath
+      const majorVersion = version.split('.')[0]
+      redisServer = await getRedisServerPathForVersion(majorVersion)
+
+      if (!redisServer) {
+        // If version-specific not found, throw error with available versions
+        const installed = await detectInstalledVersions()
+        const availableVersions = Object.keys(installed).sort()
+
+        if (availableVersions.length === 0) {
+          throw new Error(getInstallInstructions())
+        }
+
+        // Build helpful error message with platform-specific install hint
+        const availableList = availableVersions
+          .map((v) => `${v} (${installed[v]})`)
+          .join(', ')
+        throw new Error(
+          `Redis ${majorVersion} is not installed. ` +
+            `Container was created for Redis ${majorVersion} but it's no longer available.\n` +
+            `Available versions: ${availableList}.\n` +
+            getVersionInstallHint(majorVersion),
+        )
+      }
     }
 
-    if (!redisServer) {
-      throw new Error(getInstallInstructions())
-    }
-
-    logDebug(`Using redis-server for version ${majorVersion}: ${redisServer}`)
+    logDebug(`Using redis-server for version ${version}: ${redisServer}`)
 
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'redis.conf')
@@ -581,14 +622,17 @@ export class RedisEngine extends BaseEngine {
   async restore(
     container: ContainerConfig,
     backupPath: string,
-    _options: Record<string, unknown> = {},
+    options: { database?: string; flush?: boolean } = {},
   ): Promise<RestoreResult> {
-    const { name } = container
+    const { name, port } = container
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
 
     return restoreBackup(backupPath, {
       containerName: name,
       dataDir,
+      port,
+      database: options.database || container.database || '0',
+      flush: options.flush,
     })
   }
 
@@ -707,7 +751,9 @@ export class RedisEngine extends BaseEngine {
       )
     }
     // No-op - Redis databases always exist
-    logDebug(`Redis database ${database} is available (databases 0-15 always exist)`)
+    logDebug(
+      `Redis database ${database} is available (databases 0-15 always exist)`,
+    )
   }
 
   /**
@@ -737,7 +783,9 @@ export class RedisEngine extends BaseEngine {
     } catch (error) {
       const err = error as Error
       logDebug(`FLUSHDB failed: ${err.message}`)
-      throw new Error(`Failed to flush Redis database ${database}: ${err.message}`)
+      throw new Error(
+        `Failed to flush Redis database ${database}: ${err.message}`,
+      )
     }
   }
 
@@ -842,13 +890,34 @@ export class RedisEngine extends BaseEngine {
         proc.stdin?.end()
       })
     } else if (options.sql) {
-      // Run inline command (using sql field for compatibility, but it's actually Redis commands)
-      const cmd = buildRedisCliCommand(redisCli, port, options.sql, {
-        database: db,
+      // Run inline command by piping to redis-cli stdin (avoids shell quoting issues on Windows)
+      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(redisCli, args, {
+          stdio: ['pipe', 'inherit', 'inherit'],
+        })
+
+        let rejected = false
+
+        proc.on('error', (err) => {
+          rejected = true
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          if (rejected) return
+          if (code === 0 || code === null) {
+            resolve()
+          } else {
+            reject(new Error(`redis-cli exited with code ${code}`))
+          }
+        })
+
+        // Write command to stdin and close it
+        proc.stdin?.write(options.sql + '\n')
+        proc.stdin?.end()
       })
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
-      if (stdout) process.stdout.write(stdout)
-      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }

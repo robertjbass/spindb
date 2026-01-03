@@ -22,6 +22,7 @@ import {
   assertEqual,
   runScriptFile,
   runScriptSQL,
+  getInstalledVersion,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -39,6 +40,7 @@ describe('MongoDB Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
+  let installedVersion: string
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -46,6 +48,10 @@ describe('MongoDB Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
+
+    console.log('\n🔍 Detecting installed MongoDB version...')
+    installedVersion = await getInstalledVersion(ENGINE)
+    console.log(`   Using MongoDB version: ${installedVersion}`)
 
     console.log('\n🔍 Finding available test ports...')
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.mongodb.base)
@@ -72,14 +78,14 @@ describe('MongoDB Integration Tests', () => {
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '8.0',
+      version: installedVersion,
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the data directory
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, '8.0', {})
+    await engine.initDataDir(containerName, installedVersion, {})
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -158,14 +164,14 @@ describe('MongoDB Integration Tests', () => {
     // Create container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '8.0',
+      version: installedVersion,
       port: testPorts[1],
       database: DATABASE,
     })
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '8.0', {})
+    await engine.initDataDir(clonedContainerName, installedVersion, {})
 
     const config = await containerManager.getConfig(clonedContainerName)
     assert(config !== null, 'Cloned container config should exist')
@@ -211,6 +217,114 @@ describe('MongoDB Integration Tests', () => {
     )
 
     console.log(`   ✓ Verified ${rowCount} documents in restored container`)
+  })
+
+  // ============================================
+  // Backup Format Tests
+  // ============================================
+
+  it('should backup to directory format (BSON)', async () => {
+    console.log(`\n📦 Testing directory format backup (BSON)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `mongodb-dir-backup-${Date.now()}`)
+
+    // Backup with 'sql' format produces directory dump
+    const result = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'sql',
+    })
+
+    assert(result.path === backupPath, 'Backup path should match')
+    assert(result.format === 'directory', 'Format should be directory')
+
+    // Verify directory structure exists
+    const { existsSync } = await import('fs')
+    const dbDir = join(backupPath, DATABASE)
+    assert(existsSync(dbDir), 'Database directory should exist')
+
+    // Verify BSON files exist for the collection
+    const collectionFile = join(dbDir, 'test_user.bson')
+    assert(existsSync(collectionFile), 'Collection BSON file should exist')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { recursive: true, force: true })
+
+    console.log(`   ✓ Directory backup created`)
+  })
+
+  it('should backup to archive format (.archive)', async () => {
+    console.log(`\n📦 Testing archive format backup (.archive)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `mongodb-archive-backup-${Date.now()}.archive`)
+
+    // Backup with 'dump' format produces compressed archive
+    const result = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'dump',
+    })
+
+    assert(result.path === backupPath, 'Backup path should match')
+    assert(result.format === 'archive', 'Format should be archive')
+    assert(result.size > 0, 'Backup should have content')
+
+    // Verify file is gzipped (starts with gzip magic bytes 1f 8b)
+    const { readFile } = await import('fs/promises')
+    const buffer = await readFile(backupPath)
+    assert(buffer[0] === 0x1f && buffer[1] === 0x8b, 'Backup should have gzip header')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { force: true })
+
+    console.log(`   ✓ Archive backup created with ${result.size} bytes`)
+  })
+
+  it('should restore from directory format and verify data', async () => {
+    console.log(`\n📥 Testing directory format restore...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(clonedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    // Create directory backup from source
+    const sourceConfig = await containerManager.getConfig(containerName)
+    assert(sourceConfig !== null, 'Source config should exist')
+
+    const { tmpdir } = await import('os')
+    const backupPath = join(tmpdir(), `mongodb-dir-restore-${Date.now()}`)
+
+    await engine.backup(sourceConfig!, backupPath, {
+      database: DATABASE,
+      format: 'sql',
+    })
+
+    // Restore directory backup to cloned container
+    // Use a different database to avoid conflicts
+    const testDb = 'restore_test_db'
+    await engine.restore(config!, backupPath, {
+      database: testDb,
+    })
+
+    // Verify data was restored
+    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
+    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+
+    // Clean up
+    const { rm } = await import('fs/promises')
+    await rm(backupPath, { recursive: true, force: true })
+
+    console.log(`   ✓ Directory restore verified with ${rowCount} documents`)
   })
 
   it('should stop and delete the restored container', async () => {
@@ -334,13 +448,13 @@ describe('MongoDB Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '8.0',
+      version: installedVersion,
       port: testPorts[2], // This port is in use by renamed container
       database: 'conflictdb',
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '8.0', {})
+    await engine.initDataDir(portConflictContainerName, installedVersion, {})
 
     // The container should be created but when we try to start, it should detect conflict
     // In real usage, the start command would auto-assign a new port
