@@ -430,22 +430,11 @@ SpinDB uses different binary sourcing strategies by engine:
 - SpinDB detects and orchestrates, doesn't download
 
 **Why the difference?**
-PostgreSQL is the only major database with a well-maintained, current, cross-platform embedded binary distribution. While similar projects exist for other databases, none are viable:
-
-- **MySQL/MariaDB**: [MariaDB4j](https://github.com/MariaDB4j/MariaDB4j) exists but has severe limitations:
-  - Java-only (binaries in JARs, not direct downloads)
-  - Severely outdated (latest: MariaDB 10.2.11 from 2018)
-  - No Apple Silicon support (only `mac64` Intel binaries)
-  - MariaDB, not MySQL (mostly compatible but not identical)
-- **MongoDB**: [mongodb-memory-server](https://github.com/typegoose/mongodb-memory-server) downloads official binaries from `fastdl.mongodb.org`, but:
-  - Binaries are ~300-500 MB per version (vs PostgreSQL's ~45 MB)
-  - Complex platform-specific download URLs
-  - Target users likely have MongoDB installed via Homebrew/apt already
-- **Redis**: No official portable distribution; macOS has no options at all
+PostgreSQL is the only major database with a well-maintained, current, cross-platform embedded binary distribution (zonky.io). Other databases lack equivalent embeddable distributions, so SpinDB relies on system-installed binaries.
 
 **Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
 
-**Future plans:** See [BINARY-PLANS.md](BINARY-PLANS.md) for potential approaches to providing downloadable binaries for Redis (compile from source) and MySQL (fork MariaDB4j with ARM64 support).
+**Future plans:** The [hostdb](https://github.com/robertjbass/hostdb) project will provide downloadable binaries for additional database engines (Redis, MySQL/MariaDB, etc.) as GitHub releases.
 
 ## Error Handling
 

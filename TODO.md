@@ -121,6 +121,18 @@ Combine common multi-step workflows into single commands. These should remain in
 
 ## Known Issues & Technical Debt
 
+### Critical: Version Containerization Uses Wrong Binary
+
+**Bug:** When multiple versions of an engine are installed on the system, containers may use the wrong binary version. A container created for Redis 6 was found to be running with the Redis 7 binary.
+
+**Impact:** Containers don't properly isolate to their specified version. While this may not cause immediate failures (Redis 6 container ran fine on Redis 7), it defeats the purpose of version-specific containers and could cause subtle compatibility issues.
+
+**Root cause:** System binary detection finds whichever version is in PATH rather than respecting the container's configured version.
+
+- [ ] **Audit version resolution** - Verify each engine correctly maps container version to binary path
+- [ ] **Add version validation on start** - Check that the binary version matches the container's configured version
+- [ ] **Consider version-specific binary caching** - For system-installed engines, cache the path to each detected version
+
 ### Windows Support (Added v0.9.4) - Needs Testing
 
 - [ ] **Test Windows binary download and extraction** - Verify EDB binaries download and extract correctly
