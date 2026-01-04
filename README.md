@@ -976,6 +976,16 @@ SpinDB wouldn't be possible without:
 
 ---
 
+## Related Work
+
+We're actively contributing to the broader embedded database ecosystem:
+
+- **[MariaDB4j PR #1321](https://github.com/MariaDB4j/MariaDB4j/pull/1321)** - Adding ARM64 (Apple Silicon) support for MariaDB binaries on macOS and Linux. This would enable SpinDB to offer downloadable MariaDB binaries similar to how we handle PostgreSQL.
+
+See [BINARY-PLANS.md](BINARY-PLANS.md) for our roadmap on downloadable binaries for MySQL/MariaDB, Redis, and MongoDB.
+
+---
+
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE)

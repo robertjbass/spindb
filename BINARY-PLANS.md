@@ -112,6 +112,23 @@ This is very manageable compared to MongoDB (~1.5 GB for equivalent coverage).
 | **Java-only** | Binaries packaged in JARs, not directly downloadable |
 | **MariaDB ≠ MySQL** | Mostly compatible, but not identical |
 
+### Active Work: PR #1321
+
+**[PR #1321](https://github.com/MariaDB4j/MariaDB4j/pull/1321)** by [@robertjbass](https://github.com/robertjbass) adds ARM64 support to MariaDB4j:
+
+| Platform | Versions Added |
+|----------|----------------|
+| **macOS ARM64** | 10.5.29, 10.6.24, 10.11.15, 11.8.5 |
+| **Linux ARM64** | 10.11.15, 11.4.9 |
+
+**Implementation:**
+- macOS binaries sourced via Homebrew
+- Linux binaries extracted from official MariaDB Docker images (`--platform linux/arm64`)
+
+**Status:** Open PR, awaiting maintainer review and merge.
+
+**Local development:** `/Users/bob/dev/compiled-binaries/MariaDB4j/`
+
 ### Proposed Approach: Fork and Extend
 
 Rather than starting from scratch, fork MariaDB4j and modernize it:
