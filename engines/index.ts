@@ -45,7 +45,6 @@ export function getEngine(name: string): BaseEngine {
  * List all available engines
  */
 export function listEngines(): EngineInfo[] {
-  // Return unique engines (filter out aliases)
   const seen = new Set<BaseEngine>()
   return Object.entries(engines)
     .filter(([, engine]) => {

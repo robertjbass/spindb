@@ -85,6 +85,15 @@ spindb restore [name] [backup] [options]
 - `-f, --force` - Overwrite existing database
 - `-j, --json` - Output result as JSON
 
+#### `backups` - List backup files
+```bash
+spindb backups [directory] [options]
+```
+**Options:**
+- `-a, --all` - Include backups from `~/.spindb/backups`
+- `-n, --limit <count>` - Limit number of results (default: 20)
+- `-j, --json` - Output as JSON
+
 #### `clone` - Clone container
 ```bash
 spindb clone [source] [target] [-j, --json]
@@ -253,6 +262,24 @@ spindb backup prod-backup --database prod-backup --output ~/backups
 
 # Backup in JSON format (for scripts)
 spindb backup prod-backup --json
+```
+
+**Example: List backup files in directory**
+```bash
+# List backups in current directory
+spindb backups
+# Output:
+#   🐘 prod-backup-backup-20260102T120000.sql    12.5 MB     2h ago  SQL dump
+#   🐘 prod-backup-backup-20260101T180000.dump    8.2 MB    1d ago  pg_dump custom
+
+# List backups including system backup directory
+spindb backups --all
+
+# List backups in a specific directory
+spindb backups ./backups
+
+# Get machine-readable output
+spindb backups --json
 ```
 
 **Example: Restore from local backup**
@@ -1276,19 +1303,20 @@ spindb run blogdb ./seeds/blog-data.js
 
 **Example: Backup MongoDB database**
 ```bash
-# Create backup using mongodump (BSON format)
+# Create compressed archive backup (recommended)
 spindb backup blogdb --dump --name blogdb-backup
-# Creates: blogdb-blogdb-backup-TIMESTAMP.dump (directory with BSON files)
+# Creates: blogdb-blogdb-backup-TIMESTAMP.archive
 
-# You can also backup in JSON format (not recommended for large datasets)
-# Note: MongoDB backups are typically BSON (dump format), not SQL
+# Create BSON directory backup (for per-collection access)
+spindb backup blogdb --sql --name blogdb-backup-dir
+# Creates: blogdb-blogdb-backup-dir-TIMESTAMP/ directory with BSON files
 ```
 
 **Example: Restore MongoDB backup**
 ```bash
-# Create new container and restore
+# Create new container and restore from archive
 spindb create blogdb-restore --engine mongodb
-spindb restore blogdb-restore ./blogdb-backup.dump
+spindb restore blogdb-restore ./blogdb-backup.archive
 
 # Pull from remote MongoDB server
 spindb restore blogdb-restore \

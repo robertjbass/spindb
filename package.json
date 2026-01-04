@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.13.2",
+  "version": "0.13.4",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MongoDB, Redis, and SQLite instances.",
   "type": "module",
   "bin": {

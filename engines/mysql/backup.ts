@@ -10,7 +10,7 @@ import { stat } from 'fs/promises'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
 import { getMysqldumpPath } from './binary-detection'
-import { getWindowsSpawnOptions } from '../../core/platform-service'
+import { getWindowsSpawnOptions, isWindows } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -78,6 +78,7 @@ async function createSqlBackup(
       String(port),
       '-u',
       engineDef.superuser,
+      '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
       '--result-file',
       outputPath,
       database,
@@ -88,7 +89,9 @@ async function createSqlBackup(
       ...getWindowsSpawnOptions(),
     }
 
-    const proc = spawn(mysqldump, args, spawnOptions)
+    // On Windows with shell: true, paths with spaces must be quoted
+    const command = isWindows() ? `"${mysqldump}"` : mysqldump
+    const proc = spawn(command, args, spawnOptions)
 
     let stderr = ''
 
@@ -141,6 +144,7 @@ async function createCompressedBackup(
     String(port),
     '-u',
     engineDef.superuser,
+    '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
     database,
   ]
 
@@ -149,7 +153,9 @@ async function createCompressedBackup(
     ...getWindowsSpawnOptions(),
   }
 
-  const proc = spawn(mysqldump, args, spawnOptions)
+  // On Windows with shell: true, paths with spaces must be quoted
+  const command = isWindows() ? `"${mysqldump}"` : mysqldump
+  const proc = spawn(command, args, spawnOptions)
 
   const gzip = createGzip()
   const output = createWriteStream(outputPath)
@@ -160,10 +166,8 @@ async function createCompressedBackup(
     stderr += data.toString()
   })
 
-  // Create promise for pipeline completion
   const pipelinePromise = pipeline(proc.stdout!, gzip, output)
 
-  // Create promise for process exit
   const exitPromise = new Promise<void>((resolve, reject) => {
     proc.on('error', (err: NodeJS.ErrnoException) => {
       reject(err)

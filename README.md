@@ -429,16 +429,23 @@ spindb backup mydb --output ./backups/      # Custom directory
 spindb backup mydb --database my_app        # Backup specific database
 ```
 
-Backup formats:
+Backup formats (vary by engine):
 
 ```bash
-spindb backup mydb --format sql     # Plain SQL (.sql)
-spindb backup mydb --format dump    # Compressed (.dump for PG, .sql.gz for MySQL)
+spindb backup mydb --format sql     # Plain SQL (.sql) or text commands (.redis)
+spindb backup mydb --format dump    # Binary format (.dump for PG, .sql.gz for MySQL, .rdb for Redis)
 
 # Shorthand
 spindb backup mydb --sql
 spindb backup mydb --dump
 ```
+
+Format by engine:
+- PostgreSQL: `.sql` (plain SQL) / `.dump` (pg_dump custom)
+- MySQL: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
+- SQLite: `.sql` (plain SQL) / `.sqlite` (binary copy)
+- MongoDB: `.bson` (BSON dump) / `.archive` (compressed archive)
+- Redis: `.redis` (text commands) / `.rdb` (RDB snapshot)
 
 <details>
 <summary>All options</summary>
@@ -452,6 +459,27 @@ spindb backup mydb --dump
 | `--sql` | Shorthand for `--format sql` |
 | `--dump` | Shorthand for `--format dump` |
 | `--json`, `-j` | Output result as JSON |
+
+</details>
+
+#### `backups` - List backup files
+
+```bash
+spindb backups                       # List backups in current directory
+spindb backups ./data                # List backups in specific directory
+spindb backups --all                 # Include ~/.spindb/backups
+spindb backups --limit 50            # Show more results
+spindb backups --json                # JSON output
+```
+
+<details>
+<summary>All options</summary>
+
+| Option | Description |
+|--------|-------------|
+| `--all`, `-a` | Include backups from `~/.spindb/backups` |
+| `--limit`, `-n` | Limit number of results (default: 20) |
+| `--json`, `-j` | Output as JSON |
 
 </details>
 
@@ -485,6 +513,78 @@ spindb info mydb
 | `--from-url` | Pull data from a remote database connection string |
 | `--force`, `-f` | Overwrite existing database without confirmation |
 | `--json`, `-j` | Output result as JSON |
+
+</details>
+
+#### Backup & Restore Format Reference
+
+Each engine has specific backup formats and restore behaviors:
+
+<details>
+<summary>PostgreSQL</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | pg_dump | Plain text SQL, human-readable |
+| Custom | `.dump` | pg_dump -Fc | Compressed, supports parallel restore |
+
+**Restore behavior:** Creates new database or replaces existing. Uses `pg_restore` for `.dump`, `psql` for `.sql`.
+
+</details>
+
+<details>
+<summary>MySQL</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | mysqldump | Plain text SQL |
+| Compressed | `.sql.gz` | mysqldump + gzip | Gzip compressed SQL |
+
+**Restore behavior:** Creates new database or replaces existing. Pipes to `mysql` client.
+
+</details>
+
+<details>
+<summary>SQLite</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | .dump | Plain text SQL |
+| Binary | `.sqlite` | File copy | Exact copy of database file |
+
+**Restore behavior:** Creates new file or replaces existing.
+
+</details>
+
+<details>
+<summary>MongoDB</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| BSON | `.bson` | mongodump | Binary JSON per collection |
+| Archive | `.archive` | mongodump --archive | Single compressed file |
+
+**Restore behavior:** Creates new database or replaces existing. Uses `mongorestore`.
+
+</details>
+
+<details>
+<summary>Redis</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
+| Text | `.redis` | Custom | Human-readable Redis commands |
+
+**Text format detection:** Files are detected as Redis text commands if they contain valid Redis commands (SET, HSET, DEL, etc.), regardless of file extension. This allows restoring files like `users.txt` or `data` without renaming.
+
+**Restore behavior:**
+- **RDB (`.rdb`):** Requires stopping Redis, copies file to data directory, restart loads data
+- **Text (`.redis`):** Pipes commands to running Redis instance. Prompts for:
+  - **Replace all:** Runs `FLUSHDB` first (clean slate)
+  - **Merge:** Adds/updates keys, keeps existing keys not in backup
+
+**Note:** Redis uses numbered databases (0-15) that always exist. "Create new database" is not applicable.
 
 </details>
 
@@ -699,7 +799,7 @@ Native processes mean instant startup and no virtualization overhead.
 └── mydb.sqlite                             # Created with: spindb create mydb -e sqlite
 ```
 
-### How Data Persists
+### Data Persistence
 
 SpinDB runs databases as **native processes** on your machine. When you start a container:
 
@@ -716,6 +816,29 @@ When you stop a container:
 4. Your data remains in the `data/` directory
 
 **Your data is never deleted unless you explicitly delete the container.**
+
+#### Persistence by Engine
+
+Each database engine has its own persistence mechanism:
+
+| Engine | Mechanism | Durability |
+|--------|-----------|------------|
+| PostgreSQL | Write-Ahead Logging (WAL) | Every commit is immediately durable |
+| MySQL | InnoDB transaction logs | Every commit is immediately durable |
+| SQLite | File-based transactions | Every commit is immediately durable |
+| MongoDB | WiredTiger with journaling | Writes journaled before acknowledged |
+| Redis | RDB snapshots | Periodic snapshots (see below) |
+
+**PostgreSQL, MySQL, MongoDB:** These engines use transaction logs or journaling. Every committed write is guaranteed to survive a crash or unexpected shutdown.
+
+**SQLite:** As a file-based database, SQLite writes directly to disk on each commit. No server process means no risk of losing in-flight data.
+
+**Redis:** SpinDB configures Redis with RDB (Redis Database) snapshots:
+- Save after 900 seconds if at least 1 key changed
+- Save after 300 seconds if at least 10 keys changed
+- Save after 60 seconds if at least 10,000 keys changed
+
+This means Redis may lose up to ~60 seconds of writes on an unexpected crash. For local development, this trade-off (speed over strict durability) is typically acceptable. If you need stronger guarantees, use `spindb backup` before stopping work.
 
 ### Binary Sources
 
@@ -738,14 +861,15 @@ This isn't a preference—it's a practical reality of what's available.
 
 This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? SpinDB downloads both, and they run side-by-side without conflicts.
 
-**No equivalent exists for MySQL or MongoDB.** Neither database has a comparable embedded binary project:
+**No equivalent exists for MySQL, MongoDB, or Redis.** None of these databases have a comparable embedded binary project:
 
 - **MySQL:** Oracle distributes MySQL as large installers with system dependencies, not embeddable binaries. There's no "zonky.io for MySQL."
-- **MongoDB:** Server binaries are several hundred MB with complex licensing around redistribution. MongoDB Inc. doesn't provide an embedded distribution.
+- **MongoDB:** Server binaries are several hundred MB and aren't designed for portable distribution.
+- **Redis:** While Redis is small (~6-12 MB), there's no official portable distribution. Community Windows ports exist, but macOS/Linux rely on system packages.
 
 For these databases, system packages (Homebrew, apt, choco) are the most reliable option. They handle dependencies, platform quirks, and security updates. SpinDB simply orchestrates what's already installed.
 
-**Does this limit multi-version support?** Yes, for MySQL/MongoDB you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple MySQL versions simultaneously. If zonky.io-style distributions emerged for other databases, SpinDB could adopt them.
+**Does this limit multi-version support?** Yes, for MySQL/MongoDB/Redis you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple versions of these databases simultaneously. If zonky.io-style distributions emerged for other databases, SpinDB could adopt them.
 
 ---
 
@@ -775,6 +899,20 @@ See [TODO.md](TODO.md) for the full roadmap.
 - Container templates
 - Scheduled backups
 - Import from Docker
+
+### Possible Future Engines
+
+These engines are under consideration but not yet on the roadmap. Community interest and feasibility will determine priority:
+
+| Engine | Type | Notes |
+|--------|------|-------|
+| **DuckDB** | Embedded analytical | File-based like SQLite, popular for data/analytics work |
+| **libSQL** | Embedded relational | SQLite fork by Turso with replication and edge support |
+| **Valkey** | Key-value store | Redis fork (post-license change), growing adoption |
+| **Meilisearch** | Search engine | Developer-friendly search, good binary distribution |
+| **Elasticsearch/OpenSearch** | Search engine | Full-text search, common in web applications |
+| **Neo4j** | Graph database | Most popular graph database |
+| **InfluxDB** | Time-series | IoT, metrics, and monitoring use cases |
 
 ---
 
@@ -835,6 +973,14 @@ See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, 
 SpinDB wouldn't be possible without:
 
 - **[zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries)** - Pre-compiled PostgreSQL binaries that make Docker-free PostgreSQL possible. These binaries are extracted from official PostgreSQL distributions and hosted on Maven Central.
+
+---
+
+## Related Work
+
+We're actively contributing to the broader embedded database ecosystem:
+
+- **[hostdb](https://github.com/robertjbass/hostdb)** - A companion project providing downloadable database binaries (Redis, MySQL/MariaDB, etc.) as GitHub releases. This will enable SpinDB to offer multi-version support for additional engines beyond PostgreSQL.
 
 ---
 

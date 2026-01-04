@@ -187,6 +187,7 @@ import type { ContainerConfig } from '../types'
 - Use `import/export` syntax (not CommonJS `require/module.exports`)
 - Singleton pattern: class instantiation, exported at module end
 - Abstract base classes for polymorphism
+- **No barrel files**: Import modules directly from their source file. Do not create files that only re-export modules (e.g., `index.ts` files that just re-export from other files)
 
 ```ts
 // Singleton pattern
@@ -281,19 +282,41 @@ function assertValidDatabaseName(name: string): void {
 }
 ```
 
-## Documentation
+## Comments
 
-- JSDoc comments for public methods
-- Inline comments for complex logic only
-- Don't add comments that just repeat what the code does
+Code should be self-documenting through clear naming. Avoid unnecessary comments:
+
+- **No file header comments** unless the file's purpose is genuinely ambiguous from its name and contents
+- **No JSDoc for one-liners**: Don't use JSDoc-style `/** */` for single-line comments; use `//` instead
+- **No obvious comments**: Don't comment functions/variables that are self-evident from their names
+- **Only comment the "why"**: Add comments only when the reasoning isn't clear from the code itself
 
 ```ts
+// Avoid: File header that restates the filename
+/**
+ * Container Manager
+ * Handles container operations
+ */
+
+// Avoid: JSDoc for a one-line comment
+/** Increment the counter */
+count++
+
+// Avoid: Comment that restates the code
+// Get the user by ID
+const user = getUserById(id)
+
+// Good: Comment explains non-obvious reasoning
+// Skip validation for cloned containers since source was already validated
+if (container.clonedFrom) return
+
+// Good: Complex logic that benefits from explanation
 /**
  * Migrate old container configs to include databases array.
  * Ensures primary database is always in the databases array.
  */
 async function migrateConfig(config: ContainerConfig): Promise<ContainerConfig> {
-  // Complex migration logic here...
+  // ...
 }
 ```
 

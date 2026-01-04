@@ -13,11 +13,12 @@ import {
   type InstalledPostgresEngine,
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
+  type InstalledMongodbEngine,
+  type InstalledRedisEngine,
 } from '../../helpers'
-import {
-  getMysqlVersion,
-  getMysqlInstallInfo,
-} from '../../../engines/mysql/binary-detection'
+import { getMysqlVersion } from '../../../engines/mysql/binary-detection'
+import { getMongodVersion } from '../../../engines/mongodb/binary-detection'
+import { getRedisVersion } from '../../../engines/redis/binary-detection'
 
 import { type MenuChoice } from './shared'
 
@@ -53,11 +54,17 @@ export async function handleEngines(): Promise<void> {
   const pgEngines = engines.filter(
     (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
   )
-  const mysqlEngine = engines.find(
+  const mysqlEngines = engines.filter(
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
   )
   const sqliteEngine = engines.find(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
+  )
+  const mongodbEngines = engines.filter(
+    (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
+  )
+  const redisEngines = engines.filter(
+    (e): e is InstalledRedisEngine => e.engine === 'redis',
   )
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -90,7 +97,7 @@ export async function handleEngines(): Promise<void> {
     )
   }
 
-  if (mysqlEngine) {
+  for (const mysqlEngine of mysqlEngines) {
     const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
     const engineDisplay = `${icon} ${displayName}`
@@ -106,12 +113,39 @@ export async function handleEngines(): Promise<void> {
 
   if (sqliteEngine) {
     const icon = ENGINE_ICONS.sqlite
-    const engineDisplay = `${icon} sqlite`
+    // double space to align with other engines
+    const engineDisplay = `${icon}  sqlite`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
         chalk.yellow(sqliteEngine.version.padEnd(COL_VERSION)) +
+        chalk.gray('system'.padEnd(COL_SOURCE)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  for (const mongodbEngine of mongodbEngines) {
+    const icon = ENGINE_ICONS.mongodb
+    const engineDisplay = `${icon} mongodb`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+        chalk.yellow(mongodbEngine.version.padEnd(COL_VERSION)) +
+        chalk.gray('system'.padEnd(COL_SOURCE)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  for (const redisEngine of redisEngines) {
+    const icon = ENGINE_ICONS.redis
+    const engineDisplay = `${icon} redis`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+        chalk.yellow(redisEngine.version.padEnd(COL_VERSION)) +
         chalk.gray('system'.padEnd(COL_SOURCE)) +
         chalk.gray('(system-installed)'),
     )
@@ -127,12 +161,30 @@ export async function handleEngines(): Promise<void> {
       ),
     )
   }
-  if (mysqlEngine) {
-    console.log(chalk.gray(`  MySQL: system-installed at ${mysqlEngine.path}`))
+  if (mysqlEngines.length > 0) {
+    const versionCount = mysqlEngines.length
+    const versionText = versionCount === 1 ? 'version' : 'versions'
+    console.log(
+      chalk.gray(`  MySQL: ${versionCount} ${versionText} system-installed`),
+    )
   }
   if (sqliteEngine) {
     console.log(
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+    )
+  }
+  if (mongodbEngines.length > 0) {
+    const versionCount = mongodbEngines.length
+    const versionText = versionCount === 1 ? 'version' : 'versions'
+    console.log(
+      chalk.gray(`  MongoDB: ${versionCount} ${versionText} system-installed`),
+    )
+  }
+  if (redisEngines.length > 0) {
+    const versionCount = redisEngines.length
+    const versionText = versionCount === 1 ? 'version' : 'versions'
+    console.log(
+      chalk.gray(`  Redis: ${versionCount} ${versionText} system-installed`),
     )
   }
   console.log()
@@ -146,11 +198,16 @@ export async function handleEngines(): Promise<void> {
     })
   }
 
-  if (mysqlEngine) {
+  for (const mysqlEngine of mysqlEngines) {
     const displayName = mysqlEngine.isMariaDB ? 'MariaDB' : 'MySQL'
+    // Show formula name if it's a versioned install
+    const versionLabel =
+      mysqlEngine.formulaName !== 'mysql' && mysqlEngine.formulaName !== 'mariadb'
+        ? ` (${mysqlEngine.formulaName})`
+        : ''
     choices.push({
-      name: `${chalk.blue('ℹ')} ${displayName} ${mysqlEngine.version} ${chalk.gray('(system-installed)')}`,
-      value: `mysql-info:${mysqlEngine.path}`,
+      name: `${chalk.blue('ℹ')} ${displayName} ${mysqlEngine.version}${versionLabel} ${chalk.gray('(system-installed)')}`,
+      value: `mysql-info:${mysqlEngine.path}:${mysqlEngine.formulaName}`,
     })
   }
 
@@ -158,6 +215,30 @@ export async function handleEngines(): Promise<void> {
     choices.push({
       name: `${chalk.blue('ℹ')} SQLite ${sqliteEngine.version} ${chalk.gray('(system-installed)')}`,
       value: `sqlite-info:${sqliteEngine.path}`,
+    })
+  }
+
+  for (const mongodbEngine of mongodbEngines) {
+    // Show formula name if it's a versioned install
+    const versionLabel =
+      mongodbEngine.formulaName !== 'mongodb-community'
+        ? ` (${mongodbEngine.formulaName})`
+        : ''
+    choices.push({
+      name: `${chalk.blue('ℹ')} MongoDB ${mongodbEngine.version}${versionLabel} ${chalk.gray('(system-installed)')}`,
+      value: `mongodb-info:${mongodbEngine.path}:${mongodbEngine.formulaName}`,
+    })
+  }
+
+  for (const redisEngine of redisEngines) {
+    // Show formula name if it's a versioned install
+    const versionLabel =
+      redisEngine.formulaName !== 'redis'
+        ? ` (${redisEngine.formulaName})`
+        : ''
+    choices.push({
+      name: `${chalk.blue('ℹ')} Redis ${redisEngine.version}${versionLabel} ${chalk.gray('(system-installed)')}`,
+      value: `redis-info:${redisEngine.path}:${redisEngine.formulaName}`,
     })
   }
 
@@ -192,14 +273,38 @@ export async function handleEngines(): Promise<void> {
   }
 
   if (action.startsWith('mysql-info:')) {
-    const mysqldPath = action.slice('mysql-info:'.length)
-    await handleMysqlInfo(mysqldPath)
+    // Format: mysql-info:path:formulaName
+    const withoutPrefix = action.slice('mysql-info:'.length)
+    const lastColon = withoutPrefix.lastIndexOf(':')
+    const mysqldPath = withoutPrefix.slice(0, lastColon)
+    const formulaName = withoutPrefix.slice(lastColon + 1)
+    await handleMysqlInfo(mysqldPath, formulaName)
     await handleEngines()
   }
 
   if (action.startsWith('sqlite-info:')) {
     const sqlitePath = action.slice('sqlite-info:'.length)
     await handleSqliteInfo(sqlitePath)
+    await handleEngines()
+  }
+
+  if (action.startsWith('mongodb-info:')) {
+    // Format: mongodb-info:path:formulaName
+    const withoutPrefix = action.slice('mongodb-info:'.length)
+    const lastColon = withoutPrefix.lastIndexOf(':')
+    const mongodPath = withoutPrefix.slice(0, lastColon)
+    const formulaName = withoutPrefix.slice(lastColon + 1)
+    await handleMongodbInfo(mongodPath, formulaName)
+    await handleEngines()
+  }
+
+  if (action.startsWith('redis-info:')) {
+    // Format: redis-info:path:formulaName
+    const withoutPrefix = action.slice('redis-info:'.length)
+    const lastColon = withoutPrefix.lastIndexOf(':')
+    const redisPath = withoutPrefix.slice(0, lastColon)
+    const formulaName = withoutPrefix.slice(lastColon + 1)
+    await handleRedisInfo(redisPath, formulaName)
     await handleEngines()
   }
 }
@@ -259,13 +364,21 @@ async function handleDeleteEngine(
   }
 }
 
-async function handleMysqlInfo(mysqldPath: string): Promise<void> {
+async function handleMysqlInfo(
+  mysqldPath: string,
+  formulaName: string,
+): Promise<void> {
   console.clear()
 
-  const installInfo = await getMysqlInstallInfo(mysqldPath)
-  const displayName = installInfo.isMariaDB ? 'MariaDB' : 'MySQL'
+  const isMariaDB = formulaName.includes('mariadb')
+  const displayName = isMariaDB ? 'MariaDB' : 'MySQL'
 
-  const version = await getMysqlVersion(mysqldPath)
+  let version = 'unknown'
+  try {
+    version = (await getMysqlVersion(mysqldPath)) ?? 'unknown'
+  } catch {
+    // Ignore - version will remain 'unknown'
+  }
 
   console.log(header(`${displayName} Information`))
   console.log()
@@ -303,6 +416,13 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
     console.log()
   }
 
+  // Detect package manager from path
+  const isHomebrew =
+    mysqldPath.includes('/opt/homebrew/') ||
+    mysqldPath.includes('/usr/local/opt/') ||
+    mysqldPath.includes('/usr/local/Cellar/')
+  const packageManager = isHomebrew ? 'homebrew' : 'system'
+
   console.log(chalk.white('  Installation Details:'))
   console.log(chalk.gray('  ' + '─'.repeat(50)))
   console.log(
@@ -318,12 +438,12 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
   console.log(
     chalk.gray('  ') +
       chalk.white('Package Manager:'.padEnd(18)) +
-      chalk.cyan(installInfo.packageManager),
+      chalk.cyan(packageManager),
   )
   console.log(
     chalk.gray('  ') +
       chalk.white('Package Name:'.padEnd(18)) +
-      chalk.cyan(installInfo.packageName),
+      chalk.cyan(formulaName),
   )
   console.log()
 
@@ -346,62 +466,16 @@ async function handleMysqlInfo(mysqldPath: string): Promise<void> {
     stepNum++
   }
 
-  if (installInfo.packageManager === 'homebrew') {
+  if (isHomebrew) {
     console.log(
       chalk.gray(
         `  # ${stepNum}. Stop Homebrew service (if running separately)`,
       ),
     )
-    console.log(chalk.cyan(`  brew services stop ${installInfo.packageName}`))
+    console.log(chalk.cyan(`  brew services stop ${formulaName}`))
     console.log()
     console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
-    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
-  } else if (installInfo.packageManager === 'apt') {
-    console.log(chalk.gray(`  # ${stepNum}. Stop the system service`))
-    console.log(
-      chalk.cyan(
-        `  sudo systemctl stop ${installInfo.isMariaDB ? 'mariadb' : 'mysql'}`,
-      ),
-    )
-    console.log()
-    console.log(chalk.gray(`  # ${stepNum + 1}. Disable auto-start on boot`))
-    console.log(
-      chalk.cyan(
-        `  sudo systemctl disable ${installInfo.isMariaDB ? 'mariadb' : 'mysql'}`,
-      ),
-    )
-    console.log()
-    console.log(chalk.gray(`  # ${stepNum + 2}. Uninstall the package`))
-    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
-    console.log()
-    console.log(chalk.gray(`  # ${stepNum + 3}. Remove data files (optional)`))
-    console.log(
-      chalk.cyan('  sudo apt purge mysql-server mysql-client mysql-common'),
-    )
-    console.log(chalk.cyan('  sudo rm -rf /var/lib/mysql /etc/mysql'))
-  } else if (
-    installInfo.packageManager === 'yum' ||
-    installInfo.packageManager === 'dnf'
-  ) {
-    console.log(chalk.gray(`  # ${stepNum}. Stop the system service`))
-    console.log(
-      chalk.cyan(
-        `  sudo systemctl stop ${installInfo.isMariaDB ? 'mariadb' : 'mysqld'}`,
-      ),
-    )
-    console.log()
-    console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
-    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
-  } else if (installInfo.packageManager === 'pacman') {
-    console.log(chalk.gray(`  # ${stepNum}. Stop the system service`))
-    console.log(
-      chalk.cyan(
-        `  sudo systemctl stop ${installInfo.isMariaDB ? 'mariadb' : 'mysqld'}`,
-      ),
-    )
-    console.log()
-    console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
-    console.log(chalk.cyan(`  ${installInfo.uninstallCommand}`))
+    console.log(chalk.cyan(`  brew uninstall ${formulaName}`))
   } else {
     console.log(chalk.gray('  Use your system package manager to uninstall.'))
     console.log(chalk.gray(`  The binary is located at: ${mysqldPath}`))
@@ -487,6 +561,235 @@ async function handleSqliteInfo(sqlitePath: string): Promise<void> {
   console.log(
     chalk.gray('  • Use "spindb delete <name>" to unregister a database'),
   )
+  console.log()
+
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to go back...'),
+    },
+  ])
+}
+
+async function handleMongodbInfo(
+  mongodPath: string,
+  formulaName: string,
+): Promise<void> {
+  console.clear()
+
+  console.log(header('MongoDB Information'))
+  console.log()
+
+  let version = 'unknown'
+  try {
+    version = (await getMongodVersion(mongodPath)) ?? 'unknown'
+  } catch {
+    // Ignore - version will remain 'unknown'
+  }
+
+  const containers = await containerManager.list()
+  const mongodbContainers = containers.filter((c) => c.engine === 'mongodb')
+
+  const runningContainers: string[] = []
+
+  if (mongodbContainers.length > 0) {
+    console.log(uiInfo(`${mongodbContainers.length} MongoDB container(s):`))
+    console.log()
+    for (const c of mongodbContainers) {
+      const isRunning = await processManager.isRunning(c.name, {
+        engine: c.engine,
+      })
+      if (isRunning) {
+        runningContainers.push(c.name)
+      }
+      const status = isRunning
+        ? chalk.green('● running')
+        : chalk.gray('○ stopped')
+      console.log(chalk.gray(`  • ${c.name} ${status}`))
+    }
+    console.log()
+  }
+
+  // Detect package manager from path
+  const isHomebrew =
+    mongodPath.includes('/opt/homebrew/') ||
+    mongodPath.includes('/usr/local/opt/') ||
+    mongodPath.includes('/usr/local/Cellar/')
+  const packageManager = isHomebrew ? 'homebrew' : 'system'
+
+  console.log(chalk.white('  Installation Details:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Version:'.padEnd(18)) +
+      chalk.yellow(version || 'unknown'),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Binary Path:'.padEnd(18)) +
+      chalk.gray(mongodPath),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Package Manager:'.padEnd(18)) +
+      chalk.cyan(packageManager),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Package Name:'.padEnd(18)) +
+      chalk.cyan(formulaName),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Type:'.padEnd(18)) +
+      chalk.cyan('Document database (NoSQL)'),
+  )
+  console.log()
+
+  console.log(chalk.white('  To uninstall:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+
+  let stepNum = 1
+
+  if (runningContainers.length > 0) {
+    console.log(chalk.gray(`  # ${stepNum}. Stop running SpinDB containers`))
+    console.log(chalk.cyan('  spindb stop <container-name>'))
+    console.log()
+    stepNum++
+  }
+
+  if (mongodbContainers.length > 0) {
+    console.log(chalk.gray(`  # ${stepNum}. Delete SpinDB containers`))
+    console.log(chalk.cyan('  spindb delete <container-name>'))
+    console.log()
+    stepNum++
+  }
+
+  if (isHomebrew) {
+    console.log(chalk.gray(`  # ${stepNum}. Uninstall via Homebrew`))
+    console.log(chalk.cyan(`  brew services stop ${formulaName}`))
+    console.log(chalk.cyan(`  brew uninstall ${formulaName}`))
+    console.log(chalk.cyan('  brew uninstall mongosh mongodb-database-tools'))
+  } else {
+    console.log(chalk.gray('  Use your system package manager to uninstall.'))
+    console.log(chalk.gray(`  The binary is located at: ${mongodPath}`))
+  }
+
+  console.log()
+
+  await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to go back...'),
+    },
+  ])
+}
+
+async function handleRedisInfo(
+  redisServerPath: string,
+  formulaName: string,
+): Promise<void> {
+  console.clear()
+
+  console.log(header('Redis Information'))
+  console.log()
+
+  let version = 'unknown'
+  try {
+    version = (await getRedisVersion(redisServerPath)) ?? 'unknown'
+  } catch {
+    // Ignore - version will remain 'unknown'
+  }
+
+  const containers = await containerManager.list()
+  const redisContainers = containers.filter((c) => c.engine === 'redis')
+
+  const runningContainers: string[] = []
+
+  if (redisContainers.length > 0) {
+    console.log(uiInfo(`${redisContainers.length} Redis container(s):`))
+    console.log()
+    for (const c of redisContainers) {
+      const isRunning = await processManager.isRunning(c.name, {
+        engine: c.engine,
+      })
+      if (isRunning) {
+        runningContainers.push(c.name)
+      }
+      const status = isRunning
+        ? chalk.green('● running')
+        : chalk.gray('○ stopped')
+      console.log(chalk.gray(`  • ${c.name} ${status}`))
+    }
+    console.log()
+  }
+
+  // Detect package manager from path
+  const isHomebrew =
+    redisServerPath.includes('/opt/homebrew/') ||
+    redisServerPath.includes('/usr/local/opt/') ||
+    redisServerPath.includes('/usr/local/Cellar/')
+  const packageManager = isHomebrew ? 'homebrew' : 'system'
+
+  console.log(chalk.white('  Installation Details:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Version:'.padEnd(18)) +
+      chalk.yellow(version || 'unknown'),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Binary Path:'.padEnd(18)) +
+      chalk.gray(redisServerPath),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Package Manager:'.padEnd(18)) +
+      chalk.cyan(packageManager),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Package Name:'.padEnd(18)) +
+      chalk.cyan(formulaName),
+  )
+  console.log(
+    chalk.gray('  ') +
+      chalk.white('Type:'.padEnd(18)) +
+      chalk.cyan('In-memory data store'),
+  )
+  console.log()
+
+  console.log(chalk.white('  To uninstall:'))
+  console.log(chalk.gray('  ' + '─'.repeat(50)))
+
+  let stepNum = 1
+
+  if (runningContainers.length > 0) {
+    console.log(chalk.gray(`  # ${stepNum}. Stop running SpinDB containers`))
+    console.log(chalk.cyan('  spindb stop <container-name>'))
+    console.log()
+    stepNum++
+  }
+
+  if (redisContainers.length > 0) {
+    console.log(chalk.gray(`  # ${stepNum}. Delete SpinDB containers`))
+    console.log(chalk.cyan('  spindb delete <container-name>'))
+    console.log()
+    stepNum++
+  }
+
+  if (isHomebrew) {
+    console.log(chalk.gray(`  # ${stepNum}. Uninstall via Homebrew`))
+    console.log(chalk.cyan(`  brew services stop ${formulaName}`))
+    console.log(chalk.cyan(`  brew uninstall ${formulaName}`))
+  } else {
+    console.log(chalk.gray('  Use your system package manager to uninstall.'))
+    console.log(chalk.gray(`  The binary is located at: ${redisServerPath}`))
+  }
+
   console.log()
 
   await inquirer.prompt([

@@ -143,7 +143,6 @@ async function createSqliteContainer(
     console.log(chalk.cyan(`    ${connectionString}`))
     console.log()
 
-    // Connect if requested
     if (connect) {
       const config = await containerManager.getConfig(containerName)
       if (config) {
@@ -445,26 +444,26 @@ export const createCommand = new Command('create')
           depsSpinner.succeed('Required tools available')
         }
 
-        // For MySQL (and other non-PostgreSQL server DBs), download binaries after dep check
+        // For MySQL, MongoDB, Redis (system-installed engines), validate version and get binary path
+        // Store the binary path for version consistency
+        let binaryPath: string | undefined
         if (!isPostgreSQL) {
           const binarySpinner = createSpinner(
             `Checking ${dbEngine.displayName} ${version} binaries...`,
           )
           binarySpinner.start()
 
-          const isInstalled = await dbEngine.isBinaryInstalled(version)
-          if (isInstalled) {
-            binarySpinner.succeed(
-              `${dbEngine.displayName} ${version} binaries ready (cached)`,
-            )
-          } else {
-            binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
-            await dbEngine.ensureBinaries(version, ({ message }) => {
+          try {
+            // ensureBinaries validates the version and returns the binary path
+            binaryPath = await dbEngine.ensureBinaries(version, ({ message }) => {
               binarySpinner.text = message
             })
             binarySpinner.succeed(
-              `${dbEngine.displayName} ${version} binaries downloaded`,
+              `${dbEngine.displayName} ${version} binaries ready`,
             )
+          } catch (error) {
+            binarySpinner.fail(`${dbEngine.displayName} ${version} not available`)
+            throw error
           }
         }
 
@@ -486,6 +485,7 @@ export const createCommand = new Command('create')
             version,
             port,
             database,
+            binaryPath,
           })
 
           tx.addRollback({

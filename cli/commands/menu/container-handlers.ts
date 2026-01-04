@@ -45,6 +45,10 @@ import {
 } from '../../ui/theme'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
+import {
+  handleBackupForContainer,
+  handleRestoreForContainer,
+} from './backup-handlers'
 import { Engine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 
@@ -111,7 +115,7 @@ export async function handleCreate(): Promise<'main' | void> {
     port = 0
   } else {
     const engineDefaults = getEngineDefaults(engine)
-    port = await promptPort(engineDefaults.defaultPort)
+    port = await promptPort(engineDefaults.defaultPort, engine)
   }
 
   // Now we have all values - proceed with container creation
@@ -511,6 +515,7 @@ export async function handleList(
       }
     }),
     new inquirer.Separator(),
+    { name: `${chalk.green('+')} Create new`, value: 'create' },
     { name: `${chalk.blue('←')} Back to main menu`, value: 'back' },
   ]
 
@@ -528,6 +533,16 @@ export async function handleList(
 
   if (selectedContainer === 'back') {
     await showMainMenu()
+    return
+  }
+
+  if (selectedContainer === 'create') {
+    const result = await handleCreate()
+    if (result === 'main') {
+      await showMainMenu()
+    } else {
+      await handleList(showMainMenu)
+    }
     return
   }
 
@@ -651,6 +666,34 @@ export async function showContainerSubmenu(
     value: 'copy',
   })
 
+  // Backup - requires running for server databases, file exists for SQLite
+  const canBackup = isSQLite ? existsSync(config.database) : isRunning
+  actionChoices.push({
+    name: canBackup
+      ? `${chalk.magenta('↓')} Backup database`
+      : chalk.gray('↓ Backup database'),
+    value: 'backup',
+    disabled: canBackup
+      ? false
+      : isSQLite
+        ? 'Database file missing'
+        : 'Start container first',
+  })
+
+  // Restore - requires running for server databases, file exists for SQLite
+  const canRestore = isSQLite ? existsSync(config.database) : isRunning
+  actionChoices.push({
+    name: canRestore
+      ? `${chalk.magenta('↑')} Restore from backup`
+      : chalk.gray('↑ Restore from backup'),
+    value: 'restore',
+    disabled: canRestore
+      ? false
+      : isSQLite
+        ? 'Database file missing'
+        : 'Start container first',
+  })
+
   // View logs - not available for SQLite (no log file)
   if (!isSQLite) {
     actionChoices.push({
@@ -739,6 +782,14 @@ export async function showContainerSubmenu(
       return
     case 'copy':
       await handleCopyConnectionString(containerName)
+      await showContainerSubmenu(containerName, showMainMenu)
+      return
+    case 'backup':
+      await handleBackupForContainer(containerName)
+      await showContainerSubmenu(containerName, showMainMenu)
+      return
+    case 'restore':
+      await handleRestoreForContainer(containerName)
       await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'detach':
@@ -851,22 +902,55 @@ async function handleStartContainer(containerName: string): Promise<void> {
 
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
-    console.log(
-      uiWarning(
-        `Port ${config.port} is in use. Stop the process using it or change this container's port.`,
-      ),
-    )
     console.log()
-    console.log(
-      uiInfo(
-        'Tip: If you installed MariaDB via apt, it may have started a system service.',
-      ),
+    // Check if another SpinDB container is using this port
+    const allContainers = await containerManager.list()
+    const conflictingContainer = allContainers.find(
+      (c) =>
+        c.name !== containerName &&
+        c.port === config.port &&
+        c.status === 'running',
     )
-    console.log(
-      uiInfo(
-        'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
-      ),
-    )
+
+    if (conflictingContainer) {
+      console.log(
+        uiWarning(
+          `Port ${config.port} is already in use by container "${conflictingContainer.name}"`,
+        ),
+      )
+      console.log()
+      console.log(
+        uiInfo(
+          `Stop "${conflictingContainer.name}" first, or change this container's port with:`,
+        ),
+      )
+      console.log(chalk.cyan(`    spindb edit ${containerName}`))
+    } else {
+      console.log(
+        uiWarning(
+          `Port ${config.port} is in use by another process.`,
+        ),
+      )
+      console.log()
+      console.log(
+        uiInfo(
+          'Stop the process using it or change this container\'s port.',
+        ),
+      )
+      console.log()
+      console.log(
+        uiInfo(
+          'Tip: If you installed MariaDB via apt, it may have started a system service.',
+        ),
+      )
+      console.log(
+        uiInfo(
+          'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
+        ),
+      )
+    }
+    console.log()
+    await pressEnterToContinue()
     return
   }
 
