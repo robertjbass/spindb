@@ -6,7 +6,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import unzipper from 'unzipper'
 import { paths } from '../config/paths'
-import { defaults } from '../config/defaults'
+import { getBinaryUrl } from '../engines/postgresql/binary-urls'
 import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
 import { normalizeVersion } from '../engines/postgresql/version-maps'
 import {
@@ -21,7 +21,7 @@ export class BinaryManager {
   /**
    * Get the download URL for a PostgreSQL version
    *
-   * - macOS/Linux: Uses zonky.io Maven Central binaries (JAR format)
+   * - macOS/Linux: Uses hostdb GitHub releases (tar.gz format)
    * - Windows: Uses EDB (EnterpriseDB) official binaries (ZIP format)
    */
   getDownloadUrl(version: string, platform: string, arch: string): string {
@@ -31,22 +31,15 @@ export class BinaryManager {
       throw new Error(`Unsupported platform: ${platformKey}`)
     }
 
-    // Windows uses EDB binaries instead of zonky.io
+    // Windows uses EDB binaries
     if (platform === 'win32') {
       const fullVersion = this.getFullVersion(version)
       return getEDBBinaryUrl(fullVersion)
     }
 
-    // macOS/Linux use zonky.io binaries
-    const zonkyPlatform = defaults.platformMappings[platformKey]
-
-    if (!zonkyPlatform) {
-      throw new Error(`Unsupported platform: ${platformKey}`)
-    }
-
-    // Zonky.io Maven Central URL pattern
+    // macOS/Linux use hostdb binaries
     const fullVersion = this.getFullVersion(version)
-    return `https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${zonkyPlatform}/${fullVersion}/embedded-postgres-binaries-${zonkyPlatform}-${fullVersion}.jar`
+    return getBinaryUrl(fullVersion, platform, arch)
   }
 
   /**
@@ -112,8 +105,7 @@ export class BinaryManager {
   /**
    * Download and extract PostgreSQL binaries
    *
-   * - macOS/Linux (zonky.io): JAR files are ZIP archives containing a .txz (tar.xz) file.
-   *   We need to: 1) unzip the JAR, 2) extract the .txz inside
+   * - macOS/Linux (hostdb): tar.gz files extract directly to PostgreSQL structure
    * - Windows (EDB): ZIP files extract directly to a PostgreSQL directory structure
    */
   async download(
@@ -133,7 +125,7 @@ export class BinaryManager {
     const tempDir = join(paths.bin, `temp-${fullVersion}-${platform}-${arch}`)
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'postgres.zip' : 'postgres.jar',
+      platform === 'win32' ? 'postgres.zip' : 'postgres.tar.gz',
     )
 
     // Ensure directories exist
@@ -168,7 +160,7 @@ export class BinaryManager {
           onProgress,
         )
       } else {
-        // macOS/Linux: zonky.io JAR contains .txz that needs secondary extraction
+        // macOS/Linux: hostdb tar.gz extracts directly to PostgreSQL structure
         await this.extractUnixBinaries(
           archiveFile,
           binPath,
@@ -254,62 +246,23 @@ export class BinaryManager {
   }
 
   /**
-   * Extract Unix binaries from zonky.io JAR file
-   * JAR contains a .txz (tar.xz) file that needs secondary extraction
+   * Extract Unix binaries from hostdb tar.gz file
+   * hostdb tar.gz files extract directly to PostgreSQL directory structure
    */
   private async extractUnixBinaries(
-    jarFile: string,
+    tarFile: string,
     binPath: string,
     tempDir: string,
     onProgress?: ProgressCallback,
   ): Promise<void> {
-    // Extract the JAR (it's a ZIP file) using unzipper
     onProgress?.({
       stage: 'extracting',
-      message: 'Extracting binaries (step 1/2)...',
+      message: 'Extracting binaries...',
     })
 
-    await new Promise<void>((resolve, reject) => {
-      createReadStream(jarFile)
-        .pipe(unzipper.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject)
-    })
-
-    // Find the .txz file inside
-    onProgress?.({
-      stage: 'extracting',
-      message: 'Extracting binaries (step 2/2)...',
-    })
-
-    const txzFile = await this.findTxzFile(tempDir)
-    if (!txzFile) {
-      throw new Error('Could not find .txz file in downloaded archive')
-    }
-
-    // Extract the tar.xz file (no strip-components since files are at root level)
-    await execAsync(`tar -xJf "${txzFile}" -C "${binPath}"`)
-  }
-
-  /**
-   * Recursively find a .txz or .tar.xz file in a directory
-   */
-  private async findTxzFile(dir: string): Promise<string | null> {
-    const entries = await readdir(dir, { withFileTypes: true })
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name)
-      if (
-        entry.isFile() &&
-        (entry.name.endsWith('.txz') || entry.name.endsWith('.tar.xz'))
-      ) {
-        return fullPath
-      }
-      if (entry.isDirectory()) {
-        const found = await this.findTxzFile(fullPath)
-        if (found) return found
-      }
-    }
-    return null
+    // Extract tar.gz directly to binPath
+    // The tar.gz contains the PostgreSQL directory structure at the root level
+    await execAsync(`tar -xzf "${tarFile}" -C "${binPath}"`)
   }
 
   /**
