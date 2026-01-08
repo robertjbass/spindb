@@ -1,10 +1,12 @@
 import { Command } from 'commander'
+import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning } from '../ui/theme'
+import { Engine } from '../../types'
 
 export const stopCommand = new Command('stop')
   .description('Stop a container')
@@ -35,7 +37,46 @@ export const stopCommand = new Command('stop')
             spinner?.start()
 
             const engine = getEngine(container.engine)
-            await engine.stop(container)
+
+            // For PostgreSQL, check if engine binary is installed
+            let usedFallback = false
+            let stopFailed = false
+            if (container.engine === Engine.PostgreSQL) {
+              const isInstalled = await engine.isBinaryInstalled(container.version)
+              if (!isInstalled) {
+                if (spinner) {
+                  spinner.text = `Stopping ${container.name} (engine missing, using fallback)...`
+                }
+                const killed = await processManager.killProcess(container.name, {
+                  engine: container.engine,
+                })
+                if (!killed) {
+                  spinner?.fail(`Failed to stop "${container.name}"`)
+                  console.log(
+                    chalk.gray(
+                      `  The PostgreSQL ${container.version} engine is not installed.`,
+                    ),
+                  )
+                  console.log(
+                    chalk.gray(
+                      `  Run "spindb engines download postgresql ${container.version.split('.')[0]}" to reinstall.`,
+                    ),
+                  )
+                  stopFailed = true
+                } else {
+                  usedFallback = true
+                }
+              }
+            }
+
+            if (stopFailed) {
+              continue
+            }
+
+            if (!usedFallback) {
+              await engine.stop(container)
+            }
+
             await containerManager.updateConfig(container.name, {
               status: 'stopped',
             })
@@ -98,7 +139,40 @@ export const stopCommand = new Command('stop')
           : createSpinner(`Stopping ${containerName}...`)
         spinner?.start()
 
-        await engine.stop(config)
+        // For PostgreSQL, check if engine binary is installed
+        // If not, use fallback process kill
+        let usedFallback = false
+        if (config.engine === Engine.PostgreSQL) {
+          const isInstalled = await engine.isBinaryInstalled(config.version)
+          if (!isInstalled) {
+            if (spinner) {
+              spinner.text = `Stopping ${containerName} (engine missing, using fallback)...`
+            }
+            const killed = await processManager.killProcess(containerName, {
+              engine: config.engine,
+            })
+            if (!killed) {
+              spinner?.fail(`Failed to stop "${containerName}"`)
+              console.log(
+                chalk.gray(
+                  `  The PostgreSQL ${config.version} engine is not installed.`,
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  `  Run "spindb engines download postgresql ${config.version.split('.')[0]}" to reinstall.`,
+                ),
+              )
+              process.exit(1)
+            }
+            usedFallback = true
+          }
+        }
+
+        if (!usedFallback) {
+          await engine.stop(config)
+        }
+
         await containerManager.updateConfig(containerName, {
           status: 'stopped',
         })

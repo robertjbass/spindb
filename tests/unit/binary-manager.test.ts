@@ -57,20 +57,23 @@ describe('BinaryManager', () => {
   })
 
   describe('getDownloadUrl', () => {
-    it('should generate valid Maven Central URL for darwin-arm64', () => {
+    it('should generate valid hostdb GitHub releases URL for darwin-arm64', () => {
       const binaryManager = new BinaryManager()
       const url = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
 
-      assert(url.includes('repo1.maven.org'), 'URL should use Maven Central')
       assert(
-        url.includes('embedded-postgres-binaries'),
-        'URL should reference embedded-postgres',
+        url.includes('github.com/robertjbass/hostdb'),
+        'URL should use hostdb GitHub',
       )
       assert(
-        url.includes('darwin-arm64v8'),
-        'URL should include platform mapping for ARM Mac',
+        url.includes('releases/download'),
+        'URL should reference GitHub releases',
       )
-      assert(url.endsWith('.jar'), 'URL should point to JAR file')
+      assert(
+        url.includes('darwin-arm64'),
+        'URL should include platform identifier for ARM Mac',
+      )
+      assert(url.endsWith('.tar.gz'), 'URL should point to tar.gz file')
     })
 
     it('should generate valid URL for darwin-x64', () => {
@@ -78,8 +81,8 @@ describe('BinaryManager', () => {
       const url = binaryManager.getDownloadUrl('16', 'darwin', 'x64')
 
       assert(
-        url.includes('darwin-amd64'),
-        'URL should include platform mapping for Intel Mac',
+        url.includes('darwin-x64'),
+        'URL should include platform identifier for Intel Mac',
       )
     })
 
@@ -88,8 +91,8 @@ describe('BinaryManager', () => {
       const url = binaryManager.getDownloadUrl('16', 'linux', 'x64')
 
       assert(
-        url.includes('linux-amd64'),
-        'URL should include platform mapping for Linux x64',
+        url.includes('linux-x64'),
+        'URL should include platform identifier for Linux x64',
       )
     })
 
@@ -307,29 +310,26 @@ describe('BinaryManager', () => {
   })
 
   describe('platform mappings via getDownloadUrl', () => {
-    it('should use correct zonky platform mappings in URLs', () => {
+    it('should use correct hostdb platform identifiers in URLs', () => {
       const binaryManager = new BinaryManager()
 
-      // Test darwin-arm64 maps to darwin-arm64v8
+      // Test darwin-arm64 uses standard naming
       const armUrl = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
       assert(
-        armUrl.includes('darwin-arm64v8'),
-        'ARM Mac should map to darwin-arm64v8',
+        armUrl.includes('darwin-arm64'),
+        'ARM Mac should use darwin-arm64',
       )
 
-      // Test darwin-x64 maps to darwin-amd64
+      // Test darwin-x64 uses standard naming
       const intelUrl = binaryManager.getDownloadUrl('17', 'darwin', 'x64')
       assert(
-        intelUrl.includes('darwin-amd64'),
-        'Intel Mac should map to darwin-amd64',
+        intelUrl.includes('darwin-x64'),
+        'Intel Mac should use darwin-x64',
       )
 
-      // Test linux-x64 maps to linux-amd64
+      // Test linux-x64 uses standard naming
       const linuxUrl = binaryManager.getDownloadUrl('17', 'linux', 'x64')
-      assert(
-        linuxUrl.includes('linux-amd64'),
-        'Linux x64 should map to linux-amd64',
-      )
+      assert(linuxUrl.includes('linux-x64'), 'Linux x64 should use linux-x64')
     })
   })
 })
