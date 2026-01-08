@@ -40,17 +40,37 @@ export const stopCommand = new Command('stop')
 
             // For PostgreSQL, check if engine binary is installed
             let usedFallback = false
+            let stopFailed = false
             if (container.engine === Engine.PostgreSQL) {
               const isInstalled = await engine.isBinaryInstalled(container.version)
               if (!isInstalled) {
                 if (spinner) {
-                  spinner.text = `Stopping ${container.name} (engine missing)...`
+                  spinner.text = `Stopping ${container.name} (engine missing, using fallback)...`
                 }
-                await processManager.killProcess(container.name, {
+                const killed = await processManager.killProcess(container.name, {
                   engine: container.engine,
                 })
-                usedFallback = true
+                if (!killed) {
+                  spinner?.fail(`Failed to stop "${container.name}"`)
+                  console.log(
+                    chalk.gray(
+                      `  The PostgreSQL ${container.version} engine is not installed.`,
+                    ),
+                  )
+                  console.log(
+                    chalk.gray(
+                      `  Run "spindb engines download postgresql ${container.version.split('.')[0]}" to reinstall.`,
+                    ),
+                  )
+                  stopFailed = true
+                } else {
+                  usedFallback = true
+                }
               }
+            }
+
+            if (stopFailed) {
+              continue
             }
 
             if (!usedFallback) {

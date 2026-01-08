@@ -102,9 +102,8 @@ export function getBinaryUrl(
     throw new Error(`Unsupported platform: ${platformKey}`)
   }
 
-  // Use VERSION_MAP for major versions, otherwise treat as full version
-  const fullVersion =
-    VERSION_MAP[version] || normalizeVersion(version, VERSION_MAP)
+  // Normalize version (handles major version lookup and X.Y -> X.Y.0 conversion)
+  const fullVersion = normalizeVersion(version, VERSION_MAP)
 
   const tag = `postgresql-${fullVersion}`
   const filename = `postgresql-${fullVersion}-${hostdbPlatform}.tar.gz`

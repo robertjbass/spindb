@@ -2,7 +2,7 @@ import { createWriteStream, existsSync, createReadStream } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import unzipper from 'unzipper'
 import { paths } from '../config/paths'
@@ -16,6 +16,49 @@ import {
 } from '../types'
 
 const execAsync = promisify(exec)
+
+/**
+ * Execute a command using spawn with argument array (safer than shell interpolation)
+ * Returns a promise that resolves on success or rejects on error/non-zero exit
+ */
+function spawnAsync(
+  command: string,
+  args: string[],
+  options?: { cwd?: string },
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: options?.cwd,
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        reject(
+          new Error(
+            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
+          ),
+        )
+      }
+    })
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to execute "${command}": ${err.message}`))
+    })
+  })
+}
 
 export class BinaryManager {
   /**
@@ -262,9 +305,10 @@ export class BinaryManager {
     })
 
     // Extract tar.gz to temp directory first to check structure
+    // Using spawnAsync with argument array to avoid command injection
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
-    await execAsync(`tar -xzf "${tarFile}" -C "${extractDir}"`)
+    await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
     // Check if there's a nested postgresql/ directory
     const entries = await readdir(extractDir, { withFileTypes: true })
@@ -464,7 +508,8 @@ export class BinaryManager {
       })
 
       // Extract .deb using ar (available on Linux)
-      await execAsync(`ar -x "${debFile}"`, { cwd: tempDir })
+      // Using spawnAsync with argument array to avoid command injection
+      await spawnAsync('ar', ['-x', debFile], { cwd: tempDir })
 
       // Find and extract data.tar.xz or data.tar.zst
       const dataFile = await this.findDataTar(tempDir)
@@ -473,17 +518,18 @@ export class BinaryManager {
       }
 
       // Determine compression type and extract
+      // Using spawnAsync with argument array to avoid command injection
       const extractDir = join(tempDir, 'extracted')
       await mkdir(extractDir, { recursive: true })
 
       if (dataFile.endsWith('.xz')) {
-        await execAsync(`tar -xJf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['-xJf', dataFile, '-C', extractDir])
       } else if (dataFile.endsWith('.zst')) {
-        await execAsync(`tar --zstd -xf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['--zstd', '-xf', dataFile, '-C', extractDir])
       } else if (dataFile.endsWith('.gz')) {
-        await execAsync(`tar -xzf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['-xzf', dataFile, '-C', extractDir])
       } else {
-        await execAsync(`tar -xf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['-xf', dataFile, '-C', extractDir])
       }
 
       // Copy client tools to the bin directory
@@ -525,13 +571,23 @@ export class BinaryManager {
     const packageDir = `postgresql-${majorVersion}`
     const indexUrl = `${baseUrl}/${packageDir}/`
 
+    let html = ''
     try {
       const response = await fetch(indexUrl)
       if (!response.ok) {
-        throw new Error(`Failed to fetch package index: ${response.status}`)
+        throw new Error(
+          `Failed to fetch package index from ${indexUrl}: HTTP ${response.status} ${response.statusText}`,
+        )
       }
 
-      const html = await response.text()
+      html = await response.text()
+
+      // Validate that we got HTML content (basic sanity check)
+      if (!html.includes('<html') && !html.includes('<!DOCTYPE')) {
+        throw new Error(
+          `Unexpected response from ${indexUrl}: content does not appear to be HTML`,
+        )
+      }
 
       // Find the latest postgresql-client package for amd64
       // Pattern: postgresql-client-17_17.x.x-x.pgdg+1_amd64.deb
@@ -543,15 +599,22 @@ export class BinaryManager {
       const matches: string[] = []
       let match
       while ((match = pattern.exec(html)) !== null) {
-        // Skip debug symbols and snapshot versions
-        if (!match[1].includes('dbgsym') && !match[1].includes('~')) {
-          matches.push(match[1])
+        // Validate that the capture group exists
+        if (match[1]) {
+          // Skip debug symbols and snapshot versions
+          if (!match[1].includes('dbgsym') && !match[1].includes('~')) {
+            matches.push(match[1])
+          }
         }
       }
 
       if (matches.length === 0) {
+        // Provide diagnostic information for debugging
+        const htmlSnippet = html.substring(0, 500).replace(/\n/g, ' ')
         throw new Error(
-          `No client package found for PostgreSQL ${majorVersion}`,
+          `No client package found for PostgreSQL ${majorVersion} at ${indexUrl}. ` +
+            `Expected pattern: postgresql-client-${majorVersion}_*_amd64.deb. ` +
+            `HTML snippet: ${htmlSnippet}...`,
         )
       }
 
@@ -562,7 +625,14 @@ export class BinaryManager {
       return `${indexUrl}${latestPackage}`
     } catch (error) {
       const err = error as Error
-      throw new Error(`Failed to get client package URL: ${err.message}`)
+      // If the error already has context, just rethrow it
+      if (err.message.includes(indexUrl)) {
+        throw error
+      }
+      // Otherwise, add context about the URL we were trying to parse
+      throw new Error(
+        `Failed to get client package URL from ${indexUrl}: ${err.message}`,
+      )
     }
   }
 

@@ -350,8 +350,15 @@ async function deleteEngine(
         await containerManager.updateConfig(container.name, {
           status: 'stopped',
         })
-      } catch {
-        // If stop fails, try fallback kill
+      } catch (error) {
+        // Log the original failure before attempting fallback
+        const err = error as Error
+        console.error(
+          chalk.gray(
+            `  Failed to stop ${container.name} via engine.stop: ${err.message}`,
+          ),
+        )
+        // Try fallback kill
         const killed = await processManager.killProcess(container.name, {
           engine: container.engine,
         })
@@ -384,6 +391,8 @@ async function deleteEngine(
           console.log(uiWarning('Deletion cancelled'))
           return
         }
+      } else {
+        console.log(chalk.yellow('  Proceeding with deletion (--yes specified)'))
       }
     } else {
       stopSpinner.succeed(

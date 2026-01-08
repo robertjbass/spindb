@@ -89,15 +89,21 @@ export const startCommand = new Command('start')
           )
           downloadSpinner.start()
 
-          await engine.ensureBinaries(config.version, ({ stage, message }) => {
-            if (stage === 'cached') {
-              downloadSpinner.text = `PostgreSQL ${config.version} ready`
-            } else {
-              downloadSpinner.text = message
-            }
-          })
-
-          downloadSpinner.succeed(`PostgreSQL ${config.version} downloaded`)
+          try {
+            await engine.ensureBinaries(config.version, ({ stage, message }) => {
+              if (stage === 'cached') {
+                downloadSpinner.text = `PostgreSQL ${config.version} ready`
+              } else {
+                downloadSpinner.text = message
+              }
+            })
+            downloadSpinner.succeed(`PostgreSQL ${config.version} downloaded`)
+          } catch (downloadError) {
+            downloadSpinner.fail(
+              `Failed to download PostgreSQL ${config.version} for "${containerName}"`,
+            )
+            throw downloadError
+          }
         }
       }
 

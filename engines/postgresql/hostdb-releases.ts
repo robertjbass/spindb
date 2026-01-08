@@ -84,10 +84,8 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
     return data
   } catch (error) {
     const err = error as Error
-    // Return fallback on error without throwing
-    console.warn(
-      `Warning: Failed to fetch hostdb releases: ${err.message}. Using fallback versions.`,
-    )
+    // Log the failure and rethrow - caller decides whether to use fallback
+    console.warn(`Warning: Failed to fetch hostdb releases: ${err.message}`)
     throw error
   }
 }
