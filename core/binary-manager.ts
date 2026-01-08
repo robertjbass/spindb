@@ -46,7 +46,7 @@ export class BinaryManager {
    * Convert version to full version format (e.g., "16" -> "16.11.0", "16.9" -> "16.9.0")
    *
    * Uses the shared version mappings from version-maps.ts.
-   * Both zonky.io (macOS/Linux) and EDB (Windows) use the same PostgreSQL versions.
+   * Both hostdb (macOS/Linux) and EDB (Windows) use the same PostgreSQL versions.
    */
   getFullVersion(version: string): string {
     return normalizeVersion(version)
@@ -247,7 +247,8 @@ export class BinaryManager {
 
   /**
    * Extract Unix binaries from hostdb tar.gz file
-   * hostdb tar.gz files extract directly to PostgreSQL directory structure
+   * Handles both flat structure (bin/, lib/, share/ at root) and
+   * nested structure (postgresql/bin/, postgresql/lib/, etc.)
    */
   private async extractUnixBinaries(
     tarFile: string,
@@ -260,9 +261,42 @@ export class BinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract tar.gz directly to binPath
-    // The tar.gz contains the PostgreSQL directory structure at the root level
-    await execAsync(`tar -xzf "${tarFile}" -C "${binPath}"`)
+    // Extract tar.gz to temp directory first to check structure
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+    await execAsync(`tar -xzf "${tarFile}" -C "${extractDir}"`)
+
+    // Check if there's a nested postgresql/ directory
+    const entries = await readdir(extractDir, { withFileTypes: true })
+    const postgresDir = entries.find(
+      (e) => e.isDirectory() && e.name === 'postgresql',
+    )
+
+    if (postgresDir) {
+      // Nested structure: move contents from postgresql/ to binPath
+      const sourceDir = join(extractDir, 'postgresql')
+      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch {
+          await cp(sourcePath, destPath, { recursive: true })
+        }
+      }
+    } else {
+      // Flat structure: move contents directly to binPath
+      for (const entry of entries) {
+        const sourcePath = join(extractDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch {
+          await cp(sourcePath, destPath, { recursive: true })
+        }
+      }
+    }
   }
 
   /**
@@ -369,8 +403,8 @@ export class BinaryManager {
       binPath = await this.download(version, platform, arch, onProgress)
     }
 
-    // On Linux, zonky.io binaries don't include client tools (psql, pg_dump)
-    // Download them separately from the PostgreSQL apt repository
+    // On Linux, hostdb binaries may not include client tools (psql, pg_dump)
+    // Download them separately from the PostgreSQL apt repository if missing
     if (platform === 'linux') {
       await this.ensureClientTools(binPath, version, onProgress)
     }

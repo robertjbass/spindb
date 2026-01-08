@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-01-08
+
+### Changed
+- **PostgreSQL binary source migration** - Replaced zonky.io with [hostdb](https://github.com/robertjbass/hostdb) for macOS/Linux binaries
+  - Downloads from GitHub Releases instead of Maven Central
+  - Same PostgreSQL versions supported (14, 15, 16, 17, 18)
+  - Windows continues to use EnterpriseDB (EDB) binaries
+  - macOS binaries now include client tools (psql, pg_dump, pg_restore)
+- **Engine deletion now stops running containers first** - Before deleting a PostgreSQL engine, all running containers using that version are gracefully stopped
+  - Shows warning about which containers will be stopped
+  - Falls back to direct process kill (SIGTERM/SIGKILL) if pg_ctl fails
+  - Prompts for confirmation if any containers fail to stop
+
+### Added
+- **Orphaned container support** - PostgreSQL containers can now exist without their engine binary installed
+  - Deleting an engine no longer requires deleting containers first
+  - Container data is preserved in `~/.spindb/containers/`
+  - Starting an orphaned container prompts to download the missing engine
+  - Stopping an orphaned container uses direct process kill instead of pg_ctl
+- **`killProcess()` method in ProcessManager** - Direct process termination via SIGTERM/SIGKILL for cases where pg_ctl is unavailable
+  - Sends SIGTERM first for graceful shutdown
+  - Waits up to 10 seconds, then sends SIGKILL if needed
+  - Used as fallback when engine binary is missing
+
+### Fixed
+- **Binary extraction for nested tar.gz structures** - Some hostdb releases package binaries in a nested `postgresql/` directory
+  - Extraction now detects and handles both flat (`bin/`, `lib/`, `share/` at root) and nested (`postgresql/bin/`, etc.) structures
+  - Fixes "PostgreSQL binary not found" errors when downloading certain versions
+
+### Documentation
+- Updated CLAUDE.md to reflect hostdb migration and orphaned container support
+- Updated code comments in `version-maps.ts`, `binary-manager.ts`, and `binary-urls.ts` to reference hostdb instead of zonky.io
+
 ## [0.13.4] - 2026-01-02
 
 ### Added

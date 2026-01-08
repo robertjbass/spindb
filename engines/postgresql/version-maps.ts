@@ -1,12 +1,12 @@
 /**
  * PostgreSQL Version Maps
  *
- * Shared version mappings used by both zonky.io (macOS/Linux) and EDB (Windows).
+ * Shared version mappings used by both hostdb (macOS/Linux) and EDB (Windows).
  * Both sources use the same PostgreSQL releases.
  *
  * When updating versions:
- * 1. Check zonky.io Maven Central for new versions:
- *    https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/
+ * 1. Check hostdb GitHub releases for new versions:
+ *    https://github.com/robertjbass/hostdb/releases
  * 2. Check EDB download page for matching Windows versions:
  *    https://www.enterprisedb.com/download-postgresql-binaries
  * 3. Update POSTGRESQL_VERSION_MAP with new full versions
@@ -15,7 +15,7 @@
 
 /**
  * Map of major PostgreSQL versions to their latest stable patch versions.
- * Used for both zonky.io (macOS/Linux) and EDB (Windows) binaries.
+ * Used for both hostdb (macOS/Linux) and EDB (Windows) binaries.
  */
 export const POSTGRESQL_VERSION_MAP: Record<string, string> = {
   '14': '14.20.0',

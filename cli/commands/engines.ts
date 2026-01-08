@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import { rm } from 'fs/promises'
 import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
+import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { binaryManager } from '../../core/binary-manager'
 import { paths } from '../../config/paths'
@@ -281,30 +282,46 @@ async function deleteEngine(
     process.exit(1)
   }
 
-  // Check if any containers are using this engine version
+  // Check if any containers are using this engine version (for warning only)
   const containers = await containerManager.list()
   const usingContainers = containers.filter(
     (c) => c.engine === engineName && c.version === engineVersion,
   )
 
-  if (usingContainers.length > 0) {
-    console.error(
-      uiError(
-        `Cannot delete: ${usingContainers.length} container(s) are using ${engineName} ${engineVersion}`,
-      ),
-    )
-    console.log(
-      chalk.gray(
-        `  Containers: ${usingContainers.map((c) => c.name).join(', ')}`,
-      ),
-    )
-    console.log()
-    console.log(chalk.gray('  Delete these containers first, then try again.'))
-    process.exit(1)
-  }
+  // Check for running containers using this engine
+  const runningContainers = usingContainers.filter((c) => c.status === 'running')
 
-  // Confirm deletion
+  // Confirm deletion (warn about containers)
   if (!options.yes) {
+    if (usingContainers.length > 0) {
+      const runningCount = runningContainers.length
+      const stoppedCount = usingContainers.length - runningCount
+
+      if (runningCount > 0) {
+        console.log(
+          uiWarning(
+            `${runningCount} running container(s) will be stopped: ${runningContainers.map((c) => c.name).join(', ')}`,
+          ),
+        )
+      }
+      if (stoppedCount > 0) {
+        const stoppedContainers = usingContainers.filter(
+          (c) => c.status !== 'running',
+        )
+        console.log(
+          chalk.gray(
+            `  ${stoppedCount} stopped container(s) will be orphaned: ${stoppedContainers.map((c) => c.name).join(', ')}`,
+          ),
+        )
+      }
+      console.log(
+        chalk.gray(
+          '  You can re-download the engine later to use these containers.',
+        ),
+      )
+      console.log()
+    }
+
     const confirmed = await promptConfirm(
       `Delete ${engineName} ${engineVersion}? This cannot be undone.`,
       false,
@@ -313,6 +330,65 @@ async function deleteEngine(
     if (!confirmed) {
       console.log(uiWarning('Deletion cancelled'))
       return
+    }
+  }
+
+  // Stop any running containers first (while we still have the binary)
+  if (runningContainers.length > 0) {
+    const stopSpinner = createSpinner(
+      `Stopping ${runningContainers.length} running container(s)...`,
+    )
+    stopSpinner.start()
+
+    const engine = getEngine(Engine.PostgreSQL)
+    const failedToStop: string[] = []
+
+    for (const container of runningContainers) {
+      stopSpinner.text = `Stopping ${container.name}...`
+      try {
+        await engine.stop(container)
+        await containerManager.updateConfig(container.name, {
+          status: 'stopped',
+        })
+      } catch {
+        // If stop fails, try fallback kill
+        const killed = await processManager.killProcess(container.name, {
+          engine: container.engine,
+        })
+        if (killed) {
+          await containerManager.updateConfig(container.name, {
+            status: 'stopped',
+          })
+        } else {
+          failedToStop.push(container.name)
+        }
+      }
+    }
+
+    if (failedToStop.length > 0) {
+      stopSpinner.warn(
+        `Could not stop ${failedToStop.length} container(s): ${failedToStop.join(', ')}`,
+      )
+      console.log(
+        chalk.yellow(
+          '  These containers may still be running. Deleting the engine could leave them in a broken state.',
+        ),
+      )
+
+      if (!options.yes) {
+        const continueAnyway = await promptConfirm(
+          'Continue with engine deletion anyway?',
+          false,
+        )
+        if (!continueAnyway) {
+          console.log(uiWarning('Deletion cancelled'))
+          return
+        }
+      }
+    } else {
+      stopSpinner.succeed(
+        `Stopped ${runningContainers.length} container(s)`,
+      )
     }
   }
 

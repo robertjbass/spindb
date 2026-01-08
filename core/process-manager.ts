@@ -396,6 +396,63 @@ export class ProcessManager {
     }
   }
 
+  /**
+   * Kill a process directly by PID (fallback when pg_ctl is unavailable)
+   * Sends SIGTERM first, then SIGKILL if process doesn't stop
+   */
+  async killProcess(
+    containerName: string,
+    options: { engine: string },
+  ): Promise<boolean> {
+    const pid = await this.getPid(containerName, options)
+    if (!pid) {
+      logDebug('No PID found for container', { containerName })
+      return false
+    }
+
+    try {
+      // Check if process is running
+      process.kill(pid, 0)
+    } catch {
+      // Process not running
+      logDebug('Process not running', { containerName, pid })
+      return true
+    }
+
+    try {
+      // Send SIGTERM for graceful shutdown
+      logDebug('Sending SIGTERM to process', { containerName, pid })
+      process.kill(pid, 'SIGTERM')
+
+      // Wait for process to stop (up to 10 seconds)
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        try {
+          process.kill(pid, 0)
+        } catch {
+          // Process stopped
+          logDebug('Process stopped gracefully', { containerName, pid })
+          return true
+        }
+      }
+
+      // Process didn't stop, send SIGKILL
+      logDebug('Sending SIGKILL to process', { containerName, pid })
+      process.kill(pid, 'SIGKILL')
+
+      // Wait a bit more
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      return true
+    } catch (error) {
+      logDebug('Failed to kill process', {
+        containerName,
+        pid,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+
   async psql(
     psqlPath: string,
     options: PsqlOptions,
