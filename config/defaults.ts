@@ -45,12 +45,12 @@ export const defaults: Defaults = {
   engine: Engine.PostgreSQL,
   superuser: pgDefaults.superuser,
   platformMappings: {
-    'darwin-arm64': 'darwin-arm64v8',
-    'darwin-x64': 'darwin-amd64',
-    'linux-arm64': 'linux-arm64v8',
-    'linux-x64': 'linux-amd64',
-    // Windows uses EDB binaries instead of zonky.io
-    // EDB naming convention: windows-x64
-    'win32-x64': 'windows-x64',
+    // hostdb uses standard platform naming (no transformation needed)
+    // These mappings are kept for backwards compatibility but are 1:1
+    'darwin-arm64': 'darwin-arm64',
+    'darwin-x64': 'darwin-x64',
+    'linux-arm64': 'linux-arm64',
+    'linux-x64': 'linux-x64',
+    'win32-x64': 'win32-x64',
   },
 }

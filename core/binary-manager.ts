@@ -2,11 +2,11 @@ import { createWriteStream, existsSync, createReadStream } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import unzipper from 'unzipper'
 import { paths } from '../config/paths'
-import { defaults } from '../config/defaults'
+import { getBinaryUrl } from '../engines/postgresql/binary-urls'
 import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
 import { normalizeVersion } from '../engines/postgresql/version-maps'
 import {
@@ -17,11 +17,54 @@ import {
 
 const execAsync = promisify(exec)
 
+/**
+ * Execute a command using spawn with argument array (safer than shell interpolation)
+ * Returns a promise that resolves on success or rejects on error/non-zero exit
+ */
+function spawnAsync(
+  command: string,
+  args: string[],
+  options?: { cwd?: string },
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: options?.cwd,
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        reject(
+          new Error(
+            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
+          ),
+        )
+      }
+    })
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to execute "${command}": ${err.message}`))
+    })
+  })
+}
+
 export class BinaryManager {
   /**
    * Get the download URL for a PostgreSQL version
    *
-   * - macOS/Linux: Uses zonky.io Maven Central binaries (JAR format)
+   * - macOS/Linux: Uses hostdb GitHub releases (tar.gz format)
    * - Windows: Uses EDB (EnterpriseDB) official binaries (ZIP format)
    */
   getDownloadUrl(version: string, platform: string, arch: string): string {
@@ -31,29 +74,22 @@ export class BinaryManager {
       throw new Error(`Unsupported platform: ${platformKey}`)
     }
 
-    // Windows uses EDB binaries instead of zonky.io
+    // Windows uses EDB binaries
     if (platform === 'win32') {
       const fullVersion = this.getFullVersion(version)
       return getEDBBinaryUrl(fullVersion)
     }
 
-    // macOS/Linux use zonky.io binaries
-    const zonkyPlatform = defaults.platformMappings[platformKey]
-
-    if (!zonkyPlatform) {
-      throw new Error(`Unsupported platform: ${platformKey}`)
-    }
-
-    // Zonky.io Maven Central URL pattern
+    // macOS/Linux use hostdb binaries
     const fullVersion = this.getFullVersion(version)
-    return `https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${zonkyPlatform}/${fullVersion}/embedded-postgres-binaries-${zonkyPlatform}-${fullVersion}.jar`
+    return getBinaryUrl(fullVersion, platform, arch)
   }
 
   /**
    * Convert version to full version format (e.g., "16" -> "16.11.0", "16.9" -> "16.9.0")
    *
    * Uses the shared version mappings from version-maps.ts.
-   * Both zonky.io (macOS/Linux) and EDB (Windows) use the same PostgreSQL versions.
+   * Both hostdb (macOS/Linux) and EDB (Windows) use the same PostgreSQL versions.
    */
   getFullVersion(version: string): string {
     return normalizeVersion(version)
@@ -112,8 +148,7 @@ export class BinaryManager {
   /**
    * Download and extract PostgreSQL binaries
    *
-   * - macOS/Linux (zonky.io): JAR files are ZIP archives containing a .txz (tar.xz) file.
-   *   We need to: 1) unzip the JAR, 2) extract the .txz inside
+   * - macOS/Linux (hostdb): tar.gz files extract directly to PostgreSQL structure
    * - Windows (EDB): ZIP files extract directly to a PostgreSQL directory structure
    */
   async download(
@@ -133,7 +168,7 @@ export class BinaryManager {
     const tempDir = join(paths.bin, `temp-${fullVersion}-${platform}-${arch}`)
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'postgres.zip' : 'postgres.jar',
+      platform === 'win32' ? 'postgres.zip' : 'postgres.tar.gz',
     )
 
     // Ensure directories exist
@@ -168,7 +203,7 @@ export class BinaryManager {
           onProgress,
         )
       } else {
-        // macOS/Linux: zonky.io JAR contains .txz that needs secondary extraction
+        // macOS/Linux: hostdb tar.gz extracts directly to PostgreSQL structure
         await this.extractUnixBinaries(
           archiveFile,
           binPath,
@@ -254,62 +289,58 @@ export class BinaryManager {
   }
 
   /**
-   * Extract Unix binaries from zonky.io JAR file
-   * JAR contains a .txz (tar.xz) file that needs secondary extraction
+   * Extract Unix binaries from hostdb tar.gz file
+   * Handles both flat structure (bin/, lib/, share/ at root) and
+   * nested structure (postgresql/bin/, postgresql/lib/, etc.)
    */
   private async extractUnixBinaries(
-    jarFile: string,
+    tarFile: string,
     binPath: string,
     tempDir: string,
     onProgress?: ProgressCallback,
   ): Promise<void> {
-    // Extract the JAR (it's a ZIP file) using unzipper
     onProgress?.({
       stage: 'extracting',
-      message: 'Extracting binaries (step 1/2)...',
+      message: 'Extracting binaries...',
     })
 
-    await new Promise<void>((resolve, reject) => {
-      createReadStream(jarFile)
-        .pipe(unzipper.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject)
-    })
+    // Extract tar.gz to temp directory first to check structure
+    // Using spawnAsync with argument array to avoid command injection
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+    await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Find the .txz file inside
-    onProgress?.({
-      stage: 'extracting',
-      message: 'Extracting binaries (step 2/2)...',
-    })
+    // Check if there's a nested postgresql/ directory
+    const entries = await readdir(extractDir, { withFileTypes: true })
+    const postgresDir = entries.find(
+      (e) => e.isDirectory() && e.name === 'postgresql',
+    )
 
-    const txzFile = await this.findTxzFile(tempDir)
-    if (!txzFile) {
-      throw new Error('Could not find .txz file in downloaded archive')
-    }
-
-    // Extract the tar.xz file (no strip-components since files are at root level)
-    await execAsync(`tar -xJf "${txzFile}" -C "${binPath}"`)
-  }
-
-  /**
-   * Recursively find a .txz or .tar.xz file in a directory
-   */
-  private async findTxzFile(dir: string): Promise<string | null> {
-    const entries = await readdir(dir, { withFileTypes: true })
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name)
-      if (
-        entry.isFile() &&
-        (entry.name.endsWith('.txz') || entry.name.endsWith('.tar.xz'))
-      ) {
-        return fullPath
+    if (postgresDir) {
+      // Nested structure: move contents from postgresql/ to binPath
+      const sourceDir = join(extractDir, 'postgresql')
+      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch {
+          await cp(sourcePath, destPath, { recursive: true })
+        }
       }
-      if (entry.isDirectory()) {
-        const found = await this.findTxzFile(fullPath)
-        if (found) return found
+    } else {
+      // Flat structure: move contents directly to binPath
+      for (const entry of entries) {
+        const sourcePath = join(extractDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch {
+          await cp(sourcePath, destPath, { recursive: true })
+        }
       }
     }
-    return null
   }
 
   /**
@@ -416,8 +447,8 @@ export class BinaryManager {
       binPath = await this.download(version, platform, arch, onProgress)
     }
 
-    // On Linux, zonky.io binaries don't include client tools (psql, pg_dump)
-    // Download them separately from the PostgreSQL apt repository
+    // On Linux, hostdb binaries may not include client tools (psql, pg_dump)
+    // Download them separately from the PostgreSQL apt repository if missing
     if (platform === 'linux') {
       await this.ensureClientTools(binPath, version, onProgress)
     }
@@ -477,7 +508,8 @@ export class BinaryManager {
       })
 
       // Extract .deb using ar (available on Linux)
-      await execAsync(`ar -x "${debFile}"`, { cwd: tempDir })
+      // Using spawnAsync with argument array to avoid command injection
+      await spawnAsync('ar', ['-x', debFile], { cwd: tempDir })
 
       // Find and extract data.tar.xz or data.tar.zst
       const dataFile = await this.findDataTar(tempDir)
@@ -486,17 +518,18 @@ export class BinaryManager {
       }
 
       // Determine compression type and extract
+      // Using spawnAsync with argument array to avoid command injection
       const extractDir = join(tempDir, 'extracted')
       await mkdir(extractDir, { recursive: true })
 
       if (dataFile.endsWith('.xz')) {
-        await execAsync(`tar -xJf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['-xJf', dataFile, '-C', extractDir])
       } else if (dataFile.endsWith('.zst')) {
-        await execAsync(`tar --zstd -xf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['--zstd', '-xf', dataFile, '-C', extractDir])
       } else if (dataFile.endsWith('.gz')) {
-        await execAsync(`tar -xzf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['-xzf', dataFile, '-C', extractDir])
       } else {
-        await execAsync(`tar -xf "${dataFile}" -C "${extractDir}"`)
+        await spawnAsync('tar', ['-xf', dataFile, '-C', extractDir])
       }
 
       // Copy client tools to the bin directory
@@ -538,13 +571,23 @@ export class BinaryManager {
     const packageDir = `postgresql-${majorVersion}`
     const indexUrl = `${baseUrl}/${packageDir}/`
 
+    let html = ''
     try {
       const response = await fetch(indexUrl)
       if (!response.ok) {
-        throw new Error(`Failed to fetch package index: ${response.status}`)
+        throw new Error(
+          `Failed to fetch package index from ${indexUrl}: HTTP ${response.status} ${response.statusText}`,
+        )
       }
 
-      const html = await response.text()
+      html = await response.text()
+
+      // Validate that we got HTML content (basic sanity check)
+      if (!html.includes('<html') && !html.includes('<!DOCTYPE')) {
+        throw new Error(
+          `Unexpected response from ${indexUrl}: content does not appear to be HTML`,
+        )
+      }
 
       // Find the latest postgresql-client package for amd64
       // Pattern: postgresql-client-17_17.x.x-x.pgdg+1_amd64.deb
@@ -556,15 +599,22 @@ export class BinaryManager {
       const matches: string[] = []
       let match
       while ((match = pattern.exec(html)) !== null) {
-        // Skip debug symbols and snapshot versions
-        if (!match[1].includes('dbgsym') && !match[1].includes('~')) {
-          matches.push(match[1])
+        // Validate that the capture group exists
+        if (match[1]) {
+          // Skip debug symbols and snapshot versions
+          if (!match[1].includes('dbgsym') && !match[1].includes('~')) {
+            matches.push(match[1])
+          }
         }
       }
 
       if (matches.length === 0) {
+        // Provide diagnostic information for debugging
+        const htmlSnippet = html.substring(0, 500).replace(/\n/g, ' ')
         throw new Error(
-          `No client package found for PostgreSQL ${majorVersion}`,
+          `No client package found for PostgreSQL ${majorVersion} at ${indexUrl}. ` +
+            `Expected pattern: postgresql-client-${majorVersion}_*_amd64.deb. ` +
+            `HTML snippet: ${htmlSnippet}...`,
         )
       }
 
@@ -575,7 +625,14 @@ export class BinaryManager {
       return `${indexUrl}${latestPackage}`
     } catch (error) {
       const err = error as Error
-      throw new Error(`Failed to get client package URL: ${err.message}`)
+      // If the error already has context, just rethrow it
+      if (err.message.includes(indexUrl)) {
+        throw error
+      }
+      // Otherwise, add context about the URL we were trying to parse
+      throw new Error(
+        `Failed to get client package URL from ${indexUrl}: ${err.message}`,
+      )
     }
   }
 

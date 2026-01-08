@@ -1,163 +1,133 @@
-import { platformService } from '../../core/platform-service'
-import { defaults } from '../../config/defaults'
+import {
+  fetchAvailableVersions as fetchHostdbVersions,
+  getLatestVersion as getHostdbLatestVersion,
+} from './hostdb-releases'
+import {
+  POSTGRESQL_VERSION_MAP,
+  SUPPORTED_MAJOR_VERSIONS,
+} from './version-maps'
 
 /**
  * Fallback map of major versions to stable patch versions
- * Used when Maven repository is unreachable
+ * Used when hostdb repository is unreachable
+ *
+ * @deprecated Use POSTGRESQL_VERSION_MAP from version-maps.ts instead
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> = {
-  '14': '14.20.0',
-  '15': '15.15.0',
-  '16': '16.11.0',
-  '17': '17.7.0',
-  '18': '18.1.0',
-}
+export const FALLBACK_VERSION_MAP: Record<string, string> = POSTGRESQL_VERSION_MAP
 
 /**
  * Supported major versions (in order of display)
+ *
+ * @deprecated Use SUPPORTED_MAJOR_VERSIONS from version-maps.ts instead
  */
-export const SUPPORTED_MAJOR_VERSIONS = ['14', '15', '16', '17', '18']
-
-// Cache for fetched versions
-let cachedVersions: Record<string, string[]> | null = null
-let cacheTimestamp = 0
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+export { SUPPORTED_MAJOR_VERSIONS }
 
 /**
- * Fetch available versions from Maven repository
+ * Fetch available versions from hostdb repository
+ *
+ * This replaces the previous Maven Central (zonky.io) source with the new
+ * hostdb repository at https://github.com/robertjbass/hostdb
  */
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
-  // Return cached versions if still valid
-  if (cachedVersions && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedVersions
-  }
-
-  const zonkyPlatform = platformService.getZonkyPlatform()
-  if (!zonkyPlatform) {
-    const { platform, arch } = platformService.getPlatformInfo()
-    throw new Error(`Unsupported platform: ${platform}-${arch}`)
-  }
-
-  const url = `https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${zonkyPlatform}/`
-
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-
-    const html = await response.text()
-
-    // Parse version directories from the HTML listing
-    // Format: <a href="14.15.0/">14.15.0/</a>
-    const versionRegex = /href="(\d+\.\d+\.\d+)\/"/g
-    const versions: string[] = []
-    let match
-
-    while ((match = versionRegex.exec(html)) !== null) {
-      versions.push(match[1])
-    }
-
-    // Group versions by major version
-    const grouped: Record<string, string[]> = {}
-    for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      grouped[major] = versions
-        .filter((v) => v.startsWith(`${major}.`))
-        .sort((a, b) => compareVersions(b, a)) // Sort descending (latest first)
-    }
-
-    // Cache the results
-    cachedVersions = grouped
-    cacheTimestamp = Date.now()
-
-    return grouped
-  } catch {
-    // Return fallback on any error
-    return getFallbackVersions()
-  }
+  return await fetchHostdbVersions()
 }
 
 /**
- * Get fallback versions when network is unavailable
- */
-function getFallbackVersions(): Record<string, string[]> {
-  const grouped: Record<string, string[]> = {}
-  for (const major of SUPPORTED_MAJOR_VERSIONS) {
-    grouped[major] = [FALLBACK_VERSION_MAP[major]]
-  }
-  return grouped
-}
-
-/**
- * Compare two version strings (e.g., "16.11.0" vs "16.9.0")
- * Returns positive if a > b, negative if a < b, 0 if equal
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number)
-  const partsB = b.split('.').map(Number)
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] || 0
-    const numB = partsB[i] || 0
-    if (numA !== numB) {
-      return numA - numB
-    }
-  }
-  return 0
-}
-
-/**
- * Get the latest version for a major version
+ * Get the latest version for a major version from hostdb
  */
 export async function getLatestVersion(major: string): Promise<string> {
-  const versions = await fetchAvailableVersions()
-  const majorVersions = versions[major]
-  if (majorVersions && majorVersions.length > 0) {
-    return majorVersions[0] // First is latest due to descending sort
-  }
-  return FALLBACK_VERSION_MAP[major] || `${major}.0.0`
+  return await getHostdbLatestVersion(major)
 }
 
 // Legacy export for backward compatibility
 export const VERSION_MAP = FALLBACK_VERSION_MAP
 
 /**
- * Get the zonky.io platform identifier
- * @deprecated Use platformService.getZonkyPlatform() instead
+ * Get the hostdb platform identifier
+ *
+ * hostdb uses standard platform naming (e.g., 'darwin-arm64', 'linux-x64')
+ * which matches Node.js platform identifiers directly.
+ *
+ * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
+ * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
+ * @returns hostdb platform identifier or undefined if unsupported
+ */
+export function getHostdbPlatform(
+  platform: string,
+  arch: string,
+): string | undefined {
+  const key = `${platform}-${arch}`
+  const mapping: Record<string, string> = {
+    'darwin-arm64': 'darwin-arm64',
+    'darwin-x64': 'darwin-x64',
+    'linux-arm64': 'linux-arm64',
+    'linux-x64': 'linux-x64',
+    'win32-x64': 'win32-x64',
+  }
+  return mapping[key]
+}
+
+/**
+ * Get the hostdb platform identifier
+ *
+ * @deprecated Use getHostdbPlatform instead. This function exists for backward compatibility.
  */
 export function getZonkyPlatform(
   platform: string,
   arch: string,
 ): string | undefined {
-  const key = `${platform}-${arch}`
-  return defaults.platformMappings[key]
+  return getHostdbPlatform(platform, arch)
 }
 
 /**
- * Build the download URL for PostgreSQL binaries from zonky.io
+ * Build the download URL for PostgreSQL binaries from hostdb
+ *
+ * Format: https://github.com/robertjbass/hostdb/releases/download/postgresql-{version}/postgresql-{version}-{platform}-{arch}.tar.gz
+ *
+ * @param version - PostgreSQL version (e.g., '17', '17.7.0')
+ * @param platform - Platform identifier (e.g., 'darwin', 'linux')
+ * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
+ * @returns Download URL for the binary
  */
 export function getBinaryUrl(
   version: string,
   platform: string,
   arch: string,
 ): string {
-  const zonkyPlatform = getZonkyPlatform(platform, arch)
-  if (!zonkyPlatform) {
-    throw new Error(`Unsupported platform: ${platform}-${arch}`)
+  const platformKey = `${platform}-${arch}`
+  const hostdbPlatform = getHostdbPlatform(platform, arch)
+  if (!hostdbPlatform) {
+    throw new Error(`Unsupported platform: ${platformKey}`)
   }
 
-  // Use VERSION_MAP for major versions, otherwise treat as full version
-  const fullVersion = VERSION_MAP[version] || normalizeVersion(version)
+  // Normalize version (handles major version lookup and X.Y -> X.Y.0 conversion)
+  const fullVersion = normalizeVersion(version, VERSION_MAP)
 
-  return `https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${zonkyPlatform}/${fullVersion}/embedded-postgres-binaries-${zonkyPlatform}-${fullVersion}.jar`
+  const tag = `postgresql-${fullVersion}`
+  const filename = `postgresql-${fullVersion}-${hostdbPlatform}.tar.gz`
+
+  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
 }
 
 /**
  * Normalize version string to X.Y.Z format
+ *
+ * @param version - Version string (e.g., '17', '17.7', '17.7.0')
+ * @param versionMap - Optional version map for major version lookup
+ * @returns Normalized version (e.g., '17.7.0')
  */
-function normalizeVersion(version: string): string {
+function normalizeVersion(
+  version: string,
+  versionMap: Record<string, string> = VERSION_MAP,
+): string {
+  // Check if it's a major version in the map
+  if (versionMap[version]) {
+    return versionMap[version]
+  }
+
+  // Normalize to X.Y.Z format
   const parts = version.split('.')
   if (parts.length === 2) {
     return `${version}.0`
@@ -167,6 +137,9 @@ function normalizeVersion(version: string): string {
 
 /**
  * Get the full version string for a major version
+ *
+ * @param majorVersion - Major version (e.g., '17')
+ * @returns Full version string (e.g., '17.7.0') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
   return VERSION_MAP[majorVersion] || null

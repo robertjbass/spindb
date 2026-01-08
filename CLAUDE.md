@@ -78,7 +78,8 @@ engines/
 ├── index.ts                # Engine registry
 ├── postgresql/
 │   ├── index.ts            # PostgreSQL engine
-│   ├── binary-urls.ts      # Zonky.io URL builder
+│   ├── binary-urls.ts      # hostdb URL builder (macOS/Linux)
+│   ├── hostdb-releases.ts  # hostdb GitHub releases API
 │   ├── edb-binary-urls.ts  # Windows EDB URL builder
 │   ├── binary-manager.ts   # Client tool management
 │   ├── backup.ts           # pg_dump wrapper
@@ -132,9 +133,10 @@ abstract class BaseEngine {
 ```
 
 **PostgreSQL 🐘**
-- Server binaries from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries)
-- Client tools (psql, pg_dump) from system
+- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) (macOS/Linux) or EDB (Windows)
+- Client tools (psql, pg_dump) bundled with hostdb binaries
 - Versions: 14, 15, 16, 17, 18
+- Orphaned container support: if engine is deleted, containers remain and prompt to re-download on start
 
 **MySQL 🐬**
 - All binaries from system (Homebrew, apt, etc.)
@@ -327,7 +329,7 @@ After completing a feature, ensure these files are updated:
 10. Update documentation: README.md, CHANGELOG.md, TODO.md
 
 **Reference implementations:**
-- **PostgreSQL** - Server database with downloadable binaries (zonky.io/EDB)
+- **PostgreSQL** - Server database with downloadable binaries (hostdb/EDB)
 - **MySQL** - Server database with system binaries
 - **SQLite** - File-based database with registry tracking
 - **MongoDB** - Server database with system binaries, uses JavaScript instead of SQL
@@ -341,7 +343,7 @@ After completing a feature, ensure these files are updated:
 When new major versions of supported engines are released (e.g., PostgreSQL 18):
 
 1. **Check binary availability:**
-   - PostgreSQL (macOS/Linux): Verify zonky.io has binaries at [Maven Central](https://mvnrepository.com/artifact/io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64)
+   - PostgreSQL (macOS/Linux): Verify hostdb has binaries at [GitHub Releases](https://github.com/robertjbass/hostdb/releases)
    - PostgreSQL (Windows): Check EDB download page (see step 2b below)
    - MySQL: System-installed, no action needed
 
@@ -405,7 +407,7 @@ mongosh --port {port} --eval "db.adminCommand({shutdown: 1})"
 ```
 
 ### Version Resolution (PostgreSQL)
-Major versions (e.g., `"17"`) resolve to full versions (e.g., `"17.7.0"`) via Maven Central or fallback map. Full versions used everywhere.
+Major versions (e.g., `"17"`) resolve to full versions (e.g., `"17.7.0"`) via hostdb GitHub API or fallback map. Full versions used everywhere.
 
 ### Config Cache
 Tool paths cached in `~/.spindb/config.json` with 7-day staleness. Refresh after package manager interactions:
@@ -419,22 +421,32 @@ await configManager.refreshAllBinaries()
 SpinDB uses different binary sourcing strategies by engine:
 
 **PostgreSQL (Downloadable Binaries):**
-- macOS/Linux: [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) via Maven Central
+- macOS/Linux: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
 - Windows: [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
 - Enables multi-version support (14, 15, 16, 17, 18 side-by-side)
 - ~45 MB per version
+- macOS: Includes client tools (psql, pg_dump, pg_restore)
+- Linux: Client tools downloaded separately from PostgreSQL apt repository if missing
 
-**MySQL, MongoDB, Redis (System Binaries):**
+**MySQL, MongoDB, Redis (System Binaries) - Currently:**
 - Uses system-installed binaries via Homebrew, apt, choco, etc.
 - Single version per machine (whatever the package manager provides)
 - SpinDB detects and orchestrates, doesn't download
 
-**Why the difference?**
-PostgreSQL is the only major database with a well-maintained, current, cross-platform embedded binary distribution (zonky.io). Other databases lack equivalent embeddable distributions, so SpinDB relies on system-installed binaries.
-
 **Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
 
-**Future plans:** The [hostdb](https://github.com/robertjbass/hostdb) project will provide downloadable binaries for additional database engines (Redis, MySQL/MariaDB, etc.) as GitHub releases.
+**Migration in progress:** The [hostdb](https://github.com/robertjbass/hostdb) project is being expanded to provide downloadable binaries for additional database engines (Redis, MySQL/MariaDB, etc.) as GitHub releases. PostgreSQL has been fully migrated from zonky.io to hostdb.
+
+### Orphaned Container Support (PostgreSQL)
+
+When a PostgreSQL engine is deleted while containers still reference it:
+
+1. **Engine deletion**: Stops any running containers first, then deletes the engine binary
+2. **Orphaned containers**: Container data remains intact in `~/.spindb/containers/`
+3. **Starting orphaned container**: Detects missing engine, prompts to download from hostdb
+4. **Fallback stop**: If engine is missing, uses direct process kill (SIGTERM/SIGKILL) instead of pg_ctl
+
+This allows users to delete engines to free disk space and re-download them later when needed.
 
 ## Error Handling
 
