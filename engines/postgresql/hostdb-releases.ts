@@ -16,7 +16,7 @@ import {
 /**
  * Platform definition in hostdb releases.json
  */
-export interface HostdbPlatform {
+export type HostdbPlatform = {
   url: string
   sha256: string
   size: number
@@ -25,7 +25,7 @@ export interface HostdbPlatform {
 /**
  * Version entry in hostdb releases.json
  */
-export interface HostdbRelease {
+export type HostdbRelease = {
   version: string
   releaseTag: string
   releasedAt: string
@@ -35,7 +35,7 @@ export interface HostdbRelease {
 /**
  * Structure of hostdb releases.json
  */
-export interface HostdbReleasesData {
+export type HostdbReleasesData = {
   repository: string
   updatedAt: string
   databases: {
@@ -48,6 +48,14 @@ export interface HostdbReleasesData {
 let cachedReleases: HostdbReleasesData | null = null
 let cacheTimestamp = 0
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+/**
+ * Clear the releases cache (for testing)
+ */
+export function clearCache(): void {
+  cachedReleases = null
+  cacheTimestamp = 0
+}
 
 /**
  * Fetch releases.json from hostdb repository
@@ -243,6 +251,8 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     return version in releases.databases.postgresql
   } catch {
     // Fallback to checking version map
-    return version in POSTGRESQL_VERSION_MAP
+    // Handle both major versions ("17") and full versions ("17.7.0")
+    const major = version.split('.')[0]
+    return version in POSTGRESQL_VERSION_MAP || POSTGRESQL_VERSION_MAP[major] === version
   }
 }

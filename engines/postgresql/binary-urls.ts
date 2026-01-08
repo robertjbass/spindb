@@ -50,13 +50,14 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  * hostdb uses standard platform naming (e.g., 'darwin-arm64', 'linux-x64')
  * which matches Node.js platform identifiers directly.
  *
- * @deprecated This function is no longer needed as hostdb uses standard platform names
+ * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
+ * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
+ * @returns hostdb platform identifier or undefined if unsupported
  */
-export function getZonkyPlatform(
+export function getHostdbPlatform(
   platform: string,
   arch: string,
 ): string | undefined {
-  // hostdb uses standard platform naming, no transformation needed
   const key = `${platform}-${arch}`
   const mapping: Record<string, string> = {
     'darwin-arm64': 'darwin-arm64',
@@ -66,6 +67,18 @@ export function getZonkyPlatform(
     'win32-x64': 'win32-x64',
   }
   return mapping[key]
+}
+
+/**
+ * Get the hostdb platform identifier
+ *
+ * @deprecated Use getHostdbPlatform instead. This function exists for backward compatibility.
+ */
+export function getZonkyPlatform(
+  platform: string,
+  arch: string,
+): string | undefined {
+  return getHostdbPlatform(platform, arch)
 }
 
 /**
@@ -84,7 +97,7 @@ export function getBinaryUrl(
   arch: string,
 ): string {
   const platformKey = `${platform}-${arch}`
-  const hostdbPlatform = getZonkyPlatform(platform, arch)
+  const hostdbPlatform = getHostdbPlatform(platform, arch)
   if (!hostdbPlatform) {
     throw new Error(`Unsupported platform: ${platformKey}`)
   }

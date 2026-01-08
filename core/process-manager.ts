@@ -406,8 +406,9 @@ export class ProcessManager {
   ): Promise<boolean> {
     const pid = await this.getPid(containerName, options)
     if (!pid) {
-      logDebug('No PID found for container', { containerName })
-      return false
+      // No PID means the process isn't running - goal achieved
+      logDebug('No PID found for container (already stopped)', { containerName })
+      return true
     }
 
     try {
@@ -440,9 +441,17 @@ export class ProcessManager {
       logDebug('Sending SIGKILL to process', { containerName, pid })
       process.kill(pid, 'SIGKILL')
 
-      // Wait a bit more
+      // Wait a bit more and verify process is dead
       await new Promise((resolve) => setTimeout(resolve, 1000))
-      return true
+      try {
+        process.kill(pid, 0)
+        // Process still running after SIGKILL (rare: zombie or uninterruptible sleep)
+        logDebug('Process still running after SIGKILL', { containerName, pid })
+        return false
+      } catch {
+        logDebug('Process killed with SIGKILL', { containerName, pid })
+        return true
+      }
     } catch (error) {
       logDebug('Failed to kill process', {
         containerName,
