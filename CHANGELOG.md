@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-01-08
+
+### Added
+- **MariaDB engine support** - Full container lifecycle for MariaDB using pre-compiled binaries from [hostdb](https://github.com/robertjbass/hostdb)
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Create, start, stop, delete containers
+  - Backup with mariadb-dump in SQL (`.sql`) or compressed (`.sql.gz`) format
+  - Restore from SQL or compressed backups
+  - Clone containers
+  - Run SQL files or inline SQL via `spindb run`
+  - Client tools (mariadb, mariadb-dump, mariadb-admin) bundled with binaries
+  - Version 11.8 supported (more versions coming as hostdb expands)
+  - Default port 3307 to avoid conflict with MySQL
+  - Full integration tests across macOS, Linux, and Windows CI
+- New alias `maria` for MariaDB engine (e.g., `spindb create mydb -e maria`)
+
+### Changed
+- Updated documentation to reflect MariaDB as a first-class engine with downloadable binaries
+- Roadmap updated: MariaDB moved from "planned" to "shipped"
+
 ## [0.14.0] - 2026-01-08
 
 ### Changed

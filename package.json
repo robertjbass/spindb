@@ -1,7 +1,7 @@
 {
   "name": "spindb",
-  "version": "0.14.0",
-  "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MongoDB, Redis, and SQLite instances.",
+  "version": "0.15.0",
+  "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and SQLite instances.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
@@ -12,12 +12,13 @@
     "test": "run-s test:all",
     "test:pg": "node --import tsx --test --experimental-test-isolation=none tests/integration/postgresql.test.ts",
     "test:mysql": "node --import tsx --test --experimental-test-isolation=none tests/integration/mysql.test.ts",
+    "test:mariadb": "node --import tsx --test --experimental-test-isolation=none tests/integration/mariadb.test.ts",
     "test:sqlite": "node --import tsx --test --experimental-test-isolation=none tests/integration/sqlite.test.ts",
     "test:mongodb": "node --import tsx --test --experimental-test-isolation=none tests/integration/mongodb.test.ts",
     "test:redis": "node --import tsx --test --experimental-test-isolation=none tests/integration/redis.test.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
-    "test:integration": "run-s test:pg test:mysql test:sqlite test:mongodb test:redis",
+    "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:mongodb test:redis",
     "test:all": "run-s test:unit test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
@@ -28,6 +29,7 @@
     "postgres",
     "postgresql",
     "mysql",
+    "mariadb",
     "database",
     "local",
     "development",

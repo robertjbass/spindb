@@ -59,6 +59,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
+  mariadb: {
+    defaultVersion: '11.8',
+    defaultPort: 3307, // Different from MySQL to allow side-by-side
+    portRange: { start: 3307, end: 3400 },
+    supportedVersions: ['11.8'], // Add more versions as they become available in hostdb
+    latestVersion: '11.8',
+    superuser: 'root',
+    connectionScheme: 'mysql', // MariaDB uses MySQL protocol
+    logFileName: 'mariadb.log',
+    pidFileName: 'mariadb.pid',
+    dataSubdir: 'data',
+    clientTools: ['mysql', 'mysqldump', 'mysqladmin'],
+    maxConnections: 200, // Higher than default 151 for parallel builds
+  },
   sqlite: {
     defaultVersion: '3',
     defaultPort: 0, // File-based, no port

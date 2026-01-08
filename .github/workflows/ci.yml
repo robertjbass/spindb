@@ -119,6 +119,53 @@ jobs:
         timeout-minutes: 15
 
   # ============================================
+  # MariaDB Integration Tests
+  # Uses SpinDB to download and manage MariaDB binaries (like PostgreSQL)
+  # ============================================
+  test-mariadb:
+    name: MariaDB (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache MariaDB binaries - these are ~100MB+ downloads
+      - name: Cache MariaDB binaries
+        uses: actions/cache@v4
+        id: mariadb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-mariadb-11.8-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download MariaDB binaries
+      - name: Install MariaDB via SpinDB
+        run: pnpm start engines download mariadb 11.8
+
+      # Show what SpinDB installed
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run MariaDB integration tests
+        run: pnpm test:mariadb
+        timeout-minutes: 15
+
+  # ============================================
   # MySQL Integration Tests
   # Uses SpinDB to install MySQL via system package manager
   # Skipped on Linux due to permission issues with Ubuntu's MySQL package
@@ -666,6 +713,7 @@ jobs:
       [
         unit-tests,
         test-postgresql,
+        test-mariadb,
         test-mysql,
         test-sqlite,
         test-mongodb,
@@ -683,6 +731,10 @@ jobs:
           fi
           if [ "${{ needs.test-postgresql.result }}" != "success" ]; then
             echo "PostgreSQL tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mariadb.result }}" != "success" ]; then
+            echo "MariaDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-mysql.result }}" != "success" ]; then

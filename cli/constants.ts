@@ -1,6 +1,7 @@
 export const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
+  mariadb: '🦭',
   sqlite: '🪶',
   mongodb: '🍃',
   redis: '🔴',

@@ -23,6 +23,7 @@ const execAsync = promisify(exec)
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
+  mariadb: { base: 3340, clone: 3342, renamed: 3341 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
   redis: { base: 6399, clone: 6401, renamed: 6400 },
 }
@@ -152,7 +153,7 @@ export async function executeSQL(
     // For SQLite, database is the file path
     const cmd = `sqlite3 "${database}" "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MySQL) {
+  } else if (engine === Engine.MySQL || engine === Engine.MariaDB) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled mysql if available, otherwise fall back to `mysql` in PATH
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
@@ -204,7 +205,7 @@ export async function executeSQLFile(
     // For SQLite, database is the file path
     const cmd = `sqlite3 "${database}" < "${filePath}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MySQL) {
+  } else if (engine === Engine.MySQL || engine === Engine.MariaDB) {
     const engineImpl = getEngine(engine)
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
@@ -340,7 +341,7 @@ export async function waitForReady(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      if (engine === Engine.MySQL) {
+      if (engine === Engine.MySQL || engine === Engine.MariaDB) {
         // Prefer configured/bundled mysqladmin when available
         const engineImpl = getEngine(engine)
         const mysqladmin = await engineImpl
@@ -426,7 +427,7 @@ export function getConnectionString(
   port: number,
   database: string,
 ): string {
-  if (engine === Engine.MySQL) {
+  if (engine === Engine.MySQL || engine === Engine.MariaDB) {
     return `mysql://root@127.0.0.1:${port}/${database}`
   }
   if (engine === Engine.MongoDB) {
