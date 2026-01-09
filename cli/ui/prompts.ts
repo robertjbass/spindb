@@ -140,12 +140,13 @@ export async function promptVersion(
     | inquirer.Separator
 
   const majorChoices: Choice[] = []
+  const engineDefs = getEngineDefaults(engineName)
 
   for (let i = 0; i < majorVersions.length; i++) {
     const major = majorVersions[i]
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
-    const isLatestMajor = i === majorVersions.length - 1
+    const isLatestMajor = major === engineDefs.latestVersion
 
     const countLabel =
       versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
@@ -175,7 +176,7 @@ export async function promptVersion(
       name: 'majorVersion',
       message: 'Select major version:',
       choices: majorChoices,
-      default: majorVersions[majorVersions.length - 1], // Default to latest major
+      default: engineDefs.latestVersion, // Default to latest major
     },
   ])
 

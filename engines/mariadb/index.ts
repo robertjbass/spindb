@@ -30,7 +30,6 @@ import {
   fetchAvailableVersions,
   getLatestVersion,
   FALLBACK_VERSION_MAP,
-  SUPPORTED_MAJOR_VERSIONS,
 } from './binary-urls'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -109,7 +108,7 @@ export class MariaDBEngine extends BaseEngine {
   name = ENGINE
   displayName = 'MariaDB'
   defaultPort = engineDef.defaultPort
-  supportedVersions = SUPPORTED_MAJOR_VERSIONS
+  supportedVersions = engineDef.supportedVersions
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()

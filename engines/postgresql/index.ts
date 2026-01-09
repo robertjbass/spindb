@@ -22,7 +22,6 @@ import { defaults, getEngineDefaults } from '../../config/defaults'
 import { getPostgresHomebrewBinPath } from '../../config/engine-defaults'
 import {
   getBinaryUrl,
-  SUPPORTED_MAJOR_VERSIONS,
   fetchAvailableVersions,
   getLatestVersion,
   FALLBACK_VERSION_MAP,
@@ -80,11 +79,13 @@ export function buildWindowsPsqlCommand(
   return cmd
 }
 
+const engineDef = getEngineDefaults('postgresql')
+
 export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
   defaultPort = 5432
-  supportedVersions = SUPPORTED_MAJOR_VERSIONS
+  supportedVersions = engineDef.supportedVersions
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
