@@ -6,10 +6,6 @@ import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { platformService } from '../core/platform-service'
 import {
-  getMysqldPath,
-  getMysqlVersion,
-} from '../engines/mysql/binary-detection'
-import {
   getMongodPath,
   getMongodVersion,
 } from '../engines/mongodb/binary-detection'
@@ -43,10 +39,11 @@ export type InstalledMariadbEngine = {
 export type InstalledMysqlEngine = {
   engine: 'mysql'
   version: string
+  platform: string
+  arch: string
   path: string
-  source: 'system'
-  isMariaDB: boolean
-  formulaName: string // e.g., 'mysql', 'mysql@8.0', 'mariadb'
+  sizeBytes: number
+  source: 'downloaded'
 }
 
 export type InstalledSqliteEngine = {
@@ -269,97 +266,78 @@ function extractHomebrewFormula(
   return defaultName
 }
 
-/**
- * Check if a mysqld binary is MariaDB
- */
-async function isMysqldMariaDB(mysqldPath: string): Promise<boolean> {
+async function getMysqlVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const serverPath = join(binPath, 'bin', `mysqld${ext}`)
+  if (!existsSync(serverPath)) {
+    return null
+  }
+
   try {
-    const { stdout } = await execFileAsync(mysqldPath, ['--version'])
-    return stdout.toLowerCase().includes('mariadb')
+    const { stdout } = await execFileAsync(serverPath, ['--version'])
+    // Parse output like "mysqld  Ver 8.0.40 for Linux on x86_64"
+    const match = stdout.match(/Ver\s+([\d.]+)/)
+    return match ? match[1] : null
   } catch {
-    return false
+    return null
   }
 }
 
 /**
- * Homebrew paths to check for MySQL installations
+ * Get installed MySQL engines from downloaded binaries
  */
-const HOMEBREW_MYSQL_PATHS = [
-  // ARM64 (Apple Silicon) - versioned
-  '/opt/homebrew/opt/mysql@5.7/bin/mysqld',
-  '/opt/homebrew/opt/mysql@8.0/bin/mysqld',
-  '/opt/homebrew/opt/mysql@8.4/bin/mysqld',
-  '/opt/homebrew/opt/mysql@9.0/bin/mysqld',
-  // ARM64 - unversioned (latest)
-  '/opt/homebrew/opt/mysql/bin/mysqld',
-  '/opt/homebrew/opt/mariadb/bin/mysqld',
-  // Intel - versioned
-  '/usr/local/opt/mysql@5.7/bin/mysqld',
-  '/usr/local/opt/mysql@8.0/bin/mysqld',
-  '/usr/local/opt/mysql@8.4/bin/mysqld',
-  '/usr/local/opt/mysql@9.0/bin/mysqld',
-  // Intel - unversioned
-  '/usr/local/opt/mysql/bin/mysqld',
-  '/usr/local/opt/mariadb/bin/mysqld',
-]
-
 async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
-  const engines: InstalledMysqlEngine[] = []
-  const seenFormulas = new Set<string>()
-  const { platform } = platformService.getPlatformInfo()
+  const binDir = paths.bin
 
-  // On macOS, check all Homebrew paths
-  if (platform === 'darwin') {
-    for (const mysqldPath of HOMEBREW_MYSQL_PATHS) {
-      if (existsSync(mysqldPath)) {
-        const formulaName = extractHomebrewFormula(mysqldPath, 'mysql')
-
-        // Skip if we've already found this formula
-        if (seenFormulas.has(formulaName)) continue
-        seenFormulas.add(formulaName)
-
-        const version = await getMysqlVersion(mysqldPath)
-        if (version) {
-          const isMariaDB = await isMysqldMariaDB(mysqldPath)
-          engines.push({
-            engine: 'mysql',
-            version,
-            path: mysqldPath,
-            source: 'system',
-            isMariaDB,
-            formulaName,
-          })
-        }
-      }
-    }
+  if (!existsSync(binDir)) {
+    return []
   }
 
-  // Also check system PATH (for Linux or non-Homebrew installs)
-  const pathMysqld = await getMysqldPath()
-  if (pathMysqld) {
-    const formulaName = extractHomebrewFormula(
-      pathMysqld,
-      pathMysqld.toLowerCase().includes('mariadb') ? 'mariadb' : 'mysql',
-    )
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledMysqlEngine[] = []
 
-    // Only add if not already found via Homebrew paths
-    if (!seenFormulas.has(formulaName)) {
-      const version = await getMysqlVersion(pathMysqld)
-      if (version) {
-        const isMariaDB = await isMysqldMariaDB(pathMysqld)
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Match mysql-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
+      if (match && match[1] === 'mysql') {
+        const [, , majorVersion, platform, arch] = match
+        const dirPath = join(binDir, entry.name)
+
+        const actualVersion =
+          (await getMysqlVersion(dirPath)) || majorVersion
+
+        let sizeBytes = 0
+        try {
+          const files = await readdir(dirPath, { recursive: true })
+          for (const file of files) {
+            try {
+              const filePath = join(dirPath, file.toString())
+              const fileStat = await lstat(filePath)
+              if (fileStat.isFile()) {
+                sizeBytes += fileStat.size
+              }
+            } catch {
+              // Skip files we can't stat
+            }
+          }
+        } catch {
+          // Skip directories we can't read
+        }
+
         engines.push({
           engine: 'mysql',
-          version,
-          path: pathMysqld,
-          source: 'system',
-          isMariaDB,
-          formulaName,
+          version: actualVersion,
+          platform,
+          arch,
+          path: dirPath,
+          sizeBytes,
+          source: 'downloaded',
         })
       }
     }
   }
 
-  // Sort by version descending
   engines.sort((a, b) => compareVersions(b.version, a.version))
 
   return engines

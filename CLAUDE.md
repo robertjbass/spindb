@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading PostgreSQL binaries directly and using system-installed MySQL/MongoDB/Redis. With support for several engines including SQLite, PostgreSQL, MySQL, MongoDB, and Redis.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb) and using system-installed MongoDB/Redis. With support for several engines including SQLite, PostgreSQL, MySQL, MariaDB, MongoDB, and Redis.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -87,7 +87,11 @@ engines/
 │   └── version-validator.ts
 ├── mysql/
 │   ├── index.ts            # MySQL engine
-│   ├── binary-detection.ts # System binary detection
+│   ├── binary-urls.ts      # hostdb URL builder
+│   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   ├── version-maps.ts     # Version mapping
+│   ├── binary-manager.ts   # Download/extraction
+│   ├── binary-detection.ts # Legacy system binary detection
 │   ├── backup.ts           # mysqldump wrapper
 │   ├── restore.ts          # Restore logic
 │   └── version-validator.ts
@@ -139,8 +143,10 @@ abstract class BaseEngine {
 - Orphaned container support: if engine is deleted, containers remain and prompt to re-download on start
 
 **MySQL 🐬**
-- All binaries from system (Homebrew, apt, etc.)
-- Requires: mysqld, mysql, mysqldump, mysqladmin
+- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
+- Client tools (mysql, mysqldump, mysqladmin) bundled with hostdb binaries
+- Versions: 8.0, 8.4, 9
+- Orphaned container support: if engine is deleted, containers remain and prompt to re-download on start
 
 **MongoDB 🍃**
 - All binaries from system (Homebrew, apt, etc.)
@@ -718,9 +724,13 @@ SpinDB uses different binary sourcing strategies by engine:
 **MariaDB (Downloadable Binaries):**
 - All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
 - Enables multi-version support (10.11, 11.4, 11.8 side-by-side)
-- Reference implementation for hostdb migration pattern
 
-**MySQL, MongoDB, Redis (System Binaries) - Pending Migration:**
+**MySQL (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Enables multi-version support (8.0, 8.4, 9 side-by-side)
+- Includes client tools (mysql, mysqldump, mysqladmin)
+
+**MongoDB, Redis (System Binaries) - Pending Migration:**
 - Currently uses system-installed binaries via Homebrew, apt, choco, etc.
 - Single version per machine (whatever the package manager provides)
 - SpinDB detects and orchestrates, doesn't download
@@ -728,7 +738,7 @@ SpinDB uses different binary sourcing strategies by engine:
 
 **Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
 
-**Planned hostdb migrations:** MySQL and MongoDB will be migrated from system binaries to hostdb downloadable binaries following the MariaDB pattern. This enables multi-version support and removes the package manager dependency. See TODO.md "Engine Binary Migration (hostdb)" section for the detailed checklist. Prerequisites: hostdb must first publish releases for these engines.
+**Planned hostdb migrations:** MongoDB will be migrated from system binaries to hostdb downloadable binaries following the MariaDB/MySQL pattern. This enables multi-version support and removes the package manager dependency. See TODO.md "Engine Binary Migration (hostdb)" section for the detailed checklist. Prerequisites: hostdb must first publish releases for these engines.
 
 ### Orphaned Container Support (PostgreSQL)
 

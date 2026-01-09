@@ -133,15 +133,15 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // MySQL rows
   for (const mysqlEngine of mysqlEngines) {
     const icon = ENGINE_ICONS.mysql
-    const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
-    const engineDisplay = `${icon} ${displayName}`
+    const platformInfo = `${mysqlEngine.platform}-${mysqlEngine.arch}`
+    const engineDisplay = `${icon} mysql`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(mysqlEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
-        chalk.gray('(system-installed)'),
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(mysqlEngine.sizeBytes)),
     )
   }
 

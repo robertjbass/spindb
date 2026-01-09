@@ -167,8 +167,7 @@ jobs:
 
   # ============================================
   # MySQL Integration Tests
-  # Uses SpinDB to install MySQL via system package manager
-  # Skipped on Linux due to permission issues with Ubuntu's MySQL package
+  # Uses SpinDB to download and manage MySQL binaries (like PostgreSQL)
   # ============================================
   test-mysql:
     name: MySQL (${{ matrix.os }})
@@ -176,8 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Skip Linux due to MySQL permission issues with Ubuntu's package
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,45 +192,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # NOTE: macOS MySQL caching removed - Homebrew dependencies (protobuf, zlib)
-      # are dynamically linked and not included in Cellar cache, causing dyld errors.
-      # Fresh install is more reliable than partial caching.
-
-      # Cache Chocolatey packages for MySQL on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
+      # Cache MySQL binaries - these are ~100MB+ downloads
+      - name: Cache MySQL binaries
         uses: actions/cache@v4
+        id: mysql-cache
         with:
-          path: |
-            C:\ProgramData\chocolatey\lib\mysql
-            C:\tools\mysql
-          key: choco-mysql-${{ runner.os }}
-          restore-keys: |
-            choco-mysql-
+          path: ~/.spindb/bin
+          key: spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}
 
-      # Windows needs MySQL added to PATH BEFORE install check (for cache hits)
-      - name: Add MySQL to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $possiblePaths = @(
-            "C:\tools\mysql\current\bin",
-            "C:\Program Files\MySQL\MySQL Server 8.0\bin",
-            "C:\Program Files\MySQL\MySQL Server 8.4\bin",
-            "C:\Program Files\MySQL\MySQL Server 9.0\bin"
-          )
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added MySQL to PATH: $path"
-              break
-            }
-          }
-
-      # Use SpinDB to install MySQL via system package manager
+      # Use SpinDB to download MySQL binaries
       - name: Install MySQL via SpinDB
-        run: pnpm start engines download mysql
+        run: pnpm start engines download mysql 9
 
+      # Show what SpinDB installed
       - name: Show installed engines
         run: pnpm start engines list
 

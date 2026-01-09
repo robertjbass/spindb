@@ -17,7 +17,6 @@ import {
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
 } from '../../helpers'
-import { getMysqlVersion } from '../../../engines/mysql/binary-detection'
 import { getMongodVersion } from '../../../engines/mongodb/binary-detection'
 import { getRedisVersion } from '../../../engines/redis/binary-detection'
 
@@ -41,12 +40,12 @@ export async function handleEngines(): Promise<void> {
     console.log(uiInfo('No engines installed yet.'))
     console.log(
       chalk.gray(
-        '  PostgreSQL engines are downloaded automatically when you create a container.',
+        '  PostgreSQL, MySQL, and MariaDB engines are downloaded automatically when you create a container.',
       ),
     )
     console.log(
       chalk.gray(
-        '  MySQL requires system installation (brew install mysql or apt install mysql-server).',
+        '  MongoDB and Redis require system installation (brew install mongodb-community or apt install redis-server).',
       ),
     )
     return
@@ -73,6 +72,7 @@ export async function handleEngines(): Promise<void> {
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   const totalMariadbSize = mariadbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   const COL_ENGINE = 14
   const COL_VERSION = 12
@@ -116,17 +116,17 @@ export async function handleEngines(): Promise<void> {
     )
   }
 
-  for (const mysqlEngine of mysqlEngines) {
+  for (const engine of mysqlEngines) {
     const icon = ENGINE_ICONS.mysql
-    const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
-    const engineDisplay = `${icon} ${displayName}`
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} ${engine.engine}`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(mysqlEngine.version.padEnd(COL_VERSION)) +
-        chalk.gray('system'.padEnd(COL_SOURCE)) +
-        chalk.gray('(system-installed)'),
+        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
+        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
@@ -187,10 +187,10 @@ export async function handleEngines(): Promise<void> {
     )
   }
   if (mysqlEngines.length > 0) {
-    const versionCount = mysqlEngines.length
-    const versionText = versionCount === 1 ? 'version' : 'versions'
     console.log(
-      chalk.gray(`  MySQL: ${versionCount} ${versionText} system-installed`),
+      chalk.gray(
+        `  MySQL: ${mysqlEngines.length} version(s), ${formatBytes(totalMysqlSize)}`,
+      ),
     )
   }
   if (sqliteEngine) {
@@ -230,16 +230,10 @@ export async function handleEngines(): Promise<void> {
     })
   }
 
-  for (const mysqlEngine of mysqlEngines) {
-    const displayName = mysqlEngine.isMariaDB ? 'MariaDB' : 'MySQL'
-    // Show formula name if it's a versioned install
-    const versionLabel =
-      mysqlEngine.formulaName !== 'mysql' && mysqlEngine.formulaName !== 'mariadb'
-        ? ` (${mysqlEngine.formulaName})`
-        : ''
+  for (const e of mysqlEngines) {
     choices.push({
-      name: `${chalk.blue('ℹ')} ${displayName} ${mysqlEngine.version}${versionLabel} ${chalk.gray('(system-installed)')}`,
-      value: `mysql-info:${mysqlEngine.path}:${mysqlEngine.formulaName}`,
+      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
+      value: `delete:${e.path}:${e.engine}:${e.version}`,
     })
   }
 
@@ -301,16 +295,6 @@ export async function handleEngines(): Promise<void> {
     const engineName = withoutPrefix.slice(secondLastColon + 1, lastColon)
     const engineVersion = withoutPrefix.slice(lastColon + 1)
     await handleDeleteEngine(enginePath, engineName, engineVersion)
-    await handleEngines()
-  }
-
-  if (action.startsWith('mysql-info:')) {
-    // Format: mysql-info:path:formulaName
-    const withoutPrefix = action.slice('mysql-info:'.length)
-    const lastColon = withoutPrefix.lastIndexOf(':')
-    const mysqldPath = withoutPrefix.slice(0, lastColon)
-    const formulaName = withoutPrefix.slice(lastColon + 1)
-    await handleMysqlInfo(mysqldPath, formulaName)
     await handleEngines()
   }
 
@@ -394,134 +378,6 @@ async function handleDeleteEngine(
     const e = error as Error
     spinner.fail(`Failed to delete: ${e.message}`)
   }
-}
-
-async function handleMysqlInfo(
-  mysqldPath: string,
-  formulaName: string,
-): Promise<void> {
-  console.clear()
-
-  const isMariaDB = formulaName.includes('mariadb')
-  const displayName = isMariaDB ? 'MariaDB' : 'MySQL'
-
-  let version = 'unknown'
-  try {
-    version = (await getMysqlVersion(mysqldPath)) ?? 'unknown'
-  } catch {
-    // Ignore - version will remain 'unknown'
-  }
-
-  console.log(header(`${displayName} Information`))
-  console.log()
-
-  const containers = await containerManager.list()
-  const mysqlContainers = containers.filter((c) => c.engine === 'mysql')
-
-  const runningContainers: string[] = []
-
-  if (mysqlContainers.length > 0) {
-    console.log(
-      uiWarning(
-        `${mysqlContainers.length} container(s) are using ${displayName}:`,
-      ),
-    )
-    console.log()
-    for (const c of mysqlContainers) {
-      const isRunning = await processManager.isRunning(c.name, {
-        engine: c.engine,
-      })
-      if (isRunning) {
-        runningContainers.push(c.name)
-      }
-      const status = isRunning
-        ? chalk.green('● running')
-        : chalk.gray('○ stopped')
-      console.log(chalk.gray(`  • ${c.name} ${status}`))
-    }
-    console.log()
-    console.log(
-      chalk.yellow(
-        '  Uninstalling will break these containers. Delete them first.',
-      ),
-    )
-    console.log()
-  }
-
-  // Detect package manager from path
-  const isHomebrew =
-    mysqldPath.includes('/opt/homebrew/') ||
-    mysqldPath.includes('/usr/local/opt/') ||
-    mysqldPath.includes('/usr/local/Cellar/')
-  const packageManager = isHomebrew ? 'homebrew' : 'system'
-
-  console.log(chalk.white('  Installation Details:'))
-  console.log(chalk.gray('  ' + '─'.repeat(50)))
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Version:'.padEnd(18)) +
-      chalk.yellow(version || 'unknown'),
-  )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Binary Path:'.padEnd(18)) +
-      chalk.gray(mysqldPath),
-  )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Package Manager:'.padEnd(18)) +
-      chalk.cyan(packageManager),
-  )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Package Name:'.padEnd(18)) +
-      chalk.cyan(formulaName),
-  )
-  console.log()
-
-  console.log(chalk.white('  To uninstall:'))
-  console.log(chalk.gray('  ' + '─'.repeat(50)))
-
-  let stepNum = 1
-
-  if (runningContainers.length > 0) {
-    console.log(chalk.gray(`  # ${stepNum}. Stop running SpinDB containers`))
-    console.log(chalk.cyan('  spindb stop <container-name>'))
-    console.log()
-    stepNum++
-  }
-
-  if (mysqlContainers.length > 0) {
-    console.log(chalk.gray(`  # ${stepNum}. Delete SpinDB containers`))
-    console.log(chalk.cyan('  spindb delete <container-name>'))
-    console.log()
-    stepNum++
-  }
-
-  if (isHomebrew) {
-    console.log(
-      chalk.gray(
-        `  # ${stepNum}. Stop Homebrew service (if running separately)`,
-      ),
-    )
-    console.log(chalk.cyan(`  brew services stop ${formulaName}`))
-    console.log()
-    console.log(chalk.gray(`  # ${stepNum + 1}. Uninstall the package`))
-    console.log(chalk.cyan(`  brew uninstall ${formulaName}`))
-  } else {
-    console.log(chalk.gray('  Use your system package manager to uninstall.'))
-    console.log(chalk.gray(`  The binary is located at: ${mysqldPath}`))
-  }
-
-  console.log()
-
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'continue',
-      message: chalk.gray('Press Enter to go back...'),
-    },
-  ])
 }
 
 async function handleSqliteInfo(sqlitePath: string): Promise<void> {

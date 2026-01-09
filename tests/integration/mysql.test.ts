@@ -466,7 +466,7 @@ describe('MySQL Integration Tests', () => {
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '9.0', {
+    await engine.initDataDir(portConflictContainerName, installedVersion, {
       superuser: 'root',
     })
 

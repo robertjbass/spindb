@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-01-09
+
+### Added
+- **MySQL binary downloads from hostdb** - MySQL now uses pre-built binaries from [hostdb](https://github.com/robertjbass/hostdb) instead of system package managers
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Multi-version support: Run MySQL 8.0 on port 3306 and MySQL 9 on port 3307 simultaneously
+  - No more dependency on Homebrew, apt, or Chocolatey for MySQL
+  - Supported versions: 8.0, 8.4, 9 (synced with hostdb releases.json)
+  - Client tools (mysql, mysqldump, mysqladmin) bundled with binaries
+- **MySQL in Manage Engines menu** - Can now download, list, and delete MySQL engine versions like PostgreSQL and MariaDB
+- **`getMysqlClientPath()` method in BaseEngine** - Engine-specific client path method for bundled MySQL binaries
+
+### Changed
+- **MySQL now uses downloaded binaries** - No longer requires system-installed MySQL
+  - Removed Linux workaround that used MariaDB as MySQL replacement
+  - All platforms now use genuine MySQL binaries from hostdb
+  - Legacy containers created with system MySQL are treated as orphaned and will prompt to download matching version
+- **MySQL default version** - Changed from 9.0 to 9 (matching hostdb release naming)
+- **MySQL supported versions** - Updated to 8.0, 8.4, 9 (matching what's available in hostdb)
+- **CI workflow** - MySQL tests now run on all platforms (Linux added) using downloaded binaries
+
+### Removed
+- **MariaDB as MySQL fallback on Linux** - No longer needed since hostdb provides MySQL binaries for Linux
+- **System package manager dependency for MySQL** - No more brew install mysql or apt install mysql-server required
+
 ## [0.15.2] - 2026-01-09
 
 ### Fixed

@@ -421,7 +421,9 @@ async function launchShell(
     shellArgs = [config.database]
     installHint = 'brew install sqlite3'
   } else if (config.engine === 'mysql') {
-    shellCmd = 'mysql'
+    // MySQL uses downloaded binaries - get the actual path
+    const mysqlPath = await configManager.getBinaryPath('mysql')
+    shellCmd = mysqlPath || 'mysql'
     shellArgs = [
       '-u',
       'root',
@@ -431,7 +433,7 @@ async function launchShell(
       String(config.port),
       config.database,
     ]
-    installHint = 'brew install mysql-client'
+    installHint = 'spindb engines download mysql'
   } else if (config.engine === 'mariadb') {
     // MariaDB uses downloaded binaries, not system PATH - get the actual path
     const mariadbPath = await configManager.getBinaryPath('mariadb')

@@ -5,12 +5,14 @@
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
-import { createReadStream } from 'fs'
+import { createReadStream, existsSync } from 'fs'
 import { open } from 'fs/promises'
+import { join } from 'path'
 import { createGunzip } from 'zlib'
-import { getMysqlClientPath } from './binary-detection'
 import { validateRestoreCompatibility } from './version-validator'
 import { getEngineDefaults } from '../../config/defaults'
+import { configManager } from '../../core/config-manager'
+import { platformService } from '../../core/platform-service'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
@@ -148,6 +150,7 @@ export type RestoreOptions = {
   user?: string
   createDatabase?: boolean
   validateVersion?: boolean
+  binPath?: string // Optional path to MySQL binaries directory
 }
 
 // =============================================================================
@@ -159,6 +162,29 @@ export type RestoreOptions = {
  *
  * CLI equivalent: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
  */
+/**
+ * Get the mysql client path from config or binPath
+ */
+async function getMysqlClientPath(binPath?: string): Promise<string> {
+  // First check if binPath is provided and has mysql client
+  if (binPath) {
+    const ext = platformService.getExecutableExtension()
+    const mysqlPath = join(binPath, 'bin', `mysql${ext}`)
+    if (existsSync(mysqlPath)) {
+      return mysqlPath
+    }
+  }
+
+  // Fall back to config manager
+  const configPath = await configManager.getBinaryPath('mysql')
+  if (configPath) return configPath
+
+  throw new Error(
+    'mysql client not found. Ensure MySQL binaries are downloaded:\n' +
+      '  spindb engines download mysql',
+  )
+}
+
 export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
@@ -168,6 +194,7 @@ export async function restoreBackup(
     database,
     user = engineDef.superuser,
     validateVersion = true,
+    binPath,
   } = options
 
   // Validate version compatibility if requested
@@ -185,14 +212,7 @@ export async function restoreBackup(
     }
   }
 
-  const mysql = await getMysqlClientPath()
-  if (!mysql) {
-    throw new Error(
-      'mysql client not found. Install MySQL client tools:\n' +
-        '  macOS: brew install mysql-client\n' +
-        '  Ubuntu/Debian: sudo apt install mysql-client',
-    )
-  }
+  const mysql = await getMysqlClientPath(binPath)
 
   // Detect format and check for wrong engine
   const format = await detectBackupFormat(backupPath)

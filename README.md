@@ -177,31 +177,25 @@ MariaDB is MySQL-compatible, so most MySQL tools and clients work seamlessly. If
 
 | | |
 |---|---|
-| Versions | Depends on system installation |
+| Versions | 8.0, 8.4, 9 |
 | Default port | 3306 |
 | Default user | `root` |
-| Binary source | System installation |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
 
-Unlike PostgreSQL, SpinDB uses your system's MySQL installation. While Oracle provides MySQL binary downloads, they require system libraries and configuration—there's no "unzip and run" distribution like zonky.io provides for PostgreSQL. For most local development, a single system-installed MySQL version works well.
+SpinDB downloads MySQL server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases—just like PostgreSQL and MariaDB. This provides multi-version support and works across all platforms.
 
 ```bash
-# macOS
-brew install mysql
+# Create a MySQL container
+spindb create mydb --engine mysql
 
-# Ubuntu/Debian
-sudo apt install mysql-server
+# Create with specific version
+spindb create mydb --engine mysql --version 8.0
 
-# Windows (Chocolatey)
-choco install mysql
-
-# Windows (winget)
-winget install Oracle.MySQL
-
-# Check if SpinDB can find MySQL
+# Check what's available
 spindb deps check --engine mysql
 ```
 
-**Linux users:** MariaDB is also available as a standalone engine with downloadable binaries. Use `spindb create mydb --engine mariadb` for the dedicated MariaDB engine.
+**Client tools included:** MySQL binaries include `mysql`, `mysqldump`, and `mysqladmin` for all operations. No system installation required.
 
 #### SQLite
 
