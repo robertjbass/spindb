@@ -1261,11 +1261,20 @@ When new versions are added to hostdb releases.json:
 - Versions not in the map are ignored, even if present in releases.json
 - This prevents showing versions that haven't been tested with SpinDB
 
-### Cross-Platform Binary Consistency
+### Cross-Platform Binary Sources
 
-hostdb provides consistent binaries across all platforms (macOS, Linux, Windows). The releases.json contains download URLs for all supported platforms with the same versions available everywhere.
+Binary sources vary by engine and platform:
 
-**Note:** Legacy code may contain references to alternative binary sources (e.g., EDB for Windows, zonky.io for macOS/Linux). These are no longer used - hostdb is now the single source for all downloadable binaries.
+**PostgreSQL:**
+- **macOS/Linux:** hostdb binaries (replaced the legacy zonky.io source)
+- **Windows:** EDB (EnterpriseDB) official binaries - still required because hostdb doesn't package Windows PostgreSQL
+
+**MariaDB:**
+- **All platforms:** hostdb binaries
+
+When adding a new engine with downloadable binaries, check if hostdb provides builds for all platforms. If Windows binaries aren't available from hostdb, you may need to use an alternative source like EDB (see `engines/postgresql/edb-binary-urls.ts` for reference).
+
+**Note:** zonky.io (Maven Central) was previously used for macOS/Linux PostgreSQL binaries but has been replaced by hostdb.
 
 ### System Binaries (like MySQL)
 
@@ -1535,7 +1544,7 @@ Use these existing implementations as references:
 ### Server-Based Database with Downloadable Binaries
 
 **PostgreSQL** (`engines/postgresql/`):
-- Binary downloads from zonky.io (macOS/Linux) and EDB (Windows)
+- Binary downloads from hostdb (macOS/Linux) and EDB (Windows)
 - Client tool installation via Homebrew on macOS
 - Complex version resolution (major -> full version)
 - Windows-specific command building

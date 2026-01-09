@@ -342,6 +342,8 @@ After completing a feature, ensure these files are updated:
 
 When hostdb adds support for a new engine (e.g., Redis, MySQL), follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as the most recent example.
 
+**Pending migrations:** MySQL and MongoDB are planned for hostdb migration. See TODO.md "Engine Binary Migration (hostdb)" section for the detailed checklist and status.
+
 #### Prerequisites
 
 **CRITICAL: Check hostdb releases.json first**
@@ -713,14 +715,20 @@ SpinDB uses different binary sourcing strategies by engine:
 - macOS: Includes client tools (psql, pg_dump, pg_restore)
 - Linux: Client tools downloaded separately from PostgreSQL apt repository if missing
 
-**MySQL, MongoDB, Redis (System Binaries) - Currently:**
-- Uses system-installed binaries via Homebrew, apt, choco, etc.
+**MariaDB (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Enables multi-version support (10.11, 11.4, 11.8 side-by-side)
+- Reference implementation for hostdb migration pattern
+
+**MySQL, MongoDB, Redis (System Binaries) - Pending Migration:**
+- Currently uses system-installed binaries via Homebrew, apt, choco, etc.
 - Single version per machine (whatever the package manager provides)
 - SpinDB detects and orchestrates, doesn't download
+- **Planned:** Migrate to hostdb binaries for multi-version support (see TODO.md "Engine Binary Migration")
 
 **Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
 
-**Migration in progress:** The [hostdb](https://github.com/robertjbass/hostdb) project is being expanded to provide downloadable binaries for additional database engines (Redis, MySQL/MariaDB, etc.) as GitHub releases. PostgreSQL has been fully migrated from zonky.io to hostdb.
+**Planned hostdb migrations:** MySQL and MongoDB will be migrated from system binaries to hostdb downloadable binaries following the MariaDB pattern. This enables multi-version support and removes the package manager dependency. See TODO.md "Engine Binary Migration (hostdb)" section for the detailed checklist. Prerequisites: hostdb must first publish releases for these engines.
 
 ### Orphaned Container Support (PostgreSQL)
 
