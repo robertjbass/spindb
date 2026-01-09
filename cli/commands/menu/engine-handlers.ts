@@ -11,6 +11,7 @@ import { getEngineIcon, ENGINE_ICONS } from '../../constants'
 import {
   getInstalledEngines,
   type InstalledPostgresEngine,
+  type InstalledMariadbEngine,
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
   type InstalledMongodbEngine,
@@ -54,6 +55,9 @@ export async function handleEngines(): Promise<void> {
   const pgEngines = engines.filter(
     (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
   )
+  const mariadbEngines = engines.filter(
+    (e): e is InstalledMariadbEngine => e.engine === 'mariadb',
+  )
   const mysqlEngines = engines.filter(
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
   )
@@ -68,6 +72,7 @@ export async function handleEngines(): Promise<void> {
   )
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalMariadbSize = mariadbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   const COL_ENGINE = 14
   const COL_VERSION = 12
@@ -97,6 +102,20 @@ export async function handleEngines(): Promise<void> {
     )
   }
 
+  for (const engine of mariadbEngines) {
+    const icon = getEngineIcon(engine.engine)
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} ${engine.engine}`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
+        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   for (const mysqlEngine of mysqlEngines) {
     const icon = ENGINE_ICONS.mysql
     const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
@@ -113,8 +132,7 @@ export async function handleEngines(): Promise<void> {
 
   if (sqliteEngine) {
     const icon = ENGINE_ICONS.sqlite
-    // double space to align with other engines
-    const engineDisplay = `${icon}  sqlite`
+    const engineDisplay = `${icon} sqlite`
 
     console.log(
       chalk.gray('  ') +
@@ -161,6 +179,13 @@ export async function handleEngines(): Promise<void> {
       ),
     )
   }
+  if (mariadbEngines.length > 0) {
+    console.log(
+      chalk.gray(
+        `  MariaDB: ${mariadbEngines.length} version(s), ${formatBytes(totalMariadbSize)}`,
+      ),
+    )
+  }
   if (mysqlEngines.length > 0) {
     const versionCount = mysqlEngines.length
     const versionText = versionCount === 1 ? 'version' : 'versions'
@@ -192,6 +217,13 @@ export async function handleEngines(): Promise<void> {
   const choices: MenuChoice[] = []
 
   for (const e of pgEngines) {
+    choices.push({
+      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
+      value: `delete:${e.path}:${e.engine}:${e.version}`,
+    })
+  }
+
+  for (const e of mariadbEngines) {
     choices.push({
       name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
       value: `delete:${e.path}:${e.engine}:${e.version}`,

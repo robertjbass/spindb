@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-01-09
+
+### Fixed
+- **MariaDB/MySQL binary conflict resolved** - MariaDB now registers binaries under native names (`mariadb`, `mariadb-dump`, `mariadb-admin`) instead of mysql-named binaries
+  - Prevents MariaDB binaries from being used by MySQL engine (caused authentication plugin errors)
+  - Each engine now has completely separate binary registrations
+  - Test helpers updated to call correct client path method for each engine
+- **Emoji spacing in CLI** - Fixed narrow rendering of SQLite (🪶) and MariaDB (🦭) icons by adding trailing space
+
+### Changed
+- **MariaDB versions synced with hostdb** - Now supports all versions available in hostdb releases.json:
+  - 10.11 (LTS), 11.4 (LTS), 11.8 (latest)
+- **PostgreSQL 14 removed** - Version 14 is no longer available in hostdb releases, removed from supported versions
+  - Supported versions: 15, 16, 17, 18
+- **MariaDB now appears in Manage Engines menu** - Can download, list, and delete MariaDB engine versions like PostgreSQL
+
+### Added
+- **`getMariadbClientPath()` method in BaseEngine** - Engine-specific client path method for MariaDB
+- **Documentation for hostdb engine migration** - CLAUDE.md now includes comprehensive guide for migrating system-installed engines to hostdb downloadable binaries
+
 ## [0.15.0] - 2026-01-08
 
 ### Added

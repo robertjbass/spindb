@@ -7,8 +7,8 @@ describe('BinaryManager', () => {
     it('should map major versions to full versions', () => {
       const binaryManager = new BinaryManager()
 
+      // Keep in sync with engines/postgresql/version-maps.ts
       const testCases = [
-        { input: '14', expected: '14.20.0' },
         { input: '15', expected: '15.15.0' },
         { input: '16', expected: '16.11.0' },
         { input: '17', expected: '17.7.0' },

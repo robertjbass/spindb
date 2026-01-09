@@ -173,7 +173,7 @@ The engine layer implements database-specific logic via the abstract `BaseEngine
 
 All engines extend `BaseEngine`, which defines the contract for database operations:
 
-```typescript
+```ts
 abstract class BaseEngine {
   // Identity
   abstract name: string
@@ -212,7 +212,7 @@ abstract class BaseEngine {
 ```
 
 **Engine Registry** (`engines/index.ts`):
-```typescript
+```ts
 // Singleton instances with alias support
 getEngine('postgresql')  // or 'postgres', 'pg'
 getEngine('mysql')       // or 'mariadb'
@@ -265,7 +265,7 @@ Manages global configuration.
 Provides rollback support for atomic operations.
 
 **Usage:**
-```typescript
+```ts
 const tx = new TransactionManager()
 try {
   await step1()
@@ -382,7 +382,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 
 ### Container Config Schema
 
-```typescript
+```ts
 type ContainerConfig = {
   name: string
   engine: 'postgresql' | 'mysql' | 'sqlite'
@@ -398,7 +398,7 @@ type ContainerConfig = {
 
 ### Global Config Schema
 
-```typescript
+```ts
 type SpinDBConfig = {
   binaries: {
     psql?: BinaryConfig
@@ -449,7 +449,7 @@ spindb  # Opens menu → same operations
 
 Functions wrap CLI tools rather than implementing logic:
 
-```typescript
+```ts
 // CORRECT: Wraps psql CLI
 async createDatabase(container, database) {
   await execAsync(
@@ -462,7 +462,7 @@ async createDatabase(container, database) {
 
 Multi-step operations are atomic with rollback:
 
-```typescript
+```ts
 const tx = new TransactionManager()
 try {
   await createDataDir()
@@ -479,7 +479,7 @@ try {
 
 Singleton pattern with aliases:
 
-```typescript
+```ts
 const engines = {
   postgresql: new PostgreSQLEngine(),
   mysql: new MySQLEngine(),
@@ -498,7 +498,7 @@ const aliases = {
 
 Handles race conditions with automatic retry:
 
-```typescript
+```ts
 async function startWithRetry(container, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {

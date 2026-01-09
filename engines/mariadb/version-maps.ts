@@ -1,20 +1,23 @@
 /**
  * MariaDB Version Maps
  *
- * Shared version mappings used for hostdb binary downloads.
+ * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
+ * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
+ * https://github.com/robertjbass/hostdb/blob/main/releases.json
  *
  * When updating versions:
- * 1. Check hostdb GitHub releases for new versions:
- *    https://github.com/robertjbass/hostdb/releases
- * 2. Update MARIADB_VERSION_MAP with new full versions
- * 3. Update tests if needed
+ * 1. Check hostdb releases.json for available versions
+ * 2. Update MARIADB_VERSION_MAP to match
+ * 3. Update config/engine-defaults.ts supportedVersions array
  */
 
 /**
  * Map of major MariaDB versions to their latest stable patch versions.
- * Used for hostdb binary downloads.
+ * Must match versions available in hostdb releases.json.
  */
 export const MARIADB_VERSION_MAP: Record<string, string> = {
+  '10.11': '10.11.15',
+  '11.4': '11.4.5',
   '11.8': '11.8.5',
 }
 

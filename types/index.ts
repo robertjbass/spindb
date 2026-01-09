@@ -107,7 +107,7 @@ export type BinaryTool =
   | 'mysqlpump'
   | 'mysqld'
   | 'mysqladmin'
-  // MariaDB tools (uses mysql-compatible names)
+  // MariaDB tools (native names only - no mysql-named binaries to avoid conflicts)
   | 'mariadb'
   | 'mariadb-dump'
   | 'mariadbd'
@@ -161,7 +161,7 @@ export type SpinDBConfig = {
     mysqlpump?: BinaryConfig
     mysqld?: BinaryConfig
     mysqladmin?: BinaryConfig
-    // MariaDB tools (uses mysql-compatible names)
+    // MariaDB tools (native names only - no mysql-named binaries to avoid conflicts)
     mariadb?: BinaryConfig
     'mariadb-dump'?: BinaryConfig
     mariadbd?: BinaryConfig

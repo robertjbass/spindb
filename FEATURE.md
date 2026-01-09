@@ -128,7 +128,7 @@ engines/{engine}/
 
 Your engine class must extend `BaseEngine` and implement ALL of these methods:
 
-```typescript
+```ts
 import { BaseEngine } from '../base-engine'
 import type {
   ContainerConfig,
@@ -335,7 +335,7 @@ export const yourEngine = new YourEngine()
 
 Register your engine in `engines/index.ts`:
 
-```typescript
+```ts
 import { yourEngine } from './yourengine'
 
 export const engines: Record<string, BaseEngine> = {
@@ -355,7 +355,7 @@ export const engines: Record<string, BaseEngine> = {
 
 Add to the `Engine` enum:
 
-```typescript
+```ts
 export enum Engine {
   PostgreSQL = 'postgresql',
   MySQL = 'mysql',
@@ -366,7 +366,7 @@ export enum Engine {
 
 Add any new binary tools to `BinaryTool`:
 
-```typescript
+```ts
 export type BinaryTool =
   // PostgreSQL tools
   | 'psql'
@@ -383,7 +383,7 @@ export type BinaryTool =
 
 Add your engine's defaults:
 
-```typescript
+```ts
 export const engineDefaults: Record<string, EngineDefaults> = {
   // ... existing engines
 
@@ -408,7 +408,7 @@ export const engineDefaults: Record<string, EngineDefaults> = {
 
 Add system dependencies for each package manager:
 
-```typescript
+```ts
 const yourengineDependencies: EngineDependencies = {
   engine: 'yourengine',
   displayName: 'YourEngine',
@@ -458,7 +458,7 @@ export const engineDependencies: EngineDependencies[] = [
 
 If your engine needs registry-based tracking (like SQLite for file-based databases), add to the config schema:
 
-```typescript
+```ts
 export type SpinDBConfig = {
   binaries: {
     // ... existing tools
@@ -476,7 +476,7 @@ export type SpinDBConfig = {
 
 Add your engine's icon to the `ENGINE_ICONS` map. This icon appears in the interactive menu when selecting database engines.
 
-```typescript
+```ts
 export const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
@@ -504,96 +504,289 @@ If no icon is provided, the default `▣` will be used, which looks generic in t
 
 ### 6. CLI Helpers (`cli/helpers.ts`)
 
-This file provides helper functions for listing installed engines. Add support for your engine:
+This file provides helper functions for listing installed engines in the "Manage Engines" menu. The implementation differs based on whether your engine uses **downloaded binaries** or **system binaries**.
+
+#### For Downloaded Binary Engines (like PostgreSQL, MariaDB)
+
+Downloaded binaries are stored in `~/.spindb/bin/{engine}-{version}-{platform}-{arch}/` and can be deleted from the menu.
 
 1. **Add installed engine type:**
-   ```typescript
+   ```ts
+   export type InstalledYourEngineEngine = {
+     engine: 'yourengine'
+     version: string
+     platform: string    // e.g., 'darwin', 'linux', 'win32'
+     arch: string        // e.g., 'arm64', 'x64'
+     path: string
+     sizeBytes: number
+     source: 'downloaded'
+   }
+   ```
+
+2. **Add version detection function:**
+   ```ts
+   async function getYourEngineVersion(binPath: string): Promise<string | null> {
+     const ext = platformService.getExecutableExtension()
+     const serverPath = join(binPath, 'bin', `yourengine${ext}`)
+     if (!existsSync(serverPath)) {
+       return null
+     }
+
+     try {
+       const { stdout } = await execFileAsync(serverPath, ['--version'])
+       const match = stdout.match(/Ver\s+([\d.]+)/)
+       return match ? match[1] : null
+     } catch {
+       return null
+     }
+   }
+   ```
+
+3. **Add detection function that scans `~/.spindb/bin/`:**
+   ```ts
+   export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineEngine[]> {
+     const binDir = paths.bin
+     if (!existsSync(binDir)) {
+       return []
+     }
+
+     const entries = await readdir(binDir, { withFileTypes: true })
+     const engines: InstalledYourEngineEngine[] = []
+
+     for (const entry of entries) {
+       if (entry.isDirectory()) {
+         // Match yourengine-{version}-{platform}-{arch} directories
+         const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
+         if (match && match[1] === 'yourengine') {
+           const [, , majorVersion, platform, arch] = match
+           const dirPath = join(binDir, entry.name)
+           const actualVersion = (await getYourEngineVersion(dirPath)) || majorVersion
+
+           // Calculate directory size
+           let sizeBytes = 0
+           // ... size calculation logic
+
+           engines.push({
+             engine: 'yourengine',
+             version: actualVersion,
+             platform,
+             arch,
+             path: dirPath,
+             sizeBytes,
+             source: 'downloaded',
+           })
+         }
+       }
+     }
+
+     engines.sort((a, b) => compareVersions(b.version, a.version))
+     return engines
+   }
+   ```
+
+4. **Add to `InstalledEngine` union type and `getInstalledEngines()`.**
+
+5. **Export the detection function for use in engine-handlers.ts.**
+
+#### For System-Installed Engines (like MySQL, MongoDB, Redis)
+
+System binaries are installed via package managers (Homebrew, apt, etc.) and show an "Info" screen in the menu.
+
+1. **Add installed engine type:**
+   ```ts
    export type InstalledYourEngineType = {
      engine: 'yourengine'
      version: string
      path: string
      source: 'system'
+     formulaName: string  // e.g., 'yourengine', 'yourengine@8.0'
    }
    ```
 
-2. **Add to `InstalledEngine` union type:**
-   ```typescript
-   export type InstalledEngine =
-     | InstalledPostgresEngine
-     | InstalledMysqlEngine
-     | InstalledSqliteEngine
-     | InstalledYourEngineType  // Add this
-   ```
+2. **Add detection function:**
+   ```ts
+   async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineType[]> {
+     const engines: InstalledYourEngineType[] = []
+     const seenFormulas = new Set<string>()
 
-3. **Add detection function:**
-   ```typescript
-   async function getInstalledYourEngineEngine(): Promise<InstalledYourEngineType | null> {
-     const binaryPath = await getYourEnginePath()  // From binary-detection.ts
-     if (!binaryPath) {
-       return null
+     // Check Homebrew paths (macOS)
+     for (const path of HOMEBREW_YOURENGINE_PATHS) {
+       if (existsSync(path)) {
+         const formulaName = extractHomebrewFormula(path, 'yourengine')
+         if (seenFormulas.has(formulaName)) continue
+         seenFormulas.add(formulaName)
+
+         const version = await getYourEngineVersion(path)
+         if (version) {
+           engines.push({
+             engine: 'yourengine',
+             version,
+             path,
+             source: 'system',
+             formulaName,
+           })
+         }
+       }
      }
 
-     const version = await getYourEngineVersion(binaryPath)
-     if (!version) {
-       return null
-     }
-
-     return {
-       engine: 'yourengine',
-       version,
-       path: binaryPath,
-       source: 'system',
-     }
-   }
-   ```
-
-4. **Add to `getInstalledEngines()`:**
-   ```typescript
-   export async function getInstalledEngines(): Promise<InstalledEngine[]> {
-     const engines: InstalledEngine[] = []
-     // ... existing engines
-
-     const yourEngine = await getInstalledYourEngineEngine()
-     if (yourEngine) {
-       engines.push(yourEngine)
+     // Also check system PATH
+     const pathBinary = await getYourEnginePath()
+     if (pathBinary && !seenFormulas.has(extractHomebrewFormula(pathBinary, 'yourengine'))) {
+       // ... add from PATH
      }
 
      return engines
    }
    ```
 
-### 7. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
+3. **Add to `InstalledEngine` union type and `getInstalledEngines()`.**
 
-The "Manage Engines" menu displays installed engines and provides info screens for system-installed engines. You must manually update this file to include your engine.
+### 7. Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
+
+The shell handlers file controls which CLI tools are offered when connecting to a container. Each engine needs its own shell configuration to avoid defaulting to PostgreSQL tools.
+
+**Required changes:**
+
+1. **Add engine to shell option selection (around line 109-140):**
+
+   The `handleOpenShell` function has a series of `if/else if` statements that determine:
+   - `defaultShellName` - The native CLI tool (e.g., `mysql`, `mongosh`, `redis-cli`)
+   - `engineSpecificCli` - Enhanced CLI tool if available (e.g., `mycli`, `iredis`)
+   - `engineSpecificInstalled` - Whether the enhanced CLI is installed
+   - `engineSpecificValue` / `engineSpecificInstallValue` - Menu choice values
+
+   ```ts
+   if (config.engine === 'sqlite') {
+     defaultShellName = 'sqlite3'
+     engineSpecificCli = 'litecli'
+     // ...
+   } else if (config.engine === 'mysql' || config.engine === 'mariadb') {
+     defaultShellName = 'mysql'
+     engineSpecificCli = 'mycli'
+     // ...
+   } else if (config.engine === 'yourengine') {
+     defaultShellName = 'yourcli'           // Add your engine
+     engineSpecificCli = 'enhanced-yourcli' // Or null if no enhanced CLI
+     engineSpecificInstalled = yourCliInstalled
+     engineSpecificValue = 'yourcli'
+     engineSpecificInstallValue = 'install-yourcli'
+   } else {
+     // DEFAULT: PostgreSQL - catch-all fallback
+     defaultShellName = 'psql'
+     engineSpecificCli = 'pgcli'
+     // ...
+   }
+   ```
+
+   **IMPORTANT:** If you don't add your engine here, it falls through to the `else` block and shows PostgreSQL tools (psql, pgcli) which is incorrect.
+
+2. **Update usql eligibility (around line 167):**
+
+   usql is a universal SQL client. Skip it for non-SQL engines:
+
+   ```ts
+   const isNonSqlEngine = config.engine === 'redis' || config.engine === 'mongodb' || config.engine === 'yourengine'
+   ```
+
+3. **Add install handler if engine has an enhanced CLI:**
+
+   If your engine has an enhanced CLI (like pgcli, mycli, litecli, iredis), add an install handler:
+
+   ```ts
+   if (shellChoice === 'install-yourcli') {
+     console.log(uiInfo('Installing yourcli for enhanced YourEngine shell...'))
+     const pm = await detectPackageManager()
+     // ... installation logic
+   }
+   ```
+
+4. **Update launchShell function (around line 411-446):**
+
+   Add your engine's default shell command:
+
+   ```ts
+   } else if (config.engine === 'yourengine') {
+     shellCmd = 'yourcli'
+     shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), config.database]
+     installHint = 'brew install yourcli'
+   } else {
+     // DEFAULT: PostgreSQL - catch-all fallback
+     shellCmd = 'psql'
+     shellArgs = [connectionString]
+     installHint = 'brew install libpq && brew link --force libpq'
+   }
+   ```
+
+5. **Add detection functions in dependency-manager (if enhanced CLI exists):**
+
+   ```ts
+   export async function isYourCliInstalled(): Promise<boolean> {
+     // Check if enhanced CLI is in PATH
+   }
+
+   export async function installYourCli(pm: PackageManager): Promise<InstallResult> {
+     // Install via package manager
+   }
+
+   export function getYourCliManualInstructions(): string[] {
+     // Return manual install instructions
+   }
+   ```
+
+**Common mistake:** Forgetting to add the engine to shell-handlers.ts causes it to fall through to the PostgreSQL defaults, showing "Use default shell (psql)" even for MySQL, MongoDB, Redis, etc.
+
+### 8. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
+
+The "Manage Engines" menu displays installed engines. The menu options differ based on engine type:
+- **Downloaded binary engines** (PostgreSQL, MariaDB): Show "Delete" option
+- **System-installed engines** (MySQL, MongoDB, Redis): Show "Info" option with uninstall instructions
 
 **Required changes:**
 
 1. **Add type imports:**
-   ```typescript
+   ```ts
    import {
      // ... existing types
      type InstalledYourEngineType,
    } from '../../helpers'
-   import { getYourEngineVersion } from '../../../engines/yourengine/binary-detection'
    ```
 
 2. **Add engine filtering in `handleEngines()`:**
-   ```typescript
-   const yourEngine = engines.find(
+   ```ts
+   const yourEngines = engines.filter(
      (e): e is InstalledYourEngineType => e.engine === 'yourengine',
    )
    ```
 
 3. **Add engine row to the table display:**
-   ```typescript
-   if (yourEngine) {
+
+   For **downloaded binary engines**:
+   ```ts
+   for (const engine of yourEngines) {
+     const icon = getEngineIcon(engine.engine)
+     const platformInfo = `${engine.platform}-${engine.arch}`
+     const engineDisplay = `${icon} ${engine.engine}`
+
+     console.log(
+       chalk.gray('  ') +
+         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
+         chalk.yellow(engine.version.padEnd(COL_VERSION)) +
+         chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
+         chalk.white(formatBytes(engine.sizeBytes)),
+     )
+   }
+   ```
+
+   For **system-installed engines**:
+   ```ts
+   for (const engine of yourEngines) {
      const icon = ENGINE_ICONS.yourengine
      const engineDisplay = `${icon} yourengine`
 
      console.log(
        chalk.gray('  ') +
          chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-         chalk.yellow(yourEngine.version.padEnd(COL_VERSION)) +
+         chalk.yellow(engine.version.padEnd(COL_VERSION)) +
          chalk.gray('system'.padEnd(COL_SOURCE)) +
          chalk.gray('(system-installed)'),
      )
@@ -601,36 +794,64 @@ The "Manage Engines" menu displays installed engines and provides info screens f
    ```
 
 4. **Add summary line:**
-   ```typescript
-   if (yourEngine) {
+
+   For **downloaded binary engines**:
+   ```ts
+   if (yourEngines.length > 0) {
+     const totalSize = yourEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
      console.log(
-       chalk.gray(`  YourEngine: system-installed at ${yourEngine.path}`),
+       chalk.gray(`  YourEngine: ${yourEngines.length} version(s), ${formatBytes(totalSize)}`),
      )
    }
    ```
 
-5. **Add menu choice:**
-   ```typescript
-   if (yourEngine) {
+   For **system-installed engines**:
+   ```ts
+   if (yourEngines.length > 0) {
+     console.log(
+       chalk.gray(`  YourEngine: ${yourEngines.length} version(s) system-installed`),
+     )
+   }
+   ```
+
+5. **Add menu choices:**
+
+   For **downloaded binary engines** (deletable):
+   ```ts
+   for (const e of yourEngines) {
      choices.push({
-       name: `${chalk.blue('ℹ')} YourEngine ${yourEngine.version} ${chalk.gray('(system-installed)')}`,
-       value: `yourengine-info:${yourEngine.path}`,
+       name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
+       value: `delete:${e.path}:${e.engine}:${e.version}`,
+     })
+   }
+   ```
+   Note: The existing `handleDeleteEngine()` function handles deletion automatically.
+
+   For **system-installed engines** (info only):
+   ```ts
+   for (const engine of yourEngines) {
+     choices.push({
+       name: `${chalk.blue('ℹ')} YourEngine ${engine.version} ${chalk.gray('(system-installed)')}`,
+       value: `yourengine-info:${engine.path}:${engine.formulaName}`,
      })
    }
    ```
 
-6. **Add action handler:**
-   ```typescript
+6. **Add action handler (system-installed engines only):**
+   ```ts
    if (action.startsWith('yourengine-info:')) {
-     const binaryPath = action.slice('yourengine-info:'.length)
-     await handleYourEngineInfo(binaryPath)
+     const withoutPrefix = action.slice('yourengine-info:'.length)
+     const lastColon = withoutPrefix.lastIndexOf(':')
+     const binaryPath = withoutPrefix.slice(0, lastColon)
+     const formulaName = withoutPrefix.slice(lastColon + 1)
+     await handleYourEngineInfo(binaryPath, formulaName)
      await handleEngines()
    }
    ```
 
-7. **Add info handler function:**
-   ```typescript
-   async function handleYourEngineInfo(binaryPath: string): Promise<void> {
+7. **Add info handler function (system-installed engines only):**
+   ```ts
+   async function handleYourEngineInfo(binaryPath: string, formulaName: string): Promise<void> {
      console.clear()
      console.log(header('YourEngine Information'))
      // Show version, containers using this engine, uninstall instructions
@@ -638,10 +859,7 @@ The "Manage Engines" menu displays installed engines and provides info screens f
    }
    ```
 
-**Also update `cli/helpers.ts`:**
-- Add `InstalledYourEngineType` type
-- Add `getInstalledYourEngineEngine()` function
-- Add to `getInstalledEngines()` function
+**Note:** Downloaded binary engines reuse the existing `handleDeleteEngine()` function and don't need a custom info handler.
 
 ---
 
@@ -687,7 +905,7 @@ INSERT INTO test_user (id, name, email) VALUES
 
 Update `tests/integration/helpers.ts` to support your engine:
 
-```typescript
+```ts
 // 1. Add to TEST_PORTS
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
@@ -741,7 +959,7 @@ export function getConnectionString(
 
 Create `tests/integration/{engine}.test.ts` with **at least 14 tests**:
 
-```typescript
+```ts
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -931,7 +1149,7 @@ If your engine has binaries that can be downloaded:
 
 1. Create `engines/{engine}/binary-urls.ts`:
 
-```typescript
+```ts
 export const SUPPORTED_MAJOR_VERSIONS = ['6', '7', '8']
 
 // Fallback version map for offline use
@@ -979,7 +1197,7 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
 
 2. Document binary sources in a comment at the top of the file:
 
-```typescript
+```ts
 /**
  * Binary URLs for YourEngine
  *
@@ -995,29 +1213,59 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
  */
 ```
 
-### Windows Binary Considerations (PostgreSQL Example)
+### hostdb Binaries (PostgreSQL, MariaDB)
 
-PostgreSQL uses different binary sources per platform:
-- **macOS/Linux**: zonky.io provides Maven Central URLs with predictable version-based paths
-- **Windows**: EnterpriseDB (EDB) uses opaque file IDs that must be manually discovered
+For engines using the [hostdb](https://github.com/robertjbass/hostdb) repository for downloadable binaries, you must keep version-maps.ts synchronized with the releases.json file.
 
-When a Windows binary source uses opaque IDs (not version-based URLs):
+**Required files:**
 
-1. Create a separate file for Windows URL handling (e.g., `edb-binary-urls.ts`)
-2. Document the process for discovering new IDs in the file header
-3. Include both full version and major version aliases:
-   ```typescript
-   export const EDB_FILE_IDS: Record<string, string> = {
-     '18.1.0': '1259913',  // Full version
-     '18': '1259913',      // Major version alias
+1. **`engines/{engine}/version-maps.ts`** - Defines supported versions:
+
+   ```ts
+   /**
+    * IMPORTANT: Keep this in sync with versions available in hostdb releases.json:
+    * https://github.com/robertjbass/hostdb/blob/main/releases.json
+    */
+   export const YOURENGINE_VERSION_MAP: Record<string, string> = {
+     '10.11': '10.11.15',  // major version -> full version
+     '11.4': '11.4.5',
+     '11.8': '11.8.5',
+   }
+
+   export const SUPPORTED_MAJOR_VERSIONS = Object.keys(YOURENGINE_VERSION_MAP)
+   ```
+
+2. **`engines/{engine}/hostdb-releases.ts`** - Fetches versions from releases.json:
+
+   ```ts
+   export async function fetchAvailableVersions(): Promise<Record<string, string[]>> {
+     const releases = await fetchHostdbReleases()
+     // Filter by SUPPORTED_MAJOR_VERSIONS from version-maps.ts
+     // Return grouped versions
    }
    ```
-4. Add detailed instructions explaining:
-   - Why manual updates are needed (opaque IDs vs predictable URLs)
-   - Step-by-step process to find new IDs
-   - Which files need updating when new versions are released
 
-See `engines/postgresql/edb-binary-urls.ts` for a complete example with documentation.
+**Critical: Keeping versions in sync**
+
+When new versions are added to hostdb releases.json:
+
+1. Check hostdb releases.json for new database versions
+2. Add new major versions to `YOURENGINE_VERSION_MAP`
+3. The `SUPPORTED_MAJOR_VERSIONS` is automatically derived from the map keys
+4. `fetchAvailableVersions()` will now include the new versions
+
+**Why this design?**
+
+- The version map serves as both a fallback (offline use) and a filter
+- `fetchAvailableVersions()` only returns versions that match `SUPPORTED_MAJOR_VERSIONS`
+- Versions not in the map are ignored, even if present in releases.json
+- This prevents showing versions that haven't been tested with SpinDB
+
+### Cross-Platform Binary Consistency
+
+hostdb provides consistent binaries across all platforms (macOS, Linux, Windows). The releases.json contains download URLs for all supported platforms with the same versions available everywhere.
+
+**Note:** Legacy code may contain references to alternative binary sources (e.g., EDB for Windows, zonky.io for macOS/Linux). These are no longer used - hostdb is now the single source for all downloadable binaries.
 
 ### System Binaries (like MySQL)
 
@@ -1025,7 +1273,7 @@ If your engine uses system-installed binaries:
 
 1. Create `engines/{engine}/binary-detection.ts`:
 
-```typescript
+```ts
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 
@@ -1045,7 +1293,7 @@ export async function detectBinaryVersion(binaryPath: string): Promise<string | 
 
 2. In your engine's `ensureBinaries()`, use dependency manager:
 
-```typescript
+```ts
 async ensureBinaries(
   version: string,
   onProgress?: ProgressCallback,
@@ -1091,7 +1339,7 @@ If your engine has an enhanced CLI (like pgcli, mycli, litecli):
 
 1. Add to `config/os-dependencies.ts`:
 
-```typescript
+```ts
 export const yourcliDependency: Dependency = {
   name: 'yourcli',
   binary: 'yourcli',
@@ -1117,7 +1365,7 @@ Windows requires special handling in several areas:
 
 ### Command Quoting
 
-```typescript
+```ts
 import { isWindows } from '../../core/platform-service'
 
 // Use double quotes on Windows, single quotes on Unix
@@ -1129,7 +1377,7 @@ const cmd = isWindows()
 
 ### Spawn Options
 
-```typescript
+```ts
 import { getWindowsSpawnOptions } from '../../core/platform-service'
 
 const spawnOptions: SpawnOptions = {
@@ -1140,7 +1388,7 @@ const spawnOptions: SpawnOptions = {
 
 ### Executable Extensions
 
-```typescript
+```ts
 import { platformService } from '../../core/platform-service'
 
 const ext = platformService.getExecutableExtension()  // '.exe' on Windows, '' otherwise

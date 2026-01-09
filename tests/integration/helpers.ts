@@ -153,11 +153,17 @@ export async function executeSQL(
     // For SQLite, database is the file path
     const cmd = `sqlite3 "${database}" "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MySQL || engine === Engine.MariaDB) {
+  } else if (engine === Engine.MySQL) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled mysql if available, otherwise fall back to `mysql` in PATH
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.MariaDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled mariadb if available, otherwise fall back to `mariadb` in PATH
+    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
     const engineImpl = getEngine(engine)
@@ -205,10 +211,15 @@ export async function executeSQLFile(
     // For SQLite, database is the file path
     const cmd = `sqlite3 "${database}" < "${filePath}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MySQL || engine === Engine.MariaDB) {
+  } else if (engine === Engine.MySQL) {
     const engineImpl = getEngine(engine)
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.MariaDB) {
+    const engineImpl = getEngine(engine)
+    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
     const engineImpl = getEngine(engine)

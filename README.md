@@ -936,6 +936,9 @@ See [TODO.md](TODO.md) for the full roadmap.
 - Scheduled backups
 - Import from Docker
 
+### Future Infrastructure
+- **hostdb npm package**: Available database versions will be published as an npm package from [hostdb](https://github.com/robertjbass/hostdb) and imported into SpinDB, eliminating the need to manually sync version-maps.ts with releases.json
+
 ### Possible Future Engines
 
 These engines are under consideration but not yet on the roadmap. Community interest and feasibility will determine priority:

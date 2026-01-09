@@ -173,23 +173,14 @@ export class MariaDBEngine extends BaseEngine {
       onProgress,
     )
 
-    // Register client tools from downloaded binaries in config
+    // Register MariaDB-native client tools (not mysql-named ones to avoid conflicts)
     const ext = platformService.getExecutableExtension()
-    const clientTools = [
-      'mysql',
-      'mariadb',
-      'mysqldump',
-      'mariadb-dump',
-      'mysqladmin',
-      'mariadb-admin',
-    ] as const
+    const clientTools = ['mariadb', 'mariadb-dump', 'mariadb-admin'] as const
 
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
-        // Register with the canonical name (mysql, mysqldump, mysqladmin)
-        const canonicalName = tool.replace('mariadb-', 'mysql').replace('mariadb', 'mysql') as 'mysql' | 'mysqldump' | 'mysqladmin'
-        await configManager.setBinaryPath(canonicalName, toolPath, 'bundled')
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
       }
     }
 
@@ -684,22 +675,22 @@ export class MariaDBEngine extends BaseEngine {
     return `mysql://${engineDef.superuser}@127.0.0.1:${port}/${db}`
   }
 
-  async getMysqlClientPath(): Promise<string> {
-    const configPath = await configManager.getBinaryPath('mysql')
+  override async getMariadbClientPath(): Promise<string> {
+    const configPath = await configManager.getBinaryPath('mariadb')
     if (configPath) return configPath
 
     throw new Error(
-      'mysql client not found. Ensure MariaDB binaries are downloaded:\n' +
+      'mariadb client not found. Ensure MariaDB binaries are downloaded:\n' +
         '  spindb engines download mariadb',
     )
   }
 
   override async getMysqladminPath(): Promise<string> {
-    const cfg = await configManager.getBinaryPath('mysqladmin')
+    const cfg = await configManager.getBinaryPath('mariadb-admin')
     if (cfg) return cfg
 
     throw new Error(
-      'mysqladmin not found. Ensure MariaDB binaries are downloaded:\n' +
+      'mariadb-admin not found. Ensure MariaDB binaries are downloaded:\n' +
         '  spindb engines download mariadb',
     )
   }
@@ -708,7 +699,7 @@ export class MariaDBEngine extends BaseEngine {
     const { port } = container
     const db = database || container.database || 'mysql'
 
-    const mysql = await this.getMysqlClientPath()
+    const mysql = await this.getMariadbClientPath()
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
@@ -734,7 +725,7 @@ export class MariaDBEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
 
-    const mysql = await this.getMysqlClientPath()
+    const mysql = await this.getMariadbClientPath()
 
     try {
       const cmd = buildMariadbInlineCommand(
@@ -759,7 +750,7 @@ export class MariaDBEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
 
-    const mysql = await this.getMysqlClientPath()
+    const mysql = await this.getMariadbClientPath()
 
     try {
       const cmd = buildMariadbInlineCommand(
@@ -784,7 +775,7 @@ export class MariaDBEngine extends BaseEngine {
     assertValidDatabaseName(db)
 
     try {
-      const mysql = await this.getMysqlClientPath()
+      const mysql = await this.getMariadbClientPath()
 
       const { stdout } = await execAsync(
         `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
@@ -880,12 +871,11 @@ export class MariaDBEngine extends BaseEngine {
   }
 
   private async getDumpPath(): Promise<string> {
-    // Get from config manager (set during ensureBinaries)
-    const configPath = await configManager.getBinaryPath('mysqldump')
+    const configPath = await configManager.getBinaryPath('mariadb-dump')
     if (configPath) return configPath
 
     throw new Error(
-      'mariadb-dump/mysqldump not found. Ensure MariaDB binaries are downloaded:\n' +
+      'mariadb-dump not found. Ensure MariaDB binaries are downloaded:\n' +
         '  spindb engines download mariadb',
     )
   }
@@ -906,7 +896,7 @@ export class MariaDBEngine extends BaseEngine {
     const db = options.database || container.database || 'mysql'
     assertValidDatabaseName(db)
 
-    const mysql = await this.getMysqlClientPath()
+    const mysql = await this.getMariadbClientPath()
 
     if (isWindows()) {
       const cmd = buildWindowsMariadbCommand(

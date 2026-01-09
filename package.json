@@ -1,7 +1,7 @@
 {
   "name": "spindb",
-  "version": "0.15.0",
-  "description": "Zero-config Docker-free local database containers. Create, backup, and clone PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and SQLite instances.",
+  "version": "0.15.1",
+  "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
     "spindb": "./bin/cli.js"
@@ -22,7 +22,6 @@
     "test:all": "run-s test:unit test:integration",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
-    "check:pg-versions": "tsx scripts/check-pg-versions.ts",
     "prepare": "husky"
   },
   "keywords": [
@@ -35,6 +34,9 @@
     "development",
     "mongodb",
     "redis",
+    "valkey",
+    "mariadb",
+    "ferretdb",
     "sqlite",
     "tui",
     "cli"

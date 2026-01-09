@@ -30,6 +30,16 @@ export type InstalledPostgresEngine = {
   source: 'downloaded'
 }
 
+export type InstalledMariadbEngine = {
+  engine: 'mariadb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledMysqlEngine = {
   engine: 'mysql'
   version: string
@@ -64,6 +74,7 @@ export type InstalledRedisEngine = {
 
 export type InstalledEngine =
   | InstalledPostgresEngine
+  | InstalledMariadbEngine
   | InstalledMysqlEngine
   | InstalledSqliteEngine
   | InstalledMongodbEngine
@@ -127,6 +138,86 @@ export async function getInstalledPostgresEngines(): Promise<
 
         engines.push({
           engine: 'postgresql',
+          version: actualVersion,
+          platform,
+          arch,
+          path: dirPath,
+          sizeBytes,
+          source: 'downloaded',
+        })
+      }
+    }
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
+async function getMariadbVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  // Try mariadbd first, then mysqld
+  let serverPath = join(binPath, 'bin', `mariadbd${ext}`)
+  if (!existsSync(serverPath)) {
+    serverPath = join(binPath, 'bin', `mysqld${ext}`)
+  }
+  if (!existsSync(serverPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(serverPath, ['--version'])
+    // Parse output like "mariadbd  Ver 11.8.5-MariaDB"
+    const match = stdout.match(/Ver\s+([\d.]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+export async function getInstalledMariadbEngines(): Promise<
+  InstalledMariadbEngine[]
+> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledMariadbEngine[] = []
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Match mariadb-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
+      if (match && match[1] === 'mariadb') {
+        const [, , majorVersion, platform, arch] = match
+        const dirPath = join(binDir, entry.name)
+
+        const actualVersion =
+          (await getMariadbVersion(dirPath)) || majorVersion
+
+        let sizeBytes = 0
+        try {
+          const files = await readdir(dirPath, { recursive: true })
+          for (const file of files) {
+            try {
+              const filePath = join(dirPath, file.toString())
+              const fileStat = await lstat(filePath)
+              if (fileStat.isFile()) {
+                sizeBytes += fileStat.size
+              }
+            } catch {
+              // Skip files we can't stat
+            }
+          }
+        } catch {
+          // Skip directories we can't read
+        }
+
+        engines.push({
+          engine: 'mariadb',
           version: actualVersion,
           platform,
           arch,
@@ -467,6 +558,9 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
 
   const pgEngines = await getInstalledPostgresEngines()
   engines.push(...pgEngines)
+
+  const mariadbEngines = await getInstalledMariadbEngines()
+  engines.push(...mariadbEngines)
 
   const mysqlEngines = await getInstalledMysqlEngines()
   engines.push(...mysqlEngines)

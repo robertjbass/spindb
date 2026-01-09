@@ -120,7 +120,7 @@ tests/
 
 Engines extend `BaseEngine` abstract class:
 
-```typescript
+```ts
 abstract class BaseEngine {
   abstract name: string
   abstract displayName: string
@@ -208,7 +208,7 @@ Each engine supports specific backup formats with different restore behaviors:
 
 ### Container Config
 
-```typescript
+```ts
 type ContainerConfig = {
   name: string
   engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis'
@@ -236,7 +236,7 @@ spindb → Create container → mydb → 5433 # Interactive
 ### Wrapper Pattern
 Functions should wrap CLI tools, not implement database logic directly:
 
-```typescript
+```ts
 // CORRECT: Wraps psql CLI
 async createDatabase(container: ContainerConfig, database: string): Promise<void> {
   await execAsync(
@@ -248,7 +248,7 @@ async createDatabase(container: ContainerConfig, database: string): Promise<void
 ### Transactional Operations
 Multi-step operations must be atomic. Use `TransactionManager` for rollback support:
 
-```typescript
+```ts
 const tx = new TransactionManager()
 tx.addRollback(async () => await cleanup())
 try {
@@ -338,44 +338,329 @@ After completing a feature, ensure these files are updated:
 - **Server databases** (PostgreSQL, MySQL, MongoDB): Data in `~/.spindb/containers/`, port management, start/stop
 - **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
 
+### Migrating an Engine from System Binaries to hostdb
+
+When hostdb adds support for a new engine (e.g., Redis, MySQL), follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as the most recent example.
+
+#### Prerequisites
+
+**CRITICAL: Check hostdb releases.json first**
+
+Before starting, verify binaries exist and note exact versions:
+1. View https://github.com/robertjbass/hostdb/blob/main/releases.json
+2. Find the engine under `databases.{engine}`
+3. Note ALL available versions (e.g., `"8.0.5"`, `"8.2.0"`) - these become your version map
+4. Note supported platforms (darwin-arm64, darwin-x64, linux-x64)
+5. **The version-maps.ts file MUST match releases.json exactly** - any version not in releases.json will fail to download
+
+**MySQL Migration Note:** When MySQL is migrated to hostdb, it will use actual MySQL binaries on ALL platforms. Previously, SpinDB used MariaDB as a drop-in replacement for MySQL on Linux (since MySQL wasn't easily available via apt). With hostdb providing MySQL binaries directly, this workaround is no longer needed. MySQL and MariaDB will be fully separate engines with their own binaries.
+
+#### Step 1: Create Binary Management Files
+
+Create these new files in `engines/{engine}/`:
+
+**`version-maps.ts`** - Maps major versions to full versions
+
+**SYNC REQUIREMENT:** This file must match hostdb releases.json exactly. Check releases.json first, then create this file with those exact versions.
+
+```ts
+/**
+ * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
+ * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
+ * https://github.com/robertjbass/hostdb/blob/main/releases.json
+ *
+ * To update: Check releases.json, find databases.{engine}, copy all version strings.
+ */
+export const {ENGINE}_VERSION_MAP: Record<string, string> = {
+  // Copy ALL versions from releases.json - extract major version as key
+  '8': '8.0.5',    // From releases.json: "8.0.5"
+  '8.2': '8.2.0',  // From releases.json: "8.2.0" (if minor versions differ)
+}
+
+export const SUPPORTED_MAJOR_VERSIONS = Object.keys({ENGINE}_VERSION_MAP)
+export const FALLBACK_VERSION_MAP = {ENGINE}_VERSION_MAP
+```
+
+**`binary-urls.ts`** - Generates download URLs for hostdb releases
+```ts
+const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
+
+export function getBinaryUrl(version: string, platform: string, arch: string): string {
+  const fullVersion = FALLBACK_VERSION_MAP[version] || version
+  const platformKey = `${platform}-${arch}`
+  return `${HOSTDB_BASE_URL}/{engine}-${fullVersion}/${engine}-${fullVersion}-${platformKey}.tar.gz`
+}
+```
+
+**`binary-manager.ts`** - Handles download, extraction, verification
+- Copy structure from `engines/mariadb/binary-manager.ts` or `engines/postgresql/binary-manager.ts`
+- Update engine name, binary names, and verification logic
+
+#### Step 2: Update Main Engine File (`index.ts`)
+
+Key changes to make:
+
+1. **Import new modules:**
+   ```ts
+   import { {engine}BinaryManager } from './binary-manager'
+   import { getBinaryUrl, SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './binary-urls'
+   ```
+
+2. **Update `supportedVersions`:**
+   ```ts
+   supportedVersions = SUPPORTED_MAJOR_VERSIONS
+   ```
+
+3. **Update `ensureBinaries()` to register engine-native binaries only:**
+   ```ts
+   async ensureBinaries(version: string, onProgress?: ProgressCallback): Promise<string> {
+     const { platform, arch } = this.getPlatformInfo()
+     const binPath = await binaryManager.ensureInstalled(version, platform, arch, onProgress)
+
+     // CRITICAL: Register ONLY engine-native binary names to avoid conflicts
+     // e.g., for MariaDB: 'mariadb', 'mariadb-dump', 'mariadb-admin'
+     // NOT: 'mysql', 'mysqldump', 'mysqladmin' (those belong to MySQL engine)
+     const ext = platformService.getExecutableExtension()
+     const clientTools = ['{engine}', '{engine}-dump', '{engine}-admin'] as const
+
+     for (const tool of clientTools) {
+       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+       if (existsSync(toolPath)) {
+         await configManager.setBinaryPath(tool, toolPath, 'bundled')
+       }
+     }
+     return binPath
+   }
+   ```
+
+4. **Create engine-specific client path method:**
+   ```ts
+   override async get{Engine}ClientPath(): Promise<string> {
+     const configPath = await configManager.getBinaryPath('{engine}')
+     if (configPath) return configPath
+     throw new Error('{engine} client not found. Run: spindb engines download {engine}')
+   }
+   ```
+
+5. **Update all internal methods to use engine-specific client:**
+   - Replace calls like `getMysqlClientPath()` with `get{Engine}ClientPath()`
+   - Update dump/restore methods to use engine-specific binary keys
+
+#### Step 3: Update Type Definitions (`types/index.ts`)
+
+1. **Add to `BinaryTool` type:**
+   ```ts
+   // {Engine} tools (native names only - no conflicts with other engines)
+   | '{engine}'
+   | '{engine}-dump'
+   | '{engine}d'  // server binary if applicable
+   | '{engine}-admin'
+   ```
+
+2. **Add to `SpinDBConfig.binaries`:**
+   ```ts
+   // {Engine} tools
+   {engine}?: BinaryConfig
+   '{engine}-dump'?: BinaryConfig
+   '{engine}d'?: BinaryConfig
+   '{engine}-admin'?: BinaryConfig
+   ```
+
+#### Step 4: Update BaseEngine (`engines/base-engine.ts`)
+
+Add the engine-specific client path method with default implementation:
+```ts
+/**
+ * Get the path to the {engine} client if available
+ * Default implementation throws; {Engine} engine overrides this method.
+ */
+async get{Engine}ClientPath(): Promise<string> {
+  throw new Error('{engine} client not found')
+}
+```
+
+#### Step 5: Update Test Helpers (`tests/integration/helpers.ts`)
+
+**CRITICAL:** Each engine must have its own case in `executeSQL()` and `executeSQLFile()`:
+
+```ts
+} else if (engine === Engine.{Engine}) {
+  const engineImpl = getEngine(engine)
+  const clientPath = await engineImpl.get{Engine}ClientPath().catch(() => '{engine}')
+  const cmd = `"${clientPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql}"`
+  return execAsync(cmd)
+}
+```
+
+**Why separate cases?** Using a shared case (e.g., `MySQL || MariaDB`) and calling `getMysqlClientPath()` will fail for the new engine because that method returns the wrong binary. Each engine must call its own client path method.
+
+#### Step 6: Update Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
+
+1. **Add to shell option selection (around line 110):**
+   ```ts
+   } else if (config.engine === '{engine}') {
+     defaultShellName = '{engine}'
+     engineSpecificCli = 'mycli'  // or appropriate enhanced CLI
+     // ...
+   }
+   ```
+
+2. **Add to `launchShell()` function (around line 435):**
+   ```ts
+   } else if (config.engine === '{engine}') {
+     const clientPath = await configManager.getBinaryPath('{engine}')
+     shellCmd = clientPath || '{engine}'
+     shellArgs = ['-u', 'root', '-h', '127.0.0.1', '-P', String(config.port), config.database]
+     installHint = 'spindb engines download {engine}'
+   }
+   ```
+
+#### Step 7: Update Manage Engines Screen
+
+**Why this matters:** System-installed engines (MySQL, MongoDB, Redis) don't appear in the "Manage Engines" menu because there's nothing to manage - they're installed via Homebrew/apt. Once migrated to hostdb, the engine WILL appear in this menu and users can download/delete versions. This requires adding detection functions.
+
+1. **Add type in `cli/helpers.ts`:**
+   ```ts
+   export type Installed{Engine}Engine = {
+     engine: '{engine}'
+     version: string
+     platform: string
+     arch: string
+     path: string
+     sizeBytes: number
+     source: 'downloaded'
+   }
+   ```
+
+2. **Add detection function in `cli/helpers.ts`:**
+   ```ts
+   export async function getInstalled{Engine}Engines(): Promise<Installed{Engine}Engine[]> {
+     const binDir = paths.binaries
+     if (!existsSync(binDir)) return []
+
+     const entries = await readdir(binDir, { withFileTypes: true })
+     const engines: Installed{Engine}Engine[] = []
+
+     for (const entry of entries) {
+       if (!entry.isDirectory()) continue
+       // Match pattern: {engine}-{version}-{platform}-{arch}
+       const match = entry.name.match(/^{engine}-(\d+\.\d+\.\d+)-(\w+)-(\w+)$/)
+       if (!match) continue
+
+       const [, version, platform, arch] = match
+       const fullPath = join(binDir, entry.name)
+       const stats = await stat(fullPath)
+
+       engines.push({
+         engine: '{engine}',
+         version,
+         platform,
+         arch,
+         path: fullPath,
+         sizeBytes: await getDirectorySize(fullPath),
+         source: 'downloaded',
+       })
+     }
+     return engines
+   }
+   ```
+
+3. **Export from `cli/helpers.ts`** - add to exports
+
+4. **Update `cli/commands/menu/engine-handlers.ts`:**
+   ```ts
+   import { getInstalled{Engine}Engines } from '../../helpers'
+
+   // In handleManageEngines():
+   const {engine}Engines = await getInstalled{Engine}Engines()
+   const installedEngines = [...postgresEngines, ...mariadbEngines, ...{engine}Engines]
+   ```
+
+5. **Handle deletion in `handleDeleteEngine()`** - add case for the new engine type
+
+#### Step 8: Update Config Defaults (`config/engine-defaults.ts`)
+
+```ts
+{engine}: {
+  supportedVersions: ['8', '9'],  // Keep in sync with version-maps.ts
+  defaultVersion: '8',
+  latestVersion: '9',
+  // ...
+}
+```
+
+#### Step 9: Clean Up and Test
+
+1. **Clear stale config entries:** Users with old installations may have binaries registered under wrong keys. They need to:
+   ```bash
+   # Delete old config entries pointing to wrong binaries
+   # Re-download engine: spindb engines download {engine}
+   ```
+
+2. **Run all tests:**
+   ```bash
+   pnpm lint                    # TypeScript compilation
+   pnpm test:unit              # Unit tests
+   pnpm test:{engine}          # Integration tests for this engine
+   pnpm test:mysql             # Verify no regression on similar engines
+   ```
+
+#### Common Pitfalls
+
+1. **Binary key conflicts:** Never register binaries under keys used by another engine. MariaDB must use `mariadb`, not `mysql`.
+
+2. **Forgetting BaseEngine method:** If you add `get{Engine}ClientPath()` to the engine but not to `BaseEngine`, TypeScript will fail when test helpers call it.
+
+3. **Shared test helper cases:** Don't combine engines in test helpers like `MySQL || MariaDB`. Each needs its own case calling its own client path method.
+
+4. **Stale config.json:** After migration, old binary registrations may point to wrong paths. Clear and re-register.
+
+5. **Missing `override` keyword:** When overriding BaseEngine methods, always use `override` keyword.
+
 ### Updating Supported Engine Versions
 
-When new major versions of supported engines are released (e.g., PostgreSQL 18):
+#### For hostdb-based engines (PostgreSQL, MariaDB)
 
-1. **Check binary availability:**
-   - PostgreSQL (macOS/Linux): Verify hostdb has binaries at [GitHub Releases](https://github.com/robertjbass/hostdb/releases)
-   - PostgreSQL (Windows): Check EDB download page (see step 2b below)
-   - MySQL: System-installed, no action needed
+When new versions are added to hostdb releases.json:
 
-2. **Update code:**
-   - `config/engine-defaults.ts` - Add new version to `supportedVersions`, update `defaultVersion` and `latestVersion`
-   - `engines/postgresql/version-maps.ts` - Add version mapping (e.g., `'18': '18.1.0'`)
-   - `engines/postgresql/binary-urls.ts` - Add to `SUPPORTED_MAJOR_VERSIONS` and `FALLBACK_VERSION_MAP`
-   - **Windows EDB file IDs** (required for Windows support):
-     1. Visit: https://www.enterprisedb.com/download-postgresql-binaries
-     2. Find the new version in the Windows x86-64 column
-     3. Right-click the download link and copy the URL (e.g., `?fileid=1259913`)
-     4. Extract the numeric file ID and add to `engines/postgresql/edb-binary-urls.ts`:
-        ```typescript
-        export const EDB_FILE_IDS: Record<string, string> = {
-          '18.1.0': '1259913',
-          '18': '1259913', // Alias for latest 18.x
-          // ... existing versions
-        }
-        ```
-     5. See the detailed instructions in `edb-binary-urls.ts` header comments
+1. **Check hostdb releases.json:**
+   - View: https://github.com/robertjbass/hostdb/blob/main/releases.json
+   - Look for new versions under `databases.postgresql` or `databases.mariadb`
 
-3. **Update tests:**
-   - `tests/unit/binary-manager.test.ts` - Add test case for new version
-   - `tests/unit/version-validator.test.ts` - Add version to test arrays
+2. **Update version-maps.ts:**
+   - Add new major versions to `engines/{engine}/version-maps.ts`
+   - Example for MariaDB:
+     ```ts
+     export const MARIADB_VERSION_MAP: Record<string, string> = {
+       '10.11': '10.11.15',
+       '11.4': '11.4.5',
+       '11.8': '11.8.5',  // New version
+     }
+     ```
+   - `SUPPORTED_MAJOR_VERSIONS` is automatically derived from map keys
+   - **IMPORTANT:** Versions not in this map will NOT appear in SpinDB, even if in releases.json
 
-4. **Update CI workflow** (if changing the default version):
-   - `.github/workflows/ci.yml` - Update `engines download postgresql <version>` in both `test-postgresql` and `test-cli-e2e` jobs to match the new default
+3. **Update config/engine-defaults.ts:**
+   - Add to `supportedVersions` array
+   - Update `defaultVersion` and `latestVersion` if needed
 
-5. **Update documentation:**
-   - **README.md** - Update "Supported Engines" section (versions list)
-   - **CLAUDE.md** - Update version references in this file
-   - **CHANGELOG.md** - Add to unreleased section
+4. **Windows-specific (PostgreSQL only):**
+   - PostgreSQL Windows binaries require EDB file IDs
+   - Visit: https://www.enterprisedb.com/download-postgresql-binaries
+   - Add file ID to `engines/postgresql/edb-binary-urls.ts`
+
+5. **Update tests:**
+   - `tests/unit/{engine}-*.test.ts` - Add test cases for new versions
+
+6. **Update CI workflow (if changing default):**
+   - `.github/workflows/ci.yml` - Update `engines download {engine} <version>`
+
+7. **Update documentation:**
+   - README.md, CLAUDE.md, CHANGELOG.md
+
+#### For system-installed engines (MySQL, MongoDB, Redis)
+
+These use system package managers, so no version updates needed in SpinDB. Users get whatever version their package manager provides.
 
 ## Implementation Details
 
@@ -412,7 +697,7 @@ Major versions (e.g., `"17"`) resolve to full versions (e.g., `"17.7.0"`) via ho
 ### Config Cache
 Tool paths cached in `~/.spindb/config.json` with 7-day staleness. Refresh after package manager interactions:
 
-```typescript
+```ts
 await configManager.refreshAllBinaries()
 ```
 

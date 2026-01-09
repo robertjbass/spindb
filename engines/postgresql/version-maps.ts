@@ -1,24 +1,21 @@
 /**
  * PostgreSQL Version Maps
  *
- * Shared version mappings used by both hostdb (macOS/Linux) and EDB (Windows).
- * Both sources use the same PostgreSQL releases.
+ * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
+ * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
+ * https://github.com/robertjbass/hostdb/blob/main/releases.json
  *
  * When updating versions:
- * 1. Check hostdb GitHub releases for new versions:
- *    https://github.com/robertjbass/hostdb/releases
- * 2. Check EDB download page for matching Windows versions:
- *    https://www.enterprisedb.com/download-postgresql-binaries
- * 3. Update POSTGRESQL_VERSION_MAP with new full versions
- * 4. Update EDB_FILE_IDS in edb-binary-urls.ts with new file IDs
+ * 1. Check hostdb releases.json for available versions
+ * 2. Update POSTGRESQL_VERSION_MAP to match
+ * 3. Update config/engine-defaults.ts supportedVersions array
  */
 
 /**
  * Map of major PostgreSQL versions to their latest stable patch versions.
- * Used for both hostdb (macOS/Linux) and EDB (Windows) binaries.
+ * Must match versions available in hostdb releases.json.
  */
 export const POSTGRESQL_VERSION_MAP: Record<string, string> = {
-  '14': '14.20.0',
   '15': '15.15.0',
   '16': '16.11.0',
   '17': '17.7.0',

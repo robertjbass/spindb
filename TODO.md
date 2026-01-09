@@ -155,7 +155,7 @@ The hardcoded file IDs (`'17.7.0': '1259911'`) will become stale when EDB update
 
 **File:** `core/binary-manager.ts` lines 243-250
 
-```typescript
+```ts
 // UNSAFE: paths with special characters could execute arbitrary commands
 await execAsync(`mv "${sourcePath}" "${destPath}"`)
 await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
