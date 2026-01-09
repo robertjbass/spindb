@@ -180,10 +180,20 @@ export class MySQLEngine extends BaseEngine {
       onProgress,
     )
 
-    // Register MySQL client tools
+    // Register all MySQL binaries from downloaded package
     const ext = platformService.getExecutableExtension()
-    const clientTools = ['mysql', 'mysqldump', 'mysqladmin'] as const
 
+    // Server binaries
+    const serverTools = ['mysqld', 'mysqladmin'] as const
+    for (const tool of serverTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
+    }
+
+    // Client tools
+    const clientTools = ['mysql', 'mysqldump'] as const
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {

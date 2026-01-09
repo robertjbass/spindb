@@ -172,10 +172,21 @@ export class MariaDBEngine extends BaseEngine {
       onProgress,
     )
 
-    // Register MariaDB-native client tools (not mysql-named ones to avoid conflicts)
+    // Register all MariaDB binaries from downloaded package
+    // Using native names only (not mysql-named ones to avoid conflicts with MySQL engine)
     const ext = platformService.getExecutableExtension()
-    const clientTools = ['mariadb', 'mariadb-dump', 'mariadb-admin'] as const
 
+    // Server binaries
+    const serverTools = ['mariadbd', 'mariadb-admin'] as const
+    for (const tool of serverTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
+    }
+
+    // Client tools
+    const clientTools = ['mariadb', 'mariadb-dump'] as const
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {

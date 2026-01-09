@@ -1,8 +1,8 @@
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, writeFile, mkdir, readdir } from 'fs/promises'
+import { join, dirname } from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { dirname } from 'path'
 import { paths } from '../config/paths'
 import { logDebug, logWarning } from './error-handler'
 import { platformService } from './platform-service'
@@ -23,23 +23,59 @@ const DEFAULT_CONFIG: SpinDBConfig = {
 // Cache staleness threshold (7 days in milliseconds)
 const CACHE_STALENESS_MS = 7 * 24 * 60 * 60 * 1000
 
-// All tools organized by category
-const POSTGRESQL_TOOLS: BinaryTool[] = [
+// All tools organized by engine and category
+const POSTGRESQL_SERVER_TOOLS: BinaryTool[] = ['postgres', 'pg_ctl', 'initdb']
+const POSTGRESQL_CLIENT_TOOLS: BinaryTool[] = [
   'psql',
   'pg_dump',
   'pg_restore',
   'pg_basebackup',
 ]
+const POSTGRESQL_TOOLS: BinaryTool[] = [
+  ...POSTGRESQL_SERVER_TOOLS,
+  ...POSTGRESQL_CLIENT_TOOLS,
+]
 
-const MYSQL_TOOLS: BinaryTool[] = ['mysql', 'mysqldump', 'mysqladmin', 'mysqld']
+const MYSQL_SERVER_TOOLS: BinaryTool[] = ['mysqld', 'mysqladmin']
+const MYSQL_CLIENT_TOOLS: BinaryTool[] = ['mysql', 'mysqldump']
+const MYSQL_TOOLS: BinaryTool[] = [...MYSQL_SERVER_TOOLS, ...MYSQL_CLIENT_TOOLS]
 
-const ENHANCED_SHELLS: BinaryTool[] = ['pgcli', 'mycli', 'usql']
+const MARIADB_SERVER_TOOLS: BinaryTool[] = ['mariadbd', 'mariadb-admin']
+const MARIADB_CLIENT_TOOLS: BinaryTool[] = ['mariadb', 'mariadb-dump']
+const MARIADB_TOOLS: BinaryTool[] = [
+  ...MARIADB_SERVER_TOOLS,
+  ...MARIADB_CLIENT_TOOLS,
+]
+
+const MONGODB_TOOLS: BinaryTool[] = [
+  'mongod',
+  'mongosh',
+  'mongodump',
+  'mongorestore',
+]
+
+const REDIS_TOOLS: BinaryTool[] = ['redis-server', 'redis-cli']
+
+const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
+
+const ENHANCED_SHELLS: BinaryTool[] = ['pgcli', 'mycli', 'litecli', 'iredis', 'usql']
 
 const ALL_TOOLS: BinaryTool[] = [
   ...POSTGRESQL_TOOLS,
   ...MYSQL_TOOLS,
+  ...MARIADB_TOOLS,
+  ...MONGODB_TOOLS,
+  ...REDIS_TOOLS,
+  ...SQLITE_TOOLS,
   ...ENHANCED_SHELLS,
 ]
+
+// Map engine names to their binary tools (for scanning ~/.spindb/bin/)
+const ENGINE_BINARY_MAP: Record<string, BinaryTool[]> = {
+  postgresql: POSTGRESQL_TOOLS,
+  mysql: MYSQL_TOOLS,
+  mariadb: MARIADB_TOOLS,
+}
 
 export class ConfigManager {
   private config: SpinDBConfig | null = null
@@ -264,8 +300,15 @@ export class ConfigManager {
     missing: BinaryTool[]
     postgresql: { found: BinaryTool[]; missing: BinaryTool[] }
     mysql: { found: BinaryTool[]; missing: BinaryTool[] }
+    mariadb: { found: BinaryTool[]; missing: BinaryTool[] }
+    mongodb: { found: BinaryTool[]; missing: BinaryTool[] }
+    redis: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
+    // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
+    // This ensures bundled binaries are registered before system detection
+    await this.scanInstalledBinaries()
+
     const found: BinaryTool[] = []
     const missing: BinaryTool[] = []
 
@@ -288,6 +331,18 @@ export class ConfigManager {
       mysql: {
         found: found.filter((t) => MYSQL_TOOLS.includes(t)),
         missing: missing.filter((t) => MYSQL_TOOLS.includes(t)),
+      },
+      mariadb: {
+        found: found.filter((t) => MARIADB_TOOLS.includes(t)),
+        missing: missing.filter((t) => MARIADB_TOOLS.includes(t)),
+      },
+      mongodb: {
+        found: found.filter((t) => MONGODB_TOOLS.includes(t)),
+        missing: missing.filter((t) => MONGODB_TOOLS.includes(t)),
+      },
+      redis: {
+        found: found.filter((t) => REDIS_TOOLS.includes(t)),
+        missing: missing.filter((t) => REDIS_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
@@ -357,9 +412,98 @@ export class ConfigManager {
     config.registry.sqlite = registry
     await this.save()
   }
+
+  /**
+   * Scan ~/.spindb/bin/ for installed engine binaries and register any missing ones.
+   * This ensures that binaries downloaded previously are available in the config
+   * even if the config was cleared or is on a new machine with the same home dir.
+   *
+   * Directory format: {engine}-{version}-{platform}-{arch}
+   * Example: postgresql-18.1.0-darwin-arm64
+   */
+  async scanInstalledBinaries(): Promise<{
+    scanned: number
+    registered: number
+    engines: string[]
+  }> {
+    const binDir = paths.bin
+    if (!existsSync(binDir)) {
+      return { scanned: 0, registered: 0, engines: [] }
+    }
+
+    const config = await this.load()
+    let scanned = 0
+    let registered = 0
+    const enginesFound: string[] = []
+
+    try {
+      const entries = await readdir(binDir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+
+        // Parse directory name: {engine}-{version}-{platform}-{arch}
+        // e.g., postgresql-18.1.0-darwin-arm64, mysql-9.1.0-darwin-arm64
+        const match = entry.name.match(/^(\w+)-(\d+\.\d+\.\d+)-(\w+)-(\w+)$/)
+        if (!match) continue
+
+        const [, engine] = match
+        const engineTools = ENGINE_BINARY_MAP[engine]
+        if (!engineTools) continue
+
+        scanned++
+        if (!enginesFound.includes(engine)) {
+          enginesFound.push(engine)
+        }
+
+        const engineBinPath = join(binDir, entry.name, 'bin')
+        if (!existsSync(engineBinPath)) continue
+
+        const ext = platformService.getExecutableExtension()
+
+        for (const tool of engineTools) {
+          // Skip if already registered as bundled
+          const existing = config.binaries[tool]
+          if (existing?.source === 'bundled' && existsSync(existing.path)) {
+            continue
+          }
+
+          const toolPath = join(engineBinPath, `${tool}${ext}`)
+          if (existsSync(toolPath)) {
+            await this.setBinaryPath(tool, toolPath, 'bundled')
+            registered++
+            logDebug(`Registered binary from scan: ${tool}`, { path: toolPath })
+          }
+        }
+      }
+    } catch (error) {
+      logWarning('Failed to scan installed binaries', {
+        binDir,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    return { scanned, registered, engines: enginesFound }
+  }
 }
 
 export const configManager = new ConfigManager()
 
 // Export tool categories for use in commands
-export { POSTGRESQL_TOOLS, MYSQL_TOOLS, ENHANCED_SHELLS, ALL_TOOLS }
+export {
+  POSTGRESQL_TOOLS,
+  POSTGRESQL_SERVER_TOOLS,
+  POSTGRESQL_CLIENT_TOOLS,
+  MYSQL_TOOLS,
+  MYSQL_SERVER_TOOLS,
+  MYSQL_CLIENT_TOOLS,
+  MARIADB_TOOLS,
+  MARIADB_SERVER_TOOLS,
+  MARIADB_CLIENT_TOOLS,
+  MONGODB_TOOLS,
+  REDIS_TOOLS,
+  SQLITE_TOOLS,
+  ENHANCED_SHELLS,
+  ALL_TOOLS,
+  ENGINE_BINARY_MAP,
+}

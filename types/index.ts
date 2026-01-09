@@ -96,7 +96,11 @@ export type EngineInfo = {
  * Binary tool types for all supported engines
  */
 export type BinaryTool =
-  // PostgreSQL tools
+  // PostgreSQL tools (server)
+  | 'postgres'
+  | 'pg_ctl'
+  | 'initdb'
+  // PostgreSQL tools (client)
   | 'psql'
   | 'pg_dump'
   | 'pg_restore'
@@ -148,33 +152,41 @@ export type BinaryConfig = {
  * Global spindb configuration stored in ~/.spindb/config.json
  */
 export type SpinDBConfig = {
-  // Binary paths for client tools (all engines)
+  // Binary paths for all engine tools (server and client)
   binaries: {
-    // PostgreSQL tools
+    // PostgreSQL server tools
+    postgres?: BinaryConfig
+    pg_ctl?: BinaryConfig
+    initdb?: BinaryConfig
+    // PostgreSQL client tools
     psql?: BinaryConfig
     pg_dump?: BinaryConfig
     pg_restore?: BinaryConfig
     pg_basebackup?: BinaryConfig
-    // MySQL tools
+    // MySQL server tools
+    mysqld?: BinaryConfig
+    mysqladmin?: BinaryConfig
+    // MySQL client tools
     mysql?: BinaryConfig
     mysqldump?: BinaryConfig
     mysqlpump?: BinaryConfig
-    mysqld?: BinaryConfig
-    mysqladmin?: BinaryConfig
-    // MariaDB tools (native names only - no mysql-named binaries to avoid conflicts)
-    mariadb?: BinaryConfig
-    'mariadb-dump'?: BinaryConfig
+    // MariaDB server tools (native names only - no mysql-named binaries to avoid conflicts)
     mariadbd?: BinaryConfig
     'mariadb-admin'?: BinaryConfig
+    // MariaDB client tools
+    mariadb?: BinaryConfig
+    'mariadb-dump'?: BinaryConfig
     // SQLite tools
     sqlite3?: BinaryConfig
-    // MongoDB tools
+    // MongoDB server tools
     mongod?: BinaryConfig
+    // MongoDB client tools
     mongosh?: BinaryConfig
     mongodump?: BinaryConfig
     mongorestore?: BinaryConfig
-    // Redis tools
+    // Redis server tools
     'redis-server'?: BinaryConfig
+    // Redis client tools
     'redis-cli'?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig

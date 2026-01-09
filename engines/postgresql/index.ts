@@ -156,9 +156,20 @@ export class PostgreSQLEngine extends BaseEngine {
       onProgress,
     )
 
-    // Register client tools from downloaded binaries in config
-    // This ensures dependency checks find them without requiring system installation
+    // Register all binaries from downloaded package in config
+    // This ensures we can find them without requiring system installation
     const ext = platformService.getExecutableExtension()
+
+    // Server binaries (always present in hostdb downloads)
+    const serverTools = ['postgres', 'pg_ctl', 'initdb'] as const
+    for (const tool of serverTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
+    }
+
+    // Client tools (may or may not be present depending on platform)
     const clientTools = [
       'psql',
       'pg_dump',
@@ -166,7 +177,7 @@ export class PostgreSQLEngine extends BaseEngine {
       'pg_basebackup',
     ] as const
 
-    // First, try to register from downloaded binaries (works on Windows)
+    // Try to register from downloaded binaries (works on Windows)
     let hasClientTools = false
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
