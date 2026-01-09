@@ -21,6 +21,7 @@ import {
   getIredisManualInstructions,
 } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
+import { configManager } from '../../../core/config-manager'
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
@@ -114,6 +115,12 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstallValue = 'install-litecli'
   } else if (config.engine === 'mysql') {
     defaultShellName = 'mysql'
+    engineSpecificCli = 'mycli'
+    engineSpecificInstalled = mycliInstalled
+    engineSpecificValue = 'mycli'
+    engineSpecificInstallValue = 'install-mycli'
+  } else if (config.engine === 'mariadb') {
+    defaultShellName = 'mariadb'
     engineSpecificCli = 'mycli'
     engineSpecificInstalled = mycliInstalled
     engineSpecificValue = 'mycli'
@@ -425,6 +432,20 @@ async function launchShell(
       config.database,
     ]
     installHint = 'brew install mysql-client'
+  } else if (config.engine === 'mariadb') {
+    // MariaDB uses downloaded binaries, not system PATH - get the actual path
+    const mariadbPath = await configManager.getBinaryPath('mariadb')
+    shellCmd = mariadbPath || 'mariadb'
+    shellArgs = [
+      '-u',
+      'root',
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(config.port),
+      config.database,
+    ]
+    installHint = 'spindb engines download mariadb'
   } else if (config.engine === 'mongodb') {
     shellCmd = 'mongosh'
     shellArgs = [connectionString]

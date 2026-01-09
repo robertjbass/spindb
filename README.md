@@ -7,7 +7,7 @@
 
 **The first npm CLI for running local databases without Docker.**
 
-Spin up PostgreSQL, MySQL, SQLite, MongoDB, and Redis instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, and Redis instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -139,19 +139,39 @@ You'll get an interactive menu with arrow-key navigation:
 | Versions | 14, 15, 16, 17, 18 |
 | Default port | 5432 |
 | Default user | `postgres` |
-| Binary source | [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) (macOS/Linux), [EDB](https://www.enterprisedb.com/) (Windows) |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) (macOS/Linux), [EDB](https://www.enterprisedb.com/) (Windows) |
 
 SpinDB downloads PostgreSQL server binaries automatically:
-- **macOS/Linux:** Pre-compiled binaries from the zonky.io project, hosted on Maven Central
+- **macOS/Linux:** Pre-compiled binaries from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases
 - **Windows:** Official binaries from EnterpriseDB (EDB)
 
-**Why download binaries instead of using system PostgreSQL?** The [zonky.io project](https://github.com/zonkyio/embedded-postgres-binaries) provides pre-configured, portable PostgreSQL binaries—just extract and run. This lets you run PostgreSQL 14 for one project and 18 for another, side-by-side, without conflicts. No other database engine has an equivalent portable distribution.
+**Why download binaries instead of using system PostgreSQL?** The hostdb project provides pre-configured, portable PostgreSQL binaries—just extract and run. This lets you run PostgreSQL 14 for one project and 18 for another, side-by-side, without conflicts.
 
-**Client tools required:** You still need `psql`, `pg_dump`, and `pg_restore` installed on your system for some operations (connecting, backups, restores). SpinDB can install these for you:
+**Client tools included:** PostgreSQL binaries include `psql`, `pg_dump`, and `pg_restore` for all operations.
+
+#### MariaDB
+
+| | |
+|---|---|
+| Versions | 10.11, 11.4, 11.8 |
+| Default port | 3307 |
+| Default user | `root` |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
+
+SpinDB downloads MariaDB server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases—just like PostgreSQL. This provides multi-version support and works across all platforms.
 
 ```bash
-spindb deps install --engine postgresql
+# Create a MariaDB container
+spindb create mydb --engine mariadb
+
+# Or using the alias
+spindb create mydb -e maria
+
+# Check what's available
+spindb deps check --engine mariadb
 ```
+
+MariaDB is MySQL-compatible, so most MySQL tools and clients work seamlessly. If you need MySQL-specific features, use the `mysql` engine instead.
 
 #### MySQL
 
@@ -181,7 +201,7 @@ winget install Oracle.MySQL
 spindb deps check --engine mysql
 ```
 
-**Linux users:** MariaDB works as a drop-in replacement for MySQL. If you have MariaDB installed, SpinDB will detect and use it automatically. In a future release, MariaDB will be available as its own engine with support for MariaDB-specific features.
+**Linux users:** MariaDB is also available as a standalone engine with downloadable binaries. Use `spindb create mydb --engine mariadb` for the dedicated MariaDB engine.
 
 #### SQLite
 
@@ -302,6 +322,7 @@ spindb connect myredis --iredis
 
 ```bash
 spindb create mydb                           # PostgreSQL (default)
+spindb create mydb --engine mariadb          # MariaDB
 spindb create mydb --engine mysql            # MySQL
 spindb create mydb --engine sqlite           # SQLite (file-based)
 spindb create mydb --db-version 16           # Specific PostgreSQL version
@@ -328,8 +349,8 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mysql`, `sqlite`, `mongodb`, `redis`) |
-| `--db-version` | Engine version (e.g., 17 for PostgreSQL, 8 for Redis) |
+| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `mongodb`, `redis`) |
+| `--db-version` | Engine version (e.g., 17 for PostgreSQL, 11.8 for MariaDB, 8 for Redis) |
 | `--port`, `-p` | Port number (not applicable for SQLite) |
 | `--database`, `-d` | Primary database name (Redis uses 0-15) |
 | `--path` | File path for SQLite databases |
@@ -442,6 +463,7 @@ spindb backup mydb --dump
 
 Format by engine:
 - PostgreSQL: `.sql` (plain SQL) / `.dump` (pg_dump custom)
+- MariaDB: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
 - MySQL: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
 - SQLite: `.sql` (plain SQL) / `.sqlite` (binary copy)
 - MongoDB: `.bson` (BSON dump) / `.archive` (compressed archive)
@@ -529,6 +551,18 @@ Each engine has specific backup formats and restore behaviors:
 | Custom | `.dump` | pg_dump -Fc | Compressed, supports parallel restore |
 
 **Restore behavior:** Creates new database or replaces existing. Uses `pg_restore` for `.dump`, `psql` for `.sql`.
+
+</details>
+
+<details>
+<summary>MariaDB</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | mariadb-dump | Plain text SQL |
+| Compressed | `.sql.gz` | mariadb-dump + gzip | Gzip compressed SQL |
+
+**Restore behavior:** Creates new database or replaces existing. Pipes to `mariadb` client.
 
 </details>
 
@@ -734,6 +768,7 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 | Engine | Standard | Enhanced | Universal |
 |--------|----------|----------|-----------|
 | PostgreSQL | `psql` | `pgcli` | `usql` |
+| MariaDB | `mariadb` | `mycli` | `usql` |
 | MySQL | `mysql` | `mycli` | `usql` |
 | SQLite | `sqlite3` | `litecli` | `usql` |
 | MongoDB | `mongosh` | - | `usql` |
@@ -824,12 +859,13 @@ Each database engine has its own persistence mechanism:
 | Engine | Mechanism | Durability |
 |--------|-----------|------------|
 | PostgreSQL | Write-Ahead Logging (WAL) | Every commit is immediately durable |
+| MariaDB | InnoDB transaction logs | Every commit is immediately durable |
 | MySQL | InnoDB transaction logs | Every commit is immediately durable |
 | SQLite | File-based transactions | Every commit is immediately durable |
 | MongoDB | WiredTiger with journaling | Writes journaled before acknowledged |
 | Redis | RDB snapshots | Periodic snapshots (see below) |
 
-**PostgreSQL, MySQL, MongoDB:** These engines use transaction logs or journaling. Every committed write is guaranteed to survive a crash or unexpected shutdown.
+**PostgreSQL, MariaDB, MySQL, MongoDB:** These engines use transaction logs or journaling. Every committed write is guaranteed to survive a crash or unexpected shutdown.
 
 **SQLite:** As a file-based database, SQLite writes directly to disk on each commit. No server process means no risk of losing in-flight data.
 
@@ -843,41 +879,42 @@ This means Redis may lose up to ~60 seconds of writes on an unexpected crash. Fo
 ### Binary Sources
 
 **PostgreSQL:** Server binaries are downloaded automatically:
-- **macOS/Linux:** From [zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries), hosted on Maven Central
-- **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries), official PostgreSQL distributions
+- **All platforms (macOS/Linux/Windows for macOS/Linux via hostdb, Windows via EDB):** From [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases (macOS/Linux) or [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) (Windows)
+
+**MariaDB:** Server binaries are downloaded automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases for all platforms.
 
 **MySQL/MongoDB/Redis:** Uses your system installation. SpinDB detects binaries from Homebrew (macOS), apt/pacman (Linux), or Chocolatey/winget/Scoop (Windows).
 
-### Why Precompiled Binaries for PostgreSQL, but System Installs for Others?
+### Why Precompiled Binaries for PostgreSQL and MariaDB, but System Installs for Others?
 
 This isn't a preference—it's a practical reality of what's available.
 
-**PostgreSQL has an excellent embedded binary distribution.** The [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) project maintains minimal, self-contained PostgreSQL server binaries specifically designed for embedding:
+**PostgreSQL and MariaDB have excellent embedded binary distributions.** The [hostdb](https://github.com/robertjbass/hostdb) project provides pre-compiled, portable database binaries:
 
 - Cross-platform (macOS Intel/ARM, Linux x64/ARM, Windows)
-- Hosted on Maven Central (highly reliable CDN)
-- ~45 MB per version
-- Actively maintained with new PostgreSQL releases
+- Hosted on GitHub Releases (highly reliable CDN)
+- ~45-100 MB per version
+- Actively maintained with new database releases
 
-This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? SpinDB downloads both, and they run side-by-side without conflicts.
+This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? Need MariaDB 11.8? SpinDB downloads them all, and they run side-by-side without conflicts.
 
-**No equivalent exists for MySQL, MongoDB, or Redis.** None of these databases have a comparable embedded binary project:
+**No equivalent exists for MySQL, MongoDB, or Redis (yet).** None of these databases have a comparable embedded binary distribution:
 
-- **MySQL:** Oracle distributes MySQL as large installers with system dependencies, not embeddable binaries. There's no "zonky.io for MySQL."
+- **MySQL:** Oracle distributes MySQL as large installers with system dependencies, not embeddable binaries.
 - **MongoDB:** Server binaries are several hundred MB and aren't designed for portable distribution.
 - **Redis:** While Redis is small (~6-12 MB), there's no official portable distribution. Community Windows ports exist, but macOS/Linux rely on system packages.
 
 For these databases, system packages (Homebrew, apt, choco) are the most reliable option. They handle dependencies, platform quirks, and security updates. SpinDB simply orchestrates what's already installed.
 
-**Does this limit multi-version support?** Yes, for MySQL/MongoDB/Redis you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple versions of these databases simultaneously. If zonky.io-style distributions emerged for other databases, SpinDB could adopt them.
+**Does this limit multi-version support?** Yes, for MySQL/MongoDB/Redis you get whatever version your package manager provides. In practice, this is rarely a problem—developers seldom need multiple versions of these databases simultaneously. As hostdb expands to support more databases, SpinDB will adopt them for multi-version support.
 
 ---
 
 ## Limitations
 
-- **Client tools required** - `psql`, `mysql`, `mongosh`, and `redis-cli` must be installed separately for some operations (connecting, backups, restores)
+- **Client tools required** - `mysql`, `mongosh`, and `redis-cli` must be installed separately for some operations (connecting, backups, restores) for system-installed engines
 - **Local only** - Databases bind to `127.0.0.1`; remote connections planned for v1.1
-- **Single version for MySQL/MongoDB/Redis** - Unlike PostgreSQL, MySQL, MongoDB, and Redis use system installations, so you're limited to one version per machine (see [Why Precompiled Binaries for PostgreSQL?](#why-precompiled-binaries-for-postgresql-but-system-installs-for-others))
+- **Single version for MySQL/MongoDB/Redis** - Unlike PostgreSQL and MariaDB, MySQL, MongoDB, and Redis use system installations, so you're limited to one version per machine (see [Why Precompiled Binaries for PostgreSQL and MariaDB?](#why-precompiled-binaries-for-postgresql-and-mariadb-but-system-installs-for-others))
 - **Redis remote dump not supported** - Redis doesn't support creating containers from remote connection strings. Use backup/restore for data migration.
 
 ---
@@ -892,13 +929,15 @@ See [TODO.md](TODO.md) for the full roadmap.
 - Secrets management (macOS Keychain)
 
 ### v1.2 - Additional Engines
-- MariaDB as standalone engine
 - CockroachDB (distributed SQL)
 
 ### v1.3 - Advanced Features
 - Container templates
 - Scheduled backups
 - Import from Docker
+
+### Future Infrastructure
+- **hostdb npm package**: Available database versions will be published as an npm package from [hostdb](https://github.com/robertjbass/hostdb) and imported into SpinDB, eliminating the need to manually sync version-maps.ts with releases.json
 
 ### Possible Future Engines
 

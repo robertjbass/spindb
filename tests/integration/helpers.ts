@@ -23,6 +23,7 @@ const execAsync = promisify(exec)
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
+  mariadb: { base: 3340, clone: 3342, renamed: 3341 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
   redis: { base: 6399, clone: 6401, renamed: 6400 },
 }
@@ -158,6 +159,12 @@ export async function executeSQL(
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
+  } else if (engine === Engine.MariaDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled mariadb if available, otherwise fall back to `mariadb` in PATH
+    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled mongosh if available
@@ -208,6 +215,11 @@ export async function executeSQLFile(
     const engineImpl = getEngine(engine)
     const mysqlPath = await engineImpl.getMysqlClientPath().catch(() => 'mysql')
     const cmd = `"${mysqlPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.MariaDB) {
+    const engineImpl = getEngine(engine)
+    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
     const engineImpl = getEngine(engine)
@@ -340,7 +352,7 @@ export async function waitForReady(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      if (engine === Engine.MySQL) {
+      if (engine === Engine.MySQL || engine === Engine.MariaDB) {
         // Prefer configured/bundled mysqladmin when available
         const engineImpl = getEngine(engine)
         const mysqladmin = await engineImpl
@@ -426,7 +438,7 @@ export function getConnectionString(
   port: number,
   database: string,
 ): string {
-  if (engine === Engine.MySQL) {
+  if (engine === Engine.MySQL || engine === Engine.MariaDB) {
     return `mysql://root@127.0.0.1:${port}/${database}`
   }
   if (engine === Engine.MongoDB) {

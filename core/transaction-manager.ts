@@ -16,7 +16,7 @@ export type RollbackAction = {
  * Manages a stack of rollback actions for transactional operations.
  *
  * Usage:
- * ```typescript
+ * ```ts
  * const tx = new TransactionManager()
  *
  * try {
@@ -134,7 +134,7 @@ export class TransactionManager {
  * Helper function to execute an operation with automatic rollback on failure.
  *
  * Usage:
- * ```typescript
+ * ```ts
  * await withTransaction(async (tx) => {
  *   await step1()
  *   tx.addRollback({ description: 'Undo step1', execute: undoStep1 })

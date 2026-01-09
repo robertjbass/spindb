@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-01-09
+
+### Fixed
+- **MariaDB/MySQL binary conflict resolved** - MariaDB now registers binaries under native names (`mariadb`, `mariadb-dump`, `mariadb-admin`) instead of mysql-named binaries
+  - Prevents MariaDB binaries from being used by MySQL engine (caused authentication plugin errors)
+  - Each engine now has completely separate binary registrations
+  - Test helpers updated to call correct client path method for each engine
+- **Emoji spacing in CLI** - Fixed narrow rendering of SQLite (🪶) and MariaDB (🦭) icons by adding trailing space
+
+### Changed
+- **MariaDB versions synced with hostdb** - Now supports all versions available in hostdb releases.json:
+  - 10.11 (LTS), 11.4 (LTS), 11.8 (latest)
+- **PostgreSQL 14 removed** - Version 14 is no longer available in hostdb releases, removed from supported versions
+  - Supported versions: 15, 16, 17, 18
+- **MariaDB now appears in Manage Engines menu** - Can download, list, and delete MariaDB engine versions like PostgreSQL
+
+### Added
+- **`getMariadbClientPath()` method in BaseEngine** - Engine-specific client path method for MariaDB
+- **Documentation for hostdb engine migration** - CLAUDE.md now includes comprehensive guide for migrating system-installed engines to hostdb downloadable binaries
+
+## [0.15.0] - 2026-01-08
+
+### Added
+- **MariaDB engine support** - Full container lifecycle for MariaDB using pre-compiled binaries from [hostdb](https://github.com/robertjbass/hostdb)
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Create, start, stop, delete containers
+  - Backup with mariadb-dump in SQL (`.sql`) or compressed (`.sql.gz`) format
+  - Restore from SQL or compressed backups
+  - Clone containers
+  - Run SQL files or inline SQL via `spindb run`
+  - Client tools (mariadb, mariadb-dump, mariadb-admin) bundled with binaries
+  - Version 11.8 supported (more versions coming as hostdb expands)
+  - Default port 3307 to avoid conflict with MySQL
+  - Full integration tests across macOS, Linux, and Windows CI
+- New alias `maria` for MariaDB engine (e.g., `spindb create mydb -e maria`)
+
+### Changed
+- Updated documentation to reflect MariaDB as a first-class engine with downloadable binaries
+- Roadmap updated: MariaDB moved from "planned" to "shipped"
+
 ## [0.14.0] - 2026-01-08
 
 ### Changed
