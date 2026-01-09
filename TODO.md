@@ -142,7 +142,7 @@ Combine common multi-step workflows into single commands. These should remain in
   - Enable tree-shaking and other optimizations
 - [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
-  - Platforms: darwin-arm64, darwin-x64, linux-x64, win32-x64
+  - Platforms: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64
 - [x] **Fix package-manager mismatch for tests** - ~~`npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed~~ Fixed: now using `npm-run-all` so scripts work with any package manager
 - [ ] **Self-host compiled engine binaries** - Compile and host database engine binaries instead of relying on external sources (zonky.io for PostgreSQL). This would:
   - Reduce dependency on third-party binary hosts

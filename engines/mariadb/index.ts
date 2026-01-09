@@ -243,12 +243,13 @@ export class MariaDBEngine extends BaseEngine {
       )
     }
 
-    const { platform } = platformService.getPlatformInfo()
-
     // MariaDB initialization
-    // --auth-root-authentication-method=normal allows passwordless root login
+    // Windows mariadb-install-db.exe has limited options support
+    // Unix supports --auth-root-authentication-method=normal for passwordless root login
     if (isWindows()) {
-      const cmd = `"${installDb}" --datadir="${dataDir}" --auth-root-authentication-method=normal --basedir="${binPath}"`
+      // Windows mariadb-install-db.exe only supports --datadir
+      // It does NOT support --auth-root-authentication-method or --basedir options
+      const cmd = `"${installDb}" --datadir="${dataDir}"`
 
       return new Promise((resolve, reject) => {
         exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
@@ -266,15 +267,16 @@ export class MariaDBEngine extends BaseEngine {
       })
     }
 
-    // Unix path
+    // Unix path (Linux/macOS)
+    // --no-defaults: Prevent reading system my.cnf files that might have MySQL-specific options
+    // --auth-root-authentication-method=normal: Allow passwordless root login for local dev
     const args = [
+      '--no-defaults',
       `--datadir=${dataDir}`,
       '--auth-root-authentication-method=normal',
       `--basedir=${binPath}`,
+      `--user=${process.env.USER || 'mysql'}`,
     ]
-    if (platform !== 'win32') {
-      args.push(`--user=${process.env.USER || 'mysql'}`)
-    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(installDb, args, {
@@ -348,7 +350,10 @@ export class MariaDBEngine extends BaseEngine {
 
     onProgress?.({ stage: 'starting', message: 'Starting MariaDB...' })
 
+    // --no-defaults: CRITICAL - prevents reading system my.cnf files that might contain
+    // MySQL-specific options like mysqlx-bind-address which MariaDB doesn't support
     const args = [
+      '--no-defaults',
       `--datadir=${dataDir}`,
       `--port=${port}`,
       `--pid-file=${pidFile}`,
