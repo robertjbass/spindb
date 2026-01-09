@@ -35,7 +35,7 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     defaultVersion: '18',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
-    supportedVersions: ['14', '15', '16', '17', '18'], // update edb-binary-urls.ts when adding new versions
+    supportedVersions: ['15', '16', '17', '18'], // keep in sync with engines/postgresql/version-maps.ts
     latestVersion: '18',
     superuser: 'postgres',
     connectionScheme: 'postgresql',
@@ -57,6 +57,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     pidFileName: 'mysql.pid',
     dataSubdir: 'data',
     clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
+    maxConnections: 200, // Higher than default 151 for parallel builds
+  },
+  mariadb: {
+    defaultVersion: '11.8',
+    defaultPort: 3307, // Different from MySQL to allow side-by-side
+    portRange: { start: 3307, end: 3400 },
+    supportedVersions: ['10.11', '11.4', '11.8'], // Keep in sync with engines/mariadb/version-maps.ts
+    latestVersion: '11.8',
+    superuser: 'root',
+    connectionScheme: 'mysql', // MariaDB uses MySQL protocol
+    logFileName: 'mariadb.log',
+    pidFileName: 'mariadb.pid',
+    dataSubdir: 'data',
+    clientTools: ['mysql', 'mysqldump', 'mysqladmin'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
   sqlite: {

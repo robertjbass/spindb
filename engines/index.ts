@@ -1,5 +1,6 @@
 import { postgresqlEngine } from './postgresql'
 import { mysqlEngine } from './mysql'
+import { mariadbEngine } from './mariadb'
 import { sqliteEngine } from './sqlite'
 import { mongodbEngine } from './mongodb'
 import { redisEngine } from './redis'
@@ -16,7 +17,9 @@ export const engines: Record<string, BaseEngine> = {
   pg: postgresqlEngine,
   // MySQL and aliases
   mysql: mysqlEngine,
-  mariadb: mysqlEngine, // MariaDB is MySQL-compatible
+  // MariaDB (standalone engine with downloadable binaries)
+  mariadb: mariadbEngine,
+  maria: mariadbEngine,
   // SQLite and aliases
   sqlite: sqliteEngine,
   lite: sqliteEngine,

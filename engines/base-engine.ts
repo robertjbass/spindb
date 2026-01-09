@@ -97,6 +97,14 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the mariadb client if available
+   * Default implementation throws; MariaDB engine overrides this method.
+   */
+  async getMariadbClientPath(): Promise<string> {
+    throw new Error('mariadb client not found')
+  }
+
+  /**
    * Get the path to the mysqladmin client if available
    * Default implementation throws; engines that can provide a bundled or
    * configured mysqladmin should override this method.

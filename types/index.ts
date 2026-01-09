@@ -19,6 +19,7 @@ export type ContainerConfig = {
 export enum Engine {
   PostgreSQL = 'postgresql',
   MySQL = 'mysql',
+  MariaDB = 'mariadb',
   SQLite = 'sqlite',
   MongoDB = 'mongodb',
   Redis = 'redis',
@@ -106,6 +107,11 @@ export type BinaryTool =
   | 'mysqlpump'
   | 'mysqld'
   | 'mysqladmin'
+  // MariaDB tools (native names only - no mysql-named binaries to avoid conflicts)
+  | 'mariadb'
+  | 'mariadb-dump'
+  | 'mariadbd'
+  | 'mariadb-admin'
   // SQLite tools
   | 'sqlite3'
   // MongoDB tools
@@ -155,6 +161,11 @@ export type SpinDBConfig = {
     mysqlpump?: BinaryConfig
     mysqld?: BinaryConfig
     mysqladmin?: BinaryConfig
+    // MariaDB tools (native names only - no mysql-named binaries to avoid conflicts)
+    mariadb?: BinaryConfig
+    'mariadb-dump'?: BinaryConfig
+    mariadbd?: BinaryConfig
+    'mariadb-admin'?: BinaryConfig
     // SQLite tools
     sqlite3?: BinaryConfig
     // MongoDB tools

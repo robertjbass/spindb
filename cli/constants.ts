@@ -1,7 +1,10 @@
+// Note: Some emojis render narrower than others in terminals.
+// Add extra space after narrow emojis (🦭, 🪶) for visual alignment.
 export const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
-  sqlite: '🪶',
+  mariadb: '🦭 ', // Extra space - seal emoji renders narrow
+  sqlite: '🪶 ',  // Extra space - feather emoji renders narrow
   mongodb: '🍃',
   redis: '🔴',
 }

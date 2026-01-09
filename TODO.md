@@ -29,7 +29,40 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 
 - [x] Redis (in-memory key-value)
 - [x] MongoDB (document database)
-- [ ] MariaDB as standalone engine
+- [x] MariaDB as standalone engine (using hostdb binaries)
+
+### Engine Binary Migration (hostdb)
+
+Migrate system-installed engines to downloadable hostdb binaries for multi-version support. Reference: MariaDB engine migration.
+
+- [ ] **MySQL migration to hostdb**
+  - [ ] Add `engines/mysql/version-maps.ts` synced with hostdb releases.json
+  - [ ] Add `engines/mysql/binary-urls.ts` for hostdb download URLs
+  - [ ] Add `engines/mysql/binary-manager.ts` for download/extraction
+  - [ ] Update MySQL engine to use `getMysqlClientPath()` instead of system binaries
+  - [ ] Register MySQL-native binary names (`mysql`, `mysqld`, `mysqldump`, `mysqladmin`)
+  - [ ] Update test helpers with MySQL-specific client path method
+  - [ ] Update shell handlers for MySQL with hostdb binaries
+  - [ ] Add MySQL to "Manage Engines" menu with delete option
+  - [ ] Update CI to download MySQL binaries via SpinDB
+
+- [ ] **MongoDB migration to hostdb**
+  - [ ] Add `engines/mongodb/version-maps.ts` synced with hostdb releases.json
+  - [ ] Add `engines/mongodb/binary-urls.ts` for hostdb download URLs
+  - [ ] Add `engines/mongodb/binary-manager.ts` for download/extraction
+  - [ ] Update MongoDB engine to use `getMongoClientPath()` instead of system binaries
+  - [ ] Register MongoDB-native binary names (`mongod`, `mongosh`, `mongodump`, `mongorestore`)
+  - [ ] Update test helpers with MongoDB-specific client path method
+  - [ ] Update shell handlers for MongoDB with hostdb binaries
+  - [ ] Add MongoDB to "Manage Engines" menu with delete option
+  - [ ] Update CI to download MongoDB binaries via SpinDB
+
+- [ ] **Redis migration to hostdb** (when available)
+  - [ ] Same pattern as MySQL/MongoDB above
+
+**Prerequisites:** hostdb must have releases for these engines. Check https://github.com/robertjbass/hostdb/blob/main/releases.json
+
+**Reference implementation:** See `engines/mariadb/` for the most recent hostdb migration.
 
 ### v1.3 - Advanced Features
 
@@ -155,7 +188,7 @@ The hardcoded file IDs (`'17.7.0': '1259911'`) will become stale when EDB update
 
 **File:** `core/binary-manager.ts` lines 243-250
 
-```typescript
+```ts
 // UNSAFE: paths with special characters could execute arbitrary commands
 await execAsync(`mv "${sourcePath}" "${destPath}"`)
 await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
