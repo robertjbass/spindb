@@ -132,6 +132,11 @@ Combine common multi-step workflows into single commands. These should remain in
 - [x] **Windows support** - Added in v0.9.4 using EDB binaries for PostgreSQL
 - [ ] **Offline mode** - Bundle binaries for air-gapped environments
 - [ ] **Expand GitHub Actions coverage** - Add CI tests that validate major features across macOS, Linux, and Windows (not just unit tests), so cross-platform regressions are caught early
+- [ ] **Parallel CI matrix for all 5 platforms** - Run engine tests in parallel across all supported OS/arch combinations for faster CI and better platform bug detection
+  - Runners: `macos-14` (ARM64), `macos-13` (Intel), `ubuntu-latest` (x64), `windows-latest` (x64)
+  - linux-arm64: Requires `ubuntu-24.04-arm` or self-hosted runner
+  - Use GitHub Actions matrix strategy to parallelize
+  - Trade-off: macOS runners cost 10x Linux minutes
 
 ### Distribution
 
