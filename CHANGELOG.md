@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-01-09
+
+### Fixed
+- **MariaDB Linux/Windows CI failures** - Fixed MariaDB engine failing on Linux and Windows in GitHub Actions
+  - Added `--no-defaults` to MariaDB server startup to prevent reading config files with MySQL X Protocol options (`mysqlx-bind-address`) that MariaDB doesn't support
+  - Removed unsupported options (`--auth-root-authentication-method`, `--basedir`) from Windows `mariadb-install-db.exe` initialization
+
+### Changed
+- **TODO.md updated** - Added parallel CI matrix item for all 5 platform/arch combinations and fixed missing `linux-arm64` in Homebrew binary platforms
+
 ## [0.15.1] - 2026-01-09
 
 ### Fixed
