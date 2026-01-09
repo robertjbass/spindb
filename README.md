@@ -153,7 +153,7 @@ SpinDB downloads PostgreSQL server binaries automatically:
 
 | | |
 |---|---|
-| Versions | 11.8 |
+| Versions | 10.11, 11.4, 11.8 |
 | Default port | 3307 |
 | Default user | `root` |
 | Binary source | [hostdb](https://github.com/robertjbass/hostdb) |

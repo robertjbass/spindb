@@ -391,6 +391,22 @@ export class MariaDBEngine extends BaseEngine {
     }
 
     return new Promise((resolve, reject) => {
+      // Track whether we've already settled the promise to avoid race conditions
+      let settled = false
+
+      const errorHandler = (err: Error) => {
+        if (settled) return
+        settled = true
+        if (proc) {
+          proc.removeListener('error', errorHandler)
+        }
+        reject(err)
+      }
+
+      if (proc) {
+        proc.on('error', errorHandler)
+      }
+
       setTimeout(async () => {
         if (proc && proc.pid) {
           try {
@@ -406,20 +422,32 @@ export class MariaDBEngine extends BaseEngine {
         const checkInterval = 500
 
         const checkReady = async () => {
+          if (settled) return
           attempts++
           try {
             const mysqladmin = await this.getMysqladminPath()
             await execAsync(
               `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
             )
+            if (settled) return
+            settled = true
+            if (proc) {
+              proc.removeListener('error', errorHandler)
+            }
             resolve({
               port,
               connectionString: this.getConnectionString(container),
             })
           } catch {
+            if (settled) return
             if (attempts < maxAttempts) {
               setTimeout(checkReady, checkInterval)
             } else {
+              if (settled) return
+              settled = true
+              if (proc) {
+                proc.removeListener('error', errorHandler)
+              }
               reject(new Error('MariaDB failed to start within timeout'))
             }
           }
@@ -427,10 +455,6 @@ export class MariaDBEngine extends BaseEngine {
 
         checkReady()
       }, 1000)
-
-      if (proc) {
-        proc.on('error', reject)
-      }
     })
   }
 

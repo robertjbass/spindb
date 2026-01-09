@@ -230,14 +230,29 @@ export async function restoreBackup(
 
     const proc = spawn(mysql, args, spawnOptions)
 
+    // Track whether we've already settled the promise to avoid duplicate rejections
+    let settled = false
+    const rejectOnce = (err: Error) => {
+      if (settled) return
+      settled = true
+      fileStream.destroy()
+      proc.stdin?.end()
+      reject(err)
+    }
+
     // Pipe backup file to stdin, decompressing if necessary
     const fileStream = createReadStream(backupPath)
+
+    // Handle file read errors
+    fileStream.on('error', (err) => {
+      rejectOnce(new Error(`Failed to read backup file: ${err.message}`))
+    })
 
     if (format.format === 'compressed') {
       // Decompress gzipped file before piping to mariadb
       const gunzip = createGunzip()
       if (!proc.stdin) {
-        reject(
+        rejectOnce(
           new Error(
             'MariaDB process stdin is not available, cannot restore backup',
           ),
@@ -248,11 +263,13 @@ export async function restoreBackup(
 
       // Handle gunzip errors
       gunzip.on('error', (err) => {
-        reject(new Error(`Failed to decompress backup file: ${err.message}`))
+        fileStream.unpipe(gunzip)
+        gunzip.unpipe(proc.stdin!)
+        rejectOnce(new Error(`Failed to decompress backup file: ${err.message}`))
       })
     } else {
       if (!proc.stdin) {
-        reject(
+        rejectOnce(
           new Error(
             'MariaDB process stdin is not available, cannot restore backup',
           ),
@@ -273,6 +290,8 @@ export async function restoreBackup(
     })
 
     proc.on('close', (code) => {
+      if (settled) return
+      settled = true
       resolve({
         format: format.format,
         stdout,
@@ -281,7 +300,9 @@ export async function restoreBackup(
       })
     })
 
-    proc.on('error', reject)
+    proc.on('error', (err) => {
+      rejectOnce(err)
+    })
   })
 }
 
@@ -298,12 +319,26 @@ export function parseConnectionString(connectionString: string): {
   password: string
   database: string
 } {
-  const url = new URL(connectionString)
+  let url: URL
+  try {
+    url = new URL(connectionString)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(`Invalid MariaDB connection string: ${message}`)
+  }
+
+  const database = url.pathname.slice(1) // Remove leading /
+  if (!database) {
+    throw new Error(
+      'Invalid MariaDB connection string: database name is required (e.g., mysql://user:pass@host:port/database)',
+    )
+  }
+
   return {
     host: url.hostname,
     port: url.port || '3306',
     user: url.username || 'root',
     password: url.password || '',
-    database: url.pathname.slice(1), // Remove leading /
+    database,
   }
 }
