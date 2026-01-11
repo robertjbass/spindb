@@ -24,14 +24,10 @@ echo "  Platform: $(uname -s) $(uname -m)"
 echo "  SpinDB: $(spindb version 2>/dev/null || echo 'not installed')"
 echo ""
 
-# Verify clean state
-echo "=== Verifying clean state ==="
-if [ -d ~/.spindb ]; then
-  echo "WARNING: ~/.spindb already exists"
-  ls -la ~/.spindb
-else
-  echo "Clean state confirmed: no existing ~/.spindb"
-fi
+# Ensure clean state
+echo "=== Ensuring clean state ==="
+rm -rf ~/.spindb 2>/dev/null || true
+echo "Clean state confirmed"
 echo ""
 
 # Check library dependencies are available
