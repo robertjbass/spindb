@@ -161,8 +161,16 @@ export class SQLiteBinaryManager {
       }
 
       const fileStream = createWriteStream(archiveFile)
+
+      if (!response.body) {
+        fileStream.destroy()
+        throw new Error(
+          `Download failed: response has no body (status ${response.status})`,
+        )
+      }
+
       // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream)
+      const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
       if (platform === 'win32') {
