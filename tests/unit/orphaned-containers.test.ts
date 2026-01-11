@@ -143,7 +143,7 @@ describe('Orphaned Container Behavior', () => {
       const containerConfig = {
         name: 'mysql-db',
         engine: Engine.MySQL,
-        version: '9.1.0',
+        version: '9.5.0',
         port: 3306,
         database: 'testdb',
       }
@@ -422,9 +422,9 @@ describe('MySQL Engine Binary Check', () => {
   it('should return full version unchanged', async () => {
     const { mysqlEngine } = await import('../../engines/mysql')
 
-    const fullVersion = mysqlEngine.resolveFullVersion('9.1.0')
+    const fullVersion = mysqlEngine.resolveFullVersion('9.5.0')
 
-    assertEqual(fullVersion, '9.1.0', 'Full version should be unchanged')
+    assertEqual(fullVersion, '9.5.0', 'Full version should be unchanged')
   })
 
   it('should construct correct binary path', async () => {

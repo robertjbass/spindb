@@ -10,89 +10,23 @@
 import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { logDebug } from '../../core/error-handler'
 import { compareVersions } from '../../core/version-utils'
+import {
+  fetchHostdbReleases as fetchReleases,
+  clearCache as clearSharedCache,
+  getEngineReleases,
+  validatePlatform,
+  buildDownloadUrl,
+  type HostdbRelease,
+  type HostdbReleasesData,
+  type HostdbPlatform,
+} from '../../core/hostdb-client'
 
-// Platform definition in hostdb releases.json
-export type HostdbPlatform = {
-  url: string
-  sha256: string
-  size: number
-}
+// Re-export types for backwards compatibility
+export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 
-// Version entry in hostdb releases.json
-export type HostdbRelease = {
-  version: string
-  releaseTag: string
-  releasedAt: string
-  platforms: Record<string, HostdbPlatform>
-}
-
-// Structure of hostdb releases.json
-export type HostdbReleasesData = {
-  repository: string
-  updatedAt: string
-  databases: {
-    mysql?: Record<string, HostdbRelease>
-    mariadb?: Record<string, HostdbRelease>
-    postgresql?: Record<string, HostdbRelease>
-    // Other databases...
-  }
-}
-
-/**
- * In-memory cache for fetched releases.
- *
- * THREAD-SAFETY NOTE: This cache uses module-level mutable state and is NOT
- * safe for use across Node.js worker threads. Each worker thread will have
- * its own copy of this cache. For multi-threaded use cases, consider using
- * an external shared cache (e.g., Redis, file-based cache).
- *
- * For SpinDB's single-threaded CLI use case, this is acceptable.
- */
-let cachedReleases: HostdbReleasesData | null = null
-let cacheTimestamp = 0
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-
-/**
- * Clear the releases cache (for testing).
- *
- * NOTE: This only clears the cache in the current thread/process.
- * If using worker threads, each worker has its own cache instance.
- */
-export function clearCache(): void {
-  cachedReleases = null
-  cacheTimestamp = 0
-}
-
-// Fetch releases.json from hostdb repository
-export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
-  // Return cached releases if still valid
-  if (cachedReleases && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedReleases
-  }
-
-  const url =
-    'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
-
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const data = (await response.json()) as HostdbReleasesData
-
-    // Cache the results
-    cachedReleases = data
-    cacheTimestamp = Date.now()
-
-    return data
-  } catch (error) {
-    const err = error as Error
-    // Log the failure and rethrow - caller decides whether to use fallback
-    console.warn(`Warning: Failed to fetch hostdb releases: ${err.message}`)
-    throw error
-  }
-}
+// Re-export shared functions
+export const clearCache = clearSharedCache
+export const fetchHostdbReleases = fetchReleases
 
 // Get available MySQL versions from hostdb, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -100,7 +34,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   try {
     const releases = await fetchHostdbReleases()
-    const mysqlReleases = releases.databases.mysql
+    const mysqlReleases = getEngineReleases(releases, 'mysql')
 
     if (!mysqlReleases) {
       // No MySQL releases in hostdb yet, use fallback
@@ -169,9 +103,12 @@ export async function getHostdbDownloadUrl(
   platform: string,
   arch: string,
 ): Promise<string> {
+  // Validate platform up-front so we fail fast for unsupported platforms
+  const hostdbPlatform = validatePlatform(platform, arch)
+
   try {
     const releases = await fetchHostdbReleases()
-    const mysqlReleases = releases.databases.mysql
+    const mysqlReleases = getEngineReleases(releases, 'mysql')
 
     if (!mysqlReleases) {
       throw new Error('MySQL releases not found in hostdb')
@@ -182,10 +119,6 @@ export async function getHostdbDownloadUrl(
     if (!release) {
       throw new Error(`Version ${version} not found in hostdb releases`)
     }
-
-    // Map Node.js platform names to hostdb platform names
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
 
     // Get the platform-specific download URL
     const platformData = release.platforms[hostdbPlatform]
@@ -204,38 +137,8 @@ export async function getHostdbDownloadUrl(
     )
 
     // Fallback to constructing URL manually if fetch fails
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
-    const tag = `mysql-${version}`
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
-    const filename = `mysql-${version}-${hostdbPlatform}.${ext}`
-
-    return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+    return buildDownloadUrl('mysql', version, platform, arch)
   }
-}
-
-/**
- * Map Node.js platform identifiers to hostdb platform identifiers
- *
- * @param platformKey - Node.js platform-arch key (e.g., 'darwin-arm64')
- * @returns hostdb platform identifier (e.g., 'darwin-arm64')
- */
-function mapPlatformToHostdb(platformKey: string): string {
-  // hostdb uses standard platform naming, which matches Node.js
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-
-  const result = mapping[platformKey]
-  if (!result) {
-    throw new Error(`Unsupported platform: ${platformKey}`)
-  }
-
-  return result
 }
 
 /**
@@ -247,10 +150,8 @@ function mapPlatformToHostdb(platformKey: string): string {
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
     const releases = await fetchHostdbReleases()
-    if (!releases.databases.mysql) {
-      return false
-    }
-    return version in releases.databases.mysql
+    const mysqlReleases = getEngineReleases(releases, 'mysql')
+    return mysqlReleases ? version in mysqlReleases : false
   } catch {
     // Fallback to checking version map
     // Handle both major versions ("8.0") and full versions ("8.0.40")

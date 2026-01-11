@@ -17,6 +17,12 @@ let releasesCache: HostdbReleasesResponse | null = null
 let cacheTimestamp = 0
 const CACHE_TTL_MS = 5 * 60 * 1000
 
+// Clear the releases cache (for testing)
+export function clearCache(): void {
+  releasesCache = null
+  cacheTimestamp = 0
+}
+
 type HostdbPlatform = {
   url: string
   sha256: string
@@ -136,6 +142,10 @@ export async function getHostdbDownloadUrl(
   platform: string,
   arch: string,
 ): Promise<string> {
+  // Validate platform mapping up-front so we fail fast for unsupported platforms
+  const platformKey = `${platform}-${arch}`
+  const hostdbPlatform = mapPlatformToHostdb(platformKey)
+
   try {
     const releases = await fetchHostdbReleases()
     const mongodbReleases = releases?.databases?.mongodb
@@ -150,10 +160,6 @@ export async function getHostdbDownloadUrl(
       throw new Error(`Version ${version} not found in hostdb releases`)
     }
 
-    // Map Node.js platform names to hostdb platform names
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
-
     // Get the platform-specific download URL
     const platformData = release.platforms[hostdbPlatform]
     if (!platformData) {
@@ -167,12 +173,10 @@ export async function getHostdbDownloadUrl(
     // Log the error before falling back to manual URL construction
     const errorMessage = error instanceof Error ? error.message : String(error)
     logDebug(
-      `Failed to fetch MongoDB ${version} URL from hostdb for ${platform}-${arch}: ${errorMessage}. Using fallback URL.`,
+      `Failed to fetch MongoDB ${version} URL from hostdb for ${platformKey}: ${errorMessage}. Using fallback URL.`,
     )
 
     // Fallback to constructing URL manually if fetch fails
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
     const tag = `mongodb-${version}`
     const filename = `mongodb-${version}-${hostdbPlatform}.tar.gz`
 

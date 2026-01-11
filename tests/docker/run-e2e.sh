@@ -112,7 +112,6 @@ run_test() {
     echo "Waiting for container to start..."
     local status="unknown"
     local spindb_output=""
-    local spindb_failed=false
     for i in {1..15}; do
       # Capture both stdout and exit status
       if spindb_output=$(spindb info "$container_name" --json 2>&1); then

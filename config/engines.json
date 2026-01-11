@@ -22,7 +22,7 @@
       "status": "integrated",
       "binarySource": "hostdb",
       "supportedVersions": ["8.0.40", "8.4.7", "9.5.0"],
-      "defaultVersion": "9.5.0",
+      "defaultVersion": "8.4.7",
       "defaultPort": 3306,
       "runtime": "server",
       "queryLanguage": "sql",

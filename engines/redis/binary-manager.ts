@@ -285,11 +285,14 @@ export class RedisBinaryManager {
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
 
+    // Escape single quotes for PowerShell (double them)
+    const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
+
     // Use PowerShell's Expand-Archive for zip extraction
     await spawnAsync('powershell', [
       '-NoProfile',
       '-Command',
-      `Expand-Archive -Path '${zipFile}' -DestinationPath '${extractDir}' -Force`,
+      `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
     ])
 
     await this.moveExtractedEntries(extractDir, binPath)

@@ -8,15 +8,15 @@ export type EngineConfig = {
   icon: string
   status: 'integrated' | 'pending' | 'planned'
   binarySource: 'hostdb' | 'system' | 'edb'
-  supportedVersions?: string[]
-  defaultVersion?: string
-  defaultPort?: number | null
-  runtime?: 'server' | 'embedded'
-  queryLanguage?: string
-  connectionScheme?: string
-  superuser?: string | null
-  clientTools?: string[]
-  licensing?: 'commercial'
+  supportedVersions: string[]
+  defaultVersion: string
+  defaultPort: number | null
+  runtime: 'server' | 'embedded'
+  queryLanguage: string
+  connectionScheme: string
+  superuser: string | null
+  clientTools: string[]
+  licensing?: string | string[]
   notes?: string
 }
 

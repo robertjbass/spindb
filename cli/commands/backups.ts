@@ -8,6 +8,7 @@
 import { Command } from 'commander'
 import { readdirSync, statSync } from 'fs'
 import { join, extname } from 'path'
+import { homedir } from 'os'
 import chalk from 'chalk'
 import { formatBytes } from '../ui/theme'
 
@@ -167,7 +168,7 @@ export const backupsCommand = new Command('backups')
       const searchDirs = [directory || process.cwd()]
 
       if (options.all) {
-        const homeBackups = join(process.env.HOME || '', '.spindb', 'backups')
+        const homeBackups = join(homedir(), '.spindb', 'backups')
         searchDirs.push(homeBackups)
       }
 

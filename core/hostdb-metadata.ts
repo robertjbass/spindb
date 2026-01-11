@@ -65,9 +65,11 @@ const inFlightRequests = new Map<string, Promise<unknown>>()
 
 async function fetchWithCache<T>(
   url: string,
-  cache: { data: T; timestamp: number } | null,
+  getCache: () => { data: T; timestamp: number } | null,
   setCache: (cache: { data: T; timestamp: number }) => void,
 ): Promise<T> {
+  // Use getter to always check the freshest cache state
+  const cache = getCache()
   const now = Date.now()
   if (cache && now - cache.timestamp < CACHE_TTL_MS) {
     return cache.data
@@ -102,7 +104,7 @@ async function fetchWithCache<T>(
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
   return fetchWithCache(
     `${HOSTDB_RAW_BASE}/databases.json`,
-    databasesCache,
+    () => databasesCache,
     (c) => {
       databasesCache = c
     },
@@ -112,7 +114,7 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
 export async function fetchDownloadsJson(): Promise<DownloadsJson> {
   return fetchWithCache(
     `${HOSTDB_RAW_BASE}/downloads.json`,
-    downloadsCache,
+    () => downloadsCache,
     (c) => {
       downloadsCache = c
     },

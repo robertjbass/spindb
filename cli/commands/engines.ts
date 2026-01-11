@@ -289,12 +289,23 @@ async function checkAndInstallClientTools(
     clientSpinner.text = msg
   })
 
+  // Report all non-empty categories (not mutually exclusive)
+  const messages: string[] = []
   if (result.installed.length > 0) {
-    clientSpinner.succeed(`Installed client tools: ${result.installed.join(', ')}`)
-  } else if (result.skipped.length > 0) {
-    clientSpinner.succeed(`Client tools already available: ${result.skipped.join(', ')}`)
-  } else if (result.failed.length > 0) {
-    clientSpinner.warn(`Could not install: ${result.failed.join(', ')}. Install manually.`)
+    messages.push(`installed: ${result.installed.join(', ')}`)
+  }
+  if (result.skipped.length > 0) {
+    messages.push(`already available: ${result.skipped.join(', ')}`)
+  }
+
+  if (result.failed.length > 0) {
+    if (messages.length > 0) {
+      clientSpinner.warn(`${messages.join('; ')}; failed: ${result.failed.join(', ')}`)
+    } else {
+      clientSpinner.warn(`Could not install: ${result.failed.join(', ')}. Install manually.`)
+    }
+  } else if (messages.length > 0) {
+    clientSpinner.succeed(messages.join('; '))
   } else {
     clientSpinner.succeed('All client tools available')
   }
@@ -453,19 +464,19 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
     )
   }
-  const totalMongodbSize = mongodbEngines.reduce(
-    (acc, e) => acc + e.sizeBytes,
-    0,
-  )
   if (mongodbEngines.length > 0) {
+    const totalMongodbSize = mongodbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
     console.log(
       chalk.gray(
         `  MongoDB: ${mongodbEngines.length} version(s), ${formatBytes(totalMongodbSize)}`,
       ),
     )
   }
-  const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   if (redisEngines.length > 0) {
+    const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
     console.log(
       chalk.gray(
         `  Redis: ${redisEngines.length} version(s), ${formatBytes(totalRedisSize)}`,

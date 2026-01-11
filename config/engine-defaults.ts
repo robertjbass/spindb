@@ -46,7 +46,7 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     maxConnections: 200, // Higher than default 100 for parallel builds (Next.js, etc.)
   },
   mysql: {
-    defaultVersion: '9',
+    defaultVersion: '8.4',
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
     supportedVersions: ['8.0', '8.4', '9'], // Keep in sync with engines/mysql/version-maps.ts
@@ -91,8 +91,8 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     defaultVersion: '8.0',
     defaultPort: 27017,
     portRange: { start: 27017, end: 27100 },
-    supportedVersions: ['6.0', '7.0', '8.0'],
-    latestVersion: '8.0',
+    supportedVersions: ['7.0', '8.0', '8.2'], // Keep in sync with engines/mongodb/version-maps.ts
+    latestVersion: '8.2',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'mongodb',
     logFileName: 'mongodb.log',

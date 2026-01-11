@@ -1,6 +1,6 @@
 # SpinDB Architecture
 
-This document describes the architecture of SpinDB, a CLI tool for running local PostgreSQL, MySQL, and SQLite databases without Docker.
+This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and SQLite.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ SpinDB follows a **three-tier layered architecture**:
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
 │                   Engine Layer (engines/)                   │
-│         PostgreSQL, MySQL, SQLite implementations           │
+│    PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +55,7 @@ spindb/
 ├── cli/                    # CLI layer
 │   ├── bin.ts              # Entry point (#!/usr/bin/env tsx)
 │   ├── index.ts            # Commander.js setup, routes to commands
-│   ├── commands/           # CLI commands (23 files)
+│   ├── commands/           # CLI commands (26 files)
 │   │   ├── menu/           # Interactive menu
 │   │   │   ├── index.ts    # Main menu orchestrator
 │   │   │   ├── shared.ts   # MenuChoice type, utilities
@@ -79,31 +79,73 @@ spindb/
 │   ├── transaction-manager.ts  # Rollback support
 │   ├── start-with-retry.ts     # Port conflict retry logic
 │   ├── error-handler.ts        # SpinDBError class
-│   └── platform-service.ts     # Platform abstractions
+│   ├── platform-service.ts     # Platform abstractions
+│   ├── backup-restore.ts       # Backup/restore orchestration
+│   ├── hostdb-client.ts        # Shared hostdb fetch/caching
+│   ├── homebrew-version-manager.ts  # Homebrew version detection
+│   ├── update-manager.ts       # Update checking
+│   └── version-utils.ts        # Version parsing/comparison
 │
 ├── engines/                # Database engine implementations
 │   ├── base-engine.ts      # Abstract base class
 │   ├── index.ts            # Engine registry
 │   ├── postgresql/         # PostgreSQL implementation
 │   │   ├── index.ts        # PostgreSQLEngine class
-│   │   ├── binary-urls.ts  # Zonky.io URL builder
+│   │   ├── binary-urls.ts  # hostdb URL builder
+│   │   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   │   ├── version-maps.ts # Version mapping
 │   │   ├── binary-manager.ts  # Client tool management
 │   │   ├── backup.ts       # pg_dump wrapper
-│   │   └── restore.ts      # Restore logic
+│   │   ├── restore.ts      # Restore logic
+│   │   └── version-validator.ts
 │   ├── mysql/              # MySQL implementation
 │   │   ├── index.ts        # MySQLEngine class
-│   │   ├── binary-detection.ts  # System binary detection
+│   │   ├── binary-urls.ts  # hostdb URL builder
+│   │   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   │   ├── version-maps.ts # Version mapping
+│   │   ├── binary-manager.ts  # Download/extraction
 │   │   ├── backup.ts       # mysqldump wrapper
-│   │   └── restore.ts      # Restore logic
+│   │   ├── restore.ts      # Restore logic
+│   │   └── version-validator.ts
+│   ├── mariadb/            # MariaDB implementation
+│   │   ├── index.ts        # MariaDBEngine class
+│   │   ├── binary-urls.ts  # hostdb URL builder
+│   │   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   │   ├── version-maps.ts # Version mapping
+│   │   ├── binary-manager.ts  # Download/extraction
+│   │   ├── backup.ts       # mariadb-dump wrapper
+│   │   ├── restore.ts      # Restore logic
+│   │   └── version-validator.ts
+│   ├── mongodb/            # MongoDB implementation
+│   │   ├── index.ts        # MongoDBEngine class
+│   │   ├── binary-urls.ts  # hostdb URL builder
+│   │   ├── version-maps.ts # Version mapping
+│   │   ├── backup.ts       # mongodump wrapper
+│   │   ├── restore.ts      # mongorestore logic
+│   │   └── version-validator.ts
+│   ├── redis/              # Redis implementation
+│   │   ├── index.ts        # RedisEngine class
+│   │   ├── binary-urls.ts  # hostdb URL builder
+│   │   ├── version-maps.ts # Version mapping
+│   │   ├── backup.ts       # RDB/text backup
+│   │   ├── restore.ts      # RDB/text restore
+│   │   └── version-validator.ts
 │   └── sqlite/             # SQLite implementation
 │       ├── index.ts        # SQLiteEngine class
+│       ├── binary-urls.ts  # hostdb URL builder
+│       ├── version-maps.ts # Version mapping
 │       ├── registry.ts     # File tracking in config.json
 │       └── scanner.ts      # CWD scanning for .sqlite files
 │
 ├── config/                 # Configuration
 │   ├── paths.ts            # ~/.spindb/ path utilities
+│   ├── defaults.ts         # General defaults
 │   ├── engine-defaults.ts  # Engine-specific defaults
-│   └── os-dependencies.ts  # Platform-specific dependencies
+│   ├── backup-formats.ts   # Backup format definitions
+│   ├── os-dependencies.ts  # Platform-specific dependencies
+│   ├── engines.json        # Engine metadata (source of truth)
+│   ├── engines.schema.json # JSON schema for engines.json
+│   └── engines-registry.ts # Type-safe engines.json loader
 │
 ├── types/                  # TypeScript types
 │   └── index.ts            # All type definitions
@@ -127,7 +169,7 @@ bin.ts → index.ts → Commander.js → commands/*.ts
 ```
 
 **Components:**
-- **Commands**: 23 discrete commands (create, start, stop, list, etc.)
+- **Commands**: 26 discrete commands (create, start, stop, list, etc.)
 - **Menu**: Interactive mode with submenus and handlers
 - **UI**: Prompts (Inquirer), spinners (Ora), colors (Chalk)
 
@@ -164,7 +206,7 @@ The core layer contains business logic independent of CLI concerns.
 The engine layer implements database-specific logic via the abstract `BaseEngine` class.
 
 **Engine Types:**
-- **Server-based** (PostgreSQL, MySQL): Process management, port allocation
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis): Process management, port allocation
 - **File-based** (SQLite): No server, files in project directories
 
 ---
@@ -215,7 +257,10 @@ abstract class BaseEngine {
 ```ts
 // Singleton instances with alias support
 getEngine('postgresql')  // or 'postgres', 'pg'
-getEngine('mysql')       // or 'mariadb'
+getEngine('mysql')       // MySQL engine
+getEngine('mariadb')     // MariaDB engine (separate from MySQL)
+getEngine('mongodb')     // or 'mongo'
+getEngine('redis')       // Redis engine
 getEngine('sqlite')      // or 'lite'
 ```
 
@@ -385,7 +430,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'redis' | 'sqlite'
   version: string
   port: number
   database: string        // Primary database
@@ -401,12 +446,28 @@ type ContainerConfig = {
 ```ts
 type SpinDBConfig = {
   binaries: {
+    // PostgreSQL tools
     psql?: BinaryConfig
     pg_dump?: BinaryConfig
+    pg_restore?: BinaryConfig
+    // MySQL tools
     mysql?: BinaryConfig
     mysqldump?: BinaryConfig
+    mysqladmin?: BinaryConfig
+    // MariaDB tools
+    mariadb?: BinaryConfig
+    'mariadb-dump'?: BinaryConfig
+    'mariadb-admin'?: BinaryConfig
+    // MongoDB tools
+    mongod?: BinaryConfig
+    mongosh?: BinaryConfig
+    mongodump?: BinaryConfig
+    mongorestore?: BinaryConfig
+    // Redis tools
+    'redis-server'?: BinaryConfig
+    'redis-cli'?: BinaryConfig
+    // SQLite tools
     sqlite3?: BinaryConfig
-    // ... other tools
   }
   registry?: {
     sqlite?: {
@@ -483,13 +544,16 @@ Singleton pattern with aliases:
 const engines = {
   postgresql: new PostgreSQLEngine(),
   mysql: new MySQLEngine(),
+  mariadb: new MariaDBEngine(),
+  mongodb: new MongoDBEngine(),
+  redis: new RedisEngine(),
   sqlite: new SQLiteEngine(),
 }
 
 const aliases = {
   postgres: 'postgresql',
   pg: 'postgresql',
-  mariadb: 'mysql',
+  mongo: 'mongodb',
   lite: 'sqlite',
 }
 ```
@@ -523,7 +587,7 @@ Core types are centralized in `types/index.ts`:
 | Type | Purpose |
 |------|---------|
 | `ContainerConfig` | Container state and metadata |
-| `Engine` | Enum: PostgreSQL, MySQL, SQLite |
+| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite |
 | `BackupFormat` | Backup file format detection |
 | `BackupOptions` | Backup command options |
 | `BackupResult` | Backup operation result |
@@ -560,16 +624,21 @@ Error messages include actionable fix suggestions.
 
 ## Platform Support
 
-| Platform | PostgreSQL | MySQL | SQLite |
-|----------|------------|-------|--------|
-| macOS (ARM) | Bundled binaries (zonky.io) | System (Homebrew) | System |
-| macOS (Intel) | Bundled binaries (zonky.io) | System (Homebrew) | System |
-| Linux (x64) | Bundled binaries (zonky.io) | System (apt/dnf) | System |
-| Windows (x64) | Bundled binaries (EDB) | System (choco/winget/scoop) | System |
+All database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for all supported platforms.
 
-**PostgreSQL binaries:**
-- macOS/Linux: Downloaded from [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries)
-- Windows: Downloaded from [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
+| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | Redis | SQLite |
+|----------|------------|-------|---------|---------|-------|--------|
+| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb |
+
+*PostgreSQL on Windows uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries.
+
+**Binary source:**
+- **hostdb**: https://github.com/robertjbass/hostdb - Pre-built database binaries for all platforms
+- **Future**: [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) may be integrated for smaller embedded PostgreSQL binaries
 
 ---
 

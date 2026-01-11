@@ -9,6 +9,7 @@
 import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
+import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { spawn } from 'child_process'
 
@@ -193,8 +194,9 @@ export class SQLiteBinaryManager {
       }
 
       const fileStream = createWriteStream(archiveFile)
-      // @ts-expect-error - response.body is ReadableStream
-      await pipeline(response.body, fileStream)
+      // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
+      const nodeStream = Readable.fromWeb(response.body as ReadableStream)
+      await pipeline(nodeStream, fileStream)
 
       if (platform === 'win32') {
         await this.extractWindowsBinaries(
@@ -314,11 +316,14 @@ export class SQLiteBinaryManager {
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
 
+    // Escape single quotes for PowerShell (double them)
+    const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
+
     // Use PowerShell's Expand-Archive for zip extraction
     await spawnAsync('powershell', [
       '-NoProfile',
       '-Command',
-      `Expand-Archive -Path '${zipFile}' -DestinationPath '${extractDir}' -Force`,
+      `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
     ])
 
     // Check if there's a nested sqlite/ directory

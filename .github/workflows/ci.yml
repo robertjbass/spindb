@@ -3,7 +3,28 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # TODO delete this push test when done with branch
+  push:
+    branches: [claude/mysql-hostdb-binary-Yy1O6]
   workflow_dispatch:
+
+# =============================================================================
+# OS Coverage Strategy
+# =============================================================================
+# We test on 5 OS variants to cover different platforms and architectures:
+#   - ubuntu-22.04 (x64) - LTS with older glibc/system libraries
+#   - ubuntu-24.04 (x64) - LTS with newer libraries (catches issues like libaio rename)
+#   - macos-13 (Intel x64)
+#   - macos-14 (ARM64/Apple Silicon)
+#   - windows-latest (x64)
+#
+# Note: We test two Ubuntu versions instead of Linux ARM64 because:
+#   1. GitHub Actions doesn't offer free native Linux ARM64 runners
+#   2. QEMU emulation is too slow and flaky for CI
+#   3. Two Ubuntu LTS versions catch real library compatibility issues
+#   4. macOS ARM64 validates ARM code paths
+#   5. A commented-out ARM64 job exists below if native runners become available
+# =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
 concurrency:
@@ -645,6 +666,118 @@ jobs:
       - name: Run Docker E2E tests
         run: docker run --rm spindb-e2e
         timeout-minutes: 30
+
+  # ============================================
+  # Linux ARM64 Tests (COMMENTED OUT)
+  # ============================================
+  # Uncomment this section if GitHub adds free ARM64 runners or if you have
+  # access to paid larger runners. Native ARM64 is much faster than QEMU.
+  #
+  # To enable: uncomment the job below and add 'test-linux-arm64' to the
+  # 'needs' array in the ci-success job at the bottom of this file.
+  # ============================================
+  #
+  # test-linux-arm64:
+  #   name: Linux ARM64 (${{ matrix.test }})
+  #   # Native ARM64 runner (requires GitHub Teams/Enterprise or larger runners)
+  #   runs-on: ubuntu-24.04-arm64
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       test:
+  #         - unit
+  #         - postgresql
+  #         - mysql
+  #         - mariadb
+  #         - sqlite
+  #         - mongodb
+  #         - redis
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'pnpm'
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     # Cache binaries for all engines
+  #     - name: Cache binaries
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.spindb/bin
+  #         key: spindb-arm64-${{ matrix.test }}-${{ runner.os }}-${{ runner.arch }}
+  #
+  #     # Download engine binaries based on test type
+  #     - name: Download PostgreSQL
+  #       if: matrix.test == 'postgresql' || matrix.test == 'unit'
+  #       run: pnpm start engines download postgresql 18
+  #
+  #     - name: Download MySQL
+  #       if: matrix.test == 'mysql'
+  #       run: pnpm start engines download mysql 9
+  #
+  #     - name: Download MariaDB
+  #       if: matrix.test == 'mariadb'
+  #       run: pnpm start engines download mariadb 11.8
+  #
+  #     - name: Download SQLite
+  #       if: matrix.test == 'sqlite'
+  #       run: pnpm start engines download sqlite 3
+  #
+  #     - name: Download MongoDB
+  #       if: matrix.test == 'mongodb'
+  #       run: pnpm start engines download mongodb 8.0
+  #
+  #     - name: Download Redis
+  #       if: matrix.test == 'redis'
+  #       run: pnpm start engines download redis 8
+  #
+  #     - name: Show installed engines
+  #       run: pnpm start engines list
+  #
+  #     # Run the appropriate test
+  #     - name: Run unit tests
+  #       if: matrix.test == 'unit'
+  #       run: pnpm test:unit
+  #       timeout-minutes: 10
+  #
+  #     - name: Run PostgreSQL tests
+  #       if: matrix.test == 'postgresql'
+  #       run: pnpm test:pg
+  #       timeout-minutes: 15
+  #
+  #     - name: Run MySQL tests
+  #       if: matrix.test == 'mysql'
+  #       run: pnpm test:mysql
+  #       timeout-minutes: 15
+  #
+  #     - name: Run MariaDB tests
+  #       if: matrix.test == 'mariadb'
+  #       run: pnpm test:mariadb
+  #       timeout-minutes: 15
+  #
+  #     - name: Run SQLite tests
+  #       if: matrix.test == 'sqlite'
+  #       run: pnpm test:sqlite
+  #       timeout-minutes: 10
+  #
+  #     - name: Run MongoDB tests
+  #       if: matrix.test == 'mongodb'
+  #       run: pnpm test:mongodb
+  #       timeout-minutes: 15
+  #
+  #     - name: Run Redis tests
+  #       if: matrix.test == 'redis'
+  #       run: pnpm test:redis
+  #       timeout-minutes: 15
 
   # ============================================
   # Summary Job - Ensures all tests pass

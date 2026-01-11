@@ -104,9 +104,6 @@ export abstract class BasePlatformService {
   // Detect available package manager
   abstract detectPackageManager(): Promise<PackageManagerInfo | null>
 
-  // Get the zonky.io platform identifier for PostgreSQL binaries
-  abstract getZonkyPlatform(): string | null
-
   // Get the null device path for this platform ('/dev/null' on Unix, 'NUL' on Windows)
   abstract getNullDevice(): string
 
@@ -325,13 +322,6 @@ class DarwinPlatformService extends BasePlatformService {
     }
   }
 
-  getZonkyPlatform(): string | null {
-    const arch = osArch()
-    if (arch === 'arm64') return 'darwin-arm64v8'
-    if (arch === 'x64') return 'darwin-amd64'
-    return null
-  }
-
   getNullDevice(): string {
     return '/dev/null'
   }
@@ -532,13 +522,6 @@ class LinuxPlatformService extends BasePlatformService {
     return null
   }
 
-  getZonkyPlatform(): string | null {
-    const arch = osArch()
-    if (arch === 'arm64') return 'linux-arm64v8'
-    if (arch === 'x64') return 'linux-amd64'
-    return null
-  }
-
   getNullDevice(): string {
     return '/dev/null'
   }
@@ -683,11 +666,6 @@ class Win32PlatformService extends BasePlatformService {
     return null
   }
 
-  getZonkyPlatform(): string | null {
-    // zonky.io doesn't provide Windows binaries
-    return null
-  }
-
   getNullDevice(): string {
     return 'NUL'
   }
@@ -755,8 +733,6 @@ export function isWindows(): boolean {
  * Get spawn options for Windows shell requirements.
  * Windows needs shell:true for proper command execution with quoted paths.
  */
-export function getWindowsSpawnOptions():
-  | { shell: true }
-  | Record<string, never> {
+export function getWindowsSpawnOptions(): { shell?: true } {
   return isWindows() ? { shell: true } : {}
 }

@@ -174,6 +174,8 @@ export class MariaDBEngine extends BaseEngine {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      } else {
+        logDebug(`Expected MariaDB server binary not found`, { tool, toolPath })
       }
     }
 
@@ -183,6 +185,8 @@ export class MariaDBEngine extends BaseEngine {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      } else {
+        logDebug(`Expected MariaDB client binary not found`, { tool, toolPath })
       }
     }
 

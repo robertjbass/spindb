@@ -16,29 +16,19 @@ import { configManager } from '../../core/config-manager'
 import { paths } from '../../config/paths'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
-// Module-level cache for redis-cli path (undefined = not yet resolved)
-let cachedRedisCliPath: string | null | undefined
-
 /**
  * Get the path to redis-cli binary
- * First checks configManager cache, then falls back to system PATH
- * Result is cached at module level for subsequent calls
+ * First checks configManager (which has its own caching), then falls back to system PATH
  */
 async function getRedisCliPath(): Promise<string | null> {
-  if (cachedRedisCliPath !== undefined) {
-    return cachedRedisCliPath
-  }
-
   // Check if we have a cached/bundled redis-cli
   const configPath = await configManager.getBinaryPath('redis-cli')
   if (configPath) {
-    cachedRedisCliPath = configPath
-    return cachedRedisCliPath
+    return configPath
   }
 
   // Fallback to system PATH
-  cachedRedisCliPath = await platformService.findToolPath('redis-cli')
-  return cachedRedisCliPath
+  return platformService.findToolPath('redis-cli')
 }
 
 const execAsync = promisify(exec)

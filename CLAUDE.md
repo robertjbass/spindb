@@ -99,17 +99,26 @@ engines/
 │   └── version-validator.ts
 ├── sqlite/
 │   ├── index.ts            # SQLite engine (file-based)
+│   ├── binary-urls.ts      # hostdb URL builder
+│   ├── version-maps.ts     # Version mapping
+│   ├── binary-manager.ts   # Download/extraction
 │   ├── registry.ts         # File tracking in config.json
 │   └── scanner.ts          # CWD scanning for .sqlite files
 ├── mongodb/
 │   ├── index.ts            # MongoDB engine
-│   ├── binary-detection.ts # System binary detection
+│   ├── binary-urls.ts      # hostdb URL builder
+│   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   ├── version-maps.ts     # Version mapping
+│   ├── binary-manager.ts   # Download/extraction
 │   ├── backup.ts           # mongodump wrapper
 │   ├── restore.ts          # mongorestore wrapper
 │   └── version-validator.ts
 └── redis/
     ├── index.ts            # Redis engine
-    ├── binary-detection.ts # System binary detection
+    ├── binary-urls.ts      # hostdb URL builder
+    ├── hostdb-releases.ts  # hostdb GitHub releases API
+    ├── version-maps.ts     # Version mapping
+    ├── binary-manager.ts   # Download/extraction
     ├── backup.ts           # BGSAVE/RDB wrapper
     ├── restore.ts          # RDB restore
     └── version-validator.ts
@@ -439,7 +448,7 @@ Before starting, verify binaries exist and note exact versions:
 4. Note supported platforms (darwin-arm64, darwin-x64, linux-x64)
 5. **The version-maps.ts file MUST match releases.json exactly** - any version not in releases.json will fail to download
 
-**MySQL Migration Note:** When MySQL is migrated to hostdb, it will use actual MySQL binaries on ALL platforms. Previously, SpinDB used MariaDB as a drop-in replacement for MySQL on Linux (since MySQL wasn't easily available via apt). With hostdb providing MySQL binaries directly, this workaround is no longer needed. MySQL and MariaDB will be fully separate engines with their own binaries.
+**MySQL Migration Note (Historical):** MySQL now uses hostdb binaries on ALL platforms. Previously, SpinDB used MariaDB as a drop-in replacement for MySQL on Linux (since MySQL wasn't easily available via apt). With hostdb providing MySQL binaries directly, this workaround is no longer needed. MySQL and MariaDB are now fully separate engines with their own binaries.
 
 #### Step 1: Create Binary Management Files
 
@@ -871,9 +880,12 @@ Error messages should include actionable fix suggestions.
 
 ## Known Limitations
 
-1. **Client tools required** - psql/mysql/mongosh/redis-cli must be installed separately
-2. **MySQL, MongoDB, and Redis use system binaries** - Unlike PostgreSQL which downloads binaries
-3. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
+1. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
+2. **hostdb binary size** - Pre-built binaries are ~50-200MB per engine version
+
+## Future Considerations
+
+- **zonky.io integration**: For smaller embedded PostgreSQL binaries (~10MB), [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) may be integrated as an alternative binary source for use cases where size matters more than having the full toolset
 
 ## Publishing & Versioning
 

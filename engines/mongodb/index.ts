@@ -6,6 +6,7 @@
 import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
+import net from 'net'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
@@ -366,6 +367,27 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
+  // Check if a TCP port is accepting connections
+  private checkPortOpen(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket()
+      socket.setTimeout(1000)
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('error', () => {
+        socket.destroy()
+        resolve(false)
+      })
+      socket.once('timeout', () => {
+        socket.destroy()
+        resolve(false)
+      })
+      socket.connect(port, '127.0.0.1')
+    })
+  }
+
   // Wait for MongoDB to be ready to accept connections
   private async waitForReady(
     port: number,
@@ -376,11 +398,16 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await configManager.getBinaryPath('mongosh')
     if (!mongosh) {
-      // No mongosh available to verify readiness - assume ready after fork
+      // No mongosh available - fall back to TCP port check
       logDebug(
-        `mongosh not found, assuming MongoDB ready on port ${port} without verification`,
+        `mongosh not found, using TCP port check for MongoDB on port ${port}`,
       )
-      return true
+      while (Date.now() - startTime < timeoutMs) {
+        const isOpen = await this.checkPortOpen(port)
+        if (isOpen) return true
+        await new Promise((r) => setTimeout(r, checkInterval))
+      }
+      return false
     }
 
     while (Date.now() - startTime < timeoutMs) {

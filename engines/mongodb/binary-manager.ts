@@ -9,8 +9,7 @@ import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec, spawn } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
@@ -20,8 +19,6 @@ import {
   type InstalledBinary,
 } from '../../types'
 import { logDebug } from '../../core/error-handler'
-
-const execAsync = promisify(exec)
 
 // Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
@@ -299,11 +296,14 @@ export class MongoDBBinaryManager {
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
 
+    // Escape single quotes for PowerShell (double them)
+    const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
+
     // Use PowerShell's Expand-Archive for zip extraction
     await spawnAsync('powershell', [
       '-NoProfile',
       '-Command',
-      `Expand-Archive -Path '${zipFile}' -DestinationPath '${extractDir}' -Force`,
+      `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
     ])
 
     await this.moveExtractedEntries(extractDir, binPath)
@@ -365,7 +365,8 @@ export class MongoDBBinaryManager {
     }
 
     try {
-      const { stdout } = await execAsync(`"${mongodPath}" --version`)
+      // Use spawnAsync to avoid shell injection (mongodPath could contain special chars)
+      const { stdout } = await spawnAsync(mongodPath, ['--version'])
       // Extract version from output like "db version v7.0.28"
       const match = stdout.match(/db version v(\d+\.\d+\.\d+)/)
       const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+)/) : null

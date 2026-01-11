@@ -17,8 +17,8 @@
  */
 export const MYSQL_VERSION_MAP: Record<string, string> = {
   '8.0': '8.0.40',
-  '8.4': '8.4.3',
-  '9': '9.1.0',
+  '8.4': '8.4.7',
+  '9': '9.5.0',
 }
 
 /**
