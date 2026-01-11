@@ -16,16 +16,24 @@
  * Must match versions available in hostdb releases.json.
  */
 export const MARIADB_VERSION_MAP: Record<string, string> = {
+  // 1-part: major version → LTS
+  '10': '10.11.15',
+  '11': '11.8.5',
+  // 2-part: major.minor → latest patch
   '10.11': '10.11.15',
   '11.4': '11.4.5',
   '11.8': '11.8.5',
+  // 3-part: exact version (identity mapping)
+  '10.11.15': '10.11.15',
+  '11.4.5': '11.4.5',
+  '11.8.5': '11.8.5',
 }
 
 /**
- * Supported major MariaDB versions.
- * Derived from MARIADB_VERSION_MAP keys.
+ * Supported major MariaDB versions (2-part format).
+ * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MARIADB_VERSION_MAP)
+export const SUPPORTED_MAJOR_VERSIONS = ['10.11', '11.4', '11.8']
 
 /**
  * Get the full version string for a major version.
@@ -44,14 +52,27 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '11.8.5')
  */
 export function normalizeVersion(version: string): string {
-  // If it's in the map directly, use it
+  // If it's a major version key in the map, return the full version
   const fullVersion = MARIADB_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // Version not in map - warn and return unchanged
-  // Don't silently modify user input by appending zeros
+  // If it's already a known full version (a value in the map), return as-is
+  const knownVersions = Object.values(MARIADB_VERSION_MAP)
+  if (knownVersions.includes(version)) {
+    return version
+  }
+
+  // If it looks like a full version (X.Y.Z), return as-is but warn
+  if (/^\d+\.\d+\.\d+$/.test(version)) {
+    console.warn(
+      `MariaDB version '${version}' not in version map, may not be available in hostdb`,
+    )
+    return version
+  }
+
+  // Unknown version format - warn and return unchanged
   console.warn(
     `MariaDB version '${version}' not in version map, may not be available in hostdb`,
   )

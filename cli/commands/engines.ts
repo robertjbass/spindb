@@ -48,6 +48,7 @@ import { mysqlBinaryManager } from '../../engines/mysql/binary-manager'
 import { mariadbBinaryManager } from '../../engines/mariadb/binary-manager'
 import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
 import { redisBinaryManager } from '../../engines/redis/binary-manager'
+import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -158,7 +159,13 @@ async function installMissingClientTools(
   }
 
   // Map our package manager to hostdb key
-  const ALLOWED_PACKAGE_MANAGERS = ['brew', 'apt', 'yum', 'dnf', 'choco'] as const
+  const ALLOWED_PACKAGE_MANAGERS = [
+    'brew',
+    'apt',
+    'yum',
+    'dnf',
+    'choco',
+  ] as const
   type PackageManagerKey = (typeof ALLOWED_PACKAGE_MANAGERS)[number]
 
   const normalizedName = pm.name.toLowerCase().replace(/[^a-z]/g, '')
@@ -210,15 +217,17 @@ async function installMissingClientTools(
       if (pmKey === 'apt') {
         // Run apt-get update and apt-get install as separate commands with argument arrays
         const aptGetPath = isRoot ? 'apt-get' : 'sudo'
-        const updateArgs = isRoot
-          ? ['update']
-          : ['apt-get', 'update']
+        const updateArgs = isRoot ? ['update'] : ['apt-get', 'update']
         const installArgs = isRoot
           ? ['install', '-y', pkg.package]
           : ['apt-get', 'install', '-y', pkg.package]
 
-        await execFileAsync(aptGetPath, updateArgs, { timeout: INSTALL_TIMEOUT_MS })
-        await execFileAsync(aptGetPath, installArgs, { timeout: INSTALL_TIMEOUT_MS })
+        await execFileAsync(aptGetPath, updateArgs, {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+        await execFileAsync(aptGetPath, installArgs, {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
       } else {
         // Other package managers use shell commands (package names are validated above)
         const sudo = isRoot ? '' : 'sudo '
@@ -300,9 +309,13 @@ async function checkAndInstallClientTools(
   const clientSpinner = createSpinner('Checking client tools...')
   clientSpinner.start()
 
-  const result = await installMissingClientTools(engineName, bundledTools, (msg) => {
-    clientSpinner.text = msg
-  })
+  const result = await installMissingClientTools(
+    engineName,
+    bundledTools,
+    (msg) => {
+      clientSpinner.text = msg
+    },
+  )
 
   // Report all non-empty categories (not mutually exclusive)
   const messages: string[] = []
@@ -315,9 +328,13 @@ async function checkAndInstallClientTools(
 
   if (result.failed.length > 0) {
     if (messages.length > 0) {
-      clientSpinner.warn(`${messages.join('; ')}; failed: ${result.failed.join(', ')}`)
+      clientSpinner.warn(
+        `${messages.join('; ')}; failed: ${result.failed.join(', ')}`,
+      )
     } else {
-      clientSpinner.warn(`Could not install: ${result.failed.join(', ')}. Install manually.`)
+      clientSpinner.warn(
+        `Could not install: ${result.failed.join(', ')}. Install manually.`,
+      )
     }
   } else if (messages.length > 0) {
     clientSpinner.succeed(messages.join('; '))
@@ -689,8 +706,8 @@ async function deleteEngine(
   }
 }
 
-// Install an engine via system package manager
-async function installEngineViaPackageManager(
+// Install an engine via system package manager (currently unused, kept for future use)
+async function _installEngineViaPackageManager(
   engine: string,
   displayName: string,
 ): Promise<void> {
@@ -953,7 +970,42 @@ enginesCommand
       }
 
       if (['sqlite', 'sqlite3'].includes(normalizedEngine)) {
-        await installEngineViaPackageManager('sqlite', 'SQLite')
+        if (!version) {
+          console.error(uiError('SQLite requires a version (e.g., 3)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.SQLite)
+
+        const spinner = createSpinner(`Checking SQLite ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `SQLite ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`SQLite ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`SQLite ${version} binaries downloaded`)
+        }
+
+        const { platform: sqlitePlatform, arch: sqliteArch } =
+          platformService.getPlatformInfo()
+        const sqliteFullVersion = sqliteBinaryManager.getFullVersion(version)
+        const sqliteBinPath = paths.getBinaryPath({
+          engine: 'sqlite',
+          version: sqliteFullVersion,
+          platform: sqlitePlatform,
+          arch: sqliteArch,
+        })
+        console.log(chalk.gray(`  Location: ${sqliteBinPath}`))
         return
       }
 

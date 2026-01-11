@@ -16,15 +16,22 @@
  * Must match versions available in hostdb releases.json.
  */
 export const REDIS_VERSION_MAP: Record<string, string> = {
+  // 1-part: major version → latest
   '7': '7.4.7',
   '8': '8.4.0',
+  // 2-part: major.minor → latest patch
+  '7.4': '7.4.7',
+  '8.4': '8.4.0',
+  // 3-part: exact version (identity mapping)
+  '7.4.7': '7.4.7',
+  '8.4.0': '8.4.0',
 }
 
 /**
- * Supported major Redis versions.
- * Derived from REDIS_VERSION_MAP keys.
+ * Supported major Redis versions (1-part format).
+ * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(REDIS_VERSION_MAP)
+export const SUPPORTED_MAJOR_VERSIONS = ['7', '8']
 
 /**
  * Get the full version string for a major version.
@@ -43,14 +50,27 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '7.4.7')
  */
 export function normalizeVersion(version: string): string {
-  // If it's in the map directly, use it
+  // If it's a major version key in the map, return the full version
   const fullVersion = REDIS_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // Version not in map - warn and return unchanged
-  // Don't silently modify user input by appending zeros
+  // If it's already a known full version (a value in the map), return as-is
+  const knownVersions = Object.values(REDIS_VERSION_MAP)
+  if (knownVersions.includes(version)) {
+    return version
+  }
+
+  // If it looks like a full version (X.Y.Z), return as-is but warn
+  if (/^\d+\.\d+\.\d+$/.test(version)) {
+    console.warn(
+      `Redis version '${version}' not in version map, may not be available in hostdb`,
+    )
+    return version
+  }
+
+  // Unknown version format - warn and return unchanged
   console.warn(
     `Redis version '${version}' not in version map, may not be available in hostdb`,
   )

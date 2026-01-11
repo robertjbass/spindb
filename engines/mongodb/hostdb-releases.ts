@@ -12,7 +12,7 @@ import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
 import { isNewerVersion } from '../../core/version-utils'
 import { mongodbBinaryManager } from './binary-manager'
 import {
-  fetchHostdbReleases as fetchReleases,
+  fetchHostdbReleases,
   clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
@@ -21,31 +21,30 @@ import {
   type HostdbReleasesData,
   type HostdbPlatform,
 } from '../../core/hostdb-client'
+import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 
 // Re-export shared functions
 export const clearCache = clearSharedCache
-export const fetchHostdbReleases = fetchReleases
 
 /**
- * Fetch available MongoDB versions from hostdb
+ * Fetch available MongoDB versions from hostdb databases.json
  * Falls back to locally installed versions, then hardcoded version map
  */
 export async function fetchAvailableVersions(): Promise<
   Record<string, string>
 > {
-  // Try to fetch from hostdb first
+  // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const releases = await fetchHostdbReleases()
-    const mongodbReleases = getEngineReleases(releases, 'mongodb')
+    const versions = await getHostdbVersions('mongodb')
 
-    if (mongodbReleases && Object.keys(mongodbReleases).length > 0) {
+    if (versions && versions.length > 0) {
       const versionMap: Record<string, string> = {}
 
-      // Iterate over version keys (e.g., "7.0.28", "8.0.17", "8.2.3")
-      for (const fullVersion of Object.keys(mongodbReleases)) {
+      // Iterate over version strings (e.g., "7.0.28", "8.0.17", "8.2.3")
+      for (const fullVersion of versions) {
         // Extract major.minor (e.g., "7.0.28" -> "7.0")
         const parts = fullVersion.split('.')
         if (parts.length >= 2) {
@@ -165,9 +164,8 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const releases = await fetchHostdbReleases()
-    const mongodbReleases = getEngineReleases(releases, 'mongodb')
-    return mongodbReleases ? version in mongodbReleases : false
+    const versions = await getHostdbVersions('mongodb')
+    return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map
     // Handle both major versions ("8.0") and full versions ("8.0.17")

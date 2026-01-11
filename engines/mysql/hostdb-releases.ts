@@ -11,7 +11,7 @@ import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { logDebug } from '../../core/error-handler'
 import { compareVersions } from '../../core/version-utils'
 import {
-  fetchHostdbReleases as fetchReleases,
+  fetchHostdbReleases,
   clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
@@ -20,6 +20,7 @@ import {
   type HostdbReleasesData,
   type HostdbPlatform,
 } from '../../core/hostdb-client'
+import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { mysqlBinaryManager } from './binary-manager'
 
 // Re-export types for backwards compatibility
@@ -27,38 +28,40 @@ export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 
 // Re-export shared functions
 export const clearCache = clearSharedCache
-export const fetchHostdbReleases = fetchReleases
 
-// Get available MySQL versions from hostdb, grouped by major version
+// Get available MySQL versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
-  // Try to fetch from hostdb first
+  // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const releases = await fetchHostdbReleases()
-    const mysqlReleases = getEngineReleases(releases, 'mysql')
+    const versions = await getHostdbVersions('mysql')
 
-    if (mysqlReleases && Object.keys(mysqlReleases).length > 0) {
+    if (versions && versions.length > 0) {
       // Group versions by major version
+      // MySQL uses X.Y format for major versions (e.g., 8.0.40 matches 8.0)
+      // But also supports single digit major (e.g., 9.1.0 matches 9)
       const grouped: Record<string, string[]> = {}
 
-      for (const major of SUPPORTED_MAJOR_VERSIONS) {
-        grouped[major] = []
+      for (const version of versions) {
+        const parts = version.split('.')
+        // Try X.Y first, then fall back to X
+        const majorXY = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
+        const majorX = parts[0]
 
-        // Find all versions matching this major version
-        for (const [_versionKey, release] of Object.entries(mysqlReleases)) {
-          // MySQL uses X.Y format for major versions (e.g., 8.0.40 matches 8.0)
-          // But also supports single digit major (e.g., 9.1.0 matches 9)
-          const versionParts = release.version.split('.')
-          const releaseMajor = versionParts.slice(0, 2).join('.')
-          const releaseSingleMajor = versionParts[0]
+        // Use X.Y if it's in SUPPORTED_MAJOR_VERSIONS, otherwise use X
+        const major = SUPPORTED_MAJOR_VERSIONS.includes(majorXY)
+          ? majorXY
+          : majorX
 
-          if (releaseMajor === major || releaseSingleMajor === major) {
-            grouped[major].push(release.version)
-          }
+        if (!grouped[major]) {
+          grouped[major] = []
         }
+        grouped[major].push(version)
+      }
 
-        // Sort descending (latest first)
+      // Sort each group descending (latest first)
+      for (const major of Object.keys(grouped)) {
         grouped[major].sort((a, b) => compareVersions(b, a))
       }
 
@@ -174,9 +177,8 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const releases = await fetchHostdbReleases()
-    const mysqlReleases = getEngineReleases(releases, 'mysql')
-    return mysqlReleases ? version in mysqlReleases : false
+    const versions = await getHostdbVersions('mysql')
+    return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map
     // Handle both major versions ("8.0") and full versions ("8.0.40")

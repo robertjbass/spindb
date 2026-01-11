@@ -14,13 +14,24 @@
  * Values are full versions from hostdb releases.json
  */
 export const MONGODB_VERSION_MAP: Record<string, string> = {
+  // 1-part: major version → LTS
+  '7': '7.0.28',
+  '8': '8.0.17',
+  // 2-part: major.minor → latest patch
   '7.0': '7.0.28',
   '8.0': '8.0.17',
   '8.2': '8.2.3',
+  // 3-part: exact version (identity mapping)
+  '7.0.28': '7.0.28',
+  '8.0.17': '8.0.17',
+  '8.2.3': '8.2.3',
 }
 
-// List of supported major versions
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MONGODB_VERSION_MAP)
+/**
+ * Supported major MongoDB versions (2-part format).
+ * Used for grouping and display purposes.
+ */
+export const SUPPORTED_MAJOR_VERSIONS = ['7.0', '8.0', '8.2']
 
 /**
  * Fallback map of major versions to stable patch versions

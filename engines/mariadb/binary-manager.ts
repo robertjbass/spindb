@@ -189,8 +189,15 @@ export class MariaDBBinaryManager {
 
       const response = await fetch(url)
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `MariaDB ${fullVersion} binaries not found (404). ` +
+              `This version may have been removed from hostdb. ` +
+              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+          )
+        }
         throw new Error(
-          `Failed to download binaries: ${response.status} ${response.statusText}`,
+          `Failed to download MariaDB binaries: ${response.status} ${response.statusText}`,
         )
       }
 

@@ -211,8 +211,15 @@ export class SQLiteBinaryManager {
       }
 
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `SQLite ${fullVersion} binaries not found (404). ` +
+              `This version may have been removed from hostdb. ` +
+              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+          )
+        }
         throw new Error(
-          `Failed to download binaries: ${response.status} ${response.statusText}`,
+          `Failed to download SQLite binaries: ${response.status} ${response.statusText}`,
         )
       }
 
@@ -285,7 +292,8 @@ export class SQLiteBinaryManager {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const sqliteDir = entries.find(
       (e) =>
-        e.isDirectory() && (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
+        e.isDirectory() &&
+        (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
     )
 
     if (sqliteDir) {
@@ -353,7 +361,8 @@ export class SQLiteBinaryManager {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const sqliteDir = entries.find(
       (e) =>
-        e.isDirectory() && (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
+        e.isDirectory() &&
+        (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
     )
 
     if (sqliteDir) {

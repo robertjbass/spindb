@@ -13,7 +13,7 @@ import {
 } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
 import {
-  fetchHostdbReleases as fetchReleases,
+  fetchHostdbReleases,
   clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
@@ -22,6 +22,7 @@ import {
   type HostdbReleasesData,
   type HostdbPlatform,
 } from '../../core/hostdb-client'
+import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { postgresqlBinaryManager } from './binary-manager'
 import { logDebug } from '../../core/error-handler'
 
@@ -30,41 +31,41 @@ export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 
 // Re-export shared functions
 export const clearCache = clearSharedCache
-export const fetchHostdbReleases = fetchReleases
 
-// Get available PostgreSQL versions from hostdb, grouped by major version
+// Get available PostgreSQL versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
-  // Try to fetch from hostdb first
+  // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const releases = await fetchHostdbReleases()
-    const pgReleases = getEngineReleases(releases, 'postgresql')
+    const versions = await getHostdbVersions('postgresql')
 
-    if (pgReleases && Object.keys(pgReleases).length > 0) {
+    if (versions && versions.length > 0) {
       // Group versions by major version
       const grouped: Record<string, string[]> = {}
 
-      for (const major of SUPPORTED_MAJOR_VERSIONS) {
-        grouped[major] = []
-
-        // Find all versions matching this major version
-        for (const [_versionKey, release] of Object.entries(pgReleases)) {
-          if (release.version.startsWith(`${major}.`)) {
-            grouped[major].push(release.version)
-          }
+      for (const version of versions) {
+        const major = version.split('.')[0]
+        if (!grouped[major]) {
+          grouped[major] = []
         }
+        grouped[major].push(version)
+      }
 
-        // Sort descending (latest first)
+      // Sort each group descending (latest first)
+      for (const major of Object.keys(grouped)) {
         grouped[major].sort((a, b) => compareVersions(b, a))
       }
 
       return grouped
     }
   } catch (error) {
-    logDebug('Failed to fetch PostgreSQL versions from hostdb, checking local', {
-      error: error instanceof Error ? error.message : String(error),
-    })
+    logDebug(
+      'Failed to fetch PostgreSQL versions from hostdb, checking local',
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    )
   }
 
   // Offline fallback: return only locally installed versions
@@ -159,13 +160,12 @@ export async function getHostdbDownloadUrl(
  * Check if a version is available in hostdb
  *
  * @param version - Version to check
- * @returns true if the version exists in hostdb releases
+ * @returns true if the version exists in hostdb databases.json
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const releases = await fetchHostdbReleases()
-    const pgReleases = getEngineReleases(releases, 'postgresql')
-    return pgReleases ? version in pgReleases : false
+    const versions = await getHostdbVersions('postgresql')
+    return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map when network unavailable
     const major = version.split('.')[0]

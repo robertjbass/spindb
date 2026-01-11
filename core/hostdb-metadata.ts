@@ -24,6 +24,8 @@ type CliTools = {
 type DatabaseEntry = {
   displayName: string
   cliTools: CliTools
+  versions: Record<string, boolean> // version string -> available (true/false)
+  latestLts: string
   // Other fields exist but we don't need them
 }
 
@@ -269,5 +271,55 @@ export async function getPackagesForTools(
       error: error instanceof Error ? error.message : String(error),
     })
     return []
+  }
+}
+
+/**
+ * Get available versions for a database engine from databases.json
+ * This is the authoritative source for what versions are actually available in hostdb.
+ * @param engine Engine name (e.g., 'postgresql', 'mysql', 'mariadb')
+ * @returns Array of available version strings, or null if fetch fails
+ */
+export async function getAvailableVersions(
+  engine: string,
+): Promise<string[] | null> {
+  try {
+    const data = await fetchDatabasesJson()
+    const key = engine.toLowerCase()
+    const entry = data[key]
+    if (!entry?.versions) return null
+
+    // Return only versions marked as available (true)
+    return Object.entries(entry.versions)
+      .filter(([, available]) => available)
+      .map(([version]) => version)
+  } catch (error) {
+    logDebug('Failed to fetch available versions from hostdb', {
+      engine,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+/**
+ * Get the latest LTS version for a database engine
+ * @param engine Engine name (e.g., 'postgresql', 'mysql')
+ * @returns Latest LTS version string, or null if not found
+ */
+export async function getLatestLtsVersion(
+  engine: string,
+): Promise<string | null> {
+  try {
+    const data = await fetchDatabasesJson()
+    const key = engine.toLowerCase()
+    const entry = data[key]
+    return entry?.latestLts || null
+  } catch (error) {
+    logDebug('Failed to fetch latest LTS version from hostdb', {
+      engine,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
   }
 }

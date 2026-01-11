@@ -12,7 +12,7 @@ import { compareVersions } from '../../core/version-utils'
 import { logDebug } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
 import {
-  fetchHostdbReleases as fetchReleases,
+  fetchHostdbReleases,
   clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
@@ -21,40 +21,38 @@ import {
   type HostdbReleasesData,
   type HostdbPlatform,
 } from '../../core/hostdb-client'
+import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 
 // Re-export shared functions
 export const clearCache = clearSharedCache
-export const fetchHostdbReleases = fetchReleases
 
-// Get available MariaDB versions from hostdb, grouped by major version
+// Get available MariaDB versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
-  // Try to fetch from hostdb first
+  // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const releases = await fetchHostdbReleases()
-    const mariadbReleases = getEngineReleases(releases, 'mariadb')
+    const versions = await getHostdbVersions('mariadb')
 
-    if (mariadbReleases && Object.keys(mariadbReleases).length > 0) {
+    if (versions && versions.length > 0) {
       // Group versions by major version (e.g., 11.8)
+      // MariaDB uses X.Y format for major versions (e.g., 11.8.5 matches 11.8)
       const grouped: Record<string, string[]> = {}
 
-      for (const major of SUPPORTED_MAJOR_VERSIONS) {
-        grouped[major] = []
-
-        // Find all versions matching this major version
-        for (const [_versionKey, release] of Object.entries(mariadbReleases)) {
-          // MariaDB uses X.Y format for major versions (e.g., 11.8.5 matches 11.8)
-          const releaseMajor = release.version.split('.').slice(0, 2).join('.')
-          if (releaseMajor === major) {
-            grouped[major].push(release.version)
-          }
+      for (const version of versions) {
+        const parts = version.split('.')
+        const major = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
+        if (!grouped[major]) {
+          grouped[major] = []
         }
+        grouped[major].push(version)
+      }
 
-        // Sort descending (latest first)
+      // Sort each group descending (latest first)
+      for (const major of Object.keys(grouped)) {
         grouped[major].sort((a, b) => compareVersions(b, a))
       }
 
@@ -164,9 +162,8 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const releases = await fetchHostdbReleases()
-    const mariadbReleases = getEngineReleases(releases, 'mariadb')
-    return mariadbReleases ? version in mariadbReleases : false
+    const versions = await getHostdbVersions('mariadb')
+    return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map
     // Handle both major versions ("11.8") and full versions ("11.8.5")

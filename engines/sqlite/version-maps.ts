@@ -16,17 +16,19 @@
  * Must match versions available in hostdb releases.json.
  */
 export const SQLITE_VERSION_MAP: Record<string, string> = {
+  // 1-part: major version → latest
   '3': '3.51.2',
+  // 2-part: major.minor → latest patch
   '3.51': '3.51.2',
+  // 3-part: exact version (identity mapping)
+  '3.51.2': '3.51.2',
 }
 
 /**
- * Supported major SQLite versions.
- * Derived from SQLITE_VERSION_MAP keys (only numeric major version keys, e.g., '3').
+ * Supported major SQLite versions (1-part format).
+ * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(SQLITE_VERSION_MAP).filter(
-  (k) => /^\d+$/.test(k),
-)
+export const SUPPORTED_MAJOR_VERSIONS = ['3']
 
 /**
  * Get the full version string for a major version.
@@ -45,14 +47,27 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '3.51.2')
  */
 export function normalizeVersion(version: string): string {
-  // If it's in the map directly, use it
+  // If it's a major version key in the map, return the full version
   const fullVersion = SQLITE_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // Version not in map - warn and return unchanged
-  // Don't silently modify user input by appending zeros
+  // If it's already a known full version (a value in the map), return as-is
+  const knownVersions = Object.values(SQLITE_VERSION_MAP)
+  if (knownVersions.includes(version)) {
+    return version
+  }
+
+  // If it looks like a full version (X.Y.Z), return as-is but warn
+  if (/^\d+\.\d+\.\d+$/.test(version)) {
+    console.warn(
+      `SQLite version '${version}' not in version map, may not be available in hostdb`,
+    )
+    return version
+  }
+
+  // Unknown version format - warn and return unchanged
   console.warn(
     `SQLite version '${version}' not in version map, may not be available in hostdb`,
   )

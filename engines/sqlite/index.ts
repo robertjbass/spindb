@@ -483,6 +483,13 @@ export class SQLiteEngine extends BaseEngine {
     try {
       const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `File not found (404) at ${url}. ` +
+              `This version may have been removed from hostdb. ` +
+              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+          )
+        }
         throw new Error(
           `Failed to download: ${response.status} ${response.statusText}`,
         )
