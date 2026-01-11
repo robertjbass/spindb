@@ -232,7 +232,7 @@ jobs:
 
   # ============================================
   # SQLite Integration Tests
-  # Uses SpinDB to install SQLite via system package manager
+  # Uses SpinDB to download and manage SQLite binaries from hostdb
   # ============================================
   test-sqlite:
     name: SQLite (${{ matrix.os }})
@@ -262,30 +262,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache Chocolatey packages for SQLite on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
+      # Cache SQLite binaries - these are downloaded from hostdb
+      - name: Cache SQLite binaries
         uses: actions/cache@v4
+        id: sqlite-cache
         with:
-          path: C:\ProgramData\chocolatey\lib\SQLite
-          key: choco-sqlite-${{ runner.os }}
-          restore-keys: |
-            choco-sqlite-
+          path: ~/.spindb/bin
+          key: spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}
 
-      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
-      - name: Add SQLite to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
-          if (Test-Path $sqlitePath) {
-            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            echo "Added SQLite to PATH: $sqlitePath"
-          }
-
-      # Use SpinDB to install SQLite via system package manager
+      # Use SpinDB to download SQLite binaries (all platforms)
       - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
+        run: pnpm start engines download sqlite 3
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -427,34 +414,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache PostgreSQL binaries - these are ~100MB+ downloads
-      - name: Cache PostgreSQL binaries
+      # Cache PostgreSQL and SQLite binaries - these are downloads from hostdb
+      - name: Cache binaries
         uses: actions/cache@v4
-        id: pg-cache
+        id: binaries-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
-
-      # Cache Chocolatey packages for SQLite on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: C:\ProgramData\chocolatey\lib\SQLite
-          key: choco-sqlite-${{ runner.os }}
-          restore-keys: |
-            choco-sqlite-
-
-      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
-      - name: Add SQLite to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
-          if (Test-Path $sqlitePath) {
-            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            echo "Added SQLite to PATH: $sqlitePath"
-          }
+          key: spindb-cli-e2e-pg18-sqlite3-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to install all required engines
       # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
@@ -462,7 +428,7 @@ jobs:
         run: pnpm start engines download postgresql 18
 
       - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
+        run: pnpm start engines download sqlite 3
 
       - name: Show installed engines
         run: pnpm start engines list

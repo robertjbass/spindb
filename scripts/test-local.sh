@@ -259,7 +259,13 @@ test_engine_lifecycle() {
     # Check status
     log_info "Checking container status..."
     local status
-    status=$(pnpm start info "$container_name" --json 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    # Use jq for JSON parsing if available, fallback to grep/cut
+    if command -v jq &>/dev/null; then
+      status=$(pnpm start info "$container_name" --json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unknown")
+    else
+      # Fallback: grep-based parsing (may fail on complex JSON)
+      status=$(pnpm start info "$container_name" --json 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    fi
     if [ "$status" = "running" ]; then
       record_result "$engine status check" "PASS"
     else

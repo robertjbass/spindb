@@ -65,8 +65,11 @@ export type InstalledMysqlEngine = {
 export type InstalledSqliteEngine = {
   engine: 'sqlite'
   version: string
+  platform: string
+  arch: string
   path: string
-  source: 'system'
+  sizeBytes: number
+  source: 'downloaded'
 }
 
 export type InstalledMongodbEngine = {
@@ -275,30 +278,66 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
   return engines
 }
 
-async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null> {
+/**
+ * Get SQLite version from binary path
+ */
+async function getSqliteVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
+  if (!existsSync(sqlite3Path)) {
+    return null
+  }
+
   try {
-    // Use platform service for cross-platform binary detection
-    const sqlitePath = await platformService.findToolPath('sqlite3')
-    if (!sqlitePath) {
-      return null
-    }
-
-    const { stdout: versionOutput } = await execFileAsync(sqlitePath, [
-      '--version',
-    ])
-    // sqlite3 --version outputs: "3.43.2 2023-10-10 12:14:04 ..."
-    const versionMatch = versionOutput.match(/^([\d.]+)/)
-    const version = versionMatch ? versionMatch[1] : 'unknown'
-
-    return {
-      engine: 'sqlite',
-      version,
-      path: sqlitePath,
-      source: 'system',
-    }
+    const { stdout } = await execFileAsync(sqlite3Path, ['--version'])
+    // sqlite3 --version outputs: "3.51.2 2025-01-08 12:00:00 ..."
+    const match = stdout.match(/^([\d.]+)/)
+    return match ? match[1] : null
   } catch {
     return null
   }
+}
+
+/**
+ * Get installed SQLite engines from downloaded binaries
+ */
+async function getInstalledSqliteEngines(): Promise<InstalledSqliteEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledSqliteEngine[] = []
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Match sqlite-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
+      if (match && match[1] === 'sqlite') {
+        const [, , majorVersion, platform, arch] = match
+        const dirPath = join(binDir, entry.name)
+
+        const actualVersion = (await getSqliteVersion(dirPath)) || majorVersion
+        const sizeBytes = await calculateDirectorySize(dirPath)
+
+        engines.push({
+          engine: 'sqlite',
+          version: actualVersion,
+          platform,
+          arch,
+          path: dirPath,
+          sizeBytes,
+          source: 'downloaded',
+        })
+      }
+    }
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
 }
 
 /**
@@ -449,10 +488,8 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
   const mysqlEngines = await getInstalledMysqlEngines()
   engines.push(...mysqlEngines)
 
-  const sqliteEngine = await getInstalledSqliteEngine()
-  if (sqliteEngine) {
-    engines.push(sqliteEngine)
-  }
+  const sqliteEngines = await getInstalledSqliteEngines()
+  engines.push(...sqliteEngines)
 
   const mongodbEngines = await getInstalledMongodbEngines()
   engines.push(...mongodbEngines)
@@ -466,6 +503,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
 // Export individual engine detection functions for use in other modules
 export {
   getInstalledMysqlEngines,
+  getInstalledSqliteEngines,
   getInstalledMongodbEngines,
   getInstalledRedisEngines,
 }

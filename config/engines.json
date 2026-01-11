@@ -49,7 +49,7 @@
       "displayName": "SQLite",
       "icon": "🪶",
       "status": "integrated",
-      "binarySource": "system",
+      "binarySource": "hostdb",
       "supportedVersions": ["3"],
       "defaultVersion": "3",
       "defaultPort": null,
@@ -57,7 +57,7 @@
       "queryLanguage": "sql",
       "connectionScheme": "sqlite",
       "superuser": null,
-      "clientTools": ["sqlite3"]
+      "clientTools": ["sqlite3", "sqldiff", "sqlite3_analyzer", "sqlite3_rsync"]
     },
     "mongodb": {
       "displayName": "MongoDB",

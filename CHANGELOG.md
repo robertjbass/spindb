@@ -20,12 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - No more dependency on Homebrew, apt, or package managers for Redis
   - Supported versions: 7, 8 (synced with hostdb releases.json)
   - Tools bundled: redis-server, redis-cli
-- **MongoDB and Redis in Manage Engines menu** - Can now download, list, and delete MongoDB/Redis engine versions
+- **SQLite binary downloads from hostdb** - SQLite now uses pre-built binaries from [hostdb](https://github.com/robertjbass/hostdb) instead of system binaries
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - No more dependency on system-installed sqlite3
+  - Supported version: 3 (synced with hostdb releases.json)
+  - Tools bundled: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+- **MongoDB, Redis, and SQLite in Manage Engines menu** - Can now download, list, and delete engine versions for all databases
 
 ### Changed
-- **MongoDB and Redis now use downloaded binaries** - No longer requires system-installed MongoDB/Redis
+- **MongoDB, Redis, and SQLite now use downloaded binaries** - No longer requires system-installed binaries
   - Legacy containers created with system binaries are treated as orphaned and will prompt to download matching version
-- **CI workflow** - MongoDB and Redis tests now use downloaded binaries on all platforms
+- **CI workflow** - All engine tests now use downloaded binaries from hostdb on all platforms
 
 ### Removed
 - **Legacy binary detection code** - Old system binary detection code for MongoDB and Redis (available in git history if needed)

@@ -42,6 +42,7 @@ import type {
   RestoreResult,
   DumpResult,
   StatusResult,
+  BinaryTool,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -173,19 +174,21 @@ export class PostgreSQLEngine extends BaseEngine {
     ] as const
 
     // Try to register from downloaded binaries (works on Windows)
-    let hasClientTools = false
+    // Track which tools were found to only search system for missing ones
+    const foundTools = new Set<string>()
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
-        hasClientTools = true
+        foundTools.add(tool)
       }
     }
 
     // On macOS/Linux, zonky.io binaries don't include client tools
-    // Try to find and register system-installed tools (no automatic installation)
-    if (!hasClientTools && (p === 'darwin' || p === 'linux')) {
-      await this.registerSystemClientTools()
+    // Try to find and register system-installed tools for any that are missing
+    if (foundTools.size < clientTools.length && (p === 'darwin' || p === 'linux')) {
+      const missingTools = clientTools.filter((t) => !foundTools.has(t))
+      await this.registerSystemClientTools(missingTools)
     }
 
     return binPath
@@ -194,16 +197,21 @@ export class PostgreSQLEngine extends BaseEngine {
   /**
    * Register system-installed PostgreSQL client tools if found
    * Does NOT install missing tools - that happens during 'spindb engines download'
+   * @param toolsToCheck - Optional list of specific tools to check (defaults to all client tools)
    */
-  private async registerSystemClientTools(): Promise<void> {
-    const clientTools = [
+  private async registerSystemClientTools(
+    toolsToCheck?: readonly BinaryTool[],
+  ): Promise<void> {
+    const allClientTools = [
       'psql',
       'pg_dump',
       'pg_restore',
       'pg_basebackup',
     ] as const
 
-    for (const tool of clientTools) {
+    const tools = toolsToCheck ?? allClientTools
+
+    for (const tool of tools) {
       const result = await findBinary(tool)
       if (result) {
         await configManager.setBinaryPath(tool, result.path, 'system')

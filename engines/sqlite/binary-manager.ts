@@ -1,8 +1,9 @@
 /**
- * MongoDB Binary Manager
+ * SQLite Binary Manager
  *
- * Handles downloading, extracting, and managing MongoDB binaries from hostdb.
- * Similar to Redis/MySQL binary manager but tailored for MongoDB.
+ * Handles downloading, extracting, and managing SQLite binaries from hostdb.
+ * Unlike other engines, SQLite is an embedded database (not a server).
+ * This manager handles the sqlite3 CLI and related tools.
  */
 
 import { createWriteStream, existsSync } from 'fs'
@@ -19,13 +20,10 @@ import {
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
-import { logDebug } from '../../core/error-handler'
 
 const execAsync = promisify(exec)
 
-/**
- * Execute a command using spawn with argument array (safer than shell interpolation)
- */
+// Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
   command: string,
   args: string[],
@@ -65,9 +63,9 @@ function spawnAsync(
   })
 }
 
-export class MongoDBBinaryManager {
+export class SQLiteBinaryManager {
   /**
-   * Get the download URL for a MongoDB version
+   * Get the download URL for a SQLite version
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
@@ -77,7 +75,7 @@ export class MongoDBBinaryManager {
   }
 
   /**
-   * Convert version to full version format (e.g., "7.0" -> "7.0.28")
+   * Convert version to full version format (e.g., "3" -> "3.51.2")
    */
   getFullVersion(version: string): string {
     return normalizeVersion(version)
@@ -93,19 +91,18 @@ export class MongoDBBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'mongodb',
+      engine: 'sqlite',
       version: fullVersion,
       platform,
       arch,
     })
-    // MongoDB server binary (with .exe on Windows)
     const ext = platform === 'win32' ? '.exe' : ''
-    const mongodPath = join(binPath, 'bin', `mongod${ext}`)
-    return existsSync(mongodPath)
+    const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
+    return existsSync(sqlite3Path)
   }
 
   /**
-   * List all installed MongoDB versions
+   * List all installed SQLite versions
    */
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
@@ -119,11 +116,11 @@ export class MongoDBBinaryManager {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
 
-      // Use regex for robust parsing - handles versions with dashes (e.g., 8.0.0-rc1)
-      const match = entry.name.match(/^mongodb-(.+)-([^-]+)-([^-]+)$/)
+      // Match sqlite-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^sqlite-([\d.]+)-(\w+)-(\w+)$/)
       if (match) {
         installed.push({
-          engine: Engine.MongoDB,
+          engine: Engine.SQLite,
           version: match[1],
           platform: match[2],
           arch: match[3],
@@ -135,7 +132,7 @@ export class MongoDBBinaryManager {
   }
 
   /**
-   * Download and extract MongoDB binaries
+   * Download and extract SQLite binaries
    */
   async download(
     version: string,
@@ -146,29 +143,30 @@ export class MongoDBBinaryManager {
     const fullVersion = this.getFullVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
-      engine: 'mongodb',
+      engine: 'sqlite',
       version: fullVersion,
       platform,
       arch,
     })
     const tempDir = join(
       paths.bin,
-      `temp-mongodb-${fullVersion}-${platform}-${arch}`,
+      `temp-sqlite-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
     const ext = platform === 'win32' ? 'zip' : 'tar.gz'
-    const archiveFile = join(tempDir, `mongodb.${ext}`)
+    const archiveFile = join(tempDir, `sqlite.${ext}`)
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
+    let success = false
     try {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
-        message: 'Downloading MongoDB binaries...',
+        message: 'Downloading SQLite binaries...',
       })
 
       const controller = new AbortController()
@@ -228,10 +226,15 @@ export class MongoDBBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!success) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 
@@ -252,42 +255,18 @@ export class MongoDBBinaryManager {
     // Extract tar.gz to temp directory first
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
+    await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Extract tar.gz - ignore errors from macOS extended attribute files (._* files)
-    // that may be truncated. The actual binaries extract correctly.
-    try {
-      await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
-    } catch (error) {
-      const err = error as Error
-      // If error is about truncated files (macOS extended attributes), check if extraction worked
-      if (err.message.includes('Truncated') || err.message.includes('._')) {
-        // Verify that at least some files were extracted
-        const entries = await readdir(extractDir)
-        if (entries.length === 0) {
-          throw new Error(`Extraction failed completely: ${err.message}`)
-        }
-        // Files were extracted despite the error, log and continue
-        logDebug('MongoDB extraction recovered from tar warning', {
-          tarFile,
-          entriesExtracted: entries.length,
-          warningType: 'macOS extended attributes',
-        })
-      } else {
-        throw error
-      }
-    }
-
-    // Check if there's a nested mongodb/ directory
+    // Check if there's a nested sqlite/ directory
     const entries = await readdir(extractDir, { withFileTypes: true })
-    const mongoDir = entries.find(
+    const sqliteDir = entries.find(
       (e) =>
-        e.isDirectory() &&
-        (e.name === 'mongodb' || e.name.startsWith('mongodb-')),
+        e.isDirectory() && (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
     )
 
-    if (mongoDir) {
-      // Nested structure: move contents from mongodb/ to binPath
-      const sourceDir = join(extractDir, mongoDir.name)
+    if (sqliteDir) {
+      // Nested structure: move contents from sqlite/ to binPath
+      const sourceDir = join(extractDir, sqliteDir.name)
       const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
@@ -349,17 +328,16 @@ export class MongoDBBinaryManager {
       `Expand-Archive -Path '${zipFile}' -DestinationPath '${extractDir}' -Force`,
     ])
 
-    // Check if there's a nested mongodb/ directory
+    // Check if there's a nested sqlite/ directory
     const entries = await readdir(extractDir, { withFileTypes: true })
-    const mongoDir = entries.find(
+    const sqliteDir = entries.find(
       (e) =>
-        e.isDirectory() &&
-        (e.name === 'mongodb' || e.name.startsWith('mongodb-')),
+        e.isDirectory() && (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
     )
 
-    if (mongoDir) {
-      // Nested structure: move contents from mongodb/ to binPath
-      const sourceDir = join(extractDir, mongoDir.name)
+    if (sqliteDir) {
+      // Nested structure: move contents from sqlite/ to binPath
+      const sourceDir = join(extractDir, sqliteDir.name)
       const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
@@ -397,7 +375,7 @@ export class MongoDBBinaryManager {
   }
 
   /**
-   * Verify that MongoDB binaries are working
+   * Verify that SQLite binaries are working
    */
   async verify(
     version: string,
@@ -406,37 +384,33 @@ export class MongoDBBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'mongodb',
+      engine: 'sqlite',
       version: fullVersion,
       platform,
       arch,
     })
 
     const ext = platform === 'win32' ? '.exe' : ''
-    const mongodPath = join(binPath, 'bin', `mongod${ext}`)
+    const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
 
-    if (!existsSync(mongodPath)) {
-      throw new Error(`MongoDB binary not found at ${binPath}/bin/`)
+    if (!existsSync(sqlite3Path)) {
+      throw new Error(`SQLite binary not found at ${binPath}/bin/`)
     }
 
     try {
-      const { stdout } = await execAsync(`"${mongodPath}" --version`)
-      // Extract version from output like "db version v7.0.28"
-      const match = stdout.match(/db version v(\d+\.\d+\.\d+)/)
-      const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+)/) : null
-      const reportedVersion = match?.[1] ?? altMatch?.[1]
+      const { stdout } = await execAsync(`"${sqlite3Path}" --version`)
+      // Extract version from output like "3.51.2 2025-01-08 12:00:00 ..."
+      const match = stdout.match(/^(\d+\.\d+\.\d+)/)
+      const reportedVersion = match?.[1]
 
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
-      // Check if major.minor versions match
-      const expectedMajorMinor = version.split('.').slice(0, 2).join('.')
-      const reportedMajorMinor = reportedVersion
-        .split('.')
-        .slice(0, 2)
-        .join('.')
-      if (expectedMajorMinor === reportedMajorMinor) {
+      // Check if major versions match
+      const expectedMajor = version.split('.')[0]
+      const reportedMajor = reportedVersion.split('.')[0]
+      if (expectedMajor === reportedMajor) {
         return true
       }
 
@@ -450,12 +424,12 @@ export class MongoDBBinaryManager {
       )
     } catch (error) {
       const err = error as Error
-      throw new Error(`Failed to verify MongoDB binaries: ${err.message}`)
+      throw new Error(`Failed to verify SQLite binaries: ${err.message}`)
     }
   }
 
   /**
-   * Get the path to a specific binary (mongod, mongosh, etc.)
+   * Get the path to a specific binary (sqlite3, sqldiff, etc.)
    */
   getBinaryExecutable(
     version: string,
@@ -465,12 +439,13 @@ export class MongoDBBinaryManager {
   ): string {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'mongodb',
+      engine: 'sqlite',
       version: fullVersion,
       platform,
       arch,
     })
-    return join(binPath, 'bin', binary)
+    const ext = platform === 'win32' ? '.exe' : ''
+    return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   /**
@@ -487,10 +462,10 @@ export class MongoDBBinaryManager {
     if (await this.isInstalled(version, platform, arch)) {
       onProgress?.({
         stage: 'cached',
-        message: 'Using cached MongoDB binaries',
+        message: 'Using cached SQLite binaries',
       })
       return paths.getBinaryPath({
-        engine: 'mongodb',
+        engine: 'sqlite',
         version: fullVersion,
         platform,
         arch,
@@ -506,7 +481,7 @@ export class MongoDBBinaryManager {
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'mongodb',
+      engine: 'sqlite',
       version: fullVersion,
       platform,
       arch,
@@ -518,4 +493,4 @@ export class MongoDBBinaryManager {
   }
 }
 
-export const mongodbBinaryManager = new MongoDBBinaryManager()
+export const sqliteBinaryManager = new SQLiteBinaryManager()

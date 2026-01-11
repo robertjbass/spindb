@@ -53,6 +53,18 @@ export async function loadEnginesJson(): Promise<EnginesJson> {
     throw new Error(`Failed to parse engines.json at ${jsonPath}: ${message}`)
   }
 
+  // Structural validation: ensure parsed has expected shape
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error(
+      `engines.json at ${jsonPath} has invalid structure: expected object`,
+    )
+  }
+  if (!parsed.engines || typeof parsed.engines !== 'object') {
+    throw new Error(
+      `engines.json at ${jsonPath} has invalid structure: missing or invalid 'engines' field`,
+    )
+  }
+
   // Runtime validation: ensure all engines are present
   for (const engine of ALL_ENGINES) {
     if (!(engine in parsed.engines)) {

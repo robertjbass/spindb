@@ -55,7 +55,7 @@ export async function handleEngines(): Promise<void> {
   const mysqlEngines = engines.filter(
     (e): e is InstalledMysqlEngine => e.engine === 'mysql',
   )
-  const sqliteEngine = engines.find(
+  const sqliteEngines = engines.filter(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
   )
   const mongodbEngines = engines.filter(
@@ -71,6 +71,7 @@ export async function handleEngines(): Promise<void> {
     0,
   )
   const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalSqliteSize = sqliteEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   const totalMongodbSize = mongodbEngines.reduce(
     (acc, e) => acc + e.sizeBytes,
     0,
@@ -133,16 +134,17 @@ export async function handleEngines(): Promise<void> {
     )
   }
 
-  if (sqliteEngine) {
+  for (const engine of sqliteEngines) {
     const icon = ENGINE_ICONS.sqlite
-    const engineDisplay = `${icon} sqlite`
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} ${engine.engine}`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(sqliteEngine.version.padEnd(COL_VERSION)) +
-        chalk.gray('system'.padEnd(COL_SOURCE)) +
-        chalk.gray('(system-installed)'),
+        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
+        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
@@ -198,9 +200,11 @@ export async function handleEngines(): Promise<void> {
       ),
     )
   }
-  if (sqliteEngine) {
+  if (sqliteEngines.length > 0) {
     console.log(
-      chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+      chalk.gray(
+        `  SQLite: ${sqliteEngines.length} version(s), ${formatBytes(totalSqliteSize)}`,
+      ),
     )
   }
   if (mongodbEngines.length > 0) {
@@ -242,10 +246,10 @@ export async function handleEngines(): Promise<void> {
     })
   }
 
-  if (sqliteEngine) {
+  for (const e of sqliteEngines) {
     choices.push({
-      name: `${chalk.blue('ℹ')} SQLite ${sqliteEngine.version} ${chalk.gray('(system-installed)')}`,
-      value: `sqlite-info:${sqliteEngine.path}`,
+      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
+      value: `delete:${e.path}:${e.engine}:${e.version}`,
     })
   }
 
@@ -290,12 +294,6 @@ export async function handleEngines(): Promise<void> {
     const engineName = withoutPrefix.slice(secondLastColon + 1, lastColon)
     const engineVersion = withoutPrefix.slice(lastColon + 1)
     await handleDeleteEngine(enginePath, engineName, engineVersion)
-    await handleEngines()
-  }
-
-  if (action.startsWith('sqlite-info:')) {
-    const sqlitePath = action.slice('sqlite-info:'.length)
-    await handleSqliteInfo(sqlitePath)
     await handleEngines()
   }
 }
@@ -355,82 +353,3 @@ async function handleDeleteEngine(
   }
 }
 
-async function handleSqliteInfo(sqlitePath: string): Promise<void> {
-  console.clear()
-
-  console.log(header('SQLite Information'))
-  console.log()
-
-  // Get version
-  let version = 'unknown'
-  try {
-    const { exec } = await import('child_process')
-    const { promisify } = await import('util')
-    const execAsync = promisify(exec)
-    const { stdout } = await execAsync(`"${sqlitePath}" --version`)
-    const match = stdout.match(/^([\d.]+)/)
-    if (match) {
-      version = match[1]
-    }
-  } catch {
-    // Ignore
-  }
-
-  const containers = await containerManager.list()
-  const sqliteContainers = containers.filter((c) => c.engine === 'sqlite')
-
-  if (sqliteContainers.length > 0) {
-    console.log(
-      uiInfo(`${sqliteContainers.length} SQLite database(s) registered:`),
-    )
-    console.log()
-    for (const c of sqliteContainers) {
-      const status =
-        c.status === 'running'
-          ? chalk.blue('🔵 available')
-          : chalk.gray('⚪ missing')
-      console.log(chalk.gray(`  • ${c.name} ${status}`))
-    }
-    console.log()
-  }
-
-  console.log(chalk.white('  Installation Details:'))
-  console.log(chalk.gray('  ' + '─'.repeat(50)))
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Version:'.padEnd(18)) +
-      chalk.yellow(version),
-  )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Binary Path:'.padEnd(18)) +
-      chalk.gray(sqlitePath),
-  )
-  console.log(
-    chalk.gray('  ') +
-      chalk.white('Type:'.padEnd(18)) +
-      chalk.cyan('Embedded (file-based)'),
-  )
-  console.log()
-
-  console.log(chalk.white('  Notes:'))
-  console.log(chalk.gray('  ' + '─'.repeat(50)))
-  console.log(
-    chalk.gray(
-      '  • SQLite is typically pre-installed on macOS and most Linux distributions',
-    ),
-  )
-  console.log(chalk.gray('  • No server process - databases are just files'))
-  console.log(
-    chalk.gray('  • Use "spindb delete <name>" to unregister a database'),
-  )
-  console.log()
-
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'continue',
-      message: chalk.gray('Press Enter to go back...'),
-    },
-  ])
-}

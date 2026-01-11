@@ -97,7 +97,13 @@ export class MongoDBEngine extends BaseEngine {
     return platformService.getPlatformInfo()
   }
 
-  // Fetch available versions from hostdb
+  /**
+   * Returns available MongoDB versions from the fallback version map.
+   *
+   * Note: This returns cached/fallback data from FALLBACK_VERSION_MAP and does not
+   * perform network I/O. This matches the behavior of other engines that maintain
+   * a static version map synchronized with hostdb releases.json.
+   */
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     const versions: Record<string, string[]> = {}
 

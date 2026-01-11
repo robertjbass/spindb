@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis (all via hostdb downloads), and SQLite (system binary).
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and SQLite (all via hostdb downloads).
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -406,8 +406,7 @@ Current engines with CI caching:
 - MySQL: `spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}`
 - MongoDB: `spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}`
 - Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
-
-SQLite uses system binaries, so only Windows Chocolatey caching is needed (not hostdb).
+- SQLite: `spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}`
 
 **Reference implementations:**
 - **PostgreSQL** - Server database with downloadable binaries (hostdb/EDB)
@@ -415,7 +414,7 @@ SQLite uses system binaries, so only Windows Chocolatey caching is needed (not h
 - **MariaDB** - Server database with downloadable binaries (hostdb)
 - **MongoDB** - Server database with downloadable binaries (hostdb), uses JavaScript instead of SQL
 - **Redis** - Key-value store with downloadable binaries (hostdb), uses Redis commands instead of SQL
-- **SQLite** - File-based database with system binary and registry tracking
+- **SQLite** - File-based (embedded) database with downloadable binaries (hostdb), uses SQL
 
 **Engine Types:**
 - **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis): Data in `~/.spindb/containers/`, port management, start/stop
@@ -425,9 +424,9 @@ SQLite uses system binaries, so only Windows Chocolatey caching is needed (not h
 
 When hostdb adds support for a new engine, follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as an example.
 
-**Current status:** All engines except SQLite now use hostdb downloads:
+**Current status:** All engines now use hostdb downloads:
 - PostgreSQL, MySQL, MariaDB, MongoDB, Redis: Complete bundles from hostdb (server + all client tools)
-- SQLite: Uses system `sqlite3` binary (intentionally - commonly pre-installed on most systems)
+- SQLite: Tools from hostdb (sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync)
 
 #### Prerequisites
 
@@ -745,10 +744,6 @@ When new versions are added to hostdb releases.json:
 7. **Update documentation:**
    - README.md, CLAUDE.md, CHANGELOG.md
 
-#### For SQLite (system-installed)
-
-SQLite uses system binaries, so no version updates needed in SpinDB. Users get whatever version their system provides.
-
 ## Implementation Details
 
 ### Port Management
@@ -818,6 +813,12 @@ SpinDB uses different binary sourcing strategies by engine:
 - All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
 - Enables multi-version support (7, 8 side-by-side)
 - Tools bundled: redis-server, redis-cli
+
+**SQLite (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Version 3 (only major version)
+- Tools bundled: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+- File-based database - no server process, data stored in user project directories
 
 ### Orphaned Container Support (PostgreSQL)
 

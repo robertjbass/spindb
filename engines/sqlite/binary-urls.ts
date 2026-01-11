@@ -1,35 +1,15 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
-import { REDIS_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { SQLITE_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 
 /**
  * Fallback map of major versions to stable patch versions
  * Used when hostdb repository is unreachable
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> = REDIS_VERSION_MAP
+export const FALLBACK_VERSION_MAP: Record<string, string> = SQLITE_VERSION_MAP
 
 /**
  * Supported major versions (in order of display)
  */
 export { SUPPORTED_MAJOR_VERSIONS }
-
-/**
- * Fetch available versions from hostdb repository
- */
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-/**
- * Get the latest version for a major version from hostdb
- */
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
 
 // Legacy export for backward compatibility
 export const VERSION_MAP = FALLBACK_VERSION_MAP
@@ -66,11 +46,11 @@ export function getHostdbPlatform(
 }
 
 /**
- * Build the download URL for Redis binaries from hostdb
+ * Build the download URL for SQLite binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/redis-{version}/redis-{version}-{platform}-{arch}.{ext}
+ * Format: https://github.com/robertjbass/hostdb/releases/download/sqlite-{version}/sqlite-{version}-{platform}-{arch}.{ext}
  *
- * @param version - Redis version (e.g., '7', '7.4.7')
+ * @param version - SQLite version (e.g., '3', '3.51.2')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
  * @returns Download URL for the binary
@@ -89,10 +69,10 @@ export function getBinaryUrl(
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
   const fullVersion = normalizeVersion(version, VERSION_MAP)
 
-  const tag = `redis-${fullVersion}`
+  const tag = `sqlite-${fullVersion}`
   // Windows uses .zip, Unix uses .tar.gz
   const ext = platform === 'win32' ? 'zip' : 'tar.gz'
-  const filename = `redis-${fullVersion}-${hostdbPlatform}.${ext}`
+  const filename = `sqlite-${fullVersion}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
 }
@@ -100,15 +80,15 @@ export function getBinaryUrl(
 /**
  * Normalize version string to X.Y.Z format
  *
- * @param version - Version string (e.g., '7', '7.4', '7.4.7')
+ * @param version - Version string (e.g., '3', '3.51', '3.51.2')
  * @param versionMap - Optional version map for major version lookup
- * @returns Normalized version (e.g., '7.4.7')
+ * @returns Normalized version (e.g., '3.51.2')
  */
 function normalizeVersion(
   version: string,
   versionMap: Record<string, string> = VERSION_MAP,
 ): string {
-  // Check if it's an exact key in the map (handles "7", "8", "7.4", etc.)
+  // Check if it's a version key in the map (handles "3", "3.51", etc.)
   if (versionMap[version]) {
     return versionMap[version]
   }
@@ -120,7 +100,15 @@ function normalizeVersion(
     return version
   }
 
-  // For two-part versions (e.g., "7.4"), look up by major for latest patch
+  // For single-part versions, check the map by major
+  if (parts.length === 1) {
+    const mapped = versionMap[version]
+    if (mapped) {
+      return mapped
+    }
+  }
+
+  // For two-part versions, look up by major for better version
   if (parts.length === 2) {
     const major = parts[0]
     const mapped = versionMap[major]
@@ -132,7 +120,7 @@ function normalizeVersion(
   // Unknown version format - warn and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
   console.warn(
-    `Redis version '${version}' not in version map, may not be available in hostdb`,
+    `SQLite version '${version}' not in version map, may not be available in hostdb`,
   )
   return version
 }
@@ -140,8 +128,8 @@ function normalizeVersion(
 /**
  * Get the full version string for a major version
  *
- * @param majorVersion - Major version (e.g., '7', '8')
- * @returns Full version string (e.g., '7.4.7') or null if not supported
+ * @param majorVersion - Major version (e.g., '3')
+ * @returns Full version string (e.g., '3.51.2') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
   return VERSION_MAP[majorVersion] || null

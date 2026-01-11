@@ -181,6 +181,9 @@ export type BinaryTool =
   | 'mariadb-admin'
   // SQLite tools
   | 'sqlite3'
+  | 'sqldiff'
+  | 'sqlite3_analyzer'
+  | 'sqlite3_rsync'
   // MongoDB tools
   | 'mongod'
   | 'mongosh'
@@ -241,6 +244,9 @@ export type SpinDBConfig = {
     'mariadb-dump'?: BinaryConfig
     // SQLite tools
     sqlite3?: BinaryConfig
+    sqldiff?: BinaryConfig
+    sqlite3_analyzer?: BinaryConfig
+    sqlite3_rsync?: BinaryConfig
     // MongoDB server tools
     mongod?: BinaryConfig
     // MongoDB client tools

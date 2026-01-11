@@ -157,9 +157,20 @@ export class MySQLEngine extends BaseEngine {
     return getBinaryUrl(version, plat, arc)
   }
 
-  async verifyBinary(binPath: string): Promise<boolean> {
+  /**
+   * Verify MySQL binaries are installed and working
+   * @param binPath - Path to the binary directory
+   * @param version - Optional explicit version (preferred over path extraction)
+   */
+  async verifyBinary(binPath: string, version?: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    // Extract version using regex on basename for robustness
+
+    // Use explicit version if provided
+    if (version) {
+      return mysqlBinaryManager.verify(version, p, a)
+    }
+
+    // Fallback: extract version from path (less reliable)
     // Matches patterns like mysql-8.0.40-darwin-arm64 or mysql-9.0.0-linux-x64
     const basename = binPath.split('/').pop() || binPath.split('\\').pop() || ''
     const versionMatch = basename.match(/\b(\d+\.\d+\.\d+)\b/)
@@ -167,8 +178,10 @@ export class MySQLEngine extends BaseEngine {
       logDebug(`Could not extract version from binary path: ${binPath}`)
       return false
     }
-    const version = versionMatch[1]
-    return mysqlBinaryManager.verify(version, p, a)
+    logDebug(
+      `Extracted version ${versionMatch[1]} from path (prefer explicit version)`,
+    )
+    return mysqlBinaryManager.verify(versionMatch[1], p, a)
   }
 
   async ensureBinaries(

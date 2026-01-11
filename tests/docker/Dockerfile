@@ -19,15 +19,13 @@
 # All database engines download complete, self-contained binaries from hostdb
 # (https://github.com/robertjbass/hostdb). No database tools are pre-installed.
 #
-# Only pre-installs:
-# - sqlite3: SQLite engine uses system binary by design (commonly pre-installed)
-#
 # NOT pre-installed (SpinDB downloads from hostdb automatically):
 # - PostgreSQL: server + client tools (psql, pg_dump, pg_restore)
 # - MySQL: server + client tools (mysql, mysqldump, mysqladmin)
 # - MariaDB: server + client tools (mariadb, mariadb-dump, mariadb-admin)
 # - MongoDB: server + client tools (mongod, mongosh, mongodump, mongorestore)
 # - Redis: server + client tools (redis-server, redis-cli)
+# - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
 
 FROM ubuntu:24.04
 
@@ -49,7 +47,6 @@ RUN apt-get update && apt-get install -y \
 # Install additional tools needed for SpinDB/tests
 # binutils: provides 'ar' for extracting .deb archives (standard Unix tool)
 # xz-utils: provides 'xz' for .tar.xz decompression (standard Unix tool)
-# sqlite3: SQLite engine uses system binary by design
 # libnuma1: NUMA library required by Percona PostgreSQL builds
 # libaio1: async I/O library required by MySQL
 # libncurses6: terminal library required by MariaDB client
@@ -60,7 +57,6 @@ RUN apt-get update && apt-get install -y \
     jq \
     binutils \
     xz-utils \
-    sqlite3 \
     libnuma1 \
     libaio1t64 \
     libncurses6 \
@@ -70,8 +66,12 @@ RUN apt-get update && apt-get install -y \
 # Create compatibility symlink for MySQL
 # Ubuntu 24.04 renamed libaio package to libaio1t64 which creates libaio.so.1t64
 # MySQL binaries are compiled against the old library name (libaio.so.1)
-RUN ln -sf /lib/aarch64-linux-gnu/libaio.so.1t64 /lib/aarch64-linux-gnu/libaio.so.1 2>/dev/null || \
-    ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1 2>/dev/null || true
+# Try both architectures (only one will succeed based on host), then verify
+RUN set -e && \
+    (ln -sf /lib/aarch64-linux-gnu/libaio.so.1t64 /lib/aarch64-linux-gnu/libaio.so.1 2>/dev/null || \
+     ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1 2>/dev/null || true) && \
+    (test -e /lib/aarch64-linux-gnu/libaio.so.1 -o -e /lib/x86_64-linux-gnu/libaio.so.1 || \
+     (echo "ERROR: libaio.so.1 symlink not created - MySQL may fail to start" && exit 1))
 
 # Install pnpm (pinned for reproducible builds)
 ARG PNPM_VERSION=9.14.2

@@ -116,6 +116,9 @@ async function installMissingClientTools(
   const failed: string[] = []
   const skipped: string[] = []
 
+  // Timeout for package installation commands (5 minutes)
+  const INSTALL_TIMEOUT_MS = 5 * 60 * 1000
+
   // Get required client tools from hostdb databases.json
   const requiredTools = await getRequiredClientTools(engine)
   if (requiredTools.length === 0) {
@@ -158,12 +161,18 @@ async function installMissingClientTools(
   }
 
   // Map our package manager to hostdb key
-  const pmKey = pm.name.toLowerCase().replace(/[^a-z]/g, '') as
-    | 'brew'
-    | 'apt'
-    | 'yum'
-    | 'dnf'
-    | 'choco'
+  const ALLOWED_PACKAGE_MANAGERS = ['brew', 'apt', 'yum', 'dnf', 'choco'] as const
+  type PackageManagerKey = (typeof ALLOWED_PACKAGE_MANAGERS)[number]
+
+  const normalizedName = pm.name.toLowerCase().replace(/[^a-z]/g, '')
+  if (!ALLOWED_PACKAGE_MANAGERS.includes(normalizedName as PackageManagerKey)) {
+    // Unknown package manager, cannot install automatically
+    console.warn(
+      `Unknown package manager: ${pm.name}, skipping automatic installation`,
+    )
+    return { installed, failed: missingTools, skipped }
+  }
+  const pmKey = normalizedName as PackageManagerKey
 
   // Get the packages needed for missing tools
   const packages = await getPackagesForTools(missingTools, pmKey)
@@ -197,7 +206,7 @@ async function installMissingClientTools(
     try {
       // Handle Homebrew taps
       if (pmKey === 'brew' && pkg.tap) {
-        await execAsync(`brew tap ${pkg.tap}`)
+        await execAsync(`brew tap ${pkg.tap}`, { timeout: INSTALL_TIMEOUT_MS })
       }
 
       // Build install command - use sudo only if not root
@@ -216,7 +225,7 @@ async function installMissingClientTools(
         continue
       }
 
-      await execAsync(installCmd)
+      await execAsync(installCmd, { timeout: INSTALL_TIMEOUT_MS })
 
       // Register the installed tools
       for (const tool of pkg.tools) {
@@ -234,10 +243,19 @@ async function installMissingClientTools(
         }
       }
     } catch (error) {
-      const e = error as Error
-      console.error(
-        chalk.red(`  Failed to install ${pkg.package}: ${e.message}`),
-      )
+      const e = error as Error & { killed?: boolean }
+      if (e.killed) {
+        // Timeout - process was killed
+        console.error(
+          chalk.red(
+            `  Installation of ${pkg.package} timed out after 5 minutes`,
+          ),
+        )
+      } else {
+        console.error(
+          chalk.red(`  Failed to install ${pkg.package}: ${e.message}`),
+        )
+      }
       failed.push(...pkg.tools)
     }
   }

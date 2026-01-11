@@ -78,17 +78,15 @@ run_test() {
   echo ""
   echo "=== Testing $engine v$version ==="
 
-  # Download engine (skip sqlite - uses system binary)
-  if [ "$engine" != "sqlite" ]; then
-    echo "Downloading $engine $version..."
-    if ! spindb engines download "$engine" "$version"; then
-      echo "FAILED: Could not download $engine $version"
-      record_result "$engine" "$version" "FAILED" "Download failed"
-      FAILED=$((FAILED+1))
-      return 1
-    fi
-    echo "Download complete"
+  # Download engine from hostdb
+  echo "Downloading $engine $version..."
+  if ! spindb engines download "$engine" "$version"; then
+    echo "FAILED: Could not download $engine $version"
+    record_result "$engine" "$version" "FAILED" "Download failed"
+    FAILED=$((FAILED+1))
+    return 1
   fi
+  echo "Download complete"
 
   # Create container
   echo "Creating container: $container_name"
@@ -113,11 +111,27 @@ run_test() {
     # Poll for running status (up to 15 seconds)
     echo "Waiting for container to start..."
     local status="unknown"
+    local spindb_output=""
+    local spindb_failed=false
     for i in {1..15}; do
-      status=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unknown")
-      [ "$status" = "running" ] && break
+      # Capture both stdout and exit status
+      if spindb_output=$(spindb info "$container_name" --json 2>&1); then
+        # Command succeeded, parse status
+        status=$(echo "$spindb_output" | jq -r '.status' 2>/dev/null || echo "parse_error")
+        [ "$status" = "running" ] && break
+      else
+        # Command itself failed - log warning but keep retrying
+        # (container might still be initializing)
+        echo "  Attempt $i: spindb info returned error"
+        status="command_error"
+      fi
       sleep 1
     done
+
+    # If we exited the loop due to repeated spindb failures, log the last output
+    if [ "$status" = "command_error" ]; then
+      echo "WARNING: spindb info failed repeatedly. Last output: $spindb_output"
+    fi
 
     # Verify container is running
     echo "Verifying container status..."
@@ -212,35 +226,34 @@ get_default_version() {
 }
 
 # Print results table
+# Uses column -t -s '|' to handle Unicode characters (✓/✗) correctly
 print_results_table() {
   echo ""
-  echo "┌────────────────┬─────────┬────────┬─────────────────┐"
-  echo "│ Engine         │ Version │ Status │ Error           │"
-  echo "├────────────────┼─────────┼────────┼─────────────────┤"
+  # Build table with pipe separators, then format with column
+  {
+    echo "Engine|Version|Status|Error"
+    echo "------|-------|------|-----"
+    for i in "${!RESULTS_ENGINE[@]}"; do
+      local engine="${RESULTS_ENGINE[$i]}"
+      local version="${RESULTS_VERSION[$i]}"
+      local status="${RESULTS_STATUS[$i]}"
+      local error="${RESULTS_ERROR[$i]}"
 
-  for i in "${!RESULTS_ENGINE[@]}"; do
-    local engine="${RESULTS_ENGINE[$i]}"
-    local version="${RESULTS_VERSION[$i]}"
-    local status="${RESULTS_STATUS[$i]}"
-    local error="${RESULTS_ERROR[$i]}"
+      # Add status indicator
+      if [ "$status" = "PASSED" ]; then
+        status="✓ PASS"
+      else
+        status="✗ FAIL"
+      fi
 
-    # Add status indicator
-    if [ "$status" = "PASSED" ]; then
-      status="✓ PASS"
-    else
-      status="✗ FAIL"
-    fi
+      # Truncate error if too long
+      if [ ${#error} -gt 15 ]; then
+        error="${error:0:12}..."
+      fi
 
-    # Truncate error if too long
-    if [ ${#error} -gt 15 ]; then
-      error="${error:0:12}..."
-    fi
-
-    # Format with fixed width columns
-    printf "│ %-14s │ %-7s │ %-6s │ %-15s │\n" "$engine" "$version" "$status" "$error"
-  done
-
-  echo "└────────────────┴─────────┴────────┴─────────────────┘"
+      printf "%s|%s|%s|%s\n" "$engine" "$version" "$status" "$error"
+    done
+  } | column -t -s '|'
 }
 
 # Run tests for each engine
@@ -258,7 +271,7 @@ MYSQL_VERSION=$(get_default_version mysql)
 MARIADB_VERSION=$(get_default_version mariadb)
 [ -n "$MARIADB_VERSION" ] && run_test mariadb "$MARIADB_VERSION" || echo "Skipping MariaDB (no default version)"
 
-# SQLite (uses system binary, no version download needed)
+# SQLite (downloads from hostdb like other engines)
 run_test sqlite "3"
 
 # MongoDB

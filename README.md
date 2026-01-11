@@ -201,12 +201,14 @@ spindb deps check --engine mysql
 
 | | |
 |---|---|
-| Version | 3 (system) |
+| Version | 3 |
 | Default port | N/A (file-based) |
 | Data location | Project directory (CWD) |
-| Binary source | System installation |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
 
 SQLite is a file-based database—no server process, no ports. Databases are stored in your project directory by default, not `~/.spindb/`. SpinDB tracks registered SQLite databases in a registry file.
+
+**Tools included:** SQLite binaries include `sqlite3`, `sqldiff`, `sqlite3_analyzer`, and `sqlite3_rsync`. No system installation required.
 
 ```bash
 # Create in current directory
@@ -344,7 +346,6 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 
 **Notes:**
 - **\*** Licensing considerations for commercial use — consider Valkey (Redis) or FerretDB (MongoDB) as alternatives
-- **SQLite** uses system binaries (not hostdb) since it's an embedded database
 - **PostgreSQL** uses [EDB](https://www.enterprisedb.com/) binaries on Windows instead of hostdb
 - **Valkey** is a Redis-compatible drop-in replacement with permissive licensing
 - **CockroachDB** is planned for both hostdb and SpinDB (see [roadmap](TODO.md))
@@ -726,13 +727,13 @@ ENGINE        VERSION     SOURCE            SIZE
 ────────────────────────────────────────────────────────
 🐘 postgresql 18.1        darwin-arm64      46.0 MB
 🐘 postgresql 17.7        darwin-arm64      45.2 MB
-🐬 mysql      8.0.35      system            (system-installed)
-🪶 sqlite     3.43.2      system            (system-installed)
+🐬 mysql      9.0.1       darwin-arm64      150.0 MB
+🪶 sqlite     3.51.2      darwin-arm64      5.0 MB
 ────────────────────────────────────────────────────────
 
 PostgreSQL: 2 version(s), 90.0 MB
-MySQL: system-installed at /opt/homebrew/bin/mysqld
-SQLite: system-installed at /usr/bin/sqlite3
+MySQL: 1 version(s), 150.0 MB
+SQLite: 1 version(s), 5.0 MB
 ```
 
 `spindb engines supported` output:
@@ -949,8 +950,6 @@ The [hostdb](https://github.com/robertjbass/hostdb) project provides pre-compile
 - Actively maintained with new database releases
 
 This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? Need MongoDB 7.0 and 8.0? Redis 7 and 8? SpinDB downloads them all, and they run side-by-side without conflicts.
-
-**SQLite** is the only exception—it uses your system's sqlite3 binary since it's a lightweight, system-installed tool on all platforms.
 
 ---
 
