@@ -114,15 +114,24 @@ export class RedisBinaryManager {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('redis-')) continue
 
-      // Use regex for robust parsing - handles versions with dashes (e.g., 7.4.0-rc1)
-      const match = entry.name.match(/^redis-(.+)-([^-]+)-([^-]+)$/)
-      if (match) {
+      // Split from end to handle versions with dashes (e.g., 7.4.0-rc1)
+      // Format: redis-{version}-{platform}-{arch}
+      const rest = entry.name.slice('redis-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && platform && arch) {
         installed.push({
           engine: Engine.Redis,
-          version: match[1],
-          platform: match[2],
-          arch: match[3],
+          version,
+          platform,
+          arch,
         })
       }
     }

@@ -27,3 +27,6 @@ coverage/
 # Environment files
 .env
 .env.*
+.npm
+.yarn
+pnpm-lock.yaml

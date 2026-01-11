@@ -129,27 +129,34 @@ export async function getInstalledPostgresEngines(): Promise<
   const engines: InstalledPostgresEngine[] = []
 
   for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && match[1] === 'postgresql') {
-        const [, , majorVersion, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('postgresql-')) continue
 
-        const actualVersion =
-          (await getPostgresVersion(dirPath)) || majorVersion
-        const sizeBytes = await calculateDirectorySize(dirPath)
+    // Split from end to handle versions with prerelease tags (e.g., 17.0.0-rc1)
+    // Format: postgresql-{version}-{platform}-{arch}
+    const rest = entry.name.slice('postgresql-'.length)
+    const parts = rest.split('-')
+    if (parts.length < 3) continue
 
-        engines.push({
-          engine: 'postgresql',
-          version: actualVersion,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-          source: 'downloaded',
-        })
-      }
-    }
+    const arch = parts.pop()!
+    const platform = parts.pop()!
+    const dirVersion = parts.join('-')
+
+    if (!dirVersion || !platform || !arch) continue
+
+    const dirPath = join(binDir, entry.name)
+    const actualVersion = (await getPostgresVersion(dirPath)) || dirVersion
+    const sizeBytes = await calculateDirectorySize(dirPath)
+
+    engines.push({
+      engine: 'postgresql',
+      version: actualVersion,
+      platform,
+      arch,
+      path: dirPath,
+      sizeBytes,
+      source: 'downloaded',
+    })
   }
 
   engines.sort((a, b) => compareVersions(b.version, a.version))
@@ -191,27 +198,34 @@ export async function getInstalledMariadbEngines(): Promise<
   const engines: InstalledMariadbEngine[] = []
 
   for (const entry of entries) {
-    if (entry.isDirectory()) {
-      // Match mariadb-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && match[1] === 'mariadb') {
-        const [, , majorVersion, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('mariadb-')) continue
 
-        const actualVersion = (await getMariadbVersion(dirPath)) || majorVersion
-        const sizeBytes = await calculateDirectorySize(dirPath)
+    // Split from end to handle versions with prerelease tags
+    // Format: mariadb-{version}-{platform}-{arch}
+    const rest = entry.name.slice('mariadb-'.length)
+    const parts = rest.split('-')
+    if (parts.length < 3) continue
 
-        engines.push({
-          engine: 'mariadb',
-          version: actualVersion,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-          source: 'downloaded',
-        })
-      }
-    }
+    const arch = parts.pop()!
+    const platform = parts.pop()!
+    const dirVersion = parts.join('-')
+
+    if (!dirVersion || !platform || !arch) continue
+
+    const dirPath = join(binDir, entry.name)
+    const actualVersion = (await getMariadbVersion(dirPath)) || dirVersion
+    const sizeBytes = await calculateDirectorySize(dirPath)
+
+    engines.push({
+      engine: 'mariadb',
+      version: actualVersion,
+      platform,
+      arch,
+      path: dirPath,
+      sizeBytes,
+      source: 'downloaded',
+    })
   }
 
   engines.sort((a, b) => compareVersions(b.version, a.version))
@@ -250,27 +264,34 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
   const engines: InstalledMysqlEngine[] = []
 
   for (const entry of entries) {
-    if (entry.isDirectory()) {
-      // Match mysql-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && match[1] === 'mysql') {
-        const [, , majorVersion, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('mysql-')) continue
 
-        const actualVersion = (await getMysqlVersion(dirPath)) || majorVersion
-        const sizeBytes = await calculateDirectorySize(dirPath)
+    // Split from end to handle versions with prerelease tags
+    // Format: mysql-{version}-{platform}-{arch}
+    const rest = entry.name.slice('mysql-'.length)
+    const parts = rest.split('-')
+    if (parts.length < 3) continue
 
-        engines.push({
-          engine: 'mysql',
-          version: actualVersion,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-          source: 'downloaded',
-        })
-      }
-    }
+    const arch = parts.pop()!
+    const platform = parts.pop()!
+    const dirVersion = parts.join('-')
+
+    if (!dirVersion || !platform || !arch) continue
+
+    const dirPath = join(binDir, entry.name)
+    const actualVersion = (await getMysqlVersion(dirPath)) || dirVersion
+    const sizeBytes = await calculateDirectorySize(dirPath)
+
+    engines.push({
+      engine: 'mysql',
+      version: actualVersion,
+      platform,
+      arch,
+      path: dirPath,
+      sizeBytes,
+      source: 'downloaded',
+    })
   }
 
   engines.sort((a, b) => compareVersions(b.version, a.version))
@@ -312,27 +333,34 @@ async function getInstalledSqliteEngines(): Promise<InstalledSqliteEngine[]> {
   const engines: InstalledSqliteEngine[] = []
 
   for (const entry of entries) {
-    if (entry.isDirectory()) {
-      // Match sqlite-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && match[1] === 'sqlite') {
-        const [, , majorVersion, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('sqlite-')) continue
 
-        const actualVersion = (await getSqliteVersion(dirPath)) || majorVersion
-        const sizeBytes = await calculateDirectorySize(dirPath)
+    // Split from end to handle versions with prerelease tags
+    // Format: sqlite-{version}-{platform}-{arch}
+    const rest = entry.name.slice('sqlite-'.length)
+    const parts = rest.split('-')
+    if (parts.length < 3) continue
 
-        engines.push({
-          engine: 'sqlite',
-          version: actualVersion,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-          source: 'downloaded',
-        })
-      }
-    }
+    const arch = parts.pop()!
+    const platform = parts.pop()!
+    const dirVersion = parts.join('-')
+
+    if (!dirVersion || !platform || !arch) continue
+
+    const dirPath = join(binDir, entry.name)
+    const actualVersion = (await getSqliteVersion(dirPath)) || dirVersion
+    const sizeBytes = await calculateDirectorySize(dirPath)
+
+    engines.push({
+      engine: 'sqlite',
+      version: actualVersion,
+      platform,
+      arch,
+      path: dirPath,
+      sizeBytes,
+      source: 'downloaded',
+    })
   }
 
   engines.sort((a, b) => compareVersions(b.version, a.version))
@@ -374,27 +402,34 @@ async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
   const engines: InstalledMongodbEngine[] = []
 
   for (const entry of entries) {
-    if (entry.isDirectory()) {
-      // Match mongodb-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && match[1] === 'mongodb') {
-        const [, , majorVersion, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('mongodb-')) continue
 
-        const actualVersion = (await getMongodbVersion(dirPath)) || majorVersion
-        const sizeBytes = await calculateDirectorySize(dirPath)
+    // Split from end to handle versions with prerelease tags
+    // Format: mongodb-{version}-{platform}-{arch}
+    const rest = entry.name.slice('mongodb-'.length)
+    const parts = rest.split('-')
+    if (parts.length < 3) continue
 
-        engines.push({
-          engine: 'mongodb',
-          version: actualVersion,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-          source: 'downloaded',
-        })
-      }
-    }
+    const arch = parts.pop()!
+    const platform = parts.pop()!
+    const dirVersion = parts.join('-')
+
+    if (!dirVersion || !platform || !arch) continue
+
+    const dirPath = join(binDir, entry.name)
+    const actualVersion = (await getMongodbVersion(dirPath)) || dirVersion
+    const sizeBytes = await calculateDirectorySize(dirPath)
+
+    engines.push({
+      engine: 'mongodb',
+      version: actualVersion,
+      platform,
+      arch,
+      path: dirPath,
+      sizeBytes,
+      source: 'downloaded',
+    })
   }
 
   engines.sort((a, b) => compareVersions(b.version, a.version))
@@ -436,27 +471,34 @@ async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
   const engines: InstalledRedisEngine[] = []
 
   for (const entry of entries) {
-    if (entry.isDirectory()) {
-      // Match redis-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && match[1] === 'redis') {
-        const [, , majorVersion, platform, arch] = match
-        const dirPath = join(binDir, entry.name)
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('redis-')) continue
 
-        const actualVersion = (await getRedisVersion(dirPath)) || majorVersion
-        const sizeBytes = await calculateDirectorySize(dirPath)
+    // Split from end to handle versions with prerelease tags
+    // Format: redis-{version}-{platform}-{arch}
+    const rest = entry.name.slice('redis-'.length)
+    const parts = rest.split('-')
+    if (parts.length < 3) continue
 
-        engines.push({
-          engine: 'redis',
-          version: actualVersion,
-          platform,
-          arch,
-          path: dirPath,
-          sizeBytes,
-          source: 'downloaded',
-        })
-      }
-    }
+    const arch = parts.pop()!
+    const platform = parts.pop()!
+    const dirVersion = parts.join('-')
+
+    if (!dirVersion || !platform || !arch) continue
+
+    const dirPath = join(binDir, entry.name)
+    const actualVersion = (await getRedisVersion(dirPath)) || dirVersion
+    const sizeBytes = await calculateDirectorySize(dirPath)
+
+    engines.push({
+      engine: 'redis',
+      version: actualVersion,
+      platform,
+      arch,
+      path: dirPath,
+      sizeBytes,
+      source: 'downloaded',
+    })
   }
 
   engines.sort((a, b) => compareVersions(b.version, a.version))

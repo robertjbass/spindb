@@ -14,6 +14,7 @@ import unzipper from 'unzipper'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { logDebug } from '../../core/error-handler'
 import type { ProgressCallback, InstalledBinary } from '../../types'
 
 /**
@@ -261,10 +262,24 @@ export class MySQLBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
+        } catch (renameError) {
+          logDebug('MySQL rename failed, falling back to cp', {
+            sourcePath,
+            destPath,
+            error: (renameError as Error).message,
+          })
           try {
             await cp(sourcePath, destPath, { recursive: true })
+            logDebug('MySQL cp succeeded after rename failure', {
+              sourcePath,
+              destPath,
+            })
           } catch (cpError) {
+            logDebug('MySQL cp failed', {
+              sourcePath,
+              destPath,
+              error: (cpError as Error).message,
+            })
             throw new Error(
               `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
             )
@@ -309,10 +324,24 @@ export class MySQLBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
+        } catch (renameError) {
+          logDebug('MySQL rename failed, falling back to cp', {
+            sourcePath,
+            destPath,
+            error: (renameError as Error).message,
+          })
           try {
             await cp(sourcePath, destPath, { recursive: true })
+            logDebug('MySQL cp succeeded after rename failure', {
+              sourcePath,
+              destPath,
+            })
           } catch (cpError) {
+            logDebug('MySQL cp failed', {
+              sourcePath,
+              destPath,
+              error: (cpError as Error).message,
+            })
             throw new Error(
               `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
             )
@@ -326,10 +355,24 @@ export class MySQLBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
+        } catch (renameError) {
+          logDebug('MySQL rename failed, falling back to cp', {
+            sourcePath,
+            destPath,
+            error: (renameError as Error).message,
+          })
           try {
             await cp(sourcePath, destPath, { recursive: true })
+            logDebug('MySQL cp succeeded after rename failure', {
+              sourcePath,
+              destPath,
+            })
           } catch (cpError) {
+            logDebug('MySQL cp failed', {
+              sourcePath,
+              destPath,
+              error: (cpError as Error).message,
+            })
             throw new Error(
               `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
             )

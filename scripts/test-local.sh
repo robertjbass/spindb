@@ -278,17 +278,17 @@ test_engine_lifecycle() {
   local query_result=false
   case $engine in
     postgresql|mysql|mariadb|sqlite)
-      if pnpm start run "$container_name" -c "SELECT 1 as test;" 2>&1; then
+      if pnpm start run "$container_name" -c "SELECT 1 as test;" >/dev/null 2>&1; then
         query_result=true
       fi
       ;;
     mongodb)
-      if pnpm start run "$container_name" -c "db.runCommand({ping: 1})" 2>&1; then
+      if pnpm start run "$container_name" -c "db.runCommand({ping: 1})" >/dev/null 2>&1; then
         query_result=true
       fi
       ;;
     redis)
-      if pnpm start run "$container_name" -c "PING" 2>&1; then
+      if pnpm start run "$container_name" -c "PING" >/dev/null 2>&1; then
         query_result=true
       fi
       ;;
@@ -325,6 +325,10 @@ test_engine_lifecycle() {
 # Run Tests Based on Mode
 # ============================================
 
+# Disable errexit for test execution - test bodies should record failures,
+# not exit the script. Re-enable after tests complete.
+set +e
+
 if [ -n "$SPECIFIC_ENGINE" ]; then
   # Test specific engine
   case $SPECIFIC_ENGINE in
@@ -349,6 +353,7 @@ if [ -n "$SPECIFIC_ENGINE" ]; then
     *)
       log_error "Unknown engine: $SPECIFIC_ENGINE"
       echo "Available engines: postgresql, mysql, mariadb, sqlite, mongodb, redis"
+      set -e
       exit 1
       ;;
   esac
@@ -364,6 +369,9 @@ else
   test_engine_lifecycle mongodb 8.0
   test_engine_lifecycle redis 8
 fi
+
+# Re-enable errexit for summary
+set -e
 
 # Print summary
 print_summary

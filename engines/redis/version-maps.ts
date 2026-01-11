@@ -53,15 +53,16 @@ export function normalizeVersion(version: string): string {
   const parts = version.split('.')
   if (parts.length === 1) {
     // Single number like '7' - already checked above, not in map
+    console.warn(
+      `Redis version '${version}' not in version map, using '${version}.0.0'`,
+    )
     return `${version}.0.0`
   } else if (parts.length === 2) {
-    // Two parts like '7.4' - try to find by major version
-    const major = parts[0]
-    const mapped = REDIS_VERSION_MAP[major]
-    if (mapped) {
-      return mapped
-    }
-    // Default to adding .0 if not in map
+    // Two parts like '7.4' - was already checked against map above
+    // Don't silently upgrade to a different minor version
+    console.warn(
+      `Redis version '${version}' not in version map, using '${version}.0'`,
+    )
     return `${version}.0`
   }
 

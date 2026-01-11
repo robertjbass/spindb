@@ -22,9 +22,11 @@ export const SQLITE_VERSION_MAP: Record<string, string> = {
 
 /**
  * Supported major SQLite versions.
- * SQLite uses major version 3 for all modern releases.
+ * Derived from SQLITE_VERSION_MAP keys (only single-digit major versions).
  */
-export const SUPPORTED_MAJOR_VERSIONS = ['3']
+export const SUPPORTED_MAJOR_VERSIONS = Object.keys(SQLITE_VERSION_MAP).filter(
+  (k) => /^\d+$/.test(k),
+)
 
 /**
  * Get the full version string for a major version.
@@ -53,15 +55,16 @@ export function normalizeVersion(version: string): string {
   const parts = version.split('.')
   if (parts.length === 1) {
     // Single number like '3' - already checked above, not in map
+    console.warn(
+      `SQLite version '${version}' not in version map, using '${version}.0.0'`,
+    )
     return `${version}.0.0`
   } else if (parts.length === 2) {
-    // Two parts like '3.51' - try to find by major version
-    const major = parts[0]
-    const mapped = SQLITE_VERSION_MAP[major]
-    if (mapped) {
-      return mapped
-    }
-    // Default to adding .0 if not in map
+    // Two parts like '3.51' - was already checked against map above
+    // Don't silently upgrade to a different minor version
+    console.warn(
+      `SQLite version '${version}' not in version map, using '${version}.0'`,
+    )
     return `${version}.0`
   }
 

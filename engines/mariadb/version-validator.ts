@@ -11,9 +11,7 @@ import { logDebug } from '../../core/error-handler'
 
 const execAsync = promisify(exec)
 
-/**
- * Parse version string into components
- */
+// Parse version string into components
 export function parseVersion(version: string): {
   major: number
   minor: number
@@ -29,9 +27,7 @@ export function parseVersion(version: string): {
   }
 }
 
-/**
- * Extract MariaDB version from dump file header
- */
+// Extract MariaDB version from dump file header
 export async function extractDumpVersion(
   dumpPath: string,
 ): Promise<{ version: string; isMariaDB: boolean } | null> {
@@ -78,9 +74,7 @@ export async function extractDumpVersion(
   }
 }
 
-/**
- * Get the installed MariaDB server version
- */
+// Get the installed MariaDB server version
 export async function getInstalledVersion(
   binaryPath: string,
 ): Promise<string | null> {
@@ -97,9 +91,7 @@ export async function getInstalledVersion(
   }
 }
 
-/**
- * Get the installed mysql client version
- */
+// Get the installed mysql client version
 export async function getMysqlClientVersion(
   binaryPath: string,
 ): Promise<string | null> {
@@ -116,9 +108,7 @@ export async function getMysqlClientVersion(
   }
 }
 
-/**
- * Validate dump compatibility options
- */
+// Validate dump compatibility options
 export type ValidateOptions = {
   dumpPath: string
   targetVersion?: string
@@ -167,16 +157,12 @@ export async function validateRestoreCompatibility(
     if (strict) {
       return {
         compatible: false,
-        warning:
-          `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
-          `Newer dumps may use features not available in older versions.`,
+        warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. Newer dumps may use features not available in older versions.`,
       }
     }
     return {
       compatible: true,
-      warning:
-        `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
-        `This may work but some features might not be supported.`,
+      warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. This may work but some features might not be supported.`,
     }
   }
 
@@ -184,16 +170,12 @@ export async function validateRestoreCompatibility(
   if (strict) {
     return {
       compatible: false,
-      warning:
-        `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
-        `Cross-major-version restore may fail.`,
+      warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. Cross-major-version restore may fail.`,
     }
   }
 
   return {
     compatible: true,
-    warning:
-      `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
-      `Cross-major-version restore may have compatibility issues.`,
+    warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. Cross-major-version restore may have compatibility issues.`,
   }
 }

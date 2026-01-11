@@ -175,9 +175,17 @@ async function getMysqlClientPath(binPath?: string): Promise<string> {
     }
   }
 
-  // Fall back to config manager
+  // Fall back to config manager (verify file exists)
   const configPath = await configManager.getBinaryPath('mysql')
-  if (configPath) return configPath
+  if (configPath && existsSync(configPath)) {
+    return configPath
+  }
+
+  // Fall back to system PATH
+  const systemPath = await platformService.findToolPath('mysql')
+  if (systemPath) {
+    return systemPath
+  }
 
   throw new Error(
     'mysql client not found. Ensure MySQL binaries are downloaded:\n' +

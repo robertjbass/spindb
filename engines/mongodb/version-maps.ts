@@ -25,9 +25,10 @@ export const MONGODB_VERSION_MAP: Record<string, string> = {
 export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MONGODB_VERSION_MAP)
 
 /**
- * Fallback version map for when hostdb API is unavailable
+ * Fallback map of major versions to stable patch versions
+ * Used when hostdb repository is unreachable
  */
-export const FALLBACK_VERSION_MAP = MONGODB_VERSION_MAP
+export const FALLBACK_VERSION_MAP: Record<string, string> = MONGODB_VERSION_MAP
 
 /**
  * Get the full version for a major version

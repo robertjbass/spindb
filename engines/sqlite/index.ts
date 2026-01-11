@@ -26,7 +26,11 @@ import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { sqliteBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
-import { SUPPORTED_MAJOR_VERSIONS, normalizeVersion } from './version-maps'
+import {
+  SUPPORTED_MAJOR_VERSIONS,
+  SQLITE_VERSION_MAP,
+  normalizeVersion,
+} from './version-maps'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -534,9 +538,18 @@ export class SQLiteEngine extends BaseEngine {
   }
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    // Return available versions from version map
-    // Key is major version, value is list of available versions
-    return { '3': ['3.51.2'] }
+    // Return available versions derived from version map
+    // Key is major version, value is list of available full versions
+    const result: Record<string, string[]> = {}
+
+    for (const major of SUPPORTED_MAJOR_VERSIONS) {
+      const fullVersion = SQLITE_VERSION_MAP[major]
+      if (fullVersion) {
+        result[major] = [fullVersion]
+      }
+    }
+
+    return result
   }
 
   /**

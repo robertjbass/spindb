@@ -23,7 +23,7 @@ async function getRedisCliPath(): Promise<string | null> {
 
   // Check if we have a cached/bundled redis-cli
   const cachedPath = await configManager.getBinaryPath('redis-cli')
-  if (cachedPath) {
+  if (cachedPath && existsSync(cachedPath)) {
     return cachedPath
   }
 

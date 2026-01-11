@@ -6,7 +6,7 @@
  */
 
 import { logDebug, logWarning } from '../../core/error-handler'
-import { FALLBACK_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
 
 const HOSTDB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
@@ -37,7 +37,17 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesResponse | nu
   }
 
   try {
-    const response = await fetch(HOSTDB_RELEASES_URL)
+    // Add 30 second timeout to prevent hanging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30 * 1000)
+
+    let response: Response
+    try {
+      response = await fetch(HOSTDB_RELEASES_URL, { signal: controller.signal })
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
     if (!response.ok) {
       logWarning(`Failed to fetch hostdb releases: ${response.status}`)
       return null
@@ -48,7 +58,12 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesResponse | nu
     cacheTimestamp = now
     return data
   } catch (error) {
-    logWarning(`Error fetching hostdb releases: ${error}`)
+    const err = error as Error
+    if (err.name === 'AbortError') {
+      logWarning('Timeout fetching hostdb releases')
+    } else {
+      logWarning(`Error fetching hostdb releases: ${error}`)
+    }
     return null
   }
 }

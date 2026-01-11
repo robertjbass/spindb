@@ -253,7 +253,14 @@ print_results_table() {
 
       printf "%s|%s|%s|%s\n" "$engine" "$version" "$status" "$error"
     done
-  } | column -t -s '|'
+  } | if command -v column &>/dev/null; then
+    column -t -s '|'
+  else
+    # Fallback: simple table without column alignment
+    while IFS='|' read -r c1 c2 c3 c4; do
+      printf "%-12s %-10s %-10s %s\n" "$c1" "$c2" "$c3" "$c4"
+    done
+  fi
 }
 
 # Run tests for each engine

@@ -100,23 +100,6 @@ function normalizeVersion(
     return version
   }
 
-  // For single-part versions, check the map by major
-  if (parts.length === 1) {
-    const mapped = versionMap[version]
-    if (mapped) {
-      return mapped
-    }
-  }
-
-  // For two-part versions, look up by major for better version
-  if (parts.length === 2) {
-    const major = parts[0]
-    const mapped = versionMap[major]
-    if (mapped) {
-      return mapped
-    }
-  }
-
   // Unknown version format - warn and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
   console.warn(

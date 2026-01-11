@@ -2,13 +2,13 @@ import {
   fetchAvailableVersions as fetchHostdbVersions,
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
-import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import {
+  SUPPORTED_MAJOR_VERSIONS,
+  FALLBACK_VERSION_MAP,
+} from './version-maps'
 
-/**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- */
-export const FALLBACK_VERSION_MAP: Record<string, string> = MYSQL_VERSION_MAP
+// Re-export for convenience
+export { FALLBACK_VERSION_MAP }
 
 /**
  * Supported major versions (in order of display)
@@ -32,7 +32,7 @@ export async function getLatestVersion(major: string): Promise<string> {
 }
 
 // Legacy export for backward compatibility
-export const VERSION_MAP = FALLBACK_VERSION_MAP
+export { FALLBACK_VERSION_MAP as VERSION_MAP }
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -87,7 +87,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, FALLBACK_VERSION_MAP)
 
   const tag = `mysql-${fullVersion}`
   // Windows uses .zip, others use .tar.gz
@@ -106,7 +106,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = FALLBACK_VERSION_MAP,
 ): string {
   // Check if it's a major version in the map
   if (versionMap[version]) {
@@ -130,5 +130,5 @@ function normalizeVersion(
  * @returns Full version string (e.g., '8.0.40') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
+  return FALLBACK_VERSION_MAP[majorVersion] || null
 }

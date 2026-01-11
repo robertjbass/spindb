@@ -28,6 +28,12 @@ export const MYSQL_VERSION_MAP: Record<string, string> = {
 export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MYSQL_VERSION_MAP)
 
 /**
+ * Fallback map of major versions to stable patch versions
+ * Used when hostdb repository is unreachable
+ */
+export const FALLBACK_VERSION_MAP: Record<string, string> = MYSQL_VERSION_MAP
+
+/**
  * Get the full version string for a major version.
  *
  * @param majorVersion - Major version (e.g., '8.0', '9')
@@ -53,6 +59,12 @@ export function normalizeVersion(version: string): string {
   // If it's already a full version (X.Y.Z), return as-is
   const parts = version.split('.')
   if (parts.length === 3) {
+    // Validate format - each part should be numeric
+    if (!parts.every((p) => /^\d+$/.test(p))) {
+      console.warn(
+        `MySQL version '${version}' has invalid format, may not be available in hostdb`,
+      )
+    }
     return version
   }
 

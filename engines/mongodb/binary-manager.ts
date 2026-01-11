@@ -118,15 +118,24 @@ export class MongoDBBinaryManager {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('mongodb-')) continue
 
-      // Use regex for robust parsing - handles versions with dashes (e.g., 8.0.0-rc1)
-      const match = entry.name.match(/^mongodb-(.+)-([^-]+)-([^-]+)$/)
-      if (match) {
+      // Split from end to handle versions with dashes (e.g., 8.0.0-rc1)
+      // Format: mongodb-{version}-{platform}-{arch}
+      const rest = entry.name.slice('mongodb-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && platform && arch) {
         installed.push({
           engine: Engine.MongoDB,
-          version: match[1],
-          platform: match[2],
-          arch: match[3],
+          version,
+          platform,
+          arch,
         })
       }
     }
@@ -164,6 +173,7 @@ export class MongoDBBinaryManager {
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
+    let downloadSucceeded = false
     try {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
@@ -228,10 +238,15 @@ export class MongoDBBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      downloadSucceeded = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!downloadSucceeded && existsSync(binPath)) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 

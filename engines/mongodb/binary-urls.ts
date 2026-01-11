@@ -5,7 +5,7 @@
  * All platforms (macOS, Linux, Windows) use hostdb binaries.
  */
 
-import { FALLBACK_VERSION_MAP, normalizeVersion } from './version-maps'
+import { normalizeVersion } from './version-maps'
 
 const HOSTDB_BASE_URL =
   'https://github.com/robertjbass/hostdb/releases/download'
@@ -38,13 +38,6 @@ export function getHostdbPlatform(
     'win32-x64': 'win32-x64',
   }
   return mapping[key] || null
-}
-
-/**
- * Get the full version from a potentially short version string
- */
-export function getFullVersion(version: string): string {
-  return normalizeVersion(version)
 }
 
 /**
@@ -81,6 +74,5 @@ export function isPlatformSupported(platform: string, arch: string): boolean {
   return getHostdbPlatform(platform, arch) !== null
 }
 
-// Re-export version map for convenience
-export { FALLBACK_VERSION_MAP }
-export { SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+// Re-export for convenience
+export { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
