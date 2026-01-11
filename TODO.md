@@ -6,8 +6,6 @@
 
 ---
 
----
-
 ## Roadmap
 
 ### v1.1 - Remote Connections & Secrets
