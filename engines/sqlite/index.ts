@@ -31,6 +31,11 @@ import {
   SQLITE_VERSION_MAP,
   normalizeVersion,
 } from './version-maps'
+import {
+  fetchHostdbReleases,
+  getEngineReleases,
+} from '../../core/hostdb-client'
+import { logDebug } from '../../core/error-handler'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -532,17 +537,68 @@ export class SQLiteEngine extends BaseEngine {
   }
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    // Return available versions derived from version map
-    // Key is major version, value is list of available full versions
-    const result: Record<string, string[]> = {}
+    // Try to fetch from hostdb first
+    try {
+      const releases = await fetchHostdbReleases()
+      const sqliteReleases = getEngineReleases(releases, 'sqlite')
 
+      if (sqliteReleases && Object.keys(sqliteReleases).length > 0) {
+        const result: Record<string, string[]> = {}
+
+        for (const major of SUPPORTED_MAJOR_VERSIONS) {
+          result[major] = []
+
+          // Find all versions matching this major version
+          for (const [, release] of Object.entries(sqliteReleases)) {
+            if (release.version.startsWith(`${major}.`)) {
+              result[major].push(release.version)
+            }
+          }
+
+          // Sort descending (latest first)
+          result[major].sort((a, b) => {
+            const partsA = a.split('.').map(Number)
+            const partsB = b.split('.').map(Number)
+            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+              const diff = (partsB[i] || 0) - (partsA[i] || 0)
+              if (diff !== 0) return diff
+            }
+            return 0
+          })
+        }
+
+        return result
+      }
+    } catch (error) {
+      logDebug('Failed to fetch SQLite versions from hostdb, checking local', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    // Offline fallback: return only locally installed versions
+    const installed = await sqliteBinaryManager.listInstalled()
+    if (installed.length > 0) {
+      const result: Record<string, string[]> = {}
+      for (const binary of installed) {
+        const major = binary.version.split('.')[0]
+        if (!result[major]) {
+          result[major] = []
+        }
+        if (!result[major].includes(binary.version)) {
+          result[major].push(binary.version)
+        }
+      }
+      return result
+    }
+
+    // Last resort: return hardcoded version map
+    const result: Record<string, string[]> = {}
     for (const major of SUPPORTED_MAJOR_VERSIONS) {
       const fullVersion = SQLITE_VERSION_MAP[major]
       if (fullVersion) {
         result[major] = [fullVersion]
       }
     }
-
     return result
   }
 

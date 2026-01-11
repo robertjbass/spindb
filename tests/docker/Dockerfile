@@ -66,10 +66,15 @@ RUN apt-get update && apt-get install -y \
 # Create compatibility symlink for MySQL
 # Ubuntu 24.04 renamed libaio package to libaio1t64 which creates libaio.so.1t64
 # MySQL binaries are compiled against the old library name (libaio.so.1)
-# Try both architectures (only one will succeed based on host), then verify
+# Only create symlink if the source .1t64 file exists (architecture-dependent)
 RUN set -e && \
-    (ln -sf /lib/aarch64-linux-gnu/libaio.so.1t64 /lib/aarch64-linux-gnu/libaio.so.1 2>/dev/null || \
-     ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1 2>/dev/null || true) && \
+    if test -e /lib/aarch64-linux-gnu/libaio.so.1t64; then \
+      ln -sf /lib/aarch64-linux-gnu/libaio.so.1t64 /lib/aarch64-linux-gnu/libaio.so.1; \
+    elif test -e /lib/x86_64-linux-gnu/libaio.so.1t64; then \
+      ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1; \
+    else \
+      echo "ERROR: libaio.so.1t64 source file not found - libaio1t64 package may not be installed" && exit 1; \
+    fi && \
     (test -e /lib/aarch64-linux-gnu/libaio.so.1 -o -e /lib/x86_64-linux-gnu/libaio.so.1 || \
      (echo "ERROR: libaio.so.1 symlink not created - MySQL may fail to start" && exit 1))
 

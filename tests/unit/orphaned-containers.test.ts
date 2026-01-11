@@ -382,11 +382,18 @@ describe('PostgreSQL Engine Binary Check', () => {
       'Path should include postgresql prefix',
     )
     assert(binaryPath.includes('17.'), 'Path should include resolved version')
+
+    // Verify full platform-architecture combo is present
+    const validPlatformArchCombos = [
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm64',
+      'linux-x64',
+      'win32-x64',
+    ]
     assert(
-      binaryPath.includes('darwin') ||
-        binaryPath.includes('linux') ||
-        binaryPath.includes('win32'),
-      'Path should include platform',
+      validPlatformArchCombos.some((combo) => binaryPath.includes(combo)),
+      `Path should include one of the supported platform-arch combos: ${validPlatformArchCombos.join(', ')}`,
     )
   })
 })
@@ -434,11 +441,18 @@ describe('MySQL Engine Binary Check', () => {
 
     assert(binaryPath.includes('mysql-'), 'Path should include mysql prefix')
     assert(binaryPath.includes('9.'), 'Path should include resolved version')
+
+    // Verify full platform-architecture combo is present
+    const validPlatformArchCombos = [
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm64',
+      'linux-x64',
+      'win32-x64',
+    ]
     assert(
-      binaryPath.includes('darwin') ||
-        binaryPath.includes('linux') ||
-        binaryPath.includes('win32'),
-      'Path should include platform',
+      validPlatformArchCombos.some((combo) => binaryPath.includes(combo)),
+      `Path should include one of the supported platform-arch combos: ${validPlatformArchCombos.join(', ')}`,
     )
   })
 })

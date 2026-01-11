@@ -24,6 +24,7 @@ export function getHostdbPlatform(
   arch: string,
 ): string | null {
   const key = `${platform}-${arch}`
+  // TODO - consider converting map to a set
   const mapping: Record<string, string> = {
     'darwin-arm64': 'darwin-arm64',
     'darwin-x64': 'darwin-x64',

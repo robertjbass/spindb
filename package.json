@@ -18,6 +18,7 @@
     "test:redis": "node --import tsx --test --experimental-test-isolation=none tests/integration/redis.test.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
+    "test:hostdb-sync": "node --import tsx --test --experimental-test-isolation=none tests/integration/hostdb-sync.test.ts",
     "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:mongodb test:redis",
     "test:all": "run-s test:unit test:integration",
     "test:local": "./scripts/test-local.sh",

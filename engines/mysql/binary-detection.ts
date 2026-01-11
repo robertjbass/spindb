@@ -74,10 +74,22 @@ export async function getMysqlVersion(
 
 /**
  * Get the major version from a full version string
- * e.g., "8.0.35" -> "8.0"
+ * e.g., "8.0.35" -> "8.0", "v8.0.35" -> "8.0", "8" -> "8"
  */
 export function getMajorVersion(fullVersion: string): string {
-  const parts = fullVersion.split('.')
+  if (!fullVersion) return ''
+
+  // Trim whitespace and strip leading "v" prefix
+  const normalized = fullVersion.trim().replace(/^v/i, '')
+  if (!normalized) return ''
+
+  const parts = normalized.split('.')
+
+  // If only one part (e.g., "8"), return it as-is
+  if (parts.length < 2) {
+    return parts[0] || ''
+  }
+
   return `${parts[0]}.${parts[1]}`
 }
 

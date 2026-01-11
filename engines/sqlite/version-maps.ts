@@ -51,22 +51,10 @@ export function normalizeVersion(version: string): string {
     return fullVersion
   }
 
-  // If it has less than 3 parts, try to find matching entry
-  const parts = version.split('.')
-  if (parts.length === 1) {
-    // Single number like '3' - already checked above, not in map
-    console.warn(
-      `SQLite version '${version}' not in version map, using '${version}.0.0'`,
-    )
-    return `${version}.0.0`
-  } else if (parts.length === 2) {
-    // Two parts like '3.51' - was already checked against map above
-    // Don't silently upgrade to a different minor version
-    console.warn(
-      `SQLite version '${version}' not in version map, using '${version}.0'`,
-    )
-    return `${version}.0`
-  }
-
+  // Version not in map - warn and return unchanged
+  // Don't silently modify user input by appending zeros
+  console.warn(
+    `SQLite version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

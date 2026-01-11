@@ -45,17 +45,16 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '17.7.0')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version only, use the map
+  // If it's in the map directly, use it
   const fullVersion = POSTGRESQL_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // Normalize to X.Y.Z format
-  const parts = version.split('.')
-  if (parts.length === 2) {
-    return `${version}.0`
-  }
-
+  // Version not in map - warn and return unchanged
+  // Don't silently modify user input by appending zeros
+  console.warn(
+    `PostgreSQL version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

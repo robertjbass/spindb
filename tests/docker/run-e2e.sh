@@ -48,6 +48,9 @@ check_lib "libssl"
 check_lib "libcrypto"
 echo ""
 
+# Configurable timeouts (can be overridden via environment)
+STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-60}  # seconds to wait for container startup
+
 # Test counters and results tracking
 PASSED=0
 FAILED=0
@@ -108,11 +111,11 @@ run_test() {
       return 1
     fi
 
-    # Poll for running status (up to 15 seconds)
-    echo "Waiting for container to start..."
+    # Poll for running status (configurable timeout via STARTUP_TIMEOUT env var)
+    echo "Waiting for container to start (timeout: ${STARTUP_TIMEOUT}s)..."
     local status="unknown"
     local spindb_output=""
-    for i in {1..15}; do
+    for i in $(seq 1 "$STARTUP_TIMEOUT"); do
       # Capture both stdout and exit status
       if spindb_output=$(spindb info "$container_name" --json 2>&1); then
         # Command succeeded, parse status
@@ -121,7 +124,7 @@ run_test() {
       else
         # Command itself failed - log warning but keep retrying
         # (container might still be initializing)
-        echo "  Attempt $i: spindb info returned error"
+        [ $((i % 10)) -eq 0 ] && echo "  Still waiting... ($i/${STARTUP_TIMEOUT}s)"
         status="command_error"
       fi
       sleep 1
@@ -129,7 +132,7 @@ run_test() {
 
     # If we exited the loop due to repeated spindb failures, log the last output
     if [ "$status" = "command_error" ]; then
-      echo "WARNING: spindb info failed repeatedly. Last output: $spindb_output"
+      echo "WARNING: spindb info failed repeatedly after ${STARTUP_TIMEOUT}s. Last output: $spindb_output"
     fi
 
     # Verify container is running

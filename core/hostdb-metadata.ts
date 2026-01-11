@@ -7,6 +7,8 @@
  * - downloads.json: Provides package manager commands for installing tools
  */
 
+import { logDebug } from './error-handler'
+
 const HOSTDB_RAW_BASE =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main'
 
@@ -134,7 +136,11 @@ export async function getDatabaseTools(
     const key = engine.toLowerCase()
     const entry = data[key]
     return entry?.cliTools || null
-  } catch {
+  } catch (error) {
+    logDebug('Failed to fetch database tools from hostdb', {
+      engine,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -169,7 +175,11 @@ export async function getToolPackageInfo(
   try {
     const data = await fetchDownloadsJson()
     return data.tools[tool] || null
-  } catch {
+  } catch (error) {
+    logDebug('Failed to fetch tool package info from hostdb', {
+      tool,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -206,7 +216,12 @@ export async function getInstallCommand(
     }
 
     return cmd
-  } catch {
+  } catch (error) {
+    logDebug('Failed to get install command from hostdb', {
+      tool,
+      packageManager,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -247,7 +262,12 @@ export async function getPackagesForTools(
       tap: info.tap,
       tools: info.tools,
     }))
-  } catch {
+  } catch (error) {
+    logDebug('Failed to get packages for tools from hostdb', {
+      tools,
+      packageManager,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return []
   }
 }

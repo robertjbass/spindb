@@ -44,22 +44,16 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '11.8.5')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version only, use the map
+  // If it's in the map directly, use it
   const fullVersion = MARIADB_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it has two parts, try to find matching entry
-  const parts = version.split('.')
-  if (parts.length === 2) {
-    const mapped = MARIADB_VERSION_MAP[version]
-    if (mapped) {
-      return mapped
-    }
-    // Default to adding .0 if not in map
-    return `${version}.0`
-  }
-
+  // Version not in map - warn and return unchanged
+  // Don't silently modify user input by appending zeros
+  console.warn(
+    `MariaDB version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

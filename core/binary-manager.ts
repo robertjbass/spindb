@@ -24,7 +24,7 @@ const execAsync = promisify(exec)
 function spawnAsync(
   command: string,
   args: string[],
-  options?: { cwd?: string },
+  options?: { cwd?: string; timeout?: number },
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -34,6 +34,25 @@ function spawnAsync(
 
     let stdout = ''
     let stderr = ''
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // Set up timeout if specified
+    if (options?.timeout && options.timeout > 0) {
+      timer = setTimeout(() => {
+        timedOut = true
+        proc.kill('SIGKILL')
+        reject(
+          new Error(
+            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
+          ),
+        )
+      }, options.timeout)
+    }
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+    }
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -43,6 +62,8 @@ function spawnAsync(
     })
 
     proc.on('close', (code) => {
+      cleanup()
+      if (timedOut) return // Already rejected by timeout
       if (code === 0) {
         resolve({ stdout, stderr })
       } else {
@@ -55,6 +76,8 @@ function spawnAsync(
     })
 
     proc.on('error', (err) => {
+      cleanup()
+      if (timedOut) return // Already rejected by timeout
       reject(new Error(`Failed to execute "${command}": ${err.message}`))
     })
   })
@@ -608,8 +631,31 @@ export class BinaryManager {
         )
       }
 
-      // Sort to get the latest version and return the URL
-      matches.sort().reverse()
+      // Sort by semver to get the latest version
+      // Filename pattern: postgresql-client-17_17.2.0-1.pgdg+1_amd64.deb
+      // Extract version (e.g., "17.2.0-1") and compare numerically
+      const parseVersion = (filename: string): number[] => {
+        // Extract version after the underscore: "17.2.0-1.pgdg..."
+        const versionMatch = filename.match(/_(\d+)\.(\d+)\.(\d+)-(\d+)/)
+        if (versionMatch) {
+          return [
+            parseInt(versionMatch[1], 10),
+            parseInt(versionMatch[2], 10),
+            parseInt(versionMatch[3], 10),
+            parseInt(versionMatch[4], 10),
+          ]
+        }
+        return [0, 0, 0, 0]
+      }
+
+      matches.sort((a, b) => {
+        const vA = parseVersion(a)
+        const vB = parseVersion(b)
+        for (let i = 0; i < 4; i++) {
+          if (vA[i] !== vB[i]) return vB[i] - vA[i]
+        }
+        return 0
+      })
       const latestPackage = matches[0]
 
       return `${indexUrl}${latestPackage}`

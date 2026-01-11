@@ -30,14 +30,17 @@ describe('SQLite version-maps', () => {
       assertEqual(result, '3.51.2', 'Full version should remain unchanged')
     })
 
-    it('should handle unknown single-part version with .0.0', () => {
+    it('should return unknown single-part version unchanged', () => {
+      // Unknown versions not in the map should be returned unchanged (with warning)
+      // This allows the download to fail with a clear error if the version doesn't exist
       const result = normalizeVersion('4')
-      assertEqual(result, '4.0.0', 'Unknown major version should get .0.0 suffix')
+      assertEqual(result, '4', 'Unknown major version should be unchanged')
     })
 
-    it('should handle unknown two-part version with .0', () => {
+    it('should return unknown two-part version unchanged', () => {
+      // Unknown versions not in the map should be returned unchanged (with warning)
       const result = normalizeVersion('4.0')
-      assertEqual(result, '4.0.0', 'Unknown minor version should get .0 suffix')
+      assertEqual(result, '4.0', 'Unknown minor version should be unchanged')
     })
   })
 

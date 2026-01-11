@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import { rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
@@ -74,6 +74,7 @@ function displayManualInstallInstructions(
 }
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 /**
  * Check which client tools are bundled in the downloaded binaries
@@ -205,23 +206,37 @@ async function installMissingClientTools(
         await execAsync(`brew tap ${pkg.tap}`, { timeout: INSTALL_TIMEOUT_MS })
       }
 
-      // Build install command - use sudo only if not root
-      const sudo = isRoot ? '' : 'sudo '
-      const installCommands: Record<string, string> = {
-        brew: `brew install ${pkg.package}`,
-        apt: `${sudo}apt-get update && ${sudo}apt-get install -y ${pkg.package}`,
-        yum: `${sudo}yum install -y ${pkg.package}`,
-        dnf: `${sudo}dnf install -y ${pkg.package}`,
-        choco: `choco install ${pkg.package} -y`,
-      }
-      const installCmd = installCommands[pmKey] ?? null
+      // Handle apt separately to avoid shell concatenation (security best practice)
+      if (pmKey === 'apt') {
+        // Run apt-get update and apt-get install as separate commands with argument arrays
+        const aptGetPath = isRoot ? 'apt-get' : 'sudo'
+        const updateArgs = isRoot
+          ? ['update']
+          : ['apt-get', 'update']
+        const installArgs = isRoot
+          ? ['install', '-y', pkg.package]
+          : ['apt-get', 'install', '-y', pkg.package]
 
-      if (!installCmd) {
-        failed.push(...pkg.tools)
-        continue
-      }
+        await execFileAsync(aptGetPath, updateArgs, { timeout: INSTALL_TIMEOUT_MS })
+        await execFileAsync(aptGetPath, installArgs, { timeout: INSTALL_TIMEOUT_MS })
+      } else {
+        // Other package managers use shell commands (package names are validated above)
+        const sudo = isRoot ? '' : 'sudo '
+        const installCommands: Record<string, string> = {
+          brew: `brew install ${pkg.package}`,
+          yum: `${sudo}yum install -y ${pkg.package}`,
+          dnf: `${sudo}dnf install -y ${pkg.package}`,
+          choco: `choco install ${pkg.package} -y`,
+        }
+        const installCmd = installCommands[pmKey] ?? null
 
-      await execAsync(installCmd, { timeout: INSTALL_TIMEOUT_MS })
+        if (!installCmd) {
+          failed.push(...pkg.tools)
+          continue
+        }
+
+        await execAsync(installCmd, { timeout: INSTALL_TIMEOUT_MS })
+      }
 
       // Register the installed tools
       for (const tool of pkg.tools) {

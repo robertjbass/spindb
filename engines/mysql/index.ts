@@ -167,9 +167,30 @@ export class MySQLEngine extends BaseEngine {
   }
 
   /**
-   * Verify MySQL binaries are installed and working
-   * @param binPath - Path to the binary directory
-   * @param version - Optional explicit version (preferred over path extraction)
+   * Verify MySQL binaries are installed and working.
+   *
+   * **Prefer passing `version` explicitly** - the fallback path extraction is fragile.
+   *
+   * When `version` is provided, verification uses it directly. Otherwise, the method
+   * attempts to extract a semver-like pattern (`\d+\.\d+\.\d+`) from the basename of
+   * `binPath` (e.g., "mysql-8.0.40-darwin-arm64" → "8.0.40"). This fallback can fail
+   * if the path doesn't follow the expected naming convention, resulting in false negatives.
+   *
+   * Platform and architecture are derived internally via `getPlatformInfo()`.
+   * Verification is delegated to `mysqlBinaryManager.verify(version, platform, arch)`.
+   *
+   * @param binPath - Path to the binary directory (used for fallback version extraction)
+   * @param version - Explicit version string (e.g., "8.0.40", "9.1.0"). Always pass this
+   *   when available to avoid relying on path-based extraction.
+   * @returns `true` if binaries are verified, `false` if verification fails or version
+   *   cannot be determined
+   *
+   * @example
+   * // Preferred: pass version explicitly
+   * await engine.verifyBinary('/path/to/mysql-8.0.40-darwin-arm64', '8.0.40')
+   *
+   * // Fallback: version extracted from path (less reliable)
+   * await engine.verifyBinary('/path/to/mysql-8.0.40-darwin-arm64')
    */
   async verifyBinary(binPath: string, version?: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
@@ -207,19 +228,9 @@ export class MySQLEngine extends BaseEngine {
 
     // Register all MySQL binaries from downloaded package
     const ext = platformService.getExecutableExtension()
+    const tools = ['mysqld', 'mysqladmin', 'mysql', 'mysqldump'] as const
 
-    // Server binaries
-    const serverTools = ['mysqld', 'mysqladmin'] as const
-    for (const tool of serverTools) {
-      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
-      if (existsSync(toolPath)) {
-        await configManager.setBinaryPath(tool, toolPath, 'bundled')
-      }
-    }
-
-    // Client tools
-    const clientTools = ['mysql', 'mysqldump'] as const
-    for (const tool of clientTools) {
+    for (const tool of tools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')

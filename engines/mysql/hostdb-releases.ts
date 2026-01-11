@@ -20,6 +20,7 @@ import {
   type HostdbReleasesData,
   type HostdbPlatform,
 } from '../../core/hostdb-client'
+import { mysqlBinaryManager } from './binary-manager'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -32,47 +33,71 @@ export const fetchHostdbReleases = fetchReleases
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
+  // Try to fetch from hostdb first
   try {
     const releases = await fetchHostdbReleases()
     const mysqlReleases = getEngineReleases(releases, 'mysql')
 
-    if (!mysqlReleases) {
-      // No MySQL releases in hostdb yet, use fallback
-      return getFallbackVersions()
-    }
+    if (mysqlReleases && Object.keys(mysqlReleases).length > 0) {
+      // Group versions by major version
+      const grouped: Record<string, string[]> = {}
 
-    // Group versions by major version
-    const grouped: Record<string, string[]> = {}
+      for (const major of SUPPORTED_MAJOR_VERSIONS) {
+        grouped[major] = []
 
-    for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      grouped[major] = []
+        // Find all versions matching this major version
+        for (const [_versionKey, release] of Object.entries(mysqlReleases)) {
+          // MySQL uses X.Y format for major versions (e.g., 8.0.40 matches 8.0)
+          // But also supports single digit major (e.g., 9.1.0 matches 9)
+          const versionParts = release.version.split('.')
+          const releaseMajor = versionParts.slice(0, 2).join('.')
+          const releaseSingleMajor = versionParts[0]
 
-      // Find all versions matching this major version
-      for (const [_versionKey, release] of Object.entries(mysqlReleases)) {
-        // MySQL uses X.Y format for major versions (e.g., 8.0.40 matches 8.0)
-        // But also supports single digit major (e.g., 9.1.0 matches 9)
-        const versionParts = release.version.split('.')
-        const releaseMajor = versionParts.slice(0, 2).join('.')
-        const releaseSingleMajor = versionParts[0]
-
-        if (releaseMajor === major || releaseSingleMajor === major) {
-          grouped[major].push(release.version)
+          if (releaseMajor === major || releaseSingleMajor === major) {
+            grouped[major].push(release.version)
+          }
         }
+
+        // Sort descending (latest first)
+        grouped[major].sort((a, b) => compareVersions(b, a))
       }
 
-      // Sort descending (latest first)
-      grouped[major].sort((a, b) => compareVersions(b, a))
+      return grouped
     }
-
-    return grouped
-  } catch {
-    // Fallback to version map on error
-    return getFallbackVersions()
+  } catch (error) {
+    logDebug('Failed to fetch MySQL versions from hostdb, checking local', {
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
+
+  // Offline fallback: return only locally installed versions
+  const installed = await mysqlBinaryManager.listInstalled()
+  if (installed.length > 0) {
+    const result: Record<string, string[]> = {}
+    for (const binary of installed) {
+      // MySQL uses X.Y format for major versions
+      const parts = binary.version.split('.')
+      const major = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
+      if (!result[major]) {
+        result[major] = []
+      }
+      if (!result[major].includes(binary.version)) {
+        result[major].push(binary.version)
+      }
+    }
+    // Sort each major version group descending
+    for (const major of Object.keys(result)) {
+      result[major].sort((a, b) => compareVersions(b, a))
+    }
+    return result
+  }
+
+  // Last resort: return hardcoded version map
+  return getHardcodedVersions()
 }
 
-// Get fallback versions when network is unavailable
-function getFallbackVersions(): Record<string, string[]> {
+// Get hardcoded versions as last resort fallback
+function getHardcodedVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {
     grouped[major] = [MYSQL_VERSION_MAP[major]]

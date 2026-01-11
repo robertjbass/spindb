@@ -25,18 +25,20 @@ describe('BinaryManager', () => {
       }
     })
 
-    it('should normalize two-part versions to three parts', () => {
+    it('should return unknown two-part versions unchanged', () => {
       const binaryManager = new BinaryManager()
 
+      // Unknown versions not in the map should be returned unchanged (with warning)
+      // This allows the download to fail with a clear error if the version doesn't exist
       assertEqual(
         binaryManager.getFullVersion('16.9'),
-        '16.9.0',
-        'Should add .0 to two-part versions',
+        '16.9',
+        'Unknown two-part versions should be unchanged',
       )
       assertEqual(
         binaryManager.getFullVersion('15.4'),
-        '15.4.0',
-        'Should add .0 to two-part versions',
+        '15.4',
+        'Unknown two-part versions should be unchanged',
       )
     })
 

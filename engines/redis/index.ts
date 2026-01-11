@@ -170,17 +170,9 @@ export class RedisEngine extends BaseEngine {
 
     // Register binaries in config
     const ext = platformService.getExecutableExtension()
-    const serverTools = ['redis-server'] as const
-    const clientTools = ['redis-cli'] as const
+    const tools = ['redis-server', 'redis-cli'] as const
 
-    for (const tool of serverTools) {
-      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
-      if (existsSync(toolPath)) {
-        await configManager.setBinaryPath(tool, toolPath, 'bundled')
-      }
-    }
-
-    for (const tool of clientTools) {
+    for (const tool of tools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')

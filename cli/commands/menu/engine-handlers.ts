@@ -46,24 +46,23 @@ export async function handleEngines(): Promise<void> {
     return
   }
 
-  const pgEngines = engines.filter(
-    (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
-  )
-  const mariadbEngines = engines.filter(
-    (e): e is InstalledMariadbEngine => e.engine === 'mariadb',
-  )
-  const mysqlEngines = engines.filter(
-    (e): e is InstalledMysqlEngine => e.engine === 'mysql',
-  )
-  const sqliteEngines = engines.filter(
-    (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
-  )
-  const mongodbEngines = engines.filter(
-    (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
-  )
-  const redisEngines = engines.filter(
-    (e): e is InstalledRedisEngine => e.engine === 'redis',
-  )
+  const [
+    pgEngines,
+    mariadbEngines,
+    mysqlEngines,
+    sqliteEngines,
+    mongodbEngines,
+    redisEngines,
+  ] = [
+    engines.filter(
+      (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
+    ),
+    engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
+    engines.filter((e): e is InstalledMysqlEngine => e.engine === 'mysql'),
+    engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
+    engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
+    engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
+  ]
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   const totalMariadbSize = mariadbEngines.reduce(
@@ -253,4 +252,3 @@ async function handleDeleteEngine(
     spinner.fail(`Failed to delete: ${e.message}`)
   }
 }
-

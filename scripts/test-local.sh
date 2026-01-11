@@ -54,6 +54,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Configurable timeouts (can be overridden via environment)
+STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-30}  # seconds to wait for database readiness
+POLL_INTERVAL=${POLL_INTERVAL:-1}       # seconds between readiness checks
+
 # Test counters
 PASSED=0
 FAILED=0
@@ -83,6 +87,52 @@ log_section() {
   echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
   echo -e "${BLUE}  $1${NC}"
   echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
+}
+
+# Wait for database to be ready by polling with a readiness check
+# Returns 0 on success, 1 on timeout
+wait_for_ready() {
+  local engine=$1
+  local container_name=$2
+  local elapsed=0
+
+  log_info "Waiting for $engine to be ready (timeout: ${STARTUP_TIMEOUT}s)..."
+
+  while [ $elapsed -lt $STARTUP_TIMEOUT ]; do
+    local ready=false
+
+    case $engine in
+      postgresql|mysql|mariadb|sqlite)
+        if pnpm start run "$container_name" -c "SELECT 1;" >/dev/null 2>&1; then
+          ready=true
+        fi
+        ;;
+      mongodb)
+        if pnpm start run "$container_name" -c "db.runCommand({ping: 1})" >/dev/null 2>&1; then
+          ready=true
+        fi
+        ;;
+      redis)
+        if pnpm start run "$container_name" -c "PING" >/dev/null 2>&1; then
+          ready=true
+        fi
+        ;;
+    esac
+
+    if [ "$ready" = true ]; then
+      log_info "$engine ready after ${elapsed}s"
+      return 0
+    fi
+
+    sleep "$POLL_INTERVAL"
+    elapsed=$((elapsed + POLL_INTERVAL))
+
+    # Progress indicator every 5 seconds
+    [ $((elapsed % 5)) -eq 0 ] && log_info "Still waiting for $engine... (${elapsed}/${STARTUP_TIMEOUT}s)"
+  done
+
+  log_error "$engine did not become ready within ${STARTUP_TIMEOUT}s"
+  return 1
 }
 
 record_result() {
@@ -125,7 +175,9 @@ print_summary() {
 
     printf "│ %b %-56s │\n" "$icon" "$name"
     if [ -n "$message" ] && [ "$status" != "PASS" ]; then
-      printf "│   ${YELLOW}→ %s${NC}%*s│\n" "$message" $((52 - ${#message})) ""
+      local pad=$((52 - ${#message}))
+      [ $pad -lt 0 ] && pad=0
+      printf "│   ${YELLOW}→ %s${NC}%*s│\n" "$message" $pad ""
     fi
   done
 
@@ -253,8 +305,14 @@ test_engine_lifecycle() {
     fi
     record_result "$engine start" "PASS"
 
-    # Give it time to fully start
-    sleep 2
+    # Wait for database to be ready (with timeout and polling)
+    if ! wait_for_ready "$engine" "$container_name"; then
+      record_result "$engine readiness" "FAIL" "Timeout waiting for ready"
+      pnpm start stop "$container_name" 2>/dev/null || true
+      pnpm start delete "$container_name" --yes 2>/dev/null || true
+      return 1
+    fi
+    record_result "$engine readiness" "PASS"
 
     # Check status
     log_info "Checking container status..."

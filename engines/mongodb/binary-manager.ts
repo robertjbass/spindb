@@ -24,7 +24,7 @@ import { logDebug } from '../../core/error-handler'
 function spawnAsync(
   command: string,
   args: string[],
-  options?: { cwd?: string },
+  options?: { cwd?: string; timeout?: number },
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -34,6 +34,25 @@ function spawnAsync(
 
     let stdout = ''
     let stderr = ''
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // Set up timeout if specified
+    if (options?.timeout && options.timeout > 0) {
+      timer = setTimeout(() => {
+        timedOut = true
+        proc.kill('SIGKILL')
+        reject(
+          new Error(
+            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
+          ),
+        )
+      }, options.timeout)
+    }
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+    }
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -43,6 +62,8 @@ function spawnAsync(
     })
 
     proc.on('close', (code) => {
+      cleanup()
+      if (timedOut) return // Already rejected by timeout
       if (code === 0) {
         resolve({ stdout, stderr })
       } else {
@@ -55,6 +76,8 @@ function spawnAsync(
     })
 
     proc.on('error', (err) => {
+      cleanup()
+      if (timedOut) return // Already rejected by timeout
       reject(new Error(`Failed to execute "${command}": ${err.message}`))
     })
   })
@@ -414,7 +437,8 @@ export class MongoDBBinaryManager {
       platform,
       arch,
     })
-    return join(binPath, 'bin', binary)
+    const ext = platform === 'win32' ? '.exe' : ''
+    return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary

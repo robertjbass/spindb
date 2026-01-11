@@ -313,7 +313,7 @@ async function getSqliteVersion(binPath: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(sqlite3Path, ['--version'])
     // sqlite3 --version outputs: "3.51.2 2025-01-08 12:00:00 ..."
-    const match = stdout.match(/^([\d.]+)/)
+    const match = stdout.match(/^(\d+\.\d+\.\d+)/)
     return match ? match[1] : null
   } catch {
     return null

@@ -167,26 +167,14 @@ export class MariaDBEngine extends BaseEngine {
     // Register all MariaDB binaries from downloaded package
     // Using native names only (not mysql-named ones to avoid conflicts with MySQL engine)
     const ext = platformService.getExecutableExtension()
+    const tools = ['mariadbd', 'mariadb-admin', 'mariadb', 'mariadb-dump'] as const
 
-    // Server binaries
-    const serverTools = ['mariadbd', 'mariadb-admin'] as const
-    for (const tool of serverTools) {
+    for (const tool of tools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
       } else {
-        logDebug(`Expected MariaDB server binary not found`, { tool, toolPath })
-      }
-    }
-
-    // Client tools
-    const clientTools = ['mariadb', 'mariadb-dump'] as const
-    for (const tool of clientTools) {
-      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
-      if (existsSync(toolPath)) {
-        await configManager.setBinaryPath(tool, toolPath, 'bundled')
-      } else {
-        logDebug(`Expected MariaDB client binary not found`, { tool, toolPath })
+        logDebug(`Expected MariaDB binary not found`, { tool, toolPath })
       }
     }
 

@@ -11,6 +11,7 @@ import type {
   VersionInfo,
   DumpInfo,
 } from '../../engines/mysql/version-validator'
+import { getMajorVersion } from '../../engines/mysql/binary-detection'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const mysqlFixturesDir = path.join(__dirname, '../fixtures/mysql/dumps')
@@ -346,6 +347,60 @@ describe('checkVersionCompatibility', () => {
       const result = checkVersionCompatibility(dumpInfo, mysqlTool, 'mysql')
       assert.equal(result.compatible, true)
       assert.equal(result.dumpInfo.version, null)
+    })
+  })
+})
+
+// =============================================================================
+// getMajorVersion Tests
+// =============================================================================
+
+describe('getMajorVersion', () => {
+  describe('standard version strings', () => {
+    it('should extract major.minor from full version', () => {
+      assert.equal(getMajorVersion('8.0.35'), '8.0')
+    })
+
+    it('should extract major.minor from three-part version', () => {
+      assert.equal(getMajorVersion('9.1.0'), '9.1')
+    })
+
+    it('should handle four-part versions', () => {
+      assert.equal(getMajorVersion('10.11.6.1'), '10.11')
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle empty string', () => {
+      assert.equal(getMajorVersion(''), '')
+    })
+
+    it('should handle single number version', () => {
+      assert.equal(getMajorVersion('8'), '8')
+    })
+
+    it('should handle version with leading "v"', () => {
+      assert.equal(getMajorVersion('v8.0.35'), '8.0')
+    })
+
+    it('should handle version with leading "V" (uppercase)', () => {
+      assert.equal(getMajorVersion('V9.1.0'), '9.1')
+    })
+
+    it('should handle version with whitespace', () => {
+      assert.equal(getMajorVersion('  8.0.35  '), '8.0')
+    })
+
+    it('should handle "v" prefix with single number', () => {
+      assert.equal(getMajorVersion('v8'), '8')
+    })
+
+    it('should handle two-part version', () => {
+      assert.equal(getMajorVersion('8.0'), '8.0')
+    })
+
+    it('should handle whitespace-only string', () => {
+      assert.equal(getMajorVersion('   '), '')
     })
   })
 })
