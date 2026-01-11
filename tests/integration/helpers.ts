@@ -12,6 +12,7 @@ import { getEngine } from '../../engines'
 import { paths } from '../../config/paths'
 import { isWindows } from '../../core/platform-service'
 import { Engine } from '../../types'
+import { compareVersions } from '../../core/version-utils'
 
 const execAsync = promisify(exec)
 
@@ -465,8 +466,8 @@ export async function getInstalledVersion(engine: Engine): Promise<string> {
     throw new Error(`No installed versions found for ${engine}`)
   }
 
-  // Return the first available version (highest version for system engines)
-  return availableVersions.sort().reverse()[0]
+  // Return the highest semantic version (using semver-aware comparison)
+  return availableVersions.sort((a, b) => compareVersions(b, a))[0]
 }
 
 // Execute SQL file using engine.runScript (tests the run command functionality)

@@ -18,22 +18,22 @@
 export const MYSQL_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → LTS
   '8': '8.4.3',
-  '9': '9.5.0',
+  '9': '9.1.0',
   // 2-part: major.minor → latest patch
   '8.0': '8.0.40',
   '8.4': '8.4.3',
-  '9.5': '9.5.0',
+  '9.1': '9.1.0',
   // 3-part: exact version (identity mapping)
   '8.0.40': '8.0.40',
   '8.4.3': '8.4.3',
-  '9.5.0': '9.5.0',
+  '9.1.0': '9.1.0',
 }
 
 /**
  * Supported major MySQL versions (2-part format).
  * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = ['8.0', '8.4', '9.5']
+export const SUPPORTED_MAJOR_VERSIONS = ['8.0', '8.4', '9.1']
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -55,40 +55,27 @@ export function getFullVersion(majorVersion: string): string | null {
  * Normalize a version string to X.Y.Z format.
  *
  * @param version - Version string (e.g., '8.0', '8.0.40', '9')
- * @returns Normalized version (e.g., '8.0.40', '9.1.0')
+ * @returns Normalized version (e.g., '8.0.40', '9.1.0') matching hostdb releases
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version key in the map, return the full version
+  // If it's a key in the map (major, major.minor, or full version), return the mapped value
+  // This handles all known versions including identity mappings for full versions
   const fullVersion = MYSQL_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it's already a known full version (a value in the map), return as-is
-  const knownVersions = Object.values(MYSQL_VERSION_MAP)
-  if (knownVersions.includes(version)) {
-    return version
-  }
-
-  // If it's already a full version (X.Y.Z), return as-is but warn if unknown
+  // Unknown version - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
   const parts = version.split('.')
-  if (parts.length === 3) {
-    // Validate format - each part should be numeric
-    if (!parts.every((p) => /^\d+$/.test(p))) {
-      console.warn(
-        `MySQL version '${version}' has invalid format, may not be available in hostdb`,
-      )
-    } else {
-      console.warn(
-        `MySQL version '${version}' not in version map, may not be available in hostdb`,
-      )
-    }
-    return version
+  if (parts.length === 3 && !parts.every((p) => /^\d+$/.test(p))) {
+    console.warn(
+      `MySQL version '${version}' has invalid format, may not be available in hostdb`,
+    )
+  } else {
+    console.warn(
+      `MySQL version '${version}' not in version map, may not be available in hostdb`,
+    )
   }
-
-  // Unknown version format - warn and return as-is
-  console.warn(
-    `MySQL version '${version}' not in version map, may not be available in hostdb`,
-  )
   return version
 }

@@ -251,6 +251,11 @@ export class BinaryManager {
         }
       }
 
+      // Fix hardcoded library paths on macOS (hostdb binaries have paths from build environment)
+      if (platform === 'darwin') {
+        await this.fixMacOSLibraryPaths(binPath, onProgress)
+      }
+
       // Verify the installation
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
@@ -367,6 +372,82 @@ export class BinaryManager {
         } catch {
           await cp(sourcePath, destPath, { recursive: true })
         }
+      }
+    }
+  }
+
+  /**
+   * Fix hardcoded library paths in macOS binaries
+   *
+   * hostdb binaries are built in GitHub Actions and contain hardcoded paths
+   * like /Users/runner/work/hostdb/hostdb/install/postgresql/lib/libpq.5.dylib
+   * that don't exist on the user's machine.
+   *
+   * This method uses install_name_tool to rewrite those paths to use
+   * @loader_path-relative references that work on any machine.
+   */
+  private async fixMacOSLibraryPaths(
+    binPath: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'configuring',
+      message: 'Fixing library paths for macOS...',
+    })
+
+    const binDir = join(binPath, 'bin')
+    if (!existsSync(binDir)) {
+      return
+    }
+
+    const binaries = await readdir(binDir)
+
+    // Pattern to match hostdb build paths (GitHub Actions runner paths)
+    const hostdbPathPattern = /\/Users\/runner\/work\/hostdb\/[^/]+\/install\/postgresql\/lib\//
+
+    for (const binary of binaries) {
+      const binaryPath = join(binDir, binary)
+
+      try {
+        // Use otool to get the library dependencies
+        const { stdout } = await spawnAsync('otool', ['-L', binaryPath])
+
+        // Parse otool output to find hostdb library references
+        // Format: "\tlibrary_path (compatibility version X, current version Y)"
+        const lines = stdout.split('\n')
+
+        for (const line of lines) {
+          const match = line.match(/^\t([^\s]+)/)
+          if (!match) continue
+
+          const libPath = match[1]
+
+          // Check if this is a hostdb build path that needs fixing
+          if (hostdbPathPattern.test(libPath)) {
+            // Extract just the library filename (e.g., "libpq.5.dylib")
+            const libName = libPath.split('/').pop()
+            if (!libName) continue
+
+            // Create the new relative path
+            const newPath = `@loader_path/../lib/${libName}`
+
+            // Use install_name_tool to change the path
+            try {
+              await spawnAsync('install_name_tool', [
+                '-change',
+                libPath,
+                newPath,
+                binaryPath,
+              ])
+            } catch {
+              // Some binaries may not be writable or may not need fixing
+              // Continue with other binaries
+            }
+          }
+        }
+      } catch {
+        // otool may fail on non-Mach-O files (scripts, etc.)
+        // Continue with other binaries
       }
     }
   }

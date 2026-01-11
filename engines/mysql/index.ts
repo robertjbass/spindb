@@ -289,9 +289,10 @@ export class MySQLEngine extends BaseEngine {
 
     // MySQL initialization
     // --initialize-insecure creates root user without password (for local dev)
+    const logFile = paths.getContainerLogPath(containerName, { engine: ENGINE })
     if (isWindows()) {
       // On Windows, use exec with properly quoted command
-      const cmd = `"${mysqld}" --initialize-insecure --datadir="${dataDir}"`
+      const cmd = `"${mysqld}" --initialize-insecure --datadir="${dataDir}" --log-error="${logFile}"`
 
       return new Promise((resolve, reject) => {
         exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
@@ -317,6 +318,7 @@ export class MySQLEngine extends BaseEngine {
       '--initialize-insecure',
       `--datadir=${dataDir}`,
       `--basedir=${binPath}`,
+      `--log-error=${logFile}`,
     ]
 
     // Only add --user when not running as root

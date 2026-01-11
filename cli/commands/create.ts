@@ -300,11 +300,11 @@ export const createCommand = new Command('create')
         }
 
         // Redis uses numbered databases (0-15), default to "0"
-        // Other engines default to container name
+        // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
         if (engine === Engine.Redis) {
           database = database ?? '0'
         } else {
-          database = database ?? containerName
+          database = database ?? containerName.replace(/-/g, '_')
         }
 
         // Validate database name to prevent SQL injection

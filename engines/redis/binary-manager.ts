@@ -9,11 +9,12 @@ import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec, spawn } from 'child_process'
+import { exec } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   type ProgressCallback,
@@ -31,69 +32,6 @@ function isRenameFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const code = (error as NodeJS.ErrnoException).code
   return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
-}
-
-// Execute a command using spawn with argument array (safer than shell interpolation)
-function spawnAsync(
-  command: string,
-  args: string[],
-  options?: { cwd?: string; timeout?: number },
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: options?.cwd,
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let timedOut = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    // Set up timeout if specified
-    if (options?.timeout && options.timeout > 0) {
-      timer = setTimeout(() => {
-        timedOut = true
-        proc.kill('SIGKILL')
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
-          ),
-        )
-      }, options.timeout)
-    }
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer)
-    }
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    proc.on('close', (code) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      if (code === 0) {
-        resolve({ stdout, stderr })
-      } else {
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
-          ),
-        )
-      }
-    })
-
-    proc.on('error', (err) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      reject(new Error(`Failed to execute "${command}": ${err.message}`))
-    })
-  })
 }
 
 export class RedisBinaryManager {

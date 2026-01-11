@@ -32,6 +32,7 @@ import {
   assertValidDatabaseName,
   SpinDBError,
   ErrorCodes,
+  logDebug,
 } from '../../core/error-handler'
 import type {
   ContainerConfig,
@@ -215,6 +216,8 @@ export class PostgreSQLEngine extends BaseEngine {
       const result = await findBinary(tool)
       if (result) {
         await configManager.setBinaryPath(tool, result.path, 'system')
+      } else {
+        logDebug(`PostgreSQL client tool '${tool}' not found on system, will remain unregistered`)
       }
     }
   }

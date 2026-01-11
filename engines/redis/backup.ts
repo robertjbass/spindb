@@ -11,25 +11,10 @@ import { copyFile, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { isWindows, platformService } from '../../core/platform-service'
-import { configManager } from '../../core/config-manager'
+import { isWindows } from '../../core/platform-service'
 import { paths } from '../../config/paths'
+import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
-
-/**
- * Get the path to redis-cli binary
- * First checks configManager (which has its own caching), then falls back to system PATH
- */
-async function getRedisCliPath(): Promise<string | null> {
-  // Check if we have a cached/bundled redis-cli
-  const configPath = await configManager.getBinaryPath('redis-cli')
-  if (configPath) {
-    return configPath
-  }
-
-  // Fallback to system PATH
-  return platformService.findToolPath('redis-cli')
-}
 
 const execAsync = promisify(exec)
 
@@ -91,11 +76,7 @@ async function createTextBackup(
 
   const redisCli = await getRedisCliPath()
   if (!redisCli) {
-    throw new Error(
-      'redis-cli not found. Install Redis:\n' +
-        '  macOS: brew install redis\n' +
-        '  Ubuntu: sudo apt install redis-tools\n',
-    )
+    throw new Error(REDIS_CLI_NOT_FOUND_ERROR)
   }
 
   const commands: string[] = []
@@ -264,11 +245,7 @@ async function createRdbBackup(
 
   const redisCli = await getRedisCliPath()
   if (!redisCli) {
-    throw new Error(
-      'redis-cli not found. Install Redis:\n' +
-        '  macOS: brew install redis\n' +
-        '  Ubuntu: sudo apt install redis-tools\n',
-    )
+    throw new Error(REDIS_CLI_NOT_FOUND_ERROR)
   }
 
   // Trigger background save

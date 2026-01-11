@@ -9,17 +9,8 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
+import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
-
-// Get mongodump path from config or system PATH
-async function getMongodumpPath(): Promise<string | null> {
-  const { configManager } = await import('../../core/config-manager')
-  const cachedPath = await configManager.getBinaryPath('mongodump')
-  if (cachedPath && existsSync(cachedPath)) return cachedPath
-
-  const { platformService } = await import('../../core/platform-service')
-  return platformService.findToolPath('mongodump')
-}
 
 /**
  * Create a backup of a MongoDB database using mongodump
@@ -38,10 +29,7 @@ export async function createBackup(
 
   const mongodump = await getMongodumpPath()
   if (!mongodump) {
-    throw new Error(
-      'mongodump not found. Ensure MongoDB binaries are downloaded:\n' +
-        '  spindb engines download mongodb',
-    )
+    throw new Error(MONGODUMP_NOT_FOUND_ERROR)
   }
 
   // Ensure output directory exists

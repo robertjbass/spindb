@@ -14,8 +14,8 @@ on:
 # We test on 5 OS variants to cover different platforms and architectures:
 #   - ubuntu-22.04 (x64) - LTS with older glibc/system libraries
 #   - ubuntu-24.04 (x64) - LTS with newer libraries (catches issues like libaio rename)
-#   - macos-13 (Intel x64)
-#   - macos-14 (ARM64/Apple Silicon)
+#   - macos-15 (Intel x64) - Sequoia
+#   - macos-14 (ARM64/Apple Silicon) - Sonoma
 #   - windows-latest (x64)
 #
 # Note: We test two Ubuntu versions instead of Linux ARM64 because:
@@ -45,7 +45,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64 (M1/M2)
           - windows-latest
     steps:
@@ -132,7 +132,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
           - windows-latest
     steps:
@@ -186,7 +186,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
           - windows-latest
     steps:
@@ -238,7 +238,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
           - windows-latest
     steps:
@@ -256,6 +256,24 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # MySQL requires libaio on Linux
+      # Ubuntu 22.04 uses libaio1, Ubuntu 24.04 uses libaio1t64 with renamed library
+      - name: Install libaio (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # Try libaio1 first (Ubuntu 22.04), fall back to libaio1t64 (Ubuntu 24.04)
+          if sudo apt-get install -y libaio1 2>/dev/null; then
+            echo "Installed libaio1"
+          else
+            sudo apt-get install -y libaio1t64
+            # Create symlink for MySQL which expects libaio.so.1
+            if [ -e /lib/x86_64-linux-gnu/libaio.so.1t64 ]; then
+              sudo ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+            fi
+            echo "Installed libaio1t64 with symlink"
+          fi
 
       # Cache MySQL binaries - these are ~100MB+ downloads
       - name: Cache MySQL binaries
@@ -290,7 +308,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
           - windows-latest
     steps:
@@ -341,7 +359,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
           - windows-latest
     steps:
@@ -382,6 +400,7 @@ jobs:
   # ============================================
   # Redis Integration Tests
   # Uses SpinDB to download and manage Redis binaries from hostdb
+  # NOTE: Redis does not support Windows natively, so Windows is excluded
   # ============================================
   test-redis:
     name: Redis (${{ matrix.os }})
@@ -392,9 +411,9 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
-          - windows-latest
+          # Windows excluded: Redis has no native Windows support
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -442,7 +461,7 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-13 # Intel
+          - macos-15 # Intel
           - macos-14 # ARM64
           - windows-latest
     steps:

@@ -29,6 +29,7 @@ import {
   parseConnectionString,
 } from './restore'
 import { createBackup } from './backup'
+import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -120,8 +121,55 @@ export class MongoDBEngine extends BaseEngine {
     return getBinaryUrl(version, platform, arch)
   }
 
-  // Verify that MongoDB binaries are available
-  async verifyBinary(binPath: string): Promise<boolean> {
+  // Resolves version string to full version (e.g., '8' -> '8.0.17')
+  resolveFullVersion(version: string): string {
+    // Check if already a full version (has at least two dots)
+    if (/^\d+\.\d+\.\d+$/.test(version)) {
+      return version
+    }
+    // It's a major or major.minor version, resolve using fallback map
+    return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
+  }
+
+  // Get the path where binaries for a version would be installed
+  getBinaryPath(version: string): string {
+    const fullVersion = this.resolveFullVersion(version)
+    const { platform: p, arch: a } = this.getPlatformInfo()
+    return paths.getBinaryPath({
+      engine: 'mongodb',
+      version: fullVersion,
+      platform: p,
+      arch: a,
+    })
+  }
+
+  /**
+   * Verify that MongoDB binaries are available and functional
+   *
+   * Delegates to mongodbBinaryManager.verify() which:
+   * 1. Checks file existence
+   * 2. Executes `mongod --version`
+   * 3. Validates version output matches expected version
+   *
+   * @param binPath - Path to MongoDB binary directory (e.g., ~/.spindb/bin/mongodb-8.0.17-darwin-arm64)
+   * @param version - Optional explicit version to verify against
+   */
+  async verifyBinary(binPath: string, version?: string): Promise<boolean> {
+    const { platform: p, arch: a } = this.getPlatformInfo()
+
+    // Use explicit version if provided
+    if (version) {
+      return mongodbBinaryManager.verify(version, p, a)
+    }
+
+    // Fallback: extract version from path (format: mongodb-{version}-{platform}-{arch})
+    const parts = binPath.split('-')
+    if (parts.length >= 2) {
+      const extractedVersion = parts[1]
+      return mongodbBinaryManager.verify(extractedVersion, p, a)
+    }
+
+    // Last resort: just check file existence
     const mongodPath = join(binPath, 'bin', 'mongod')
     return existsSync(mongodPath)
   }
@@ -388,7 +436,19 @@ export class MongoDBEngine extends BaseEngine {
     })
   }
 
-  // Wait for MongoDB to be ready to accept connections
+  /**
+   * Wait for MongoDB to be ready to accept connections
+   *
+   * Uses two strategies depending on tool availability:
+   * 1. **Preferred (mongosh available)**: Executes `db.runCommand({ping:1})` via mongosh
+   *    to verify MongoDB is fully operational and responding to commands.
+   * 2. **Fallback (mongosh unavailable)**: Uses TCP port check via checkPortOpen().
+   *    TCP connectivity is a less thorough check than a mongosh ping - it only confirms
+   *    the port is accepting connections, not that MongoDB is fully initialized and
+   *    ready to process queries. However, for local development containers this is
+   *    acceptable since MongoDB typically accepts connections shortly after becoming
+   *    ready, and this avoids requiring mongosh to be installed.
+   */
   private async waitForReady(
     port: number,
     timeoutMs = 30000,
@@ -398,7 +458,8 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await configManager.getBinaryPath('mongosh')
     if (!mongosh) {
-      // No mongosh available - fall back to TCP port check
+      // Fallback: TCP port check when mongosh is unavailable
+      // Less thorough than db.runCommand({ping:1}) but sufficient for local dev containers
       logDebug(
         `mongosh not found, using TCP port check for MongoDB on port ${port}`,
       )
@@ -725,17 +786,9 @@ export class MongoDBEngine extends BaseEngine {
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult> {
-    // Get mongodump from config or fallback to system PATH
-    let mongodump = await configManager.getBinaryPath('mongodump')
-    if (!mongodump || !existsSync(mongodump)) {
-      mongodump = await platformService.findToolPath('mongodump')
-    }
+    const mongodump = await getMongodumpPath()
     if (!mongodump) {
-      throw new Error(
-        'mongodump not found. Download MongoDB binaries:\n' +
-          '  Run: spindb engines download mongodb <version>\n' +
-          '  Or download from: https://www.mongodb.com/try/download/database-tools',
-      )
+      throw new Error(MONGODUMP_NOT_FOUND_ERROR)
     }
 
     const parsed = parseConnectionString(connectionString)

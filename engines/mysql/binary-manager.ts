@@ -5,79 +5,15 @@
  * Similar to MariaDB/PostgreSQL binary manager but tailored for MySQL.
  */
 
-import { createWriteStream, existsSync, createReadStream } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { spawn } from 'child_process'
-import unzipper from 'unzipper'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
 import type { ProgressCallback, InstalledBinary } from '../../types'
-
-// Execute a command using spawn with argument array (safer than shell interpolation)
-function spawnAsync(
-  command: string,
-  args: string[],
-  options?: { cwd?: string; timeout?: number },
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: options?.cwd,
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let timedOut = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    // Set up timeout if specified
-    if (options?.timeout && options.timeout > 0) {
-      timer = setTimeout(() => {
-        timedOut = true
-        proc.kill('SIGKILL')
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
-          ),
-        )
-      }, options.timeout)
-    }
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer)
-    }
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    proc.on('close', (code) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      if (code === 0) {
-        resolve({ stdout, stderr })
-      } else {
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
-          ),
-        )
-      }
-    })
-
-    proc.on('error', (err) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      reject(new Error(`Failed to execute "${command}": ${err.message}`))
-    })
-  })
-}
 
 export class MySQLBinaryManager {
   /**
@@ -177,6 +113,8 @@ export class MySQLBinaryManager {
     await mkdir(binPath, { recursive: true })
 
     let success = false
+    // 5 minute timeout for downloading binaries (~100MB+)
+    const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000
     try {
       // Download the archive
       onProgress?.({
@@ -184,7 +122,25 @@ export class MySQLBinaryManager {
         message: 'Downloading MySQL binaries...',
       })
 
-      const response = await fetch(url)
+      // Set up fetch with timeout using AbortController
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+
+      let response: Response
+      try {
+        response = await fetch(url, { signal: controller.signal })
+      } catch (error) {
+        clearTimeout(timeoutId)
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(
+            `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
+              `Check your network connection and try again.`,
+          )
+        }
+        throw error
+      }
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
@@ -257,13 +213,8 @@ export class MySQLBinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract ZIP to temp directory first
-    await new Promise<void>((resolve, reject) => {
-      createReadStream(zipFile)
-        .pipe(unzipper.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject)
-    })
+    // Extract ZIP to temp directory using PowerShell
+    await extractWindowsArchive(zipFile, tempDir)
 
     await this.moveExtractedEntries(tempDir, binPath, 'mysql')
   }

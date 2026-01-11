@@ -7,7 +7,22 @@
 
 /**
  * Parse a version segment into numeric prefix and suffix
- * e.g., "7" -> { num: 7, suffix: "" }, "7-rc1" -> { num: 7, suffix: "-rc1" }
+ *
+ * Expected format: optional digits followed by optional suffix
+ * Examples:
+ *   "7"     -> { num: 7, suffix: "" }
+ *   "7-rc1" -> { num: 7, suffix: "-rc1" }
+ *   "0"     -> { num: 0, suffix: "" }
+ *
+ * Non-numeric segments (no leading digits):
+ *   "abc"   -> { num: -1, suffix: "abc" }
+ *   ""      -> { num: -1, suffix: "" }
+ *
+ * Use num === -1 to detect non-numeric segments. When comparing versions,
+ * non-numeric segments sort before numeric ones (since -1 < 0).
+ *
+ * @param segment - A single version segment (part between dots)
+ * @returns Object with numeric prefix and remaining suffix
  */
 export function parseVersionSegment(segment: string): {
   num: number
@@ -15,7 +30,8 @@ export function parseVersionSegment(segment: string): {
 } {
   const match = segment.match(/^(\d+)(.*)$/)
   if (!match) {
-    return { num: 0, suffix: segment }
+    // Non-numeric segment: use -1 as sentinel so callers can distinguish
+    return { num: -1, suffix: segment }
   }
   return { num: parseInt(match[1], 10), suffix: match[2] }
 }

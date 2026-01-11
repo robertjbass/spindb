@@ -107,8 +107,13 @@ function normalizeVersion(
     return version
   }
 
-  // For two-part versions (e.g., "7.4"), look up by major for latest patch
+  // For two-part versions (e.g., "7.4"), first try exact two-part key, then fall back to major
   if (parts.length === 2) {
+    const twoPart = `${parts[0]}.${parts[1]}`
+    if (versionMap[twoPart]) {
+      return versionMap[twoPart]
+    }
+    // Fall back to major version for latest patch
     const major = parts[0]
     const mapped = versionMap[major]
     if (mapped) {

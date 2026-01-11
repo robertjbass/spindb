@@ -21,7 +21,7 @@
       "icon": "🐬",
       "status": "integrated",
       "binarySource": "hostdb",
-      "supportedVersions": ["8.0.40", "8.4.3", "9.5.0"],
+      "supportedVersions": ["8.0.40", "8.4.3", "9.1.0"],
       "defaultVersion": "8.0.40",
       "defaultPort": 3306,
       "runtime": "server",

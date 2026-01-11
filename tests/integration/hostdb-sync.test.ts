@@ -95,9 +95,13 @@ describe('hostdb Version Sync Verification', () => {
     )
 
     if (missingEngines.length > 0) {
-      console.log(
-        `   ⚠ hostdb has engines not yet in SpinDB: ${missingEngines.join(', ')}`,
-      )
+      // Emit CI-visible warning (GitHub Actions annotation format + console.warn)
+      const message = `hostdb has engines not yet in SpinDB: ${missingEngines.join(', ')}`
+      if (process.env.GITHUB_ACTIONS) {
+        // GitHub Actions warning annotation - shows in CI summary
+        console.log(`::warning::${message}`)
+      }
+      console.warn(`   ⚠ ${message}`)
       // This is informational, not a failure - new engines are added intentionally
     }
 

@@ -11,26 +11,8 @@ import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import { logDebug } from '../../core/error-handler'
+import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import type { BackupFormat, RestoreResult } from '../../types'
-
-/**
- * Get the path to redis-cli binary
- * First checks configManager cache, then falls back to system PATH
- */
-async function getRedisCliPath(): Promise<string | null> {
-  // Import here to avoid circular dependency
-  const { configManager } = await import('../../core/config-manager')
-
-  // Check if we have a cached/bundled redis-cli
-  const cachedPath = await configManager.getBinaryPath('redis-cli')
-  if (cachedPath && existsSync(cachedPath)) {
-    return cachedPath
-  }
-
-  // Fallback to system PATH
-  const { platformService } = await import('../../core/platform-service')
-  return platformService.findToolPath('redis-cli')
-}
 
 /**
  * Common Redis commands used to detect text-based backup files
@@ -232,11 +214,7 @@ async function restoreTextBackup(
 ): Promise<RestoreResult> {
   const redisCli = await getRedisCliPath()
   if (!redisCli) {
-    throw new Error(
-      'redis-cli not found. Install Redis:\n' +
-        '  macOS: brew install redis\n' +
-        '  Ubuntu: sudo apt install redis-tools\n',
-    )
+    throw new Error(REDIS_CLI_NOT_FOUND_ERROR)
   }
 
   // Read the backup file

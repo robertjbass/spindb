@@ -31,9 +31,12 @@ export const MARIADB_VERSION_MAP: Record<string, string> = {
 
 /**
  * Supported major MariaDB versions (2-part format).
+ * Derived from MARIADB_VERSION_MAP keys to avoid duplication.
  * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = ['10.11', '11.4', '11.8']
+export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MARIADB_VERSION_MAP).filter(
+  (key) => key.split('.').length === 2,
+)
 
 /**
  * Get the full version string for a major version.
@@ -64,15 +67,8 @@ export function normalizeVersion(version: string): string {
     return version
   }
 
-  // If it looks like a full version (X.Y.Z), return as-is but warn
-  if (/^\d+\.\d+\.\d+$/.test(version)) {
-    console.warn(
-      `MariaDB version '${version}' not in version map, may not be available in hostdb`,
-    )
-    return version
-  }
-
-  // Unknown version format - warn and return unchanged
+  // Unknown version (either X.Y.Z format or other) - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
   console.warn(
     `MariaDB version '${version}' not in version map, may not be available in hostdb`,
   )

@@ -138,6 +138,28 @@ export class RedisEngine extends BaseEngine {
     return getBinaryUrl(version, platform, arch)
   }
 
+  // Resolves version string to full version (e.g., '8' -> '8.4.0')
+  resolveFullVersion(version: string): string {
+    // Check if already a full version (has at least two dots)
+    if (/^\d+\.\d+\.\d+$/.test(version)) {
+      return version
+    }
+    // It's a major version, resolve using version map
+    return VERSION_MAP[version] || `${version}.0.0`
+  }
+
+  // Get the path where binaries for a version would be installed
+  getBinaryPath(version: string): string {
+    const fullVersion = this.resolveFullVersion(version)
+    const { platform: p, arch: a } = this.getPlatformInfo()
+    return paths.getBinaryPath({
+      engine: 'redis',
+      version: fullVersion,
+      platform: p,
+      arch: a,
+    })
+  }
+
   // Verify that Redis binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
     const serverPath = join(binPath, 'bin', 'redis-server')

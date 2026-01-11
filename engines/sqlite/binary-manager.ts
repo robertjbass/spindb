@@ -11,11 +11,11 @@ import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
-import { spawn } from 'child_process'
 
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   type ProgressCallback,
@@ -31,69 +31,6 @@ function isRenameFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const code = (error as NodeJS.ErrnoException).code
   return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
-}
-
-// Execute a command using spawn with argument array (safer than shell interpolation)
-function spawnAsync(
-  command: string,
-  args: string[],
-  options?: { cwd?: string; timeout?: number },
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: options?.cwd,
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let timedOut = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    // Set up timeout if specified
-    if (options?.timeout && options.timeout > 0) {
-      timer = setTimeout(() => {
-        timedOut = true
-        proc.kill('SIGKILL')
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
-          ),
-        )
-      }, options.timeout)
-    }
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer)
-    }
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    proc.on('close', (code) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      if (code === 0) {
-        resolve({ stdout, stderr })
-      } else {
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
-          ),
-        )
-      }
-    })
-
-    proc.on('error', (err) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      reject(new Error(`Failed to execute "${command}": ${err.message}`))
-    })
-  })
 }
 
 export class SQLiteBinaryManager {
@@ -271,6 +208,47 @@ export class SQLiteBinaryManager {
     }
   }
 
+  /**
+   * Move extracted entries from extractDir to binPath.
+   * Handles both nested (sqlite/ or sqlite-* /) and flat archive structures.
+   * (Note: space before / prevents early comment termination)
+   * Uses rename with fallback to cp for cross-device or permission errors.
+   */
+  private async moveExtractedEntries(
+    extractDir: string,
+    binPath: string,
+  ): Promise<void> {
+    const entries = await readdir(extractDir, { withFileTypes: true })
+
+    // Check if there's a nested sqlite/ directory
+    const sqliteDir = entries.find(
+      (e) =>
+        e.isDirectory() &&
+        (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
+    )
+
+    // Determine source directory and entries to move
+    const sourceDir = sqliteDir ? join(extractDir, sqliteDir.name) : extractDir
+    const sourceEntries = sqliteDir
+      ? await readdir(sourceDir, { withFileTypes: true })
+      : entries
+
+    // Move each entry to binPath
+    for (const entry of sourceEntries) {
+      const sourcePath = join(sourceDir, entry.name)
+      const destPath = join(binPath, entry.name)
+      try {
+        await rename(sourcePath, destPath)
+      } catch (error) {
+        if (isRenameFallbackError(error)) {
+          await cp(sourcePath, destPath, { recursive: true })
+        } else {
+          throw error
+        }
+      }
+    }
+  }
+
   // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
@@ -288,47 +266,8 @@ export class SQLiteBinaryManager {
     await mkdir(extractDir, { recursive: true })
     await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Check if there's a nested sqlite/ directory
-    const entries = await readdir(extractDir, { withFileTypes: true })
-    const sqliteDir = entries.find(
-      (e) =>
-        e.isDirectory() &&
-        (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
-    )
-
-    if (sqliteDir) {
-      // Nested structure: move contents from sqlite/ to binPath
-      const sourceDir = join(extractDir, sqliteDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    }
+    // Move extracted entries to binPath
+    await this.moveExtractedEntries(extractDir, binPath)
   }
 
   // Extract Windows binaries from zip file
@@ -357,47 +296,8 @@ export class SQLiteBinaryManager {
       `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
     ])
 
-    // Check if there's a nested sqlite/ directory
-    const entries = await readdir(extractDir, { withFileTypes: true })
-    const sqliteDir = entries.find(
-      (e) =>
-        e.isDirectory() &&
-        (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
-    )
-
-    if (sqliteDir) {
-      // Nested structure: move contents from sqlite/ to binPath
-      const sourceDir = join(extractDir, sqliteDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    }
+    // Move extracted entries to binPath
+    await this.moveExtractedEntries(extractDir, binPath)
   }
 
   // Verify that SQLite binaries are working
@@ -431,15 +331,18 @@ export class SQLiteBinaryManager {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
-      // Check if major versions match
-      const expectedMajor = version.split('.')[0]
-      const reportedMajor = reportedVersion.split('.')[0]
-      if (expectedMajor === reportedMajor) {
+      // Check if full versions match exactly
+      if (reportedVersion === fullVersion) {
         return true
       }
 
-      // Check if full versions match
-      if (reportedVersion === fullVersion) {
+      // Check if major versions match (relaxed match due to version normalization)
+      const expectedMajor = version.split('.')[0]
+      const reportedMajor = reportedVersion.split('.')[0]
+      if (expectedMajor === reportedMajor) {
+        console.debug(
+          `SQLite version match by major version: requested ${version} (normalized to ${fullVersion}), binary reports ${reportedVersion}`,
+        )
         return true
       }
 

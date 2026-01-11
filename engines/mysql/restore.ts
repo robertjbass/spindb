@@ -160,9 +160,19 @@ export type RestoreOptions = {
  *
  * CLI equivalent: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
  */
-// Get the mysql client path from config or binPath
+/**
+ * Get the mysql client path from config or binPath
+ *
+ * Lookup order:
+ * 1. binPath/bin/mysql (hostdb layout: binaries are in bin/ subdirectory)
+ * 2. Config manager cached path
+ * 3. System PATH
+ *
+ * @param binPath - Optional path to MySQL binary directory (from hostdb download)
+ */
 async function getMysqlClientPath(binPath?: string): Promise<string> {
   // First check if binPath is provided and has mysql client
+  // hostdb packages MySQL binaries in a bin/ subdirectory
   if (binPath) {
     const ext = platformService.getExecutableExtension()
     const mysqlPath = join(binPath, 'bin', `mysql${ext}`)

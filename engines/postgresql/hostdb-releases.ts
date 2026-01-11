@@ -159,7 +159,7 @@ export async function getHostdbDownloadUrl(
 /**
  * Check if a version is available in hostdb
  *
- * @param version - Version to check
+ * @param version - Version to check (e.g., "17" or "17.7.0")
  * @returns true if the version exists in hostdb databases.json
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
@@ -168,10 +168,11 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map when network unavailable
+    // Accept either a major version key (e.g., "17") or its mapped full version (e.g., "17.7.0")
+    if (version in POSTGRESQL_VERSION_MAP) {
+      return true // Input is a major version key
+    }
     const major = version.split('.')[0]
-    return (
-      major in POSTGRESQL_VERSION_MAP ||
-      POSTGRESQL_VERSION_MAP[major] === version
-    )
+    return POSTGRESQL_VERSION_MAP[major] === version
   }
 }

@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import { rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
@@ -74,7 +74,6 @@ function displayManualInstallInstructions(
   }
 }
 
-const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
 /**
@@ -158,25 +157,37 @@ async function installMissingClientTools(
     return { installed, failed: missingTools, skipped }
   }
 
-  // Map our package manager to hostdb key
-  const ALLOWED_PACKAGE_MANAGERS = [
-    'brew',
-    'apt',
-    'yum',
-    'dnf',
-    'choco',
-  ] as const
-  type PackageManagerKey = (typeof ALLOWED_PACKAGE_MANAGERS)[number]
+  // Package manager keys supported by hostdb
+  type PackageManagerKey = 'brew' | 'apt' | 'yum' | 'dnf' | 'choco'
 
-  const normalizedName = pm.name.toLowerCase().replace(/[^a-z]/g, '')
-  if (!ALLOWED_PACKAGE_MANAGERS.includes(normalizedName as PackageManagerKey)) {
+  // Explicit mapping from package manager name variants to canonical keys
+  const PACKAGE_MANAGER_ALIASES: Record<string, PackageManagerKey> = {
+    // Homebrew
+    brew: 'brew',
+    homebrew: 'brew',
+    // APT
+    apt: 'apt',
+    'apt-get': 'apt',
+    aptget: 'apt',
+    // YUM
+    yum: 'yum',
+    // DNF
+    dnf: 'dnf',
+    // Chocolatey
+    choco: 'choco',
+    chocolatey: 'choco',
+  }
+
+  const lookupKey = pm.name.toLowerCase().trim()
+  const pmKey = PACKAGE_MANAGER_ALIASES[lookupKey]
+
+  if (!pmKey) {
     // Unknown package manager, cannot install automatically
     console.warn(
       `Unknown package manager: ${pm.name}, skipping automatic installation`,
     )
     return { installed, failed: missingTools, skipped }
   }
-  const pmKey = normalizedName as PackageManagerKey
 
   // Get the packages needed for missing tools
   const packages = await getPackagesForTools(missingTools, pmKey)
@@ -210,41 +221,54 @@ async function installMissingClientTools(
     try {
       // Handle Homebrew taps
       if (pmKey === 'brew' && pkg.tap) {
-        await execAsync(`brew tap ${pkg.tap}`, { timeout: INSTALL_TIMEOUT_MS })
+        await execFileAsync('brew', ['tap', pkg.tap], {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
       }
 
-      // Handle apt separately to avoid shell concatenation (security best practice)
+      // All package managers use execFileAsync with explicit argument arrays
       if (pmKey === 'apt') {
-        // Run apt-get update and apt-get install as separate commands with argument arrays
-        const aptGetPath = isRoot ? 'apt-get' : 'sudo'
+        // APT: Run apt-get update and apt-get install as separate commands
+        const aptExecutable = isRoot ? 'apt-get' : 'sudo'
         const updateArgs = isRoot ? ['update'] : ['apt-get', 'update']
         const installArgs = isRoot
           ? ['install', '-y', pkg.package]
           : ['apt-get', 'install', '-y', pkg.package]
 
-        await execFileAsync(aptGetPath, updateArgs, {
+        await execFileAsync(aptExecutable, updateArgs, {
           timeout: INSTALL_TIMEOUT_MS,
         })
-        await execFileAsync(aptGetPath, installArgs, {
+        await execFileAsync(aptExecutable, installArgs, {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+      } else if (pmKey === 'brew') {
+        // Homebrew: No sudo needed
+        await execFileAsync('brew', ['install', pkg.package], {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+      } else if (pmKey === 'yum') {
+        // YUM: Needs sudo for non-root
+        const executable = isRoot ? 'yum' : 'sudo'
+        const args = isRoot
+          ? ['install', '-y', pkg.package]
+          : ['yum', 'install', '-y', pkg.package]
+        await execFileAsync(executable, args, { timeout: INSTALL_TIMEOUT_MS })
+      } else if (pmKey === 'dnf') {
+        // DNF: Needs sudo for non-root
+        const executable = isRoot ? 'dnf' : 'sudo'
+        const args = isRoot
+          ? ['install', '-y', pkg.package]
+          : ['dnf', 'install', '-y', pkg.package]
+        await execFileAsync(executable, args, { timeout: INSTALL_TIMEOUT_MS })
+      } else if (pmKey === 'choco') {
+        // Chocolatey: No sudo on Windows
+        await execFileAsync('choco', ['install', pkg.package, '-y'], {
           timeout: INSTALL_TIMEOUT_MS,
         })
       } else {
-        // Other package managers use shell commands (package names are validated above)
-        const sudo = isRoot ? '' : 'sudo '
-        const installCommands: Record<string, string> = {
-          brew: `brew install ${pkg.package}`,
-          yum: `${sudo}yum install -y ${pkg.package}`,
-          dnf: `${sudo}dnf install -y ${pkg.package}`,
-          choco: `choco install ${pkg.package} -y`,
-        }
-        const installCmd = installCommands[pmKey] ?? null
-
-        if (!installCmd) {
-          failed.push(...pkg.tools)
-          continue
-        }
-
-        await execAsync(installCmd, { timeout: INSTALL_TIMEOUT_MS })
+        // Unknown package manager - should not reach here due to earlier validation
+        failed.push(...pkg.tools)
+        continue
       }
 
       // Register the installed tools
@@ -258,14 +282,14 @@ async function installMissingClientTools(
           )
           installed.push(tool)
         } else {
-          // Installed but can't find - maybe needs PATH refresh
+          // Package installed but binary not found - don't count as usable
           console.warn(
             chalk.yellow(
               `  Warning: ${tool} was installed but its binary was not found. ` +
                 'You may need to refresh your PATH and re-run this command.',
             ),
           )
-          installed.push(tool) // Still count as installed
+          failed.push(tool)
         }
       }
     } catch (error) {

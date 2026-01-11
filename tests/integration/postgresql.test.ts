@@ -71,21 +71,22 @@ describe('PostgreSQL Integration Tests', () => {
     )
 
     // Ensure PostgreSQL binaries are downloaded first
+    // NOTE: Version must match CI workflow download (spindb-pg-18 cache key)
     const engine = getEngine(ENGINE)
     console.log('   Ensuring PostgreSQL binaries are available...')
-    await engine.ensureBinaries('17', ({ message }) => {
+    await engine.ensureBinaries('18', ({ message }) => {
       console.log(`   ${message}`)
     })
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '17',
+      version: '18',
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the database cluster
-    await engine.initDataDir(containerName, '17', { superuser: 'postgres' })
+    await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -167,14 +168,14 @@ describe('PostgreSQL Integration Tests', () => {
     // Create container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '17',
+      version: '18',
       port: testPorts[1],
       database: DATABASE,
     })
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '17', {
+    await engine.initDataDir(clonedContainerName, '18', {
       superuser: 'postgres',
     })
 
@@ -470,13 +471,13 @@ describe('PostgreSQL Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '17',
+      version: '18',
       port: testPorts[2], // This port is in use by renamed container
       database: 'conflictdb',
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '17', {
+    await engine.initDataDir(portConflictContainerName, '18', {
       superuser: 'postgres',
     })
 

@@ -302,74 +302,18 @@ export async function getMysqlInstallInfo(
     }
   }
 
-  // Linux: Detect package manager from path or check installed packages
+  // Linux: Detect package manager using memoized helper
   if (platform === 'linux') {
-    // Check for apt (Debian/Ubuntu)
-    try {
-      const { stdout } = await execAsync('which apt 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
-        return {
-          packageManager: 'apt',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo apt remove ${packageName}`,
-          isMariaDB: mariadb,
-        }
+    const pm = await getLinuxPackageManager()
+    if (pm) {
+      const packageName = mariadb ? pm.mariadbPackage : pm.mysqlPackage
+      return {
+        packageManager: pm.name,
+        packageName,
+        path: mysqldPath,
+        uninstallCommand: pm.uninstallCmd(packageName),
+        isMariaDB: mariadb,
       }
-    } catch {
-      // Not apt
-    }
-
-    // Check for dnf (Fedora/RHEL 8+)
-    try {
-      const { stdout } = await execAsync('which dnf 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
-        return {
-          packageManager: 'dnf',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo dnf remove ${packageName}`,
-          isMariaDB: mariadb,
-        }
-      }
-    } catch {
-      // Not dnf
-    }
-
-    // Check for yum (CentOS/RHEL 7)
-    try {
-      const { stdout } = await execAsync('which yum 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
-        return {
-          packageManager: 'yum',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo yum remove ${packageName}`,
-          isMariaDB: mariadb,
-        }
-      }
-    } catch {
-      // Not yum
-    }
-
-    // Check for pacman (Arch Linux)
-    try {
-      const { stdout } = await execAsync('which pacman 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb' : 'mysql'
-        return {
-          packageManager: 'pacman',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo pacman -Rs ${packageName}`,
-          isMariaDB: mariadb,
-        }
-      }
-    } catch {
-      // Not pacman
     }
   }
 
@@ -381,4 +325,83 @@ export async function getMysqlInstallInfo(
     uninstallCommand: 'Use your system package manager to uninstall',
     isMariaDB: mariadb,
   }
+}
+
+/**
+ * Linux package manager configuration
+ * Prioritized list: most common package managers first for faster detection
+ */
+type LinuxPackageManagerConfig = {
+  name: MysqlPackageManager
+  command: string
+  mysqlPackage: string
+  mariadbPackage: string
+  uninstallCmd: (pkg: string) => string
+}
+
+const LINUX_PACKAGE_MANAGERS: LinuxPackageManagerConfig[] = [
+  {
+    name: 'apt',
+    command: 'apt',
+    mysqlPackage: 'mysql-server',
+    mariadbPackage: 'mariadb-server',
+    uninstallCmd: (pkg) => `sudo apt remove ${pkg}`,
+  },
+  {
+    name: 'dnf',
+    command: 'dnf',
+    mysqlPackage: 'mysql-server',
+    mariadbPackage: 'mariadb-server',
+    uninstallCmd: (pkg) => `sudo dnf remove ${pkg}`,
+  },
+  {
+    name: 'yum',
+    command: 'yum',
+    mysqlPackage: 'mysql-server',
+    mariadbPackage: 'mariadb-server',
+    uninstallCmd: (pkg) => `sudo yum remove ${pkg}`,
+  },
+  {
+    name: 'pacman',
+    command: 'pacman',
+    mysqlPackage: 'mysql',
+    mariadbPackage: 'mariadb',
+    uninstallCmd: (pkg) => `sudo pacman -Rs ${pkg}`,
+  },
+]
+
+// Memoized Linux package manager detection result
+let cachedLinuxPackageManager: LinuxPackageManagerConfig | null | undefined
+
+/**
+ * Detect the Linux package manager (memoized)
+ * Returns the first available package manager from the prioritized list
+ */
+async function getLinuxPackageManager(): Promise<LinuxPackageManagerConfig | null> {
+  // Return cached result if available (undefined means not checked yet)
+  if (cachedLinuxPackageManager !== undefined) {
+    return cachedLinuxPackageManager
+  }
+
+  for (const pm of LINUX_PACKAGE_MANAGERS) {
+    try {
+      const { stdout } = await execAsync(`which ${pm.command} 2>/dev/null`)
+      if (stdout.trim()) {
+        cachedLinuxPackageManager = pm
+        return pm
+      }
+    } catch {
+      // Package manager not found, try next
+    }
+  }
+
+  cachedLinuxPackageManager = null
+  return null
+}
+
+/**
+ * Clear the memoized package manager cache (useful for testing)
+ */
+export function clearPackageManagerCache(): void {
+  cachedLinuxPackageManager = undefined
 }

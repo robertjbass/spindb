@@ -143,7 +143,7 @@ describe('Orphaned Container Behavior', () => {
       const containerConfig = {
         name: 'mysql-db',
         engine: Engine.MySQL,
-        version: '9.5.0',
+        version: '9.1.0',
         port: 3306,
         database: 'testdb',
       }
@@ -165,7 +165,7 @@ describe('Orphaned Container Behavior', () => {
       const containerConfig = {
         name: 'mongo-db',
         engine: Engine.MongoDB,
-        version: '8.0.4',
+        version: '8.0.17',
         port: 27017,
         database: 'testdb',
       }
@@ -187,7 +187,7 @@ describe('Orphaned Container Behavior', () => {
       const containerConfig = {
         name: 'redis-db',
         engine: Engine.Redis,
-        version: '8.0.0',
+        version: '8.4.0',
         port: 6379,
         database: '0',
       }
@@ -429,9 +429,9 @@ describe('MySQL Engine Binary Check', () => {
   it('should return full version unchanged', async () => {
     const { mysqlEngine } = await import('../../engines/mysql')
 
-    const fullVersion = mysqlEngine.resolveFullVersion('9.5.0')
+    const fullVersion = mysqlEngine.resolveFullVersion('9.1.0')
 
-    assertEqual(fullVersion, '9.5.0', 'Full version should be unchanged')
+    assertEqual(fullVersion, '9.1.0', 'Full version should be unchanged')
   })
 
   it('should construct correct binary path', async () => {
@@ -483,6 +483,52 @@ describe('MongoDB Engine Binary Check', () => {
       'Should support MongoDB 8.x',
     )
   })
+
+  it('should resolve major version to full version', async () => {
+    const { mongodbEngine } = await import('../../engines/mongodb')
+
+    // Test version resolution
+    const fullVersion = mongodbEngine.resolveFullVersion('8')
+
+    assert(fullVersion.startsWith('8.'), 'Should resolve to 8.x.x')
+    assert(
+      fullVersion.split('.').length >= 2,
+      'Should have at least major.minor format',
+    )
+  })
+
+  it('should return full version unchanged', async () => {
+    const { mongodbEngine } = await import('../../engines/mongodb')
+
+    const fullVersion = mongodbEngine.resolveFullVersion('8.0.17')
+
+    assertEqual(fullVersion, '8.0.17', 'Full version should be unchanged')
+  })
+
+  it('should construct correct binary path', async () => {
+    const { mongodbEngine } = await import('../../engines/mongodb')
+
+    const binaryPath = mongodbEngine.getBinaryPath('8')
+
+    assert(
+      binaryPath.includes('mongodb-'),
+      'Path should include mongodb prefix',
+    )
+    assert(binaryPath.includes('8.'), 'Path should include resolved version')
+
+    // Verify full platform-architecture combo is present
+    const validPlatformArchCombos = [
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm64',
+      'linux-x64',
+      'win32-x64',
+    ]
+    assert(
+      validPlatformArchCombos.some((combo) => binaryPath.includes(combo)),
+      `Path should include one of the supported platform-arch combos: ${validPlatformArchCombos.join(', ')}`,
+    )
+  })
 })
 
 describe('Redis Engine Binary Check', () => {
@@ -507,6 +553,49 @@ describe('Redis Engine Binary Check', () => {
     assert(Array.isArray(versions), 'supportedVersions should be an array')
     assert(versions.length > 0, 'Should have at least one supported version')
     assert(versions.some((v) => v.startsWith('8')), 'Should support Redis 8.x')
+  })
+
+  it('should resolve major version to full version', async () => {
+    const { redisEngine } = await import('../../engines/redis')
+
+    // Test version resolution
+    const fullVersion = redisEngine.resolveFullVersion('8')
+
+    assert(fullVersion.startsWith('8.'), 'Should resolve to 8.x.x')
+    assert(
+      fullVersion.split('.').length >= 2,
+      'Should have at least major.minor format',
+    )
+  })
+
+  it('should return full version unchanged', async () => {
+    const { redisEngine } = await import('../../engines/redis')
+
+    const fullVersion = redisEngine.resolveFullVersion('8.4.0')
+
+    assertEqual(fullVersion, '8.4.0', 'Full version should be unchanged')
+  })
+
+  it('should construct correct binary path', async () => {
+    const { redisEngine } = await import('../../engines/redis')
+
+    const binaryPath = redisEngine.getBinaryPath('8')
+
+    assert(binaryPath.includes('redis-'), 'Path should include redis prefix')
+    assert(binaryPath.includes('8.'), 'Path should include resolved version')
+
+    // Verify full platform-architecture combo is present
+    const validPlatformArchCombos = [
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm64',
+      'linux-x64',
+      'win32-x64',
+    ]
+    assert(
+      validPlatformArchCombos.some((combo) => binaryPath.includes(combo)),
+      `Path should include one of the supported platform-arch combos: ${validPlatformArchCombos.join(', ')}`,
+    )
   })
 })
 

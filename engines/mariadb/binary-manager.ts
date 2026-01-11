@@ -5,82 +5,19 @@
  * Similar to PostgreSQL binary manager but tailored for MariaDB.
  */
 
-import { createWriteStream, existsSync, createReadStream } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec, spawn } from 'child_process'
+import { exec } from 'child_process'
 import { promisify } from 'util'
-import unzipper from 'unzipper'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
 import type { ProgressCallback, InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
-
-// Execute a command using spawn with argument array (safer than shell interpolation)
-function spawnAsync(
-  command: string,
-  args: string[],
-  options?: { cwd?: string; timeout?: number },
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: options?.cwd,
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let timedOut = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    // Set up timeout if specified
-    if (options?.timeout && options.timeout > 0) {
-      timer = setTimeout(() => {
-        timedOut = true
-        proc.kill('SIGKILL')
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
-          ),
-        )
-      }, options.timeout)
-    }
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer)
-    }
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    proc.on('close', (code) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      if (code === 0) {
-        resolve({ stdout, stderr })
-      } else {
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
-          ),
-        )
-      }
-    })
-
-    proc.on('error', (err) => {
-      cleanup()
-      if (timedOut) return // Already rejected by timeout
-      reject(new Error(`Failed to execute "${command}": ${err.message}`))
-    })
-  })
-}
 
 export class MariaDBBinaryManager {
   /**
@@ -255,13 +192,8 @@ export class MariaDBBinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract ZIP to temp directory first
-    await new Promise<void>((resolve, reject) => {
-      createReadStream(zipFile)
-        .pipe(unzipper.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject)
-    })
+    // Extract ZIP using PowerShell Expand-Archive
+    await extractWindowsArchive(zipFile, tempDir)
 
     await this.moveExtractedEntries(tempDir, binPath)
   }
@@ -311,9 +243,9 @@ export class MariaDBBinaryManager {
       try {
         await rename(sourcePath, destPath)
       } catch (error) {
-        // Only fallback to cp for cross-device rename errors
+        // Fallback to cp for cross-device (EXDEV) or permission (EPERM) errors
         const err = error as NodeJS.ErrnoException
-        if (err.code === 'EXDEV') {
+        if (err.code === 'EXDEV' || err.code === 'EPERM') {
           await cp(sourcePath, destPath, { recursive: true })
         } else {
           throw error
