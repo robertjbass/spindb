@@ -29,4 +29,3 @@ coverage/
 .env.*
 .npm
 .yarn
-pnpm-lock.yaml
