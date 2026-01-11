@@ -11,22 +11,73 @@ import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import { logDebug } from '../../core/error-handler'
-import { getRedisCliPath } from './binary-detection'
 import type { BackupFormat, RestoreResult } from '../../types'
+
+/**
+ * Get the path to redis-cli binary
+ * First checks configManager cache, then falls back to system PATH
+ */
+async function getRedisCliPath(): Promise<string | null> {
+  // Import here to avoid circular dependency
+  const { configManager } = await import('../../core/config-manager')
+
+  // Check if we have a cached/bundled redis-cli
+  const cachedPath = await configManager.getBinaryPath('redis-cli')
+  if (cachedPath && existsSync(cachedPath)) {
+    return cachedPath
+  }
+
+  // Fallback to system PATH
+  const { platformService } = await import('../../core/platform-service')
+  return platformService.findToolPath('redis-cli')
+}
 
 /**
  * Common Redis commands used to detect text-based backup files
  * These are the commands typically found at the start of a Redis command dump
  */
 const REDIS_COMMANDS = [
-  'SET', 'GET', 'DEL', 'MSET', 'MGET', 'SETNX', 'SETEX', 'PSETEX', 'APPEND',
-  'HSET', 'HGET', 'HMSET', 'HDEL', 'HGETALL', 'HSETNX',
-  'LPUSH', 'RPUSH', 'LPOP', 'RPOP', 'LSET', 'LINSERT', 'LREM',
-  'SADD', 'SREM', 'SMEMBERS', 'SPOP',
-  'ZADD', 'ZREM', 'ZINCRBY', 'ZRANGE',
-  'EXPIRE', 'EXPIREAT', 'PEXPIRE', 'TTL', 'PERSIST',
-  'FLUSHDB', 'FLUSHALL', 'SELECT',
-  'PFADD', 'GEOADD', 'XADD',
+  'SET',
+  'GET',
+  'DEL',
+  'MSET',
+  'MGET',
+  'SETNX',
+  'SETEX',
+  'PSETEX',
+  'APPEND',
+  'HSET',
+  'HGET',
+  'HMSET',
+  'HDEL',
+  'HGETALL',
+  'HSETNX',
+  'LPUSH',
+  'RPUSH',
+  'LPOP',
+  'RPOP',
+  'LSET',
+  'LINSERT',
+  'LREM',
+  'SADD',
+  'SREM',
+  'SMEMBERS',
+  'SPOP',
+  'ZADD',
+  'ZREM',
+  'ZINCRBY',
+  'ZRANGE',
+  'EXPIRE',
+  'EXPIREAT',
+  'PEXPIRE',
+  'TTL',
+  'PERSIST',
+  'FLUSHDB',
+  'FLUSHALL',
+  'SELECT',
+  'PFADD',
+  'GEOADD',
+  'XADD',
 ]
 
 /**
@@ -281,7 +332,13 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { containerName, dataDir, port, database = '0', flush = false } = options
+  const {
+    containerName,
+    dataDir,
+    port,
+    database = '0',
+    flush = false,
+  } = options
 
   if (!existsSync(backupPath)) {
     throw new Error(`Backup file not found: ${backupPath}`)
@@ -363,9 +420,7 @@ export function parseConnectionString(connectionString: string): {
 
   // Validate database number (0-15)
   if (isNaN(dbNum) || dbNum < 0 || dbNum > 15) {
-    throw new Error(
-      `Invalid Redis database number: ${dbStr}. Must be 0-15.`,
-    )
+    throw new Error(`Invalid Redis database number: ${dbStr}. Must be 0-15.`)
   }
 
   // Redis uses password only (no username), but URL might have username field

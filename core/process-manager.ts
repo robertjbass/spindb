@@ -407,7 +407,9 @@ export class ProcessManager {
     const pid = await this.getPid(containerName, options)
     if (!pid) {
       // No PID means the process isn't running - goal achieved
-      logDebug('No PID found for container (already stopped)', { containerName })
+      logDebug('No PID found for container (already stopped)', {
+        containerName,
+      })
       return true
     }
 

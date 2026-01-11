@@ -7,10 +7,7 @@
  * hostdb provides pre-built MariaDB binaries for multiple platforms.
  */
 
-import {
-  MARIADB_VERSION_MAP,
-  SUPPORTED_MAJOR_VERSIONS,
-} from './version-maps'
+import { MARIADB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 
 /**
  * Platform definition in hostdb releases.json
@@ -265,7 +262,10 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     // Fallback to checking version map
     // Handle both major versions ("11.8") and full versions ("11.8.5")
     const majorParts = version.split('.')
-    const major = majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
-    return version in MARIADB_VERSION_MAP || MARIADB_VERSION_MAP[major] === version
+    const major =
+      majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
+    return (
+      version in MARIADB_VERSION_MAP || MARIADB_VERSION_MAP[major] === version
+    )
   }
 }

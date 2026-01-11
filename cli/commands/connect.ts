@@ -467,7 +467,14 @@ export const connectCommand = new Command('connect')
           clientArgs = [config.database]
         } else if (useIredis) {
           clientCmd = 'iredis'
-          clientArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+          clientArgs = [
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String(config.port),
+            '-n',
+            database,
+          ]
         } else if (usePgcli) {
           clientCmd = 'pgcli'
           clientArgs = [connectionString]
@@ -490,7 +497,14 @@ export const connectCommand = new Command('connect')
           clientArgs = [config.database]
         } else if (engineName === Engine.Redis) {
           clientCmd = 'redis-cli'
-          clientArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+          clientArgs = [
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String(config.port),
+            '-n',
+            database,
+          ]
         } else if (engineName === 'mysql') {
           clientCmd = 'mysql'
           clientArgs = [

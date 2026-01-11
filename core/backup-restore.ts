@@ -98,7 +98,9 @@ export type BackupResult = {
 /**
  * Perform a backup operation
  */
-export async function performBackup(options: BackupOptions): Promise<BackupResult> {
+export async function performBackup(
+  options: BackupOptions,
+): Promise<BackupResult> {
   const {
     containerName,
     databaseName,
@@ -223,7 +225,9 @@ export function checkBackupSize(backupPath: string): {
 /**
  * Perform a restore operation
  */
-export async function performRestore(options: RestoreOptions): Promise<RestoreResult> {
+export async function performRestore(
+  options: RestoreOptions,
+): Promise<RestoreResult> {
   const {
     containerName,
     databaseName,

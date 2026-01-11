@@ -165,10 +165,7 @@ const HOMEBREW_MYSQL_VERSION_PATHS: Record<string, string[]> = {
     '/usr/local/opt/mysql@8.4/bin',
     '/usr/local/opt/mysql/bin',
   ],
-  '5': [
-    '/opt/homebrew/opt/mysql@5.7/bin',
-    '/usr/local/opt/mysql@5.7/bin',
-  ],
+  '5': ['/opt/homebrew/opt/mysql@5.7/bin', '/usr/local/opt/mysql@5.7/bin'],
 }
 
 /**

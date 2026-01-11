@@ -94,7 +94,9 @@ describe('MariaDB Integration Tests', () => {
 
     // Initialize the database cluster
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, DEFAULT_VERSION, { superuser: 'root' })
+    await engine.initDataDir(containerName, DEFAULT_VERSION, {
+      superuser: 'root',
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -182,7 +184,9 @@ describe('MariaDB Integration Tests', () => {
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, DEFAULT_VERSION, { superuser: 'root' })
+    await engine.initDataDir(clonedContainerName, DEFAULT_VERSION, {
+      superuser: 'root',
+    })
 
     const config = await containerManager.getConfig(clonedContainerName)
     assert(config !== null, 'Cloned container config should exist')
@@ -260,8 +264,14 @@ describe('MariaDB Integration Tests', () => {
     // Verify file contains SQL statements
     const { readFile } = await import('fs/promises')
     const content = await readFile(backupPath, 'utf-8')
-    assert(content.includes('CREATE TABLE'), 'Backup should contain CREATE TABLE')
-    assert(content.includes('test_user'), 'Backup should contain test_user table')
+    assert(
+      content.includes('CREATE TABLE'),
+      'Backup should contain CREATE TABLE',
+    )
+    assert(
+      content.includes('test_user'),
+      'Backup should contain test_user table',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -278,7 +288,10 @@ describe('MariaDB Integration Tests', () => {
     assert(config !== null, 'Container config should exist')
 
     const { tmpdir } = await import('os')
-    const backupPath = join(tmpdir(), `mariadb-dump-backup-${Date.now()}.sql.gz`)
+    const backupPath = join(
+      tmpdir(),
+      `mariadb-dump-backup-${Date.now()}.sql.gz`,
+    )
 
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
@@ -292,7 +305,10 @@ describe('MariaDB Integration Tests', () => {
     // Verify file is gzipped (starts with gzip magic bytes 1f 8b)
     const { readFile } = await import('fs/promises')
     const buffer = await readFile(backupPath)
-    assert(buffer[0] === 0x1f && buffer[1] === 0x8b, 'Backup should have gzip header')
+    assert(
+      buffer[0] === 0x1f && buffer[1] === 0x8b,
+      'Backup should have gzip header',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -331,16 +347,29 @@ describe('MariaDB Integration Tests', () => {
       database: testDb,
       createDatabase: false,
     })
-    console.log(`   Restore result: code=${restoreResult.code}, stderr=${restoreResult.stderr || 'none'}`)
+    console.log(
+      `   Restore result: code=${restoreResult.code}, stderr=${restoreResult.stderr || 'none'}`,
+    )
 
     // Check restore result for errors
     if (restoreResult.code !== 0 && restoreResult.code !== undefined) {
-      throw new Error(`Restore failed with code ${restoreResult.code}: ${restoreResult.stderr}`)
+      throw new Error(
+        `Restore failed with code ${restoreResult.code}: ${restoreResult.stderr}`,
+      )
     }
 
     // Verify data was restored
-    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      testDb,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should match source',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -509,9 +538,14 @@ describe('MariaDB Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

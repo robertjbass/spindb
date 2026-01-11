@@ -315,17 +315,11 @@ describe('BinaryManager', () => {
 
       // Test darwin-arm64 uses standard naming
       const armUrl = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
-      assert(
-        armUrl.includes('darwin-arm64'),
-        'ARM Mac should use darwin-arm64',
-      )
+      assert(armUrl.includes('darwin-arm64'), 'ARM Mac should use darwin-arm64')
 
       // Test darwin-x64 uses standard naming
       const intelUrl = binaryManager.getDownloadUrl('17', 'darwin', 'x64')
-      assert(
-        intelUrl.includes('darwin-x64'),
-        'Intel Mac should use darwin-x64',
-      )
+      assert(intelUrl.includes('darwin-x64'), 'Intel Mac should use darwin-x64')
 
       // Test linux-x64 uses standard naming
       const linuxUrl = binaryManager.getDownloadUrl('17', 'linux', 'x64')

@@ -162,7 +162,9 @@ export async function executeSQL(
   } else if (engine === Engine.MariaDB) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled mariadb if available, otherwise fall back to `mariadb` in PATH
-    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const mariadbPath = await engineImpl
+      .getMariadbClientPath()
+      .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
@@ -182,7 +184,9 @@ export async function executeSQL(
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled redis-cli if available
-    const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+    const redisCliPath = await engineImpl
+      .getRedisCliPath()
+      .catch(() => 'redis-cli')
     // For Redis, sql is a Redis command
     const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
     return execAsync(cmd)
@@ -218,7 +222,9 @@ export async function executeSQLFile(
     return execAsync(cmd)
   } else if (engine === Engine.MariaDB) {
     const engineImpl = getEngine(engine)
-    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const mariadbPath = await engineImpl
+      .getMariadbClientPath()
+      .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
@@ -228,7 +234,9 @@ export async function executeSQLFile(
     return execAsync(cmd)
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
-    const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+    const redisCliPath = await engineImpl
+      .getRedisCliPath()
+      .catch(() => 'redis-cli')
     // Redis uses pipe for file input: redis-cli -n <db> < file.redis
     const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} < "${filePath}"`
     return execAsync(cmd)
@@ -297,7 +305,9 @@ export async function getKeyCount(
   pattern: string,
 ): Promise<number> {
   const engineImpl = getEngine(Engine.Redis)
-  const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  const redisCliPath = await engineImpl
+    .getRedisCliPath()
+    .catch(() => 'redis-cli')
 
   // Use DBSIZE for full wildcard (O(1) vs O(N) for KEYS)
   if (pattern === '*' || pattern === '') {
@@ -332,7 +342,9 @@ export async function getRedisValue(
   key: string,
 ): Promise<string> {
   const engineImpl = getEngine(Engine.Redis)
-  const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  const redisCliPath = await engineImpl
+    .getRedisCliPath()
+    .catch(() => 'redis-cli')
   const { stdout } = await execAsync(
     `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} GET "${key}"`,
   )

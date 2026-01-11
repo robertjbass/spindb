@@ -927,15 +927,11 @@ async function handleStartContainer(containerName: string): Promise<void> {
       console.log(chalk.cyan(`    spindb edit ${containerName}`))
     } else {
       console.log(
-        uiWarning(
-          `Port ${config.port} is in use by another process.`,
-        ),
+        uiWarning(`Port ${config.port} is in use by another process.`),
       )
       console.log()
       console.log(
-        uiInfo(
-          'Stop the process using it or change this container\'s port.',
-        ),
+        uiInfo("Stop the process using it or change this container's port."),
       )
       console.log()
       console.log(

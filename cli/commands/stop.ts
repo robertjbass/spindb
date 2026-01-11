@@ -42,14 +42,19 @@ export const stopCommand = new Command('stop')
             let usedFallback = false
             let stopFailed = false
             if (container.engine === Engine.PostgreSQL) {
-              const isInstalled = await engine.isBinaryInstalled(container.version)
+              const isInstalled = await engine.isBinaryInstalled(
+                container.version,
+              )
               if (!isInstalled) {
                 if (spinner) {
                   spinner.text = `Stopping ${container.name} (engine missing, using fallback)...`
                 }
-                const killed = await processManager.killProcess(container.name, {
-                  engine: container.engine,
-                })
+                const killed = await processManager.killProcess(
+                  container.name,
+                  {
+                    engine: container.engine,
+                  },
+                )
                 if (!killed) {
                   spinner?.fail(`Failed to stop "${container.name}"`)
                   console.log(
@@ -143,14 +148,19 @@ export const stopCommand = new Command('stop')
         // If not, use fallback process kill
         let usedFallback = false
         if (config.engine === Engine.PostgreSQL) {
-          const isInstalled = await engine.isBinaryInstalled(config.version)
+          const isInstalled = await engine.isBinaryInstalled(
+            config.version,
+          )
           if (!isInstalled) {
             if (spinner) {
               spinner.text = `Stopping ${containerName} (engine missing, using fallback)...`
             }
-            const killed = await processManager.killProcess(containerName, {
-              engine: config.engine,
-            })
+            const killed = await processManager.killProcess(
+              containerName,
+              {
+                engine: config.engine,
+              },
+            )
             if (!killed) {
               spinner?.fail(`Failed to stop "${containerName}"`)
               console.log(

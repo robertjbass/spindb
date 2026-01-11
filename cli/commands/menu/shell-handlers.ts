@@ -73,14 +73,19 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
 
-  const [usqlInstalled, pgcliInstalled, mycliInstalled, litecliInstalled, iredisInstalled] =
-    await Promise.all([
-      isUsqlInstalled(),
-      isPgcliInstalled(),
-      isMycliInstalled(),
-      isLitecliInstalled(),
-      isIredisInstalled(),
-    ])
+  const [
+    usqlInstalled,
+    pgcliInstalled,
+    mycliInstalled,
+    litecliInstalled,
+    iredisInstalled,
+  ] = await Promise.all([
+    isUsqlInstalled(),
+    isPgcliInstalled(),
+    isMycliInstalled(),
+    isLitecliInstalled(),
+    isIredisInstalled(),
+  ])
 
   shellCheckSpinner.stop()
   // Clear the spinner line
@@ -171,7 +176,8 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   }
 
   // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis and MongoDB
-  const isNonSqlEngine = config.engine === 'redis' || config.engine === 'mongodb'
+  const isNonSqlEngine =
+    config.engine === 'redis' || config.engine === 'mongodb'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -352,7 +358,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
         console.error(uiError(`Failed to install iredis: ${result.error}`))
         console.log()
         console.log(chalk.gray('Manual installation:'))
-        for (const instruction of getIredisManualInstructions(platformService.getPlatformInfo().platform)) {
+        for (const instruction of getIredisManualInstructions(
+          platformService.getPlatformInfo().platform,
+        )) {
           console.log(chalk.cyan(`  ${instruction}`))
         }
         console.log()
@@ -362,7 +370,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       console.error(uiError('No supported package manager found'))
       console.log()
       console.log(chalk.gray('Manual installation:'))
-      for (const instruction of getIredisManualInstructions(platformService.getPlatformInfo().platform)) {
+      for (const instruction of getIredisManualInstructions(
+        platformService.getPlatformInfo().platform,
+      )) {
         console.log(chalk.cyan(`  ${instruction}`))
       }
       console.log()
@@ -421,7 +431,9 @@ async function launchShell(
     shellArgs = [config.database]
     installHint = 'brew install sqlite3'
   } else if (config.engine === 'mysql') {
-    shellCmd = 'mysql'
+    // MySQL uses downloaded binaries - get the actual path
+    const mysqlPath = await configManager.getBinaryPath('mysql')
+    shellCmd = mysqlPath || 'mysql'
     shellArgs = [
       '-u',
       'root',
@@ -431,7 +443,7 @@ async function launchShell(
       String(config.port),
       config.database,
     ]
-    installHint = 'brew install mysql-client'
+    installHint = 'spindb engines download mysql'
   } else if (config.engine === 'mariadb') {
     // MariaDB uses downloaded binaries, not system PATH - get the actual path
     const mariadbPath = await configManager.getBinaryPath('mariadb')
@@ -453,12 +465,26 @@ async function launchShell(
   } else if (shellType === 'iredis') {
     // iredis: enhanced Redis CLI
     shellCmd = 'iredis'
-    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', config.database]
+    shellArgs = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(config.port),
+      '-n',
+      config.database,
+    ]
     installHint = 'brew install iredis'
   } else if (config.engine === 'redis') {
     // Default Redis shell
     shellCmd = 'redis-cli'
-    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', config.database]
+    shellArgs = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(config.port),
+      '-n',
+      config.database,
+    ]
     installHint = 'brew install redis'
   } else {
     shellCmd = 'psql'

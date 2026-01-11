@@ -46,17 +46,17 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     maxConnections: 200, // Higher than default 100 for parallel builds (Next.js, etc.)
   },
   mysql: {
-    defaultVersion: '9.0',
+    defaultVersion: '9',
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
-    supportedVersions: ['5.7', '8.0', '8.4', '9.0'],
-    latestVersion: '9.0', // MySQL doesn't use versioned Homebrew packages, but kept for consistency
+    supportedVersions: ['8.0', '8.4', '9'], // Keep in sync with engines/mysql/version-maps.ts
+    latestVersion: '9',
     superuser: 'root',
     connectionScheme: 'mysql',
     logFileName: 'mysql.log',
     pidFileName: 'mysql.pid',
     dataSubdir: 'data',
-    clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
+    clientTools: ['mysql', 'mysqldump', 'mysqladmin'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
   mariadb: {
@@ -102,11 +102,11 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     maxConnections: 0, // Not applicable for MongoDB
   },
   redis: {
-    defaultVersion: '7',
+    defaultVersion: '8',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6400 },
-    supportedVersions: ['6', '7', '8'],
-    latestVersion: '7',
+    supportedVersions: ['7', '8'], // Keep in sync with engines/redis/version-maps.ts
+    latestVersion: '8',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis',
     logFileName: 'redis.log',

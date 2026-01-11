@@ -293,7 +293,11 @@ describe('Redis Integration Tests', () => {
     assert(config !== null, 'Container config should exist')
 
     // First, add a key that's NOT in the backup file
-    await runScriptSQL(containerName, 'SET extra:key "should-persist"', DATABASE)
+    await runScriptSQL(
+      containerName,
+      'SET extra:key "should-persist"',
+      DATABASE,
+    )
 
     // Create a text backup
     const { tmpdir } = await import('os')
@@ -323,7 +327,11 @@ describe('Redis Integration Tests', () => {
 
     // Verify extra key still exists (merge mode keeps existing keys)
     const extraKey = await getRedisValue(testPorts[0], DATABASE, 'extra:key')
-    assertEqual(extraKey, 'should-persist', 'Extra key should persist in merge mode')
+    assertEqual(
+      extraKey,
+      'should-persist',
+      'Extra key should persist in merge mode',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -334,7 +342,9 @@ describe('Redis Integration Tests', () => {
   })
 
   it('should restore from text format with replace mode (FLUSHDB)', async () => {
-    console.log(`\n📥 Testing text format restore (replace mode with FLUSHDB)...`)
+    console.log(
+      `\n📥 Testing text format restore (replace mode with FLUSHDB)...`,
+    )
 
     const engine = getEngine(ENGINE)
     const config = await containerManager.getConfig(containerName)
@@ -350,11 +360,19 @@ describe('Redis Integration Tests', () => {
     })
 
     // Add a key that's NOT in the backup
-    await runScriptSQL(containerName, 'SET extra:key "should-be-deleted"', DATABASE)
+    await runScriptSQL(
+      containerName,
+      'SET extra:key "should-be-deleted"',
+      DATABASE,
+    )
 
     // Verify extra key exists
     let extraKey = await getRedisValue(testPorts[0], DATABASE, 'extra:key')
-    assertEqual(extraKey, 'should-be-deleted', 'Extra key should exist before restore')
+    assertEqual(
+      extraKey,
+      'should-be-deleted',
+      'Extra key should exist before restore',
+    )
 
     // Restore with replace mode (flush: true) - runs FLUSHDB first
     await engine.restore(config!, backupPath, {
@@ -364,7 +382,10 @@ describe('Redis Integration Tests', () => {
 
     // Verify extra key is gone (FLUSHDB cleared it)
     extraKey = await getRedisValue(testPorts[0], DATABASE, 'extra:key')
-    assert(extraKey === null || extraKey === '', 'Extra key should be deleted by FLUSHDB')
+    assert(
+      extraKey === null || extraKey === '',
+      'Extra key should be deleted by FLUSHDB',
+    )
 
     // Verify backup data is restored
     const keyCount = await getKeyCount(testPorts[0], DATABASE, 'user:*')
@@ -408,7 +429,9 @@ describe('Redis Integration Tests', () => {
     // Clean up
     await rm(testFile, { force: true })
 
-    console.log('   ✓ Content-based detection works for files without .redis extension')
+    console.log(
+      '   ✓ Content-based detection works for files without .redis extension',
+    )
   })
 
   it('should modify data using runScript inline command', async () => {
@@ -541,9 +564,14 @@ describe('Redis Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

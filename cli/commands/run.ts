@@ -12,7 +12,10 @@ import { Engine } from '../../types'
 export const runCommand = new Command('run')
   .description('Run script file or command against a container')
   .argument('<name>', 'Container name')
-  .argument('[file]', 'Path to script file (SQL for relational DBs, Redis commands, etc.)')
+  .argument(
+    '[file]',
+    'Path to script file (SQL for relational DBs, Redis commands, etc.)',
+  )
   .option('-d, --database <name>', 'Target database (defaults to primary)')
   .option('-c, --command <cmd>', 'Command to execute (alternative to file)')
   .option('--sql <statement>', 'Alias for --command (deprecated)')
@@ -71,7 +74,9 @@ export const runCommand = new Command('run')
 
         if (file && command) {
           console.error(
-            uiError('Cannot specify both a file and --command option. Choose one.'),
+            uiError(
+              'Cannot specify both a file and --command option. Choose one.',
+            ),
           )
           process.exit(1)
         }
