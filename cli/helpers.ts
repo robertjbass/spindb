@@ -8,6 +8,30 @@ import { platformService } from '../core/platform-service'
 
 const execFileAsync = promisify(execFile)
 
+/**
+ * Calculate the total size of all files in a directory (recursive)
+ */
+async function calculateDirectorySize(dirPath: string): Promise<number> {
+  let sizeBytes = 0
+  try {
+    const files = await readdir(dirPath, { recursive: true })
+    for (const file of files) {
+      try {
+        const filePath = join(dirPath, file.toString())
+        const fileStat = await lstat(filePath)
+        if (fileStat.isFile()) {
+          sizeBytes += fileStat.size
+        }
+      } catch {
+        // Skip files we can't stat
+      }
+    }
+  } catch {
+    // Skip directories we can't read
+  }
+  return sizeBytes
+}
+
 export type InstalledPostgresEngine = {
   engine: 'postgresql'
   version: string
@@ -103,31 +127,14 @@ export async function getInstalledPostgresEngines(): Promise<
 
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      const match = entry.name.match(/^(\w+)-(.+)-(\w+)-(\w+)$/)
+      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
       if (match && match[1] === 'postgresql') {
         const [, , majorVersion, platform, arch] = match
         const dirPath = join(binDir, entry.name)
 
         const actualVersion =
           (await getPostgresVersion(dirPath)) || majorVersion
-
-        let sizeBytes = 0
-        try {
-          const files = await readdir(dirPath, { recursive: true })
-          for (const file of files) {
-            try {
-              const filePath = join(dirPath, file.toString())
-              const fileStat = await lstat(filePath)
-              if (fileStat.isFile()) {
-                sizeBytes += fileStat.size
-              }
-            } catch {
-              // Skip files we can't stat
-            }
-          }
-        } catch {
-          // Skip directories we can't read
-        }
+        const sizeBytes = await calculateDirectorySize(dirPath)
 
         engines.push({
           engine: 'postgresql',
@@ -189,24 +196,7 @@ export async function getInstalledMariadbEngines(): Promise<
         const dirPath = join(binDir, entry.name)
 
         const actualVersion = (await getMariadbVersion(dirPath)) || majorVersion
-
-        let sizeBytes = 0
-        try {
-          const files = await readdir(dirPath, { recursive: true })
-          for (const file of files) {
-            try {
-              const filePath = join(dirPath, file.toString())
-              const fileStat = await lstat(filePath)
-              if (fileStat.isFile()) {
-                sizeBytes += fileStat.size
-              }
-            } catch {
-              // Skip files we can't stat
-            }
-          }
-        } catch {
-          // Skip directories we can't read
-        }
+        const sizeBytes = await calculateDirectorySize(dirPath)
 
         engines.push({
           engine: 'mariadb',
@@ -265,24 +255,7 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
         const dirPath = join(binDir, entry.name)
 
         const actualVersion = (await getMysqlVersion(dirPath)) || majorVersion
-
-        let sizeBytes = 0
-        try {
-          const files = await readdir(dirPath, { recursive: true })
-          for (const file of files) {
-            try {
-              const filePath = join(dirPath, file.toString())
-              const fileStat = await lstat(filePath)
-              if (fileStat.isFile()) {
-                sizeBytes += fileStat.size
-              }
-            } catch {
-              // Skip files we can't stat
-            }
-          }
-        } catch {
-          // Skip directories we can't read
-        }
+        const sizeBytes = await calculateDirectorySize(dirPath)
 
         engines.push({
           engine: 'mysql',
@@ -370,24 +343,7 @@ async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
         const dirPath = join(binDir, entry.name)
 
         const actualVersion = (await getMongodbVersion(dirPath)) || majorVersion
-
-        let sizeBytes = 0
-        try {
-          const files = await readdir(dirPath, { recursive: true })
-          for (const file of files) {
-            try {
-              const filePath = join(dirPath, file.toString())
-              const fileStat = await lstat(filePath)
-              if (fileStat.isFile()) {
-                sizeBytes += fileStat.size
-              }
-            } catch {
-              // Skip files we can't stat
-            }
-          }
-        } catch {
-          // Skip directories we can't read
-        }
+        const sizeBytes = await calculateDirectorySize(dirPath)
 
         engines.push({
           engine: 'mongodb',
@@ -449,24 +405,7 @@ async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
         const dirPath = join(binDir, entry.name)
 
         const actualVersion = (await getRedisVersion(dirPath)) || majorVersion
-
-        let sizeBytes = 0
-        try {
-          const files = await readdir(dirPath, { recursive: true })
-          for (const file of files) {
-            try {
-              const filePath = join(dirPath, file.toString())
-              const fileStat = await lstat(filePath)
-              if (fileStat.isFile()) {
-                sizeBytes += fileStat.size
-              }
-            } catch {
-              // Skip files we can't stat
-            }
-          }
-        } catch {
-          // Skip directories we can't read
-        }
+        const sizeBytes = await calculateDirectorySize(dirPath)
 
         engines.push({
           engine: 'redis',

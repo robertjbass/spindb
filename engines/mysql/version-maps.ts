@@ -50,15 +50,16 @@ export function normalizeVersion(version: string): string {
     return fullVersion
   }
 
-  // If it has less than 3 parts, provide fallback
+  // If it's already a full version (X.Y.Z), return as-is
   const parts = version.split('.')
-  if (parts.length === 1) {
-    // Single number like '9' - already checked above, not in map
-    return `${version}.0.0`
-  } else if (parts.length === 2) {
-    // Two parts like '8.0' - already checked above, not in map
-    return `${version}.0`
+  if (parts.length === 3) {
+    return version
   }
 
+  // Unknown version format - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
+  console.warn(
+    `MySQL version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

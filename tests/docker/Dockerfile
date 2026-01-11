@@ -73,8 +73,9 @@ RUN apt-get update && apt-get install -y \
 RUN ln -sf /lib/aarch64-linux-gnu/libaio.so.1t64 /lib/aarch64-linux-gnu/libaio.so.1 2>/dev/null || \
     ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1 2>/dev/null || true
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm (pinned for reproducible builds)
+ARG PNPM_VERSION=9.14.2
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Create non-root user for running databases
 # PostgreSQL initdb refuses to run as root for security reasons

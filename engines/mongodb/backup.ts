@@ -41,9 +41,8 @@ export async function createBackup(
   const mongodump = await getMongodumpPath()
   if (!mongodump) {
     throw new Error(
-      'mongodump not found. Download MongoDB binaries:\n' +
-        '  Run: spindb engines download mongodb <version>\n' +
-        '  Or download from: https://www.mongodb.com/try/download/database-tools',
+      'mongodump not found. Ensure MongoDB binaries are downloaded:\n' +
+        '  spindb engines download mongodb',
     )
   }
 

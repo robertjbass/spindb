@@ -37,6 +37,12 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --engine)
+      if [ -z "$2" ] || [[ "$2" == -* ]]; then
+        echo "Error: --engine requires a value"
+        echo "Usage: $0 [--quick] [--fresh] [--engine <engine>]"
+        echo "Available engines: postgresql, mysql, mariadb, sqlite, mongodb, redis"
+        exit 1
+      fi
       SPECIFIC_ENGINE="$2"
       shift 2
       ;;
@@ -87,13 +93,13 @@ record_result() {
   RESULTS+=("$status|$test_name|$message")
 
   if [ "$status" = "PASS" ]; then
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
     log_success "$test_name"
   elif [ "$status" = "FAIL" ]; then
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
     log_error "$test_name: $message"
   else
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
     log_warning "$test_name: SKIPPED - $message"
   fi
 }

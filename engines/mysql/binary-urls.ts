@@ -35,6 +35,18 @@ export async function getLatestVersion(major: string): Promise<string> {
 export const VERSION_MAP = FALLBACK_VERSION_MAP
 
 /**
+ * Supported platform identifiers for hostdb downloads.
+ * hostdb uses standard Node.js platform naming.
+ */
+const SUPPORTED_PLATFORMS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
+
+/**
  * Get the hostdb platform identifier
  *
  * hostdb uses standard platform naming (e.g., 'darwin-arm64', 'linux-x64')
@@ -49,14 +61,7 @@ export function getHostdbPlatform(
   arch: string,
 ): string | undefined {
   const key = `${platform}-${arch}`
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-  return mapping[key]
+  return SUPPORTED_PLATFORMS.has(key) ? key : undefined
 }
 
 /**

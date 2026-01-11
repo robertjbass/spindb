@@ -114,12 +114,17 @@ run_test() {
       return 1
     fi
 
-    # Give it a moment to fully start
-    sleep 2
+    # Poll for running status (up to 15 seconds)
+    echo "Waiting for container to start..."
+    local status="unknown"
+    for i in {1..15}; do
+      status=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unknown")
+      [ "$status" = "running" ] && break
+      sleep 1
+    done
 
     # Verify container is running
     echo "Verifying container status..."
-    local status=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unknown")
     if [ "$status" != "running" ]; then
       echo "FAILED: Container status is '$status', expected 'running'"
       spindb stop "$container_name" 2>/dev/null || true

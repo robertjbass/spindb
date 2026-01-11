@@ -116,16 +116,17 @@ export class MongoDBBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('mongodb-')) {
-        const parts = entry.name.split('-')
-        if (parts.length >= 4) {
-          installed.push({
-            engine: Engine.MongoDB,
-            version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
-          })
-        }
+      if (!entry.isDirectory()) continue
+
+      // Use regex for robust parsing - handles versions with dashes (e.g., 8.0.0-rc1)
+      const match = entry.name.match(/^mongodb-(.+)-([^-]+)-([^-]+)$/)
+      if (match) {
+        installed.push({
+          engine: Engine.MongoDB,
+          version: match[1],
+          platform: match[2],
+          arch: match[3],
+        })
       }
     }
 
@@ -163,13 +164,28 @@ export class MongoDBBinaryManager {
     await mkdir(binPath, { recursive: true })
 
     try {
-      // Download the archive
+      // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
         message: 'Downloading MongoDB binaries...',
       })
 
-      const response = await fetch(url)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+      let response: Response
+      try {
+        response = await fetch(url, { signal: controller.signal })
+      } catch (error) {
+        const err = error as Error
+        if (err.name === 'AbortError') {
+          throw new Error('Download timed out after 5 minutes')
+        }
+        throw error
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
       if (!response.ok) {
         throw new Error(
           `Failed to download binaries: ${response.status} ${response.statusText}`,
@@ -272,8 +288,14 @@ export class MongoDBBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     } else {
@@ -283,8 +305,14 @@ export class MongoDBBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }
@@ -332,8 +360,14 @@ export class MongoDBBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     } else {
@@ -343,8 +377,14 @@ export class MongoDBBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }
@@ -377,17 +417,9 @@ export class MongoDBBinaryManager {
       const { stdout } = await execAsync(`"${mongodPath}" --version`)
       // Extract version from output like "db version v7.0.28"
       const match = stdout.match(/db version v(\d+\.\d+\.\d+)/)
-      if (!match) {
-        // Also try matching just version number pattern
-        const altMatch = stdout.match(/(\d+\.\d+\.\d+)/)
-        if (!altMatch) {
-          throw new Error(`Could not parse version from: ${stdout.trim()}`)
-        }
-      }
+      const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+)/) : null
+      const reportedVersion = match?.[1] ?? altMatch?.[1]
 
-      const reportedVersion = match
-        ? match[1]
-        : stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }

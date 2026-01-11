@@ -22,9 +22,7 @@ import {
 
 const execAsync = promisify(exec)
 
-/**
- * Execute a command using spawn with argument array (safer than shell interpolation)
- */
+// Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
   command: string,
   args: string[],
@@ -115,16 +113,17 @@ export class RedisBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('redis-')) {
-        const parts = entry.name.split('-')
-        if (parts.length >= 4) {
-          installed.push({
-            engine: Engine.Redis,
-            version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
-          })
-        }
+      if (!entry.isDirectory()) continue
+
+      // Use regex for robust parsing - handles versions with dashes (e.g., 7.4.0-rc1)
+      const match = entry.name.match(/^redis-(.+)-([^-]+)-([^-]+)$/)
+      if (match) {
+        installed.push({
+          engine: Engine.Redis,
+          version: match[1],
+          platform: match[2],
+          arch: match[3],
+        })
       }
     }
 
@@ -162,13 +161,28 @@ export class RedisBinaryManager {
     await mkdir(binPath, { recursive: true })
 
     try {
-      // Download the archive
+      // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
         message: 'Downloading Redis binaries...',
       })
 
-      const response = await fetch(url)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+      let response: Response
+      try {
+        response = await fetch(url, { signal: controller.signal })
+      } catch (error) {
+        const err = error as Error
+        if (err.name === 'AbortError') {
+          throw new Error('Download timed out after 5 minutes')
+        }
+        throw error
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
       if (!response.ok) {
         throw new Error(
           `Failed to download binaries: ${response.status} ${response.statusText}`,
@@ -252,8 +266,14 @@ export class RedisBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     } else {
@@ -263,8 +283,14 @@ export class RedisBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }
@@ -311,8 +337,14 @@ export class RedisBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     } else {
@@ -322,8 +354,14 @@ export class RedisBinaryManager {
         const destPath = join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } catch (error) {
+          // Only fallback to cp for cross-device rename errors
+          const err = error as NodeJS.ErrnoException
+          if (err.code === 'EXDEV') {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }
@@ -356,17 +394,9 @@ export class RedisBinaryManager {
       const { stdout } = await execAsync(`"${serverPath}" --version`)
       // Extract version from output like "Redis server v=7.4.7 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=..."
       const match = stdout.match(/v=(\d+\.\d+\.\d+)/)
-      if (!match) {
-        // Also try matching just version number pattern
-        const altMatch = stdout.match(/(\d+\.\d+\.\d+)/)
-        if (!altMatch) {
-          throw new Error(`Could not parse version from: ${stdout.trim()}`)
-        }
-      }
+      const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+)/) : null
+      const reportedVersion = match?.[1] ?? altMatch?.[1]
 
-      const reportedVersion = match
-        ? match[1]
-        : stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }

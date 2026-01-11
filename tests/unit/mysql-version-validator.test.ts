@@ -166,12 +166,14 @@ describe('parseDumpVersion', () => {
       assert.equal(result.variant, 'unknown')
     })
 
-    it('should parse version from README if dump headers appear in first 30 lines', async () => {
-      // README.md has dump examples within the first 30 lines
-      // The parser reads the first 30 lines and may find version info
-      const result = await parseDumpVersion(path.join(fixturesDir, 'README.md'))
+    it('should parse version from non-dump files containing dump headers', async () => {
+      // Tests that parseDumpVersion can extract version info from files
+      // that contain dump headers in the first 30 lines but aren't actual dumps
+      const result = await parseDumpVersion(
+        path.join(fixturesDir, 'embedded-header-example.txt'),
+      )
 
-      // Should parse the example dump header from the README
+      // Should parse the example dump header
       // Example: "-- MySQL dump 10.13  Distrib 8.0.36, for macos14.2 (arm64)"
       assert.notEqual(result.version, null)
       assert.equal(result.version?.major, 8)

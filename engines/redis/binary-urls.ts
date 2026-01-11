@@ -113,20 +113,35 @@ function normalizeVersion(
     return versionMap[version]
   }
 
-  // Normalize to X.Y.Z format based on parts count
   const parts = version.split('.')
+
+  // If it's already a full version (X.Y.Z), return as-is
+  if (parts.length === 3) {
+    return version
+  }
+
+  // For single-part versions, check the map by major
   if (parts.length === 1) {
-    // Single digit like "7" not in map - append .0.0
-    return `${version}.0.0`
-  } else if (parts.length === 2) {
-    // Two parts like "7.4" - look up by major for better version
+    const mapped = versionMap[version]
+    if (mapped) {
+      return mapped
+    }
+  }
+
+  // For two-part versions, look up by major for better version
+  if (parts.length === 2) {
     const major = parts[0]
     const mapped = versionMap[major]
     if (mapped) {
       return mapped
     }
-    return `${version}.0`
   }
+
+  // Unknown version format - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
+  console.warn(
+    `Redis version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }
 

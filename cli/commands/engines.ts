@@ -168,10 +168,28 @@ async function installMissingClientTools(
   // Get the packages needed for missing tools
   const packages = await getPackagesForTools(missingTools, pmKey)
 
+  // Pattern for validating package names (prevents command injection)
+  // Allows alphanumeric, @, ., _, -, / (for scoped packages and paths)
+  const SAFE_PACKAGE_PATTERN = /^[@a-zA-Z0-9][a-zA-Z0-9._/-]*$/
+
   // Check if running as root (no sudo needed)
   const isRoot = process.getuid?.() === 0
 
   for (const pkg of packages) {
+    // Validate package name to prevent command injection
+    if (!SAFE_PACKAGE_PATTERN.test(pkg.package)) {
+      console.warn(`Skipping invalid package name: ${pkg.package}`)
+      failed.push(...pkg.tools)
+      continue
+    }
+
+    // Also validate tap if present
+    if (pkg.tap && !SAFE_PACKAGE_PATTERN.test(pkg.tap)) {
+      console.warn(`Skipping invalid tap name: ${pkg.tap}`)
+      failed.push(...pkg.tools)
+      continue
+    }
+
     onProgress?.(
       `Installing ${pkg.package} (provides: ${pkg.tools.join(', ')})...`,
     )
@@ -225,6 +243,41 @@ async function installMissingClientTools(
   }
 
   return { installed, failed, skipped }
+}
+
+/**
+ * Check for bundled client tools and install any that are missing
+ *
+ * @param engineName - Engine name (e.g., 'postgresql', 'mysql')
+ * @param binPath - Path to the extracted binary directory
+ */
+async function checkAndInstallClientTools(
+  engineName: string,
+  binPath: string,
+): Promise<void> {
+  const requiredTools = await getRequiredClientTools(engineName)
+  const bundledTools = checkBundledTools(binPath, requiredTools)
+
+  if (bundledTools.length >= requiredTools.length) {
+    return // All tools are bundled
+  }
+
+  const clientSpinner = createSpinner('Checking client tools...')
+  clientSpinner.start()
+
+  const result = await installMissingClientTools(engineName, bundledTools, (msg) => {
+    clientSpinner.text = msg
+  })
+
+  if (result.installed.length > 0) {
+    clientSpinner.succeed(`Installed client tools: ${result.installed.join(', ')}`)
+  } else if (result.skipped.length > 0) {
+    clientSpinner.succeed(`Client tools already available: ${result.skipped.join(', ')}`)
+  } else if (result.failed.length > 0) {
+    clientSpinner.warn(`Could not install: ${result.failed.join(', ')}. Install manually.`)
+  } else {
+    clientSpinner.succeed('All client tools available')
+  }
 }
 
 /**
@@ -763,37 +816,7 @@ enginesCommand
         console.log(chalk.gray(`  Location: ${binPath}`))
 
         // Check for bundled client tools and install missing ones
-        const requiredTools = await getRequiredClientTools('postgresql')
-        const bundledTools = checkBundledTools(binPath, requiredTools)
-
-        if (bundledTools.length < requiredTools.length) {
-          const clientSpinner = createSpinner('Checking client tools...')
-          clientSpinner.start()
-
-          const result = await installMissingClientTools(
-            'postgresql',
-            bundledTools,
-            (msg) => {
-              clientSpinner.text = msg
-            },
-          )
-
-          if (result.installed.length > 0) {
-            clientSpinner.succeed(
-              `Installed client tools: ${result.installed.join(', ')}`,
-            )
-          } else if (result.skipped.length > 0) {
-            clientSpinner.succeed(
-              `Client tools already available: ${result.skipped.join(', ')}`,
-            )
-          } else if (result.failed.length > 0) {
-            clientSpinner.warn(
-              `Could not install: ${result.failed.join(', ')}. Install manually.`,
-            )
-          } else {
-            clientSpinner.succeed('All client tools available')
-          }
-        }
+        await checkAndInstallClientTools('postgresql', binPath)
         return
       }
 
@@ -837,40 +860,7 @@ enginesCommand
         console.log(chalk.gray(`  Location: ${mysqlBinPath}`))
 
         // Check for bundled client tools and install missing ones
-        const mysqlRequiredTools = await getRequiredClientTools('mysql')
-        const mysqlBundledTools = checkBundledTools(
-          mysqlBinPath,
-          mysqlRequiredTools,
-        )
-
-        if (mysqlBundledTools.length < mysqlRequiredTools.length) {
-          const clientSpinner = createSpinner('Checking client tools...')
-          clientSpinner.start()
-
-          const result = await installMissingClientTools(
-            'mysql',
-            mysqlBundledTools,
-            (msg) => {
-              clientSpinner.text = msg
-            },
-          )
-
-          if (result.installed.length > 0) {
-            clientSpinner.succeed(
-              `Installed client tools: ${result.installed.join(', ')}`,
-            )
-          } else if (result.skipped.length > 0) {
-            clientSpinner.succeed(
-              `Client tools already available: ${result.skipped.join(', ')}`,
-            )
-          } else if (result.failed.length > 0) {
-            clientSpinner.warn(
-              `Could not install: ${result.failed.join(', ')}. Install manually.`,
-            )
-          } else {
-            clientSpinner.succeed('All client tools available')
-          }
-        }
+        await checkAndInstallClientTools('mysql', mysqlBinPath)
         return
       }
 
@@ -916,40 +906,7 @@ enginesCommand
         console.log(chalk.gray(`  Location: ${mariadbBinPath}`))
 
         // Check for bundled client tools and install missing ones
-        const mariadbRequiredTools = await getRequiredClientTools('mariadb')
-        const mariadbBundledTools = checkBundledTools(
-          mariadbBinPath,
-          mariadbRequiredTools,
-        )
-
-        if (mariadbBundledTools.length < mariadbRequiredTools.length) {
-          const clientSpinner = createSpinner('Checking client tools...')
-          clientSpinner.start()
-
-          const result = await installMissingClientTools(
-            'mariadb',
-            mariadbBundledTools,
-            (msg) => {
-              clientSpinner.text = msg
-            },
-          )
-
-          if (result.installed.length > 0) {
-            clientSpinner.succeed(
-              `Installed client tools: ${result.installed.join(', ')}`,
-            )
-          } else if (result.skipped.length > 0) {
-            clientSpinner.succeed(
-              `Client tools already available: ${result.skipped.join(', ')}`,
-            )
-          } else if (result.failed.length > 0) {
-            clientSpinner.warn(
-              `Could not install: ${result.failed.join(', ')}. Install manually.`,
-            )
-          } else {
-            clientSpinner.succeed('All client tools available')
-          }
-        }
+        await checkAndInstallClientTools('mariadb', mariadbBinPath)
         return
       }
 
@@ -998,40 +955,7 @@ enginesCommand
         console.log(chalk.gray(`  Location: ${binPath}`))
 
         // Check for bundled client tools and install missing ones
-        const mongodbRequiredTools = await getRequiredClientTools('mongodb')
-        const mongodbBundledTools = checkBundledTools(
-          binPath,
-          mongodbRequiredTools,
-        )
-
-        if (mongodbBundledTools.length < mongodbRequiredTools.length) {
-          const clientSpinner = createSpinner('Checking client tools...')
-          clientSpinner.start()
-
-          const result = await installMissingClientTools(
-            'mongodb',
-            mongodbBundledTools,
-            (msg) => {
-              clientSpinner.text = msg
-            },
-          )
-
-          if (result.installed.length > 0) {
-            clientSpinner.succeed(
-              `Installed client tools: ${result.installed.join(', ')}`,
-            )
-          } else if (result.skipped.length > 0) {
-            clientSpinner.succeed(
-              `Client tools already available: ${result.skipped.join(', ')}`,
-            )
-          } else if (result.failed.length > 0) {
-            clientSpinner.warn(
-              `Could not install: ${result.failed.join(', ')}. Install manually.`,
-            )
-          } else {
-            clientSpinner.succeed('All client tools available')
-          }
-        }
+        await checkAndInstallClientTools('mongodb', binPath)
         return
       }
 
@@ -1076,37 +1000,7 @@ enginesCommand
         console.log(chalk.gray(`  Location: ${binPath}`))
 
         // Check for bundled client tools and install missing ones
-        const redisRequiredTools = await getRequiredClientTools('redis')
-        const redisBundledTools = checkBundledTools(binPath, redisRequiredTools)
-
-        if (redisBundledTools.length < redisRequiredTools.length) {
-          const clientSpinner = createSpinner('Checking client tools...')
-          clientSpinner.start()
-
-          const result = await installMissingClientTools(
-            'redis',
-            redisBundledTools,
-            (msg) => {
-              clientSpinner.text = msg
-            },
-          )
-
-          if (result.installed.length > 0) {
-            clientSpinner.succeed(
-              `Installed client tools: ${result.installed.join(', ')}`,
-            )
-          } else if (result.skipped.length > 0) {
-            clientSpinner.succeed(
-              `Client tools already available: ${result.skipped.join(', ')}`,
-            )
-          } else if (result.failed.length > 0) {
-            clientSpinner.warn(
-              `Could not install: ${result.failed.join(', ')}. Install manually.`,
-            )
-          } else {
-            clientSpinner.succeed('All client tools available')
-          }
-        }
+        await checkAndInstallClientTools('redis', binPath)
         return
       }
 

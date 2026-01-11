@@ -64,22 +64,16 @@ export function normalizeVersion(version: string): string {
     return version
   }
 
-  // Try to resolve from map
+  // Delegate to getFullVersion for major/major.minor lookup
   const fullVersion = getFullVersion(version)
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it's a major version like "8", try to find the latest 8.x
-  const majorOnly = version.split('.')[0]
-  const matchingVersions = Object.entries(MONGODB_VERSION_MAP)
-    .filter(([key]) => key.startsWith(majorOnly + '.'))
-    .sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }))
-
-  if (matchingVersions.length > 0) {
-    return matchingVersions[0][1]
-  }
-
-  // Fallback: assume it's the version they want
+  // Unknown version format - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
+  console.warn(
+    `MongoDB version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

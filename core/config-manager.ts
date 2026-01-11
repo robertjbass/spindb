@@ -402,7 +402,6 @@ export class ConfigManager {
   }
 
   // SQLite Registry Methods
-
   async getSqliteRegistry(): Promise<SQLiteEngineRegistry> {
     const config = await this.load()
     return (
@@ -454,7 +453,10 @@ export class ConfigManager {
 
         // Parse directory name: {engine}-{version}-{platform}-{arch}
         // e.g., postgresql-18.1.0-darwin-arm64, mysql-9.1.0-darwin-arm64
-        const match = entry.name.match(/^(\w+)-(\d+\.\d+\.\d+)-(\w+)-(\w+)$/)
+        // Also handles prerelease versions like 18.1.0-beta1 or 8.0.0-rc1
+        const match = entry.name.match(
+          /^(\w+)-(\d+\.\d+\.\d+(?:-[\w.]+)?)-(\w+)-(\w+)$/,
+        )
         if (!match) continue
 
         const [, engineName] = match

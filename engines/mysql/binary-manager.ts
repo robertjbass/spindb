@@ -225,9 +225,7 @@ export class MySQLBinaryManager {
     }
   }
 
-  /**
-   * Extract Windows binaries from ZIP file
-   */
+  // Extract Windows binaries from ZIP file
   private async extractWindowsBinaries(
     zipFile: string,
     binPath: string,
@@ -264,7 +262,13 @@ export class MySQLBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+          try {
+            await cp(sourcePath, destPath, { recursive: true })
+          } catch (cpError) {
+            throw new Error(
+              `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
+            )
+          }
         }
       }
     } else {
@@ -272,9 +276,7 @@ export class MySQLBinaryManager {
     }
   }
 
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
+  // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
     binPath: string,
@@ -308,7 +310,13 @@ export class MySQLBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+          try {
+            await cp(sourcePath, destPath, { recursive: true })
+          } catch (cpError) {
+            throw new Error(
+              `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
+            )
+          }
         }
       }
     } else {
@@ -319,15 +327,19 @@ export class MySQLBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+          try {
+            await cp(sourcePath, destPath, { recursive: true })
+          } catch (cpError) {
+            throw new Error(
+              `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
+            )
+          }
         }
       }
     }
   }
 
-  /**
-   * Verify that MySQL binaries are working
-   */
+  // Verify that MySQL binaries are working
   async verify(
     version: string,
     platform: string,
@@ -383,9 +395,7 @@ export class MySQLBinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (mysqld, mysql, mysqldump, etc.)
-   */
+  // Get the path to a specific binary (mysqld, mysql, mysqldump, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -403,9 +413,7 @@ export class MySQLBinaryManager {
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,

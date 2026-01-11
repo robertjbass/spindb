@@ -274,14 +274,9 @@ export async function installDependency(
   try {
     const commands = buildInstallCommand(dependency, packageManager)
 
-    // When running as root, strip leading sudo from commands (not needed and may not exist)
-    const isRoot = process.getuid?.() === 0
-    const processedCommands = isRoot
-      ? commands.map((cmd) => cmd.replace(/^sudo\s+/, ''))
-      : commands
-
-    for (const cmd of processedCommands) {
+    for (const cmd of commands) {
       // Use inherited stdio so sudo can prompt for password in terminal
+      // Note: execWithInheritedStdio handles sudo stripping when running as root
       execWithInheritedStdio(cmd)
     }
 
