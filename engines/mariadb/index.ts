@@ -280,13 +280,21 @@ export class MariaDBEngine extends BaseEngine {
     // Unix path (Linux/macOS)
     // --no-defaults: Prevent reading system my.cnf files that might have MySQL-specific options
     // --auth-root-authentication-method=normal: Allow passwordless root login for local dev
+    // --user: Required for non-root, but when running as root we can skip it to avoid
+    //         needing a dedicated 'mysql' user to exist on the system
+    const isRunningAsRoot = process.getuid?.() === 0
     const args = [
       '--no-defaults',
       `--datadir=${dataDir}`,
       '--auth-root-authentication-method=normal',
       `--basedir=${binPath}`,
-      `--user=${process.env.USER || 'mysql'}`,
     ]
+
+    // Only add --user when not running as root
+    // When running as root, mariadb-install-db works without specifying a user
+    if (!isRunningAsRoot && process.env.USER) {
+      args.push(`--user=${process.env.USER}`)
+    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(installDb, args, {

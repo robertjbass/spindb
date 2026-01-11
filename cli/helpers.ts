@@ -1,18 +1,10 @@
-import { existsSync, realpathSync } from 'fs'
+import { existsSync } from 'fs'
 import { readdir, lstat } from 'fs/promises'
 import { join } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { platformService } from '../core/platform-service'
-import {
-  getMongodPath,
-  getMongodVersion,
-} from '../engines/mongodb/binary-detection'
-import {
-  getRedisServerPath,
-  getRedisVersion,
-} from '../engines/redis/binary-detection'
 
 const execFileAsync = promisify(execFile)
 
@@ -56,17 +48,21 @@ export type InstalledSqliteEngine = {
 export type InstalledMongodbEngine = {
   engine: 'mongodb'
   version: string
+  platform: string
+  arch: string
   path: string
-  source: 'system'
-  formulaName: string // e.g., 'mongodb-community', 'mongodb-community@7.0'
+  sizeBytes: number
+  source: 'downloaded'
 }
 
 export type InstalledRedisEngine = {
   engine: 'redis'
   version: string
+  platform: string
+  arch: string
   path: string
-  source: 'system'
-  formulaName: string // e.g., 'redis', 'redis@6.2', 'redis@7.0'
+  sizeBytes: number
+  source: 'downloaded'
 }
 
 export type InstalledEngine =
@@ -231,41 +227,6 @@ export async function getInstalledMariadbEngines(): Promise<
   return engines
 }
 
-/**
- * Extract Homebrew formula name from a binary path by resolving symlinks
- */
-function extractHomebrewFormula(
-  binaryPath: string,
-  defaultName: string,
-): string {
-  let resolvedPath = binaryPath
-  try {
-    resolvedPath = realpathSync(binaryPath)
-  } catch {
-    // Use original path if resolution fails
-  }
-
-  // Try to extract from Cellar path first (most reliable after symlink resolution)
-  // Format: /opt/homebrew/Cellar/<formula>/<version>/bin/binary
-  const cellarMatch = resolvedPath.match(
-    /\/(?:opt\/homebrew|usr\/local)\/Cellar\/([^/]+)\//,
-  )
-  if (cellarMatch) {
-    return cellarMatch[1]
-  }
-
-  // Fall back to opt path pattern
-  // Format: /opt/homebrew/opt/<formula>/bin/binary
-  const optMatch = resolvedPath.match(
-    /\/(?:opt\/homebrew|usr\/local)\/opt\/([^/]+)\//,
-  )
-  if (optMatch) {
-    return optMatch[1]
-  }
-
-  return defaultName
-}
-
 async function getMysqlVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
   const serverPath = join(binPath, 'bin', `mysqld${ext}`)
@@ -370,150 +331,160 @@ async function getInstalledSqliteEngine(): Promise<InstalledSqliteEngine | null>
 }
 
 /**
- * Homebrew paths to check for MongoDB installations
+ * Get MongoDB version from binary path
  */
-const HOMEBREW_MONGODB_PATHS = [
-  // ARM64 (Apple Silicon) - versioned
-  '/opt/homebrew/opt/mongodb-community@6.0/bin/mongod',
-  '/opt/homebrew/opt/mongodb-community@7.0/bin/mongod',
-  '/opt/homebrew/opt/mongodb-community@8.0/bin/mongod',
-  // ARM64 - unversioned (latest)
-  '/opt/homebrew/opt/mongodb-community/bin/mongod',
-  // Intel - versioned
-  '/usr/local/opt/mongodb-community@6.0/bin/mongod',
-  '/usr/local/opt/mongodb-community@7.0/bin/mongod',
-  '/usr/local/opt/mongodb-community@8.0/bin/mongod',
-  // Intel - unversioned
-  '/usr/local/opt/mongodb-community/bin/mongod',
-]
-
-async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
-  const engines: InstalledMongodbEngine[] = []
-  const seenFormulas = new Set<string>()
-  const { platform } = platformService.getPlatformInfo()
-
-  // On macOS, check all Homebrew paths
-  if (platform === 'darwin') {
-    for (const mongodPath of HOMEBREW_MONGODB_PATHS) {
-      if (existsSync(mongodPath)) {
-        const formulaName = extractHomebrewFormula(mongodPath, 'mongodb-community')
-
-        // Skip if we've already found this formula
-        if (seenFormulas.has(formulaName)) continue
-        seenFormulas.add(formulaName)
-
-        const version = await getMongodVersion(mongodPath)
-        if (version) {
-          engines.push({
-            engine: 'mongodb',
-            version,
-            path: mongodPath,
-            source: 'system',
-            formulaName,
-          })
-        }
-      }
-    }
+async function getMongodbVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const serverPath = join(binPath, 'bin', `mongod${ext}`)
+  if (!existsSync(serverPath)) {
+    return null
   }
 
-  // Also check system PATH (for Linux or non-Homebrew installs)
-  const pathMongod = await getMongodPath()
-  if (pathMongod) {
-    const formulaName = extractHomebrewFormula(pathMongod, 'mongodb-community')
+  try {
+    const { stdout } = await execFileAsync(serverPath, ['--version'])
+    // Parse output like "db version v7.0.28"
+    const match = stdout.match(/v([\d.]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
 
-    // Only add if not already found via Homebrew paths
-    if (!seenFormulas.has(formulaName)) {
-      const version = await getMongodVersion(pathMongod)
-      if (version) {
+/**
+ * Get installed MongoDB engines from downloaded binaries
+ */
+async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledMongodbEngine[] = []
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Match mongodb-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
+      if (match && match[1] === 'mongodb') {
+        const [, , majorVersion, platform, arch] = match
+        const dirPath = join(binDir, entry.name)
+
+        const actualVersion =
+          (await getMongodbVersion(dirPath)) || majorVersion
+
+        let sizeBytes = 0
+        try {
+          const files = await readdir(dirPath, { recursive: true })
+          for (const file of files) {
+            try {
+              const filePath = join(dirPath, file.toString())
+              const fileStat = await lstat(filePath)
+              if (fileStat.isFile()) {
+                sizeBytes += fileStat.size
+              }
+            } catch {
+              // Skip files we can't stat
+            }
+          }
+        } catch {
+          // Skip directories we can't read
+        }
+
         engines.push({
           engine: 'mongodb',
-          version,
-          path: pathMongod,
-          source: 'system',
-          formulaName,
+          version: actualVersion,
+          platform,
+          arch,
+          path: dirPath,
+          sizeBytes,
+          source: 'downloaded',
         })
       }
     }
   }
 
-  // Sort by version descending
   engines.sort((a, b) => compareVersions(b.version, a.version))
 
   return engines
 }
 
 /**
- * Homebrew paths to check for Redis installations
+ * Get Redis version from binary path
  */
-const HOMEBREW_REDIS_PATHS = [
-  // ARM64 (Apple Silicon) - versioned
-  '/opt/homebrew/opt/redis@6.2/bin/redis-server',
-  '/opt/homebrew/opt/redis@7.0/bin/redis-server',
-  '/opt/homebrew/opt/redis@7.2/bin/redis-server',
-  '/opt/homebrew/opt/redis@8.0/bin/redis-server',
-  '/opt/homebrew/opt/redis@8.2/bin/redis-server',
-  // ARM64 - unversioned (latest)
-  '/opt/homebrew/opt/redis/bin/redis-server',
-  // Intel - versioned
-  '/usr/local/opt/redis@6.2/bin/redis-server',
-  '/usr/local/opt/redis@7.0/bin/redis-server',
-  '/usr/local/opt/redis@7.2/bin/redis-server',
-  '/usr/local/opt/redis@8.0/bin/redis-server',
-  '/usr/local/opt/redis@8.2/bin/redis-server',
-  // Intel - unversioned
-  '/usr/local/opt/redis/bin/redis-server',
-]
-
-async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
-  const engines: InstalledRedisEngine[] = []
-  const seenFormulas = new Set<string>()
-  const { platform } = platformService.getPlatformInfo()
-
-  // On macOS, check all Homebrew paths
-  if (platform === 'darwin') {
-    for (const redisPath of HOMEBREW_REDIS_PATHS) {
-      if (existsSync(redisPath)) {
-        const formulaName = extractHomebrewFormula(redisPath, 'redis')
-
-        // Skip if we've already found this formula
-        if (seenFormulas.has(formulaName)) continue
-        seenFormulas.add(formulaName)
-
-        const version = await getRedisVersion(redisPath)
-        if (version) {
-          engines.push({
-            engine: 'redis',
-            version,
-            path: redisPath,
-            source: 'system',
-            formulaName,
-          })
-        }
-      }
-    }
+async function getRedisVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const serverPath = join(binPath, 'bin', `redis-server${ext}`)
+  if (!existsSync(serverPath)) {
+    return null
   }
 
-  // Also check system PATH (for Linux or non-Homebrew installs)
-  const pathRedis = await getRedisServerPath()
-  if (pathRedis) {
-    const formulaName = extractHomebrewFormula(pathRedis, 'redis')
+  try {
+    const { stdout } = await execFileAsync(serverPath, ['--version'])
+    // Parse output like "Redis server v=7.4.7 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=..."
+    const match = stdout.match(/v=([\d.]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
 
-    // Only add if not already found via Homebrew paths
-    if (!seenFormulas.has(formulaName)) {
-      const version = await getRedisVersion(pathRedis)
-      if (version) {
+/**
+ * Get installed Redis engines from downloaded binaries
+ */
+async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledRedisEngine[] = []
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Match redis-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
+      if (match && match[1] === 'redis') {
+        const [, , majorVersion, platform, arch] = match
+        const dirPath = join(binDir, entry.name)
+
+        const actualVersion =
+          (await getRedisVersion(dirPath)) || majorVersion
+
+        let sizeBytes = 0
+        try {
+          const files = await readdir(dirPath, { recursive: true })
+          for (const file of files) {
+            try {
+              const filePath = join(dirPath, file.toString())
+              const fileStat = await lstat(filePath)
+              if (fileStat.isFile()) {
+                sizeBytes += fileStat.size
+              }
+            } catch {
+              // Skip files we can't stat
+            }
+          }
+        } catch {
+          // Skip directories we can't read
+        }
+
         engines.push({
           engine: 'redis',
-          version,
-          path: pathRedis,
-          source: 'system',
-          formulaName,
+          version: actualVersion,
+          platform,
+          arch,
+          path: dirPath,
+          sizeBytes,
+          source: 'downloaded',
         })
       }
     }
   }
 
-  // Sort by version descending
   engines.sort((a, b) => compareVersions(b.version, a.version))
 
   return engines

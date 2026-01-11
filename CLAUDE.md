@@ -72,7 +72,9 @@ core/
 config/
 ├── paths.ts                # ~/.spindb/ paths
 ├── defaults.ts             # Default values
-└── os-dependencies.ts      # OS-specific deps
+├── os-dependencies.ts      # OS-specific deps
+├── engines.json            # Engines registry (source of truth)
+└── engines-registry.ts     # Type-safe loader for engines.json
 engines/
 ├── base-engine.ts          # Abstract base class
 ├── index.ts                # Engine registry
@@ -149,17 +151,63 @@ abstract class BaseEngine {
 - Orphaned container support: if engine is deleted, containers remain and prompt to re-download on start
 
 **MongoDB 🍃**
-- All binaries from system (Homebrew, apt, etc.)
-- Requires: mongod, mongosh, mongodump, mongorestore
-- Versions: 6.0, 7.0, 8.0
+- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
+- Client tools (mongod, mongosh, mongodump, mongorestore) bundled with hostdb binaries
+- Versions: 7.0, 8.0, 8.2
 - Uses JavaScript for queries instead of SQL
 
 **Redis 🔴**
-- All binaries from system (Homebrew, apt, etc.)
-- Requires: redis-server, redis-cli
-- Versions: 6, 7, 8
+- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
+- Client tools (redis-server, redis-cli) bundled with hostdb binaries
+- Versions: 7, 8
 - Uses numbered databases (0-15) instead of named databases
 - Uses Redis commands instead of SQL
+
+### Engines JSON Registry
+
+The `config/engines.json` file is the source of truth for all supported database engines. It contains metadata like display names, icons, supported versions, binary sources, and status.
+
+**Type-Safe Engine Handling:**
+
+The `Engine` enum in `types/index.ts` defines all supported engines. When adding a new engine:
+
+1. Add to `Engine` enum in `types/index.ts`
+2. Add to `ALL_ENGINES` array in `types/index.ts` (TypeScript will error if missing)
+3. Add to `config/engines.json` (runtime validation will error if missing)
+
+```ts
+// types/index.ts
+export enum Engine {
+  PostgreSQL = 'postgresql',
+  MySQL = 'mysql',
+  // ... add new engine here
+}
+
+// ALL_ENGINES must include all enum values - compile-time checked
+export const ALL_ENGINES = [
+  Engine.PostgreSQL,
+  Engine.MySQL,
+  // ... if you forget to add here, TypeScript errors
+] as const
+
+// Use assertExhaustive in switch statements
+function getPort(engine: Engine): number {
+  switch (engine) {
+    case Engine.PostgreSQL: return 5432
+    case Engine.MySQL: return 3306
+    // ... if you forget a case, TypeScript errors in default
+    default: assertExhaustive(engine)
+  }
+}
+```
+
+**CLI Command:**
+
+```bash
+spindb engines supported          # List all supported engines
+spindb engines supported --json   # Full config as JSON
+spindb engines supported --all    # Include pending/planned engines
+```
 
 ### Backup & Restore Formats
 
@@ -346,9 +394,11 @@ After completing a feature, ensure these files are updated:
 
 ### Migrating an Engine from System Binaries to hostdb
 
-When hostdb adds support for a new engine (e.g., Redis, MySQL), follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as the most recent example.
+When hostdb adds support for a new engine, follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as an example.
 
-**Pending migrations:** MySQL and MongoDB are planned for hostdb migration. See TODO.md "Engine Binary Migration (hostdb)" section for the detailed checklist and status.
+**Current status:** All engines except SQLite now use hostdb downloads:
+- PostgreSQL, MySQL, MariaDB, MongoDB, Redis: Complete bundles from hostdb (server + all client tools)
+- SQLite: Uses system `sqlite3` binary (intentionally - commonly pre-installed on most systems)
 
 #### Prerequisites
 
@@ -730,15 +780,17 @@ SpinDB uses different binary sourcing strategies by engine:
 - Enables multi-version support (8.0, 8.4, 9 side-by-side)
 - Includes client tools (mysql, mysqldump, mysqladmin)
 
-**MongoDB, Redis (System Binaries) - Pending Migration:**
-- Currently uses system-installed binaries via Homebrew, apt, choco, etc.
-- Single version per machine (whatever the package manager provides)
-- SpinDB detects and orchestrates, doesn't download
-- **Planned:** Migrate to hostdb binaries for multi-version support (see TODO.md "Engine Binary Migration")
+**MongoDB (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Enables multi-version support (7.0, 8.0, 8.2 side-by-side)
+- All tools bundled: mongod, mongosh, mongodump, mongorestore
 
-**Windows Redis exception:** For CI testing, SpinDB uses [tporadowski/redis](https://github.com/tporadowski/redis) community port since official Redis doesn't support Windows.
+**Redis (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Enables multi-version support (7, 8 side-by-side)
+- Tools bundled: redis-server, redis-cli
 
-**Planned hostdb migrations:** MongoDB will be migrated from system binaries to hostdb downloadable binaries following the MariaDB/MySQL pattern. This enables multi-version support and removes the package manager dependency. See TODO.md "Engine Binary Migration (hostdb)" section for the detailed checklist. Prerequisites: hostdb must first publish releases for these engines.
+**Legacy code preserved:** System binary detection code is preserved in `legacy/` folder for historical reference.
 
 ### Orphaned Container Support (PostgreSQL)
 

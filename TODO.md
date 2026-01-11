@@ -35,34 +35,34 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 
 Migrate system-installed engines to downloadable hostdb binaries for multi-version support. Reference: MariaDB engine migration.
 
-- [ ] **MySQL migration to hostdb**
-  - [ ] Add `engines/mysql/version-maps.ts` synced with hostdb releases.json
-  - [ ] Add `engines/mysql/binary-urls.ts` for hostdb download URLs
-  - [ ] Add `engines/mysql/binary-manager.ts` for download/extraction
-  - [ ] Update MySQL engine to use `getMysqlClientPath()` instead of system binaries
-  - [ ] Register MySQL-native binary names (`mysql`, `mysqld`, `mysqldump`, `mysqladmin`)
-  - [ ] Update test helpers with MySQL-specific client path method
-  - [ ] Update shell handlers for MySQL with hostdb binaries
-  - [ ] Add MySQL to "Manage Engines" menu with delete option
-  - [ ] Update CI to download MySQL binaries via SpinDB
+**Detailed Plan:** `~/.claude/plans/declarative-toasting-quail.md` (MongoDB & Redis migration plan)
 
-- [ ] **MongoDB migration to hostdb**
-  - [ ] Add `engines/mongodb/version-maps.ts` synced with hostdb releases.json
-  - [ ] Add `engines/mongodb/binary-urls.ts` for hostdb download URLs
-  - [ ] Add `engines/mongodb/binary-manager.ts` for download/extraction
-  - [ ] Update MongoDB engine to use `getMongoClientPath()` instead of system binaries
-  - [ ] Register MongoDB-native binary names (`mongod`, `mongosh`, `mongodump`, `mongorestore`)
-  - [ ] Update test helpers with MongoDB-specific client path method
-  - [ ] Update shell handlers for MongoDB with hostdb binaries
-  - [ ] Add MongoDB to "Manage Engines" menu with delete option
-  - [ ] Update CI to download MongoDB binaries via SpinDB
+- [x] **MySQL migration to hostdb** - Completed in v0.15.0
+- [x] **MongoDB migration to hostdb** - Completed
+  - [x] Add `engines/mongodb/version-maps.ts` synced with hostdb releases.json
+  - [x] Add `engines/mongodb/binary-urls.ts` for hostdb download URLs
+  - [x] Add `engines/mongodb/binary-manager.ts` for download/extraction
+  - [x] Update MongoDB engine to use `getMongoshPath()` from downloaded binaries
+  - [x] Register MongoDB binary names (`mongod`, `mongosh`, `mongodump`, `mongorestore`)
+  - [x] Update backup.ts and restore.ts to use configManager
+  - [x] Update shell handlers for MongoDB with hostdb binaries
+  - [x] Add MongoDB to "Manage Engines" menu with delete option
+  - [x] Update CI to download MongoDB binaries via SpinDB (macOS/Linux)
+  - [x] Move legacy binary-detection.ts to `legacy/` folder
 
-- [ ] **Redis migration to hostdb** (when available)
-  - [ ] Same pattern as MySQL/MongoDB above
+- [x] **Redis migration to hostdb** - Completed
+  - [x] Add `engines/redis/version-maps.ts` synced with hostdb releases.json
+  - [x] Add `engines/redis/binary-urls.ts` for hostdb download URLs
+  - [x] Add `engines/redis/binary-manager.ts` for download/extraction
+  - [x] Update Redis engine to use downloaded binaries on macOS/Linux
+  - [x] Register Redis binary names (`redis-server`, `redis-cli`)
+  - [x] Update backup.ts and restore.ts to use configManager
+  - [x] Add Redis to "Manage Engines" menu with delete option
+  - [x] Update CI to download Redis binaries via SpinDB (macOS/Linux)
+  - [x] Move legacy binary-detection.ts to `legacy/` folder
 
-**Prerequisites:** hostdb must have releases for these engines. Check https://github.com/robertjbass/hostdb/blob/main/releases.json
-
-**Reference implementation:** See `engines/mariadb/` for the most recent hostdb migration.
+**Reference implementation:** See `engines/mariadb/` for hostdb migration pattern.
+**Legacy code:** See `legacy/` folder for preserved system binary detection code.
 
 ### v1.3 - Advanced Features
 
@@ -87,7 +87,7 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
 
 - [x] **Windows CI/CD tests for Redis** - Add `windows-latest` to Redis CI matrix
   - ~~Currently skipped pending macOS/Linux verification~~
-  - Uses Redis installation via Chocolatey (`choco install redis-64`)
+  - Uses hostdb binaries (all platforms)
   - Updated `.github/workflows/ci.yml` test-redis job matrix
 
 ### CLI Improvements

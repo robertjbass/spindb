@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MongoDB binary downloads from hostdb** - MongoDB now uses pre-built binaries from [hostdb](https://github.com/robertjbass/hostdb) instead of system package managers
+  - Downloadable binaries for all platforms (macOS, Linux, Windows)
+  - Multi-version support: Run MongoDB 7.0 and 8.0 simultaneously
+  - No more dependency on Homebrew, apt, or Chocolatey for MongoDB
+  - Supported versions: 7.0, 8.0, 8.2 (synced with hostdb releases.json)
+  - All tools bundled: mongod, mongosh, mongodump, mongorestore
+- **Redis binary downloads from hostdb** - Redis now uses pre-built binaries from [hostdb](https://github.com/robertjbass/hostdb) instead of system package managers
+  - Downloadable binaries for all platforms (macOS, Linux, Windows)
+  - Multi-version support: Run Redis 7 and 8 simultaneously
+  - No more dependency on Homebrew, apt, or package managers for Redis
+  - Supported versions: 7, 8 (synced with hostdb releases.json)
+  - Tools bundled: redis-server, redis-cli
+- **MongoDB and Redis in Manage Engines menu** - Can now download, list, and delete MongoDB/Redis engine versions
+
+### Changed
+- **MongoDB and Redis now use downloaded binaries** - No longer requires system-installed MongoDB/Redis
+  - Legacy containers created with system binaries are treated as orphaned and will prompt to download matching version
+- **CI workflow** - MongoDB and Redis tests now use downloaded binaries on all platforms
+
+### Preserved
+- **Legacy binary detection code** - Moved to `legacy/` folder for reference
+  - `legacy/engines/mongodb/binary-detection.ts` - System binary detection for MongoDB
+  - `legacy/engines/redis/binary-detection.ts` - System binary detection for Redis
+  - `legacy/README.md` - Documentation of old architecture
+
 ## [0.16.0] - 2026-01-09
 
 ### Added

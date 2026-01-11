@@ -1213,7 +1213,7 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
  */
 ```
 
-### hostdb Binaries (PostgreSQL, MariaDB)
+### hostdb Binaries (PostgreSQL, MariaDB, MySQL, MongoDB, Redis)
 
 For engines using the [hostdb](https://github.com/robertjbass/hostdb) repository for downloadable binaries, you must keep version-maps.ts synchronized with the releases.json file.
 
@@ -1266,63 +1266,19 @@ When new versions are added to hostdb releases.json:
 Binary sources vary by engine and platform:
 
 **PostgreSQL:**
-- **macOS/Linux:** hostdb binaries (replaced the legacy zonky.io source)
-- **Windows:** EDB (EnterpriseDB) official binaries - still required because hostdb doesn't package Windows PostgreSQL
+- **macOS/Linux:** hostdb binaries
+- **Windows:** EDB (EnterpriseDB) official binaries - hostdb doesn't package Windows PostgreSQL
 
-**MariaDB:**
+**MariaDB, MySQL, MongoDB, Redis:**
 - **All platforms:** hostdb binaries
 
-When adding a new engine with downloadable binaries, check if hostdb provides builds for all platforms. If Windows binaries aren't available from hostdb, you may need to use an alternative source like EDB (see `engines/postgresql/edb-binary-urls.ts` for reference).
+When adding a new engine with downloadable binaries, check if hostdb provides builds for all platforms. If Windows binaries aren't available from hostdb, you may need to use an alternative source (see `engines/postgresql/edb-binary-urls.ts` for EDB fallback reference).
 
-**Note:** zonky.io (Maven Central) was previously used for macOS/Linux PostgreSQL binaries but has been replaced by hostdb.
+### System Binaries (SQLite)
 
-### System Binaries (like MySQL)
+**SQLite** uses system-installed binaries on all platforms since it's a lightweight tool typically pre-installed.
 
-If your engine uses system-installed binaries:
-
-1. Create `engines/{engine}/binary-detection.ts`:
-
-```ts
-import { platformService } from '../../core/platform-service'
-import { configManager } from '../../core/config-manager'
-
-export async function findBinaryPath(binary: string): Promise<string | null> {
-  // Check config cache first
-  const cachedPath = await configManager.getBinaryPath(binary)
-  if (cachedPath) return cachedPath
-
-  // Search system PATH
-  return platformService.findToolPath(binary)
-}
-
-export async function detectBinaryVersion(binaryPath: string): Promise<string | null> {
-  // Run --version command and parse output
-}
-```
-
-2. In your engine's `ensureBinaries()`, use dependency manager:
-
-```ts
-async ensureBinaries(
-  version: string,
-  onProgress?: ProgressCallback,
-): Promise<string> {
-  const packageManager = await detectPackageManager()
-  if (!packageManager) {
-    throw new Error('No package manager found. Install manually.')
-  }
-
-  await installEngineDependencies('yourengine', packageManager, onProgress)
-
-  // Verify installation and register paths
-  const binaryPath = await findBinaryPath('mongosh')
-  if (binaryPath) {
-    await configManager.setBinaryPath('mongosh', binaryPath, 'system')
-  }
-
-  return binaryPath || ''
-}
-```
+**Legacy reference:** System binary detection code is preserved in `legacy/engines/*/binary-detection.ts` for reference.
 
 ---
 
@@ -1541,20 +1497,18 @@ pnpm test:sqlite
 
 Use these existing implementations as references:
 
-### Server-Based Database with Downloadable Binaries
+### Server-Based Database with Downloadable Binaries (All Platforms)
+
+**MariaDB** (`engines/mariadb/`), **MySQL** (`engines/mysql/`), **MongoDB** (`engines/mongodb/`), **Redis** (`engines/redis/`):
+- Binary downloads from hostdb for all platforms (macOS, Linux, Windows)
+- Client tools bundled with server binaries
+- Complex version resolution (major -> full version)
+
+### Server-Based Database with Downloadable Binaries (Windows EDB Fallback)
 
 **PostgreSQL** (`engines/postgresql/`):
 - Binary downloads from hostdb (macOS/Linux) and EDB (Windows)
-- Client tool installation via Homebrew on macOS
-- Complex version resolution (major -> full version)
-- Windows-specific command building
-
-### Server-Based Database with System Binaries
-
-**MySQL** (`engines/mysql/`):
-- All binaries from system package managers
-- Binary detection in PATH
-- Works with both MySQL and MariaDB
+- Example of Windows-specific alternative source (when hostdb doesn't provide Windows binaries for an engine)
 
 ### File-Based Database
 
@@ -1563,6 +1517,10 @@ Use these existing implementations as references:
 - Registry-based tracking
 - File stored in project directories
 - HTTP/HTTPS URL support for remote restore
+
+### Legacy System Binary Reference
+
+The `legacy/` folder contains preserved system binary detection code from before the hostdb migration. Useful reference for supporting user-provided system binaries as an alternative to downloaded binaries.
 
 ---
 

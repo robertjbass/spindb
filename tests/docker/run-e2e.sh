@@ -1,0 +1,257 @@
+#!/bin/bash
+# SpinDB Docker E2E Test Script
+# Tests all database engines in a clean Ubuntu environment
+
+set -e
+
+echo "=== SpinDB Docker E2E Test ==="
+echo "Node: $(node --version)"
+echo "pnpm: $(pnpm --version)"
+echo "SpinDB: $(spindb version 2>/dev/null || echo 'not installed')"
+echo ""
+
+# Verify clean state
+echo "=== Verifying clean state ==="
+if [ -d ~/.spindb ]; then
+  echo "WARNING: ~/.spindb already exists"
+  ls -la ~/.spindb
+else
+  echo "Clean state confirmed: no existing ~/.spindb"
+fi
+echo ""
+
+# Test counters and results tracking
+PASSED=0
+FAILED=0
+declare -a RESULTS_ENGINE
+declare -a RESULTS_VERSION
+declare -a RESULTS_STATUS
+declare -a RESULTS_ERROR
+
+# Record test result
+record_result() {
+  local engine=$1
+  local version=$2
+  local status=$3
+  local error=${4:-""}
+
+  RESULTS_ENGINE+=("$engine")
+  RESULTS_VERSION+=("$version")
+  RESULTS_STATUS+=("$status")
+  RESULTS_ERROR+=("$error")
+}
+
+# Test function
+run_test() {
+  local engine=$1
+  local version=$2
+  local container_name="test_${engine}_$$"
+
+  echo ""
+  echo "=== Testing $engine v$version ==="
+
+  # Download engine (skip sqlite - uses system binary)
+  if [ "$engine" != "sqlite" ]; then
+    echo "Downloading $engine $version..."
+    if ! spindb engines download "$engine" "$version"; then
+      echo "FAILED: Could not download $engine $version"
+      record_result "$engine" "$version" "FAILED" "Download failed"
+      ((FAILED++))
+      return 1
+    fi
+    echo "Download complete"
+  fi
+
+  # Create container
+  echo "Creating container: $container_name"
+  if ! spindb create "$container_name" --engine "$engine" --db-version "$version" --no-start; then
+    echo "FAILED: Could not create $container_name"
+    record_result "$engine" "$version" "FAILED" "Create failed"
+    ((FAILED++))
+    return 1
+  fi
+
+  # Start container (skip for sqlite - it's file-based, no server process)
+  if [ "$engine" != "sqlite" ]; then
+    echo "Starting container..."
+    if ! spindb start "$container_name"; then
+      echo "FAILED: Could not start $container_name"
+      spindb delete "$container_name" --yes 2>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "Start failed"
+      ((FAILED++))
+      return 1
+    fi
+
+    # Give it a moment to fully start
+    sleep 2
+
+    # Verify container is running
+    echo "Verifying container status..."
+    local status=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unknown")
+    if [ "$status" != "running" ]; then
+      echo "FAILED: Container status is '$status', expected 'running'"
+      spindb stop "$container_name" 2>/dev/null || true
+      spindb delete "$container_name" --yes 2>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "Status: $status"
+      ((FAILED++))
+      return 1
+    fi
+  fi
+
+  # Run a simple query to verify database is working
+  echo "Testing database connectivity..."
+  case $engine in
+    postgresql)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run PostgreSQL query"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        ((FAILED++))
+        return 1
+      fi
+      ;;
+    mysql|mariadb)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run $engine query"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        ((FAILED++))
+        return 1
+      fi
+      ;;
+    mongodb)
+      if ! spindb run "$container_name" -c "db.runCommand({ping: 1})"; then
+        echo "FAILED: Could not run MongoDB command"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Ping failed"
+        ((FAILED++))
+        return 1
+      fi
+      ;;
+    redis)
+      if ! spindb run "$container_name" -c "PING"; then
+        echo "FAILED: Could not run Redis command"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "PING failed"
+        ((FAILED++))
+        return 1
+      fi
+      ;;
+    sqlite)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run SQLite query"
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        ((FAILED++))
+        return 1
+      fi
+      ;;
+  esac
+
+  # Stop container (skip for sqlite - it's embedded)
+  if [ "$engine" != "sqlite" ]; then
+    echo "Stopping container..."
+    if ! spindb stop "$container_name"; then
+      echo "WARNING: Could not stop $container_name gracefully"
+    fi
+  fi
+
+  # Delete container
+  echo "Cleaning up..."
+  if ! spindb delete "$container_name" --yes; then
+    echo "WARNING: Could not delete $container_name"
+  fi
+
+  echo "PASSED: $engine v$version"
+  record_result "$engine" "$version" "PASSED" ""
+  ((PASSED++))
+  return 0
+}
+
+# Get default versions from engines.json
+get_default_version() {
+  local engine=$1
+  spindb engines supported --json 2>/dev/null | jq -r ".engines.$engine.defaultVersion" 2>/dev/null || echo ""
+}
+
+# Print results table
+print_results_table() {
+  echo ""
+  echo "┌────────────────┬─────────┬────────┬─────────────────┐"
+  echo "│ Engine         │ Version │ Status │ Error           │"
+  echo "├────────────────┼─────────┼────────┼─────────────────┤"
+
+  for i in "${!RESULTS_ENGINE[@]}"; do
+    local engine="${RESULTS_ENGINE[$i]}"
+    local version="${RESULTS_VERSION[$i]}"
+    local status="${RESULTS_STATUS[$i]}"
+    local error="${RESULTS_ERROR[$i]}"
+
+    # Add status indicator
+    if [ "$status" = "PASSED" ]; then
+      status="✓ PASS"
+    else
+      status="✗ FAIL"
+    fi
+
+    # Truncate error if too long
+    if [ ${#error} -gt 15 ]; then
+      error="${error:0:12}..."
+    fi
+
+    # Format with fixed width columns
+    printf "│ %-14s │ %-7s │ %-6s │ %-15s │\n" "$engine" "$version" "$status" "$error"
+  done
+
+  echo "└────────────────┴─────────┴────────┴─────────────────┘"
+}
+
+# Run tests for each engine
+echo "=== Running E2E Tests ==="
+
+# PostgreSQL
+PG_VERSION=$(get_default_version postgresql)
+[ -n "$PG_VERSION" ] && run_test postgresql "$PG_VERSION" || echo "Skipping PostgreSQL (no default version)"
+
+# MySQL
+MYSQL_VERSION=$(get_default_version mysql)
+[ -n "$MYSQL_VERSION" ] && run_test mysql "$MYSQL_VERSION" || echo "Skipping MySQL (no default version)"
+
+# MariaDB
+MARIADB_VERSION=$(get_default_version mariadb)
+[ -n "$MARIADB_VERSION" ] && run_test mariadb "$MARIADB_VERSION" || echo "Skipping MariaDB (no default version)"
+
+# SQLite (uses system binary, no version download needed)
+run_test sqlite "3"
+
+# MongoDB
+MONGODB_VERSION=$(get_default_version mongodb)
+[ -n "$MONGODB_VERSION" ] && run_test mongodb "$MONGODB_VERSION" || echo "Skipping MongoDB (no default version)"
+
+# Redis
+REDIS_VERSION=$(get_default_version redis)
+[ -n "$REDIS_VERSION" ] && run_test redis "$REDIS_VERSION" || echo "Skipping Redis (no default version)"
+
+# Summary
+echo ""
+echo "═══════════════════════════════════════════════════════"
+echo "                  E2E TEST RESULTS                      "
+echo "═══════════════════════════════════════════════════════"
+
+print_results_table
+
+echo ""
+echo "Summary: $PASSED passed, $FAILED failed"
+echo ""
+
+if [ $FAILED -gt 0 ]; then
+  echo "❌ SOME TESTS FAILED"
+  exit 1
+else
+  echo "✅ ALL TESTS PASSED"
+  exit 0
+fi

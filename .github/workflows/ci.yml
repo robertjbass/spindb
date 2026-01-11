@@ -273,7 +273,7 @@ jobs:
 
   # ============================================
   # MongoDB Integration Tests
-  # Uses system-installed MongoDB via Homebrew/apt/Chocolatey
+  # Uses SpinDB to download and manage MongoDB binaries from hostdb
   # ============================================
   test-mongodb:
     name: MongoDB (${{ matrix.os }})
@@ -298,213 +298,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Install MongoDB on macOS via Homebrew
-      - name: Install MongoDB (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew tap mongodb/brew
-          brew install mongodb-community mongosh mongodb-database-tools
-
-      # Install MongoDB on Ubuntu
-      - name: Install MongoDB (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          # Import MongoDB public GPG key
-          curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
-            sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
-          # Add MongoDB repository
-          echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" | \
-            sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
-          # Update and install
-          sudo apt-get update
-          sudo apt-get install -y mongodb-org mongodb-mongosh mongodb-database-tools
-
-      # Cache Chocolatey packages for MongoDB on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: |
-            C:\ProgramData\chocolatey\lib\mongodb
-            C:\ProgramData\chocolatey\lib\mongodb-shell
-            C:\ProgramData\chocolatey\lib\mongodb-database-tools
-            C:\Program Files\MongoDB
-          key: choco-mongodb-${{ runner.os }}-v1
-          restore-keys: |
-            choco-mongodb-${{ runner.os }}-
-
-      # Windows needs MongoDB added to PATH BEFORE install check (for cache hits)
-      - name: Add MongoDB to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $possibleServerPaths = @(
-            "C:\Program Files\MongoDB\Server\8.0\bin",
-            "C:\Program Files\MongoDB\Server\7.0\bin",
-            "C:\Program Files\MongoDB\Server\6.0\bin"
-          )
-          $possibleToolsPaths = @(
-            "C:\Program Files\MongoDB\Tools\100\bin",
-            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools"
-          )
-          foreach ($path in $possibleServerPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added MongoDB Server to PATH: $path"
-              break
-            }
-          }
-          foreach ($path in $possibleToolsPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added MongoDB Tools to PATH: $path"
-              break
-            }
-          }
-
-      # Install MongoDB on Windows via Chocolatey
-      - name: Install MongoDB (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Check if MongoDB is already installed (cache hit)
-          $mongodExists = Get-Command mongod -ErrorAction SilentlyContinue
-          if (-not $mongodExists) {
-            echo "Installing MongoDB via Chocolatey..."
-            choco install mongodb --yes --no-progress
-          } else {
-            echo "MongoDB already installed (cache hit)"
-          }
-
-          # Check if mongosh is already installed
-          $mongoshExists = Get-Command mongosh -ErrorAction SilentlyContinue
-          if (-not $mongoshExists) {
-            echo "Installing mongosh via Chocolatey..."
-            choco install mongodb-shell --yes --no-progress
-          } else {
-            echo "mongosh already installed (cache hit)"
-          }
-
-          # Check if mongodump is already installed
-          $mongodumpExists = Get-Command mongodump -ErrorAction SilentlyContinue
-          if (-not $mongodumpExists) {
-            echo "Installing mongodb-database-tools via Chocolatey..."
-            choco install mongodb-database-tools --yes --no-progress
-          } else {
-            echo "mongodb-database-tools already installed (cache hit)"
-          }
-
-          # Re-add paths after install (in case they were just created)
-          $possibleServerPaths = @(
-            "C:\Program Files\MongoDB\Server\8.0\bin",
-            "C:\Program Files\MongoDB\Server\7.0\bin",
-            "C:\Program Files\MongoDB\Server\6.0\bin"
-          )
-          $possibleToolsPaths = @(
-            "C:\Program Files\MongoDB\Tools\100\bin",
-            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools"
-          )
-          foreach ($path in $possibleServerPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              break
-            }
-          }
-          foreach ($path in $possibleToolsPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              break
-            }
-          }
-
-      # Verify MongoDB binaries are usable after install
-      - name: Verify MongoDB installation (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "Verifying MongoDB installation..."
-
-          # Helper function to find and add tool path
-          function Find-AndAddPath {
-            param([string]$ToolName, [string[]]$SearchPaths)
-            foreach ($path in $SearchPaths) {
-              $toolPath = Join-Path $path "$ToolName.exe"
-              if (Test-Path $toolPath) {
-                if ($env:PATH -notlike "*$path*") {
-                  $env:PATH = "$path;$env:PATH"
-                  Write-Host "  Added to PATH: $path"
-                }
-                return $true
-              }
-            }
-            return $false
-          }
-
-          # Paths where MongoDB tools might be installed
-          $toolsPaths = @(
-            "C:\Program Files\MongoDB\Tools\100\bin",
-            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools",
-            "C:\ProgramData\chocolatey\bin"
-          )
-
-          try {
-            $mongodVersion = mongod --version | Select-Object -First 1
-            Write-Host "✓ mongod: $mongodVersion"
-          } catch {
-            Write-Host "✗ mongod not found or not working"
-            exit 1
-          }
-
-          try {
-            $mongoshVersion = mongosh --version
-            Write-Host "✓ mongosh: $mongoshVersion"
-          } catch {
-            Write-Host "✗ mongosh not found or not working"
-            exit 1
-          }
-
-          # mongodump check with retry logic
-          $mongodumpFound = $false
-          try {
-            $mongodumpVersion = mongodump --version | Select-Object -First 1
-            Write-Host "✓ mongodump: $mongodumpVersion"
-            $mongodumpFound = $true
-          } catch {
-            Write-Host "mongodump not in PATH, searching known locations..."
-            if (Find-AndAddPath -ToolName "mongodump" -SearchPaths $toolsPaths) {
-              try {
-                $mongodumpVersion = mongodump --version | Select-Object -First 1
-                Write-Host "✓ mongodump: $mongodumpVersion (found via search)"
-                $mongodumpFound = $true
-              } catch {
-                Write-Host "  mongodump found but failed to run"
-              }
-            }
-          }
-
-          if (-not $mongodumpFound) {
-            Write-Host "mongodump not found, attempting reinstall..."
-            choco install mongodb-database-tools --yes --no-progress --force
-            Start-Sleep -Seconds 2
-
-            # Search again after reinstall
-            if (Find-AndAddPath -ToolName "mongodump" -SearchPaths $toolsPaths) {
-              try {
-                $mongodumpVersion = mongodump --version | Select-Object -First 1
-                Write-Host "✓ mongodump: $mongodumpVersion (after reinstall)"
-                $mongodumpFound = $true
-              } catch {
-                Write-Host "✗ mongodump still not working after reinstall"
-              }
-            }
-          }
-
-          if (-not $mongodumpFound) {
-            Write-Host "✗ mongodump not found or not working"
-            exit 1
-          }
-
-          Write-Host "All MongoDB binaries verified successfully"
+      # Download MongoDB binaries via hostdb for all platforms
+      - name: Download MongoDB binaries
+        run: pnpm start engines download mongodb 8.0
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -515,7 +311,7 @@ jobs:
 
   # ============================================
   # Redis Integration Tests
-  # Uses system-installed Redis via Homebrew/apt/Chocolatey
+  # Uses SpinDB to download and manage Redis binaries from hostdb
   # ============================================
   test-redis:
     name: Redis (${{ matrix.os }})
@@ -540,63 +336,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Install Redis on macOS via Homebrew
-      - name: Install Redis (macOS)
-        if: runner.os == 'macOS'
-        run: brew install redis
-
-      # Install Redis on Ubuntu
-      - name: Install Redis (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
-
-      # Install Redis on Windows from tporadowski/redis GitHub releases
-      # (official Redis doesn't support Windows, this is the most maintained port)
-      - name: Cache Redis (Windows)
-        if: runner.os == 'Windows'
+      # Cache Redis binaries - these are downloaded from hostdb
+      - name: Cache Redis binaries
         uses: actions/cache@v4
         id: redis-cache
         with:
-          path: C:\Redis
-          key: redis-windows-5.0.14.1
+          path: |
+            ~/.spindb/bin
+            ${{ runner.os == 'Windows' && 'C:\Users\runneradmin\.spindb\bin' || '' }}
+          key: spindb-redis-8-${{ runner.os }}-${{ runner.arch }}
 
-      - name: Install Redis (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path "C:\Redis\redis-server.exe") {
-            Write-Host "Redis already installed (cache hit)"
-          } else {
-            Write-Host "Downloading Redis for Windows from tporadowski/redis..."
-            $url = "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
-            $zip = "$env:TEMP\redis.zip"
-
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -ErrorAction Stop
-
-            Write-Host "Extracting to C:\Redis..."
-            Expand-Archive -Path $zip -DestinationPath "C:\Redis" -Force
-            Remove-Item $zip
-
-            # Handle nested directory structure if zip extracts to subdirectory
-            $nestedDir = Get-ChildItem "C:\Redis" -Directory | Where-Object { $_.Name -like "Redis-*" } | Select-Object -First 1
-            if ($nestedDir) {
-              Write-Host "Moving files from nested directory: $($nestedDir.Name)"
-              Move-Item "$($nestedDir.FullName)\*" "C:\Redis\" -Force
-              Remove-Item $nestedDir.FullName -Force
-            }
-          }
-
-          # Add to PATH for subsequent steps
-          echo "C:\Redis" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Verify Redis (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "Verifying Redis installation..."
-          redis-server --version
-          redis-cli --version
-          Write-Host "Redis installation verified successfully"
+      # Use SpinDB to download Redis binaries (all platforms)
+      - name: Install Redis via SpinDB
+        run: pnpm start engines download redis 8
 
       - name: Show installed engines
         run: pnpm start engines list

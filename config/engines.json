@@ -1,0 +1,93 @@
+{
+  "$schema": "./engines.schema.json",
+  "engines": {
+    "postgresql": {
+      "displayName": "PostgreSQL",
+      "icon": "🐘",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["15", "16", "17", "18"],
+      "defaultVersion": "18",
+      "defaultPort": 5432,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "connectionScheme": "postgresql",
+      "superuser": "postgres",
+      "clientTools": ["psql", "pg_dump", "pg_restore"],
+      "notes": "Windows uses EDB binaries instead of hostdb"
+    },
+    "mysql": {
+      "displayName": "MySQL",
+      "icon": "🐬",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["8.0", "8.4", "9"],
+      "defaultVersion": "9",
+      "defaultPort": 3306,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "connectionScheme": "mysql",
+      "superuser": "root",
+      "clientTools": ["mysql", "mysqldump", "mysqladmin"],
+      "licensing": "commercial"
+    },
+    "mariadb": {
+      "displayName": "MariaDB",
+      "icon": "🦭",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["10.11", "11.4", "11.8"],
+      "defaultVersion": "11.8",
+      "defaultPort": 3307,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "connectionScheme": "mysql",
+      "superuser": "root",
+      "clientTools": ["mariadb", "mariadb-dump", "mariadb-admin"]
+    },
+    "sqlite": {
+      "displayName": "SQLite",
+      "icon": "🪶",
+      "status": "integrated",
+      "binarySource": "system",
+      "supportedVersions": ["3"],
+      "defaultVersion": "3",
+      "defaultPort": null,
+      "runtime": "embedded",
+      "queryLanguage": "sql",
+      "connectionScheme": "sqlite",
+      "superuser": null,
+      "clientTools": ["sqlite3"]
+    },
+    "mongodb": {
+      "displayName": "MongoDB",
+      "icon": "🍃",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["7.0", "8.0", "8.2"],
+      "defaultVersion": "8.0",
+      "defaultPort": 27017,
+      "runtime": "server",
+      "queryLanguage": "javascript",
+      "connectionScheme": "mongodb",
+      "superuser": null,
+      "clientTools": ["mongod", "mongosh", "mongodump", "mongorestore"],
+      "licensing": "commercial"
+    },
+    "redis": {
+      "displayName": "Redis",
+      "icon": "🔴",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["7", "8"],
+      "defaultVersion": "8",
+      "defaultPort": 6379,
+      "runtime": "server",
+      "queryLanguage": "redis",
+      "connectionScheme": "redis",
+      "superuser": null,
+      "clientTools": ["redis-server", "redis-cli"],
+      "licensing": "commercial"
+    }
+  }
+}

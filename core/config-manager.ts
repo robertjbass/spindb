@@ -75,6 +75,7 @@ const ENGINE_BINARY_MAP: Record<string, BinaryTool[]> = {
   postgresql: POSTGRESQL_TOOLS,
   mysql: MYSQL_TOOLS,
   mariadb: MARIADB_TOOLS,
+  redis: REDIS_TOOLS,
 }
 
 export class ConfigManager {

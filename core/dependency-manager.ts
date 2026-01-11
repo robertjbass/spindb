@@ -41,6 +41,10 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'mysqld',
   'mysqladmin',
   'sqlite3',
+  'mongod',
+  'mongosh',
+  'mongodump',
+  'mongorestore',
   'redis-server',
   'redis-cli',
   'pgcli',
@@ -305,7 +309,13 @@ export async function installDependency(
   try {
     const commands = buildInstallCommand(dependency, packageManager)
 
-    for (const cmd of commands) {
+    // When running as root, strip sudo from commands (not needed and may not exist)
+    const isRoot = process.getuid?.() === 0
+    const processedCommands = isRoot
+      ? commands.map((cmd) => cmd.replace(/sudo\s+/g, ''))
+      : commands
+
+    for (const cmd of processedCommands) {
       // Use inherited stdio so sudo can prompt for password in terminal
       execWithInheritedStdio(cmd)
     }

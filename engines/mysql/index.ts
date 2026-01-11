@@ -274,12 +274,20 @@ export class MySQLEngine extends BaseEngine {
     }
 
     // Unix path - use spawn without shell
+    // --user: Required for non-root, but when running as root we can skip it to avoid
+    //         needing a dedicated 'mysql' user to exist on the system
+    const isRunningAsRoot = process.getuid?.() === 0
     const args = [
       '--initialize-insecure',
       `--datadir=${dataDir}`,
       `--basedir=${binPath}`,
-      `--user=${process.env.USER || 'mysql'}`,
     ]
+
+    // Only add --user when not running as root
+    // When running as root, mysqld --initialize-insecure works without specifying a user
+    if (!isRunningAsRoot && process.env.USER) {
+      args.push(`--user=${process.env.USER}`)
+    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(mysqld, args, {

@@ -312,7 +312,7 @@ export const createCommand = new Command('create')
         if (engine !== Engine.Redis && !isValidDatabaseName(database)) {
           console.error(
             uiError(
-              'Database name must start with a letter and contain only letters, numbers, hyphens, and underscores',
+              'Database name must start with a letter and contain only letters, numbers, and underscores',
             ),
           )
           process.exit(1)

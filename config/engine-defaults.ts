@@ -102,11 +102,11 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     maxConnections: 0, // Not applicable for MongoDB
   },
   redis: {
-    defaultVersion: '7',
+    defaultVersion: '8',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6400 },
-    supportedVersions: ['6', '7', '8'],
-    latestVersion: '7',
+    supportedVersions: ['7', '8'], // Keep in sync with engines/redis/version-maps.ts
+    latestVersion: '8',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis',
     logFileName: 'redis.log',

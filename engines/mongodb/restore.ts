@@ -6,9 +6,20 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
-import { getMongorestorePath } from './binary-detection'
 import { logDebug, logWarning } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
+
+/**
+ * Get mongorestore path from config or system PATH
+ */
+async function getMongorestorePath(): Promise<string | null> {
+  const { configManager } = await import('../../core/config-manager')
+  const cachedPath = await configManager.getBinaryPath('mongorestore')
+  if (cachedPath && existsSync(cachedPath)) return cachedPath
+
+  const { platformService } = await import('../../core/platform-service')
+  return platformService.findToolPath('mongorestore')
+}
 
 /**
  * Detect the format of a MongoDB backup
@@ -107,8 +118,8 @@ export async function restoreBackup(
   const mongorestore = await getMongorestorePath()
   if (!mongorestore) {
     throw new Error(
-      'mongorestore not found. Install MongoDB database tools:\n' +
-        '  macOS: brew install mongodb-database-tools\n' +
+      'mongorestore not found. Download MongoDB binaries:\n' +
+        '  Run: spindb engines download mongodb <version>\n' +
         '  Or download from: https://www.mongodb.com/try/download/database-tools',
     )
   }

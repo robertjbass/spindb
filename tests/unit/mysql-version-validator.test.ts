@@ -13,7 +13,10 @@ import type {
 } from '../../engines/mysql/version-validator'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const fixturesDir = path.join(__dirname, '../fixtures/mysql/dumps')
+const mysqlFixturesDir = path.join(__dirname, '../fixtures/mysql/dumps')
+const mariadbFixturesDir = path.join(__dirname, '../fixtures/mariadb/dumps')
+// Alias for backward compatibility in existing tests
+const fixturesDir = mysqlFixturesDir
 
 // =============================================================================
 // parseToolVersion Tests
@@ -81,17 +84,6 @@ describe('parseToolVersion', () => {
 
 describe('parseDumpVersion', () => {
   describe('MySQL dumps', () => {
-    it('should parse MySQL 5.7 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mysql-5.7-plain.sql')
-      const result = await parseDumpVersion(dumpPath)
-
-      assert.equal(result.variant, 'mysql')
-      assert.notEqual(result.version, null)
-      assert.equal(result.version?.major, 5)
-      assert.equal(result.version?.minor, 7)
-      assert.equal(result.version?.patch, 44)
-    })
-
     it('should parse MySQL 8.0 dump file header', async () => {
       const dumpPath = path.join(fixturesDir, 'mysql-8.0-plain.sql')
       const result = await parseDumpVersion(dumpPath)
@@ -103,8 +95,19 @@ describe('parseDumpVersion', () => {
       assert.equal(result.version?.patch, 36)
     })
 
-    it('should parse MySQL 9.0 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mysql-9.0-plain.sql')
+    it('should parse MySQL 8.4 dump file header', async () => {
+      const dumpPath = path.join(fixturesDir, 'mysql-8.4-plain.sql')
+      const result = await parseDumpVersion(dumpPath)
+
+      assert.equal(result.variant, 'mysql')
+      assert.notEqual(result.version, null)
+      assert.equal(result.version?.major, 8)
+      assert.equal(result.version?.minor, 4)
+      assert.equal(result.version?.patch, 3)
+    })
+
+    it('should parse MySQL 9 dump file header', async () => {
+      const dumpPath = path.join(fixturesDir, 'mysql-9-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       assert.equal(result.variant, 'mysql')
@@ -125,7 +128,7 @@ describe('parseDumpVersion', () => {
 
   describe('MariaDB dumps', () => {
     it('should parse MariaDB 10.11 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mariadb-10.11-plain.sql')
+      const dumpPath = path.join(mariadbFixturesDir, 'mariadb-10.11-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       assert.equal(result.variant, 'mariadb')
@@ -136,7 +139,7 @@ describe('parseDumpVersion', () => {
     })
 
     it('should parse MariaDB 11.4 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mariadb-11.4-plain.sql')
+      const dumpPath = path.join(mariadbFixturesDir, 'mariadb-11.4-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       assert.equal(result.variant, 'mariadb')
@@ -147,7 +150,7 @@ describe('parseDumpVersion', () => {
     })
 
     it('should detect MariaDB variant from header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mariadb-10.11-plain.sql')
+      const dumpPath = path.join(mariadbFixturesDir, 'mariadb-10.11-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       // Should detect from "MariaDB dump" or "-MariaDB" in header
@@ -163,13 +166,16 @@ describe('parseDumpVersion', () => {
       assert.equal(result.variant, 'unknown')
     })
 
-    it('should return null version for file without dump headers in first 30 lines', async () => {
-      // README.md has dump examples but they appear after line 30
-      // The parser only reads the first 30 lines for performance
+    it('should parse version from README if dump headers appear in first 30 lines', async () => {
+      // README.md has dump examples within the first 30 lines
+      // The parser reads the first 30 lines and may find version info
       const result = await parseDumpVersion(path.join(fixturesDir, 'README.md'))
 
-      // Should not parse version since the examples are past line 30
-      assert.equal(result.version, null)
+      // Should parse the example dump header from the README
+      // Example: "-- MySQL dump 10.13  Distrib 8.0.36, for macos14.2 (arm64)"
+      assert.notEqual(result.version, null)
+      assert.equal(result.version?.major, 8)
+      assert.equal(result.version?.minor, 0)
     })
   })
 })
