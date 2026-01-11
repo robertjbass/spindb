@@ -106,9 +106,7 @@ export function parseToolVersion(output: string): {
   }
 }
 
-/**
- * Read the first N lines of a file
- */
+// Read the first N lines of a file
 async function readFirstLines(
   filePath: string,
   lineCount: number,
@@ -206,9 +204,7 @@ export async function parseDumpVersion(dumpPath: string): Promise<DumpInfo> {
   }
 }
 
-/**
- * Get the version of the mysql client
- */
+// Get the version of the mysql client
 export async function getMysqlClientVersion(): Promise<{
   version: VersionInfo
   variant: MySQLVariant

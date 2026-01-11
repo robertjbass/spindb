@@ -10,23 +10,17 @@ import {
 // Re-export for convenience
 export { FALLBACK_VERSION_MAP }
 
-/**
- * Supported major versions (in order of display)
- */
+// Supported major versions (in order of display)
 export { SUPPORTED_MAJOR_VERSIONS }
 
-/**
- * Fetch available versions from hostdb repository
- */
+// Fetch available versions from hostdb repository
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
   return await fetchHostdbVersions()
 }
 
-/**
- * Get the latest version for a major version from hostdb
- */
+// Get the latest version for a major version from hostdb
 export async function getLatestVersion(major: string): Promise<string> {
   return await getHostdbLatestVersion(major)
 }

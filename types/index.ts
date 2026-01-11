@@ -155,9 +155,7 @@ export type EngineConnection = {
   queryLanguage: string // e.g., 'sql', 'javascript', 'redis'
 }
 
-/**
- * Binary tool types for all supported engines
- */
+// Binary tool types for all supported engines
 export type BinaryTool =
   // PostgreSQL tools (server)
   | 'postgres'
@@ -199,14 +197,10 @@ export type BinaryTool =
   | 'iredis'
   | 'usql'
 
-/**
- * Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
- */
+// Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
 export type BinarySource = 'bundled' | 'system' | 'custom'
 
-/**
- * Configuration for a single binary tool
- */
+// Configuration for a single binary tool
 export type BinaryConfig = {
   tool: BinaryTool
   path: string
@@ -214,9 +208,7 @@ export type BinaryConfig = {
   version?: string
 }
 
-/**
- * Global spindb configuration stored in ~/.spindb/config.json
- */
+// Global spindb configuration stored in ~/.spindb/config.json
 export type SpinDBConfig = {
   // Binary paths for all engine tools (server and client)
   binaries: {

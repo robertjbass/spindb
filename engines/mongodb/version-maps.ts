@@ -19,9 +19,7 @@ export const MONGODB_VERSION_MAP: Record<string, string> = {
   '8.2': '8.2.3',
 }
 
-/**
- * List of supported major versions
- */
+// List of supported major versions
 export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MONGODB_VERSION_MAP)
 
 /**

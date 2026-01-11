@@ -124,9 +124,7 @@ export function isVersionCompatible(
   return { compatible: true }
 }
 
-/**
- * Validate that a version string matches supported format
- */
+// Validate that a version string matches supported format
 export function isValidVersionFormat(version: string): boolean {
   const parsed = parseVersion(version)
   return parsed !== null

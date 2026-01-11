@@ -10,58 +10,42 @@ import { platformService } from '../../core/platform-service'
 
 const execAsync = promisify(exec)
 
-/**
- * Find a MySQL binary by name using the platform service
- */
+// Find a MySQL binary by name using the platform service
 export async function findMysqlBinary(name: string): Promise<string | null> {
   return platformService.findToolPath(name)
 }
 
-/**
- * Get the path to mysqld (MySQL server)
- */
+// Get the path to mysqld (MySQL server)
 export async function getMysqldPath(): Promise<string | null> {
   return findMysqlBinary('mysqld')
 }
 
-/**
- * Get the path to mysql client
- */
+// Get the path to mysql client
 export async function getMysqlClientPath(): Promise<string | null> {
   return findMysqlBinary('mysql')
 }
 
-/**
- * Get the path to mysqladmin
- */
+// Get the path to mysqladmin
 export async function getMysqladminPath(): Promise<string | null> {
   return findMysqlBinary('mysqladmin')
 }
 
-/**
- * Get the path to mysqldump
- */
+// Get the path to mysqldump
 export async function getMysqldumpPath(): Promise<string | null> {
   return findMysqlBinary('mysqldump')
 }
 
-/**
- * Get the path to mysql_install_db (MariaDB initialization script)
- */
+// Get the path to mysql_install_db (MariaDB initialization script)
 export async function getMysqlInstallDbPath(): Promise<string | null> {
   return findMysqlBinary('mysql_install_db')
 }
 
-/**
- * Get the path to mariadb-install-db (alternative MariaDB initialization)
- */
+// Get the path to mariadb-install-db (alternative MariaDB initialization)
 export async function getMariadbInstallDbPath(): Promise<string | null> {
   return findMysqlBinary('mariadb-install-db')
 }
 
-/**
- * Detect if the installed MySQL is actually MariaDB
- */
+// Detect if the installed MySQL is actually MariaDB
 export async function isMariaDB(): Promise<boolean> {
   const mysqld = await getMysqldPath()
   if (!mysqld) return false
@@ -74,9 +58,7 @@ export async function isMariaDB(): Promise<boolean> {
   }
 }
 
-/**
- * Get the MySQL server version from a mysqld binary
- */
+// Get the MySQL server version from a mysqld binary
 export async function getMysqlVersion(
   mysqldPath: string,
 ): Promise<string | null> {
@@ -168,9 +150,7 @@ const HOMEBREW_MYSQL_VERSION_PATHS: Record<string, string[]> = {
   '5': ['/opt/homebrew/opt/mysql@5.7/bin', '/usr/local/opt/mysql@5.7/bin'],
 }
 
-/**
- * Get mysqld path for a specific major version
- */
+// Get mysqld path for a specific major version
 export async function getMysqldPathForVersion(
   majorVersion: string,
 ): Promise<string | null> {
@@ -209,9 +189,7 @@ export async function getMysqldPathForVersion(
   return null
 }
 
-/**
- * Get install instructions for MySQL
- */
+// Get install instructions for MySQL
 export function getInstallInstructions(): string {
   const { platform } = platformService.getPlatformInfo()
 
@@ -254,9 +232,7 @@ export type MysqlInstallInfo = {
   isMariaDB: boolean
 }
 
-/**
- * Detect which package manager installed MySQL and get uninstall info
- */
+// Detect which package manager installed MySQL and get uninstall info
 export async function getMysqlInstallInfo(
   mysqldPath: string,
 ): Promise<MysqlInstallInfo> {

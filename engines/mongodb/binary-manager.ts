@@ -23,9 +23,7 @@ import { logDebug } from '../../core/error-handler'
 
 const execAsync = promisify(exec)
 
-/**
- * Execute a command using spawn with argument array (safer than shell interpolation)
- */
+// Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
   command: string,
   args: string[],
@@ -76,16 +74,12 @@ export class MongoDBBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  /**
-   * Convert version to full version format (e.g., "7.0" -> "7.0.28")
-   */
+  // Convert version to full version format (e.g., "7.0" -> "7.0.28")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
 
-  /**
-   * Check if binaries for a specific version are already installed
-   */
+  // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
     platform: string,
@@ -104,9 +98,7 @@ export class MongoDBBinaryManager {
     return existsSync(mongodPath)
   }
 
-  /**
-   * List all installed MongoDB versions
-   */
+  // List all installed MongoDB versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -143,9 +135,7 @@ export class MongoDBBinaryManager {
     return installed
   }
 
-  /**
-   * Download and extract MongoDB binaries
-   */
+  // Download and extract MongoDB binaries
   async download(
     version: string,
     platform: string,
@@ -250,9 +240,7 @@ export class MongoDBBinaryManager {
     }
   }
 
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
+  // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
     binPath: string,
@@ -339,9 +327,7 @@ export class MongoDBBinaryManager {
     }
   }
 
-  /**
-   * Extract Windows binaries from zip file
-   */
+  // Extract Windows binaries from zip file
   private async extractWindowsBinaries(
     zipFile: string,
     binPath: string,
@@ -411,9 +397,7 @@ export class MongoDBBinaryManager {
     }
   }
 
-  /**
-   * Verify that MongoDB binaries are working
-   */
+  // Verify that MongoDB binaries are working
   async verify(
     version: string,
     platform: string,
@@ -469,9 +453,7 @@ export class MongoDBBinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (mongod, mongosh, etc.)
-   */
+  // Get the path to a specific binary (mongod, mongosh, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -488,9 +470,7 @@ export class MongoDBBinaryManager {
     return join(binPath, 'bin', binary)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -515,9 +495,7 @@ export class MongoDBBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  /**
-   * Delete installed binaries for a specific version
-   */
+  // Delete installed binaries for a specific version
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({

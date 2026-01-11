@@ -32,9 +32,7 @@ type HealthCheckResult = {
   }
 }
 
-/**
- * Check configuration file validity
- */
+// Check configuration file validity
 async function checkConfiguration(): Promise<HealthCheckResult> {
   const configPath = paths.config
 
@@ -83,9 +81,7 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check container status across all engines
- */
+// Check container status across all engines
 async function checkContainers(): Promise<HealthCheckResult> {
   try {
     const containers = await containerManager.list()
@@ -135,9 +131,7 @@ async function checkContainers(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check SQLite registry for orphaned entries
- */
+// Check SQLite registry for orphaned entries
 async function checkSqliteRegistry(): Promise<HealthCheckResult> {
   try {
     const entries = await sqliteRegistry.list()
@@ -199,9 +193,7 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check binary/tool availability for all engines
- */
+// Check binary/tool availability for all engines
 async function checkBinaries(): Promise<HealthCheckResult> {
   try {
     const engines = getSupportedEngines()
@@ -237,9 +229,7 @@ async function checkBinaries(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Display a single health check result
- */
+// Display a single health check result
 function displayResult(result: HealthCheckResult): void {
   const icon =
     result.status === 'ok'

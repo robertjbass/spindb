@@ -6,9 +6,7 @@ import { SQLITE_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
  */
 export const FALLBACK_VERSION_MAP: Record<string, string> = SQLITE_VERSION_MAP
 
-/**
- * Supported major versions (in order of display)
- */
+// Supported major versions (in order of display)
 export { SUPPORTED_MAJOR_VERSIONS }
 
 // Legacy export for backward compatibility

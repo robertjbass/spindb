@@ -25,9 +25,7 @@ type HostdbReleasesResponse = {
   }
 }
 
-/**
- * Fetch the hostdb releases.json file
- */
+// Fetch the hostdb releases.json file
 export async function fetchHostdbReleases(): Promise<HostdbReleasesResponse | null> {
   const now = Date.now()
 
@@ -105,9 +103,7 @@ export async function fetchAvailableVersions(): Promise<
   return FALLBACK_VERSION_MAP
 }
 
-/**
- * Get the latest full version for a major.minor version
- */
+// Get the latest full version for a major.minor version
 export async function getLatestVersion(
   majorMinor: string,
 ): Promise<string | null> {
@@ -115,9 +111,7 @@ export async function getLatestVersion(
   return versions[majorMinor] || null
 }
 
-/**
- * Get the download URL for a MongoDB version from hostdb
- */
+// Get the download URL for a MongoDB version from hostdb
 export function getHostdbDownloadUrl(
   version: string,
   platform: string,

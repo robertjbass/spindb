@@ -26,17 +26,13 @@ import {
 } from '../config/backup-formats'
 import type { ContainerConfig } from '../types'
 
-/**
- * Generate a timestamp string for backup filenames
- */
+// Generate a timestamp string for backup filenames
 export function generateBackupTimestamp(): string {
   const now = new Date()
   return now.toISOString().replace(/:/g, '').split('.')[0]
 }
 
-/**
- * Generate a default backup filename
- */
+// Generate a default backup filename
 export function generateBackupFilename(
   containerName: string,
   databaseName: string,
@@ -55,9 +51,7 @@ export async function checkBackupDependencies(
   return getMissingDependencies(engine)
 }
 
-/**
- * Get the estimated size of a database for backup
- */
+// Get the estimated size of a database for backup
 export async function estimateBackupSize(
   config: ContainerConfig,
 ): Promise<number | null> {
@@ -69,9 +63,7 @@ export async function estimateBackupSize(
   }
 }
 
-/**
- * Options for performing a backup
- */
+// Options for performing a backup
 export type BackupOptions = {
   containerName: string
   databaseName: string
@@ -84,9 +76,7 @@ export type BackupOptions = {
   onProgress?: (message: string) => void
 }
 
-/**
- * Result of a backup operation
- */
+// Result of a backup operation
 export type BackupResult = {
   success: boolean
   path?: string
@@ -95,9 +85,7 @@ export type BackupResult = {
   error?: string
 }
 
-/**
- * Perform a backup operation
- */
+// Perform a backup operation
 export async function performBackup(
   options: BackupOptions,
 ): Promise<BackupResult> {
@@ -171,9 +159,7 @@ export async function performBackup(
   }
 }
 
-/**
- * Options for performing a restore
- */
+// Options for performing a restore
 export type RestoreOptions = {
   containerName: string
   databaseName: string
@@ -188,9 +174,7 @@ export type RestoreOptions = {
   onProgress?: (message: string) => void
 }
 
-/**
- * Result of a restore operation
- */
+// Result of a restore operation
 export type RestoreResult = {
   success: boolean
   databaseName?: string
@@ -199,9 +183,7 @@ export type RestoreResult = {
   error?: string
 }
 
-/**
- * Check backup file size and return warning level
- */
+// Check backup file size and return warning level
 export function checkBackupSize(backupPath: string): {
   size: number
   level: 'normal' | 'large' | 'very_large'
@@ -222,9 +204,7 @@ export function checkBackupSize(backupPath: string): {
   }
 }
 
-/**
- * Perform a restore operation
- */
+// Perform a restore operation
 export async function performRestore(
   options: RestoreOptions,
 ): Promise<RestoreResult> {

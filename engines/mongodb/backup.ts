@@ -11,9 +11,7 @@ import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
-/**
- * Get mongodump path from config or system PATH
- */
+// Get mongodump path from config or system PATH
 async function getMongodumpPath(): Promise<string | null> {
   const { configManager } = await import('../../core/config-manager')
   const cachedPath = await configManager.getBinaryPath('mongodump')

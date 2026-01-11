@@ -10,21 +10,15 @@ import { normalizeVersion } from './version-maps'
 const HOSTDB_BASE_URL =
   'https://github.com/robertjbass/hostdb/releases/download'
 
-/**
- * Supported platforms for MongoDB hostdb binaries
- */
+// Supported platforms for MongoDB hostdb binaries
 export const SUPPORTED_PLATFORMS = ['darwin', 'linux', 'win32'] as const
 export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 
-/**
- * Supported architectures
- */
+// Supported architectures
 export const SUPPORTED_ARCHS = ['arm64', 'x64'] as const
 export type SupportedArch = (typeof SUPPORTED_ARCHS)[number]
 
-/**
- * Map Node.js platform/arch to hostdb platform key
- */
+// Map Node.js platform/arch to hostdb platform key
 export function getHostdbPlatform(
   platform: string,
   arch: string,
@@ -67,9 +61,7 @@ export function getBinaryUrl(
   return `${HOSTDB_BASE_URL}/mongodb-${fullVersion}/mongodb-${fullVersion}-${platformKey}.${ext}`
 }
 
-/**
- * Check if a platform/arch combination is supported
- */
+// Check if a platform/arch combination is supported
 export function isPlatformSupported(platform: string, arch: string): boolean {
   return getHostdbPlatform(platform, arch) !== null
 }

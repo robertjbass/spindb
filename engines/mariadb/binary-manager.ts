@@ -19,9 +19,7 @@ import type { ProgressCallback, InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
 
-/**
- * Execute a command using spawn with argument array (safer than shell interpolation)
- */
+// Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
   command: string,
   args: string[],
@@ -78,16 +76,12 @@ export class MariaDBBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  /**
-   * Convert version to full version format (e.g., "11.8" -> "11.8.5")
-   */
+  // Convert version to full version format (e.g., "11.8" -> "11.8.5")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
 
-  /**
-   * Check if binaries for a specific version are already installed
-   */
+  // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
     platform: string,
@@ -107,9 +101,7 @@ export class MariaDBBinaryManager {
     return existsSync(mariadbPath) || existsSync(mysqldPath)
   }
 
-  /**
-   * List all installed MariaDB versions
-   */
+  // List all installed MariaDB versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -136,9 +128,7 @@ export class MariaDBBinaryManager {
     return installed
   }
 
-  /**
-   * Download and extract MariaDB binaries
-   */
+  // Download and extract MariaDB binaries
   async download(
     version: string,
     platform: string,
@@ -223,9 +213,7 @@ export class MariaDBBinaryManager {
     }
   }
 
-  /**
-   * Extract Windows binaries from ZIP file
-   */
+  // Extract Windows binaries from ZIP file
   private async extractWindowsBinaries(
     zipFile: string,
     binPath: string,
@@ -273,9 +261,7 @@ export class MariaDBBinaryManager {
     }
   }
 
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
+  // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
     binPath: string,
@@ -327,9 +313,7 @@ export class MariaDBBinaryManager {
     }
   }
 
-  /**
-   * Verify that MariaDB binaries are working
-   */
+  // Verify that MariaDB binaries are working
   async verify(
     version: string,
     platform: string,
@@ -389,9 +373,7 @@ export class MariaDBBinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (mariadbd, mysql, mysqldump, etc.)
-   */
+  // Get the path to a specific binary (mariadbd, mysql, mysqldump, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -409,9 +391,7 @@ export class MariaDBBinaryManager {
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -436,9 +416,7 @@ export class MariaDBBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  /**
-   * Delete installed binaries for a specific version
-   */
+  // Delete installed binaries for a specific version
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({

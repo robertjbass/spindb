@@ -118,9 +118,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Check if the backup file is from the wrong engine and throw helpful error
- */
+// Check if the backup file is from the wrong engine and throw helpful error
 export function assertCompatibleFormat(format: BackupFormat): void {
   if (
     format.format === 'postgresql_custom' ||
@@ -162,9 +160,7 @@ export type RestoreOptions = {
  *
  * CLI equivalent: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
  */
-/**
- * Get the mysql client path from config or binPath
- */
+// Get the mysql client path from config or binPath
 async function getMysqlClientPath(binPath?: string): Promise<string> {
   // First check if binPath is provided and has mysql client
   if (binPath) {

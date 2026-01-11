@@ -17,9 +17,7 @@ import { normalizeVersion } from './version-maps'
 import { logDebug } from '../../core/error-handler'
 import type { ProgressCallback, InstalledBinary } from '../../types'
 
-/**
- * Execute a command using spawn with argument array (safer than shell interpolation)
- */
+// Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
   command: string,
   args: string[],
@@ -76,16 +74,12 @@ export class MySQLBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  /**
-   * Convert version to full version format (e.g., "8.0" -> "8.0.40")
-   */
+  // Convert version to full version format (e.g., "8.0" -> "8.0.40")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
 
-  /**
-   * Check if binaries for a specific version are already installed
-   */
+  // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
     platform: string,
@@ -103,9 +97,7 @@ export class MySQLBinaryManager {
     return existsSync(mysqldPath)
   }
 
-  /**
-   * List all installed MySQL versions
-   */
+  // List all installed MySQL versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -133,9 +125,7 @@ export class MySQLBinaryManager {
     return installed
   }
 
-  /**
-   * Download and extract MySQL binaries
-   */
+  // Download and extract MySQL binaries
   async download(
     version: string,
     platform: string,
@@ -481,9 +471,7 @@ export class MySQLBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  /**
-   * Delete installed binaries for a specific version
-   */
+  // Delete installed binaries for a specific version
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({

@@ -358,9 +358,7 @@ export async function promptPort(
   return port
 }
 
-/**
- * Prompt for confirmation using arrow-key selection
- */
+// Prompt for confirmation using arrow-key selection
 export async function promptConfirm(
   message: string,
   defaultValue: boolean = true,
@@ -864,9 +862,7 @@ export async function promptSqlitePath(
   return finalPath
 }
 
-/**
- * Full interactive create flow
- */
+// Full interactive create flow
 export async function promptCreateOptions(): Promise<CreateOptions> {
   console.log(chalk.cyan('\n  ▣  Create New Database Container\n'))
 

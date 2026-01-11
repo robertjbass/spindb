@@ -53,9 +53,7 @@ const execAsync = promisify(exec)
 const ENGINE = 'mariadb'
 const engineDef = getEngineDefaults(ENGINE)
 
-/**
- * Build a Windows-safe mariadb command string for either a file or inline SQL.
- */
+// Build a Windows-safe mariadb command string for either a file or inline SQL.
 export function buildWindowsMariadbCommand(
   mysqlPath: string,
   port: number,
@@ -79,9 +77,7 @@ export function buildWindowsMariadbCommand(
   return cmd
 }
 
-/**
- * Build a platform-safe mariadb command string with SQL inline.
- */
+// Build a platform-safe mariadb command string with SQL inline.
 export function buildMariadbInlineCommand(
   mysqlPath: string,
   port: number,

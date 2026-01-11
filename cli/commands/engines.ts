@@ -49,18 +49,14 @@ import { mariadbBinaryManager } from '../../engines/mariadb/binary-manager'
 import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
 import { redisBinaryManager } from '../../engines/redis/binary-manager'
 
-/**
- * Pad string to width, accounting for emoji taking 2 display columns
- */
+// Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
   // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
   const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
 }
 
-/**
- * Display manual installation instructions for missing dependencies
- */
+// Display manual installation instructions for missing dependencies
 function displayManualInstallInstructions(
   missingDeps: Array<{ dependency: { name: string }; installed: boolean }>,
 ): void {
@@ -298,9 +294,7 @@ async function checkAndInstallClientTools(
   }
 }
 
-/**
- * List subcommand action
- */
+// List subcommand action
 async function listEngines(options: { json?: boolean }): Promise<void> {
   const engines = await getInstalledEngines()
 
@@ -475,9 +469,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   console.log()
 }
 
-/**
- * Delete subcommand action
- */
+// Delete subcommand action
 async function deleteEngine(
   engine: string | undefined,
   version: string | undefined,

@@ -116,9 +116,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Check if the backup file is from the wrong engine and throw helpful error
- */
+// Check if the backup file is from the wrong engine and throw helpful error
 export function assertCompatibleFormat(format: BackupFormat): void {
   if (
     format.format === 'postgresql_custom' ||
@@ -151,9 +149,7 @@ export type RestoreOptions = {
   binPath: string
 }
 
-/**
- * Get the path to mariadb or mysql client from the binary path
- */
+// Get the path to mariadb or mysql client from the binary path
 function getMysqlClientPath(binPath: string): string {
   const { platform } = platformService.getPlatformInfo()
   const ext = platform === 'win32' ? '.exe' : ''

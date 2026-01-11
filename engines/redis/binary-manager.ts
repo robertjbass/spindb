@@ -73,16 +73,12 @@ export class RedisBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  /**
-   * Convert version to full version format (e.g., "7" -> "7.4.7")
-   */
+  // Convert version to full version format (e.g., "7" -> "7.4.7")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
 
-  /**
-   * Check if binaries for a specific version are already installed
-   */
+  // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
     platform: string,
@@ -100,9 +96,7 @@ export class RedisBinaryManager {
     return existsSync(redisServerPath)
   }
 
-  /**
-   * List all installed Redis versions
-   */
+  // List all installed Redis versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -139,9 +133,7 @@ export class RedisBinaryManager {
     return installed
   }
 
-  /**
-   * Download and extract Redis binaries
-   */
+  // Download and extract Redis binaries
   async download(
     version: string,
     platform: string,
@@ -169,6 +161,7 @@ export class RedisBinaryManager {
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
+    let success = false
     try {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
@@ -233,16 +226,19 @@ export class RedisBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!success) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
+  // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
     binPath: string,
@@ -305,9 +301,7 @@ export class RedisBinaryManager {
     }
   }
 
-  /**
-   * Extract Windows binaries from zip file
-   */
+  // Extract Windows binaries from zip file
   private async extractWindowsBinaries(
     zipFile: string,
     binPath: string,
@@ -376,9 +370,7 @@ export class RedisBinaryManager {
     }
   }
 
-  /**
-   * Verify that Redis binaries are working
-   */
+  // Verify that Redis binaries are working
   async verify(
     version: string,
     platform: string,
@@ -431,9 +423,7 @@ export class RedisBinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (redis-server, redis-cli, etc.)
-   */
+  // Get the path to a specific binary (redis-server, redis-cli, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -450,9 +440,7 @@ export class RedisBinaryManager {
     return join(binPath, 'bin', binary)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -477,9 +465,7 @@ export class RedisBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  /**
-   * Delete installed binaries for a specific version
-   */
+  // Delete installed binaries for a specific version
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({

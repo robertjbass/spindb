@@ -20,9 +20,7 @@ type BackupInfo = {
   format: string
 }
 
-/**
- * Detect engine and format from file extension
- */
+// Detect engine and format from file extension
 function detectBackupType(filename: string): {
   engine: string | null
   format: string
@@ -57,9 +55,7 @@ function detectBackupType(filename: string): {
   }
 }
 
-/**
- * Check if a file looks like a backup file
- */
+// Check if a file looks like a backup file
 function isBackupFile(filename: string): boolean {
   const backupExtensions = [
     '.sql',
@@ -80,9 +76,7 @@ function isBackupFile(filename: string): boolean {
   return backupExtensions.includes(ext)
 }
 
-/**
- * Scan directory for backup files
- */
+// Scan directory for backup files
 function findBackups(directory: string): BackupInfo[] {
   const backups: BackupInfo[] = []
 
@@ -121,9 +115,7 @@ function findBackups(directory: string): BackupInfo[] {
   return backups
 }
 
-/**
- * Format a relative time string
- */
+// Format a relative time string
 function formatRelativeTime(date: Date): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -139,9 +131,7 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString()
 }
 
-/**
- * Get engine icon
- */
+// Get engine icon
 function getEngineIcon(engine: string | null): string {
   switch (engine) {
     case 'postgresql':

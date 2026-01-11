@@ -16,9 +16,7 @@ import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
 
-/**
- * Get the mysqldump path from config
- */
+// Get the mysqldump path from config
 async function getMysqldumpPath(): Promise<string> {
   const configPath = await configManager.getBinaryPath('mysqldump')
   if (configPath) return configPath
@@ -53,9 +51,7 @@ export async function createBackup(
   }
 }
 
-/**
- * Create a plain SQL backup
- */
+// Create a plain SQL backup
 async function createSqlBackup(
   mysqldump: string,
   port: number,

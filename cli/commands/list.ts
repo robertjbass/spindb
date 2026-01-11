@@ -14,9 +14,7 @@ import {
   deriveContainerName,
 } from '../../engines/sqlite/scanner'
 
-/**
- * Pad string to width, accounting for emoji taking 2 display columns
- */
+// Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
   // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
   const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length

@@ -19,60 +19,42 @@ export abstract class BaseEngine {
   abstract defaultPort: number
   abstract supportedVersions: string[]
 
-  /**
-   * Get the download URL for binaries
-   */
+  // Get the download URL for binaries
   abstract getBinaryUrl(version: string, platform: string, arch: string): string
 
-  /**
-   * Verify that the binaries are working correctly
-   */
+  // Verify that the binaries are working correctly
   abstract verifyBinary(binPath: string): Promise<boolean>
 
-  /**
-   * Initialize a new data directory
-   */
+  // Initialize a new data directory
   abstract initDataDir(
     containerName: string,
     version: string,
     options?: Record<string, unknown>,
   ): Promise<string>
 
-  /**
-   * Start the database server
-   */
+  // Start the database server
   abstract start(
     container: ContainerConfig,
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }>
 
-  /**
-   * Stop the database server
-   */
+  // Stop the database server
   abstract stop(container: ContainerConfig): Promise<void>
 
-  /**
-   * Get the status of the database server
-   */
+  // Get the status of the database server
   abstract status(container: ContainerConfig): Promise<StatusResult>
 
-  /**
-   * Detect the format of a backup file
-   */
+  // Detect the format of a backup file
   abstract detectBackupFormat(filePath: string): Promise<BackupFormat>
 
-  /**
-   * Restore a backup to the database
-   */
+  // Restore a backup to the database
   abstract restore(
     container: ContainerConfig,
     backupPath: string,
     options?: Record<string, unknown>,
   ): Promise<RestoreResult>
 
-  /**
-   * Get the connection string for a container
-   */
+  // Get the connection string for a container
   abstract getConnectionString(
     container: ContainerConfig,
     database?: string,
@@ -131,35 +113,25 @@ export abstract class BaseEngine {
     throw new Error('redis-cli not found')
   }
 
-  /**
-   * Open an interactive shell/CLI connection
-   */
+  // Open an interactive shell/CLI connection
   abstract connect(container: ContainerConfig, database?: string): Promise<void>
 
-  /**
-   * Create a new database within the container
-   */
+  // Create a new database within the container
   abstract createDatabase(
     container: ContainerConfig,
     database: string,
   ): Promise<void>
 
-  /**
-   * Drop a database within the container
-   */
+  // Drop a database within the container
   abstract dropDatabase(
     container: ContainerConfig,
     database: string,
   ): Promise<void>
 
-  /**
-   * Check if binaries are installed
-   */
+  // Check if binaries are installed
   abstract isBinaryInstalled(version: string): Promise<boolean>
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   abstract ensureBinaries(
     version: string,
     onProgress?: ProgressCallback,
@@ -179,9 +151,7 @@ export abstract class BaseEngine {
     return versions
   }
 
-  /**
-   * Create a dump from a remote database using a connection string
-   */
+  // Create a dump from a remote database using a connection string
   abstract dumpFromConnectionString(
     connectionString: string,
     outputPath: string,

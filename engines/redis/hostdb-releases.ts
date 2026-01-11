@@ -121,9 +121,7 @@ export async function fetchAvailableVersions(): Promise<
   }
 }
 
-/**
- * Get fallback versions when network is unavailable
- */
+// Get fallback versions when network is unavailable
 function getFallbackVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {

@@ -133,16 +133,12 @@ export function getEngineDefaults(engine: string): EngineDefaults {
   return defaults
 }
 
-/**
- * Check if an engine is supported
- */
+// Check if an engine is supported
 export function isEngineSupported(engine: string): boolean {
   return engine.toLowerCase() in engineDefaults
 }
 
-/**
- * Get list of all supported engine names
- */
+// Get list of all supported engine names
 export function getSupportedEngines(): string[] {
   return Object.keys(engineDefaults)
 }

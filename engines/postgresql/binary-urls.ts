@@ -35,9 +35,7 @@ export async function fetchAvailableVersions(): Promise<
   return await fetchHostdbVersions()
 }
 
-/**
- * Get the latest version for a major version from hostdb
- */
+// Get the latest version for a major version from hostdb
 export async function getLatestVersion(major: string): Promise<string> {
   return await getHostdbLatestVersion(major)
 }

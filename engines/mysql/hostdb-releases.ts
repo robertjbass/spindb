@@ -8,19 +8,16 @@
  */
 
 import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { logDebug } from '../../core/error-handler'
 
-/**
- * Platform definition in hostdb releases.json
- */
+// Platform definition in hostdb releases.json
 export type HostdbPlatform = {
   url: string
   sha256: string
   size: number
 }
 
-/**
- * Version entry in hostdb releases.json
- */
+// Version entry in hostdb releases.json
 export type HostdbRelease = {
   version: string
   releaseTag: string
@@ -28,9 +25,7 @@ export type HostdbRelease = {
   platforms: Record<string, HostdbPlatform>
 }
 
-/**
- * Structure of hostdb releases.json
- */
+// Structure of hostdb releases.json
 export type HostdbReleasesData = {
   repository: string
   updatedAt: string
@@ -42,22 +37,32 @@ export type HostdbReleasesData = {
   }
 }
 
-// Cache for fetched releases
+/**
+ * In-memory cache for fetched releases.
+ *
+ * THREAD-SAFETY NOTE: This cache uses module-level mutable state and is NOT
+ * safe for use across Node.js worker threads. Each worker thread will have
+ * its own copy of this cache. For multi-threaded use cases, consider using
+ * an external shared cache (e.g., Redis, file-based cache).
+ *
+ * For SpinDB's single-threaded CLI use case, this is acceptable.
+ */
 let cachedReleases: HostdbReleasesData | null = null
 let cacheTimestamp = 0
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
 /**
- * Clear the releases cache (for testing)
+ * Clear the releases cache (for testing).
+ *
+ * NOTE: This only clears the cache in the current thread/process.
+ * If using worker threads, each worker has its own cache instance.
  */
 export function clearCache(): void {
   cachedReleases = null
   cacheTimestamp = 0
 }
 
-/**
- * Fetch releases.json from hostdb repository
- */
+// Fetch releases.json from hostdb repository
 export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
   // Return cached releases if still valid
   if (cachedReleases && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
@@ -88,9 +93,7 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
   }
 }
 
-/**
- * Get available MySQL versions from hostdb, grouped by major version
- */
+// Get available MySQL versions from hostdb, grouped by major version
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
@@ -133,9 +136,7 @@ export async function fetchAvailableVersions(): Promise<
   }
 }
 
-/**
- * Get fallback versions when network is unavailable
- */
+// Get fallback versions when network is unavailable
 function getFallbackVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {
@@ -162,9 +163,7 @@ function compareVersions(a: string, b: string): number {
   return 0
 }
 
-/**
- * Get the latest version for a major version from hostdb
- */
+// Get the latest version for a major version from hostdb
 export async function getLatestVersion(major: string): Promise<string> {
   const versions = await fetchAvailableVersions()
   const majorVersions = versions[major]
@@ -214,7 +213,13 @@ export async function getHostdbDownloadUrl(
     }
 
     return platformData.url
-  } catch {
+  } catch (error) {
+    // Log the error before falling back to manual URL construction
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logDebug(
+      `Failed to fetch MySQL ${version} URL from hostdb for ${platform}-${arch}: ${errorMessage}. Using fallback URL.`,
+    )
+
     // Fallback to constructing URL manually if fetch fails
     const platformKey = `${platform}-${arch}`
     const hostdbPlatform = mapPlatformToHostdb(platformKey)

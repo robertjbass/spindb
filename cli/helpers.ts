@@ -8,9 +8,7 @@ import { platformService } from '../core/platform-service'
 
 const execFileAsync = promisify(execFile)
 
-/**
- * Calculate the total size of all files in a directory (recursive)
- */
+// Calculate the total size of all files in a directory (recursive)
 async function calculateDirectorySize(dirPath: string): Promise<number> {
   let sizeBytes = 0
   try {
@@ -250,9 +248,7 @@ async function getMysqlVersion(binPath: string): Promise<string | null> {
   }
 }
 
-/**
- * Get installed MySQL engines from downloaded binaries
- */
+// Get installed MySQL engines from downloaded binaries
 async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
   const binDir = paths.bin
 
@@ -299,9 +295,7 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
   return engines
 }
 
-/**
- * Get SQLite version from binary path
- */
+// Get SQLite version from binary path
 async function getSqliteVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
   const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
@@ -319,9 +313,7 @@ async function getSqliteVersion(binPath: string): Promise<string | null> {
   }
 }
 
-/**
- * Get installed SQLite engines from downloaded binaries
- */
+// Get installed SQLite engines from downloaded binaries
 async function getInstalledSqliteEngines(): Promise<InstalledSqliteEngine[]> {
   const binDir = paths.bin
 
@@ -368,9 +360,7 @@ async function getInstalledSqliteEngines(): Promise<InstalledSqliteEngine[]> {
   return engines
 }
 
-/**
- * Get MongoDB version from binary path
- */
+// Get MongoDB version from binary path
 async function getMongodbVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
   const serverPath = join(binPath, 'bin', `mongod${ext}`)
@@ -388,9 +378,7 @@ async function getMongodbVersion(binPath: string): Promise<string | null> {
   }
 }
 
-/**
- * Get installed MongoDB engines from downloaded binaries
- */
+// Get installed MongoDB engines from downloaded binaries
 async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
   const binDir = paths.bin
 
@@ -437,9 +425,7 @@ async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
   return engines
 }
 
-/**
- * Get Redis version from binary path
- */
+// Get Redis version from binary path
 async function getRedisVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
   const serverPath = join(binPath, 'bin', `redis-server${ext}`)
@@ -457,9 +443,7 @@ async function getRedisVersion(binPath: string): Promise<string | null> {
   }
 }
 
-/**
- * Get installed Redis engines from downloaded binaries
- */
+// Get installed Redis engines from downloaded binaries
 async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
   const binDir = paths.bin
 

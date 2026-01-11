@@ -26,9 +26,7 @@ function isValidName(name: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
 }
 
-/**
- * Prompt for what to edit when no options provided
- */
+// Prompt for what to edit when no options provided
 async function promptEditAction(
   engine: string,
 ): Promise<'name' | 'port' | 'config' | 'relocate' | null> {
@@ -114,9 +112,7 @@ const COMMON_PG_SETTINGS = [
   },
 ]
 
-/**
- * Prompt for PostgreSQL config setting to edit
- */
+// Prompt for PostgreSQL config setting to edit
 async function promptConfigSetting(): Promise<{
   key: string
   value: string
@@ -175,9 +171,7 @@ async function promptConfigSetting(): Promise<{
   return { key, value }
 }
 
-/**
- * Prompt for new port
- */
+// Prompt for new port
 async function promptNewPort(currentPort: number): Promise<number | null> {
   const { newPort } = await inquirer.prompt<{ newPort: number }>([
     {
@@ -213,9 +207,7 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
   return newPort
 }
 
-/**
- * Prompt for new file location (SQLite relocate)
- */
+// Prompt for new file location (SQLite relocate)
 async function promptNewLocation(currentPath: string): Promise<string | null> {
   console.log()
   console.log(chalk.gray(`  Current location: ${currentPath}`))

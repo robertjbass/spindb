@@ -9,9 +9,7 @@ import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
-/**
- * Get mongorestore path from config or system PATH
- */
+// Get mongorestore path from config or system PATH
 async function getMongorestorePath(): Promise<string | null> {
   const { configManager } = await import('../../core/config-manager')
   const cachedPath = await configManager.getBinaryPath('mongorestore')
@@ -21,9 +19,7 @@ async function getMongorestorePath(): Promise<string | null> {
   return platformService.findToolPath('mongorestore')
 }
 
-/**
- * Detect the format of a MongoDB backup
- */
+// Detect the format of a MongoDB backup
 export async function detectBackupFormat(
   filePath: string,
 ): Promise<BackupFormat> {
@@ -96,9 +92,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Restore options
- */
+// Restore options
 export type RestoreOptions = {
   port: number
   database: string
@@ -106,9 +100,7 @@ export type RestoreOptions = {
   validateVersion?: boolean
 }
 
-/**
- * Restore a MongoDB backup using mongorestore
- */
+// Restore a MongoDB backup using mongorestore
 export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,

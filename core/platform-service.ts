@@ -20,9 +20,7 @@ const execAsync = promisify(exec)
 export type Platform = 'darwin' | 'linux' | 'win32'
 export type Architecture = 'arm64' | 'x64'
 
-/**
- * Options for resolving home directory under sudo
- */
+// Options for resolving home directory under sudo
 export type ResolveHomeDirOptions = {
   sudoUser: string | null
   getentResult: string | null
@@ -91,44 +89,28 @@ export type PackageManagerInfo = {
 export abstract class BasePlatformService {
   protected cachedPlatformInfo: PlatformInfo | null = null
 
-  /**
-   * Get platform information
-   */
+  // Get platform information
   abstract getPlatformInfo(): PlatformInfo
 
-  /**
-   * Get clipboard configuration for this platform
-   */
+  // Get clipboard configuration for this platform
   abstract getClipboardConfig(): ClipboardConfig
 
-  /**
-   * Get the "which" command equivalent for this platform
-   */
+  // Get the "which" command equivalent for this platform
   abstract getWhichCommand(): WhichCommandConfig
 
-  /**
-   * Get common search paths for a tool on this platform
-   */
+  // Get common search paths for a tool on this platform
   abstract getSearchPaths(tool: string): string[]
 
-  /**
-   * Detect available package manager
-   */
+  // Detect available package manager
   abstract detectPackageManager(): Promise<PackageManagerInfo | null>
 
-  /**
-   * Get the zonky.io platform identifier for PostgreSQL binaries
-   */
+  // Get the zonky.io platform identifier for PostgreSQL binaries
   abstract getZonkyPlatform(): string | null
 
-  /**
-   * Get the null device path for this platform ('/dev/null' on Unix, 'NUL' on Windows)
-   */
+  // Get the null device path for this platform ('/dev/null' on Unix, 'NUL' on Windows)
   abstract getNullDevice(): string
 
-  /**
-   * Get the executable file extension for this platform ('' on Unix, '.exe' on Windows)
-   */
+  // Get the executable file extension for this platform ('' on Unix, '.exe' on Windows)
   abstract getExecutableExtension(): string
 
   /**
@@ -138,14 +120,10 @@ export abstract class BasePlatformService {
    */
   abstract terminateProcess(pid: number, force: boolean): Promise<void>
 
-  /**
-   * Check if a process is running by PID
-   */
+  // Check if a process is running by PID
   abstract isProcessRunning(pid: number): boolean
 
-  /**
-   * Copy text to clipboard
-   */
+  // Copy text to clipboard
   async copyToClipboard(text: string): Promise<boolean> {
     const config = this.getClipboardConfig()
     if (!config.available) return false
@@ -169,9 +147,7 @@ export abstract class BasePlatformService {
     }
   }
 
-  /**
-   * Check if a tool is installed and return its path
-   */
+  // Check if a tool is installed and return its path
   async findToolPath(toolName: string): Promise<string | null> {
     const whichConfig = this.getWhichCommand()
 
@@ -202,14 +178,10 @@ export abstract class BasePlatformService {
     return null
   }
 
-  /**
-   * Build the full path to a tool in a directory
-   */
+  // Build the full path to a tool in a directory
   protected abstract buildToolPath(dir: string, toolName: string): string
 
-  /**
-   * Get tool version by running --version
-   */
+  // Get tool version by running --version
   async getToolVersion(toolPath: string): Promise<string | null> {
     try {
       const { stdout } = await execAsync(`"${toolPath}" --version`, {
@@ -755,9 +727,7 @@ class Win32PlatformService extends BasePlatformService {
   }
 }
 
-/**
- * Create the appropriate platform service for the current OS
- */
+// Create the appropriate platform service for the current OS
 export function createPlatformService(): BasePlatformService {
   const platform = osPlatform()
 
@@ -776,9 +746,7 @@ export function createPlatformService(): BasePlatformService {
 // Export singleton instance for convenience
 export const platformService = createPlatformService()
 
-/**
- * Check if running on Windows
- */
+// Check if running on Windows
 export function isWindows(): boolean {
   return process.platform === 'win32'
 }

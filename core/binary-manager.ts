@@ -116,9 +116,7 @@ export class BinaryManager {
     return existsSync(postgresPath)
   }
 
-  /**
-   * List all installed PostgreSQL versions
-   */
+  // List all installed PostgreSQL versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -343,9 +341,7 @@ export class BinaryManager {
     }
   }
 
-  /**
-   * Verify that PostgreSQL binaries are working
-   */
+  // Verify that PostgreSQL binaries are working
   async verify(
     version: string,
     platform: string,
@@ -400,9 +396,7 @@ export class BinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (postgres, pg_ctl, psql, etc.)
-   */
+  // Get the path to a specific binary (postgres, pg_ctl, psql, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -420,9 +414,7 @@ export class BinaryManager {
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -563,9 +555,7 @@ export class BinaryManager {
     }
   }
 
-  /**
-   * Get the download URL for PostgreSQL client package from apt repository
-   */
+  // Get the download URL for PostgreSQL client package from apt repository
   private async getClientPackageUrl(majorVersion: string): Promise<string> {
     const baseUrl = 'https://apt.postgresql.org/pub/repos/apt/pool/main/p'
     const packageDir = `postgresql-${majorVersion}`

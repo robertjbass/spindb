@@ -74,16 +74,12 @@ export class SQLiteBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  /**
-   * Convert version to full version format (e.g., "3" -> "3.51.2")
-   */
+  // Convert version to full version format (e.g., "3" -> "3.51.2")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
 
-  /**
-   * Check if binaries for a specific version are already installed
-   */
+  // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
     platform: string,
@@ -101,9 +97,7 @@ export class SQLiteBinaryManager {
     return existsSync(sqlite3Path)
   }
 
-  /**
-   * List all installed SQLite versions
-   */
+  // List all installed SQLite versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -131,9 +125,7 @@ export class SQLiteBinaryManager {
     return installed
   }
 
-  /**
-   * Download and extract SQLite binaries
-   */
+  // Download and extract SQLite binaries
   async download(
     version: string,
     platform: string,
@@ -238,9 +230,7 @@ export class SQLiteBinaryManager {
     }
   }
 
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
+  // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
     binPath: string,
@@ -303,9 +293,7 @@ export class SQLiteBinaryManager {
     }
   }
 
-  /**
-   * Extract Windows binaries from zip file
-   */
+  // Extract Windows binaries from zip file
   private async extractWindowsBinaries(
     zipFile: string,
     binPath: string,
@@ -374,9 +362,7 @@ export class SQLiteBinaryManager {
     }
   }
 
-  /**
-   * Verify that SQLite binaries are working
-   */
+  // Verify that SQLite binaries are working
   async verify(
     version: string,
     platform: string,
@@ -428,9 +414,7 @@ export class SQLiteBinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (sqlite3, sqldiff, etc.)
-   */
+  // Get the path to a specific binary (sqlite3, sqldiff, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -448,9 +432,7 @@ export class SQLiteBinaryManager {
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -475,9 +457,7 @@ export class SQLiteBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  /**
-   * Delete installed binaries for a specific version
-   */
+  // Delete installed binaries for a specific version
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({

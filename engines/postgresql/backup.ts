@@ -11,9 +11,7 @@ import { getWindowsSpawnOptions } from '../../core/platform-service'
 import { defaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
-/**
- * Get pg_dump path from config, with helpful error message
- */
+// Get pg_dump path from config, with helpful error message
 async function getPgDumpPath(): Promise<string> {
   const pgDumpPath = await configManager.getBinaryPath('pg_dump')
   if (!pgDumpPath) {

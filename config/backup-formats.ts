@@ -24,9 +24,7 @@ export type EngineBackupFormats = {
   defaultFormat: 'sql' | 'dump'
 }
 
-/**
- * Backup format configuration by engine
- */
+// Backup format configuration by engine
 export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
   postgresql: {
     sql: {
@@ -110,9 +108,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
   },
 }
 
-/**
- * Get backup format info for an engine
- */
+// Get backup format info for an engine
 export function getBackupFormatInfo(
   engine: string,
   format: 'sql' | 'dump',
@@ -121,9 +117,7 @@ export function getBackupFormatInfo(
   return engineFormats[format]
 }
 
-/**
- * Get file extension for a backup format
- */
+// Get file extension for a backup format
 export function getBackupExtension(
   engine: string,
   format: 'sql' | 'dump',
@@ -131,9 +125,7 @@ export function getBackupExtension(
   return getBackupFormatInfo(engine, format).extension
 }
 
-/**
- * Get spinner label for a backup format
- */
+// Get spinner label for a backup format
 export function getBackupSpinnerLabel(
   engine: string,
   format: 'sql' | 'dump',
@@ -141,28 +133,20 @@ export function getBackupSpinnerLabel(
   return getBackupFormatInfo(engine, format).spinnerLabel
 }
 
-/**
- * Check if an engine supports format selection
- */
+// Check if an engine supports format selection
 export function supportsFormatChoice(engine: string): boolean {
   const engineFormats = BACKUP_FORMATS[engine]
   return engineFormats?.supportsFormatChoice ?? true
 }
 
-/**
- * Get default format for an engine
- */
+// Get default format for an engine
 export function getDefaultFormat(engine: string): 'sql' | 'dump' {
   const engineFormats = BACKUP_FORMATS[engine]
   return engineFormats?.defaultFormat ?? 'sql'
 }
 
-/**
- * Large backup threshold (100MB) - warn user before restoring
- */
+// Large backup threshold (100MB) - warn user before restoring
 export const LARGE_BACKUP_THRESHOLD = 100 * 1024 * 1024
 
-/**
- * Very large backup threshold (1GB) - require confirmation
- */
+// Very large backup threshold (1GB) - require confirmation
 export const VERY_LARGE_BACKUP_THRESHOLD = 1024 * 1024 * 1024

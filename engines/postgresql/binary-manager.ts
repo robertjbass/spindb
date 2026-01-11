@@ -33,9 +33,7 @@ export type PackageManager = {
   versionCheckCommand: (binary: string) => string
 }
 
-/**
- * Detect which package manager is available on the system
- */
+// Detect which package manager is available on the system
 export async function detectPackageManager(): Promise<PackageManager | null> {
   const pgPackage = getPostgresHomebrewPackage()
   const managers: PackageManager[] = [
@@ -90,9 +88,7 @@ export async function detectPackageManager(): Promise<PackageManager | null> {
   return null
 }
 
-/**
- * Get PostgreSQL version from pg_restore or psql
- */
+// Get PostgreSQL version from pg_restore or psql
 export async function getPostgresVersion(
   binary: 'pg_restore' | 'psql',
 ): Promise<string | null> {
@@ -108,9 +104,7 @@ export async function getPostgresVersion(
   }
 }
 
-/**
- * Find binary path using which/where command
- */
+// Find binary path using which/where command
 export async function findBinaryPath(binary: string): Promise<string | null> {
   try {
     const command = isWindows() ? 'where' : 'which'
@@ -124,9 +118,7 @@ export async function findBinaryPath(binary: string): Promise<string | null> {
   }
 }
 
-/**
- * Find binary path with fallback to refresh PATH cache
- */
+// Find binary path with fallback to refresh PATH cache
 export async function findBinaryPathFresh(
   binary: string,
 ): Promise<string | null> {
@@ -156,9 +148,7 @@ export async function findBinaryPathFresh(
   }
 }
 
-/**
- * Execute command with timeout
- */
+// Execute command with timeout
 async function execWithTimeout(
   command: string,
   timeoutMs: number = 60000,
@@ -236,9 +226,7 @@ export async function getDumpRequiredVersion(
   }
 }
 
-/**
- * Check if a PostgreSQL version is compatible with a dump
- */
+// Check if a PostgreSQL version is compatible with a dump
 export function isVersionCompatible(
   currentVersion: string,
   requiredVersion: string,
@@ -250,9 +238,7 @@ export function isVersionCompatible(
   return current >= required
 }
 
-/**
- * Get binary information including version and compatibility
- */
+// Get binary information including version and compatibility
 export async function getBinaryInfo(
   binary: 'pg_restore' | 'psql',
   dumpPath?: string,
@@ -319,9 +305,7 @@ export async function getBinaryInfo(
   }
 }
 
-/**
- * Install PostgreSQL client tools using the new dependency manager
- */
+// Install PostgreSQL client tools using the new dependency manager
 export async function installPostgresBinaries(): Promise<boolean> {
   const spinner = createSpinner('Checking package manager...')
   spinner.start()
@@ -388,9 +372,7 @@ export async function installPostgresBinaries(): Promise<boolean> {
   }
 }
 
-/**
- * Update individual PostgreSQL client tools to resolve conflicts
- */
+// Update individual PostgreSQL client tools to resolve conflicts
 export async function updatePostgresClientTools(): Promise<boolean> {
   const spinner = createSpinner('Updating PostgreSQL client tools...')
   spinner.start()
@@ -505,9 +487,7 @@ export async function updatePostgresBinaries(): Promise<boolean> {
   }
 }
 
-/**
- * Ensure PostgreSQL binary is available and compatible
- */
+// Ensure PostgreSQL binary is available and compatible
 export async function ensurePostgresBinary(
   binary: 'pg_restore' | 'psql',
   dumpPath?: string,

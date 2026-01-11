@@ -1,6 +1,4 @@
-/**
- * Test helpers for system integration tests
- */
+// Test helpers for system integration tests
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -17,9 +15,7 @@ import { Engine } from '../../types'
 
 const execAsync = promisify(exec)
 
-/**
- * Default test port configuration
- */
+// Default test port configuration
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
@@ -39,9 +35,7 @@ export function generateTestName(prefix = 'test'): string {
   return `${prefix}_${uuid}`
 }
 
-/**
- * Find N consecutive free ports starting from a base port
- */
+// Find N consecutive free ports starting from a base port
 export async function findConsecutiveFreePorts(
   count: number,
   startPort: number,
@@ -333,9 +327,7 @@ export async function getKeyCount(
   return lines.length
 }
 
-/**
- * Get the value of a key in Redis
- */
+// Get the value of a key in Redis
 export async function getRedisValue(
   port: number,
   database: string,
@@ -351,9 +343,7 @@ export async function getRedisValue(
   return stdout.trim()
 }
 
-/**
- * Wait for a database to be ready to accept connections
- */
+// Wait for a database to be ready to accept connections
 export async function waitForReady(
   engine: Engine,
   port: number,
@@ -435,16 +425,12 @@ export function containerDataExists(
   return existsSync(containerPath)
 }
 
-/**
- * Check if a SQLite database file exists
- */
+// Check if a SQLite database file exists
 export function sqliteFileExists(filePath: string): boolean {
   return existsSync(filePath)
 }
 
-/**
- * Get connection string for a container
- */
+// Get connection string for a container
 export function getConnectionString(
   engine: Engine,
   port: number,
@@ -483,9 +469,7 @@ export async function getInstalledVersion(engine: Engine): Promise<string> {
   return availableVersions.sort().reverse()[0]
 }
 
-/**
- * Execute SQL file using engine.runScript (tests the run command functionality)
- */
+// Execute SQL file using engine.runScript (tests the run command functionality)
 export async function runScriptFile(
   containerName: string,
   filePath: string,
@@ -503,9 +487,7 @@ export async function runScriptFile(
   })
 }
 
-/**
- * Execute inline SQL using engine.runScript (tests the run command functionality)
- */
+// Execute inline SQL using engine.runScript (tests the run command functionality)
 export async function runScriptSQL(
   containerName: string,
   sql: string,

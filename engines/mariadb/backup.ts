@@ -20,9 +20,7 @@ import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 const engineDef = getEngineDefaults('mariadb')
 
-/**
- * Get the path to mariadb-dump or mysqldump from the container's binary path
- */
+// Get the path to mariadb-dump or mysqldump from the container's binary path
 async function getDumpPath(container: ContainerConfig): Promise<string> {
   const { platform, arch } = platformService.getPlatformInfo()
   const ext = platform === 'win32' ? '.exe' : ''
@@ -80,9 +78,7 @@ export async function createBackup(
   }
 }
 
-/**
- * Create a plain SQL backup
- */
+// Create a plain SQL backup
 async function createSqlBackup(
   dumpPath: string,
   port: number,
@@ -158,9 +154,7 @@ async function createSqlBackup(
   })
 }
 
-/**
- * Create a compressed (gzipped) backup
- */
+// Create a compressed (gzipped) backup
 async function createCompressedBackup(
   dumpPath: string,
   port: number,

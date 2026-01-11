@@ -50,9 +50,7 @@ export class SQLiteEngine extends BaseEngine {
   defaultPort = 0 // File-based, no port
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
-  /**
-   * Get the download URL for SQLite binaries from hostdb
-   */
+  // Get the download URL for SQLite binaries from hostdb
   getBinaryUrl(version: string, platform: string, arch: string): string {
     return getBinaryUrl(version, platform, arch)
   }
@@ -66,9 +64,7 @@ export class SQLiteEngine extends BaseEngine {
     return sqliteBinaryManager.isInstalled(version, platform, arch)
   }
 
-  /**
-   * Ensure SQLite binaries are downloaded from hostdb and register tools
-   */
+  // Ensure SQLite binaries are downloaded from hostdb and register tools
   async ensureBinaries(
     version: string,
     onProgress?: ProgressCallback,
@@ -102,9 +98,7 @@ export class SQLiteEngine extends BaseEngine {
     return binPath
   }
 
-  /**
-   * Get path to sqlite3 binary - checks downloaded binary first
-   */
+  // Get path to sqlite3 binary - checks downloaded binary first
   async getSqlite3Path(version?: string): Promise<string | null> {
     // Check config manager first (cached path from downloaded binaries)
     const configPath = await configManager.getBinaryPath('sqlite3')
@@ -552,9 +546,7 @@ export class SQLiteEngine extends BaseEngine {
     return result
   }
 
-  /**
-   * Helper to get sqlite3 path or throw a helpful error
-   */
+  // Helper to get sqlite3 path or throw a helpful error
   private async requireSqlite3Path(): Promise<string> {
     const sqlite3 = await this.getSqlite3Path()
     if (!sqlite3) {

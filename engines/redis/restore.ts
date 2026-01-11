@@ -208,9 +208,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Restore options for Redis
- */
+// Restore options for Redis
 export type RestoreOptions = {
   containerName: string
   dataDir?: string
