@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
 # libnuma1: NUMA library required by Percona PostgreSQL builds
 # libaio1: async I/O library required by MySQL
 # libncurses6: terminal library required by MariaDB client
+# libxml2: XML library required by PostgreSQL (hostdb binaries compiled with XML support)
 # sudo: needed for non-root user to run privileged commands
 RUN apt-get update && apt-get install -y \
     git \
@@ -60,6 +61,7 @@ RUN apt-get update && apt-get install -y \
     libnuma1 \
     libaio1t64 \
     libncurses6 \
+    libxml2 \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
