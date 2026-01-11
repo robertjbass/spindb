@@ -1,15 +1,12 @@
 import { describe, it } from 'node:test'
 import { assert, assertEqual } from '../utils/assertions'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
-import {
-  getBinaryUrl,
-  getHostdbPlatform,
-  SUPPORTED_MAJOR_VERSIONS,
-} from '../../engines/sqlite/binary-urls'
+import { getBinaryUrl, getHostdbPlatform } from '../../engines/sqlite/binary-urls'
 import {
   normalizeVersion,
   getFullVersion,
   SQLITE_VERSION_MAP,
+  SUPPORTED_MAJOR_VERSIONS,
 } from '../../engines/sqlite/version-maps'
 
 // =============================================================================

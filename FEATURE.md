@@ -737,129 +737,50 @@ The shell handlers file controls which CLI tools are offered when connecting to 
 
 ### 8. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
 
-The "Manage Engines" menu displays installed engines. The menu options differ based on engine type:
-- **Downloaded binary engines** (PostgreSQL, MariaDB): Show "Delete" option
-- **System-installed engines** (MySQL, MongoDB, Redis): Show "Info" option with uninstall instructions
+The "Manage Engines" menu displays installed engines with delete options. All engines now use hostdb downloads.
 
 **Required changes:**
 
-1. **Add type imports:**
+1. **Add type import:**
    ```ts
    import {
      // ... existing types
-     type InstalledYourEngineType,
+     type InstalledYourengineEngine,
    } from '../../helpers'
    ```
 
-2. **Add engine filtering in `handleEngines()`:**
+2. **Add engine filtering:**
    ```ts
-   const yourEngines = engines.filter(
-     (e): e is InstalledYourEngineType => e.engine === 'yourengine',
+   const yourengineEngines = engines.filter(
+     (e): e is InstalledYourengineEngine => e.engine === 'yourengine',
    )
    ```
 
-3. **Add engine row to the table display:**
-
-   For **downloaded binary engines**:
+3. **Add totalSize calculation:**
    ```ts
-   for (const engine of yourEngines) {
-     const icon = getEngineIcon(engine.engine)
-     const platformInfo = `${engine.platform}-${engine.arch}`
-     const engineDisplay = `${icon} ${engine.engine}`
+   const totalYourengineSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+   ```
 
+4. **Add to `allEnginesSorted` array** (maintains display grouping):
+   ```ts
+   const allEnginesSorted = [
+     ...pgEngines,
+     ...mariadbEngines,
+     // ... other engines ...
+     ...yourengineEngines,
+   ]
+   ```
+
+5. **Add summary display block:**
+   ```ts
+   if (yourengineEngines.length > 0) {
      console.log(
-       chalk.gray('  ') +
-         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-         chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-         chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-         chalk.white(formatBytes(engine.sizeBytes)),
+       chalk.gray(`  Yourengine: ${yourengineEngines.length} version(s), ${formatBytes(totalYourengineSize)}`),
      )
    }
    ```
 
-   For **system-installed engines**:
-   ```ts
-   for (const engine of yourEngines) {
-     const icon = ENGINE_ICONS.yourengine
-     const engineDisplay = `${icon} yourengine`
-
-     console.log(
-       chalk.gray('  ') +
-         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-         chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-         chalk.gray('system'.padEnd(COL_SOURCE)) +
-         chalk.gray('(system-installed)'),
-     )
-   }
-   ```
-
-4. **Add summary line:**
-
-   For **downloaded binary engines**:
-   ```ts
-   if (yourEngines.length > 0) {
-     const totalSize = yourEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-     console.log(
-       chalk.gray(`  YourEngine: ${yourEngines.length} version(s), ${formatBytes(totalSize)}`),
-     )
-   }
-   ```
-
-   For **system-installed engines**:
-   ```ts
-   if (yourEngines.length > 0) {
-     console.log(
-       chalk.gray(`  YourEngine: ${yourEngines.length} version(s) system-installed`),
-     )
-   }
-   ```
-
-5. **Add menu choices:**
-
-   For **downloaded binary engines** (deletable):
-   ```ts
-   for (const e of yourEngines) {
-     choices.push({
-       name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-       value: `delete:${e.path}:${e.engine}:${e.version}`,
-     })
-   }
-   ```
-   Note: The existing `handleDeleteEngine()` function handles deletion automatically.
-
-   For **system-installed engines** (info only):
-   ```ts
-   for (const engine of yourEngines) {
-     choices.push({
-       name: `${chalk.blue('ℹ')} YourEngine ${engine.version} ${chalk.gray('(system-installed)')}`,
-       value: `yourengine-info:${engine.path}:${engine.formulaName}`,
-     })
-   }
-   ```
-
-6. **Add action handler (system-installed engines only):**
-   ```ts
-   if (action.startsWith('yourengine-info:')) {
-     const withoutPrefix = action.slice('yourengine-info:'.length)
-     const lastColon = withoutPrefix.lastIndexOf(':')
-     const binaryPath = withoutPrefix.slice(0, lastColon)
-     const formulaName = withoutPrefix.slice(lastColon + 1)
-     await handleYourEngineInfo(binaryPath, formulaName)
-     await handleEngines()
-   }
-   ```
-
-7. **Add info handler function (system-installed engines only):**
-   ```ts
-   async function handleYourEngineInfo(binaryPath: string, formulaName: string): Promise<void> {
-     console.clear()
-     console.log(header('YourEngine Information'))
-     // Show version, containers using this engine, uninstall instructions
-     // See handleMongodbInfo() or handleRedisInfo() as reference
-   }
-   ```
-
-**Note:** Downloaded binary engines reuse the existing `handleDeleteEngine()` function and don't need a custom info handler.
+**Note:** The table display, delete menu choices, and delete handling all work automatically via the `allEnginesSorted` array - no additional changes needed for those.
 
 ---
 

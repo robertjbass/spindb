@@ -10,8 +10,8 @@ import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec, spawn } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
+
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
@@ -21,7 +21,16 @@ import {
   type InstalledBinary,
 } from '../../types'
 
-const execAsync = promisify(exec)
+/**
+ * Check if an error is a filesystem error that should trigger cp fallback
+ * - EXDEV: cross-device link (rename across filesystems)
+ * - EPERM: permission error (Windows filesystem operations)
+ */
+function isRenameFallbackError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as NodeJS.ErrnoException).code
+  return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
+}
 
 // Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
@@ -264,9 +273,7 @@ export class SQLiteBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
+          if (isRenameFallbackError(error)) {
             await cp(sourcePath, destPath, { recursive: true })
           } else {
             throw error
@@ -281,9 +288,7 @@ export class SQLiteBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
+          if (isRenameFallbackError(error)) {
             await cp(sourcePath, destPath, { recursive: true })
           } else {
             throw error
@@ -333,9 +338,7 @@ export class SQLiteBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
+          if (isRenameFallbackError(error)) {
             await cp(sourcePath, destPath, { recursive: true })
           } else {
             throw error
@@ -350,9 +353,7 @@ export class SQLiteBinaryManager {
         try {
           await rename(sourcePath, destPath)
         } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
+          if (isRenameFallbackError(error)) {
             await cp(sourcePath, destPath, { recursive: true })
           } else {
             throw error
@@ -384,7 +385,7 @@ export class SQLiteBinaryManager {
     }
 
     try {
-      const { stdout } = await execAsync(`"${sqlite3Path}" --version`)
+      const { stdout } = await spawnAsync(sqlite3Path, ['--version'])
       // Extract version from output like "3.51.2 2025-01-08 12:00:00 ..."
       const match = stdout.match(/^(\d+\.\d+\.\d+)/)
       const reportedVersion = match?.[1]

@@ -42,7 +42,7 @@ export function getFullVersion(majorVersion: string): string | null {
   // Try matching major only (e.g., "8" -> highest 8.x version)
   const majorOnly = majorVersion.split('.')[0]
   const matchingVersions = Object.entries(MONGODB_VERSION_MAP)
-    .filter(([key]) => key.startsWith(majorOnly + '.'))
+    .filter(([key]) => key.split('.')[0] === majorOnly)
     .sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }))
 
   if (matchingVersions.length > 0) {

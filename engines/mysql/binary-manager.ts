@@ -14,7 +14,6 @@ import unzipper from 'unzipper'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
-import { logDebug } from '../../core/error-handler'
 import type { ProgressCallback, InstalledBinary } from '../../types'
 
 // Execute a command using spawn with argument array (safer than shell interpolation)
@@ -236,49 +235,7 @@ export class MySQLBinaryManager {
         .on('error', reject)
     })
 
-    // hostdb ZIPs have a mysql/ directory - find it and move contents to binPath
-    const entries = await readdir(tempDir, { withFileTypes: true })
-    const mysqlDir = entries.find(
-      (e) =>
-        e.isDirectory() && (e.name === 'mysql' || e.name.startsWith('mysql-')),
-    )
-
-    if (mysqlDir) {
-      // Move contents from mysql/ to binPath
-      const sourceDir = join(tempDir, mysqlDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (renameError) {
-          logDebug('MySQL rename failed, falling back to cp', {
-            sourcePath,
-            destPath,
-            error: (renameError as Error).message,
-          })
-          try {
-            await cp(sourcePath, destPath, { recursive: true })
-            logDebug('MySQL cp succeeded after rename failure', {
-              sourcePath,
-              destPath,
-            })
-          } catch (cpError) {
-            logDebug('MySQL cp failed', {
-              sourcePath,
-              destPath,
-              error: (cpError as Error).message,
-            })
-            throw new Error(
-              `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
-            )
-          }
-        }
-      }
-    } else {
-      throw new Error('Unexpected archive structure - no mysql directory found')
-    }
+    await this.moveExtractedEntries(tempDir, binPath, 'mysql')
   }
 
   // Extract Unix binaries from tar.gz file
@@ -298,75 +255,39 @@ export class MySQLBinaryManager {
     await mkdir(extractDir, { recursive: true })
     await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Check if there's a nested mysql/ directory
+    await this.moveExtractedEntries(extractDir, binPath, 'mysql')
+  }
+
+  // Move extracted entries from extractDir to binPath, handling nested engine directories
+  private async moveExtractedEntries(
+    extractDir: string,
+    binPath: string,
+    engineName: string,
+  ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
-    const mysqlDir = entries.find(
+    const engineDir = entries.find(
       (e) =>
-        e.isDirectory() && (e.name === 'mysql' || e.name.startsWith('mysql-')),
+        e.isDirectory() &&
+        (e.name === engineName || e.name.startsWith(`${engineName}-`)),
     )
 
-    if (mysqlDir) {
-      // Nested structure: move contents from mysql/ to binPath
-      const sourceDir = join(extractDir, mysqlDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (renameError) {
-          logDebug('MySQL rename failed, falling back to cp', {
-            sourcePath,
-            destPath,
-            error: (renameError as Error).message,
-          })
-          try {
-            await cp(sourcePath, destPath, { recursive: true })
-            logDebug('MySQL cp succeeded after rename failure', {
-              sourcePath,
-              destPath,
-            })
-          } catch (cpError) {
-            logDebug('MySQL cp failed', {
-              sourcePath,
-              destPath,
-              error: (cpError as Error).message,
-            })
-            throw new Error(
-              `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
-            )
-          }
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (renameError) {
-          logDebug('MySQL rename failed, falling back to cp', {
-            sourcePath,
-            destPath,
-            error: (renameError as Error).message,
-          })
-          try {
-            await cp(sourcePath, destPath, { recursive: true })
-            logDebug('MySQL cp succeeded after rename failure', {
-              sourcePath,
-              destPath,
-            })
-          } catch (cpError) {
-            logDebug('MySQL cp failed', {
-              sourcePath,
-              destPath,
-              error: (cpError as Error).message,
-            })
-            throw new Error(
-              `Failed to copy ${sourcePath} to ${destPath}: ${(cpError as Error).message}`,
-            )
-          }
+    const sourceDir = engineDir ? join(extractDir, engineDir.name) : extractDir
+    const entriesToMove = engineDir
+      ? await readdir(sourceDir, { withFileTypes: true })
+      : entries
+
+    for (const entry of entriesToMove) {
+      const sourcePath = join(sourceDir, entry.name)
+      const destPath = join(binPath, entry.name)
+      try {
+        await rename(sourcePath, destPath)
+      } catch (error) {
+        // Only fallback to cp for cross-device rename errors
+        const err = error as NodeJS.ErrnoException
+        if (err.code === 'EXDEV') {
+          await cp(sourcePath, destPath, { recursive: true })
+        } else {
+          throw error
         }
       }
     }

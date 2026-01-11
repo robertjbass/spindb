@@ -11,27 +11,34 @@ import { copyFile, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { isWindows } from '../../core/platform-service'
+import { isWindows, platformService } from '../../core/platform-service'
+import { configManager } from '../../core/config-manager'
 import { paths } from '../../config/paths'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+
+// Module-level cache for redis-cli path (undefined = not yet resolved)
+let cachedRedisCliPath: string | null | undefined
 
 /**
  * Get the path to redis-cli binary
  * First checks configManager cache, then falls back to system PATH
+ * Result is cached at module level for subsequent calls
  */
 async function getRedisCliPath(): Promise<string | null> {
-  // Import here to avoid circular dependency
-  const { configManager } = await import('../../core/config-manager')
+  if (cachedRedisCliPath !== undefined) {
+    return cachedRedisCliPath
+  }
 
   // Check if we have a cached/bundled redis-cli
-  const cachedPath = await configManager.getBinaryPath('redis-cli')
-  if (cachedPath) {
-    return cachedPath
+  const configPath = await configManager.getBinaryPath('redis-cli')
+  if (configPath) {
+    cachedRedisCliPath = configPath
+    return cachedRedisCliPath
   }
 
   // Fallback to system PATH
-  const { platformService } = await import('../../core/platform-service')
-  return platformService.findToolPath('redis-cli')
+  cachedRedisCliPath = await platformService.findToolPath('redis-cli')
+  return cachedRedisCliPath
 }
 
 const execAsync = promisify(exec)

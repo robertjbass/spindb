@@ -1,13 +1,10 @@
-import { SQLITE_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { SQLITE_VERSION_MAP } from './version-maps'
 
 /**
  * Fallback map of major versions to stable patch versions
  * Used when hostdb repository is unreachable
  */
 export const FALLBACK_VERSION_MAP: Record<string, string> = SQLITE_VERSION_MAP
-
-// Supported major versions (in order of display)
-export { SUPPORTED_MAJOR_VERSIONS }
 
 // Legacy export for backward compatibility
 export const VERSION_MAP = FALLBACK_VERSION_MAP
@@ -92,9 +89,15 @@ function normalizeVersion(
   }
 
   const parts = version.split('.')
+  const knownVersions = Object.values(versionMap)
 
-  // If it's already a full version (X.Y.Z), return as-is
+  // If it's already a full version (X.Y.Z), validate against known versions
   if (parts.length === 3) {
+    if (!knownVersions.includes(version)) {
+      console.warn(
+        `SQLite version '${version}' not in version map, may not be available in hostdb`,
+      )
+    }
     return version
   }
 

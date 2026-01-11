@@ -22,6 +22,17 @@ import {
 
 const execAsync = promisify(exec)
 
+/**
+ * Check if an error is a filesystem error that should trigger cp fallback
+ * - EXDEV: cross-device link (rename across filesystems)
+ * - EPERM: permission error (Windows filesystem operations)
+ */
+function isRenameFallbackError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as NodeJS.ErrnoException).code
+  return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
+}
+
 // Execute a command using spawn with argument array (safer than shell interpolation)
 function spawnAsync(
   command: string,
@@ -255,50 +266,7 @@ export class RedisBinaryManager {
     await mkdir(extractDir, { recursive: true })
     await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Check if there's a nested redis/ directory
-    const entries = await readdir(extractDir, { withFileTypes: true })
-    const redisDir = entries.find(
-      (e) =>
-        e.isDirectory() && (e.name === 'redis' || e.name.startsWith('redis-')),
-    )
-
-    if (redisDir) {
-      // Nested structure: move contents from redis/ to binPath
-      const sourceDir = join(extractDir, redisDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    }
+    await this.moveExtractedEntries(extractDir, binPath)
   }
 
   // Extract Windows binaries from zip file
@@ -324,47 +292,35 @@ export class RedisBinaryManager {
       `Expand-Archive -Path '${zipFile}' -DestinationPath '${extractDir}' -Force`,
     ])
 
-    // Check if there's a nested redis/ directory
+    await this.moveExtractedEntries(extractDir, binPath)
+  }
+
+  // Move extracted entries from extractDir to binPath, handling nested redis/ directories
+  private async moveExtractedEntries(
+    extractDir: string,
+    binPath: string,
+  ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const redisDir = entries.find(
       (e) =>
         e.isDirectory() && (e.name === 'redis' || e.name.startsWith('redis-')),
     )
 
-    if (redisDir) {
-      // Nested structure: move contents from redis/ to binPath
-      const sourceDir = join(extractDir, redisDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          // Only fallback to cp for cross-device rename errors
-          const err = error as NodeJS.ErrnoException
-          if (err.code === 'EXDEV') {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
+    const sourceDir = redisDir ? join(extractDir, redisDir.name) : extractDir
+    const entriesToMove = redisDir
+      ? await readdir(sourceDir, { withFileTypes: true })
+      : entries
+
+    for (const entry of entriesToMove) {
+      const sourcePath = join(sourceDir, entry.name)
+      const destPath = join(binPath, entry.name)
+      try {
+        await rename(sourcePath, destPath)
+      } catch (error) {
+        if (isRenameFallbackError(error)) {
+          await cp(sourcePath, destPath, { recursive: true })
+        } else {
+          throw error
         }
       }
     }

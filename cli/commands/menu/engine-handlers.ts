@@ -6,7 +6,7 @@ import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
 import { header, uiError, uiWarning, uiInfo, formatBytes } from '../../ui/theme'
 import { promptConfirm } from '../../ui/prompts'
-import { getEngineIcon, ENGINE_ICONS } from '../../constants'
+import { getEngineIcon } from '../../constants'
 import {
   getInstalledEngines,
   type InstalledPostgresEngine,
@@ -92,78 +92,18 @@ export async function handleEngines(): Promise<void> {
   )
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
-  for (const engine of pgEngines) {
+  // Render all engines grouped by type
+  const allEnginesSorted = [
+    ...pgEngines,
+    ...mariadbEngines,
+    ...mysqlEngines,
+    ...sqliteEngines,
+    ...mongodbEngines,
+    ...redisEngines,
+  ]
+
+  for (const engine of allEnginesSorted) {
     const icon = getEngineIcon(engine.engine)
-    const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
-
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  for (const engine of mariadbEngines) {
-    const icon = getEngineIcon(engine.engine)
-    const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
-
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  for (const engine of mysqlEngines) {
-    const icon = ENGINE_ICONS.mysql
-    const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
-
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  for (const engine of sqliteEngines) {
-    const icon = ENGINE_ICONS.sqlite
-    const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
-
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  for (const engine of mongodbEngines) {
-    const icon = ENGINE_ICONS.mongodb
-    const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
-
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  for (const engine of redisEngines) {
-    const icon = ENGINE_ICONS.redis
     const platformInfo = `${engine.platform}-${engine.arch}`
     const engineDisplay = `${icon} ${engine.engine}`
 
@@ -223,49 +163,10 @@ export async function handleEngines(): Promise<void> {
   }
   console.log()
 
-  const choices: MenuChoice[] = []
-
-  for (const e of pgEngines) {
-    choices.push({
-      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-      value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })
-  }
-
-  for (const e of mariadbEngines) {
-    choices.push({
-      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-      value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })
-  }
-
-  for (const e of mysqlEngines) {
-    choices.push({
-      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-      value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })
-  }
-
-  for (const e of sqliteEngines) {
-    choices.push({
-      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-      value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })
-  }
-
-  for (const e of mongodbEngines) {
-    choices.push({
-      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-      value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })
-  }
-
-  for (const e of redisEngines) {
-    choices.push({
-      name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-      value: `delete:${e.path}:${e.engine}:${e.version}`,
-    })
-  }
+  const choices: MenuChoice[] = allEnginesSorted.map((e) => ({
+    name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
+    value: `delete:${e.path}:${e.engine}:${e.version}`,
+  }))
 
   choices.push(new inquirer.Separator())
   choices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })

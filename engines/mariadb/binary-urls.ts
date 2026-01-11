@@ -2,16 +2,13 @@ import {
   fetchAvailableVersions as fetchHostdbVersions,
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
-import { MARIADB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { MARIADB_VERSION_MAP } from './version-maps'
 
 /**
  * Fallback map of major versions to stable patch versions
  * Used when hostdb repository is unreachable
  */
 export const FALLBACK_VERSION_MAP: Record<string, string> = MARIADB_VERSION_MAP
-
-// Supported major versions (in order of display)
-export { SUPPORTED_MAJOR_VERSIONS }
 
 // Fetch available versions from hostdb repository
 export async function fetchAvailableVersions(): Promise<

@@ -2,16 +2,10 @@ import {
   fetchAvailableVersions as fetchHostdbVersions,
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
-import {
-  SUPPORTED_MAJOR_VERSIONS,
-  FALLBACK_VERSION_MAP,
-} from './version-maps'
+import { FALLBACK_VERSION_MAP } from './version-maps'
 
 // Re-export for convenience
 export { FALLBACK_VERSION_MAP }
-
-// Supported major versions (in order of display)
-export { SUPPORTED_MAJOR_VERSIONS }
 
 // Fetch available versions from hostdb repository
 export async function fetchAvailableVersions(): Promise<

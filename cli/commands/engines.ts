@@ -235,6 +235,12 @@ async function installMissingClientTools(
           installed.push(tool)
         } else {
           // Installed but can't find - maybe needs PATH refresh
+          console.warn(
+            chalk.yellow(
+              `  Warning: ${tool} was installed but its binary was not found. ` +
+                'You may need to refresh your PATH and re-run this command.',
+            ),
+          )
           installed.push(tool) // Still count as installed
         }
       }

@@ -9,6 +9,7 @@
 
 import { REDIS_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { getHostdbPlatform } from './binary-urls'
+import { compareVersions } from '../../core/version-utils'
 
 // Platform definition in hostdb releases.json
 export type HostdbPlatform = {
@@ -128,47 +129,6 @@ function getFallbackVersions(): Record<string, string[]> {
     grouped[major] = [REDIS_VERSION_MAP[major]]
   }
   return grouped
-}
-
-/**
- * Parse a version segment into numeric prefix and suffix
- * e.g., "7" -> { num: 7, suffix: "" }, "7-rc1" -> { num: 7, suffix: "-rc1" }
- */
-function parseVersionSegment(segment: string): { num: number; suffix: string } {
-  const match = segment.match(/^(\d+)(.*)$/)
-  if (!match) {
-    return { num: 0, suffix: segment }
-  }
-  return { num: parseInt(match[1], 10), suffix: match[2] }
-}
-
-/**
- * Compare two version strings (e.g., "7.4.7" vs "7.4.6")
- * Handles prerelease suffixes like "7.4.7-rc1" - empty suffix sorts after prerelease
- * Returns positive if a > b, negative if a < b, 0 if equal
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.')
-  const partsB = b.split('.')
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const segA = parseVersionSegment(partsA[i] || '0')
-    const segB = parseVersionSegment(partsB[i] || '0')
-
-    // Compare numeric parts first
-    if (segA.num !== segB.num) {
-      return segA.num - segB.num
-    }
-
-    // If numeric parts equal, compare suffixes
-    // Empty suffix (release) > prerelease suffix (e.g., "-rc1")
-    if (segA.suffix !== segB.suffix) {
-      if (segA.suffix === '') return 1 // a is release, b is prerelease
-      if (segB.suffix === '') return -1 // b is release, a is prerelease
-      return segA.suffix.localeCompare(segB.suffix)
-    }
-  }
-  return 0
 }
 
 // Get the latest version for a major version from hostdb

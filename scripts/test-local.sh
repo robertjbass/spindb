@@ -237,7 +237,7 @@ test_engine_lifecycle() {
 
   # Create container
   log_info "Creating container: $container_name"
-  if ! pnpm start create "$container_name" --engine "$engine" --db-version "$version" --no-start 2>&1; then
+  if ! pnpm start create "$container_name" --engine "$engine" --db-version "$version" --no-start > /dev/null 2>&1; then
     record_result "$engine create" "FAIL" "Create failed"
     return 1
   fi

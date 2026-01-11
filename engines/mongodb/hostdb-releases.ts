@@ -7,6 +7,7 @@
 
 import { logDebug, logWarning } from '../../core/error-handler'
 import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
+import { isNewerVersion } from '../../core/version-utils'
 
 const HOSTDB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
@@ -16,12 +17,22 @@ let releasesCache: HostdbReleasesResponse | null = null
 let cacheTimestamp = 0
 const CACHE_TTL_MS = 5 * 60 * 1000
 
+type HostdbPlatform = {
+  url: string
+  sha256: string
+  size: number
+}
+
+type VersionRelease = {
+  version: string
+  releaseTag: string
+  releasedAt: string
+  platforms: Record<string, HostdbPlatform>
+}
+
 type HostdbReleasesResponse = {
   databases: {
-    mongodb?: {
-      versions: string[]
-      platforms: Record<string, string[]>
-    }
+    mongodb?: Record<string, VersionRelease>
   }
 }
 
@@ -75,11 +86,12 @@ export async function fetchAvailableVersions(): Promise<
 > {
   const releases = await fetchHostdbReleases()
 
-  if (releases?.databases?.mongodb?.versions) {
-    const versions = releases.databases.mongodb.versions
+  if (releases?.databases?.mongodb) {
+    const mongodbReleases = releases.databases.mongodb
     const versionMap: Record<string, string> = {}
 
-    for (const fullVersion of versions) {
+    // Iterate over version keys (e.g., "7.0.28", "8.0.17", "8.2.3")
+    for (const fullVersion of Object.keys(mongodbReleases)) {
       // Extract major.minor (e.g., "7.0.28" -> "7.0")
       const parts = fullVersion.split('.')
       if (parts.length >= 2) {
@@ -111,32 +123,80 @@ export async function getLatestVersion(
   return versions[majorMinor] || null
 }
 
-// Get the download URL for a MongoDB version from hostdb
-export function getHostdbDownloadUrl(
+/**
+ * Get the download URL for a MongoDB version from hostdb
+ *
+ * @param version - Full version (e.g., '7.0.28')
+ * @param platform - Platform identifier (e.g., 'darwin', 'linux')
+ * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
+ * @returns Download URL for the binary
+ */
+export async function getHostdbDownloadUrl(
   version: string,
   platform: string,
   arch: string,
-): string {
-  const platformKey = `${platform}-${arch}`
-  return `https://github.com/robertjbass/hostdb/releases/download/mongodb-${version}/mongodb-${version}-${platformKey}.tar.gz`
+): Promise<string> {
+  try {
+    const releases = await fetchHostdbReleases()
+    const mongodbReleases = releases?.databases?.mongodb
+
+    if (!mongodbReleases) {
+      throw new Error('MongoDB releases not found in hostdb')
+    }
+
+    // Find the version in releases
+    const release = mongodbReleases[version]
+    if (!release) {
+      throw new Error(`Version ${version} not found in hostdb releases`)
+    }
+
+    // Map Node.js platform names to hostdb platform names
+    const platformKey = `${platform}-${arch}`
+    const hostdbPlatform = mapPlatformToHostdb(platformKey)
+
+    // Get the platform-specific download URL
+    const platformData = release.platforms[hostdbPlatform]
+    if (!platformData) {
+      throw new Error(
+        `Platform ${hostdbPlatform} not available for MongoDB ${version}`,
+      )
+    }
+
+    return platformData.url
+  } catch (error) {
+    // Log the error before falling back to manual URL construction
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logDebug(
+      `Failed to fetch MongoDB ${version} URL from hostdb for ${platform}-${arch}: ${errorMessage}. Using fallback URL.`,
+    )
+
+    // Fallback to constructing URL manually if fetch fails
+    const platformKey = `${platform}-${arch}`
+    const hostdbPlatform = mapPlatformToHostdb(platformKey)
+    const tag = `mongodb-${version}`
+    const filename = `mongodb-${version}-${hostdbPlatform}.tar.gz`
+
+    return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  }
 }
 
 /**
- * Compare two semantic versions
- * Returns true if versionA > versionB
+ * Map Node.js platform identifiers to hostdb platform identifiers
  */
-function isNewerVersion(versionA: string, versionB: string): boolean {
-  const partsA = versionA.split('.').map(Number)
-  const partsB = versionB.split('.').map(Number)
-  const maxLength = Math.max(partsA.length, partsB.length)
-
-  for (let i = 0; i < maxLength; i++) {
-    const a = partsA[i] || 0
-    const b = partsB[i] || 0
-    if (a > b) return true
-    if (a < b) return false
+function mapPlatformToHostdb(platformKey: string): string {
+  const mapping: Record<string, string> = {
+    'darwin-arm64': 'darwin-arm64',
+    'darwin-x64': 'darwin-x64',
+    'linux-arm64': 'linux-arm64',
+    'linux-x64': 'linux-x64',
   }
-  return false
+
+  const result = mapping[platformKey]
+  if (!result) {
+    throw new Error(`Unsupported platform: ${platformKey}`)
+  }
+
+  return result
 }
 
 // Re-export for convenience

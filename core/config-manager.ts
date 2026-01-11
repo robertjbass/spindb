@@ -460,9 +460,13 @@ export class ConfigManager {
         if (!match) continue
 
         const [, engineName] = match
+
+        // Validate engineName is a known engine before casting
+        if (!Object.prototype.hasOwnProperty.call(ENGINE_BINARY_MAP, engineName)) {
+          continue
+        }
         const engine = engineName as Engine
-        const engineTools = ENGINE_BINARY_MAP[engine]
-        if (!engineTools) continue
+        const engineTools = ENGINE_BINARY_MAP[engine]!
 
         scanned++
         if (!enginesFound.includes(engine)) {

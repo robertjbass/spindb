@@ -2,10 +2,7 @@ import {
   fetchAvailableVersions as fetchHostdbVersions,
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
-import {
-  POSTGRESQL_VERSION_MAP,
-  SUPPORTED_MAJOR_VERSIONS,
-} from './version-maps'
+import { POSTGRESQL_VERSION_MAP } from './version-maps'
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -15,13 +12,6 @@ import {
  */
 export const FALLBACK_VERSION_MAP: Record<string, string> =
   POSTGRESQL_VERSION_MAP
-
-/**
- * Supported major versions (in order of display)
- *
- * @deprecated Use SUPPORTED_MAJOR_VERSIONS from version-maps.ts instead
- */
-export { SUPPORTED_MAJOR_VERSIONS }
 
 /**
  * Fetch available versions from hostdb repository

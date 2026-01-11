@@ -655,14 +655,31 @@ async get{Engine}ClientPath(): Promise<string> {
 
 4. **Update `cli/commands/menu/engine-handlers.ts`:**
    ```ts
-   import { getInstalled{Engine}Engines } from '../../helpers'
+   import { type InstalledNewengineEngine } from '../../helpers'
 
-   // In handleManageEngines():
-   const {engine}Engines = await getInstalled{Engine}Engines()
-   const installedEngines = [...postgresEngines, ...mariadbEngines, ...{engine}Engines]
+   // Add filter for the new engine type
+   const newengineEngines = engines.filter(
+     (e): e is InstalledNewengineEngine => e.engine === 'newengine',
+   )
+
+   // Add totalSize calculation
+   const totalNewengineSize = newengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+
+   // Add to allEnginesSorted array (maintains display grouping)
+   const allEnginesSorted = [
+     ...pgEngines,
+     ...mariadbEngines,
+     // ... other engines ...
+     ...newengineEngines,
+   ]
+
+   // Add summary display block
+   if (newengineEngines.length > 0) {
+     console.log(chalk.gray(`  Newengine: ${newengineEngines.length} version(s), ${formatBytes(totalNewengineSize)}`))
+   }
    ```
 
-5. **Handle deletion in `handleDeleteEngine()`** - add case for the new engine type
+   Note: The delete functionality works automatically via `allEnginesSorted` - no additional changes needed.
 
 #### Step 8: Update Config Defaults (`config/engine-defaults.ts`)
 

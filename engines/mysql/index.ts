@@ -132,7 +132,16 @@ export class MySQLEngine extends BaseEngine {
       return version
     }
     // It's a major version, resolve using fallback map
-    return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
+    const resolved = FALLBACK_VERSION_MAP[version]
+    if (!resolved) {
+      const availableVersions = Object.keys(FALLBACK_VERSION_MAP).join(', ')
+      logWarning(
+        `Unknown MySQL major version "${version}". Available versions: ${availableVersions}. ` +
+          `Falling back to ${version}.0.0 which may not exist.`,
+      )
+      return `${version}.0.0`
+    }
+    return resolved
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {

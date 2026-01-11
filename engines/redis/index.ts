@@ -11,12 +11,8 @@ import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { redisBinaryManager } from './binary-manager'
-import {
-  getBinaryUrl,
-  SUPPORTED_MAJOR_VERSIONS,
-  FALLBACK_VERSION_MAP,
-} from './binary-urls'
-import { normalizeVersion } from './version-maps'
+import { getBinaryUrl, VERSION_MAP } from './binary-urls'
+import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
@@ -52,9 +48,7 @@ const SHELL_INJECTION_PATTERNS = [
   /\|\s*\S/, // Pipe to another command
 ]
 
-/**
- * Validate that a command doesn't contain shell injection patterns
- */
+// Validate that a command doesn't contain shell injection patterns
 function validateCommand(command: string): void {
   for (const pattern of SHELL_INJECTION_PATTERNS) {
     if (pattern.test(command)) {
@@ -66,9 +60,7 @@ function validateCommand(command: string): void {
   }
 }
 
-/**
- * Build a redis-cli command for inline command execution
- */
+// Build a redis-cli command for inline command execution
 export function buildRedisCliCommand(
   redisCliPath: string,
   port: number,
@@ -89,9 +81,7 @@ export function buildRedisCliCommand(
   }
 }
 
-/**
- * Generate Redis configuration file content
- */
+// Generate Redis configuration file content
 function generateRedisConfig(options: {
   port: number
   dataDir: string
@@ -127,44 +117,34 @@ export class RedisEngine extends BaseEngine {
   defaultPort = engineDef.defaultPort
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
-  /**
-   * Get platform info for binary operations
-   */
+  // Get platform info for binary operations
   getPlatformInfo(): { platform: string; arch: string } {
     return platformService.getPlatformInfo()
   }
 
-  /**
-   * Fetch available versions from hostdb
-   */
+  // Fetch available versions from hostdb
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     const versions: Record<string, string[]> = {}
 
     for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      versions[major] = [FALLBACK_VERSION_MAP[major]]
+      versions[major] = [VERSION_MAP[major]]
     }
 
     return versions
   }
 
-  /**
-   * Get binary download URL from hostdb
-   */
+  // Get binary download URL from hostdb
   getBinaryUrl(version: string, platform: string, arch: string): string {
     return getBinaryUrl(version, platform, arch)
   }
 
-  /**
-   * Verify that Redis binaries are available
-   */
+  // Verify that Redis binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
     const serverPath = join(binPath, 'bin', 'redis-server')
     return existsSync(serverPath)
   }
 
-  /**
-   * Check if a specific Redis version is installed (downloaded)
-   */
+  //Check if a specific Redis version is installed (downloaded)
   async isBinaryInstalled(version: string): Promise<boolean> {
     const { platform, arch } = this.getPlatformInfo()
     return redisBinaryManager.isInstalled(version, platform, arch)
@@ -249,9 +229,7 @@ export class RedisEngine extends BaseEngine {
     return dataDir
   }
 
-  /**
-   * Get the path to redis-server for a version
-   */
+  // Get the path to redis-server for a version
   async getRedisServerPath(version: string): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()
     const fullVersion = normalizeVersion(version)
@@ -270,9 +248,7 @@ export class RedisEngine extends BaseEngine {
     )
   }
 
-  /**
-   * Get the path to redis-cli for a version
-   */
+  // Get the path to redis-cli for a version
   override async getRedisCliPath(version?: string): Promise<string> {
     // Check config cache first
     const cached = await configManager.getBinaryPath('redis-cli')
@@ -342,10 +318,13 @@ export class RedisEngine extends BaseEngine {
       // Get binary from downloaded hostdb binaries
       try {
         redisServer = await this.getRedisServerPath(version)
-      } catch {
+      } catch (error) {
         // Binary not downloaded yet - this is an orphaned container situation
+        const originalMessage =
+          error instanceof Error ? error.message : String(error)
         throw new Error(
-          `Redis ${version} is not installed. Run: spindb engines download redis ${version}`,
+          `Redis ${version} is not installed. Run: spindb engines download redis ${version}\n` +
+            `  Original error: ${originalMessage}`,
         )
       }
     }
@@ -504,9 +483,7 @@ export class RedisEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Wait for Redis to be ready to accept connections
-   */
+  // Wait for Redis to be ready to accept connections
   private async waitForReady(
     port: number,
     version: string,
@@ -604,9 +581,7 @@ export class RedisEngine extends BaseEngine {
     logDebug('Redis stopped')
   }
 
-  /**
-   * Get Redis server status
-   */
+  // Get Redis server status
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, port, version } = container
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
@@ -645,9 +620,7 @@ export class RedisEngine extends BaseEngine {
     return { running: false, message: 'Redis is not running' }
   }
 
-  /**
-   * Detect backup format
-   */
+  // Detect backup format
   async detectBackupFormat(filePath: string): Promise<BackupFormat> {
     return detectBackupFormatImpl(filePath)
   }
@@ -692,9 +665,7 @@ export class RedisEngine extends BaseEngine {
     return this.getRedisCliPath(version)
   }
 
-  /**
-   * Open redis-cli interactive shell
-   */
+  // Open redis-cli interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
     const { port, version } = container
     const db = database || container.database || '0'
@@ -717,9 +688,7 @@ export class RedisEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Get path to iredis (enhanced CLI) if installed
-   */
+  // Get path to iredis (enhanced CLI) if installed
   private async getIredisPath(): Promise<string | null> {
     // Check config cache first
     const cached = await configManager.getBinaryPath('iredis')
@@ -736,9 +705,7 @@ export class RedisEngine extends BaseEngine {
     return null
   }
 
-  /**
-   * Connect with iredis (enhanced CLI)
-   */
+  // Connect with iredis (enhanced CLI)
   async connectWithIredis(
     container: ContainerConfig,
     database?: string,
@@ -872,9 +839,7 @@ export class RedisEngine extends BaseEngine {
     )
   }
 
-  /**
-   * Create a backup
-   */
+  // Create a backup
   async backup(
     container: ContainerConfig,
     outputPath: string,
@@ -883,9 +848,7 @@ export class RedisEngine extends BaseEngine {
     return createBackup(container, outputPath, options)
   }
 
-  /**
-   * Run a Redis command file or inline command
-   */
+  // Run a Redis command file or inline command
   async runScript(
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },

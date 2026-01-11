@@ -8,6 +8,40 @@ import { platformService } from '../core/platform-service'
 
 const execFileAsync = promisify(execFile)
 
+// Parsed engine directory info
+type ParsedEngineDir = {
+  version: string
+  platform: string
+  arch: string
+  path: string
+}
+
+// Parse engine directory name into components
+// Format: {engine}-{version}-{platform}-{arch}
+// Handles versions with dashes (e.g., 17.0.0-rc1) by splitting from the end
+function parseEngineDirectory(
+  entryName: string,
+  enginePrefix: string,
+  binDir: string,
+): ParsedEngineDir | null {
+  const rest = entryName.slice(enginePrefix.length)
+  const parts = rest.split('-')
+  if (parts.length < 3) return null
+
+  const arch = parts.pop()!
+  const platform = parts.pop()!
+  const version = parts.join('-')
+
+  if (!version || !platform || !arch) return null
+
+  return {
+    version,
+    platform,
+    arch,
+    path: join(binDir, entryName),
+  }
+}
+
 // Calculate the total size of all files in a directory (recursive)
 async function calculateDirectorySize(dirPath: string): Promise<number> {
   let sizeBytes = 0
@@ -130,28 +164,19 @@ export async function getInstalledPostgresEngines(): Promise<
     if (!entry.isDirectory()) continue
     if (!entry.name.startsWith('postgresql-')) continue
 
-    // Split from end to handle versions with prerelease tags (e.g., 17.0.0-rc1)
-    // Format: postgresql-{version}-{platform}-{arch}
-    const rest = entry.name.slice('postgresql-'.length)
-    const parts = rest.split('-')
-    if (parts.length < 3) continue
+    const parsed = parseEngineDirectory(entry.name, 'postgresql-', binDir)
+    if (!parsed) continue
 
-    const arch = parts.pop()!
-    const platform = parts.pop()!
-    const dirVersion = parts.join('-')
-
-    if (!dirVersion || !platform || !arch) continue
-
-    const dirPath = join(binDir, entry.name)
-    const actualVersion = (await getPostgresVersion(dirPath)) || dirVersion
-    const sizeBytes = await calculateDirectorySize(dirPath)
+    const actualVersion =
+      (await getPostgresVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
       engine: 'postgresql',
       version: actualVersion,
-      platform,
-      arch,
-      path: dirPath,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
       sizeBytes,
       source: 'downloaded',
     })
@@ -199,28 +224,19 @@ export async function getInstalledMariadbEngines(): Promise<
     if (!entry.isDirectory()) continue
     if (!entry.name.startsWith('mariadb-')) continue
 
-    // Split from end to handle versions with prerelease tags
-    // Format: mariadb-{version}-{platform}-{arch}
-    const rest = entry.name.slice('mariadb-'.length)
-    const parts = rest.split('-')
-    if (parts.length < 3) continue
+    const parsed = parseEngineDirectory(entry.name, 'mariadb-', binDir)
+    if (!parsed) continue
 
-    const arch = parts.pop()!
-    const platform = parts.pop()!
-    const dirVersion = parts.join('-')
-
-    if (!dirVersion || !platform || !arch) continue
-
-    const dirPath = join(binDir, entry.name)
-    const actualVersion = (await getMariadbVersion(dirPath)) || dirVersion
-    const sizeBytes = await calculateDirectorySize(dirPath)
+    const actualVersion =
+      (await getMariadbVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
       engine: 'mariadb',
       version: actualVersion,
-      platform,
-      arch,
-      path: dirPath,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
       sizeBytes,
       source: 'downloaded',
     })
@@ -263,28 +279,19 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
     if (!entry.isDirectory()) continue
     if (!entry.name.startsWith('mysql-')) continue
 
-    // Split from end to handle versions with prerelease tags
-    // Format: mysql-{version}-{platform}-{arch}
-    const rest = entry.name.slice('mysql-'.length)
-    const parts = rest.split('-')
-    if (parts.length < 3) continue
+    const parsed = parseEngineDirectory(entry.name, 'mysql-', binDir)
+    if (!parsed) continue
 
-    const arch = parts.pop()!
-    const platform = parts.pop()!
-    const dirVersion = parts.join('-')
-
-    if (!dirVersion || !platform || !arch) continue
-
-    const dirPath = join(binDir, entry.name)
-    const actualVersion = (await getMysqlVersion(dirPath)) || dirVersion
-    const sizeBytes = await calculateDirectorySize(dirPath)
+    const actualVersion =
+      (await getMysqlVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
       engine: 'mysql',
       version: actualVersion,
-      platform,
-      arch,
-      path: dirPath,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
       sizeBytes,
       source: 'downloaded',
     })
@@ -328,28 +335,19 @@ async function getInstalledSqliteEngines(): Promise<InstalledSqliteEngine[]> {
     if (!entry.isDirectory()) continue
     if (!entry.name.startsWith('sqlite-')) continue
 
-    // Split from end to handle versions with prerelease tags
-    // Format: sqlite-{version}-{platform}-{arch}
-    const rest = entry.name.slice('sqlite-'.length)
-    const parts = rest.split('-')
-    if (parts.length < 3) continue
+    const parsed = parseEngineDirectory(entry.name, 'sqlite-', binDir)
+    if (!parsed) continue
 
-    const arch = parts.pop()!
-    const platform = parts.pop()!
-    const dirVersion = parts.join('-')
-
-    if (!dirVersion || !platform || !arch) continue
-
-    const dirPath = join(binDir, entry.name)
-    const actualVersion = (await getSqliteVersion(dirPath)) || dirVersion
-    const sizeBytes = await calculateDirectorySize(dirPath)
+    const actualVersion =
+      (await getSqliteVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
       engine: 'sqlite',
       version: actualVersion,
-      platform,
-      arch,
-      path: dirPath,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
       sizeBytes,
       source: 'downloaded',
     })
@@ -393,28 +391,19 @@ async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
     if (!entry.isDirectory()) continue
     if (!entry.name.startsWith('mongodb-')) continue
 
-    // Split from end to handle versions with prerelease tags
-    // Format: mongodb-{version}-{platform}-{arch}
-    const rest = entry.name.slice('mongodb-'.length)
-    const parts = rest.split('-')
-    if (parts.length < 3) continue
+    const parsed = parseEngineDirectory(entry.name, 'mongodb-', binDir)
+    if (!parsed) continue
 
-    const arch = parts.pop()!
-    const platform = parts.pop()!
-    const dirVersion = parts.join('-')
-
-    if (!dirVersion || !platform || !arch) continue
-
-    const dirPath = join(binDir, entry.name)
-    const actualVersion = (await getMongodbVersion(dirPath)) || dirVersion
-    const sizeBytes = await calculateDirectorySize(dirPath)
+    const actualVersion =
+      (await getMongodbVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
       engine: 'mongodb',
       version: actualVersion,
-      platform,
-      arch,
-      path: dirPath,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
       sizeBytes,
       source: 'downloaded',
     })
@@ -458,28 +447,19 @@ async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
     if (!entry.isDirectory()) continue
     if (!entry.name.startsWith('redis-')) continue
 
-    // Split from end to handle versions with prerelease tags
-    // Format: redis-{version}-{platform}-{arch}
-    const rest = entry.name.slice('redis-'.length)
-    const parts = rest.split('-')
-    if (parts.length < 3) continue
+    const parsed = parseEngineDirectory(entry.name, 'redis-', binDir)
+    if (!parsed) continue
 
-    const arch = parts.pop()!
-    const platform = parts.pop()!
-    const dirVersion = parts.join('-')
-
-    if (!dirVersion || !platform || !arch) continue
-
-    const dirPath = join(binDir, entry.name)
-    const actualVersion = (await getRedisVersion(dirPath)) || dirVersion
-    const sizeBytes = await calculateDirectorySize(dirPath)
+    const actualVersion =
+      (await getRedisVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
       engine: 'redis',
       version: actualVersion,
-      platform,
-      arch,
-      path: dirPath,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
       sizeBytes,
       source: 'downloaded',
     })

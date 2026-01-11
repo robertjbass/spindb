@@ -979,6 +979,7 @@ See [TODO.md](TODO.md) for the full roadmap.
 
 ### Future Infrastructure
 - **hostdb npm package**: Available database versions will be published as an npm package from [hostdb](https://github.com/robertjbass/hostdb) and imported into SpinDB, eliminating the need to manually sync version-maps.ts with releases.json
+- **pnpm 10 upgrade**: Currently pinned to pnpm 9.x (`packageManager` in package.json and Docker). Consider upgrading to pnpm 10.x when stable—requires updating package.json, Dockerfile, regenerating pnpm-lock.yaml, and testing for lockfile format changes
 
 ### Possible Future Engines
 

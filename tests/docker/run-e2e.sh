@@ -278,8 +278,9 @@ MYSQL_VERSION=$(get_default_version mysql)
 MARIADB_VERSION=$(get_default_version mariadb)
 [ -n "$MARIADB_VERSION" ] && run_test mariadb "$MARIADB_VERSION" || echo "Skipping MariaDB (no default version)"
 
-# SQLite (downloads from hostdb like other engines)
-run_test sqlite "3"
+# SQLite
+SQLITE_VERSION=$(get_default_version sqlite)
+[ -n "$SQLITE_VERSION" ] && run_test sqlite "$SQLITE_VERSION" || echo "Skipping SQLite (no default version)"
 
 # MongoDB
 MONGODB_VERSION=$(get_default_version mongodb)

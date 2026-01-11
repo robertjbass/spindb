@@ -233,32 +233,7 @@ export class MariaDBBinaryManager {
         .on('error', reject)
     })
 
-    // hostdb ZIPs have a mariadb/ directory - find it and move contents to binPath
-    const entries = await readdir(tempDir, { withFileTypes: true })
-    const mariadbDir = entries.find(
-      (e) =>
-        e.isDirectory() &&
-        (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
-    )
-
-    if (mariadbDir) {
-      // Move contents from mariadb/ to binPath
-      const sourceDir = join(tempDir, mariadbDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
-        }
-      }
-    } else {
-      throw new Error(
-        'Unexpected archive structure - no mariadb directory found',
-      )
-    }
+    await this.moveExtractedEntries(tempDir, binPath)
   }
 
   // Extract Unix binaries from tar.gz file
@@ -278,7 +253,14 @@ export class MariaDBBinaryManager {
     await mkdir(extractDir, { recursive: true })
     await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Check if there's a nested mariadb/ directory
+    await this.moveExtractedEntries(extractDir, binPath)
+  }
+
+  // Move extracted entries from extractDir to binPath, handling nested mariadb/ directories
+  private async moveExtractedEntries(
+    extractDir: string,
+    binPath: string,
+  ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const mariadbDir = entries.find(
       (e) =>
@@ -286,28 +268,25 @@ export class MariaDBBinaryManager {
         (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
     )
 
-    if (mariadbDir) {
-      // Nested structure: move contents from mariadb/ to binPath
-      const sourceDir = join(extractDir, mariadbDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch {
+    const sourceDir = mariadbDir
+      ? join(extractDir, mariadbDir.name)
+      : extractDir
+    const entriesToMove = mariadbDir
+      ? await readdir(sourceDir, { withFileTypes: true })
+      : entries
+
+    for (const entry of entriesToMove) {
+      const sourcePath = join(sourceDir, entry.name)
+      const destPath = join(binPath, entry.name)
+      try {
+        await rename(sourcePath, destPath)
+      } catch (error) {
+        // Only fallback to cp for cross-device rename errors
+        const err = error as NodeJS.ErrnoException
+        if (err.code === 'EXDEV') {
           await cp(sourcePath, destPath, { recursive: true })
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } else {
+          throw error
         }
       }
     }

@@ -9,6 +9,7 @@
 
 import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { logDebug } from '../../core/error-handler'
+import { compareVersions } from '../../core/version-utils'
 
 // Platform definition in hostdb releases.json
 export type HostdbPlatform = {
@@ -143,24 +144,6 @@ function getFallbackVersions(): Record<string, string[]> {
     grouped[major] = [MYSQL_VERSION_MAP[major]]
   }
   return grouped
-}
-
-/**
- * Compare two version strings (e.g., "8.0.40" vs "8.0.39")
- * Returns positive if a > b, negative if a < b, 0 if equal
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number)
-  const partsB = b.split('.').map(Number)
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] || 0
-    const numB = partsB[i] || 0
-    if (numA !== numB) {
-      return numA - numB
-    }
-  }
-  return 0
 }
 
 // Get the latest version for a major version from hostdb

@@ -47,6 +47,11 @@ import { type Engine } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
 
+// Strip surrounding quotes from paths (handles drag-and-drop paths)
+function stripQuotes(path: string): string {
+  return path.replace(/^['"]|['"]$/g, '').trim()
+}
+
 export async function handleCreateForRestore(): Promise<{
   name: string
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>
@@ -424,9 +429,6 @@ export async function handleRestore(): Promise<void> {
         return
       }
     } else {
-      const stripQuotes = (path: string) =>
-        path.replace(/^['"]|['"]$/g, '').trim()
-
       console.log(
         chalk.gray(
           '  Drag & drop, enter path (abs or rel), or press Enter to go back',
@@ -1030,9 +1032,6 @@ export async function handleRestoreForContainer(
 
   let backupPath = ''
   let isTempFile = false
-
-  // Helper to strip quotes from paths (for drag-and-drop)
-  const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
   if (restoreSource === 'connection') {
     // Handle connection string restore

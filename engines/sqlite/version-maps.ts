@@ -22,7 +22,7 @@ export const SQLITE_VERSION_MAP: Record<string, string> = {
 
 /**
  * Supported major SQLite versions.
- * Derived from SQLITE_VERSION_MAP keys (only single-digit major versions).
+ * Derived from SQLITE_VERSION_MAP keys (only numeric major version keys, e.g., '3').
  */
 export const SUPPORTED_MAJOR_VERSIONS = Object.keys(SQLITE_VERSION_MAP).filter(
   (k) => /^\d+$/.test(k),

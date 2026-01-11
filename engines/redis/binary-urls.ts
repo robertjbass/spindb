@@ -2,16 +2,12 @@ import {
   fetchAvailableVersions as fetchHostdbVersions,
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
-import { REDIS_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { REDIS_VERSION_MAP } from './version-maps'
 
 /**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
+ * Version map for Redis - used as fallback when hostdb repository is unreachable
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> = REDIS_VERSION_MAP
-
-// Supported major versions (in order of display)
-export { SUPPORTED_MAJOR_VERSIONS }
+export const VERSION_MAP: Record<string, string> = REDIS_VERSION_MAP
 
 // Fetch available versions from hostdb repository
 export async function fetchAvailableVersions(): Promise<
@@ -24,9 +20,6 @@ export async function fetchAvailableVersions(): Promise<
 export async function getLatestVersion(major: string): Promise<string> {
   return await getHostdbLatestVersion(major)
 }
-
-// Legacy export for backward compatibility
-export const VERSION_MAP = FALLBACK_VERSION_MAP
 
 /**
  * Supported platform identifiers for hostdb downloads.
