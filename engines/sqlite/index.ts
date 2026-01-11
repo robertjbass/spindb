@@ -104,7 +104,7 @@ export class SQLiteEngine extends BaseEngine {
   }
 
   // Get path to sqlite3 binary - checks downloaded binary first
-  async getSqlite3Path(version?: string): Promise<string | null> {
+  override async getSqlite3Path(version?: string): Promise<string | null> {
     // Check config manager first (cached path from downloaded binaries)
     const configPath = await configManager.getBinaryPath('sqlite3')
     if (configPath && existsSync(configPath)) {

@@ -113,6 +113,14 @@ export abstract class BaseEngine {
     throw new Error('redis-cli not found')
   }
 
+  /**
+   * Get the path to the sqlite3 client if available
+   * Default implementation returns null; SQLite engine overrides this method.
+   */
+  async getSqlite3Path(_version?: string): Promise<string | null> {
+    return null
+  }
+
   // Open an interactive shell/CLI connection
   abstract connect(container: ContainerConfig, database?: string): Promise<void>
 

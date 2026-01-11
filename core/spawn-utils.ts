@@ -89,6 +89,14 @@ export function spawnAsync(
 }
 
 /**
+ * Escape a string for use in a PowerShell single-quoted string.
+ * PowerShell escapes single quotes by doubling them: ' becomes ''
+ */
+function escapeForPowerShell(s: string): string {
+  return s.replace(/'/g, "''")
+}
+
+/**
  * Extract a ZIP archive using PowerShell Expand-Archive (Windows)
  *
  * @param zipFile - Path to the ZIP file
@@ -99,9 +107,14 @@ export async function extractWindowsArchive(
   zipFile: string,
   destDir: string,
 ): Promise<void> {
+  // Escape paths to prevent command injection via single quotes
+  // Use -LiteralPath to treat the path literally (no wildcard expansion)
+  const safeZipFile = escapeForPowerShell(zipFile)
+  const safeDestDir = escapeForPowerShell(destDir)
+
   await spawnAsync('powershell', [
     '-NoProfile',
     '-Command',
-    `Expand-Archive -Path '${zipFile}' -DestinationPath '${destDir}' -Force`,
+    `Expand-Archive -LiteralPath '${safeZipFile}' -DestinationPath '${safeDestDir}' -Force`,
   ])
 }

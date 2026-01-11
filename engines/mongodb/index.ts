@@ -8,7 +8,7 @@ import { promisify } from 'util'
 import { existsSync } from 'fs'
 import net from 'net'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -162,10 +162,12 @@ export class MongoDBEngine extends BaseEngine {
       return mongodbBinaryManager.verify(version, p, a)
     }
 
-    // Fallback: extract version from path (format: mongodb-{version}-{platform}-{arch})
-    const parts = binPath.split('-')
-    if (parts.length >= 2) {
-      const extractedVersion = parts[1]
+    // Fallback: extract version from directory name (format: mongodb-{version}-{platform}-{arch})
+    // Use basename to avoid issues with dashes in parent directory names
+    const dirName = basename(binPath)
+    const match = dirName.match(/^mongodb-([\d.]+)-/)
+    if (match) {
+      const extractedVersion = match[1]
       return mongodbBinaryManager.verify(extractedVersion, p, a)
     }
 

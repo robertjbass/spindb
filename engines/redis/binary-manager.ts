@@ -364,7 +364,8 @@ export class RedisBinaryManager {
       platform,
       arch,
     })
-    return join(binPath, 'bin', binary)
+    const ext = platform === 'win32' ? '.exe' : ''
+    return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary

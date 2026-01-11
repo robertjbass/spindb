@@ -26,6 +26,16 @@ import { getEngine } from '../../engines'
 import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { Engine } from '../../types'
 
+// Helper to get sqlite3 path from the engine
+async function getSqlite3Path(): Promise<string> {
+  const engine = getEngine(Engine.SQLite)
+  const path = await engine.getSqlite3Path()
+  if (!path) {
+    throw new Error('sqlite3 not found. Run: spindb engines download sqlite')
+  }
+  return path
+}
+
 const ENGINE = Engine.SQLite
 const SEED_FILE = join(__dirname, '../fixtures/sqlite/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
@@ -127,8 +137,9 @@ describe('SQLite Integration Tests', () => {
     const { execFile } = await import('child_process')
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
+    const sqlite3 = await getSqlite3Path()
 
-    const { stdout } = await execFileAsync('sqlite3', [
+    const { stdout } = await execFileAsync(sqlite3, [
       dbPath,
       'SELECT COUNT(*) FROM test_user',
     ])
@@ -156,8 +167,9 @@ describe('SQLite Integration Tests', () => {
     const { execFile } = await import('child_process')
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
+    const sqlite3 = await getSqlite3Path()
 
-    const { stdout } = await execFileAsync('sqlite3', [
+    const { stdout } = await execFileAsync(sqlite3, [
       dbPath,
       'SELECT COUNT(*) FROM test_user',
     ])
@@ -225,8 +237,9 @@ describe('SQLite Integration Tests', () => {
     const { execFile } = await import('child_process')
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
+    const sqlite3 = await getSqlite3Path()
 
-    const { stdout } = await execFileAsync('sqlite3', [
+    const { stdout } = await execFileAsync(sqlite3, [
       backupDbPath,
       'SELECT COUNT(*) FROM test_user',
     ])
@@ -304,8 +317,9 @@ describe('SQLite Integration Tests', () => {
     const { execFile } = await import('child_process')
     const { promisify } = await import('util')
     const execFileAsync = promisify(execFile)
+    const sqlite3 = await getSqlite3Path()
 
-    const { stdout } = await execFileAsync('sqlite3', [
+    const { stdout } = await execFileAsync(sqlite3, [
       newDbPath,
       'SELECT COUNT(*) FROM test_user',
     ])

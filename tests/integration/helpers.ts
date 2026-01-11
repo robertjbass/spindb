@@ -146,7 +146,13 @@ export async function executeSQL(
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
-    const cmd = `sqlite3 "${database}" "${sql.replace(/"/g, '\\"')}"`
+    // Use configured/bundled sqlite3 if available
+    const engineImpl = getEngine(engine)
+    const sqlite3Path = await engineImpl.getSqlite3Path().catch(() => null)
+    if (!sqlite3Path) {
+      throw new Error('sqlite3 not found. Run: spindb engines download sqlite')
+    }
+    const cmd = `"${sqlite3Path}" "${database}" "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.MySQL) {
     const engineImpl = getEngine(engine)
@@ -208,7 +214,13 @@ export async function executeSQLFile(
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
-    const cmd = `sqlite3 "${database}" < "${filePath}"`
+    // Use configured/bundled sqlite3 if available
+    const engineImpl = getEngine(engine)
+    const sqlite3Path = await engineImpl.getSqlite3Path().catch(() => null)
+    if (!sqlite3Path) {
+      throw new Error('sqlite3 not found. Run: spindb engines download sqlite')
+    }
+    const cmd = `"${sqlite3Path}" "${database}" < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MySQL) {
     const engineImpl = getEngine(engine)
