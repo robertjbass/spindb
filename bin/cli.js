@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -9,24 +9,37 @@ import { existsSync } from 'node:fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Path to the main TypeScript entry point
-const mainScript = join(__dirname, '..', 'cli', 'bin.ts')
+// Path to the main TypeScript entry point and package root
+const packageRoot = join(__dirname, '..')
+const mainScript = join(packageRoot, 'cli', 'bin.ts')
 
-// Detect Windows
-const isWindows = process.platform === 'win32'
+// Use Node.js with tsx as ESM loader
+// This approach works reliably on all platforms because:
+// 1. We use process.execPath (always the current Node.js executable)
+// 2. We use --import with tsx's ESM loader module
+// 3. Arguments pass through without shell interpretation (shell: false)
+// 4. Works on Windows without needing to spawn .cmd files
 
-// Use tsx to execute the TypeScript file
-// On Windows, npm creates tsx.cmd which can be spawned directly without shell: true
-// Using shell: true would cause argument parsing issues with special characters (semicolons, quotes, etc.)
-const tsxBase = join(__dirname, '..', 'node_modules', '.bin', 'tsx')
-const tsxPath = isWindows && existsSync(tsxBase + '.cmd') ? tsxBase + '.cmd' : tsxBase
+// Find tsx ESM loader - check common paths
+const tsxLoaderPaths = [
+  join(packageRoot, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs'),
+  join(packageRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs'),
+]
 
-// Spawn tsx process with the main script and pass through all arguments
-// Keep shell: false to preserve argument integrity (especially important for SQL statements)
-const child = spawn(tsxPath, [mainScript, ...process.argv.slice(2)], {
-  stdio: 'inherit',
-  shell: false,
-})
+let tsxLoader = tsxLoaderPaths.find((p) => existsSync(p))
+
+// Convert to file URL for --import (required on Windows)
+const tsxLoaderUrl = tsxLoader ? pathToFileURL(tsxLoader).href : 'tsx'
+
+const child = spawn(
+  process.execPath,
+  ['--import', tsxLoaderUrl, mainScript, ...process.argv.slice(2)],
+  {
+    stdio: 'inherit',
+    shell: false,
+    cwd: packageRoot,
+  },
+)
 
 // Forward exit code
 child.on('exit', (code) => {
