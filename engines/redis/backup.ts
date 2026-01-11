@@ -111,7 +111,11 @@ async function createTextBackup(
   const keysCmd = buildRedisCliCommand(redisCli, port, 'KEYS *')
   const { stdout: keysOutput } = await execAsync(keysCmd)
   // Use /\r?\n/ to handle both Unix (\n) and Windows (\r\n) line endings
-  const keys = keysOutput.trim().split(/\r?\n/).map((k) => k.trim()).filter((k) => k)
+  const keys = keysOutput
+    .trim()
+    .split(/\r?\n/)
+    .map((k) => k.trim())
+    .filter((k) => k)
 
   logDebug(`Found ${keys.length} keys to backup`)
 
@@ -134,9 +138,17 @@ async function createTextBackup(
         break
       }
       case 'hash': {
-        const hgetallCmd = buildRedisCliCommand(redisCli, port, `HGETALL ${key}`)
+        const hgetallCmd = buildRedisCliCommand(
+          redisCli,
+          port,
+          `HGETALL ${key}`,
+        )
         const { stdout: hashData } = await execAsync(hgetallCmd)
-        const lines = hashData.trim().split(/\r?\n/).map((l) => l.trim()).filter((l) => l)
+        const lines = hashData
+          .trim()
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l)
         if (lines.length >= 2) {
           const pairs: string[] = []
           for (let i = 0; i < lines.length; i += 2) {
@@ -149,19 +161,37 @@ async function createTextBackup(
         break
       }
       case 'list': {
-        const lrangeCmd = buildRedisCliCommand(redisCli, port, `LRANGE ${key} 0 -1`)
+        const lrangeCmd = buildRedisCliCommand(
+          redisCli,
+          port,
+          `LRANGE ${key} 0 -1`,
+        )
         const { stdout: listData } = await execAsync(lrangeCmd)
-        const items = listData.trim().split(/\r?\n/).map((l) => l.trim()).filter((l) => l)
+        const items = listData
+          .trim()
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l)
         if (items.length > 0) {
-          const escapedItems = items.map((item) => escapeRedisValue(item.trim()))
+          const escapedItems = items.map((item) =>
+            escapeRedisValue(item.trim()),
+          )
           commands.push(`RPUSH ${key} ${escapedItems.join(' ')}`)
         }
         break
       }
       case 'set': {
-        const smembersCmd = buildRedisCliCommand(redisCli, port, `SMEMBERS ${key}`)
+        const smembersCmd = buildRedisCliCommand(
+          redisCli,
+          port,
+          `SMEMBERS ${key}`,
+        )
         const { stdout: setData } = await execAsync(smembersCmd)
-        const members = setData.trim().split(/\r?\n/).map((l) => l.trim()).filter((l) => l)
+        const members = setData
+          .trim()
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l)
         if (members.length > 0) {
           const escapedMembers = members.map((m) => escapeRedisValue(m.trim()))
           commands.push(`SADD ${key} ${escapedMembers.join(' ')}`)
@@ -175,7 +205,11 @@ async function createTextBackup(
           `ZRANGE ${key} 0 -1 WITHSCORES`,
         )
         const { stdout: zsetData } = await execAsync(zrangeCmd)
-        const lines = zsetData.trim().split(/\r?\n/).map((l) => l.trim()).filter((l) => l)
+        const lines = zsetData
+          .trim()
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l)
         if (lines.length >= 2) {
           const pairs: string[] = []
           for (let i = 0; i < lines.length; i += 2) {
@@ -280,7 +314,9 @@ async function createRdbBackup(
     !bgsaveResponse.includes('Background save already in progress')
   ) {
     // Unexpected response - warn but continue (might be a different Redis version)
-    logDebug(`Unexpected BGSAVE response (continuing anyway): ${bgsaveResponse}`)
+    logDebug(
+      `Unexpected BGSAVE response (continuing anyway): ${bgsaveResponse}`,
+    )
   }
 
   // Wait for save to complete by checking rdb_bgsave_in_progress
@@ -288,11 +324,7 @@ async function createRdbBackup(
   const startTime = Date.now()
   const timeout = 60000 // 1 minute timeout
 
-  const infoCmd = buildRedisCliCommand(
-    redisCli,
-    port,
-    'INFO persistence',
-  )
+  const infoCmd = buildRedisCliCommand(redisCli, port, 'INFO persistence')
 
   while (Date.now() - startTime < timeout) {
     const { stdout: infoOutput } = await execAsync(infoCmd)

@@ -266,7 +266,10 @@ describe('MongoDB Integration Tests', () => {
     assert(config !== null, 'Container config should exist')
 
     const { tmpdir } = await import('os')
-    const backupPath = join(tmpdir(), `mongodb-archive-backup-${Date.now()}.archive`)
+    const backupPath = join(
+      tmpdir(),
+      `mongodb-archive-backup-${Date.now()}.archive`,
+    )
 
     // Backup with 'dump' format produces compressed archive
     const result = await engine.backup(config!, backupPath, {
@@ -281,7 +284,10 @@ describe('MongoDB Integration Tests', () => {
     // Verify file is gzipped (starts with gzip magic bytes 1f 8b)
     const { readFile } = await import('fs/promises')
     const buffer = await readFile(backupPath)
-    assert(buffer[0] === 0x1f && buffer[1] === 0x8b, 'Backup should have gzip header')
+    assert(
+      buffer[0] === 0x1f && buffer[1] === 0x8b,
+      'Backup should have gzip header',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -317,8 +323,17 @@ describe('MongoDB Integration Tests', () => {
     })
 
     // Verify data was restored
-    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      testDb,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should match source',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -496,9 +511,14 @@ describe('MongoDB Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

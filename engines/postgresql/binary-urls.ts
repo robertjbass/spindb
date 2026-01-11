@@ -13,7 +13,8 @@ import {
  *
  * @deprecated Use POSTGRESQL_VERSION_MAP from version-maps.ts instead
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> = POSTGRESQL_VERSION_MAP
+export const FALLBACK_VERSION_MAP: Record<string, string> =
+  POSTGRESQL_VERSION_MAP
 
 /**
  * Supported major versions (in order of display)

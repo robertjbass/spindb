@@ -255,8 +255,14 @@ describe('PostgreSQL Integration Tests', () => {
     // Verify file contains SQL statements
     const { readFile } = await import('fs/promises')
     const content = await readFile(backupPath, 'utf-8')
-    assert(content.includes('CREATE TABLE'), 'Backup should contain CREATE TABLE')
-    assert(content.includes('test_user'), 'Backup should contain test_user table')
+    assert(
+      content.includes('CREATE TABLE'),
+      'Backup should contain CREATE TABLE',
+    )
+    assert(
+      content.includes('test_user'),
+      'Backup should contain test_user table',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -328,8 +334,17 @@ describe('PostgreSQL Integration Tests', () => {
     })
 
     // Verify data was restored
-    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      testDb,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should match source',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -505,9 +520,14 @@ describe('PostgreSQL Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

@@ -14,7 +14,11 @@ import { promisify } from 'util'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
-import { Engine, type ProgressCallback, type InstalledBinary } from '../../types'
+import {
+  Engine,
+  type ProgressCallback,
+  type InstalledBinary,
+} from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -176,9 +180,19 @@ export class RedisBinaryManager {
       await pipeline(response.body, fileStream)
 
       if (platform === 'win32') {
-        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       } else {
-        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       }
 
       // Make binaries executable (Unix only)
@@ -226,8 +240,7 @@ export class RedisBinaryManager {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const redisDir = entries.find(
       (e) =>
-        e.isDirectory() &&
-        (e.name === 'redis' || e.name.startsWith('redis-')),
+        e.isDirectory() && (e.name === 'redis' || e.name.startsWith('redis-')),
     )
 
     if (redisDir) {
@@ -286,8 +299,7 @@ export class RedisBinaryManager {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const redisDir = entries.find(
       (e) =>
-        e.isDirectory() &&
-        (e.name === 'redis' || e.name.startsWith('redis-')),
+        e.isDirectory() && (e.name === 'redis' || e.name.startsWith('redis-')),
     )
 
     if (redisDir) {
@@ -352,7 +364,9 @@ export class RedisBinaryManager {
         }
       }
 
-      const reportedVersion = match ? match[1] : stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
+      const reportedVersion = match
+        ? match[1]
+        : stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
@@ -427,11 +441,7 @@ export class RedisBinaryManager {
   /**
    * Delete installed binaries for a specific version
    */
-  async delete(
-    version: string,
-    platform: string,
-    arch: string,
-  ): Promise<void> {
+  async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'redis',

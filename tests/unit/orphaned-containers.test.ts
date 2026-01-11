@@ -57,7 +57,11 @@ describe('Orphaned Container Behavior', () => {
           c.version === engineToDelete.version,
       )
 
-      assertEqual(orphanedContainers.length, 1, 'Should find one orphaned container')
+      assertEqual(
+        orphanedContainers.length,
+        1,
+        'Should find one orphaned container',
+      )
       assertEqual(
         orphanedContainers[0].name,
         'pg17-db',
@@ -232,10 +236,7 @@ describe('Orphaned Container Behavior', () => {
         !containerDataPath.includes('/bin/'),
         'Container data should not be in bin directory',
       )
-      assert(
-        enginePath.includes('/bin/'),
-        'Engine should be in bin directory',
-      )
+      assert(enginePath.includes('/bin/'), 'Engine should be in bin directory')
       assert(
         containerDataPath.includes('/containers/'),
         'Container data should be in containers directory',
@@ -296,7 +297,11 @@ describe('PostgreSQL Engine Binary Check', () => {
     // Check for a version that definitely doesn't exist
     const isInstalled = await postgresqlEngine.isBinaryInstalled('99.99.99')
 
-    assertEqual(isInstalled, false, 'Non-existent version should not be installed')
+    assertEqual(
+      isInstalled,
+      false,
+      'Non-existent version should not be installed',
+    )
   })
 
   it('should resolve major version to full version', async () => {
@@ -325,10 +330,15 @@ describe('PostgreSQL Engine Binary Check', () => {
 
     const binaryPath = postgresqlEngine.getBinaryPath('17')
 
-    assert(binaryPath.includes('postgresql-'), 'Path should include postgresql prefix')
+    assert(
+      binaryPath.includes('postgresql-'),
+      'Path should include postgresql prefix',
+    )
     assert(binaryPath.includes('17.'), 'Path should include resolved version')
     assert(
-      binaryPath.includes('darwin') || binaryPath.includes('linux') || binaryPath.includes('win32'),
+      binaryPath.includes('darwin') ||
+        binaryPath.includes('linux') ||
+        binaryPath.includes('win32'),
       'Path should include platform',
     )
   })
@@ -336,11 +346,7 @@ describe('PostgreSQL Engine Binary Check', () => {
 
 describe('Warning Message Formatting', () => {
   it('should format orphaned container warning correctly', () => {
-    const containers = [
-      { name: 'db1' },
-      { name: 'db2' },
-      { name: 'db3' },
-    ]
+    const containers = [{ name: 'db1' }, { name: 'db2' }, { name: 'db3' }]
 
     const count = containers.length
     const names = containers.map((c) => c.name).join(', ')
@@ -369,6 +375,9 @@ describe('Warning Message Formatting', () => {
     const manualHint = `Run "spindb engines download postgresql ${majorVersion}" to download manually.`
 
     assert(prompt.includes(version), 'Prompt should include version')
-    assert(manualHint.includes('engines download'), 'Hint should include command')
+    assert(
+      manualHint.includes('engines download'),
+      'Hint should include command',
+    )
   })
 })

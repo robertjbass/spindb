@@ -48,10 +48,6 @@ import type {
   StatusResult,
 } from '../../types'
 
-// Re-export modules for external access
-export * from './version-validator'
-export * from './restore'
-
 const execAsync = promisify(exec)
 
 const ENGINE = 'mysql'
@@ -163,8 +159,15 @@ export class MySQLEngine extends BaseEngine {
 
   async verifyBinary(binPath: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    const parts = binPath.split('-')
-    const version = parts[1]
+    // Extract version using regex on basename for robustness
+    // Matches patterns like mysql-8.0.40-darwin-arm64 or mysql-9.0.0-linux-x64
+    const basename = binPath.split('/').pop() || binPath.split('\\').pop() || ''
+    const versionMatch = basename.match(/\b(\d+\.\d+\.\d+)\b/)
+    if (!versionMatch) {
+      logDebug(`Could not extract version from binary path: ${binPath}`)
+      return false
+    }
+    const version = versionMatch[1]
     return mysqlBinaryManager.verify(version, p, a)
   }
 
@@ -564,8 +567,17 @@ export class MySQLEngine extends BaseEngine {
       if (pid) {
         try {
           await platformService.terminateProcess(pid, false)
-        } catch {
-          return true
+        } catch (terminateError) {
+          const termErr = terminateError as NodeJS.ErrnoException
+          // ESRCH means process doesn't exist - it's already gone
+          if (termErr.code === 'ESRCH') {
+            logDebug(`Process ${pid} already terminated (ESRCH)`)
+            return true
+          }
+          logDebug(
+            `terminateProcess failed for PID ${pid}: ${termErr.message}`,
+          )
+          return false
         }
       }
     }

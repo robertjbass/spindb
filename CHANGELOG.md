@@ -27,11 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Legacy containers created with system binaries are treated as orphaned and will prompt to download matching version
 - **CI workflow** - MongoDB and Redis tests now use downloaded binaries on all platforms
 
-### Preserved
-- **Legacy binary detection code** - Moved to `legacy/` folder for reference
-  - `legacy/engines/mongodb/binary-detection.ts` - System binary detection for MongoDB
-  - `legacy/engines/redis/binary-detection.ts` - System binary detection for Redis
-  - `legacy/README.md` - Documentation of old architecture
+### Removed
+- **Legacy binary detection code** - Old system binary detection code for MongoDB and Redis (available in git history if needed)
 
 ## [0.16.0] - 2026-01-09
 

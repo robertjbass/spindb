@@ -48,7 +48,6 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
   - [x] Update shell handlers for MongoDB with hostdb binaries
   - [x] Add MongoDB to "Manage Engines" menu with delete option
   - [x] Update CI to download MongoDB binaries via SpinDB (macOS/Linux)
-  - [x] Move legacy binary-detection.ts to `legacy/` folder
 
 - [x] **Redis migration to hostdb** - Completed
   - [x] Add `engines/redis/version-maps.ts` synced with hostdb releases.json
@@ -59,10 +58,8 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
   - [x] Update backup.ts and restore.ts to use configManager
   - [x] Add Redis to "Manage Engines" menu with delete option
   - [x] Update CI to download Redis binaries via SpinDB (macOS/Linux)
-  - [x] Move legacy binary-detection.ts to `legacy/` folder
 
 **Reference implementation:** See `engines/mariadb/` for hostdb migration pattern.
-**Legacy code:** See `legacy/` folder for preserved system binary detection code.
 
 ### v1.3 - Advanced Features
 

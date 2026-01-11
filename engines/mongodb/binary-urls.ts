@@ -7,7 +7,8 @@
 
 import { FALLBACK_VERSION_MAP, normalizeVersion } from './version-maps'
 
-const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
+const HOSTDB_BASE_URL =
+  'https://github.com/robertjbass/hostdb/releases/download'
 
 /**
  * Supported platforms for MongoDB hostdb binaries

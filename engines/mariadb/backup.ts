@@ -10,7 +10,11 @@ import { stat } from 'fs/promises'
 import { join } from 'path'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
-import { getWindowsSpawnOptions, isWindows, platformService } from '../../core/platform-service'
+import {
+  getWindowsSpawnOptions,
+  isWindows,
+  platformService,
+} from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 

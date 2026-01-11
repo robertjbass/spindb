@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  # TODO: uncomment for testing CI
-  # push:
-  #   branches: [dev]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -15,7 +12,8 @@ concurrency:
 
 jobs:
   # ============================================
-  # Unit Tests
+  # Unit Tests - Expanded OS Matrix
+  # Tests on multiple OS versions to catch platform-specific issues
   # ============================================
   unit-tests:
     name: Unit Tests (${{ matrix.os }})
@@ -23,7 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64 (M1/M2)
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,7 +82,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -128,7 +136,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -175,7 +188,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -222,7 +240,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -281,7 +304,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -297,6 +325,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Cache MongoDB binaries - these are downloaded from hostdb
+      - name: Cache MongoDB binaries
+        uses: actions/cache@v4
+        id: mongodb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}
 
       # Download MongoDB binaries via hostdb for all platforms
       - name: Download MongoDB binaries
@@ -319,7 +355,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -341,9 +382,7 @@ jobs:
         uses: actions/cache@v4
         id: redis-cache
         with:
-          path: |
-            ~/.spindb/bin
-            ${{ runner.os == 'Windows' && 'C:\Users\runneradmin\.spindb\bin' || '' }}
+          path: ~/.spindb/bin
           key: spindb-redis-8-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download Redis binaries (all platforms)
@@ -366,7 +405,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-13 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -428,6 +472,215 @@ jobs:
         timeout-minutes: 15
 
   # ============================================
+  # Fresh Install Test - Tests npm global install like real users
+  # Simulates a user installing SpinDB for the first time
+  # ============================================
+  test-fresh-install:
+    name: Fresh Install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Ensure clean state - no existing ~/.spindb
+      - name: Ensure clean state (Unix)
+        if: runner.os != 'Windows'
+        run: rm -rf ~/.spindb
+
+      - name: Ensure clean state (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:USERPROFILE\.spindb") {
+            Remove-Item -Recurse -Force "$env:USERPROFILE\.spindb"
+          }
+
+      # Pack and install globally (simulates npm install -g spindb)
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack package
+        run: pnpm pack
+
+      - name: Install globally (Unix)
+        if: runner.os != 'Windows'
+        run: npm install -g spindb-*.tgz
+
+      - name: Install globally (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: npm install -g (Get-Item spindb-*.tgz).FullName
+
+      # Test CLI is accessible
+      - name: Verify spindb command exists
+        run: spindb version
+
+      - name: Verify spindb help works
+        run: spindb --help
+
+      # Test full lifecycle with PostgreSQL
+      - name: Download PostgreSQL engine
+        run: spindb engines download postgresql 18
+
+      - name: List installed engines
+        run: spindb engines list
+
+      - name: Create test container
+        run: spindb create fresh-install-test --engine postgresql --db-version 18 --no-start
+
+      - name: Start container
+        run: spindb start fresh-install-test
+
+      - name: Verify container is running
+        run: spindb info fresh-install-test
+
+      - name: Run test query
+        run: spindb run fresh-install-test -c "SELECT 1 as test;"
+
+      - name: Stop container
+        run: spindb stop fresh-install-test
+
+      - name: Delete container
+        run: spindb delete fresh-install-test --yes
+
+      # Cleanup
+      - name: Uninstall spindb
+        run: npm uninstall -g spindb
+
+  # ============================================
+  # Upgrade Test - Tests that existing containers survive upgrades
+  # Simulates a user upgrading SpinDB with existing data
+  # ============================================
+  test-upgrade:
+    name: Upgrade Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Ensure clean state
+      - name: Ensure clean state (Unix)
+        if: runner.os != 'Windows'
+        run: rm -rf ~/.spindb
+
+      - name: Ensure clean state (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:USERPROFILE\.spindb") {
+            Remove-Item -Recurse -Force "$env:USERPROFILE\.spindb"
+          }
+
+      # Install current version
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack and install globally
+        shell: bash
+        run: |
+          pnpm pack
+          npm install -g spindb-*.tgz
+
+      # Create container and add data
+      - name: Download PostgreSQL engine
+        run: spindb engines download postgresql 18
+
+      - name: Create container with data
+        run: |
+          spindb create upgrade-test --engine postgresql --db-version 18 --no-start
+          spindb start upgrade-test
+
+      - name: Add test data
+        shell: bash
+        run: |
+          spindb run upgrade-test -c "CREATE TABLE upgrade_data (id SERIAL PRIMARY KEY, value TEXT);"
+          spindb run upgrade-test -c "INSERT INTO upgrade_data (value) VALUES ('pre-upgrade-data');"
+
+      - name: Verify data exists
+        run: spindb run upgrade-test -c "SELECT * FROM upgrade_data;"
+
+      - name: Stop container
+        run: spindb stop upgrade-test
+
+      # Simulate upgrade by reinstalling
+      - name: Uninstall current version
+        run: npm uninstall -g spindb
+
+      - name: Reinstall (simulate upgrade)
+        shell: bash
+        run: npm install -g spindb-*.tgz
+
+      # Verify data persists after upgrade
+      - name: Verify spindb still works
+        run: spindb version
+
+      - name: List containers (should show upgrade-test)
+        run: spindb list
+
+      - name: Start container after upgrade
+        run: spindb start upgrade-test
+
+      - name: Verify data persisted
+        run: spindb run upgrade-test -c "SELECT * FROM upgrade_data WHERE value = 'pre-upgrade-data';"
+
+      # Cleanup
+      - name: Stop and delete container
+        run: |
+          spindb stop upgrade-test
+          spindb delete upgrade-test --yes
+
+      - name: Uninstall spindb
+        run: npm uninstall -g spindb
+
+  # ============================================
+  # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
+  # Verifies hostdb binaries work on clean Ubuntu systems
+  # ============================================
+  test-docker-linux:
+    name: Docker Linux Edge Cases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker test image
+        run: docker build -t spindb-e2e -f tests/docker/Dockerfile .
+
+      - name: Run Docker E2E tests
+        run: docker run --rm spindb-e2e
+        timeout-minutes: 30
+
+  # ============================================
   # Summary Job - Ensures all tests pass
   # ============================================
   ci-success:
@@ -443,6 +696,9 @@ jobs:
         test-mongodb,
         test-redis,
         test-cli-e2e,
+        test-fresh-install,
+        test-upgrade,
+        test-docker-linux,
         lint,
       ]
     if: always()
@@ -479,6 +735,18 @@ jobs:
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
             echo "CLI E2E tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-fresh-install.result }}" != "success" ]; then
+            echo "Fresh install tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-upgrade.result }}" != "success" ]; then
+            echo "Upgrade tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
+            echo "Docker Linux edge case tests failed"
             exit 1
           fi
           if [ "${{ needs.lint.result }}" != "success" ]; then

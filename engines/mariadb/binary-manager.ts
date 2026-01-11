@@ -153,7 +153,10 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const tempDir = join(paths.bin, `temp-mariadb-${fullVersion}-${platform}-${arch}`)
+    const tempDir = join(
+      paths.bin,
+      `temp-mariadb-${fullVersion}-${platform}-${arch}`,
+    )
     const archiveFile = join(
       tempDir,
       platform === 'win32' ? 'mariadb.zip' : 'mariadb.tar.gz',
@@ -292,7 +295,9 @@ export class MariaDBBinaryManager {
     // Check if there's a nested mariadb/ directory
     const entries = await readdir(extractDir, { withFileTypes: true })
     const mariadbDir = entries.find(
-      (e) => e.isDirectory() && (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
+      (e) =>
+        e.isDirectory() &&
+        (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
     )
 
     if (mariadbDir) {
@@ -434,11 +439,7 @@ export class MariaDBBinaryManager {
   /**
    * Delete installed binaries for a specific version
    */
-  async delete(
-    version: string,
-    platform: string,
-    arch: string,
-  ): Promise<void> {
+  async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mariadb',

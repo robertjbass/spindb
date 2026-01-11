@@ -40,7 +40,14 @@ import {
   type InstalledRedisEngine,
 } from '../helpers'
 import { Engine } from '../../types'
-import { loadEnginesJson, type EngineConfig } from '../../config/engines-registry'
+import {
+  loadEnginesJson,
+  type EngineConfig,
+} from '../../config/engines-registry'
+import { mysqlBinaryManager } from '../../engines/mysql/binary-manager'
+import { mariadbBinaryManager } from '../../engines/mariadb/binary-manager'
+import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
+import { redisBinaryManager } from '../../engines/redis/binary-manager'
 
 /**
  * Pad string to width, accounting for emoji taking 2 display columns
@@ -127,7 +134,11 @@ async function installMissingClientTools(
     const existing = await findBinary(tool)
     if (existing) {
       // Register it in config and skip installation
-      await configManager.setBinaryPath(tool as BinaryTool, existing.path, 'system')
+      await configManager.setBinaryPath(
+        tool as BinaryTool,
+        existing.path,
+        'system',
+      )
       skipped.push(tool)
       continue
     }
@@ -161,7 +172,9 @@ async function installMissingClientTools(
   const isRoot = process.getuid?.() === 0
 
   for (const pkg of packages) {
-    onProgress?.(`Installing ${pkg.package} (provides: ${pkg.tools.join(', ')})...`)
+    onProgress?.(
+      `Installing ${pkg.package} (provides: ${pkg.tools.join(', ')})...`,
+    )
 
     try {
       // Handle Homebrew taps
@@ -171,18 +184,14 @@ async function installMissingClientTools(
 
       // Build install command - use sudo only if not root
       const sudo = isRoot ? '' : 'sudo '
-      const installCmd =
-        pmKey === 'brew'
-          ? `brew install ${pkg.package}`
-          : pmKey === 'apt'
-            ? `${sudo}apt-get update && ${sudo}apt-get install -y ${pkg.package}`
-            : pmKey === 'yum'
-              ? `${sudo}yum install -y ${pkg.package}`
-              : pmKey === 'dnf'
-                ? `${sudo}dnf install -y ${pkg.package}`
-                : pmKey === 'choco'
-                  ? `choco install ${pkg.package} -y`
-                  : null
+      const installCommands: Record<string, string> = {
+        brew: `brew install ${pkg.package}`,
+        apt: `${sudo}apt-get update && ${sudo}apt-get install -y ${pkg.package}`,
+        yum: `${sudo}yum install -y ${pkg.package}`,
+        dnf: `${sudo}dnf install -y ${pkg.package}`,
+        choco: `choco install ${pkg.package} -y`,
+      }
+      const installCmd = installCommands[pmKey] ?? null
 
       if (!installCmd) {
         failed.push(...pkg.tools)
@@ -195,7 +204,11 @@ async function installMissingClientTools(
       for (const tool of pkg.tools) {
         const result = await findBinary(tool)
         if (result) {
-          await configManager.setBinaryPath(tool as BinaryTool, result.path, 'system')
+          await configManager.setBinaryPath(
+            tool as BinaryTool,
+            result.path,
+            'system',
+          )
           installed.push(tool)
         } else {
           // Installed but can't find - maybe needs PATH refresh
@@ -204,7 +217,9 @@ async function installMissingClientTools(
       }
     } catch (error) {
       const e = error as Error
-      console.error(chalk.red(`  Failed to install ${pkg.package}: ${e.message}`))
+      console.error(
+        chalk.red(`  Failed to install ${pkg.package}: ${e.message}`),
+      )
       failed.push(...pkg.tools)
     }
   }
@@ -227,12 +242,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(uiInfo('No engines installed yet.'))
     console.log(
       chalk.gray(
-        '  PostgreSQL engines are downloaded automatically when you create a container.',
+        '  Database engines are downloaded automatically when you create a container.',
       ),
     )
     console.log(
       chalk.gray(
-        '  MySQL requires system installation (brew install mysql or apt install mysql-server).',
+        '  Or download manually: spindb engines download <engine> <version>',
       ),
     )
     return
@@ -355,10 +370,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
   if (mysqlEngines.length > 0) {
-    const versionCount = mysqlEngines.length
-    const versionText = versionCount === 1 ? 'version' : 'versions'
+    const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
     console.log(
-      chalk.gray(`  MySQL: ${versionCount} ${versionText} system-installed`),
+      chalk.gray(
+        `  MySQL: ${mysqlEngines.length} version(s), ${formatBytes(totalMysqlSize)}`,
+      ),
     )
   }
   if (sqliteEngine) {
@@ -366,7 +382,10 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
     )
   }
-  const totalMongodbSize = mongodbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalMongodbSize = mongodbEngines.reduce(
+    (acc, e) => acc + e.sizeBytes,
+    0,
+  )
   if (mongodbEngines.length > 0) {
     console.log(
       chalk.gray(
@@ -400,7 +419,7 @@ async function deleteEngine(
     console.log(uiWarning('No deletable engines found.'))
     console.log(
       chalk.gray(
-        '  MySQL is system-installed and cannot be deleted via spindb.',
+        '  Engine deletion is currently supported for PostgreSQL only.',
       ),
     )
     return
@@ -447,7 +466,9 @@ async function deleteEngine(
   )
 
   // Check for running containers using this engine
-  const runningContainers = usingContainers.filter((c) => c.status === 'running')
+  const runningContainers = usingContainers.filter(
+    (c) => c.status === 'running',
+  )
 
   // Confirm deletion (warn about containers)
   if (!options.yes) {
@@ -550,12 +571,12 @@ async function deleteEngine(
           return
         }
       } else {
-        console.log(chalk.yellow('  Proceeding with deletion (--yes specified)'))
+        console.log(
+          chalk.yellow('  Proceeding with deletion (--yes specified)'),
+        )
       }
     } else {
-      stopSpinner.succeed(
-        `Stopped ${runningContainers.length} container(s)`,
-      )
+      stopSpinner.succeed(`Stopped ${runningContainers.length} container(s)`)
     }
   }
 
@@ -785,9 +806,7 @@ enginesCommand
 
         const engine = getEngine(Engine.MySQL)
 
-        const spinner = createSpinner(
-          `Checking MySQL ${version} binaries...`,
-        )
+        const spinner = createSpinner(`Checking MySQL ${version} binaries...`)
         spinner.start()
 
         let wasCached = false
@@ -806,8 +825,8 @@ enginesCommand
           spinner.succeed(`MySQL ${version} binaries downloaded`)
         }
 
-        const { platform: mysqlPlatform, arch: mysqlArch } = platformService.getPlatformInfo()
-        const { mysqlBinaryManager } = await import('../../engines/mysql/binary-manager')
+        const { platform: mysqlPlatform, arch: mysqlArch } =
+          platformService.getPlatformInfo()
         const mysqlFullVersion = mysqlBinaryManager.getFullVersion(version)
         const mysqlBinPath = paths.getBinaryPath({
           engine: 'mysql',
@@ -819,7 +838,10 @@ enginesCommand
 
         // Check for bundled client tools and install missing ones
         const mysqlRequiredTools = await getRequiredClientTools('mysql')
-        const mysqlBundledTools = checkBundledTools(mysqlBinPath, mysqlRequiredTools)
+        const mysqlBundledTools = checkBundledTools(
+          mysqlBinPath,
+          mysqlRequiredTools,
+        )
 
         if (mysqlBundledTools.length < mysqlRequiredTools.length) {
           const clientSpinner = createSpinner('Checking client tools...')
@@ -855,15 +877,15 @@ enginesCommand
       // MariaDB: download from hostdb
       if (['mariadb', 'maria'].includes(normalizedEngine)) {
         if (!version) {
-          console.error(uiError('MariaDB requires a version (e.g., 10.11, 11.4, 11.8)'))
+          console.error(
+            uiError('MariaDB requires a version (e.g., 10.11, 11.4, 11.8)'),
+          )
           process.exit(1)
         }
 
         const engine = getEngine(Engine.MariaDB)
 
-        const spinner = createSpinner(
-          `Checking MariaDB ${version} binaries...`,
-        )
+        const spinner = createSpinner(`Checking MariaDB ${version} binaries...`)
         spinner.start()
 
         let wasCached = false
@@ -882,8 +904,8 @@ enginesCommand
           spinner.succeed(`MariaDB ${version} binaries downloaded`)
         }
 
-        const { platform: mariadbPlatform, arch: mariadbArch } = platformService.getPlatformInfo()
-        const { mariadbBinaryManager } = await import('../../engines/mariadb/binary-manager')
+        const { platform: mariadbPlatform, arch: mariadbArch } =
+          platformService.getPlatformInfo()
         const mariadbFullVersion = mariadbBinaryManager.getFullVersion(version)
         const mariadbBinPath = paths.getBinaryPath({
           engine: 'mariadb',
@@ -895,7 +917,10 @@ enginesCommand
 
         // Check for bundled client tools and install missing ones
         const mariadbRequiredTools = await getRequiredClientTools('mariadb')
-        const mariadbBundledTools = checkBundledTools(mariadbBinPath, mariadbRequiredTools)
+        const mariadbBundledTools = checkBundledTools(
+          mariadbBinPath,
+          mariadbRequiredTools,
+        )
 
         if (mariadbBundledTools.length < mariadbRequiredTools.length) {
           const clientSpinner = createSpinner('Checking client tools...')
@@ -941,9 +966,7 @@ enginesCommand
 
         const engine = getEngine(Engine.MongoDB)
 
-        const spinner = createSpinner(
-          `Checking MongoDB ${version} binaries...`,
-        )
+        const spinner = createSpinner(`Checking MongoDB ${version} binaries...`)
         spinner.start()
 
         // Always call ensureBinaries - it handles cached binaries gracefully
@@ -965,7 +988,6 @@ enginesCommand
 
         // Show the path for reference
         const { platform, arch } = platformService.getPlatformInfo()
-        const { mongodbBinaryManager } = await import('../../engines/mongodb/binary-manager')
         const fullVersion = mongodbBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'mongodb',
@@ -974,6 +996,42 @@ enginesCommand
           arch,
         })
         console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        const mongodbRequiredTools = await getRequiredClientTools('mongodb')
+        const mongodbBundledTools = checkBundledTools(
+          binPath,
+          mongodbRequiredTools,
+        )
+
+        if (mongodbBundledTools.length < mongodbRequiredTools.length) {
+          const clientSpinner = createSpinner('Checking client tools...')
+          clientSpinner.start()
+
+          const result = await installMissingClientTools(
+            'mongodb',
+            mongodbBundledTools,
+            (msg) => {
+              clientSpinner.text = msg
+            },
+          )
+
+          if (result.installed.length > 0) {
+            clientSpinner.succeed(
+              `Installed client tools: ${result.installed.join(', ')}`,
+            )
+          } else if (result.skipped.length > 0) {
+            clientSpinner.succeed(
+              `Client tools already available: ${result.skipped.join(', ')}`,
+            )
+          } else if (result.failed.length > 0) {
+            clientSpinner.warn(
+              `Could not install: ${result.failed.join(', ')}. Install manually.`,
+            )
+          } else {
+            clientSpinner.succeed('All client tools available')
+          }
+        }
         return
       }
 
@@ -985,9 +1043,7 @@ enginesCommand
 
         const engine = getEngine(Engine.Redis)
 
-        const spinner = createSpinner(
-          `Checking Redis ${version} binaries...`,
-        )
+        const spinner = createSpinner(`Checking Redis ${version} binaries...`)
         spinner.start()
 
         // Always call ensureBinaries - it handles cached binaries gracefully
@@ -1008,16 +1064,49 @@ enginesCommand
         }
 
         // Show the path for reference
-        const { platform, arch } = platformService.getPlatformInfo()
-        const { redisBinaryManager } = await import('../../engines/redis/binary-manager')
-        const fullVersion = redisBinaryManager.getFullVersion(version)
+        const { platform: redisPlatform, arch: redisArch } =
+          platformService.getPlatformInfo()
+        const redisFullVersion = redisBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'redis',
-          version: fullVersion,
-          platform,
-          arch,
+          version: redisFullVersion,
+          platform: redisPlatform,
+          arch: redisArch,
         })
         console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        const redisRequiredTools = await getRequiredClientTools('redis')
+        const redisBundledTools = checkBundledTools(binPath, redisRequiredTools)
+
+        if (redisBundledTools.length < redisRequiredTools.length) {
+          const clientSpinner = createSpinner('Checking client tools...')
+          clientSpinner.start()
+
+          const result = await installMissingClientTools(
+            'redis',
+            redisBundledTools,
+            (msg) => {
+              clientSpinner.text = msg
+            },
+          )
+
+          if (result.installed.length > 0) {
+            clientSpinner.succeed(
+              `Installed client tools: ${result.installed.join(', ')}`,
+            )
+          } else if (result.skipped.length > 0) {
+            clientSpinner.succeed(
+              `Client tools already available: ${result.skipped.join(', ')}`,
+            )
+          } else if (result.failed.length > 0) {
+            clientSpinner.warn(
+              `Could not install: ${result.failed.join(', ')}. Install manually.`,
+            )
+          } else {
+            clientSpinner.succeed('All client tools available')
+          }
+        }
         return
       }
 
@@ -1085,7 +1174,9 @@ enginesCommand
               : config.status === 'pending'
                 ? chalk.blue
                 : chalk.gray
-          console.log(`${config.icon} ${name} ${statusColor(`(${config.status})`)}`)
+          console.log(
+            `${config.icon} ${name} ${statusColor(`(${config.status})`)}`,
+          )
         } else {
           // Just engine name with icon
           console.log(`${config.icon} ${name}`)

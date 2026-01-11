@@ -1,5 +1,14 @@
-# SpinDB Docker E2E Test Environment
-# Tests SpinDB in a clean Ubuntu environment without any pre-installed databases
+# SpinDB Docker Linux Edge Case Test Environment
+#
+# PURPOSE: Tests that hostdb binaries work correctly on minimal Linux systems.
+# This catches library dependency issues and platform-specific edge cases.
+#
+# NOTE: This is NOT the primary test environment. GitHub Actions runs native
+# tests on Ubuntu, macOS, and Windows VMs which better represent real user
+# environments. Use this for:
+# - Verifying hostdb binaries have correct library dependencies
+# - Testing on a minimal system without pre-installed database tools
+# - Catching Linux-specific edge cases (libaio, libnuma, etc.)
 #
 # Uses Ubuntu LTS as base because:
 # - Represents a typical developer Linux system
@@ -44,6 +53,7 @@ RUN apt-get update && apt-get install -y \
 # libnuma1: NUMA library required by Percona PostgreSQL builds
 # libaio1: async I/O library required by MySQL
 # libncurses6: terminal library required by MariaDB client
+# sudo: needed for non-root user to run privileged commands
 RUN apt-get update && apt-get install -y \
     git \
     procps \
@@ -54,6 +64,7 @@ RUN apt-get update && apt-get install -y \
     libnuma1 \
     libaio1t64 \
     libncurses6 \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Create compatibility symlink for MySQL
@@ -68,10 +79,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Create non-root user for running databases
 # PostgreSQL initdb refuses to run as root for security reasons
 RUN useradd -m -s /bin/bash spindb \
-    && apt-get update \
-    && apt-get install -y sudo \
-    && echo "spindb ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
-    && rm -rf /var/lib/apt/lists/*
+    && echo "spindb ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Set up pnpm global bin directory for spindb user
 ENV PNPM_HOME="/home/spindb/.local/share/pnpm"

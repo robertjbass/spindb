@@ -1,13 +1,27 @@
 #!/bin/bash
-# SpinDB Docker E2E Test Script
-# Tests all database engines in a clean Ubuntu environment
+# SpinDB Docker Linux Edge Case Test Script
+#
+# PURPOSE: Verify hostdb binaries work on minimal Linux systems.
+# Tests library dependencies (libaio, libnuma, libncurses) and
+# platform-specific edge cases that can't be caught on macOS/Windows.
+#
+# This script runs in a clean Ubuntu container to catch issues like:
+# - Missing shared libraries
+# - Library version incompatibilities (e.g., libaio.so.1 vs libaio.so.1t64)
+# - Permission issues with binary execution
+# - Path resolution problems
 
 set -e
 
-echo "=== SpinDB Docker E2E Test ==="
-echo "Node: $(node --version)"
-echo "pnpm: $(pnpm --version)"
-echo "SpinDB: $(spindb version 2>/dev/null || echo 'not installed')"
+echo "════════════════════════════════════════════════════════════════"
+echo "  SpinDB Docker Linux Edge Case Tests"
+echo "════════════════════════════════════════════════════════════════"
+echo ""
+echo "Environment:"
+echo "  Node: $(node --version)"
+echo "  pnpm: $(pnpm --version)"
+echo "  Platform: $(uname -s) $(uname -m)"
+echo "  SpinDB: $(spindb version 2>/dev/null || echo 'not installed')"
 echo ""
 
 # Verify clean state
@@ -18,6 +32,24 @@ if [ -d ~/.spindb ]; then
 else
   echo "Clean state confirmed: no existing ~/.spindb"
 fi
+echo ""
+
+# Check library dependencies are available
+echo "=== Checking library dependencies ==="
+check_lib() {
+  local lib=$1
+  if ldconfig -p | grep -q "$lib"; then
+    echo "  ✓ $lib found"
+  else
+    echo "  ⚠ $lib NOT found (may cause issues)"
+  fi
+}
+
+check_lib "libaio"
+check_lib "libnuma"
+check_lib "libncurses"
+check_lib "libssl"
+check_lib "libcrypto"
 echo ""
 
 # Test counters and results tracking
@@ -56,7 +88,7 @@ run_test() {
     if ! spindb engines download "$engine" "$version"; then
       echo "FAILED: Could not download $engine $version"
       record_result "$engine" "$version" "FAILED" "Download failed"
-      ((FAILED++))
+      FAILED=$((FAILED+1))
       return 1
     fi
     echo "Download complete"
@@ -67,7 +99,7 @@ run_test() {
   if ! spindb create "$container_name" --engine "$engine" --db-version "$version" --no-start; then
     echo "FAILED: Could not create $container_name"
     record_result "$engine" "$version" "FAILED" "Create failed"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
     return 1
   fi
 
@@ -78,7 +110,7 @@ run_test() {
       echo "FAILED: Could not start $container_name"
       spindb delete "$container_name" --yes 2>/dev/null || true
       record_result "$engine" "$version" "FAILED" "Start failed"
-      ((FAILED++))
+      FAILED=$((FAILED+1))
       return 1
     fi
 
@@ -93,7 +125,7 @@ run_test() {
       spindb stop "$container_name" 2>/dev/null || true
       spindb delete "$container_name" --yes 2>/dev/null || true
       record_result "$engine" "$version" "FAILED" "Status: $status"
-      ((FAILED++))
+      FAILED=$((FAILED+1))
       return 1
     fi
   fi
@@ -107,7 +139,7 @@ run_test() {
         spindb stop "$container_name" 2>/dev/null || true
         spindb delete "$container_name" --yes 2>/dev/null || true
         record_result "$engine" "$version" "FAILED" "Query failed"
-        ((FAILED++))
+        FAILED=$((FAILED+1))
         return 1
       fi
       ;;
@@ -117,7 +149,7 @@ run_test() {
         spindb stop "$container_name" 2>/dev/null || true
         spindb delete "$container_name" --yes 2>/dev/null || true
         record_result "$engine" "$version" "FAILED" "Query failed"
-        ((FAILED++))
+        FAILED=$((FAILED+1))
         return 1
       fi
       ;;
@@ -127,7 +159,7 @@ run_test() {
         spindb stop "$container_name" 2>/dev/null || true
         spindb delete "$container_name" --yes 2>/dev/null || true
         record_result "$engine" "$version" "FAILED" "Ping failed"
-        ((FAILED++))
+        FAILED=$((FAILED+1))
         return 1
       fi
       ;;
@@ -137,7 +169,7 @@ run_test() {
         spindb stop "$container_name" 2>/dev/null || true
         spindb delete "$container_name" --yes 2>/dev/null || true
         record_result "$engine" "$version" "FAILED" "PING failed"
-        ((FAILED++))
+        FAILED=$((FAILED+1))
         return 1
       fi
       ;;
@@ -146,7 +178,7 @@ run_test() {
         echo "FAILED: Could not run SQLite query"
         spindb delete "$container_name" --yes 2>/dev/null || true
         record_result "$engine" "$version" "FAILED" "Query failed"
-        ((FAILED++))
+        FAILED=$((FAILED+1))
         return 1
       fi
       ;;
@@ -168,7 +200,7 @@ run_test() {
 
   echo "PASSED: $engine v$version"
   record_result "$engine" "$version" "PASSED" ""
-  ((PASSED++))
+  PASSED=$((PASSED+1))
   return 0
 }
 

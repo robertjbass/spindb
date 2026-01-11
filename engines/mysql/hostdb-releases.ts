@@ -7,10 +7,7 @@
  * hostdb provides pre-built MySQL binaries for multiple platforms.
  */
 
-import {
-  MYSQL_VERSION_MAP,
-  SUPPORTED_MAJOR_VERSIONS,
-} from './version-maps'
+import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 
 /**
  * Platform definition in hostdb releases.json

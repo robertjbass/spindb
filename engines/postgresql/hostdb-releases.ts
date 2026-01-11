@@ -251,6 +251,9 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     // Fallback to checking version map
     // Handle both major versions ("17") and full versions ("17.7.0")
     const major = version.split('.')[0]
-    return version in POSTGRESQL_VERSION_MAP || POSTGRESQL_VERSION_MAP[major] === version
+    return (
+      version in POSTGRESQL_VERSION_MAP ||
+      POSTGRESQL_VERSION_MAP[major] === version
+    )
   }
 }

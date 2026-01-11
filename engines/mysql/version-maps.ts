@@ -44,28 +44,19 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '8.0.40', '9.1.0')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version only, use the map
+  // If it's in the map directly, use it (handles '9', '8.0', '8.4', etc.)
   const fullVersion = MYSQL_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it has less than 3 parts, try to find matching entry
+  // If it has less than 3 parts, provide fallback
   const parts = version.split('.')
   if (parts.length === 1) {
-    // Single number like '9'
-    const mapped = MYSQL_VERSION_MAP[version]
-    if (mapped) {
-      return mapped
-    }
+    // Single number like '9' - already checked above, not in map
     return `${version}.0.0`
   } else if (parts.length === 2) {
-    // Two parts like '8.0' or '8.4'
-    const mapped = MYSQL_VERSION_MAP[version]
-    if (mapped) {
-      return mapped
-    }
-    // Default to adding .0 if not in map
+    // Two parts like '8.0' - already checked above, not in map
     return `${version}.0`
   }
 

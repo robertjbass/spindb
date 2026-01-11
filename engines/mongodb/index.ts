@@ -39,18 +39,12 @@ import type {
   StatusResult,
 } from '../../types'
 
-// Re-export modules for external access
-export * from './version-validator'
-export * from './restore'
-
 const execAsync = promisify(exec)
 
 const ENGINE = 'mongodb'
 const engineDef = getEngineDefaults(ENGINE)
 
-/**
- * Build a mongosh command for inline JavaScript execution
- */
+// Build a mongosh command for inline JavaScript execution
 export function buildMongoshCommand(
   mongoshPath: string,
   port: number,
@@ -98,16 +92,12 @@ export class MongoDBEngine extends BaseEngine {
   defaultPort = engineDef.defaultPort
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
-  /**
-   * Get the current platform and architecture
-   */
+  // Get the current platform and architecture
   getPlatformInfo(): { platform: string; arch: string } {
     return platformService.getPlatformInfo()
   }
 
-  /**
-   * Fetch available versions from hostdb
-   */
+  // Fetch available versions from hostdb
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     const versions: Record<string, string[]> = {}
 
@@ -118,24 +108,18 @@ export class MongoDBEngine extends BaseEngine {
     return versions
   }
 
-  /**
-   * Get binary download URL from hostdb
-   */
+  // Get binary download URL from hostdb
   getBinaryUrl(version: string, platform: string, arch: string): string {
     return getBinaryUrl(version, platform, arch)
   }
 
-  /**
-   * Verify that MongoDB binaries are available
-   */
+  // Verify that MongoDB binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
     const mongodPath = join(binPath, 'bin', 'mongod')
     return existsSync(mongodPath)
   }
 
-  /**
-   * Check if a specific MongoDB version is installed
-   */
+  // Check if a specific MongoDB version is installed
   async isBinaryInstalled(version: string): Promise<boolean> {
     const { platform, arch } = this.getPlatformInfo()
     return mongodbBinaryManager.isInstalled(version, platform, arch)
@@ -159,11 +143,16 @@ export class MongoDBEngine extends BaseEngine {
       onProgress,
     )
 
-    // Register binaries in config
+    // Register binaries in config (includes server + client tools)
     const ext = platformService.getExecutableExtension()
-    const clientTools = ['mongod', 'mongosh', 'mongodump', 'mongorestore'] as const
+    const bundledTools = [
+      'mongod', // server
+      'mongosh', // shell client
+      'mongodump', // backup utility
+      'mongorestore', // restore utility
+    ] as const
 
-    for (const tool of clientTools) {
+    for (const tool of bundledTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
@@ -371,9 +360,7 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Wait for MongoDB to be ready to accept connections
-   */
+  // Wait for MongoDB to be ready to accept connections
   private async waitForReady(
     port: number,
     timeoutMs = 30000,
@@ -383,13 +370,22 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await configManager.getBinaryPath('mongosh')
     if (!mongosh) {
-      // No mongosh, assume ready after fork
+      // No mongosh available to verify readiness - assume ready after fork
+      logDebug(
+        `mongosh not found, assuming MongoDB ready on port ${port} without verification`,
+      )
       return true
     }
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const cmd = buildMongoshCommand(mongosh, port, 'admin', 'db.runCommand({ping:1})', { quiet: true })
+        const cmd = buildMongoshCommand(
+          mongosh,
+          port,
+          'admin',
+          'db.runCommand({ping:1})',
+          { quiet: true },
+        )
         await execAsync(cmd, { timeout: 5000 })
         return true
       } catch {
@@ -487,9 +483,7 @@ export class MongoDBEngine extends BaseEngine {
     logDebug('MongoDB stopped')
   }
 
-  /**
-   * Get MongoDB server status
-   */
+  // Get MongoDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, port } = container
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
@@ -501,7 +495,13 @@ export class MongoDBEngine extends BaseEngine {
     const mongosh = await configManager.getBinaryPath('mongosh')
     if (mongosh) {
       try {
-        const cmd = buildMongoshCommand(mongosh, port, 'admin', 'db.runCommand({ping:1})', { quiet: true })
+        const cmd = buildMongoshCommand(
+          mongosh,
+          port,
+          'admin',
+          'db.runCommand({ping:1})',
+          { quiet: true },
+        )
         await execAsync(cmd, { timeout: 5000 })
         return { running: true, message: 'MongoDB is running' }
       } catch {
@@ -530,16 +530,12 @@ export class MongoDBEngine extends BaseEngine {
     return { running: false, message: 'MongoDB is not running' }
   }
 
-  /**
-   * Detect backup format
-   */
+  // Detect backup format
   async detectBackupFormat(filePath: string): Promise<BackupFormat> {
     return detectBackupFormatImpl(filePath)
   }
 
-  /**
-   * Restore a backup
-   */
+  // Restore a backup
   async restore(
     container: ContainerConfig,
     backupPath: string,
@@ -556,18 +552,14 @@ export class MongoDBEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Get connection string
-   */
+  // Get connection string
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
     const db = database || container.database || 'test'
     return `mongodb://127.0.0.1:${port}/${db}`
   }
 
-  /**
-   * Get path to mongosh
-   */
+  // Get path to mongosh
   override async getMongoshPath(): Promise<string> {
     const cached = await configManager.getBinaryPath('mongosh')
     if (cached && existsSync(cached)) return cached
@@ -586,9 +578,7 @@ export class MongoDBEngine extends BaseEngine {
     )
   }
 
-  /**
-   * Open mongosh interactive shell
-   */
+  // Open mongosh interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
     const { port } = container
     const db = database || container.database || 'test'
@@ -646,9 +636,7 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Drop a database
-   */
+  // Drop a database
   async dropDatabase(
     container: ContainerConfig,
     database: string,
@@ -674,9 +662,7 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Get the size of the database in bytes
-   */
+  // Get the size of the database in bytes
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const { port, database } = container
     const db = database || 'test'
@@ -701,9 +687,7 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Create a dump from a remote database
-   */
+  // Create a dump from a remote database
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
@@ -771,9 +755,7 @@ export class MongoDBEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Create a backup
-   */
+  // Create a backup
   async backup(
     container: ContainerConfig,
     outputPath: string,
@@ -782,9 +764,7 @@ export class MongoDBEngine extends BaseEngine {
     return createBackup(container, outputPath, options)
   }
 
-  /**
-   * Run a JavaScript file or inline script against the database
-   */
+  // Run a JavaScript file or inline script against the database
   async runScript(
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },

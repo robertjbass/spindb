@@ -48,10 +48,6 @@ import type {
   StatusResult,
 } from '../../types'
 
-// Re-export modules for external access
-export * from './version-validator'
-export * from './restore'
-
 const execAsync = promisify(exec)
 
 const ENGINE = 'mariadb'

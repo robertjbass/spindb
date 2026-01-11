@@ -30,7 +30,9 @@ export function assertNotEqual<T>(
   message: string,
 ): void {
   if (actual === notExpected) {
-    throw new Error(`${message}\n  Should not be: ${notExpected}\n  Actual: ${actual}`)
+    throw new Error(
+      `${message}\n  Should not be: ${notExpected}\n  Actual: ${actual}`,
+    )
   }
 }
 

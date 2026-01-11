@@ -188,8 +188,7 @@ export async function getInstalledMariadbEngines(): Promise<
         const [, , majorVersion, platform, arch] = match
         const dirPath = join(binDir, entry.name)
 
-        const actualVersion =
-          (await getMariadbVersion(dirPath)) || majorVersion
+        const actualVersion = (await getMariadbVersion(dirPath)) || majorVersion
 
         let sizeBytes = 0
         try {
@@ -265,8 +264,7 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
         const [, , majorVersion, platform, arch] = match
         const dirPath = join(binDir, entry.name)
 
-        const actualVersion =
-          (await getMysqlVersion(dirPath)) || majorVersion
+        const actualVersion = (await getMysqlVersion(dirPath)) || majorVersion
 
         let sizeBytes = 0
         try {
@@ -371,8 +369,7 @@ async function getInstalledMongodbEngines(): Promise<InstalledMongodbEngine[]> {
         const [, , majorVersion, platform, arch] = match
         const dirPath = join(binDir, entry.name)
 
-        const actualVersion =
-          (await getMongodbVersion(dirPath)) || majorVersion
+        const actualVersion = (await getMongodbVersion(dirPath)) || majorVersion
 
         let sizeBytes = 0
         try {
@@ -451,8 +448,7 @@ async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
         const [, , majorVersion, platform, arch] = match
         const dirPath = join(binDir, entry.name)
 
-        const actualVersion =
-          (await getRedisVersion(dirPath)) || majorVersion
+        const actualVersion = (await getRedisVersion(dirPath)) || majorVersion
 
         let sizeBytes = 0
         try {
@@ -529,4 +525,8 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
 }
 
 // Export individual engine detection functions for use in other modules
-export { getInstalledMysqlEngines, getInstalledMongodbEngines, getInstalledRedisEngines }
+export {
+  getInstalledMysqlEngines,
+  getInstalledMongodbEngines,
+  getInstalledRedisEngines,
+}

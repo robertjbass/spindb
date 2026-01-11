@@ -444,7 +444,7 @@ export const createCommand = new Command('create')
           depsSpinner.succeed('Required tools available')
         }
 
-        // For MySQL, MongoDB, Redis (system-installed engines), validate version and get binary path
+        // For non-PostgreSQL engines, validate version and get binary path
         // Store the binary path for version consistency
         let binaryPath: string | undefined
         if (!isPostgreSQL) {
@@ -455,14 +455,19 @@ export const createCommand = new Command('create')
 
           try {
             // ensureBinaries validates the version and returns the binary path
-            binaryPath = await dbEngine.ensureBinaries(version, ({ message }) => {
-              binarySpinner.text = message
-            })
+            binaryPath = await dbEngine.ensureBinaries(
+              version,
+              ({ message }) => {
+                binarySpinner.text = message
+              },
+            )
             binarySpinner.succeed(
               `${dbEngine.displayName} ${version} binaries ready`,
             )
           } catch (error) {
-            binarySpinner.fail(`${dbEngine.displayName} ${version} not available`)
+            binarySpinner.fail(
+              `${dbEngine.displayName} ${version} not available`,
+            )
             throw error
           }
         }

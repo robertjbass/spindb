@@ -57,7 +57,9 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesResponse | nu
  * Fetch available MongoDB versions from hostdb
  * Falls back to hardcoded version map if fetch fails
  */
-export async function fetchAvailableVersions(): Promise<Record<string, string>> {
+export async function fetchAvailableVersions(): Promise<
+  Record<string, string>
+> {
   const releases = await fetchHostdbReleases()
 
   if (releases?.databases?.mongodb?.versions) {
@@ -72,7 +74,7 @@ export async function fetchAvailableVersions(): Promise<Record<string, string>> 
         // Keep the latest full version for each major.minor
         if (
           !versionMap[majorMinor] ||
-          fullVersion > versionMap[majorMinor]
+          isNewerVersion(fullVersion, versionMap[majorMinor])
         ) {
           versionMap[majorMinor] = fullVersion
         }
@@ -108,6 +110,24 @@ export function getHostdbDownloadUrl(
 ): string {
   const platformKey = `${platform}-${arch}`
   return `https://github.com/robertjbass/hostdb/releases/download/mongodb-${version}/mongodb-${version}-${platformKey}.tar.gz`
+}
+
+/**
+ * Compare two semantic versions
+ * Returns true if versionA > versionB
+ */
+function isNewerVersion(versionA: string, versionB: string): boolean {
+  const partsA = versionA.split('.').map(Number)
+  const partsB = versionB.split('.').map(Number)
+  const maxLength = Math.max(partsA.length, partsB.length)
+
+  for (let i = 0; i < maxLength; i++) {
+    const a = partsA[i] || 0
+    const b = partsB[i] || 0
+    if (a > b) return true
+    if (a < b) return false
+  }
+  return false
 }
 
 // Re-export for convenience

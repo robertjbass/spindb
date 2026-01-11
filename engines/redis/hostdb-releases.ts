@@ -8,6 +8,7 @@
  */
 
 import { REDIS_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { getHostdbPlatform } from './binary-urls'
 
 /**
  * Platform definition in hostdb releases.json
@@ -201,8 +202,10 @@ export async function getHostdbDownloadUrl(
     }
 
     // Map Node.js platform names to hostdb platform names
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
+    const hostdbPlatform = getHostdbPlatform(platform, arch)
+    if (!hostdbPlatform) {
+      throw new Error(`Unsupported platform: ${platform}-${arch}`)
+    }
 
     // Get the platform-specific download URL
     const platformData = release.platforms[hostdbPlatform]
@@ -215,8 +218,10 @@ export async function getHostdbDownloadUrl(
     return platformData.url
   } catch {
     // Fallback to constructing URL manually if fetch fails
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
+    const hostdbPlatform = getHostdbPlatform(platform, arch)
+    if (!hostdbPlatform) {
+      throw new Error(`Unsupported platform: ${platform}-${arch}`)
+    }
     const tag = `redis-${version}`
     // Windows uses .zip, Unix uses .tar.gz
     const ext = platform === 'win32' ? 'zip' : 'tar.gz'
@@ -224,30 +229,6 @@ export async function getHostdbDownloadUrl(
 
     return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
   }
-}
-
-/**
- * Map Node.js platform identifiers to hostdb platform identifiers
- *
- * @param platformKey - Node.js platform-arch key (e.g., 'darwin-arm64')
- * @returns hostdb platform identifier (e.g., 'darwin-arm64')
- */
-function mapPlatformToHostdb(platformKey: string): string {
-  // hostdb uses standard platform naming, which matches Node.js
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-
-  const result = mapping[platformKey]
-  if (!result) {
-    throw new Error(`Unsupported platform: ${platformKey}`)
-  }
-
-  return result
 }
 
 /**
@@ -267,8 +248,6 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     // Fallback to checking version map
     // Handle both major versions ("7") and full versions ("7.4.7")
     const major = version.split('.')[0]
-    return (
-      version in REDIS_VERSION_MAP || REDIS_VERSION_MAP[major] === version
-    )
+    return version in REDIS_VERSION_MAP || REDIS_VERSION_MAP[major] === version
   }
 }

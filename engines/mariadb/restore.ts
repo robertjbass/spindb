@@ -226,7 +226,11 @@ export async function restoreBackup(
   return new Promise((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
 
-    logDebug('Restoring backup with mariadb client', { mysql, args, spawnOptions })
+    logDebug('Restoring backup with mariadb client', {
+      mysql,
+      args,
+      spawnOptions,
+    })
 
     const proc = spawn(mysql, args, spawnOptions)
 
@@ -265,7 +269,9 @@ export async function restoreBackup(
       gunzip.on('error', (err) => {
         fileStream.unpipe(gunzip)
         gunzip.unpipe(proc.stdin!)
-        rejectOnce(new Error(`Failed to decompress backup file: ${err.message}`))
+        rejectOnce(
+          new Error(`Failed to decompress backup file: ${err.message}`),
+        )
       })
     } else {
       if (!proc.stdin) {

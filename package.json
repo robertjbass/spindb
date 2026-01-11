@@ -20,7 +20,10 @@
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
     "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:mongodb test:redis",
     "test:all": "run-s test:unit test:integration",
-    "test:docker": "docker build -t spindb-e2e -f tests/docker/Dockerfile . && docker run --rm spindb-e2e",
+    "test:local": "./scripts/test-local.sh",
+    "test:local:quick": "./scripts/test-local.sh --quick",
+    "test:local:fresh": "./scripts/test-local.sh --fresh",
+    "test:docker": "docker build -t spindb-e2e -f tests/docker/Dockerfile . && docker run --rm spindb-e2e; docker rmi spindb-e2e 2>/dev/null || true",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
     "prepare": "husky"

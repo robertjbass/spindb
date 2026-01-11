@@ -12,7 +12,6 @@ export default [
       'eslint.config.js',
       'scripts/',
       'tests/fixtures/',
-      'legacy/',
     ],
   },
   {

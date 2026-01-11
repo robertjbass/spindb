@@ -69,11 +69,17 @@ describe('Redis Version Validator', () => {
     })
 
     it('should return false for Redis 5.x', () => {
-      assert(!isVersionSupported('5.0.14'), 'Redis 5.0.14 should not be supported')
+      assert(
+        !isVersionSupported('5.0.14'),
+        'Redis 5.0.14 should not be supported',
+      )
     })
 
     it('should return false for invalid version', () => {
-      assert(!isVersionSupported('invalid'), 'Invalid version should not be supported')
+      assert(
+        !isVersionSupported('invalid'),
+        'Invalid version should not be supported',
+      )
     })
   })
 
@@ -90,7 +96,11 @@ describe('Redis Version Validator', () => {
 
     it('should return original string for invalid version', () => {
       // getMajorVersion returns the original string if parsing fails
-      assertEqual(getMajorVersion('invalid'), 'invalid', 'Should return original for invalid')
+      assertEqual(
+        getMajorVersion('invalid'),
+        'invalid',
+        'Should return original for invalid',
+      )
     })
   })
 
@@ -114,14 +124,34 @@ describe('Redis Version Validator', () => {
     })
 
     it('should return 0 when versions are equal', () => {
-      assertEqual(compareVersions('7.2.4', '7.2.4'), 0, 'Same versions should be equal')
+      assertEqual(
+        compareVersions('7.2.4', '7.2.4'),
+        0,
+        'Same versions should be equal',
+      )
     })
 
     it('should return null when either version cannot be parsed', () => {
-      assertEqual(compareVersions('invalid', '7.0.0'), null, 'Invalid first version should return null')
-      assertEqual(compareVersions('7.0.0', 'invalid'), null, 'Invalid second version should return null')
-      assertEqual(compareVersions('invalid', 'also-invalid'), null, 'Both invalid should return null')
-      assertEqual(compareVersions('', '7.0.0'), null, 'Empty first version should return null')
+      assertEqual(
+        compareVersions('invalid', '7.0.0'),
+        null,
+        'Invalid first version should return null',
+      )
+      assertEqual(
+        compareVersions('7.0.0', 'invalid'),
+        null,
+        'Invalid second version should return null',
+      )
+      assertEqual(
+        compareVersions('invalid', 'also-invalid'),
+        null,
+        'Both invalid should return null',
+      )
+      assertEqual(
+        compareVersions('', '7.0.0'),
+        null,
+        'Empty first version should return null',
+      )
     })
   })
 
@@ -139,14 +169,20 @@ describe('Redis Version Validator', () => {
 
     it('should not be compatible when backup is from newer major version', () => {
       const result = isVersionCompatible('7.0.0', '6.0.0')
-      assert(!result.compatible, '7.0.0 backup should not restore to 6.0.0 server')
+      assert(
+        !result.compatible,
+        '7.0.0 backup should not restore to 6.0.0 server',
+      )
     })
 
     it('should be compatible with warning for invalid versions', () => {
       // Function returns compatible: true with a warning for unparseable versions
       const result = isVersionCompatible('invalid', '7.0.0')
       assert(result.compatible, 'Should be compatible with warning')
-      assert(result.warning !== undefined, 'Should have warning for invalid version')
+      assert(
+        result.warning !== undefined,
+        'Should have warning for invalid version',
+      )
     })
   })
 })

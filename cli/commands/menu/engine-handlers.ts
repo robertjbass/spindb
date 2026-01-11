@@ -41,9 +41,7 @@ export async function handleEngines(): Promise<void> {
       ),
     )
     console.log(
-      chalk.gray(
-        '  Or use: spindb engines download <engine> <version>',
-      ),
+      chalk.gray('  Or use: spindb engines download <engine> <version>'),
     )
     return
   }
@@ -68,8 +66,16 @@ export async function handleEngines(): Promise<void> {
   )
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalMariadbSize = mariadbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalMariadbSize = mariadbEngines.reduce(
+    (acc, e) => acc + e.sizeBytes,
+    0,
+  )
   const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalMongodbSize = mongodbEngines.reduce(
+    (acc, e) => acc + e.sizeBytes,
+    0,
+  )
+  const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   const COL_ENGINE = 14
   const COL_VERSION = 12
@@ -197,7 +203,6 @@ export async function handleEngines(): Promise<void> {
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
     )
   }
-  const totalMongodbSize = mongodbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   if (mongodbEngines.length > 0) {
     console.log(
       chalk.gray(
@@ -205,7 +210,6 @@ export async function handleEngines(): Promise<void> {
       ),
     )
   }
-  const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   if (redisEngines.length > 0) {
     console.log(
       chalk.gray(

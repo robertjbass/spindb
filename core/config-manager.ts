@@ -6,12 +6,13 @@ import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { logDebug, logWarning } from './error-handler'
 import { platformService } from './platform-service'
-import type {
-  SpinDBConfig,
-  BinaryConfig,
-  BinaryTool,
-  BinarySource,
-  SQLiteEngineRegistry,
+import {
+  Engine,
+  type SpinDBConfig,
+  type BinaryConfig,
+  type BinaryTool,
+  type BinarySource,
+  type SQLiteEngineRegistry,
 } from '../types'
 
 const execAsync = promisify(exec)
@@ -58,7 +59,13 @@ const REDIS_TOOLS: BinaryTool[] = ['redis-server', 'redis-cli']
 
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
-const ENHANCED_SHELLS: BinaryTool[] = ['pgcli', 'mycli', 'litecli', 'iredis', 'usql']
+const ENHANCED_SHELLS: BinaryTool[] = [
+  'pgcli',
+  'mycli',
+  'litecli',
+  'iredis',
+  'usql',
+]
 
 const ALL_TOOLS: BinaryTool[] = [
   ...POSTGRESQL_TOOLS,
@@ -71,11 +78,13 @@ const ALL_TOOLS: BinaryTool[] = [
 ]
 
 // Map engine names to their binary tools (for scanning ~/.spindb/bin/)
-const ENGINE_BINARY_MAP: Record<string, BinaryTool[]> = {
-  postgresql: POSTGRESQL_TOOLS,
-  mysql: MYSQL_TOOLS,
-  mariadb: MARIADB_TOOLS,
-  redis: REDIS_TOOLS,
+// SQLite is excluded because it uses system binaries, not hostdb downloads
+const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
+  [Engine.PostgreSQL]: POSTGRESQL_TOOLS,
+  [Engine.MySQL]: MYSQL_TOOLS,
+  [Engine.MariaDB]: MARIADB_TOOLS,
+  [Engine.MongoDB]: MONGODB_TOOLS,
+  [Engine.Redis]: REDIS_TOOLS,
 }
 
 export class ConfigManager {
@@ -448,7 +457,8 @@ export class ConfigManager {
         const match = entry.name.match(/^(\w+)-(\d+\.\d+\.\d+)-(\w+)-(\w+)$/)
         if (!match) continue
 
-        const [, engine] = match
+        const [, engineName] = match
+        const engine = engineName as Engine
         const engineTools = ENGINE_BINARY_MAP[engine]
         if (!engineTools) continue
 

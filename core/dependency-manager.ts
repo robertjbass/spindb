@@ -27,9 +27,6 @@ import type { BinaryTool } from '../types'
 
 const execAsync = promisify(exec)
 
-/**
- * Known binary tools that can be registered in config
- */
 const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'psql',
   'pg_dump',
@@ -54,13 +51,6 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'usql',
 ] as const
 
-/**
- * Type guard to check if a string is a known BinaryTool
- */
-function isBinaryTool(binary: string): binary is BinaryTool {
-  return KNOWN_BINARY_TOOLS.includes(binary as BinaryTool)
-}
-
 export type DependencyStatus = {
   dependency: Dependency
   installed: boolean
@@ -78,6 +68,10 @@ export type InstallResult = {
   success: boolean
   dependency: Dependency
   error?: string
+}
+
+function isBinaryTool(binary: string): binary is BinaryTool {
+  return KNOWN_BINARY_TOOLS.includes(binary as BinaryTool)
 }
 
 export async function detectPackageManager(): Promise<DetectedPackageManager | null> {
@@ -104,9 +98,6 @@ export async function detectPackageManager(): Promise<DetectedPackageManager | n
   return null
 }
 
-/**
- * Get the current platform
- */
 export function getCurrentPlatform(): Platform {
   return platformService.getPlatformInfo().platform as Platform
 }
@@ -138,9 +129,6 @@ export async function findBinary(
   }
 }
 
-/**
- * Check the status of a single dependency
- */
 export async function checkDependency(
   dependency: Dependency,
 ): Promise<DependencyStatus> {
@@ -154,9 +142,6 @@ export async function checkDependency(
   }
 }
 
-/**
- * Check all dependencies for a specific engine
- */
 export async function checkEngineDependencies(
   engine: string,
 ): Promise<DependencyStatus[]> {
@@ -170,18 +155,12 @@ export async function checkEngineDependencies(
   return results
 }
 
-/**
- * Check all dependencies across all engines
- */
 export async function checkAllDependencies(): Promise<DependencyStatus[]> {
   const deps = getUniqueDependencies()
   const results = await Promise.all(deps.map((dep) => checkDependency(dep)))
   return results
 }
 
-/**
- * Get missing dependencies for an engine
- */
 export async function getMissingDependencies(
   engine: string,
 ): Promise<Dependency[]> {
@@ -189,9 +168,6 @@ export async function getMissingDependencies(
   return statuses.filter((s) => !s.installed).map((s) => s.dependency)
 }
 
-/**
- * Get all missing dependencies across all engines
- */
 export async function getAllMissingDependencies(): Promise<Dependency[]> {
   const statuses = await checkAllDependencies()
   return statuses.filter((s) => !s.installed).map((s) => s.dependency)
@@ -201,16 +177,11 @@ function hasTTY(): boolean {
   return process.stdin.isTTY === true
 }
 
-/**
- * Check if running as root
- */
 function isRoot(): boolean {
   return process.getuid?.() === 0
 }
 
-/**
- * Check if running in a CI environment where sudo doesn't require a password
- */
+// Check if running in a CI environment where sudo doesn't require a password
 function isPasswordlessSudoEnvironment(): boolean {
   // GitHub Actions, GitLab CI, CircleCI, Travis CI, etc.
   return !!(
@@ -263,9 +234,6 @@ function execWithInheritedStdio(command: string): void {
   }
 }
 
-/**
- * Build install command for a dependency using a package manager
- */
 export function buildInstallCommand(
   dependency: Dependency,
   packageManager: DetectedPackageManager,
@@ -299,9 +267,6 @@ export function buildInstallCommand(
   return commands
 }
 
-/**
- * Install a single dependency
- */
 export async function installDependency(
   dependency: Dependency,
   packageManager: DetectedPackageManager,
@@ -309,10 +274,10 @@ export async function installDependency(
   try {
     const commands = buildInstallCommand(dependency, packageManager)
 
-    // When running as root, strip sudo from commands (not needed and may not exist)
+    // When running as root, strip leading sudo from commands (not needed and may not exist)
     const isRoot = process.getuid?.() === 0
     const processedCommands = isRoot
-      ? commands.map((cmd) => cmd.replace(/sudo\s+/g, ''))
+      ? commands.map((cmd) => cmd.replace(/^sudo\s+/, ''))
       : commands
 
     for (const cmd of processedCommands) {
@@ -344,9 +309,6 @@ export async function installDependency(
   }
 }
 
-/**
- * Install all dependencies for an engine
- */
 export async function installEngineDependencies(
   engine: string,
   packageManager: DetectedPackageManager,
@@ -381,9 +343,7 @@ export async function installEngineDependencies(
   return results
 }
 
-/**
- * Install all missing dependencies across all engines
- */
+// Install all missing dependencies across all engines
 export async function installAllDependencies(
   packageManager: DetectedPackageManager,
 ): Promise<InstallResult[]> {

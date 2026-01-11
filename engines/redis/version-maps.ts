@@ -43,7 +43,7 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '7.4.7')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version only, use the map
+  // If it's in the map directly, use it
   const fullVersion = REDIS_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
@@ -52,15 +52,10 @@ export function normalizeVersion(version: string): string {
   // If it has less than 3 parts, try to find matching entry
   const parts = version.split('.')
   if (parts.length === 1) {
-    // Single number like '7'
-    const mapped = REDIS_VERSION_MAP[version]
-    if (mapped) {
-      return mapped
-    }
+    // Single number like '7' - already checked above, not in map
     return `${version}.0.0`
   } else if (parts.length === 2) {
-    // Two parts like '7.4'
-    // Try to find by major version
+    // Two parts like '7.4' - try to find by major version
     const major = parts[0]
     const mapped = REDIS_VERSION_MAP[major]
     if (mapped) {

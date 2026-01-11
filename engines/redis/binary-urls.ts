@@ -35,10 +35,23 @@ export async function getLatestVersion(major: string): Promise<string> {
 export const VERSION_MAP = FALLBACK_VERSION_MAP
 
 /**
+ * Supported platform identifiers for hostdb downloads.
+ * hostdb uses standard Node.js platform naming - this set validates
+ * that a platform/arch combination is supported, not transforms it.
+ */
+const SUPPORTED_PLATFORMS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
+
+/**
  * Get the hostdb platform identifier
  *
- * hostdb uses standard platform naming (e.g., 'darwin-arm64', 'linux-x64', 'win32-x64')
- * which matches Node.js platform identifiers directly.
+ * hostdb uses standard platform naming that matches Node.js identifiers directly.
+ * This function validates the platform/arch combination is supported.
  *
  * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
@@ -49,14 +62,7 @@ export function getHostdbPlatform(
   arch: string,
 ): string | undefined {
   const key = `${platform}-${arch}`
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-  return mapping[key]
+  return SUPPORTED_PLATFORMS.has(key) ? key : undefined
 }
 
 /**
@@ -102,22 +108,18 @@ function normalizeVersion(
   version: string,
   versionMap: Record<string, string> = VERSION_MAP,
 ): string {
-  // Check if it's a major version in the map
+  // Check if it's a version key in the map (handles "7", "7.4", etc.)
   if (versionMap[version]) {
     return versionMap[version]
   }
 
-  // Normalize to X.Y.Z format
+  // Normalize to X.Y.Z format based on parts count
   const parts = version.split('.')
   if (parts.length === 1) {
-    // Single digit like "7" - look up in map
-    const mapped = versionMap[version]
-    if (mapped) {
-      return mapped
-    }
+    // Single digit like "7" not in map - append .0.0
     return `${version}.0.0`
   } else if (parts.length === 2) {
-    // Two parts like "7.4" - look up by major
+    // Two parts like "7.4" - look up by major for better version
     const major = parts[0]
     const mapped = versionMap[major]
     if (mapped) {

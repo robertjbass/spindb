@@ -303,9 +303,7 @@ export async function promptPort(
       ),
     )
     console.log(
-      chalk.gray(
-        '    Only one container can run on this port at a time.',
-      ),
+      chalk.gray('    Only one container can run on this port at a time.'),
     )
     console.log()
 
@@ -608,11 +606,8 @@ export async function promptBackupFormat(
   options?: { includeBack?: boolean },
 ): Promise<'sql' | 'dump' | null> {
   // Import here to avoid circular dependencies
-  const {
-    BACKUP_FORMATS,
-    supportsFormatChoice,
-    getDefaultFormat,
-  } = await import('../../config/backup-formats')
+  const { BACKUP_FORMATS, supportsFormatChoice, getDefaultFormat } =
+    await import('../../config/backup-formats')
 
   // If engine doesn't support format choice (e.g., Redis), return default
   if (!supportsFormatChoice(engine)) {

@@ -1278,8 +1278,6 @@ When adding a new engine with downloadable binaries, check if hostdb provides bu
 
 **SQLite** uses system-installed binaries on all platforms since it's a lightweight tool typically pre-installed.
 
-**Legacy reference:** System binary detection code is preserved in `legacy/engines/*/binary-detection.ts` for reference.
-
 ---
 
 ## OS Dependencies
@@ -1517,10 +1515,6 @@ Use these existing implementations as references:
 - Registry-based tracking
 - File stored in project directories
 - HTTP/HTTPS URL support for remote restore
-
-### Legacy System Binary Reference
-
-The `legacy/` folder contains preserved system binary detection code from before the hostdb migration. Useful reference for supporting user-provided system binaries as an alternative to downloaded binaries.
 
 ---
 

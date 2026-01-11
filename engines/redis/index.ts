@@ -11,7 +11,11 @@ import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { redisBinaryManager } from './binary-manager'
-import { getBinaryUrl, SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './binary-urls'
+import {
+  getBinaryUrl,
+  SUPPORTED_MAJOR_VERSIONS,
+  FALLBACK_VERSION_MAP,
+} from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -28,10 +32,6 @@ import type {
   DumpResult,
   StatusResult,
 } from '../../types'
-
-// Re-export modules for external access
-export * from './version-validator'
-export * from './restore'
 
 const execAsync = promisify(exec)
 

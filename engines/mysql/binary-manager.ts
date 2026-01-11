@@ -9,15 +9,12 @@ import { createWriteStream, existsSync, createReadStream } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec, spawn } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import unzipper from 'unzipper'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import type { ProgressCallback, InstalledBinary } from '../../types'
-
-const execAsync = promisify(exec)
 
 /**
  * Execute a command using spawn with argument array (safer than shell interpolation)
@@ -118,14 +115,15 @@ export class MySQLBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('mysql-')) {
-        const parts = entry.name.split('-')
-        if (parts.length >= 4) {
+      if (entry.isDirectory()) {
+        // Use regex for robust parsing (consistent with cli/helpers.ts)
+        const match = entry.name.match(/^mysql-([\d.]+)-(\w+)-(\w+)$/)
+        if (match) {
           installed.push({
             engine: 'mysql' as InstalledBinary['engine'],
-            version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
+            version: match[1],
+            platform: match[2],
+            arch: match[3],
           })
         }
       }
@@ -151,7 +149,10 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const tempDir = join(paths.bin, `temp-mysql-${fullVersion}-${platform}-${arch}`)
+    const tempDir = join(
+      paths.bin,
+      `temp-mysql-${fullVersion}-${platform}-${arch}`,
+    )
     const archiveFile = join(
       tempDir,
       platform === 'win32' ? 'mysql.zip' : 'mysql.tar.gz',
@@ -162,6 +163,7 @@ export class MySQLBinaryManager {
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
+    let success = false
     try {
       // Download the archive
       onProgress?.({
@@ -211,10 +213,15 @@ export class MySQLBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!success) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 
@@ -244,8 +251,7 @@ export class MySQLBinaryManager {
     const entries = await readdir(tempDir, { withFileTypes: true })
     const mysqlDir = entries.find(
       (e) =>
-        e.isDirectory() &&
-        (e.name === 'mysql' || e.name.startsWith('mysql-')),
+        e.isDirectory() && (e.name === 'mysql' || e.name.startsWith('mysql-')),
     )
 
     if (mysqlDir) {
@@ -262,9 +268,7 @@ export class MySQLBinaryManager {
         }
       }
     } else {
-      throw new Error(
-        'Unexpected archive structure - no mysql directory found',
-      )
+      throw new Error('Unexpected archive structure - no mysql directory found')
     }
   }
 
@@ -290,7 +294,8 @@ export class MySQLBinaryManager {
     // Check if there's a nested mysql/ directory
     const entries = await readdir(extractDir, { withFileTypes: true })
     const mysqlDir = entries.find(
-      (e) => e.isDirectory() && (e.name === 'mysql' || e.name.startsWith('mysql-')),
+      (e) =>
+        e.isDirectory() && (e.name === 'mysql' || e.name.startsWith('mysql-')),
     )
 
     if (mysqlDir) {
@@ -344,7 +349,7 @@ export class MySQLBinaryManager {
     }
 
     try {
-      const { stdout } = await execAsync(`"${serverPath}" --version`)
+      const { stdout } = await spawnAsync(serverPath, ['--version'])
       // Extract version from output like "mysqld  Ver 8.0.40 for Linux on x86_64"
       const match = stdout.match(/Ver\s+([\d.]+)/)
       if (!match) {
@@ -428,11 +433,7 @@ export class MySQLBinaryManager {
   /**
    * Delete installed binaries for a specific version
    */
-  async delete(
-    version: string,
-    platform: string,
-    arch: string,
-  ): Promise<void> {
+  async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mysql',

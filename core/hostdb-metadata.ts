@@ -60,6 +60,9 @@ type DownloadsJson = {
 let databasesCache: { data: DatabasesJson; timestamp: number } | null = null
 let downloadsCache: { data: DownloadsJson; timestamp: number } | null = null
 
+// In-flight request deduplication to prevent parallel fetches for the same URL
+const inFlightRequests = new Map<string, Promise<unknown>>()
+
 async function fetchWithCache<T>(
   url: string,
   cache: { data: T; timestamp: number } | null,
@@ -70,19 +73,32 @@ async function fetchWithCache<T>(
     return cache.data
   }
 
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status}`)
+  // Check for in-flight request to prevent duplicate fetches
+  const inFlight = inFlightRequests.get(url)
+  if (inFlight) {
+    return inFlight as Promise<T>
   }
 
-  const data = (await response.json()) as T
-  setCache({ data, timestamp: now })
-  return data
+  // Create the fetch promise and store it
+  const fetchPromise = (async () => {
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${url}: ${response.status}`)
+      }
+
+      const data = (await response.json()) as T
+      setCache({ data, timestamp: Date.now() })
+      return data
+    } finally {
+      inFlightRequests.delete(url)
+    }
+  })()
+
+  inFlightRequests.set(url, fetchPromise)
+  return fetchPromise
 }
 
-/**
- * Fetch databases.json from hostdb
- */
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
   return fetchWithCache(
     `${HOSTDB_RAW_BASE}/databases.json`,
@@ -93,9 +109,6 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
   )
 }
 
-/**
- * Fetch downloads.json from hostdb
- */
 export async function fetchDownloadsJson(): Promise<DownloadsJson> {
   return fetchWithCache(
     `${HOSTDB_RAW_BASE}/downloads.json`,
@@ -128,7 +141,9 @@ export async function getDatabaseTools(
  * Get the client tools required for a database engine
  * Returns an array of tool names (client + utilities)
  */
-export async function getRequiredClientTools(engine: string): Promise<string[]> {
+export async function getRequiredClientTools(
+  engine: string,
+): Promise<string[]> {
   const cliTools = await getDatabaseTools(engine)
   if (!cliTools) return []
 
@@ -203,30 +218,34 @@ export async function getPackagesForTools(
   tools: string[],
   packageManager: 'brew' | 'apt' | 'yum' | 'dnf' | 'choco',
 ): Promise<Array<{ package: string; tap?: string; tools: string[] }>> {
-  const data = await fetchDownloadsJson()
-  const packageMap = new Map<string, { tap?: string; tools: string[] }>()
+  try {
+    const data = await fetchDownloadsJson()
+    const packageMap = new Map<string, { tap?: string; tools: string[] }>()
 
-  for (const tool of tools) {
-    const toolInfo = data.tools[tool]
-    if (!toolInfo?.packages?.[packageManager]) continue
+    for (const tool of tools) {
+      const toolInfo = data.tools[tool]
+      if (!toolInfo?.packages?.[packageManager]) continue
 
-    const pkgInfo = toolInfo.packages[packageManager]
-    const key = pkgInfo.package
+      const pkgInfo = toolInfo.packages[packageManager]
+      const key = pkgInfo.package
 
-    const existing = packageMap.get(key)
-    if (existing) {
-      existing.tools.push(tool)
-    } else {
-      packageMap.set(key, {
-        tap: pkgInfo.tap,
-        tools: [tool],
-      })
+      const existing = packageMap.get(key)
+      if (existing) {
+        existing.tools.push(tool)
+      } else {
+        packageMap.set(key, {
+          tap: pkgInfo.tap,
+          tools: [tool],
+        })
+      }
     }
-  }
 
-  return Array.from(packageMap.entries()).map(([pkg, info]) => ({
-    package: pkg,
-    tap: info.tap,
-    tools: info.tools,
-  }))
+    return Array.from(packageMap.entries()).map(([pkg, info]) => ({
+      package: pkg,
+      tap: info.tap,
+      tools: info.tools,
+    }))
+  } catch {
+    return []
+  }
 }

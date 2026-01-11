@@ -40,12 +40,14 @@ export function getFullVersion(majorVersion: string): string | null {
     return MONGODB_VERSION_MAP[majorVersion]
   }
 
-  // Try matching major only (e.g., "8" -> "8.0")
+  // Try matching major only (e.g., "8" -> highest 8.x version)
   const majorOnly = majorVersion.split('.')[0]
-  for (const [key, value] of Object.entries(MONGODB_VERSION_MAP)) {
-    if (key.startsWith(majorOnly + '.')) {
-      return value
-    }
+  const matchingVersions = Object.entries(MONGODB_VERSION_MAP)
+    .filter(([key]) => key.startsWith(majorOnly + '.'))
+    .sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }))
+
+  if (matchingVersions.length > 0) {
+    return matchingVersions[0][1]
   }
 
   return null

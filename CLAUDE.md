@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb) and using system-installed MongoDB/Redis. With support for several engines including SQLite, PostgreSQL, MySQL, MariaDB, MongoDB, and Redis.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis (all via hostdb downloads), and SQLite (system binary).
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -379,17 +379,46 @@ After completing a feature, ensure these files are updated:
 6. Create test fixtures: `tests/fixtures/{engine}/seeds/sample-db.sql`
 7. Create integration tests: `tests/integration/{engine}.test.ts` (14+ tests)
 8. Update `tests/integration/helpers.ts` with engine support
-9. Add integration test job to `.github/workflows/ci.yml` for all 3 OSes
+9. Add integration test job to `.github/workflows/ci.yml` for all 3 OSes (see CI Binary Caching below)
 10. Update documentation: README.md, CHANGELOG.md, TODO.md
+
+**CI Binary Caching (REQUIRED for hostdb-based engines):**
+
+All engines that download binaries from hostdb MUST have a cache step in `.github/workflows/ci.yml` to avoid re-downloading ~100MB+ binaries on every CI run:
+
+```yaml
+# Cache {Engine} binaries - these are downloaded from hostdb
+- name: Cache {Engine} binaries
+  uses: actions/cache@v4
+  id: {engine}-cache
+  with:
+    path: ~/.spindb/bin
+    key: spindb-{engine}-{version}-${{ runner.os }}-${{ runner.arch }}
+
+# Download {Engine} binaries via hostdb
+- name: Install {Engine} via SpinDB
+  run: pnpm start engines download {engine} {version}
+```
+
+Current engines with CI caching:
+- PostgreSQL: `spindb-pg-18-${{ runner.os }}-${{ runner.arch }}`
+- MariaDB: `spindb-mariadb-11.8-${{ runner.os }}-${{ runner.arch }}`
+- MySQL: `spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}`
+- MongoDB: `spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}`
+- Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
+
+SQLite uses system binaries, so only Windows Chocolatey caching is needed (not hostdb).
 
 **Reference implementations:**
 - **PostgreSQL** - Server database with downloadable binaries (hostdb/EDB)
-- **MySQL** - Server database with system binaries
-- **SQLite** - File-based database with registry tracking
-- **MongoDB** - Server database with system binaries, uses JavaScript instead of SQL
+- **MySQL** - Server database with downloadable binaries (hostdb)
+- **MariaDB** - Server database with downloadable binaries (hostdb)
+- **MongoDB** - Server database with downloadable binaries (hostdb), uses JavaScript instead of SQL
+- **Redis** - Key-value store with downloadable binaries (hostdb), uses Redis commands instead of SQL
+- **SQLite** - File-based database with system binary and registry tracking
 
 **Engine Types:**
-- **Server databases** (PostgreSQL, MySQL, MongoDB): Data in `~/.spindb/containers/`, port management, start/stop
+- **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis): Data in `~/.spindb/containers/`, port management, start/stop
 - **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
 
 ### Migrating an Engine from System Binaries to hostdb
@@ -716,9 +745,9 @@ When new versions are added to hostdb releases.json:
 7. **Update documentation:**
    - README.md, CLAUDE.md, CHANGELOG.md
 
-#### For system-installed engines (MySQL, MongoDB, Redis)
+#### For SQLite (system-installed)
 
-These use system package managers, so no version updates needed in SpinDB. Users get whatever version their package manager provides.
+SQLite uses system binaries, so no version updates needed in SpinDB. Users get whatever version their system provides.
 
 ## Implementation Details
 
@@ -789,8 +818,6 @@ SpinDB uses different binary sourcing strategies by engine:
 - All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
 - Enables multi-version support (7, 8 side-by-side)
 - Tools bundled: redis-server, redis-cli
-
-**Legacy code preserved:** System binary detection code is preserved in `legacy/` folder for historical reference.
 
 ### Orphaned Container Support (PostgreSQL)
 

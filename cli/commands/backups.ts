@@ -23,7 +23,10 @@ type BackupInfo = {
 /**
  * Detect engine and format from file extension
  */
-function detectBackupType(filename: string): { engine: string | null; format: string } {
+function detectBackupType(filename: string): {
+  engine: string | null
+  format: string
+} {
   const ext = extname(filename).toLowerCase()
 
   // Check for double extensions like .sql.gz
@@ -174,11 +177,7 @@ export const backupsCommand = new Command('backups')
       const searchDirs = [directory || process.cwd()]
 
       if (options.all) {
-        const homeBackups = join(
-          process.env.HOME || '',
-          '.spindb',
-          'backups',
-        )
+        const homeBackups = join(process.env.HOME || '', '.spindb', 'backups')
         searchDirs.push(homeBackups)
       }
 
@@ -219,7 +218,9 @@ export const backupsCommand = new Command('backups')
         console.log(chalk.gray('  No backup files found'))
         console.log()
         console.log(chalk.gray('  Backup files are identified by extensions:'))
-        console.log(chalk.gray('    .sql, .dump, .sqlite, .archive, .rdb, .sql.gz'))
+        console.log(
+          chalk.gray('    .sql, .dump, .sqlite, .archive, .rdb, .sql.gz'),
+        )
         console.log()
         return
       }
@@ -248,7 +249,9 @@ export const backupsCommand = new Command('backups')
         const time = formatRelativeTime(backup.modified).padStart(10)
         const format = chalk.gray(backup.format)
 
-        console.log(`  ${icon} ${chalk.cyan(filename)} ${chalk.white(size)} ${chalk.gray(time)} ${format}`)
+        console.log(
+          `  ${icon} ${chalk.cyan(filename)} ${chalk.white(size)} ${chalk.gray(time)} ${format}`,
+        )
       }
 
       console.log()

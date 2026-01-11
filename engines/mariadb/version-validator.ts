@@ -45,7 +45,9 @@ export async function extractDumpVersion(
 
     // Look for MariaDB dump header
     // Example: "-- MariaDB dump 10.19  Distrib 11.8.5-MariaDB"
-    const mariadbMatch = header.match(/MariaDB dump \S+\s+Distrib (\d+\.\d+\.\d+)/)
+    const mariadbMatch = header.match(
+      /MariaDB dump \S+\s+Distrib (\d+\.\d+\.\d+)/,
+    )
     if (mariadbMatch) {
       return { version: mariadbMatch[1], isMariaDB: true }
     }
@@ -165,13 +167,15 @@ export async function validateRestoreCompatibility(
     if (strict) {
       return {
         compatible: false,
-        warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
+        warning:
+          `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
           `Newer dumps may use features not available in older versions.`,
       }
     }
     return {
       compatible: true,
-      warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
+      warning:
+        `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
         `This may work but some features might not be supported.`,
     }
   }
@@ -180,14 +184,16 @@ export async function validateRestoreCompatibility(
   if (strict) {
     return {
       compatible: false,
-      warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
+      warning:
+        `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
         `Cross-major-version restore may fail.`,
     }
   }
 
   return {
     compatible: true,
-    warning: `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
+    warning:
+      `Dump is from MariaDB ${dumpInfo.version} but target is ${targetVersion}. ` +
       `Cross-major-version restore may have compatibility issues.`,
   }
 }

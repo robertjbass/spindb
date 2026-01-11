@@ -169,7 +169,9 @@ export async function restoreBackup(
         })
         if (dbWithBson) {
           const sourceDbDir = join(backupPath, dbWithBson.name)
-          logDebug(`Using source database directory with BSON files: ${sourceDbDir}`)
+          logDebug(
+            `Using source database directory with BSON files: ${sourceDbDir}`,
+          )
           args.push(sourceDbDir)
         } else {
           args.push(backupPath)

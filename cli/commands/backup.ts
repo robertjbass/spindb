@@ -252,7 +252,10 @@ export const backupCommand = new Command('backup')
           console.log(uiSuccess('Backup complete'))
           console.log()
           console.log(chalk.gray('  Saved to:'), chalk.cyan(result.path))
-          console.log(chalk.gray('  Size:'), chalk.white(formatBytes(result.size)))
+          console.log(
+            chalk.gray('  Size:'),
+            chalk.white(formatBytes(result.size)),
+          )
           console.log(chalk.gray('  Format:'), chalk.white(result.format))
           console.log()
         }

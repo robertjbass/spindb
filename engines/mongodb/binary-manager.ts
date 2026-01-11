@@ -14,7 +14,11 @@ import { promisify } from 'util'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
-import { Engine, type ProgressCallback, type InstalledBinary } from '../../types'
+import {
+  Engine,
+  type ProgressCallback,
+  type InstalledBinary,
+} from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -177,9 +181,19 @@ export class MongoDBBinaryManager {
       await pipeline(response.body, fileStream)
 
       if (platform === 'win32') {
-        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       } else {
-        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       }
 
       // Make binaries executable (Unix only)
@@ -371,14 +385,19 @@ export class MongoDBBinaryManager {
         }
       }
 
-      const reportedVersion = match ? match[1] : stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
+      const reportedVersion = match
+        ? match[1]
+        : stdout.match(/(\d+\.\d+\.\d+)/)?.[1]
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
       // Check if major.minor versions match
       const expectedMajorMinor = version.split('.').slice(0, 2).join('.')
-      const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
+      const reportedMajorMinor = reportedVersion
+        .split('.')
+        .slice(0, 2)
+        .join('.')
       if (expectedMajorMinor === reportedMajorMinor) {
         return true
       }
@@ -446,11 +465,7 @@ export class MongoDBBinaryManager {
   /**
    * Delete installed binaries for a specific version
    */
-  async delete(
-    version: string,
-    platform: string,
-    arch: string,
-  ): Promise<void> {
+  async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mongodb',
