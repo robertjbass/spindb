@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y \
 # libaio1: async I/O library required by MySQL
 # libncurses6: terminal library required by MariaDB client
 # libxml2: XML library required by PostgreSQL (hostdb binaries compiled with XML support)
+# libicu74: ICU library required by PostgreSQL (for internationalization support)
 # sudo: needed for non-root user to run privileged commands
 RUN apt-get update && apt-get install -y \
     git \
@@ -62,6 +63,7 @@ RUN apt-get update && apt-get install -y \
     libaio1t64 \
     libncurses6 \
     libxml2 \
+    libicu74 \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 

@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 8.0.36, for macos14.2 (arm64)
+-- MySQL dump 10.13  Distrib 8.0.40, for macos14.2 (arm64)
 --
 -- Host: 127.0.0.1    Database: example
 -- ------------------------------------------------------
--- Server version	8.0.36
+-- Server version	8.0.40
 
 -- This file tests that parseDumpVersion can extract version info
 -- from files that contain dump headers but aren't actual dump files.

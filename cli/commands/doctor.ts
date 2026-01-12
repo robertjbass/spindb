@@ -280,7 +280,14 @@ export const doctorCommand = new Command('doctor')
     // Collect actions for warnings
     const actionsAvailable = checks.filter((c) => c.action)
 
-    if (actionsAvailable.length > 0) {
+    // Detect non-interactive environment (CI, no TTY)
+    const isNonInteractive = !!(
+      process.env.CI ||
+      process.env.GITHUB_ACTIONS ||
+      !process.stdin.isTTY
+    )
+
+    if (actionsAvailable.length > 0 && !isNonInteractive) {
       type ActionChoice = {
         name: string
         value: string
