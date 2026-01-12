@@ -153,9 +153,7 @@ export async function parseDumpVersion(
   return null // Version not found in dump
 }
 
-/**
- * Get the version of pg_restore
- */
+// Get the version of pg_restore
 export async function getPgRestoreVersion(
   pgRestorePath: string,
 ): Promise<VersionInfo> {

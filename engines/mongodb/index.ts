@@ -1,13 +1,14 @@
 /**
  * MongoDB Engine implementation
- * Manages MongoDB database containers using system-installed MongoDB binaries
+ * Manages MongoDB database containers using hostdb-downloaded binaries
  */
 
 import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
+import net from 'net'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -19,20 +20,16 @@ import {
   assertValidDatabaseName,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
-import {
-  getMongodPath,
-  getMongodPathForVersion,
-  getMongoshPath,
-  getMongodumpPath,
-  detectInstalledVersions,
-  getInstallInstructions,
-} from './binary-detection'
+import { mongodbBinaryManager } from './binary-manager'
+import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
+import { getBinaryUrl } from './binary-urls'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
   parseConnectionString,
 } from './restore'
 import { createBackup } from './backup'
+import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -44,18 +41,12 @@ import type {
   StatusResult,
 } from '../../types'
 
-// Re-export modules for external access
-export * from './version-validator'
-export * from './restore'
-
 const execAsync = promisify(exec)
 
 const ENGINE = 'mongodb'
 const engineDef = getEngineDefaults(ENGINE)
 
-/**
- * Build a mongosh command for inline JavaScript execution
- */
+// Build a mongosh command for inline JavaScript execution
 export function buildMongoshCommand(
   mongoshPath: string,
   port: number,
@@ -101,91 +92,131 @@ export class MongoDBEngine extends BaseEngine {
   name = ENGINE
   displayName = 'MongoDB'
   defaultPort = engineDef.defaultPort
-  supportedVersions = engineDef.supportedVersions
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
+
+  // Get the current platform and architecture
+  getPlatformInfo(): { platform: string; arch: string } {
+    return platformService.getPlatformInfo()
+  }
 
   /**
-   * Fetch available versions from system
-   * MongoDB uses system-installed versions
+   * Returns available MongoDB versions from the fallback version map.
+   *
+   * Note: This returns cached/fallback data from FALLBACK_VERSION_MAP and does not
+   * perform network I/O. This matches the behavior of other engines that maintain
+   * a static version map synchronized with hostdb releases.json.
    */
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    const installed = await detectInstalledVersions()
     const versions: Record<string, string[]> = {}
 
-    for (const [major, full] of Object.entries(installed)) {
-      versions[major] = [full]
-    }
-
-    // If no versions found, return supported versions as placeholders
-    if (Object.keys(versions).length === 0) {
-      for (const v of this.supportedVersions) {
-        versions[v] = [v]
-      }
+    for (const [majorMinor, full] of Object.entries(FALLBACK_VERSION_MAP)) {
+      versions[majorMinor] = [full]
     }
 
     return versions
   }
 
-  /**
-   * Get binary download URL - not applicable for MongoDB (uses system binaries)
-   */
-  getBinaryUrl(_version: string, _platform: string, _arch: string): string {
-    throw new Error(
-      'MongoDB uses system-installed binaries. ' + getInstallInstructions(),
-    )
+  // Get binary download URL from hostdb
+  getBinaryUrl(version: string, platform: string, arch: string): string {
+    return getBinaryUrl(version, platform, arch)
+  }
+
+  // Resolves version string to full version (e.g., '8' -> '8.0.17')
+  resolveFullVersion(version: string): string {
+    // Check if already a full version (has at least two dots)
+    if (/^\d+\.\d+\.\d+$/.test(version)) {
+      return version
+    }
+    // It's a major or major.minor version, resolve using fallback map
+    return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
+  }
+
+  // Get the path where binaries for a version would be installed
+  getBinaryPath(version: string): string {
+    const fullVersion = this.resolveFullVersion(version)
+    const { platform: p, arch: a } = this.getPlatformInfo()
+    return paths.getBinaryPath({
+      engine: 'mongodb',
+      version: fullVersion,
+      platform: p,
+      arch: a,
+    })
   }
 
   /**
-   * Verify that MongoDB binaries are available
+   * Verify that MongoDB binaries are available and functional
+   *
+   * Delegates to mongodbBinaryManager.verify() which:
+   * 1. Checks file existence
+   * 2. Executes `mongod --version`
+   * 3. Validates version output matches expected version
+   *
+   * @param binPath - Path to MongoDB binary directory (e.g., ~/.spindb/bin/mongodb-8.0.17-darwin-arm64)
+   * @param version - Optional explicit version to verify against
    */
-  async verifyBinary(_binPath: string): Promise<boolean> {
-    const mongod = await getMongodPath()
-    return mongod !== null
+  async verifyBinary(binPath: string, version?: string): Promise<boolean> {
+    const { platform: p, arch: a } = this.getPlatformInfo()
+
+    // Use explicit version if provided
+    if (version) {
+      return mongodbBinaryManager.verify(version, p, a)
+    }
+
+    // Fallback: extract version from directory name (format: mongodb-{version}-{platform}-{arch})
+    // Use basename to avoid issues with dashes in parent directory names
+    const dirName = basename(binPath)
+    const match = dirName.match(/^mongodb-([\d.]+)-/)
+    if (match) {
+      const extractedVersion = match[1]
+      return mongodbBinaryManager.verify(extractedVersion, p, a)
+    }
+
+    // Last resort: just check file existence
+    const mongodPath = join(binPath, 'bin', 'mongod')
+    return existsSync(mongodPath)
   }
 
-  /**
-   * Check if a specific MongoDB version is installed
-   * Returns true only if the requested version is actually available
-   */
+  // Check if a specific MongoDB version is installed
   async isBinaryInstalled(version: string): Promise<boolean> {
-    const majorVersion = version.split('.')[0]
-    const versionPath = await getMongodPathForVersion(majorVersion)
-    return versionPath !== null
+    const { platform, arch } = this.getPlatformInfo()
+    return mongodbBinaryManager.isInstalled(version, platform, arch)
   }
 
   /**
    * Ensure MongoDB binaries are available for a specific version
-   * Returns the path to mongod for the requested version
-   * Throws if the version is not available (no silent fallback)
+   * Downloads from hostdb for all platforms
    */
   async ensureBinaries(
     version: string,
-    _onProgress?: ProgressCallback,
+    onProgress?: ProgressCallback,
   ): Promise<string> {
-    const majorVersion = version.split('.')[0]
+    const { platform, arch } = this.getPlatformInfo()
 
-    // Try to find version-specific binary
-    const versionPath = await getMongodPathForVersion(majorVersion)
-    if (versionPath) {
-      return versionPath
-    }
-
-    // Version not found - check what versions ARE available
-    const installed = await detectInstalledVersions()
-    const availableVersions = Object.keys(installed).sort()
-
-    if (availableVersions.length === 0) {
-      throw new Error(getInstallInstructions())
-    }
-
-    // Build helpful error message
-    const availableList = availableVersions
-      .map((v) => `${v} (${installed[v]})`)
-      .join(', ')
-    throw new Error(
-      `MongoDB ${majorVersion} is not installed. ` +
-        `Available versions: ${availableList}.\n` +
-        `Install MongoDB ${majorVersion} with: brew install mongodb-community@${majorVersion}.0`,
+    // Download from hostdb
+    const binPath = await mongodbBinaryManager.ensureInstalled(
+      version,
+      platform,
+      arch,
+      onProgress,
     )
+
+    // Register binaries in config (includes server + client tools)
+    const ext = platformService.getExecutableExtension()
+    const bundledTools = [
+      'mongod', // server
+      'mongosh', // shell client
+      'mongodump', // backup utility
+      'mongorestore', // restore utility
+    ] as const
+
+    for (const tool of bundledTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
+    }
+
+    return binPath
   }
 
   /**
@@ -236,31 +267,35 @@ export class MongoDBEngine extends BaseEngine {
     let mongod: string | null = null
 
     if (binaryPath && existsSync(binaryPath)) {
-      mongod = binaryPath
-      logDebug(`Using stored binary path: ${mongod}`)
-    } else {
-      // Fall back to version detection for legacy containers without binaryPath
-      const majorVersion = version.split('.')[0]
-      mongod = await getMongodPathForVersion(majorVersion)
+      // binaryPath is the directory (e.g., ~/.spindb/bin/mongodb-8.0.17-linux-arm64)
+      // We need to construct the full path to mongod
+      const ext = platformService.getExecutableExtension()
+      const serverPath = join(binaryPath, 'bin', `mongod${ext}`)
+      if (existsSync(serverPath)) {
+        mongod = serverPath
+        logDebug(`Using stored binary path: ${mongod}`)
+      }
+    }
 
-      if (!mongod) {
-        // If version-specific not found, throw error with available versions
-        const installed = await detectInstalledVersions()
-        const availableVersions = Object.keys(installed).sort()
+    // If we didn't find the binary above, fall back to normal path
+    if (!mongod) {
+      // Get mongod from config or download if needed
+      const mongodPath = await configManager.getBinaryPath('mongod')
+      if (mongodPath && existsSync(mongodPath)) {
+        mongod = mongodPath
+        logDebug(`Using registered binary path: ${mongod}`)
+      } else {
+        // Try to ensure binaries are available
+        const binPath = await this.ensureBinaries(version, onProgress)
+        const ext = platformService.getExecutableExtension()
+        mongod = join(binPath, 'bin', `mongod${ext}`)
 
-        if (availableVersions.length === 0) {
-          throw new Error(getInstallInstructions())
+        if (!existsSync(mongod)) {
+          throw new Error(
+            `MongoDB ${version} is not installed. ` +
+              `Run: spindb engines download mongodb ${version}`,
+          )
         }
-
-        const availableList = availableVersions
-          .map((v) => `${v} (${installed[v]})`)
-          .join(', ')
-        throw new Error(
-          `MongoDB ${majorVersion} is not installed. ` +
-            `Container was created for MongoDB ${majorVersion} but it's no longer available.\n` +
-            `Available versions: ${availableList}.\n` +
-            `Install MongoDB ${majorVersion} with: brew install mongodb-community@${majorVersion}.0`,
-        )
       }
     }
 
@@ -382,8 +417,39 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
+  // Check if a TCP port is accepting connections
+  private checkPortOpen(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket()
+      socket.setTimeout(1000)
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('error', () => {
+        socket.destroy()
+        resolve(false)
+      })
+      socket.once('timeout', () => {
+        socket.destroy()
+        resolve(false)
+      })
+      socket.connect(port, '127.0.0.1')
+    })
+  }
+
   /**
    * Wait for MongoDB to be ready to accept connections
+   *
+   * Uses two strategies depending on tool availability:
+   * 1. **Preferred (mongosh available)**: Executes `db.runCommand({ping:1})` via mongosh
+   *    to verify MongoDB is fully operational and responding to commands.
+   * 2. **Fallback (mongosh unavailable)**: Uses TCP port check via checkPortOpen().
+   *    TCP connectivity is a less thorough check than a mongosh ping - it only confirms
+   *    the port is accepting connections, not that MongoDB is fully initialized and
+   *    ready to process queries. However, for local development containers this is
+   *    acceptable since MongoDB typically accepts connections shortly after becoming
+   *    ready, and this avoids requiring mongosh to be installed.
    */
   private async waitForReady(
     port: number,
@@ -392,15 +458,30 @@ export class MongoDBEngine extends BaseEngine {
     const startTime = Date.now()
     const checkInterval = 500
 
-    const mongosh = await getMongoshPath()
+    const mongosh = await configManager.getBinaryPath('mongosh')
     if (!mongosh) {
-      // No mongosh, try connecting with mongod directly
-      return true // Assume ready after fork
+      // Fallback: TCP port check when mongosh is unavailable
+      // Less thorough than db.runCommand({ping:1}) but sufficient for local dev containers
+      logDebug(
+        `mongosh not found, using TCP port check for MongoDB on port ${port}`,
+      )
+      while (Date.now() - startTime < timeoutMs) {
+        const isOpen = await this.checkPortOpen(port)
+        if (isOpen) return true
+        await new Promise((r) => setTimeout(r, checkInterval))
+      }
+      return false
     }
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const cmd = buildMongoshCommand(mongosh, port, 'admin', 'db.runCommand({ping:1})', { quiet: true })
+        const cmd = buildMongoshCommand(
+          mongosh,
+          port,
+          'admin',
+          'db.runCommand({ping:1})',
+          { quiet: true },
+        )
         await execAsync(cmd, { timeout: 5000 })
         return true
       } catch {
@@ -425,7 +506,7 @@ export class MongoDBEngine extends BaseEngine {
     logDebug(`Stopping MongoDB container "${name}" on port ${port}`)
 
     // Try graceful shutdown via mongosh
-    const mongosh = await getMongoshPath()
+    const mongosh = await configManager.getBinaryPath('mongosh')
     if (mongosh) {
       try {
         const cmd = buildMongoshCommand(
@@ -498,9 +579,7 @@ export class MongoDBEngine extends BaseEngine {
     logDebug('MongoDB stopped')
   }
 
-  /**
-   * Get MongoDB server status
-   */
+  // Get MongoDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, port } = container
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
@@ -509,10 +588,16 @@ export class MongoDBEngine extends BaseEngine {
     const lockFile = join(dataDir, 'mongod.lock')
 
     // Try pinging with mongosh
-    const mongosh = await getMongoshPath()
+    const mongosh = await configManager.getBinaryPath('mongosh')
     if (mongosh) {
       try {
-        const cmd = buildMongoshCommand(mongosh, port, 'admin', 'db.runCommand({ping:1})', { quiet: true })
+        const cmd = buildMongoshCommand(
+          mongosh,
+          port,
+          'admin',
+          'db.runCommand({ping:1})',
+          { quiet: true },
+        )
         await execAsync(cmd, { timeout: 5000 })
         return { running: true, message: 'MongoDB is running' }
       } catch {
@@ -541,16 +626,12 @@ export class MongoDBEngine extends BaseEngine {
     return { running: false, message: 'MongoDB is not running' }
   }
 
-  /**
-   * Detect backup format
-   */
+  // Detect backup format
   async detectBackupFormat(filePath: string): Promise<BackupFormat> {
     return detectBackupFormatImpl(filePath)
   }
 
-  /**
-   * Restore a backup
-   */
+  // Restore a backup
   async restore(
     container: ContainerConfig,
     backupPath: string,
@@ -567,36 +648,33 @@ export class MongoDBEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Get connection string
-   */
+  // Get connection string
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
     const db = database || container.database || 'test'
     return `mongodb://127.0.0.1:${port}/${db}`
   }
 
-  /**
-   * Get path to mongosh
-   */
-  async getMongoshPath(): Promise<string> {
+  // Get path to mongosh
+  override async getMongoshPath(): Promise<string> {
     const cached = await configManager.getBinaryPath('mongosh')
-    if (cached) return cached
+    if (cached && existsSync(cached)) return cached
 
-    const detected = await getMongoshPath()
-    if (!detected) {
-      throw new Error(
-        'mongosh not found. Install MongoDB Shell:\n' +
-          '  macOS: brew install mongosh\n' +
-          '  Or download from: https://www.mongodb.com/try/download/shell',
-      )
+    // Try to find in PATH as fallback
+    const detected = await platformService.findToolPath('mongosh')
+    if (detected) {
+      await configManager.setBinaryPath('mongosh', detected, 'system')
+      return detected
     }
-    return detected
+
+    throw new Error(
+      'mongosh not found. Download MongoDB binaries:\n' +
+        '  Run: spindb engines download mongodb <version>\n' +
+        '  Or install mongosh from: https://www.mongodb.com/try/download/shell',
+    )
   }
 
-  /**
-   * Open mongosh interactive shell
-   */
+  // Open mongosh interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
     const { port } = container
     const db = database || container.database || 'test'
@@ -654,9 +732,7 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Drop a database
-   */
+  // Drop a database
   async dropDatabase(
     container: ContainerConfig,
     database: string,
@@ -682,9 +758,7 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Get the size of the database in bytes
-   */
+  // Get the size of the database in bytes
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const { port, database } = container
     const db = database || 'test'
@@ -709,20 +783,14 @@ export class MongoDBEngine extends BaseEngine {
     }
   }
 
-  /**
-   * Create a dump from a remote database
-   */
+  // Create a dump from a remote database
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult> {
     const mongodump = await getMongodumpPath()
     if (!mongodump) {
-      throw new Error(
-        'mongodump not found. Install MongoDB database tools:\n' +
-          '  macOS: brew install mongodb-database-tools\n' +
-          '  Or download from: https://www.mongodb.com/try/download/database-tools',
-      )
+      throw new Error(MONGODUMP_NOT_FOUND_ERROR)
     }
 
     const parsed = parseConnectionString(connectionString)
@@ -775,9 +843,7 @@ export class MongoDBEngine extends BaseEngine {
     })
   }
 
-  /**
-   * Create a backup
-   */
+  // Create a backup
   async backup(
     container: ContainerConfig,
     outputPath: string,
@@ -786,9 +852,7 @@ export class MongoDBEngine extends BaseEngine {
     return createBackup(container, outputPath, options)
   }
 
-  /**
-   * Run a JavaScript file or inline script against the database
-   */
+  // Run a JavaScript file or inline script against the database
   async runScript(
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },

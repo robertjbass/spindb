@@ -22,7 +22,6 @@ import {
   assertEqual,
   runScriptFile,
   runScriptSQL,
-  getInstalledVersion,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -33,6 +32,7 @@ const ENGINE = Engine.MySQL
 const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/mysql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
+const TEST_VERSION = '9' // Major version - will be resolved to full version via version map
 
 describe('MySQL Integration Tests', () => {
   let testPorts: number[]
@@ -40,7 +40,6 @@ describe('MySQL Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
-  let installedVersion: string
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -48,10 +47,6 @@ describe('MySQL Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
-
-    console.log('\n🔍 Detecting installed MySQL version...')
-    installedVersion = await getInstalledVersion(ENGINE)
-    console.log(`   Using MySQL version: ${installedVersion}`)
 
     console.log('\n🔍 Finding available test ports...')
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.mysql.base)
@@ -76,16 +71,24 @@ describe('MySQL Integration Tests', () => {
       `\n📦 Creating container "${containerName}" without starting...`,
     )
 
+    // Ensure MySQL binaries are downloaded first
+    const engine = getEngine(ENGINE)
+    console.log('   Ensuring MySQL binaries are available...')
+    await engine.ensureBinaries(TEST_VERSION, ({ message }) => {
+      console.log(`   ${message}`)
+    })
+
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: installedVersion,
+      version: TEST_VERSION,
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the database cluster
-    const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, installedVersion, { superuser: 'root' })
+    await engine.initDataDir(containerName, TEST_VERSION, {
+      superuser: 'root',
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -167,14 +170,16 @@ describe('MySQL Integration Tests', () => {
     // Create container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: installedVersion,
+      version: TEST_VERSION,
       port: testPorts[1],
       database: DATABASE,
     })
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, installedVersion, { superuser: 'root' })
+    await engine.initDataDir(clonedContainerName, TEST_VERSION, {
+      superuser: 'root',
+    })
 
     const config = await containerManager.getConfig(clonedContainerName)
     assert(config !== null, 'Cloned container config should exist')
@@ -253,8 +258,14 @@ describe('MySQL Integration Tests', () => {
     // Verify file contains SQL statements
     const { readFile } = await import('fs/promises')
     const content = await readFile(backupPath, 'utf-8')
-    assert(content.includes('CREATE TABLE'), 'Backup should contain CREATE TABLE')
-    assert(content.includes('test_user'), 'Backup should contain test_user table')
+    assert(
+      content.includes('CREATE TABLE'),
+      'Backup should contain CREATE TABLE',
+    )
+    assert(
+      content.includes('test_user'),
+      'Backup should contain test_user table',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -286,7 +297,10 @@ describe('MySQL Integration Tests', () => {
     // Verify file is gzipped (starts with gzip magic bytes 1f 8b)
     const { readFile } = await import('fs/promises')
     const buffer = await readFile(backupPath)
-    assert(buffer[0] === 0x1f && buffer[1] === 0x8b, 'Backup should have gzip header')
+    assert(
+      buffer[0] === 0x1f && buffer[1] === 0x8b,
+      'Backup should have gzip header',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -325,16 +339,29 @@ describe('MySQL Integration Tests', () => {
       database: testDb,
       createDatabase: false,
     })
-    console.log(`   Restore result: code=${restoreResult.code}, stderr=${restoreResult.stderr || 'none'}`)
+    console.log(
+      `   Restore result: code=${restoreResult.code}, stderr=${restoreResult.stderr || 'none'}`,
+    )
 
     // Check restore result for errors
     if (restoreResult.code !== 0 && restoreResult.code !== undefined) {
-      throw new Error(`Restore failed with code ${restoreResult.code}: ${restoreResult.stderr}`)
+      throw new Error(
+        `Restore failed with code ${restoreResult.code}: ${restoreResult.stderr}`,
+      )
     }
 
     // Verify data was restored
-    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      testDb,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should match source',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -460,13 +487,13 @@ describe('MySQL Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: installedVersion,
+      version: TEST_VERSION,
       port: testPorts[2], // This port is in use by renamed container
       database: 'conflictdb',
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '9.0', {
+    await engine.initDataDir(portConflictContainerName, TEST_VERSION, {
       superuser: 'root',
     })
 
@@ -510,9 +537,14 @@ describe('MySQL Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

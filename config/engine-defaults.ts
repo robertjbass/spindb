@@ -46,17 +46,17 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     maxConnections: 200, // Higher than default 100 for parallel builds (Next.js, etc.)
   },
   mysql: {
-    defaultVersion: '9.0',
+    defaultVersion: '8.4',
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
-    supportedVersions: ['5.7', '8.0', '8.4', '9.0'],
-    latestVersion: '9.0', // MySQL doesn't use versioned Homebrew packages, but kept for consistency
+    supportedVersions: ['8.0', '8.4', '9'], // Keep in sync with engines/mysql/version-maps.ts
+    latestVersion: '9',
     superuser: 'root',
     connectionScheme: 'mysql',
     logFileName: 'mysql.log',
     pidFileName: 'mysql.pid',
     dataSubdir: 'data',
-    clientTools: ['mysql', 'mysqldump', 'mysqlpump'],
+    clientTools: ['mysql', 'mysqldump', 'mysqladmin'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
   mariadb: {
@@ -91,8 +91,8 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     defaultVersion: '8.0',
     defaultPort: 27017,
     portRange: { start: 27017, end: 27100 },
-    supportedVersions: ['6.0', '7.0', '8.0'],
-    latestVersion: '8.0',
+    supportedVersions: ['7.0', '8.0', '8.2'], // Keep in sync with engines/mongodb/version-maps.ts
+    latestVersion: '8.2',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'mongodb',
     logFileName: 'mongodb.log',
@@ -102,11 +102,11 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     maxConnections: 0, // Not applicable for MongoDB
   },
   redis: {
-    defaultVersion: '7',
+    defaultVersion: '8',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6400 },
-    supportedVersions: ['6', '7', '8'],
-    latestVersion: '7',
+    supportedVersions: ['7', '8'], // Keep in sync with engines/redis/version-maps.ts
+    latestVersion: '8',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis',
     logFileName: 'redis.log',
@@ -133,16 +133,12 @@ export function getEngineDefaults(engine: string): EngineDefaults {
   return defaults
 }
 
-/**
- * Check if an engine is supported
- */
+// Check if an engine is supported
 export function isEngineSupported(engine: string): boolean {
   return engine.toLowerCase() in engineDefaults
 }
 
-/**
- * Get list of all supported engine names
- */
+// Get list of all supported engine names
 export function getSupportedEngines(): string[] {
   return Object.keys(engineDefaults)
 }

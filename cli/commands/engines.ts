@@ -1,9 +1,14 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { rm } from 'fs/promises'
+import { existsSync } from 'fs'
+import { join } from 'path'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import inquirer from 'inquirer'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
+import { configManager } from '../../core/config-manager'
 import { getEngine } from '../../engines'
 import { binaryManager } from '../../core/binary-manager'
 import { paths } from '../../config/paths'
@@ -14,7 +19,13 @@ import {
   installEngineDependencies,
   getManualInstallInstructions,
   getCurrentPlatform,
+  findBinary,
 } from '../../core/dependency-manager'
+import {
+  getRequiredClientTools,
+  getPackagesForTools,
+} from '../../core/hostdb-metadata'
+import type { BinaryTool } from '../../types'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
@@ -29,19 +40,24 @@ import {
   type InstalledRedisEngine,
 } from '../helpers'
 import { Engine } from '../../types'
+import {
+  loadEnginesJson,
+  type EngineConfig,
+} from '../../config/engines-registry'
+import { mysqlBinaryManager } from '../../engines/mysql/binary-manager'
+import { mariadbBinaryManager } from '../../engines/mariadb/binary-manager'
+import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
+import { redisBinaryManager } from '../../engines/redis/binary-manager'
+import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
 
-/**
- * Pad string to width, accounting for emoji taking 2 display columns
- */
+// Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
   // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
   const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
   return str.padEnd(width + emojiCount)
 }
 
-/**
- * Display manual installation instructions for missing dependencies
- */
+// Display manual installation instructions for missing dependencies
 function displayManualInstallInstructions(
   missingDeps: Array<{ dependency: { name: string }; installed: boolean }>,
 ): void {
@@ -58,9 +74,300 @@ function displayManualInstallInstructions(
   }
 }
 
+const execFileAsync = promisify(execFile)
+
 /**
- * List subcommand action
+ * Check which client tools are bundled in the downloaded binaries
+ * @param binPath Path to the extracted binary directory
+ * @param tools List of tool names to check
+ * @returns Array of tools that were found bundled
  */
+function checkBundledTools(binPath: string, tools: string[]): string[] {
+  const ext = platformService.getExecutableExtension()
+  const bundled: string[] = []
+
+  for (const tool of tools) {
+    const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+    if (existsSync(toolPath)) {
+      bundled.push(tool)
+    }
+  }
+
+  return bundled
+}
+
+/**
+ * Install missing client tools using the system package manager
+ * Uses hostdb's downloads.json to determine the correct packages
+ *
+ * @param engine Engine name (e.g., 'postgresql', 'mysql')
+ * @param bundledTools Tools already bundled with the downloaded binaries
+ * @param onProgress Progress callback for UI updates
+ */
+async function installMissingClientTools(
+  engine: string,
+  bundledTools: string[],
+  onProgress?: (msg: string) => void,
+): Promise<{ installed: string[]; failed: string[]; skipped: string[] }> {
+  const installed: string[] = []
+  const failed: string[] = []
+  const skipped: string[] = []
+
+  // Timeout for package installation commands (5 minutes)
+  const INSTALL_TIMEOUT_MS = 5 * 60 * 1000
+
+  // Get required client tools from hostdb databases.json
+  const requiredTools = await getRequiredClientTools(engine)
+  if (requiredTools.length === 0) {
+    return { installed, failed, skipped }
+  }
+
+  // Find which tools are missing (not bundled and not already installed)
+  const missingTools: string[] = []
+  for (const tool of requiredTools) {
+    if (bundledTools.includes(tool)) {
+      // Already bundled in the download
+      continue
+    }
+
+    // Check if already installed on system
+    const existing = await findBinary(tool)
+    if (existing) {
+      // Register it in config and skip installation
+      await configManager.setBinaryPath(
+        tool as BinaryTool,
+        existing.path,
+        'system',
+      )
+      skipped.push(tool)
+      continue
+    }
+
+    missingTools.push(tool)
+  }
+
+  if (missingTools.length === 0) {
+    return { installed, failed, skipped }
+  }
+
+  // Detect package manager
+  const pm = await detectPackageManager()
+  if (!pm) {
+    // No package manager available, all missing tools fail
+    return { installed, failed: missingTools, skipped }
+  }
+
+  // Package manager keys supported by hostdb
+  type PackageManagerKey = 'brew' | 'apt' | 'yum' | 'dnf' | 'choco'
+
+  // Explicit mapping from package manager name variants to canonical keys
+  const PACKAGE_MANAGER_ALIASES: Record<string, PackageManagerKey> = {
+    // Homebrew
+    brew: 'brew',
+    homebrew: 'brew',
+    // APT
+    apt: 'apt',
+    'apt-get': 'apt',
+    aptget: 'apt',
+    // YUM
+    yum: 'yum',
+    // DNF
+    dnf: 'dnf',
+    // Chocolatey
+    choco: 'choco',
+    chocolatey: 'choco',
+  }
+
+  const lookupKey = pm.name.toLowerCase().trim()
+  const pmKey = PACKAGE_MANAGER_ALIASES[lookupKey]
+
+  if (!pmKey) {
+    // Unknown package manager, cannot install automatically
+    console.warn(
+      `Unknown package manager: ${pm.name}, skipping automatic installation`,
+    )
+    return { installed, failed: missingTools, skipped }
+  }
+
+  // Get the packages needed for missing tools
+  const packages = await getPackagesForTools(missingTools, pmKey)
+
+  // Pattern for validating package names (prevents command injection)
+  // Allows alphanumeric, @, ., _, -, / (for scoped packages and paths)
+  const SAFE_PACKAGE_PATTERN = /^[@a-zA-Z0-9][a-zA-Z0-9._/-]*$/
+
+  // Check if running as root (no sudo needed)
+  const isRoot = process.getuid?.() === 0
+
+  for (const pkg of packages) {
+    // Validate package name to prevent command injection
+    if (!SAFE_PACKAGE_PATTERN.test(pkg.package)) {
+      console.warn(`Skipping invalid package name: ${pkg.package}`)
+      failed.push(...pkg.tools)
+      continue
+    }
+
+    // Also validate tap if present
+    if (pkg.tap && !SAFE_PACKAGE_PATTERN.test(pkg.tap)) {
+      console.warn(`Skipping invalid tap name: ${pkg.tap}`)
+      failed.push(...pkg.tools)
+      continue
+    }
+
+    onProgress?.(
+      `Installing ${pkg.package} (provides: ${pkg.tools.join(', ')})...`,
+    )
+
+    try {
+      // Handle Homebrew taps
+      if (pmKey === 'brew' && pkg.tap) {
+        await execFileAsync('brew', ['tap', pkg.tap], {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+      }
+
+      // All package managers use execFileAsync with explicit argument arrays
+      if (pmKey === 'apt') {
+        // APT: Run apt-get update and apt-get install as separate commands
+        const aptExecutable = isRoot ? 'apt-get' : 'sudo'
+        const updateArgs = isRoot ? ['update'] : ['apt-get', 'update']
+        const installArgs = isRoot
+          ? ['install', '-y', pkg.package]
+          : ['apt-get', 'install', '-y', pkg.package]
+
+        await execFileAsync(aptExecutable, updateArgs, {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+        await execFileAsync(aptExecutable, installArgs, {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+      } else if (pmKey === 'brew') {
+        // Homebrew: No sudo needed
+        await execFileAsync('brew', ['install', pkg.package], {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+      } else if (pmKey === 'yum') {
+        // YUM: Needs sudo for non-root
+        const executable = isRoot ? 'yum' : 'sudo'
+        const args = isRoot
+          ? ['install', '-y', pkg.package]
+          : ['yum', 'install', '-y', pkg.package]
+        await execFileAsync(executable, args, { timeout: INSTALL_TIMEOUT_MS })
+      } else if (pmKey === 'dnf') {
+        // DNF: Needs sudo for non-root
+        const executable = isRoot ? 'dnf' : 'sudo'
+        const args = isRoot
+          ? ['install', '-y', pkg.package]
+          : ['dnf', 'install', '-y', pkg.package]
+        await execFileAsync(executable, args, { timeout: INSTALL_TIMEOUT_MS })
+      } else if (pmKey === 'choco') {
+        // Chocolatey: No sudo on Windows
+        await execFileAsync('choco', ['install', pkg.package, '-y'], {
+          timeout: INSTALL_TIMEOUT_MS,
+        })
+      } else {
+        // Unknown package manager - should not reach here due to earlier validation
+        failed.push(...pkg.tools)
+        continue
+      }
+
+      // Register the installed tools
+      for (const tool of pkg.tools) {
+        const result = await findBinary(tool)
+        if (result) {
+          await configManager.setBinaryPath(
+            tool as BinaryTool,
+            result.path,
+            'system',
+          )
+          installed.push(tool)
+        } else {
+          // Package installed but binary not found - don't count as usable
+          console.warn(
+            chalk.yellow(
+              `  Warning: ${tool} was installed but its binary was not found. ` +
+                'You may need to refresh your PATH and re-run this command.',
+            ),
+          )
+          failed.push(tool)
+        }
+      }
+    } catch (error) {
+      const e = error as Error & { killed?: boolean }
+      if (e.killed) {
+        // Timeout - process was killed
+        console.error(
+          chalk.red(
+            `  Installation of ${pkg.package} timed out after 5 minutes`,
+          ),
+        )
+      } else {
+        console.error(
+          chalk.red(`  Failed to install ${pkg.package}: ${e.message}`),
+        )
+      }
+      failed.push(...pkg.tools)
+    }
+  }
+
+  return { installed, failed, skipped }
+}
+
+/**
+ * Check for bundled client tools and install any that are missing
+ *
+ * @param engineName - Engine name (e.g., 'postgresql', 'mysql')
+ * @param binPath - Path to the extracted binary directory
+ */
+async function checkAndInstallClientTools(
+  engineName: string,
+  binPath: string,
+): Promise<void> {
+  const requiredTools = await getRequiredClientTools(engineName)
+  const bundledTools = checkBundledTools(binPath, requiredTools)
+
+  if (bundledTools.length >= requiredTools.length) {
+    return // All tools are bundled
+  }
+
+  const clientSpinner = createSpinner('Checking client tools...')
+  clientSpinner.start()
+
+  const result = await installMissingClientTools(
+    engineName,
+    bundledTools,
+    (msg) => {
+      clientSpinner.text = msg
+    },
+  )
+
+  // Report all non-empty categories (not mutually exclusive)
+  const messages: string[] = []
+  if (result.installed.length > 0) {
+    messages.push(`installed: ${result.installed.join(', ')}`)
+  }
+  if (result.skipped.length > 0) {
+    messages.push(`already available: ${result.skipped.join(', ')}`)
+  }
+
+  if (result.failed.length > 0) {
+    if (messages.length > 0) {
+      clientSpinner.warn(
+        `${messages.join('; ')}; failed: ${result.failed.join(', ')}`,
+      )
+    } else {
+      clientSpinner.warn(
+        `Could not install: ${result.failed.join(', ')}. Install manually.`,
+      )
+    }
+  } else if (messages.length > 0) {
+    clientSpinner.succeed(messages.join('; '))
+  } else {
+    clientSpinner.succeed('All client tools available')
+  }
+}
+
+// List subcommand action
 async function listEngines(options: { json?: boolean }): Promise<void> {
   const engines = await getInstalledEngines()
 
@@ -73,12 +380,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(uiInfo('No engines installed yet.'))
     console.log(
       chalk.gray(
-        '  PostgreSQL engines are downloaded automatically when you create a container.',
+        '  Database engines are downloaded automatically when you create a container.',
       ),
     )
     console.log(
       chalk.gray(
-        '  MySQL requires system installation (brew install mysql or apt install mysql-server).',
+        '  Or download manually: spindb engines download <engine> <version>',
       ),
     )
     return
@@ -133,15 +440,15 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // MySQL rows
   for (const mysqlEngine of mysqlEngines) {
     const icon = ENGINE_ICONS.mysql
-    const displayName = mysqlEngine.isMariaDB ? 'mariadb' : 'mysql'
-    const engineDisplay = `${icon} ${displayName}`
+    const platformInfo = `${mysqlEngine.platform}-${mysqlEngine.arch}`
+    const engineDisplay = `${icon} mysql`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(mysqlEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
-        chalk.gray('(system-installed)'),
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(mysqlEngine.sizeBytes)),
     )
   }
 
@@ -160,30 +467,32 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   }
 
   // MongoDB rows
-  for (const mongodbEngine of mongodbEngines) {
+  for (const engine of mongodbEngines) {
     const icon = ENGINE_ICONS.mongodb
+    const platformInfo = `${engine.platform}-${engine.arch}`
     const engineDisplay = `${icon} mongodb`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padWithEmoji(engineDisplay, 13)) +
-        chalk.yellow(mongodbEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
-        chalk.gray('(system-installed)'),
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
   // Redis rows
-  for (const redisEngine of redisEngines) {
+  for (const engine of redisEngines) {
     const icon = ENGINE_ICONS.redis
+    const platformInfo = `${engine.platform}-${engine.arch}`
     const engineDisplay = `${icon} redis`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padWithEmoji(engineDisplay, 13)) +
-        chalk.yellow(redisEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
-        chalk.gray('(system-installed)'),
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
@@ -199,10 +508,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
   if (mysqlEngines.length > 0) {
-    const versionCount = mysqlEngines.length
-    const versionText = versionCount === 1 ? 'version' : 'versions'
+    const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
     console.log(
-      chalk.gray(`  MySQL: ${versionCount} ${versionText} system-installed`),
+      chalk.gray(
+        `  MySQL: ${mysqlEngines.length} version(s), ${formatBytes(totalMysqlSize)}`,
+      ),
     )
   }
   if (sqliteEngine) {
@@ -211,25 +521,28 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
   if (mongodbEngines.length > 0) {
-    const versionCount = mongodbEngines.length
-    const versionText = versionCount === 1 ? 'version' : 'versions'
+    const totalMongodbSize = mongodbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
     console.log(
-      chalk.gray(`  MongoDB: ${versionCount} ${versionText} system-installed`),
+      chalk.gray(
+        `  MongoDB: ${mongodbEngines.length} version(s), ${formatBytes(totalMongodbSize)}`,
+      ),
     )
   }
   if (redisEngines.length > 0) {
-    const versionCount = redisEngines.length
-    const versionText = versionCount === 1 ? 'version' : 'versions'
+    const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
     console.log(
-      chalk.gray(`  Redis: ${versionCount} ${versionText} system-installed`),
+      chalk.gray(
+        `  Redis: ${redisEngines.length} version(s), ${formatBytes(totalRedisSize)}`,
+      ),
     )
   }
   console.log()
 }
 
-/**
- * Delete subcommand action
- */
+// Delete subcommand action
 async function deleteEngine(
   engine: string | undefined,
   version: string | undefined,
@@ -242,7 +555,7 @@ async function deleteEngine(
     console.log(uiWarning('No deletable engines found.'))
     console.log(
       chalk.gray(
-        '  MySQL is system-installed and cannot be deleted via spindb.',
+        '  Engine deletion is currently supported for PostgreSQL only.',
       ),
     )
     return
@@ -289,7 +602,9 @@ async function deleteEngine(
   )
 
   // Check for running containers using this engine
-  const runningContainers = usingContainers.filter((c) => c.status === 'running')
+  const runningContainers = usingContainers.filter(
+    (c) => c.status === 'running',
+  )
 
   // Confirm deletion (warn about containers)
   if (!options.yes) {
@@ -392,12 +707,12 @@ async function deleteEngine(
           return
         }
       } else {
-        console.log(chalk.yellow('  Proceeding with deletion (--yes specified)'))
+        console.log(
+          chalk.yellow('  Proceeding with deletion (--yes specified)'),
+        )
       }
     } else {
-      stopSpinner.succeed(
-        `Stopped ${runningContainers.length} container(s)`,
-      )
+      stopSpinner.succeed(`Stopped ${runningContainers.length} container(s)`)
     }
   }
 
@@ -415,8 +730,8 @@ async function deleteEngine(
   }
 }
 
-// Install an engine via system package manager
-async function installEngineViaPackageManager(
+// Install an engine via system package manager (currently unused, kept for future use)
+async function _installEngineViaPackageManager(
   engine: string,
   displayName: string,
 ): Promise<void> {
@@ -500,10 +815,10 @@ async function installEngineViaPackageManager(
 // Main engines command
 export const enginesCommand = new Command('engines')
   .description('Manage installed database engines')
-  .option('--json', 'Output as JSON')
-  .action(async (options: { json?: boolean }) => {
+  .action(async () => {
     try {
-      await listEngines(options)
+      // Default action: list installed engines (same as 'engines list')
+      await listEngines({})
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))
@@ -582,27 +897,228 @@ enginesCommand
           arch,
         })
         console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('postgresql', binPath)
         return
       }
 
-      // MySQL and SQLite: install via system package manager
-      if (['mysql', 'mariadb'].includes(normalizedEngine)) {
-        await installEngineViaPackageManager('mysql', 'MySQL')
+      // MySQL: download from hostdb
+      if (['mysql'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('MySQL requires a version (e.g., 8.0, 8.4, 9)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.MySQL)
+
+        const spinner = createSpinner(`Checking MySQL ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `MySQL ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`MySQL ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`MySQL ${version} binaries downloaded`)
+        }
+
+        const { platform: mysqlPlatform, arch: mysqlArch } =
+          platformService.getPlatformInfo()
+        const mysqlFullVersion = mysqlBinaryManager.getFullVersion(version)
+        const mysqlBinPath = paths.getBinaryPath({
+          engine: 'mysql',
+          version: mysqlFullVersion,
+          platform: mysqlPlatform,
+          arch: mysqlArch,
+        })
+        console.log(chalk.gray(`  Location: ${mysqlBinPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('mysql', mysqlBinPath)
+        return
+      }
+
+      // MariaDB: download from hostdb
+      if (['mariadb', 'maria'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(
+            uiError('MariaDB requires a version (e.g., 10.11, 11.4, 11.8)'),
+          )
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.MariaDB)
+
+        const spinner = createSpinner(`Checking MariaDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `MariaDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`MariaDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`MariaDB ${version} binaries downloaded`)
+        }
+
+        const { platform: mariadbPlatform, arch: mariadbArch } =
+          platformService.getPlatformInfo()
+        const mariadbFullVersion = mariadbBinaryManager.getFullVersion(version)
+        const mariadbBinPath = paths.getBinaryPath({
+          engine: 'mariadb',
+          version: mariadbFullVersion,
+          platform: mariadbPlatform,
+          arch: mariadbArch,
+        })
+        console.log(chalk.gray(`  Location: ${mariadbBinPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('mariadb', mariadbBinPath)
         return
       }
 
       if (['sqlite', 'sqlite3'].includes(normalizedEngine)) {
-        await installEngineViaPackageManager('sqlite', 'SQLite')
+        if (!version) {
+          console.error(uiError('SQLite requires a version (e.g., 3)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.SQLite)
+
+        const spinner = createSpinner(`Checking SQLite ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `SQLite ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`SQLite ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`SQLite ${version} binaries downloaded`)
+        }
+
+        const { platform: sqlitePlatform, arch: sqliteArch } =
+          platformService.getPlatformInfo()
+        const sqliteFullVersion = sqliteBinaryManager.getFullVersion(version)
+        const sqliteBinPath = paths.getBinaryPath({
+          engine: 'sqlite',
+          version: sqliteFullVersion,
+          platform: sqlitePlatform,
+          arch: sqliteArch,
+        })
+        console.log(chalk.gray(`  Location: ${sqliteBinPath}`))
         return
       }
 
       if (['mongodb', 'mongo'].includes(normalizedEngine)) {
-        await installEngineViaPackageManager('mongodb', 'MongoDB')
+        if (!version) {
+          console.error(uiError('MongoDB requires a version (e.g., 7.0, 8.0)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.MongoDB)
+
+        const spinner = createSpinner(`Checking MongoDB ${version} binaries...`)
+        spinner.start()
+
+        // Always call ensureBinaries - it handles cached binaries gracefully
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `MongoDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`MongoDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`MongoDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform, arch } = platformService.getPlatformInfo()
+        const fullVersion = mongodbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'mongodb',
+          version: fullVersion,
+          platform,
+          arch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('mongodb', binPath)
         return
       }
 
       if (normalizedEngine === 'redis') {
-        await installEngineViaPackageManager('redis', 'Redis')
+        if (!version) {
+          console.error(uiError('Redis requires a version (e.g., 8)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.Redis)
+
+        const spinner = createSpinner(`Checking Redis ${version} binaries...`)
+        spinner.start()
+
+        // Always call ensureBinaries - it handles cached binaries gracefully
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `Redis ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`Redis ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`Redis ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: redisPlatform, arch: redisArch } =
+          platformService.getPlatformInfo()
+        const redisFullVersion = redisBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'redis',
+          version: redisFullVersion,
+          platform: redisPlatform,
+          arch: redisArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('redis', binPath)
         return
       }
 
@@ -612,6 +1128,72 @@ enginesCommand
         ),
       )
       process.exit(1)
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
+      process.exit(1)
+    }
+  })
+
+// List subcommand (explicit alias for default action)
+enginesCommand
+  .command('list')
+  .description('List installed database engines')
+  .option('--json', 'Output as JSON')
+  .action(async (options: { json?: boolean }) => {
+    try {
+      await listEngines(options)
+    } catch (error) {
+      const e = error as Error
+      console.error(uiError(e.message))
+      process.exit(1)
+    }
+  })
+
+// Supported subcommand - list all supported engines from engines.json
+enginesCommand
+  .command('supported')
+  .description('List all supported database engines')
+  .option('--json', 'Output as JSON')
+  .option('--all', 'Include pending and planned engines')
+  .action(async (options: { json?: boolean; all?: boolean }) => {
+    try {
+      const enginesData = await loadEnginesJson()
+
+      if (options.json) {
+        // Output full JSON
+        console.log(JSON.stringify(enginesData, null, 2))
+        return
+      }
+
+      // Simple list output
+      const entries = Object.entries(enginesData.engines) as [
+        string,
+        EngineConfig,
+      ][]
+
+      for (const [name, config] of entries) {
+        // Skip non-integrated unless --all flag is set
+        if (!options.all && config.status !== 'integrated') {
+          continue
+        }
+
+        if (options.all) {
+          // Show status in parentheses
+          const statusColor =
+            config.status === 'integrated'
+              ? chalk.green
+              : config.status === 'pending'
+                ? chalk.blue
+                : chalk.gray
+          console.log(
+            `${config.icon} ${name} ${statusColor(`(${config.status})`)}`,
+          )
+        } else {
+          // Just engine name with icon
+          console.log(`${config.icon} ${name}`)
+        }
+      }
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))

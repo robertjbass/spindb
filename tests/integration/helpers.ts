@@ -1,6 +1,4 @@
-/**
- * Test helpers for system integration tests
- */
+// Test helpers for system integration tests
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -14,12 +12,11 @@ import { getEngine } from '../../engines'
 import { paths } from '../../config/paths'
 import { isWindows } from '../../core/platform-service'
 import { Engine } from '../../types'
+import { compareVersions } from '../../core/version-utils'
 
 const execAsync = promisify(exec)
 
-/**
- * Default test port configuration
- */
+// Default test port configuration
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
@@ -39,9 +36,7 @@ export function generateTestName(prefix = 'test'): string {
   return `${prefix}_${uuid}`
 }
 
-/**
- * Find N consecutive free ports starting from a base port
- */
+// Find N consecutive free ports starting from a base port
 export async function findConsecutiveFreePorts(
   count: number,
   startPort: number,
@@ -151,7 +146,13 @@ export async function executeSQL(
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
-    const cmd = `sqlite3 "${database}" "${sql.replace(/"/g, '\\"')}"`
+    // Use configured/bundled sqlite3 if available
+    const engineImpl = getEngine(engine)
+    const sqlite3Path = await engineImpl.getSqlite3Path().catch(() => null)
+    if (!sqlite3Path) {
+      throw new Error('sqlite3 not found. Run: spindb engines download sqlite')
+    }
+    const cmd = `"${sqlite3Path}" "${database}" "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.MySQL) {
     const engineImpl = getEngine(engine)
@@ -162,7 +163,9 @@ export async function executeSQL(
   } else if (engine === Engine.MariaDB) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled mariadb if available, otherwise fall back to `mariadb` in PATH
-    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const mariadbPath = await engineImpl
+      .getMariadbClientPath()
+      .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
@@ -182,7 +185,9 @@ export async function executeSQL(
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled redis-cli if available
-    const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+    const redisCliPath = await engineImpl
+      .getRedisCliPath()
+      .catch(() => 'redis-cli')
     // For Redis, sql is a Redis command
     const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
     return execAsync(cmd)
@@ -209,7 +214,13 @@ export async function executeSQLFile(
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
-    const cmd = `sqlite3 "${database}" < "${filePath}"`
+    // Use configured/bundled sqlite3 if available
+    const engineImpl = getEngine(engine)
+    const sqlite3Path = await engineImpl.getSqlite3Path().catch(() => null)
+    if (!sqlite3Path) {
+      throw new Error('sqlite3 not found. Run: spindb engines download sqlite')
+    }
+    const cmd = `"${sqlite3Path}" "${database}" < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MySQL) {
     const engineImpl = getEngine(engine)
@@ -218,7 +229,9 @@ export async function executeSQLFile(
     return execAsync(cmd)
   } else if (engine === Engine.MariaDB) {
     const engineImpl = getEngine(engine)
-    const mariadbPath = await engineImpl.getMariadbClientPath().catch(() => 'mariadb')
+    const mariadbPath = await engineImpl
+      .getMariadbClientPath()
+      .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.MongoDB) {
@@ -228,7 +241,9 @@ export async function executeSQLFile(
     return execAsync(cmd)
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
-    const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+    const redisCliPath = await engineImpl
+      .getRedisCliPath()
+      .catch(() => 'redis-cli')
     // Redis uses pipe for file input: redis-cli -n <db> < file.redis
     const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} < "${filePath}"`
     return execAsync(cmd)
@@ -297,7 +312,9 @@ export async function getKeyCount(
   pattern: string,
 ): Promise<number> {
   const engineImpl = getEngine(Engine.Redis)
-  const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  const redisCliPath = await engineImpl
+    .getRedisCliPath()
+    .catch(() => 'redis-cli')
 
   // Use DBSIZE for full wildcard (O(1) vs O(N) for KEYS)
   if (pattern === '*' || pattern === '') {
@@ -323,25 +340,23 @@ export async function getKeyCount(
   return lines.length
 }
 
-/**
- * Get the value of a key in Redis
- */
+// Get the value of a key in Redis
 export async function getRedisValue(
   port: number,
   database: string,
   key: string,
 ): Promise<string> {
   const engineImpl = getEngine(Engine.Redis)
-  const redisCliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  const redisCliPath = await engineImpl
+    .getRedisCliPath()
+    .catch(() => 'redis-cli')
   const { stdout } = await execAsync(
     `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} GET "${key}"`,
   )
   return stdout.trim()
 }
 
-/**
- * Wait for a database to be ready to accept connections
- */
+// Wait for a database to be ready to accept connections
 export async function waitForReady(
   engine: Engine,
   port: number,
@@ -423,16 +438,12 @@ export function containerDataExists(
   return existsSync(containerPath)
 }
 
-/**
- * Check if a SQLite database file exists
- */
+// Check if a SQLite database file exists
 export function sqliteFileExists(filePath: string): boolean {
   return existsSync(filePath)
 }
 
-/**
- * Get connection string for a container
- */
+// Get connection string for a container
 export function getConnectionString(
   engine: Engine,
   port: number,
@@ -454,9 +465,9 @@ export function getConnectionString(
 export { assert, assertEqual } from '../utils/assertions'
 
 /**
- * Get an installed version for an engine
- * For system-installed engines (MySQL, MongoDB, Redis), returns the first available version
- * For PostgreSQL, returns the default version from engine defaults
+ * Get an available version for an engine.
+ * All engines now use hostdb downloads, so this fetches available versions
+ * from hostdb or the fallback version map.
  */
 export async function getInstalledVersion(engine: Engine): Promise<string> {
   const engineImpl = getEngine(engine)
@@ -467,13 +478,11 @@ export async function getInstalledVersion(engine: Engine): Promise<string> {
     throw new Error(`No installed versions found for ${engine}`)
   }
 
-  // Return the first available version (highest version for system engines)
-  return availableVersions.sort().reverse()[0]
+  // Return the highest semantic version (using semver-aware comparison)
+  return availableVersions.sort((a, b) => compareVersions(b, a))[0]
 }
 
-/**
- * Execute SQL file using engine.runScript (tests the run command functionality)
- */
+// Execute SQL file using engine.runScript (tests the run command functionality)
 export async function runScriptFile(
   containerName: string,
   filePath: string,
@@ -491,9 +500,7 @@ export async function runScriptFile(
   })
 }
 
-/**
- * Execute inline SQL using engine.runScript (tests the run command functionality)
- */
+// Execute inline SQL using engine.runScript (tests the run command functionality)
 export async function runScriptSQL(
   containerName: string,
   sql: string,

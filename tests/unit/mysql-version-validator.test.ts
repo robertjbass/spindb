@@ -11,9 +11,13 @@ import type {
   VersionInfo,
   DumpInfo,
 } from '../../engines/mysql/version-validator'
+import { getMajorVersion } from '../../engines/mysql/binary-detection'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const fixturesDir = path.join(__dirname, '../fixtures/mysql/dumps')
+const mysqlFixturesDir = path.join(__dirname, '../fixtures/mysql/dumps')
+const mariadbFixturesDir = path.join(__dirname, '../fixtures/mariadb/dumps')
+// Alias for backward compatibility in existing tests
+const fixturesDir = mysqlFixturesDir
 
 // =============================================================================
 // parseToolVersion Tests
@@ -81,17 +85,6 @@ describe('parseToolVersion', () => {
 
 describe('parseDumpVersion', () => {
   describe('MySQL dumps', () => {
-    it('should parse MySQL 5.7 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mysql-5.7-plain.sql')
-      const result = await parseDumpVersion(dumpPath)
-
-      assert.equal(result.variant, 'mysql')
-      assert.notEqual(result.version, null)
-      assert.equal(result.version?.major, 5)
-      assert.equal(result.version?.minor, 7)
-      assert.equal(result.version?.patch, 44)
-    })
-
     it('should parse MySQL 8.0 dump file header', async () => {
       const dumpPath = path.join(fixturesDir, 'mysql-8.0-plain.sql')
       const result = await parseDumpVersion(dumpPath)
@@ -103,8 +96,19 @@ describe('parseDumpVersion', () => {
       assert.equal(result.version?.patch, 36)
     })
 
-    it('should parse MySQL 9.0 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mysql-9.0-plain.sql')
+    it('should parse MySQL 8.4 dump file header', async () => {
+      const dumpPath = path.join(fixturesDir, 'mysql-8.4-plain.sql')
+      const result = await parseDumpVersion(dumpPath)
+
+      assert.equal(result.variant, 'mysql')
+      assert.notEqual(result.version, null)
+      assert.equal(result.version?.major, 8)
+      assert.equal(result.version?.minor, 4)
+      assert.equal(result.version?.patch, 3)
+    })
+
+    it('should parse MySQL 9 dump file header', async () => {
+      const dumpPath = path.join(fixturesDir, 'mysql-9-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       assert.equal(result.variant, 'mysql')
@@ -125,7 +129,7 @@ describe('parseDumpVersion', () => {
 
   describe('MariaDB dumps', () => {
     it('should parse MariaDB 10.11 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mariadb-10.11-plain.sql')
+      const dumpPath = path.join(mariadbFixturesDir, 'mariadb-10.11-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       assert.equal(result.variant, 'mariadb')
@@ -136,7 +140,7 @@ describe('parseDumpVersion', () => {
     })
 
     it('should parse MariaDB 11.4 dump file header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mariadb-11.4-plain.sql')
+      const dumpPath = path.join(mariadbFixturesDir, 'mariadb-11.4-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       assert.equal(result.variant, 'mariadb')
@@ -147,7 +151,7 @@ describe('parseDumpVersion', () => {
     })
 
     it('should detect MariaDB variant from header', async () => {
-      const dumpPath = path.join(fixturesDir, 'mariadb-10.11-plain.sql')
+      const dumpPath = path.join(mariadbFixturesDir, 'mariadb-10.11-plain.sql')
       const result = await parseDumpVersion(dumpPath)
 
       // Should detect from "MariaDB dump" or "-MariaDB" in header
@@ -163,13 +167,18 @@ describe('parseDumpVersion', () => {
       assert.equal(result.variant, 'unknown')
     })
 
-    it('should return null version for file without dump headers in first 30 lines', async () => {
-      // README.md has dump examples but they appear after line 30
-      // The parser only reads the first 30 lines for performance
-      const result = await parseDumpVersion(path.join(fixturesDir, 'README.md'))
+    it('should parse version from non-dump files containing dump headers', async () => {
+      // Tests that parseDumpVersion can extract version info from files
+      // that contain dump headers in the first 30 lines but aren't actual dumps
+      const result = await parseDumpVersion(
+        path.join(fixturesDir, 'embedded-header-example.txt'),
+      )
 
-      // Should not parse version since the examples are past line 30
-      assert.equal(result.version, null)
+      // Should parse the example dump header
+      // Example: "-- MySQL dump 10.13  Distrib 8.0.36, for macos14.2 (arm64)"
+      assert.notEqual(result.version, null)
+      assert.equal(result.version?.major, 8)
+      assert.equal(result.version?.minor, 0)
     })
   })
 })
@@ -338,6 +347,60 @@ describe('checkVersionCompatibility', () => {
       const result = checkVersionCompatibility(dumpInfo, mysqlTool, 'mysql')
       assert.equal(result.compatible, true)
       assert.equal(result.dumpInfo.version, null)
+    })
+  })
+})
+
+// =============================================================================
+// getMajorVersion Tests
+// =============================================================================
+
+describe('getMajorVersion', () => {
+  describe('standard version strings', () => {
+    it('should extract major.minor from full version', () => {
+      assert.equal(getMajorVersion('8.0.35'), '8.0')
+    })
+
+    it('should extract major.minor from three-part version', () => {
+      assert.equal(getMajorVersion('9.1.0'), '9.1')
+    })
+
+    it('should handle four-part versions', () => {
+      assert.equal(getMajorVersion('10.11.6.1'), '10.11')
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle empty string', () => {
+      assert.equal(getMajorVersion(''), '')
+    })
+
+    it('should handle single number version', () => {
+      assert.equal(getMajorVersion('8'), '8')
+    })
+
+    it('should handle version with leading "v"', () => {
+      assert.equal(getMajorVersion('v8.0.35'), '8.0')
+    })
+
+    it('should handle version with leading "V" (uppercase)', () => {
+      assert.equal(getMajorVersion('V9.1.0'), '9.1')
+    })
+
+    it('should handle version with whitespace', () => {
+      assert.equal(getMajorVersion('  8.0.35  '), '8.0')
+    })
+
+    it('should handle "v" prefix with single number', () => {
+      assert.equal(getMajorVersion('v8'), '8')
+    })
+
+    it('should handle two-part version', () => {
+      assert.equal(getMajorVersion('8.0'), '8.0')
+    })
+
+    it('should handle whitespace-only string', () => {
+      assert.equal(getMajorVersion('   '), '')
     })
   })
 })

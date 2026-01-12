@@ -16,16 +16,27 @@
  * Must match versions available in hostdb releases.json.
  */
 export const MARIADB_VERSION_MAP: Record<string, string> = {
+  // 1-part: major version → LTS
+  '10': '10.11.15',
+  '11': '11.8.5',
+  // 2-part: major.minor → latest patch
   '10.11': '10.11.15',
   '11.4': '11.4.5',
   '11.8': '11.8.5',
+  // 3-part: exact version (identity mapping)
+  '10.11.15': '10.11.15',
+  '11.4.5': '11.4.5',
+  '11.8.5': '11.8.5',
 }
 
 /**
- * Supported major MariaDB versions.
- * Derived from MARIADB_VERSION_MAP keys.
+ * Supported major MariaDB versions (2-part format).
+ * Derived from MARIADB_VERSION_MAP keys to avoid duplication.
+ * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MARIADB_VERSION_MAP)
+export const SUPPORTED_MAJOR_VERSIONS = Object.keys(MARIADB_VERSION_MAP).filter(
+  (key) => key.split('.').length === 2,
+)
 
 /**
  * Get the full version string for a major version.
@@ -44,22 +55,22 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '11.8.5')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version only, use the map
+  // If it's a major version key in the map, return the full version
   const fullVersion = MARIADB_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it has two parts, try to find matching entry
-  const parts = version.split('.')
-  if (parts.length === 2) {
-    const mapped = MARIADB_VERSION_MAP[version]
-    if (mapped) {
-      return mapped
-    }
-    // Default to adding .0 if not in map
-    return `${version}.0`
+  // If it's already a known full version (a value in the map), return as-is
+  const knownVersions = Object.values(MARIADB_VERSION_MAP)
+  if (knownVersions.includes(version)) {
+    return version
   }
 
+  // Unknown version (either X.Y.Z format or other) - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
+  console.warn(
+    `MariaDB version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

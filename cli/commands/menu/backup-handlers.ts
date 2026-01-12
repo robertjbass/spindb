@@ -47,6 +47,11 @@ import { type Engine } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
 
+// Strip surrounding quotes from paths (handles drag-and-drop paths)
+function stripQuotes(path: string): string {
+  return path.replace(/^['"]|['"]$/g, '').trim()
+}
+
 export async function handleCreateForRestore(): Promise<{
   name: string
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>
@@ -424,9 +429,6 @@ export async function handleRestore(): Promise<void> {
         return
       }
     } else {
-      const stripQuotes = (path: string) =>
-        path.replace(/^['"]|['"]$/g, '').trim()
-
       console.log(
         chalk.gray(
           '  Drag & drop, enter path (abs or rel), or press Enter to go back',
@@ -471,34 +473,32 @@ export async function handleRestore(): Promise<void> {
       // Redis: Always restore to existing database (0-15)
       restoreMode = 'replace'
     } else {
-      const result = await inquirer.prompt<{ restoreMode: RestoreMode }>(
-        [
-          {
-            type: 'list',
-            name: 'restoreMode',
-            message: 'How would you like to restore?',
-            choices: [
-              {
-                name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
-                value: 'new',
-              },
-              {
-                name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
-                value: 'replace',
-                disabled:
-                  existingDatabases.length === 0
-                    ? 'No existing databases'
-                    : false,
-              },
-              new inquirer.Separator(),
-              {
-                name: `${chalk.blue('←')} Back`,
-                value: '__back__',
-              },
-            ],
-          },
-        ],
-      )
+      const result = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+        {
+          type: 'list',
+          name: 'restoreMode',
+          message: 'How would you like to restore?',
+          choices: [
+            {
+              name: `${chalk.green('➕')} Create new database ${chalk.gray('(keeps existing databases intact)')}`,
+              value: 'new',
+            },
+            {
+              name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+              value: 'replace',
+              disabled:
+                existingDatabases.length === 0
+                  ? 'No existing databases'
+                  : false,
+            },
+            new inquirer.Separator(),
+            {
+              name: `${chalk.blue('←')} Back`,
+              value: '__back__',
+            },
+          ],
+        },
+      ])
       restoreMode = result.restoreMode
     }
 
@@ -1033,10 +1033,6 @@ export async function handleRestoreForContainer(
   let backupPath = ''
   let isTempFile = false
 
-  // Helper to strip quotes from paths (for drag-and-drop)
-  const stripQuotes = (path: string) =>
-    path.replace(/^['"]|['"]$/g, '').trim()
-
   if (restoreSource === 'connection') {
     // Handle connection string restore
     console.log(
@@ -1056,7 +1052,10 @@ export async function handleRestoreForContainer(
               return 'Connection string must start with mysql://'
             }
           } else if (config.engine === 'mongodb') {
-            if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
+            if (
+              !input.startsWith('mongodb://') &&
+              !input.startsWith('mongodb+srv://')
+            ) {
               return 'Connection string must start with mongodb:// or mongodb+srv://'
             }
           } else {
@@ -1138,9 +1137,7 @@ export async function handleRestoreForContainer(
   if (sizeCheck.level === 'very_large') {
     console.log()
     console.log(
-      chalk.yellow(
-        `  ⚠ Large backup file: ${formatBytes(sizeCheck.size)}`,
-      ),
+      chalk.yellow(`  ⚠ Large backup file: ${formatBytes(sizeCheck.size)}`),
     )
     console.log(chalk.gray('  This restore may take a while.'))
     console.log()

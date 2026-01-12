@@ -125,9 +125,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
   await pressEnterToContinue()
 }
 
-/**
- * View container logs with interactive options
- */
+// View container logs with interactive options
 export async function handleViewLogs(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {

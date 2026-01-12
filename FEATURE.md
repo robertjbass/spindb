@@ -737,129 +737,50 @@ The shell handlers file controls which CLI tools are offered when connecting to 
 
 ### 8. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
 
-The "Manage Engines" menu displays installed engines. The menu options differ based on engine type:
-- **Downloaded binary engines** (PostgreSQL, MariaDB): Show "Delete" option
-- **System-installed engines** (MySQL, MongoDB, Redis): Show "Info" option with uninstall instructions
+The "Manage Engines" menu displays installed engines with delete options. All engines now use hostdb downloads.
 
 **Required changes:**
 
-1. **Add type imports:**
+1. **Add type import:**
    ```ts
    import {
      // ... existing types
-     type InstalledYourEngineType,
+     type InstalledYourengineEngine,
    } from '../../helpers'
    ```
 
-2. **Add engine filtering in `handleEngines()`:**
+2. **Add engine filtering:**
    ```ts
-   const yourEngines = engines.filter(
-     (e): e is InstalledYourEngineType => e.engine === 'yourengine',
+   const yourengineEngines = engines.filter(
+     (e): e is InstalledYourengineEngine => e.engine === 'yourengine',
    )
    ```
 
-3. **Add engine row to the table display:**
-
-   For **downloaded binary engines**:
+3. **Add totalSize calculation:**
    ```ts
-   for (const engine of yourEngines) {
-     const icon = getEngineIcon(engine.engine)
-     const platformInfo = `${engine.platform}-${engine.arch}`
-     const engineDisplay = `${icon} ${engine.engine}`
+   const totalYourengineSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+   ```
 
+4. **Add to `allEnginesSorted` array** (maintains display grouping):
+   ```ts
+   const allEnginesSorted = [
+     ...pgEngines,
+     ...mariadbEngines,
+     // ... other engines ...
+     ...yourengineEngines,
+   ]
+   ```
+
+5. **Add summary display block:**
+   ```ts
+   if (yourengineEngines.length > 0) {
      console.log(
-       chalk.gray('  ') +
-         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-         chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-         chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-         chalk.white(formatBytes(engine.sizeBytes)),
+       chalk.gray(`  Yourengine: ${yourengineEngines.length} version(s), ${formatBytes(totalYourengineSize)}`),
      )
    }
    ```
 
-   For **system-installed engines**:
-   ```ts
-   for (const engine of yourEngines) {
-     const icon = ENGINE_ICONS.yourengine
-     const engineDisplay = `${icon} yourengine`
-
-     console.log(
-       chalk.gray('  ') +
-         chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-         chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-         chalk.gray('system'.padEnd(COL_SOURCE)) +
-         chalk.gray('(system-installed)'),
-     )
-   }
-   ```
-
-4. **Add summary line:**
-
-   For **downloaded binary engines**:
-   ```ts
-   if (yourEngines.length > 0) {
-     const totalSize = yourEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-     console.log(
-       chalk.gray(`  YourEngine: ${yourEngines.length} version(s), ${formatBytes(totalSize)}`),
-     )
-   }
-   ```
-
-   For **system-installed engines**:
-   ```ts
-   if (yourEngines.length > 0) {
-     console.log(
-       chalk.gray(`  YourEngine: ${yourEngines.length} version(s) system-installed`),
-     )
-   }
-   ```
-
-5. **Add menu choices:**
-
-   For **downloaded binary engines** (deletable):
-   ```ts
-   for (const e of yourEngines) {
-     choices.push({
-       name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-       value: `delete:${e.path}:${e.engine}:${e.version}`,
-     })
-   }
-   ```
-   Note: The existing `handleDeleteEngine()` function handles deletion automatically.
-
-   For **system-installed engines** (info only):
-   ```ts
-   for (const engine of yourEngines) {
-     choices.push({
-       name: `${chalk.blue('ℹ')} YourEngine ${engine.version} ${chalk.gray('(system-installed)')}`,
-       value: `yourengine-info:${engine.path}:${engine.formulaName}`,
-     })
-   }
-   ```
-
-6. **Add action handler (system-installed engines only):**
-   ```ts
-   if (action.startsWith('yourengine-info:')) {
-     const withoutPrefix = action.slice('yourengine-info:'.length)
-     const lastColon = withoutPrefix.lastIndexOf(':')
-     const binaryPath = withoutPrefix.slice(0, lastColon)
-     const formulaName = withoutPrefix.slice(lastColon + 1)
-     await handleYourEngineInfo(binaryPath, formulaName)
-     await handleEngines()
-   }
-   ```
-
-7. **Add info handler function (system-installed engines only):**
-   ```ts
-   async function handleYourEngineInfo(binaryPath: string, formulaName: string): Promise<void> {
-     console.clear()
-     console.log(header('YourEngine Information'))
-     // Show version, containers using this engine, uninstall instructions
-     // See handleMongodbInfo() or handleRedisInfo() as reference
-   }
-   ```
-
-**Note:** Downloaded binary engines reuse the existing `handleDeleteEngine()` function and don't need a custom info handler.
+**Note:** The table display, delete menu choices, and delete handling all work automatically via the `allEnginesSorted` array - no additional changes needed for those.
 
 ---
 
@@ -1213,7 +1134,7 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
  */
 ```
 
-### hostdb Binaries (PostgreSQL, MariaDB)
+### hostdb Binaries (PostgreSQL, MariaDB, MySQL, MongoDB, Redis)
 
 For engines using the [hostdb](https://github.com/robertjbass/hostdb) repository for downloadable binaries, you must keep version-maps.ts synchronized with the releases.json file.
 
@@ -1266,63 +1187,17 @@ When new versions are added to hostdb releases.json:
 Binary sources vary by engine and platform:
 
 **PostgreSQL:**
-- **macOS/Linux:** hostdb binaries (replaced the legacy zonky.io source)
-- **Windows:** EDB (EnterpriseDB) official binaries - still required because hostdb doesn't package Windows PostgreSQL
+- **macOS/Linux:** hostdb binaries
+- **Windows:** EDB (EnterpriseDB) official binaries - hostdb doesn't package Windows PostgreSQL
 
-**MariaDB:**
+**MariaDB, MySQL, MongoDB, Redis:**
 - **All platforms:** hostdb binaries
 
-When adding a new engine with downloadable binaries, check if hostdb provides builds for all platforms. If Windows binaries aren't available from hostdb, you may need to use an alternative source like EDB (see `engines/postgresql/edb-binary-urls.ts` for reference).
+When adding a new engine with downloadable binaries, check if hostdb provides builds for all platforms. If Windows binaries aren't available from hostdb, you may need to use an alternative source (see `engines/postgresql/edb-binary-urls.ts` for EDB fallback reference).
 
-**Note:** zonky.io (Maven Central) was previously used for macOS/Linux PostgreSQL binaries but has been replaced by hostdb.
+### System Binaries (SQLite)
 
-### System Binaries (like MySQL)
-
-If your engine uses system-installed binaries:
-
-1. Create `engines/{engine}/binary-detection.ts`:
-
-```ts
-import { platformService } from '../../core/platform-service'
-import { configManager } from '../../core/config-manager'
-
-export async function findBinaryPath(binary: string): Promise<string | null> {
-  // Check config cache first
-  const cachedPath = await configManager.getBinaryPath(binary)
-  if (cachedPath) return cachedPath
-
-  // Search system PATH
-  return platformService.findToolPath(binary)
-}
-
-export async function detectBinaryVersion(binaryPath: string): Promise<string | null> {
-  // Run --version command and parse output
-}
-```
-
-2. In your engine's `ensureBinaries()`, use dependency manager:
-
-```ts
-async ensureBinaries(
-  version: string,
-  onProgress?: ProgressCallback,
-): Promise<string> {
-  const packageManager = await detectPackageManager()
-  if (!packageManager) {
-    throw new Error('No package manager found. Install manually.')
-  }
-
-  await installEngineDependencies('yourengine', packageManager, onProgress)
-
-  // Verify installation and register paths
-  const binaryPath = await findBinaryPath('mongosh')
-  if (binaryPath) {
-    await configManager.setBinaryPath('mongosh', binaryPath, 'system')
-  }
-
-  return binaryPath || ''
-}
-```
+**SQLite** uses system-installed binaries on all platforms since it's a lightweight tool typically pre-installed.
 
 ---
 
@@ -1541,20 +1416,18 @@ pnpm test:sqlite
 
 Use these existing implementations as references:
 
-### Server-Based Database with Downloadable Binaries
+### Server-Based Database with Downloadable Binaries (All Platforms)
+
+**MariaDB** (`engines/mariadb/`), **MySQL** (`engines/mysql/`), **MongoDB** (`engines/mongodb/`), **Redis** (`engines/redis/`):
+- Binary downloads from hostdb for all platforms (macOS, Linux, Windows)
+- Client tools bundled with server binaries
+- Complex version resolution (major -> full version)
+
+### Server-Based Database with Downloadable Binaries (Windows EDB Fallback)
 
 **PostgreSQL** (`engines/postgresql/`):
 - Binary downloads from hostdb (macOS/Linux) and EDB (Windows)
-- Client tool installation via Homebrew on macOS
-- Complex version resolution (major -> full version)
-- Windows-specific command building
-
-### Server-Based Database with System Binaries
-
-**MySQL** (`engines/mysql/`):
-- All binaries from system package managers
-- Binary detection in PATH
-- Works with both MySQL and MariaDB
+- Example of Windows-specific alternative source (when hostdb doesn't provide Windows binaries for an engine)
 
 ### File-Based Database
 

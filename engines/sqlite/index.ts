@@ -7,6 +7,10 @@
  * - No port management
  * - Database files stored in user project directories (not ~/.spindb/)
  * - Uses a registry to track file paths
+ *
+ * Binary sourcing:
+ * - Downloads sqlite3 and related tools from hostdb
+ * - Includes: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
  */
 
 import { spawn, execFile } from 'child_process'
@@ -19,7 +23,19 @@ import { BaseEngine } from '../base-engine'
 import { sqliteRegistry } from './registry'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
-import { getEngineDefaults } from '../../config/engine-defaults'
+import { paths } from '../../config/paths'
+import { sqliteBinaryManager } from './binary-manager'
+import { getBinaryUrl } from './binary-urls'
+import {
+  SUPPORTED_MAJOR_VERSIONS,
+  SQLITE_VERSION_MAP,
+  normalizeVersion,
+} from './version-maps'
+import {
+  fetchHostdbReleases,
+  getEngineReleases,
+} from '../../core/hostdb-client'
+import { logDebug } from '../../core/error-handler'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -32,59 +48,88 @@ import type {
 } from '../../types'
 
 const execFileAsync = promisify(execFile)
-const engineDef = getEngineDefaults('sqlite')
 
 export class SQLiteEngine extends BaseEngine {
   name = 'sqlite'
   displayName = 'SQLite'
   defaultPort = 0 // File-based, no port
-  supportedVersions = engineDef.supportedVersions
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
-  // SQLite uses system binaries - no download URL.
-  getBinaryUrl(): string {
-    throw new Error(
-      'SQLite uses system-installed binaries. Install sqlite3:\n' +
-        '  macOS: brew install sqlite (or use built-in /usr/bin/sqlite3)\n' +
-        '  Ubuntu/Debian: sudo apt install sqlite3\n' +
-        '  Windows: choco install sqlite or winget install SQLite.SQLite',
-    )
+  // Get the download URL for SQLite binaries from hostdb
+  getBinaryUrl(version: string, platform: string, arch: string): string {
+    return getBinaryUrl(version, platform, arch)
   }
 
   async verifyBinary(): Promise<boolean> {
     return this.isBinaryInstalled('3')
   }
 
-  async isBinaryInstalled(_version: string): Promise<boolean> {
-    const sqlite3Path = await this.getSqlite3Path()
-    return sqlite3Path !== null
+  async isBinaryInstalled(version: string): Promise<boolean> {
+    const { platform, arch } = platformService.getPlatformInfo()
+    return sqliteBinaryManager.isInstalled(version, platform, arch)
   }
 
+  // Ensure SQLite binaries are downloaded from hostdb and register tools
   async ensureBinaries(
-    _version: string,
-    _onProgress?: ProgressCallback,
+    version: string,
+    onProgress?: ProgressCallback,
   ): Promise<string> {
-    const sqlite3Path = await this.getSqlite3Path()
-    if (!sqlite3Path) {
-      throw new Error(
-        'sqlite3 not found. Install SQLite:\n' +
-          '  macOS: brew install sqlite (or use built-in /usr/bin/sqlite3)\n' +
-          '  Ubuntu/Debian: sudo apt install sqlite3\n' +
-          '  Fedora: sudo dnf install sqlite\n' +
-          '  Windows: choco install sqlite or winget install SQLite.SQLite',
-      )
+    const { platform, arch } = platformService.getPlatformInfo()
+
+    // Download from hostdb
+    const binPath = await sqliteBinaryManager.ensureInstalled(
+      version,
+      platform,
+      arch,
+      onProgress,
+    )
+
+    // Register all SQLite tools in config
+    const ext = platformService.getExecutableExtension()
+    const tools = [
+      'sqlite3',
+      'sqldiff',
+      'sqlite3_analyzer',
+      'sqlite3_rsync',
+    ] as const
+
+    for (const tool of tools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
     }
-    return sqlite3Path
+
+    return binPath
   }
 
-  async getSqlite3Path(): Promise<string | null> {
-    // Check config manager first
+  // Get path to sqlite3 binary - checks downloaded binary first
+  override async getSqlite3Path(version?: string): Promise<string | null> {
+    // Check config manager first (cached path from downloaded binaries)
     const configPath = await configManager.getBinaryPath('sqlite3')
-    if (configPath) {
+    if (configPath && existsSync(configPath)) {
       return configPath
     }
 
-    // Check system PATH using platform service (works on Windows, macOS, Linux)
-    return platformService.findToolPath('sqlite3')
+    // If version provided, check downloaded binary path directly
+    if (version) {
+      const { platform, arch } = platformService.getPlatformInfo()
+      const fullVersion = normalizeVersion(version)
+      const binPath = paths.getBinaryPath({
+        engine: 'sqlite',
+        version: fullVersion,
+        platform,
+        arch,
+      })
+      const ext = platformService.getExecutableExtension()
+      const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
+      if (existsSync(sqlite3Path)) {
+        return sqlite3Path
+      }
+    }
+
+    // Not found - require download
+    return null
   }
 
   async getLitecliPath(): Promise<string | null> {
@@ -125,10 +170,7 @@ export class SQLiteEngine extends BaseEngine {
     }
 
     // Create empty database by running a simple query
-    const sqlite3 = await this.getSqlite3Path()
-    if (!sqlite3) {
-      throw new Error('sqlite3 not found')
-    }
+    const sqlite3 = await this.requireSqlite3Path()
 
     await execFileAsync(sqlite3, [absolutePath, 'SELECT 1'])
 
@@ -206,16 +248,7 @@ export class SQLiteEngine extends BaseEngine {
 
     // Try litecli first, fall back to sqlite3
     const litecli = await this.getLitecliPath()
-    const sqlite3 = await this.getSqlite3Path()
-
-    const cmd = litecli || sqlite3
-    if (!cmd) {
-      throw new Error(
-        'sqlite3 not found. Install SQLite:\n' +
-          '  macOS: brew install sqlite\n' +
-          '  Ubuntu/Debian: sudo apt install sqlite3',
-      )
-    }
+    const cmd = litecli ?? (await this.requireSqlite3Path())
 
     return new Promise((resolve, reject) => {
       const proc = spawn(cmd, [entry.filePath], { stdio: 'inherit' })
@@ -281,10 +314,7 @@ export class SQLiteEngine extends BaseEngine {
 
     if (options.format === 'sql') {
       // Use .dump command for SQL format
-      const sqlite3 = await this.getSqlite3Path()
-      if (!sqlite3) {
-        throw new Error('sqlite3 not found')
-      }
+      const sqlite3 = await this.requireSqlite3Path()
 
       // Pipe .dump output to file (avoids shell injection)
       await this.dumpToFile(sqlite3, entry.filePath, outputPath)
@@ -315,10 +345,7 @@ export class SQLiteEngine extends BaseEngine {
 
     if (format.format === 'sql') {
       // Restore SQL dump
-      const sqlite3 = await this.getSqlite3Path()
-      if (!sqlite3) {
-        throw new Error('sqlite3 not found')
-      }
+      const sqlite3 = await this.requireSqlite3Path()
 
       // Pipe file to sqlite3 stdin (avoids shell injection)
       await this.runSqlFile(sqlite3, entry.filePath, backupPath)
@@ -362,10 +389,7 @@ export class SQLiteEngine extends BaseEngine {
       throw new Error(`SQLite database file not found: ${filePath}`)
     }
 
-    const sqlite3 = await this.getSqlite3Path()
-    if (!sqlite3) {
-      throw new Error('sqlite3 not found')
-    }
+    const sqlite3 = await this.requireSqlite3Path()
 
     try {
       // Pipe .dump output to file (avoids shell injection)
@@ -459,6 +483,13 @@ export class SQLiteEngine extends BaseEngine {
     try {
       const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `File not found (404) at ${url}. ` +
+              `This version may have been removed from hostdb. ` +
+              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+          )
+        }
         throw new Error(
           `Failed to download: ${response.status} ${response.statusText}`,
         )
@@ -499,10 +530,7 @@ export class SQLiteEngine extends BaseEngine {
       throw new Error('SQLite database file not found')
     }
 
-    const sqlite3 = await this.getSqlite3Path()
-    if (!sqlite3) {
-      throw new Error('sqlite3 not found')
-    }
+    const sqlite3 = await this.requireSqlite3Path()
 
     if (options.file) {
       // Run SQL file - pipe file to stdin (avoids shell injection)
@@ -516,8 +544,81 @@ export class SQLiteEngine extends BaseEngine {
   }
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    // SQLite uses system version, just return supported versions
-    return { '3': ['3'] }
+    // Try to fetch from hostdb first
+    try {
+      const releases = await fetchHostdbReleases()
+      const sqliteReleases = getEngineReleases(releases, 'sqlite')
+
+      if (sqliteReleases && Object.keys(sqliteReleases).length > 0) {
+        const result: Record<string, string[]> = {}
+
+        for (const major of SUPPORTED_MAJOR_VERSIONS) {
+          result[major] = []
+
+          // Find all versions matching this major version
+          for (const [, release] of Object.entries(sqliteReleases)) {
+            if (release.version.startsWith(`${major}.`)) {
+              result[major].push(release.version)
+            }
+          }
+
+          // Sort descending (latest first)
+          result[major].sort((a, b) => {
+            const partsA = a.split('.').map(Number)
+            const partsB = b.split('.').map(Number)
+            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+              const diff = (partsB[i] || 0) - (partsA[i] || 0)
+              if (diff !== 0) return diff
+            }
+            return 0
+          })
+        }
+
+        return result
+      }
+    } catch (error) {
+      logDebug('Failed to fetch SQLite versions from hostdb, checking local', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    // Offline fallback: return only locally installed versions
+    const installed = await sqliteBinaryManager.listInstalled()
+    if (installed.length > 0) {
+      const result: Record<string, string[]> = {}
+      for (const binary of installed) {
+        const major = binary.version.split('.')[0]
+        if (!result[major]) {
+          result[major] = []
+        }
+        if (!result[major].includes(binary.version)) {
+          result[major].push(binary.version)
+        }
+      }
+      return result
+    }
+
+    // Last resort: return hardcoded version map
+    const result: Record<string, string[]> = {}
+    for (const major of SUPPORTED_MAJOR_VERSIONS) {
+      const fullVersion = SQLITE_VERSION_MAP[major]
+      if (fullVersion) {
+        result[major] = [fullVersion]
+      }
+    }
+    return result
+  }
+
+  // Helper to get sqlite3 path or throw a helpful error
+  private async requireSqlite3Path(): Promise<string> {
+    const sqlite3 = await this.getSqlite3Path()
+    if (!sqlite3) {
+      throw new Error(
+        'sqlite3 not found. Ensure SQLite binaries are downloaded:\n' +
+          '  spindb engines download sqlite',
+      )
+    }
+    return sqlite3
   }
 }
 

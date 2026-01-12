@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpinDB Engines Configuration",
+  "type": "object",
+  "required": ["engines"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "engines": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/engine"
+      }
+    }
+  },
+  "definitions": {
+    "engine": {
+      "type": "object",
+      "required": [
+        "displayName",
+        "icon",
+        "status",
+        "binarySource",
+        "supportedVersions",
+        "defaultVersion",
+        "defaultPort",
+        "runtime",
+        "queryLanguage",
+        "connectionScheme",
+        "superuser",
+        "clientTools"
+      ],
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Human-readable name for the engine"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Emoji icon for the engine"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["integrated", "pending", "planned"],
+          "description": "Integration status of the engine"
+        },
+        "binarySource": {
+          "type": "string",
+          "enum": ["hostdb", "system", "edb"],
+          "description": "Source for engine binaries"
+        },
+        "supportedVersions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of supported major versions"
+        },
+        "defaultVersion": {
+          "type": "string",
+          "description": "Default version to use when not specified"
+        },
+        "defaultPort": {
+          "type": ["integer", "null"],
+          "description": "Default port number (null for embedded databases)"
+        },
+        "runtime": {
+          "type": "string",
+          "enum": ["server", "embedded"],
+          "description": "Whether the engine runs as a server or embedded"
+        },
+        "queryLanguage": {
+          "type": "string",
+          "enum": ["sql", "javascript", "redis"],
+          "description": "Query language used by the engine"
+        },
+        "connectionScheme": {
+          "type": "string",
+          "description": "URI scheme for connection strings"
+        },
+        "superuser": {
+          "type": ["string", "null"],
+          "description": "Default superuser name (null if none)"
+        },
+        "clientTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of client tools bundled with the engine"
+        },
+        "licensing": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Single license identifier"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Multiple license options"
+            }
+          ],
+          "description": "License type(s) for the engine"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the engine"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

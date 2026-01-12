@@ -7,134 +7,91 @@
  * hostdb provides pre-built MariaDB binaries for multiple platforms.
  */
 
+import { MARIADB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { compareVersions } from '../../core/version-utils'
+import { logDebug } from '../../core/error-handler'
+import { mariadbBinaryManager } from './binary-manager'
 import {
-  MARIADB_VERSION_MAP,
-  SUPPORTED_MAJOR_VERSIONS,
-} from './version-maps'
+  fetchHostdbReleases,
+  clearCache as clearSharedCache,
+  getEngineReleases,
+  validatePlatform,
+  buildDownloadUrl,
+  type HostdbRelease,
+  type HostdbReleasesData,
+  type HostdbPlatform,
+} from '../../core/hostdb-client'
+import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 
-/**
- * Platform definition in hostdb releases.json
- */
-export type HostdbPlatform = {
-  url: string
-  sha256: string
-  size: number
-}
+// Re-export types for backwards compatibility
+export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 
-/**
- * Version entry in hostdb releases.json
- */
-export type HostdbRelease = {
-  version: string
-  releaseTag: string
-  releasedAt: string
-  platforms: Record<string, HostdbPlatform>
-}
+// Re-export shared functions
+export const clearCache = clearSharedCache
 
-/**
- * Structure of hostdb releases.json
- */
-export type HostdbReleasesData = {
-  repository: string
-  updatedAt: string
-  databases: {
-    mariadb?: Record<string, HostdbRelease>
-    postgresql?: Record<string, HostdbRelease>
-    // Other databases...
-  }
-}
-
-// Cache for fetched releases
-let cachedReleases: HostdbReleasesData | null = null
-let cacheTimestamp = 0
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-
-/**
- * Clear the releases cache (for testing)
- */
-export function clearCache(): void {
-  cachedReleases = null
-  cacheTimestamp = 0
-}
-
-/**
- * Fetch releases.json from hostdb repository
- */
-export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
-  // Return cached releases if still valid
-  if (cachedReleases && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedReleases
-  }
-
-  const url =
-    'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
-
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const data = (await response.json()) as HostdbReleasesData
-
-    // Cache the results
-    cachedReleases = data
-    cacheTimestamp = Date.now()
-
-    return data
-  } catch (error) {
-    const err = error as Error
-    // Log the failure and rethrow - caller decides whether to use fallback
-    console.warn(`Warning: Failed to fetch hostdb releases: ${err.message}`)
-    throw error
-  }
-}
-
-/**
- * Get available MariaDB versions from hostdb, grouped by major version
- */
+// Get available MariaDB versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
+  // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const releases = await fetchHostdbReleases()
-    const mariadbReleases = releases.databases.mariadb
+    const versions = await getHostdbVersions('mariadb')
 
-    if (!mariadbReleases) {
-      // No MariaDB releases in hostdb yet, use fallback
-      return getFallbackVersions()
-    }
+    if (versions && versions.length > 0) {
+      // Group versions by major version (e.g., 11.8)
+      // MariaDB uses X.Y format for major versions (e.g., 11.8.5 matches 11.8)
+      const grouped: Record<string, string[]> = {}
 
-    // Group versions by major version (e.g., 11.8)
-    const grouped: Record<string, string[]> = {}
-
-    for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      grouped[major] = []
-
-      // Find all versions matching this major version
-      for (const [_versionKey, release] of Object.entries(mariadbReleases)) {
-        // MariaDB uses X.Y format for major versions (e.g., 11.8.5 matches 11.8)
-        const releaseMajor = release.version.split('.').slice(0, 2).join('.')
-        if (releaseMajor === major) {
-          grouped[major].push(release.version)
+      for (const version of versions) {
+        const parts = version.split('.')
+        const major = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
+        if (!grouped[major]) {
+          grouped[major] = []
         }
+        grouped[major].push(version)
       }
 
-      // Sort descending (latest first)
-      grouped[major].sort((a, b) => compareVersions(b, a))
-    }
+      // Sort each group descending (latest first)
+      for (const major of Object.keys(grouped)) {
+        grouped[major].sort((a, b) => compareVersions(b, a))
+      }
 
-    return grouped
-  } catch {
-    // Fallback to version map on error
-    return getFallbackVersions()
+      return grouped
+    }
+  } catch (error) {
+    logDebug('Failed to fetch MariaDB versions from hostdb, checking local', {
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
+
+  // Offline fallback: return only locally installed versions
+  const installed = await mariadbBinaryManager.listInstalled()
+  if (installed.length > 0) {
+    const result: Record<string, string[]> = {}
+    for (const binary of installed) {
+      // MariaDB uses X.Y format for major versions
+      const parts = binary.version.split('.')
+      const major = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
+      if (!result[major]) {
+        result[major] = []
+      }
+      if (!result[major].includes(binary.version)) {
+        result[major].push(binary.version)
+      }
+    }
+    // Sort each major version group descending
+    for (const major of Object.keys(result)) {
+      result[major].sort((a, b) => compareVersions(b, a))
+    }
+    return result
+  }
+
+  // Last resort: return hardcoded version map
+  return getHardcodedVersions()
 }
 
-/**
- * Get fallback versions when network is unavailable
- */
-function getFallbackVersions(): Record<string, string[]> {
+// Get hardcoded versions as last resort fallback
+function getHardcodedVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {
     grouped[major] = [MARIADB_VERSION_MAP[major]]
@@ -142,27 +99,7 @@ function getFallbackVersions(): Record<string, string[]> {
   return grouped
 }
 
-/**
- * Compare two version strings (e.g., "11.8.5" vs "11.8.4")
- * Returns positive if a > b, negative if a < b, 0 if equal
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number)
-  const partsB = b.split('.').map(Number)
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] || 0
-    const numB = partsB[i] || 0
-    if (numA !== numB) {
-      return numA - numB
-    }
-  }
-  return 0
-}
-
-/**
- * Get the latest version for a major version from hostdb
- */
+// Get the latest version for a major version from hostdb
 export async function getLatestVersion(major: string): Promise<string> {
   const versions = await fetchAvailableVersions()
   const majorVersions = versions[major]
@@ -185,9 +122,12 @@ export async function getHostdbDownloadUrl(
   platform: string,
   arch: string,
 ): Promise<string> {
+  // Validate platform up-front so we fail fast for unsupported platforms
+  const hostdbPlatform = validatePlatform(platform, arch)
+
   try {
     const releases = await fetchHostdbReleases()
-    const mariadbReleases = releases.databases.mariadb
+    const mariadbReleases = getEngineReleases(releases, 'mariadb')
 
     if (!mariadbReleases) {
       throw new Error('MariaDB releases not found in hostdb')
@@ -198,10 +138,6 @@ export async function getHostdbDownloadUrl(
     if (!release) {
       throw new Error(`Version ${version} not found in hostdb releases`)
     }
-
-    // Map Node.js platform names to hostdb platform names
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
 
     // Get the platform-specific download URL
     const platformData = release.platforms[hostdbPlatform]
@@ -214,38 +150,8 @@ export async function getHostdbDownloadUrl(
     return platformData.url
   } catch {
     // Fallback to constructing URL manually if fetch fails
-    const platformKey = `${platform}-${arch}`
-    const hostdbPlatform = mapPlatformToHostdb(platformKey)
-    const tag = `mariadb-${version}`
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
-    const filename = `mariadb-${version}-${hostdbPlatform}.${ext}`
-
-    return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+    return buildDownloadUrl('mariadb', version, platform, arch)
   }
-}
-
-/**
- * Map Node.js platform identifiers to hostdb platform identifiers
- *
- * @param platformKey - Node.js platform-arch key (e.g., 'darwin-arm64')
- * @returns hostdb platform identifier (e.g., 'darwin-arm64')
- */
-function mapPlatformToHostdb(platformKey: string): string {
-  // hostdb uses standard platform naming, which matches Node.js
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-
-  const result = mapping[platformKey]
-  if (!result) {
-    throw new Error(`Unsupported platform: ${platformKey}`)
-  }
-
-  return result
 }
 
 /**
@@ -256,16 +162,16 @@ function mapPlatformToHostdb(platformKey: string): string {
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const releases = await fetchHostdbReleases()
-    if (!releases.databases.mariadb) {
-      return false
-    }
-    return version in releases.databases.mariadb
+    const versions = await getHostdbVersions('mariadb')
+    return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map
     // Handle both major versions ("11.8") and full versions ("11.8.5")
     const majorParts = version.split('.')
-    const major = majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
-    return version in MARIADB_VERSION_MAP || MARIADB_VERSION_MAP[major] === version
+    const major =
+      majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
+    return (
+      version in MARIADB_VERSION_MAP || MARIADB_VERSION_MAP[major] === version
+    )
   }
 }

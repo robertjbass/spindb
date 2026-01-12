@@ -13,9 +13,7 @@ import { uiError, uiSuccess, header, uiInfo } from '../ui/theme'
 import { createSpinner } from '../ui/spinner'
 import type { BinaryTool } from '../../types'
 
-/**
- * Helper to display a tool's config
- */
+// Helper to display a tool's config
 function displayToolConfig(
   tool: BinaryTool,
   binaryConfig: { path: string; version?: string; source: string } | undefined,

@@ -92,9 +92,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Check if the backup file is from the wrong engine and throw helpful error
- */
+// Check if the backup file is from the wrong engine and throw helpful error
 export function assertCompatibleFormat(format: BackupFormat): void {
   if (format.format === 'mysql_sql') {
     throw new SpinDBError(
@@ -119,9 +117,7 @@ export type RestoreOptions = {
   pgRestorePath?: string
 }
 
-/**
- * Get psql path from config, with helpful error message
- */
+// Get psql path from config, with helpful error message
 async function getPsqlPath(): Promise<string> {
   const psqlPath = await configManager.getBinaryPath('psql')
   if (!psqlPath) {
@@ -135,9 +131,7 @@ async function getPsqlPath(): Promise<string> {
   return psqlPath
 }
 
-/**
- * Get pg_restore path from config or system PATH, with helpful error message
- */
+// Get pg_restore path from config or system PATH, with helpful error message
 async function getPgRestorePath(): Promise<string> {
   // First try to get from config (in case user has set a custom path)
   const configPath = await configManager.getBinaryPath('pg_restore')
@@ -159,9 +153,7 @@ async function getPgRestorePath(): Promise<string> {
   return systemPath
 }
 
-/**
- * Restore a backup to a PostgreSQL database
- */
+// Restore a backup to a PostgreSQL database
 export async function restoreBackup(
   _binPath: string, // Not used - using config manager instead
   backupPath: string,

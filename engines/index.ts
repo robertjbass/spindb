@@ -7,9 +7,7 @@ import { redisEngine } from './redis'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
-/**
- * Registry of available database engines
- */
+// Registry of available database engines
 export const engines: Record<string, BaseEngine> = {
   // PostgreSQL and aliases
   postgresql: postgresqlEngine,
@@ -30,9 +28,7 @@ export const engines: Record<string, BaseEngine> = {
   redis: redisEngine,
 }
 
-/**
- * Get an engine by name
- */
+// Get an engine by name
 export function getEngine(name: string): BaseEngine {
   const engine = engines[name.toLowerCase()]
   if (!engine) {
@@ -44,9 +40,7 @@ export function getEngine(name: string): BaseEngine {
   return engine
 }
 
-/**
- * List all available engines
- */
+// List all available engines
 export function listEngines(): EngineInfo[] {
   const seen = new Set<BaseEngine>()
   return Object.entries(engines)

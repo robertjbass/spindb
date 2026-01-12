@@ -8,8 +8,8 @@ import { stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
-import { getMongodumpPath } from './binary-detection'
 import { logDebug } from '../../core/error-handler'
+import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 /**
@@ -29,11 +29,7 @@ export async function createBackup(
 
   const mongodump = await getMongodumpPath()
   if (!mongodump) {
-    throw new Error(
-      'mongodump not found. Install MongoDB database tools:\n' +
-        '  macOS: brew install mongodb-database-tools\n' +
-        '  Or download from: https://www.mongodb.com/try/download/database-tools',
-    )
+    throw new Error(MONGODUMP_NOT_FOUND_ERROR)
   }
 
   // Ensure output directory exists

@@ -115,16 +115,12 @@ export class TransactionManager {
     this.committed = true
   }
 
-  /**
-   * Check if the transaction has been committed.
-   */
+  // Check if the transaction has been committed.
   isCommitted(): boolean {
     return this.committed
   }
 
-  /**
-   * Get the number of pending rollback actions.
-   */
+  // Get the number of pending rollback actions.
   getPendingCount(): number {
     return this.rollbackStack.length
   }

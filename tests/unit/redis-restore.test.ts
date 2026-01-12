@@ -86,17 +86,29 @@ describe('Redis Restore', () => {
     })
 
     it('should parse Redis URL with password', () => {
-      const result = parseConnectionString('redis://:mypassword@127.0.0.1:6379/0')
+      const result = parseConnectionString(
+        'redis://:mypassword@127.0.0.1:6379/0',
+      )
       assertEqual(result.host, '127.0.0.1', 'Host should be 127.0.0.1')
       assertEqual(result.port, 6379, 'Port should be 6379')
       assertEqual(result.database, '0', 'Database should be 0')
-      assertEqual(result.password, 'mypassword', 'Password should be mypassword')
+      assertEqual(
+        result.password,
+        'mypassword',
+        'Password should be mypassword',
+      )
     })
 
     it('should parse Redis URL with username and password', () => {
-      const result = parseConnectionString('redis://user:mypassword@127.0.0.1:6379/0')
+      const result = parseConnectionString(
+        'redis://user:mypassword@127.0.0.1:6379/0',
+      )
       assertEqual(result.host, '127.0.0.1', 'Host should be 127.0.0.1')
-      assertEqual(result.password, 'mypassword', 'Password should be mypassword')
+      assertEqual(
+        result.password,
+        'mypassword',
+        'Password should be mypassword',
+      )
     })
 
     it('should parse Redis URL with different database', () => {

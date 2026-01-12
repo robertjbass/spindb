@@ -1,12 +1,30 @@
 name: CI
 
 on:
-  # TODO: uncomment for testing CI
-  # push:
-  #   branches: [dev]
   pull_request:
     branches: [main]
+  # TODO delete this push test when done with branch
+  push:
+    branches: [claude/mysql-hostdb-binary-Yy1O6]
   workflow_dispatch:
+
+# =============================================================================
+# OS Coverage Strategy
+# =============================================================================
+# We test on 5 OS variants to cover different platforms and architectures:
+#   - ubuntu-22.04 (x64) - LTS with older glibc/system libraries
+#   - ubuntu-24.04 (x64) - LTS with newer libraries (catches issues like libaio rename)
+#   - macos-15 (Intel x64) - Sequoia
+#   - macos-14 (ARM64/Apple Silicon) - Sonoma
+#   - windows-latest (x64)
+#
+# Note: We test two Ubuntu versions instead of Linux ARM64 because:
+#   1. GitHub Actions doesn't offer free native Linux ARM64 runners
+#   2. QEMU emulation is too slow and flaky for CI
+#   3. Two Ubuntu LTS versions catch real library compatibility issues
+#   4. macOS ARM64 validates ARM code paths
+#   5. A commented-out ARM64 job exists below if native runners become available
+# =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
 concurrency:
@@ -15,7 +33,8 @@ concurrency:
 
 jobs:
   # ============================================
-  # Unit Tests
+  # Unit Tests - Expanded OS Matrix
+  # Tests on multiple OS versions to catch platform-specific issues
   # ============================================
   unit-tests:
     name: Unit Tests (${{ matrix.os }})
@@ -23,7 +42,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64 (M1/M2)
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,6 +94,32 @@ jobs:
         run: pnpm lint
 
   # ============================================
+  # hostdb Version Sync Check
+  # Verifies SpinDB version-maps match hostdb releases.json
+  # ============================================
+  hostdb-sync:
+    name: Verify hostdb Sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify version maps match hostdb
+        run: pnpm test:hostdb-sync
+
+  # ============================================
   # PostgreSQL Integration Tests
   # Uses SpinDB to download and manage PostgreSQL
   # ============================================
@@ -79,7 +129,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -128,7 +183,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -167,8 +227,7 @@ jobs:
 
   # ============================================
   # MySQL Integration Tests
-  # Uses SpinDB to install MySQL via system package manager
-  # Skipped on Linux due to permission issues with Ubuntu's MySQL package
+  # Uses SpinDB to download and manage MySQL binaries (like PostgreSQL)
   # ============================================
   test-mysql:
     name: MySQL (${{ matrix.os }})
@@ -176,8 +235,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Skip Linux due to MySQL permission issues with Ubuntu's package
-        os: [macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,45 +257,37 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # NOTE: macOS MySQL caching removed - Homebrew dependencies (protobuf, zlib)
-      # are dynamically linked and not included in Cellar cache, causing dyld errors.
-      # Fresh install is more reliable than partial caching.
-
-      # Cache Chocolatey packages for MySQL on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: |
-            C:\ProgramData\chocolatey\lib\mysql
-            C:\tools\mysql
-          key: choco-mysql-${{ runner.os }}
-          restore-keys: |
-            choco-mysql-
-
-      # Windows needs MySQL added to PATH BEFORE install check (for cache hits)
-      - name: Add MySQL to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      # MySQL requires libaio on Linux
+      # Ubuntu 22.04 uses libaio1, Ubuntu 24.04 uses libaio1t64 with renamed library
+      - name: Install libaio (Linux only)
+        if: runner.os == 'Linux'
         run: |
-          $possiblePaths = @(
-            "C:\tools\mysql\current\bin",
-            "C:\Program Files\MySQL\MySQL Server 8.0\bin",
-            "C:\Program Files\MySQL\MySQL Server 8.4\bin",
-            "C:\Program Files\MySQL\MySQL Server 9.0\bin"
-          )
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added MySQL to PATH: $path"
-              break
-            }
-          }
+          sudo apt-get update
+          # Try libaio1 first (Ubuntu 22.04), fall back to libaio1t64 (Ubuntu 24.04)
+          if sudo apt-get install -y libaio1 2>/dev/null; then
+            echo "Installed libaio1"
+          else
+            sudo apt-get install -y libaio1t64
+            # Create symlink for MySQL which expects libaio.so.1
+            if [ -e /lib/x86_64-linux-gnu/libaio.so.1t64 ]; then
+              sudo ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+            fi
+            echo "Installed libaio1t64 with symlink"
+          fi
 
-      # Use SpinDB to install MySQL via system package manager
+      # Cache MySQL binaries - these are ~100MB+ downloads
+      - name: Cache MySQL binaries
+        uses: actions/cache@v4
+        id: mysql-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download MySQL binaries
       - name: Install MySQL via SpinDB
-        run: pnpm start engines download mysql
+        run: pnpm start engines download mysql 9
 
+      # Show what SpinDB installed
       - name: Show installed engines
         run: pnpm start engines list
 
@@ -242,7 +297,7 @@ jobs:
 
   # ============================================
   # SQLite Integration Tests
-  # Uses SpinDB to install SQLite via system package manager
+  # Uses SpinDB to download and manage SQLite binaries from hostdb
   # ============================================
   test-sqlite:
     name: SQLite (${{ matrix.os }})
@@ -250,7 +305,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -267,30 +327,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache Chocolatey packages for SQLite on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
+      # Cache SQLite binaries - these are downloaded from hostdb
+      - name: Cache SQLite binaries
         uses: actions/cache@v4
+        id: sqlite-cache
         with:
-          path: C:\ProgramData\chocolatey\lib\SQLite
-          key: choco-sqlite-${{ runner.os }}
-          restore-keys: |
-            choco-sqlite-
+          path: ~/.spindb/bin
+          key: spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}
 
-      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
-      - name: Add SQLite to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
-          if (Test-Path $sqlitePath) {
-            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            echo "Added SQLite to PATH: $sqlitePath"
-          }
-
-      # Use SpinDB to install SQLite via system package manager
+      # Use SpinDB to download SQLite binaries (all platforms)
       - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
+        run: pnpm start engines download sqlite 3
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -301,7 +348,7 @@ jobs:
 
   # ============================================
   # MongoDB Integration Tests
-  # Uses system-installed MongoDB via Homebrew/apt/Chocolatey
+  # Uses SpinDB to download and manage MongoDB binaries from hostdb
   # ============================================
   test-mongodb:
     name: MongoDB (${{ matrix.os }})
@@ -309,7 +356,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -326,213 +378,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Install MongoDB on macOS via Homebrew
-      - name: Install MongoDB (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew tap mongodb/brew
-          brew install mongodb-community mongosh mongodb-database-tools
-
-      # Install MongoDB on Ubuntu
-      - name: Install MongoDB (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          # Import MongoDB public GPG key
-          curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
-            sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
-          # Add MongoDB repository
-          echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" | \
-            sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
-          # Update and install
-          sudo apt-get update
-          sudo apt-get install -y mongodb-org mongodb-mongosh mongodb-database-tools
-
-      # Cache Chocolatey packages for MongoDB on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
+      # Cache MongoDB binaries - these are downloaded from hostdb
+      - name: Cache MongoDB binaries
         uses: actions/cache@v4
+        id: mongodb-cache
         with:
-          path: |
-            C:\ProgramData\chocolatey\lib\mongodb
-            C:\ProgramData\chocolatey\lib\mongodb-shell
-            C:\ProgramData\chocolatey\lib\mongodb-database-tools
-            C:\Program Files\MongoDB
-          key: choco-mongodb-${{ runner.os }}-v1
-          restore-keys: |
-            choco-mongodb-${{ runner.os }}-
+          path: ~/.spindb/bin
+          key: spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}
 
-      # Windows needs MongoDB added to PATH BEFORE install check (for cache hits)
-      - name: Add MongoDB to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $possibleServerPaths = @(
-            "C:\Program Files\MongoDB\Server\8.0\bin",
-            "C:\Program Files\MongoDB\Server\7.0\bin",
-            "C:\Program Files\MongoDB\Server\6.0\bin"
-          )
-          $possibleToolsPaths = @(
-            "C:\Program Files\MongoDB\Tools\100\bin",
-            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools"
-          )
-          foreach ($path in $possibleServerPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added MongoDB Server to PATH: $path"
-              break
-            }
-          }
-          foreach ($path in $possibleToolsPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added MongoDB Tools to PATH: $path"
-              break
-            }
-          }
-
-      # Install MongoDB on Windows via Chocolatey
-      - name: Install MongoDB (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Check if MongoDB is already installed (cache hit)
-          $mongodExists = Get-Command mongod -ErrorAction SilentlyContinue
-          if (-not $mongodExists) {
-            echo "Installing MongoDB via Chocolatey..."
-            choco install mongodb --yes --no-progress
-          } else {
-            echo "MongoDB already installed (cache hit)"
-          }
-
-          # Check if mongosh is already installed
-          $mongoshExists = Get-Command mongosh -ErrorAction SilentlyContinue
-          if (-not $mongoshExists) {
-            echo "Installing mongosh via Chocolatey..."
-            choco install mongodb-shell --yes --no-progress
-          } else {
-            echo "mongosh already installed (cache hit)"
-          }
-
-          # Check if mongodump is already installed
-          $mongodumpExists = Get-Command mongodump -ErrorAction SilentlyContinue
-          if (-not $mongodumpExists) {
-            echo "Installing mongodb-database-tools via Chocolatey..."
-            choco install mongodb-database-tools --yes --no-progress
-          } else {
-            echo "mongodb-database-tools already installed (cache hit)"
-          }
-
-          # Re-add paths after install (in case they were just created)
-          $possibleServerPaths = @(
-            "C:\Program Files\MongoDB\Server\8.0\bin",
-            "C:\Program Files\MongoDB\Server\7.0\bin",
-            "C:\Program Files\MongoDB\Server\6.0\bin"
-          )
-          $possibleToolsPaths = @(
-            "C:\Program Files\MongoDB\Tools\100\bin",
-            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools"
-          )
-          foreach ($path in $possibleServerPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              break
-            }
-          }
-          foreach ($path in $possibleToolsPaths) {
-            if (Test-Path $path) {
-              echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              break
-            }
-          }
-
-      # Verify MongoDB binaries are usable after install
-      - name: Verify MongoDB installation (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "Verifying MongoDB installation..."
-
-          # Helper function to find and add tool path
-          function Find-AndAddPath {
-            param([string]$ToolName, [string[]]$SearchPaths)
-            foreach ($path in $SearchPaths) {
-              $toolPath = Join-Path $path "$ToolName.exe"
-              if (Test-Path $toolPath) {
-                if ($env:PATH -notlike "*$path*") {
-                  $env:PATH = "$path;$env:PATH"
-                  Write-Host "  Added to PATH: $path"
-                }
-                return $true
-              }
-            }
-            return $false
-          }
-
-          # Paths where MongoDB tools might be installed
-          $toolsPaths = @(
-            "C:\Program Files\MongoDB\Tools\100\bin",
-            "C:\ProgramData\chocolatey\lib\mongodb-database-tools\tools",
-            "C:\ProgramData\chocolatey\bin"
-          )
-
-          try {
-            $mongodVersion = mongod --version | Select-Object -First 1
-            Write-Host "✓ mongod: $mongodVersion"
-          } catch {
-            Write-Host "✗ mongod not found or not working"
-            exit 1
-          }
-
-          try {
-            $mongoshVersion = mongosh --version
-            Write-Host "✓ mongosh: $mongoshVersion"
-          } catch {
-            Write-Host "✗ mongosh not found or not working"
-            exit 1
-          }
-
-          # mongodump check with retry logic
-          $mongodumpFound = $false
-          try {
-            $mongodumpVersion = mongodump --version | Select-Object -First 1
-            Write-Host "✓ mongodump: $mongodumpVersion"
-            $mongodumpFound = $true
-          } catch {
-            Write-Host "mongodump not in PATH, searching known locations..."
-            if (Find-AndAddPath -ToolName "mongodump" -SearchPaths $toolsPaths) {
-              try {
-                $mongodumpVersion = mongodump --version | Select-Object -First 1
-                Write-Host "✓ mongodump: $mongodumpVersion (found via search)"
-                $mongodumpFound = $true
-              } catch {
-                Write-Host "  mongodump found but failed to run"
-              }
-            }
-          }
-
-          if (-not $mongodumpFound) {
-            Write-Host "mongodump not found, attempting reinstall..."
-            choco install mongodb-database-tools --yes --no-progress --force
-            Start-Sleep -Seconds 2
-
-            # Search again after reinstall
-            if (Find-AndAddPath -ToolName "mongodump" -SearchPaths $toolsPaths) {
-              try {
-                $mongodumpVersion = mongodump --version | Select-Object -First 1
-                Write-Host "✓ mongodump: $mongodumpVersion (after reinstall)"
-                $mongodumpFound = $true
-              } catch {
-                Write-Host "✗ mongodump still not working after reinstall"
-              }
-            }
-          }
-
-          if (-not $mongodumpFound) {
-            Write-Host "✗ mongodump not found or not working"
-            exit 1
-          }
-
-          Write-Host "All MongoDB binaries verified successfully"
+      # Download MongoDB binaries via hostdb for all platforms
+      - name: Download MongoDB binaries
+        run: pnpm start engines download mongodb 8.0
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -543,7 +399,8 @@ jobs:
 
   # ============================================
   # Redis Integration Tests
-  # Uses system-installed Redis via Homebrew/apt/Chocolatey
+  # Uses SpinDB to download and manage Redis binaries from hostdb
+  # NOTE: Redis does not support Windows natively, so Windows is excluded
   # ============================================
   test-redis:
     name: Redis (${{ matrix.os }})
@@ -551,7 +408,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          # Windows excluded: Redis has no native Windows support
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -568,63 +430,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Install Redis on macOS via Homebrew
-      - name: Install Redis (macOS)
-        if: runner.os == 'macOS'
-        run: brew install redis
-
-      # Install Redis on Ubuntu
-      - name: Install Redis (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
-
-      # Install Redis on Windows from tporadowski/redis GitHub releases
-      # (official Redis doesn't support Windows, this is the most maintained port)
-      - name: Cache Redis (Windows)
-        if: runner.os == 'Windows'
+      # Cache Redis binaries - these are downloaded from hostdb
+      - name: Cache Redis binaries
         uses: actions/cache@v4
         id: redis-cache
         with:
-          path: C:\Redis
-          key: redis-windows-5.0.14.1
+          path: ~/.spindb/bin
+          key: spindb-redis-8-${{ runner.os }}-${{ runner.arch }}
 
-      - name: Install Redis (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path "C:\Redis\redis-server.exe") {
-            Write-Host "Redis already installed (cache hit)"
-          } else {
-            Write-Host "Downloading Redis for Windows from tporadowski/redis..."
-            $url = "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
-            $zip = "$env:TEMP\redis.zip"
-
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -ErrorAction Stop
-
-            Write-Host "Extracting to C:\Redis..."
-            Expand-Archive -Path $zip -DestinationPath "C:\Redis" -Force
-            Remove-Item $zip
-
-            # Handle nested directory structure if zip extracts to subdirectory
-            $nestedDir = Get-ChildItem "C:\Redis" -Directory | Where-Object { $_.Name -like "Redis-*" } | Select-Object -First 1
-            if ($nestedDir) {
-              Write-Host "Moving files from nested directory: $($nestedDir.Name)"
-              Move-Item "$($nestedDir.FullName)\*" "C:\Redis\" -Force
-              Remove-Item $nestedDir.FullName -Force
-            }
-          }
-
-          # Add to PATH for subsequent steps
-          echo "C:\Redis" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Verify Redis (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "Verifying Redis installation..."
-          redis-server --version
-          redis-cli --version
-          Write-Host "Redis installation verified successfully"
+      # Use SpinDB to download Redis binaries (all platforms)
+      - name: Install Redis via SpinDB
+        run: pnpm start engines download redis 8
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -642,7 +458,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -659,34 +480,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache PostgreSQL binaries - these are ~100MB+ downloads
-      - name: Cache PostgreSQL binaries
+      # Cache PostgreSQL and SQLite binaries - these are downloads from hostdb
+      - name: Cache binaries
         uses: actions/cache@v4
-        id: pg-cache
+        id: binaries-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
-
-      # Cache Chocolatey packages for SQLite on Windows
-      - name: Cache Chocolatey packages (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: C:\ProgramData\chocolatey\lib\SQLite
-          key: choco-sqlite-${{ runner.os }}
-          restore-keys: |
-            choco-sqlite-
-
-      # Windows needs SQLite added to PATH BEFORE install check (for cache hits)
-      - name: Add SQLite to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $sqlitePath = "C:\ProgramData\chocolatey\lib\SQLite\tools"
-          if (Test-Path $sqlitePath) {
-            echo "$sqlitePath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            echo "Added SQLite to PATH: $sqlitePath"
-          }
+          key: spindb-cli-e2e-pg18-sqlite3-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to install all required engines
       # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
@@ -694,7 +494,7 @@ jobs:
         run: pnpm start engines download postgresql 18
 
       - name: Install SQLite via SpinDB
-        run: pnpm start engines download sqlite
+        run: pnpm start engines download sqlite 3
 
       - name: Show installed engines
         run: pnpm start engines list
@@ -702,6 +502,327 @@ jobs:
       - name: Run CLI E2E tests
         run: pnpm test:cli
         timeout-minutes: 15
+
+  # ============================================
+  # Fresh Install Test - Tests npm global install like real users
+  # Simulates a user installing SpinDB for the first time
+  # ============================================
+  test-fresh-install:
+    name: Fresh Install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Ensure clean state - no existing ~/.spindb
+      - name: Ensure clean state (Unix)
+        if: runner.os != 'Windows'
+        run: rm -rf ~/.spindb
+
+      - name: Ensure clean state (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:USERPROFILE\.spindb") {
+            Remove-Item -Recurse -Force "$env:USERPROFILE\.spindb"
+          }
+
+      # Pack and install globally (simulates npm install -g spindb)
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack package
+        run: pnpm pack
+
+      - name: Install globally (Unix)
+        if: runner.os != 'Windows'
+        run: npm install -g spindb-*.tgz
+
+      - name: Install globally (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: npm install -g (Get-Item spindb-*.tgz).FullName
+
+      # Test CLI is accessible
+      - name: Verify spindb command exists
+        run: spindb version
+
+      - name: Verify spindb help works
+        run: spindb --help
+
+      # Test full lifecycle with PostgreSQL
+      - name: Download PostgreSQL engine
+        run: spindb engines download postgresql 18
+
+      - name: List installed engines
+        run: spindb engines list
+
+      - name: Create test container
+        run: spindb create fresh-install-test --engine postgresql --db-version 18 --no-start
+
+      - name: Start container
+        run: spindb start fresh-install-test
+
+      - name: Verify container is running
+        run: spindb info fresh-install-test
+
+      - name: Run test query
+        run: spindb run fresh-install-test -c "SELECT 1 as test;"
+
+      - name: Stop container
+        run: spindb stop fresh-install-test
+
+      - name: Delete container
+        run: spindb delete fresh-install-test --yes
+
+      # Cleanup
+      - name: Uninstall spindb
+        run: npm uninstall -g spindb
+
+  # ============================================
+  # Upgrade Test - Tests that existing containers survive upgrades
+  # Simulates a user upgrading SpinDB with existing data
+  # ============================================
+  test-upgrade:
+    name: Upgrade Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Ensure clean state
+      - name: Ensure clean state (Unix)
+        if: runner.os != 'Windows'
+        run: rm -rf ~/.spindb
+
+      - name: Ensure clean state (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:USERPROFILE\.spindb") {
+            Remove-Item -Recurse -Force "$env:USERPROFILE\.spindb"
+          }
+
+      # Install current version
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack and install globally
+        shell: bash
+        run: |
+          pnpm pack
+          npm install -g spindb-*.tgz
+
+      # Create container and add data
+      - name: Download PostgreSQL engine
+        run: spindb engines download postgresql 18
+
+      - name: Create container with data
+        run: |
+          spindb create upgrade-test --engine postgresql --db-version 18 --no-start
+          spindb start upgrade-test
+
+      - name: Add test data
+        shell: bash
+        run: |
+          spindb run upgrade-test -c "CREATE TABLE upgrade_data (id SERIAL PRIMARY KEY, value TEXT);"
+          spindb run upgrade-test -c "INSERT INTO upgrade_data (value) VALUES ('pre-upgrade-data');"
+
+      - name: Verify data exists
+        run: spindb run upgrade-test -c "SELECT * FROM upgrade_data;"
+
+      - name: Stop container
+        run: spindb stop upgrade-test
+
+      # Simulate upgrade by reinstalling
+      - name: Uninstall current version
+        run: npm uninstall -g spindb
+
+      - name: Reinstall (simulate upgrade)
+        shell: bash
+        run: npm install -g spindb-*.tgz
+
+      # Verify data persists after upgrade
+      - name: Verify spindb still works
+        run: spindb version
+
+      - name: List containers (should show upgrade-test)
+        run: spindb list
+
+      - name: Start container after upgrade
+        run: spindb start upgrade-test
+
+      - name: Verify data persisted
+        run: spindb run upgrade-test -c "SELECT * FROM upgrade_data WHERE value = 'pre-upgrade-data';"
+
+      # Cleanup
+      - name: Stop and delete container
+        run: |
+          spindb stop upgrade-test
+          spindb delete upgrade-test --yes
+
+      - name: Uninstall spindb
+        run: npm uninstall -g spindb
+
+  # ============================================
+  # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
+  # Verifies hostdb binaries work on clean Ubuntu systems
+  # ============================================
+  test-docker-linux:
+    name: Docker Linux Edge Cases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker test image
+        run: docker build -t spindb-e2e -f tests/docker/Dockerfile .
+
+      - name: Run Docker E2E tests
+        run: docker run --rm spindb-e2e
+        timeout-minutes: 30
+
+  # ============================================
+  # Linux ARM64 Tests (COMMENTED OUT)
+  # ============================================
+  # Uncomment this section if GitHub adds free ARM64 runners or if you have
+  # access to paid larger runners. Native ARM64 is much faster than QEMU.
+  #
+  # To enable: uncomment the job below and add 'test-linux-arm64' to the
+  # 'needs' array in the ci-success job at the bottom of this file.
+  # ============================================
+  #
+  # test-linux-arm64:
+  #   name: Linux ARM64 (${{ matrix.test }})
+  #   # Native ARM64 runner (requires GitHub Teams/Enterprise or larger runners)
+  #   runs-on: ubuntu-24.04-arm64
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       test:
+  #         - unit
+  #         - postgresql
+  #         - mysql
+  #         - mariadb
+  #         - sqlite
+  #         - mongodb
+  #         - redis
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'pnpm'
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     # Cache binaries for all engines
+  #     - name: Cache binaries
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.spindb/bin
+  #         key: spindb-arm64-${{ matrix.test }}-${{ runner.os }}-${{ runner.arch }}
+  #
+  #     # Download engine binaries based on test type
+  #     - name: Download PostgreSQL
+  #       if: matrix.test == 'postgresql' || matrix.test == 'unit'
+  #       run: pnpm start engines download postgresql 18
+  #
+  #     - name: Download MySQL
+  #       if: matrix.test == 'mysql'
+  #       run: pnpm start engines download mysql 9
+  #
+  #     - name: Download MariaDB
+  #       if: matrix.test == 'mariadb'
+  #       run: pnpm start engines download mariadb 11.8
+  #
+  #     - name: Download SQLite
+  #       if: matrix.test == 'sqlite'
+  #       run: pnpm start engines download sqlite 3
+  #
+  #     - name: Download MongoDB
+  #       if: matrix.test == 'mongodb'
+  #       run: pnpm start engines download mongodb 8.0
+  #
+  #     - name: Download Redis
+  #       if: matrix.test == 'redis'
+  #       run: pnpm start engines download redis 8
+  #
+  #     - name: Show installed engines
+  #       run: pnpm start engines list
+  #
+  #     # Run the appropriate test
+  #     - name: Run unit tests
+  #       if: matrix.test == 'unit'
+  #       run: pnpm test:unit
+  #       timeout-minutes: 10
+  #
+  #     - name: Run PostgreSQL tests
+  #       if: matrix.test == 'postgresql'
+  #       run: pnpm test:pg
+  #       timeout-minutes: 15
+  #
+  #     - name: Run MySQL tests
+  #       if: matrix.test == 'mysql'
+  #       run: pnpm test:mysql
+  #       timeout-minutes: 15
+  #
+  #     - name: Run MariaDB tests
+  #       if: matrix.test == 'mariadb'
+  #       run: pnpm test:mariadb
+  #       timeout-minutes: 15
+  #
+  #     - name: Run SQLite tests
+  #       if: matrix.test == 'sqlite'
+  #       run: pnpm test:sqlite
+  #       timeout-minutes: 10
+  #
+  #     - name: Run MongoDB tests
+  #       if: matrix.test == 'mongodb'
+  #       run: pnpm test:mongodb
+  #       timeout-minutes: 15
+  #
+  #     - name: Run Redis tests
+  #       if: matrix.test == 'redis'
+  #       run: pnpm test:redis
+  #       timeout-minutes: 15
 
   # ============================================
   # Summary Job - Ensures all tests pass
@@ -719,6 +840,9 @@ jobs:
         test-mongodb,
         test-redis,
         test-cli-e2e,
+        test-fresh-install,
+        test-upgrade,
+        test-docker-linux,
         lint,
       ]
     if: always()
@@ -755,6 +879,18 @@ jobs:
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
             echo "CLI E2E tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-fresh-install.result }}" != "success" ]; then
+            echo "Fresh install tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-upgrade.result }}" != "success" ]; then
+            echo "Upgrade tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
+            echo "Docker Linux edge case tests failed"
             exit 1
           fi
           if [ "${{ needs.lint.result }}" != "success" ]; then

@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Node modules (will be reinstalled in container)
+node_modules
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Environment files
+.env
+.env.*
+.npm
+.yarn

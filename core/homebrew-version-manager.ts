@@ -34,9 +34,7 @@ export type VersionSwitchResult = {
   error?: string
 }
 
-/**
- * Check if Homebrew is available on this system
- */
+// Check if Homebrew is available on this system
 export async function isHomebrewAvailable(): Promise<boolean> {
   const { platform } = platformService.getPlatformInfo()
   if (platform !== 'darwin') return false
@@ -49,24 +47,18 @@ export async function isHomebrewAvailable(): Promise<boolean> {
   }
 }
 
-/**
- * Get the Homebrew prefix based on architecture
- */
+// Get the Homebrew prefix based on architecture
 function getHomebrewPrefix(): string {
   const { arch } = platformService.getPlatformInfo()
   return arch === 'arm64' ? '/opt/homebrew' : '/usr/local'
 }
 
-/**
- * Get Linux PostgreSQL bin paths (Debian/Ubuntu style)
- */
+// Get Linux PostgreSQL bin paths (Debian/Ubuntu style)
 function getLinuxPostgresPath(majorVersion: string): string {
   return `/usr/lib/postgresql/${majorVersion}/bin`
 }
 
-/**
- * Get the currently linked PostgreSQL major version (if any)
- */
+// Get the currently linked PostgreSQL major version (if any)
 export async function getCurrentLinkedVersion(): Promise<string | null> {
   const prefix = getHomebrewPrefix()
   const pgDumpPath = `${prefix}/bin/pg_dump`
@@ -240,9 +232,7 @@ export async function switchHomebrewVersion(
   }
 }
 
-/**
- * Switch PostgreSQL version on macOS using Homebrew
- */
+// Switch PostgreSQL version on macOS using Homebrew
 async function switchHomebrewVersionMacOS(
   targetMajor: string,
 ): Promise<VersionSwitchResult> {

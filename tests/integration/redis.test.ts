@@ -22,7 +22,6 @@ import {
   assertEqual,
   runScriptFile,
   runScriptSQL,
-  getInstalledVersion,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -33,6 +32,7 @@ const ENGINE = Engine.Redis
 const DATABASE = '0' // Redis uses numbered databases 0-15
 const SEED_FILE = join(__dirname, '../fixtures/redis/seeds/sample-db.redis')
 const EXPECTED_KEY_COUNT = 6 // 5 user keys + 1 user:count key
+const TEST_VERSION = '8' // Major version - will be resolved to full version via version map
 
 describe('Redis Integration Tests', () => {
   let testPorts: number[]
@@ -40,7 +40,6 @@ describe('Redis Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
-  let installedVersion: string
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -48,10 +47,6 @@ describe('Redis Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
-
-    console.log('\n🔍 Detecting installed Redis version...')
-    installedVersion = await getInstalledVersion(ENGINE)
-    console.log(`   Using Redis version: ${installedVersion}`)
 
     console.log('\n🔍 Finding available test ports...')
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.redis.base)
@@ -76,16 +71,22 @@ describe('Redis Integration Tests', () => {
       `\n📦 Creating container "${containerName}" without starting...`,
     )
 
+    // Ensure Redis binaries are downloaded first
+    const engine = getEngine(ENGINE)
+    console.log('   Ensuring Redis binaries are available...')
+    await engine.ensureBinaries(TEST_VERSION, ({ message }) => {
+      console.log(`   ${message}`)
+    })
+
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: installedVersion,
+      version: TEST_VERSION,
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the data directory
-    const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, installedVersion, {})
+    await engine.initDataDir(containerName, TEST_VERSION, {})
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -153,13 +154,13 @@ describe('Redis Integration Tests', () => {
     // Create and initialize cloned container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: installedVersion,
+      version: TEST_VERSION,
       port: testPorts[1],
       database: DATABASE,
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, installedVersion, {})
+    await engine.initDataDir(clonedContainerName, TEST_VERSION, {})
 
     // Create backup from source
     const { tmpdir } = await import('os')
@@ -293,7 +294,11 @@ describe('Redis Integration Tests', () => {
     assert(config !== null, 'Container config should exist')
 
     // First, add a key that's NOT in the backup file
-    await runScriptSQL(containerName, 'SET extra:key "should-persist"', DATABASE)
+    await runScriptSQL(
+      containerName,
+      'SET extra:key "should-persist"',
+      DATABASE,
+    )
 
     // Create a text backup
     const { tmpdir } = await import('os')
@@ -323,7 +328,11 @@ describe('Redis Integration Tests', () => {
 
     // Verify extra key still exists (merge mode keeps existing keys)
     const extraKey = await getRedisValue(testPorts[0], DATABASE, 'extra:key')
-    assertEqual(extraKey, 'should-persist', 'Extra key should persist in merge mode')
+    assertEqual(
+      extraKey,
+      'should-persist',
+      'Extra key should persist in merge mode',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -334,7 +343,9 @@ describe('Redis Integration Tests', () => {
   })
 
   it('should restore from text format with replace mode (FLUSHDB)', async () => {
-    console.log(`\n📥 Testing text format restore (replace mode with FLUSHDB)...`)
+    console.log(
+      `\n📥 Testing text format restore (replace mode with FLUSHDB)...`,
+    )
 
     const engine = getEngine(ENGINE)
     const config = await containerManager.getConfig(containerName)
@@ -350,11 +361,19 @@ describe('Redis Integration Tests', () => {
     })
 
     // Add a key that's NOT in the backup
-    await runScriptSQL(containerName, 'SET extra:key "should-be-deleted"', DATABASE)
+    await runScriptSQL(
+      containerName,
+      'SET extra:key "should-be-deleted"',
+      DATABASE,
+    )
 
     // Verify extra key exists
     let extraKey = await getRedisValue(testPorts[0], DATABASE, 'extra:key')
-    assertEqual(extraKey, 'should-be-deleted', 'Extra key should exist before restore')
+    assertEqual(
+      extraKey,
+      'should-be-deleted',
+      'Extra key should exist before restore',
+    )
 
     // Restore with replace mode (flush: true) - runs FLUSHDB first
     await engine.restore(config!, backupPath, {
@@ -364,7 +383,10 @@ describe('Redis Integration Tests', () => {
 
     // Verify extra key is gone (FLUSHDB cleared it)
     extraKey = await getRedisValue(testPorts[0], DATABASE, 'extra:key')
-    assert(extraKey === null || extraKey === '', 'Extra key should be deleted by FLUSHDB')
+    assert(
+      extraKey === null || extraKey === '',
+      'Extra key should be deleted by FLUSHDB',
+    )
 
     // Verify backup data is restored
     const keyCount = await getKeyCount(testPorts[0], DATABASE, 'user:*')
@@ -408,7 +430,9 @@ describe('Redis Integration Tests', () => {
     // Clean up
     await rm(testFile, { force: true })
 
-    console.log('   ✓ Content-based detection works for files without .redis extension')
+    console.log(
+      '   ✓ Content-based detection works for files without .redis extension',
+    )
   })
 
   it('should modify data using runScript inline command', async () => {
@@ -493,13 +517,13 @@ describe('Redis Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: installedVersion,
+      version: TEST_VERSION,
       port: testPorts[2], // This port is in use by renamed container
       database: '1', // Different database to avoid confusion
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, installedVersion, {})
+    await engine.initDataDir(portConflictContainerName, TEST_VERSION, {})
 
     // The container should be created but when we try to start, it should detect conflict
     // In real usage, the start command would auto-assign a new port
@@ -541,9 +565,14 @@ describe('Redis Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

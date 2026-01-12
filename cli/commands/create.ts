@@ -300,11 +300,11 @@ export const createCommand = new Command('create')
         }
 
         // Redis uses numbered databases (0-15), default to "0"
-        // Other engines default to container name
+        // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
         if (engine === Engine.Redis) {
           database = database ?? '0'
         } else {
-          database = database ?? containerName
+          database = database ?? containerName.replace(/-/g, '_')
         }
 
         // Validate database name to prevent SQL injection
@@ -312,7 +312,7 @@ export const createCommand = new Command('create')
         if (engine !== Engine.Redis && !isValidDatabaseName(database)) {
           console.error(
             uiError(
-              'Database name must start with a letter and contain only letters, numbers, hyphens, and underscores',
+              'Database name must start with a letter and contain only letters, numbers, and underscores',
             ),
           )
           process.exit(1)
@@ -444,7 +444,7 @@ export const createCommand = new Command('create')
           depsSpinner.succeed('Required tools available')
         }
 
-        // For MySQL, MongoDB, Redis (system-installed engines), validate version and get binary path
+        // For non-PostgreSQL engines, validate version and get binary path
         // Store the binary path for version consistency
         let binaryPath: string | undefined
         if (!isPostgreSQL) {
@@ -455,14 +455,19 @@ export const createCommand = new Command('create')
 
           try {
             // ensureBinaries validates the version and returns the binary path
-            binaryPath = await dbEngine.ensureBinaries(version, ({ message }) => {
-              binarySpinner.text = message
-            })
+            binaryPath = await dbEngine.ensureBinaries(
+              version,
+              ({ message }) => {
+                binarySpinner.text = message
+              },
+            )
             binarySpinner.succeed(
               `${dbEngine.displayName} ${version} binaries ready`,
             )
           } catch (error) {
-            binarySpinner.fail(`${dbEngine.displayName} ${version} not available`)
+            binarySpinner.fail(
+              `${dbEngine.displayName} ${version} not available`,
+            )
             throw error
           }
         }

@@ -3,27 +3,21 @@
  * Used by both unit and integration tests
  */
 
-/**
- * Assert helper that throws with descriptive message
- */
+// Assert helper that throws with descriptive message
 export function assert(condition: boolean, message: string): asserts condition {
   if (!condition) {
     throw new Error(`Assertion failed: ${message}`)
   }
 }
 
-/**
- * Assert two values are equal
- */
+// Assert two values are equal
 export function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
     throw new Error(`${message}\n  Expected: ${expected}\n  Actual: ${actual}`)
   }
 }
 
-/**
- * Assert two values are not equal
- */
+// Assert two values are not equal
 export function assertNotEqual<T>(
   actual: T,
   notExpected: T,
@@ -34,9 +28,7 @@ export function assertNotEqual<T>(
   }
 }
 
-/**
- * Assert a value is truthy
- */
+// Assert a value is truthy
 export function assertTruthy<T>(
   value: T,
   message: string,
@@ -46,9 +38,7 @@ export function assertTruthy<T>(
   }
 }
 
-/**
- * Assert a value is null or undefined
- */
+// Assert a value is null or undefined
 export function assertNullish(
   value: unknown,
   message: string,

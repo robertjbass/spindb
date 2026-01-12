@@ -12,17 +12,11 @@ import {
   isWindows,
   getWindowsSpawnOptions,
 } from '../../core/platform-service'
-import {
-  detectPackageManager,
-  installEngineDependencies,
-  findBinary,
-} from '../../core/dependency-manager'
+import { findBinary } from '../../core/dependency-manager'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
-import { getPostgresHomebrewBinPath } from '../../config/engine-defaults'
 import {
   getBinaryUrl,
-  SUPPORTED_MAJOR_VERSIONS,
   fetchAvailableVersions,
   getLatestVersion,
   FALLBACK_VERSION_MAP,
@@ -38,6 +32,7 @@ import {
   assertValidDatabaseName,
   SpinDBError,
   ErrorCodes,
+  logDebug,
 } from '../../core/error-handler'
 import type {
   ContainerConfig,
@@ -48,6 +43,7 @@ import type {
   RestoreResult,
   DumpResult,
   StatusResult,
+  BinaryTool,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -80,11 +76,13 @@ export function buildWindowsPsqlCommand(
   return cmd
 }
 
+const engineDef = getEngineDefaults('postgresql')
+
 export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
   defaultPort = 5432
-  supportedVersions = SUPPORTED_MAJOR_VERSIONS
+  supportedVersions = engineDef.supportedVersions
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
@@ -155,9 +153,20 @@ export class PostgreSQLEngine extends BaseEngine {
       onProgress,
     )
 
-    // Register client tools from downloaded binaries in config
-    // This ensures dependency checks find them without requiring system installation
+    // Register all binaries from downloaded package in config
+    // This ensures we can find them without requiring system installation
     const ext = platformService.getExecutableExtension()
+
+    // Server binaries (always present in hostdb downloads)
+    const serverTools = ['postgres', 'pg_ctl', 'initdb'] as const
+    for (const tool of serverTools) {
+      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
+      if (existsSync(toolPath)) {
+        await configManager.setBinaryPath(tool, toolPath, 'bundled')
+      }
+    }
+
+    // Client tools (may or may not be present depending on platform)
     const clientTools = [
       'psql',
       'pg_dump',
@@ -165,91 +174,52 @@ export class PostgreSQLEngine extends BaseEngine {
       'pg_basebackup',
     ] as const
 
-    // First, try to register from downloaded binaries (works on Windows)
-    let hasClientTools = false
+    // Try to register from downloaded binaries (works on Windows)
+    // Track which tools were found to only search system for missing ones
+    const foundTools = new Set<string>()
     for (const tool of clientTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
-        hasClientTools = true
+        foundTools.add(tool)
       }
     }
 
-    // On macOS, zonky.io binaries don't include client tools
-    // Install them via Homebrew and register from there
-    if (!hasClientTools && p === 'darwin') {
-      await this.ensureMacOSClientTools(a, onProgress)
+    // On macOS/Linux, zonky.io binaries don't include client tools
+    // Try to find and register system-installed tools for any that are missing
+    if (foundTools.size < clientTools.length && (p === 'darwin' || p === 'linux')) {
+      const missingTools = clientTools.filter((t) => !foundTools.has(t))
+      await this.registerSystemClientTools(missingTools)
     }
 
     return binPath
   }
 
   /**
-   * Ensure PostgreSQL client tools are available on macOS
-   * Installs via Homebrew if missing, then registers paths in config
+   * Register system-installed PostgreSQL client tools if found
+   * Does NOT install missing tools - that happens during 'spindb engines download'
+   * @param toolsToCheck - Optional list of specific tools to check (defaults to all client tools)
    */
-  private async ensureMacOSClientTools(
-    arch: string,
-    onProgress?: ProgressCallback,
+  private async registerSystemClientTools(
+    toolsToCheck?: readonly BinaryTool[],
   ): Promise<void> {
-    const clientTools = [
+    const allClientTools = [
       'psql',
       'pg_dump',
       'pg_restore',
       'pg_basebackup',
     ] as const
 
-    // Check if psql is already available (either from Homebrew or system)
-    const psqlResult = await findBinary('psql')
-    if (psqlResult) {
-      // Client tools already available, register all of them
-      for (const tool of clientTools) {
-        const result = await findBinary(tool)
-        if (result) {
-          await configManager.setBinaryPath(tool, result.path, 'system')
-        }
-      }
-      return
-    }
+    const tools = toolsToCheck ?? allClientTools
 
-    // Need to install client tools via Homebrew
-    onProgress?.({
-      stage: 'installing',
-      message: 'Installing PostgreSQL client tools via Homebrew...',
-    })
-
-    const packageManager = await detectPackageManager()
-    if (!packageManager) {
-      throw new Error(
-        'Homebrew not found. Install PostgreSQL client tools manually:\n' +
-          '  brew install postgresql@17 && brew link --overwrite postgresql@17',
-      )
-    }
-
-    // Install PostgreSQL via Homebrew (only installs if missing)
-    await installEngineDependencies('postgresql', packageManager)
-
-    // After installation, register tool paths from Homebrew location
-    const homebrewArch = arch === 'arm64' ? 'arm64' : 'x64'
-    const homebrewBinPath = getPostgresHomebrewBinPath(homebrewArch)
-
-    for (const tool of clientTools) {
-      const toolPath = join(homebrewBinPath, tool)
-      if (existsSync(toolPath)) {
-        await configManager.setBinaryPath(tool, toolPath, 'system')
+    for (const tool of tools) {
+      const result = await findBinary(tool)
+      if (result) {
+        await configManager.setBinaryPath(tool, result.path, 'system')
       } else {
-        // Fallback: try to find via PATH
-        const result = await findBinary(tool)
-        if (result) {
-          await configManager.setBinaryPath(tool, result.path, 'system')
-        }
+        logDebug(`PostgreSQL client tool '${tool}' not found on system, will remain unregistered`)
       }
     }
-
-    onProgress?.({
-      stage: 'complete',
-      message: 'PostgreSQL client tools installed',
-    })
   }
 
   async isBinaryInstalled(version: string): Promise<boolean> {

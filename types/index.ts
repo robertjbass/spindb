@@ -25,6 +25,45 @@ export enum Engine {
   Redis = 'redis',
 }
 
+/**
+ * Array of all supported engine values (type-safe, exhaustive)
+ * When adding a new Engine enum value, TypeScript will error here until you add it
+ */
+export const ALL_ENGINES = [
+  Engine.PostgreSQL,
+  Engine.MySQL,
+  Engine.MariaDB,
+  Engine.SQLite,
+  Engine.MongoDB,
+  Engine.Redis,
+] as const
+
+/**
+ * Type helper for exhaustive switch statements
+ * Use in the default case to ensure all enum values are handled
+ *
+ * @example
+ * switch (engine) {
+ *   case Engine.PostgreSQL: return 5432
+ *   // ... other cases
+ *   default:
+ *     assertExhaustive(engine, `Unknown engine: ${engine}`)
+ * }
+ */
+export function assertExhaustive(x: never, message?: string): never {
+  throw new Error(message ?? `Unhandled case: ${x}`)
+}
+
+// Compile-time validation that ALL_ENGINES contains all Engine enum values
+type _AssertAllEngines = typeof ALL_ENGINES extends readonly Engine[]
+  ? (typeof ALL_ENGINES)[number] extends Engine
+    ? Engine extends (typeof ALL_ENGINES)[number]
+      ? true
+      : ['Error: ALL_ENGINES is missing some Engine values']
+    : never
+  : never
+const _exhaustiveCheck: _AssertAllEngines = true
+
 export type ProgressCallback = (progress: {
   stage: string
   message: string
@@ -93,10 +132,36 @@ export type EngineInfo = {
 }
 
 /**
- * Binary tool types for all supported engines
+ * CLI tools structure (matches hostdb databases.json)
+ * Used to align SpinDB with hostdb's standardized engine metadata
  */
+export type EngineCliTools = {
+  server: string // e.g., 'redis-server', 'mongod', 'postgres'
+  client: string // e.g., 'redis-cli', 'mongosh', 'psql'
+  utilities: string[] // e.g., ['mongodump', 'mongorestore', 'pg_dump']
+  enhanced?: string[] // e.g., ['iredis', 'pgcli', 'mycli']
+}
+
+/**
+ * Connection configuration (matches hostdb databases.json)
+ * Defines how to connect to each database engine
+ */
+export type EngineConnection = {
+  runtime: 'server' | 'embedded' // server = process-based, embedded = file-based (SQLite)
+  defaultPort: number | null // null for embedded databases
+  scheme: string // e.g., 'postgresql', 'mysql', 'mongodb', 'redis'
+  defaultDatabase: string // e.g., 'postgres', '', '0' (for Redis)
+  defaultUser: string // e.g., 'postgres', 'root', ''
+  queryLanguage: string // e.g., 'sql', 'javascript', 'redis'
+}
+
+// Binary tool types for all supported engines
 export type BinaryTool =
-  // PostgreSQL tools
+  // PostgreSQL tools (server)
+  | 'postgres'
+  | 'pg_ctl'
+  | 'initdb'
+  // PostgreSQL tools (client)
   | 'psql'
   | 'pg_dump'
   | 'pg_restore'
@@ -114,6 +179,9 @@ export type BinaryTool =
   | 'mariadb-admin'
   // SQLite tools
   | 'sqlite3'
+  | 'sqldiff'
+  | 'sqlite3_analyzer'
+  | 'sqlite3_rsync'
   // MongoDB tools
   | 'mongod'
   | 'mongosh'
@@ -129,14 +197,10 @@ export type BinaryTool =
   | 'iredis'
   | 'usql'
 
-/**
- * Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
- */
+// Source of a binary - bundled (downloaded by spindb) or system (found on PATH)
 export type BinarySource = 'bundled' | 'system' | 'custom'
 
-/**
- * Configuration for a single binary tool
- */
+// Configuration for a single binary tool
 export type BinaryConfig = {
   tool: BinaryTool
   path: string
@@ -144,37 +208,46 @@ export type BinaryConfig = {
   version?: string
 }
 
-/**
- * Global spindb configuration stored in ~/.spindb/config.json
- */
+// Global spindb configuration stored in ~/.spindb/config.json
 export type SpinDBConfig = {
-  // Binary paths for client tools (all engines)
+  // Binary paths for all engine tools (server and client)
   binaries: {
-    // PostgreSQL tools
+    // PostgreSQL server tools
+    postgres?: BinaryConfig
+    pg_ctl?: BinaryConfig
+    initdb?: BinaryConfig
+    // PostgreSQL client tools
     psql?: BinaryConfig
     pg_dump?: BinaryConfig
     pg_restore?: BinaryConfig
     pg_basebackup?: BinaryConfig
-    // MySQL tools
+    // MySQL server tools
+    mysqld?: BinaryConfig
+    mysqladmin?: BinaryConfig
+    // MySQL client tools
     mysql?: BinaryConfig
     mysqldump?: BinaryConfig
     mysqlpump?: BinaryConfig
-    mysqld?: BinaryConfig
-    mysqladmin?: BinaryConfig
-    // MariaDB tools (native names only - no mysql-named binaries to avoid conflicts)
-    mariadb?: BinaryConfig
-    'mariadb-dump'?: BinaryConfig
+    // MariaDB server tools (native names only - no mysql-named binaries to avoid conflicts)
     mariadbd?: BinaryConfig
     'mariadb-admin'?: BinaryConfig
+    // MariaDB client tools
+    mariadb?: BinaryConfig
+    'mariadb-dump'?: BinaryConfig
     // SQLite tools
     sqlite3?: BinaryConfig
-    // MongoDB tools
+    sqldiff?: BinaryConfig
+    sqlite3_analyzer?: BinaryConfig
+    sqlite3_rsync?: BinaryConfig
+    // MongoDB server tools
     mongod?: BinaryConfig
+    // MongoDB client tools
     mongosh?: BinaryConfig
     mongodump?: BinaryConfig
     mongorestore?: BinaryConfig
-    // Redis tools
+    // Redis server tools
     'redis-server'?: BinaryConfig
+    // Redis client tools
     'redis-cli'?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
