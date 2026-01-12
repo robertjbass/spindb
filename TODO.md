@@ -5,7 +5,6 @@
 - [ ] Review and update `EVALUATION.md` periodically (last updated: 2025-12-06, v0.9.0)
 
 ---
----
 
 ## Roadmap
 
@@ -83,10 +82,9 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
     - Add `--migrate` flag that copies keys from remote to local
   - Current behavior: throws helpful error with manual migration instructions
 
-- [x] **Windows CI/CD tests for Redis** - Add `windows-latest` to Redis CI matrix
-  - ~~Currently skipped pending macOS/Linux verification~~
-  - Uses hostdb binaries (all platforms)
-  - Updated `.github/workflows/ci.yml` test-redis job matrix
+- [x] **Redis CI/CD tests** - Redis integration tests added to CI matrix
+  - All platforms: macOS (Intel/ARM), Linux (Ubuntu 22.04/24.04), Windows
+  - Uses hostdb binaries for all platforms
 
 ### CLI Improvements
 

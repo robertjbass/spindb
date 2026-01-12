@@ -136,7 +136,7 @@ You'll get an interactive menu with arrow-key navigation:
 
 | | |
 |---|---|
-| Versions | 14, 15, 16, 17, 18 |
+| Versions | 15, 16, 17, 18 |
 | Default port | 5432 |
 | Default user | `postgres` |
 | Binary source | [hostdb](https://github.com/robertjbass/hostdb) (macOS/Linux), [EDB](https://www.enterprisedb.com/) (Windows) |
@@ -1053,15 +1053,7 @@ See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, 
 
 SpinDB wouldn't be possible without:
 
-- **[zonky.io/embedded-postgres-binaries](https://github.com/zonkyio/embedded-postgres-binaries)** - Pre-compiled PostgreSQL binaries that make Docker-free PostgreSQL possible. These binaries are extracted from official PostgreSQL distributions and hosted on Maven Central.
-
----
-
-## Related Work
-
-We're actively contributing to the broader embedded database ecosystem:
-
-- **[hostdb](https://github.com/robertjbass/hostdb)** - A companion project providing downloadable database binaries (Redis, MySQL/MariaDB, etc.) as GitHub releases. This will enable SpinDB to offer multi-version support for additional engines beyond PostgreSQL.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite) that make Docker-free local databases possible. Hosted on GitHub Releases for reliable, fast downloads.
 
 ---
 
