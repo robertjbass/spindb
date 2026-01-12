@@ -51,7 +51,8 @@ RUN apt-get update && apt-get install -y \
 # libaio1: async I/O library required by MySQL
 # libncurses6: terminal library required by MariaDB client
 # libxml2: XML library required by PostgreSQL (hostdb binaries compiled with XML support)
-# libicu74: ICU library required by PostgreSQL (for internationalization support)
+# libicu74: ICU library - PostgreSQL needs ICU 70 but Ubuntu 24.04 ships ICU 74
+#           We create symlinks (libicui18n.so.70 -> .74, etc.) below for compatibility
 # sudo: needed for non-root user to run privileged commands
 RUN apt-get update && apt-get install -y \
     git \
@@ -81,6 +82,29 @@ RUN set -e && \
     fi && \
     (test -e /lib/aarch64-linux-gnu/libaio.so.1 -o -e /lib/x86_64-linux-gnu/libaio.so.1 || \
      (echo "ERROR: libaio.so.1 symlink not created - MySQL may fail to start" && exit 1))
+
+# Create compatibility symlinks for PostgreSQL ICU libraries
+# hostdb PostgreSQL binaries are compiled against ICU 70 (libicui18n.so.70, etc.)
+# Ubuntu 24.04 ships with ICU 74 (libicui18n.so.74, etc.)
+# Create symlinks from ICU 74 to ICU 70 names so PostgreSQL can find them
+# Note: ICU major versions are generally ABI-compatible for basic usage
+RUN set -e && \
+    LIBDIR="" && \
+    if test -d /usr/lib/aarch64-linux-gnu; then \
+      LIBDIR=/usr/lib/aarch64-linux-gnu; \
+    elif test -d /usr/lib/x86_64-linux-gnu; then \
+      LIBDIR=/usr/lib/x86_64-linux-gnu; \
+    else \
+      echo "ERROR: Could not find system library directory" && exit 1; \
+    fi && \
+    for lib in libicui18n libicuuc libicudata; do \
+      if test -e "$LIBDIR/${lib}.so.74"; then \
+        ln -sf "$LIBDIR/${lib}.so.74" "$LIBDIR/${lib}.so.70"; \
+        echo "Created symlink: ${lib}.so.70 -> ${lib}.so.74"; \
+      else \
+        echo "WARNING: $LIBDIR/${lib}.so.74 not found"; \
+      fi; \
+    done
 
 # Install pnpm (pinned for reproducible builds)
 ARG PNPM_VERSION=9.14.2

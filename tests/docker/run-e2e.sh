@@ -47,6 +47,8 @@ check_lib "libncurses"
 check_lib "libssl"
 check_lib "libcrypto"
 check_lib "libxml2"
+check_lib "libicui18n"
+check_lib "libicuuc"
 echo ""
 
 # Configurable timeouts (can be overridden via environment)
