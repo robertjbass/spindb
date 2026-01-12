@@ -10,10 +10,12 @@
 # - Testing on a minimal system without pre-installed database tools
 # - Catching Linux-specific edge cases (libaio, libnuma, etc.)
 #
-# Uses Ubuntu LTS as base because:
+# Uses Ubuntu 22.04 LTS as base because:
 # - Represents a typical developer Linux system
 # - Includes standard system libraries (libaio, etc.) that apps expect
 # - More "batteries included" than minimal Debian images
+# - Ships with ICU 70 which hostdb PostgreSQL binaries are compiled against
+#   (Ubuntu 24.04 ships ICU 74 which is not ABI-compatible)
 #
 # Binary sourcing strategy:
 # All database engines download complete, self-contained binaries from hostdb
@@ -27,7 +29,7 @@
 # - Redis: server + client tools (redis-server, redis-cli)
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
 
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 
 # Prevent interactive prompts during apt install
 ENV DEBIAN_FRONTEND=noninteractive
@@ -51,8 +53,7 @@ RUN apt-get update && apt-get install -y \
 # libaio1: async I/O library required by MySQL
 # libncurses6: terminal library required by MariaDB client
 # libxml2: XML library required by PostgreSQL (hostdb binaries compiled with XML support)
-# libicu74: ICU library - PostgreSQL needs ICU 70 but Ubuntu 24.04 ships ICU 74
-#           We create symlinks (libicui18n.so.70 -> .74, etc.) below for compatibility
+# libicu70: ICU library required by PostgreSQL (Ubuntu 22.04 ships ICU 70)
 # sudo: needed for non-root user to run privileged commands
 RUN apt-get update && apt-get install -y \
     git \
@@ -61,50 +62,12 @@ RUN apt-get update && apt-get install -y \
     binutils \
     xz-utils \
     libnuma1 \
-    libaio1t64 \
+    libaio1 \
     libncurses6 \
     libxml2 \
-    libicu74 \
+    libicu70 \
     sudo \
     && rm -rf /var/lib/apt/lists/*
-
-# Create compatibility symlink for MySQL
-# Ubuntu 24.04 renamed libaio package to libaio1t64 which creates libaio.so.1t64
-# MySQL binaries are compiled against the old library name (libaio.so.1)
-# Only create symlink if the source .1t64 file exists (architecture-dependent)
-RUN set -e && \
-    if test -e /lib/aarch64-linux-gnu/libaio.so.1t64; then \
-      ln -sf /lib/aarch64-linux-gnu/libaio.so.1t64 /lib/aarch64-linux-gnu/libaio.so.1; \
-    elif test -e /lib/x86_64-linux-gnu/libaio.so.1t64; then \
-      ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1; \
-    else \
-      echo "ERROR: libaio.so.1t64 source file not found - libaio1t64 package may not be installed" && exit 1; \
-    fi && \
-    (test -e /lib/aarch64-linux-gnu/libaio.so.1 -o -e /lib/x86_64-linux-gnu/libaio.so.1 || \
-     (echo "ERROR: libaio.so.1 symlink not created - MySQL may fail to start" && exit 1))
-
-# Create compatibility symlinks for PostgreSQL ICU libraries
-# hostdb PostgreSQL binaries are compiled against ICU 70 (libicui18n.so.70, etc.)
-# Ubuntu 24.04 ships with ICU 74 (libicui18n.so.74, etc.)
-# Create symlinks from ICU 74 to ICU 70 names so PostgreSQL can find them
-# Note: ICU major versions are generally ABI-compatible for basic usage
-RUN set -e && \
-    LIBDIR="" && \
-    if test -d /usr/lib/aarch64-linux-gnu; then \
-      LIBDIR=/usr/lib/aarch64-linux-gnu; \
-    elif test -d /usr/lib/x86_64-linux-gnu; then \
-      LIBDIR=/usr/lib/x86_64-linux-gnu; \
-    else \
-      echo "ERROR: Could not find system library directory" && exit 1; \
-    fi && \
-    for lib in libicui18n libicuuc libicudata; do \
-      if test -e "$LIBDIR/${lib}.so.74"; then \
-        ln -sf "$LIBDIR/${lib}.so.74" "$LIBDIR/${lib}.so.70"; \
-        echo "Created symlink: ${lib}.so.70 -> ${lib}.so.74"; \
-      else \
-        echo "WARNING: $LIBDIR/${lib}.so.74 not found"; \
-      fi; \
-    done
 
 # Install pnpm (pinned for reproducible builds)
 ARG PNPM_VERSION=9.14.2

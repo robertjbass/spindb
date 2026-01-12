@@ -4,7 +4,7 @@
 
 | Engine | Status | Binary Source | Binary Size | Notes |
 |--------|--------|---------------|-------------|-------|
-| 🐘 **PostgreSQL** | ✅ Complete | hostdb (macOS/Linux), EDB (Windows) | ~45 MB | Versions 14-18 |
+| 🐘 **PostgreSQL** | ✅ Complete | hostdb (macOS/Linux), EDB (Windows) | ~45 MB | Versions 15-18 |
 | 🐬 **MySQL** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 8.0, 8.4, 9 |
 | 🦭 **MariaDB** | ✅ Complete | hostdb (all platforms) | ~120 MB | Versions 10.11, 11.4, 11.8 |
 | 🪶 **SQLite** | ✅ Complete | System | N/A (system) | File-based, stores in project directories |

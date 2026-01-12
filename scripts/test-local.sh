@@ -403,10 +403,10 @@ if [ -n "$SPECIFIC_ENGINE" ]; then
       test_engine_lifecycle sqlite 3
       ;;
     mongodb)
-      test_engine_lifecycle mongodb 8.0
+      test_engine_lifecycle mongodb 7.0.28
       ;;
     redis)
-      test_engine_lifecycle redis 8
+      test_engine_lifecycle redis 7.4.7
       ;;
     *)
       log_error "Unknown engine: $SPECIFIC_ENGINE"
@@ -424,8 +424,8 @@ else
   test_engine_lifecycle mysql 9
   test_engine_lifecycle mariadb 11.8
   test_engine_lifecycle sqlite 3
-  test_engine_lifecycle mongodb 8.0
-  test_engine_lifecycle redis 8
+  test_engine_lifecycle mongodb 7.0.28
+  test_engine_lifecycle redis 7.4.7
 fi
 
 # Re-enable errexit for summary
