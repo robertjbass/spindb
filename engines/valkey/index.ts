@@ -61,6 +61,26 @@ function validateCommand(command: string): void {
   }
 }
 
+/**
+ * Convert a Windows path to Cygwin path format.
+ * Valkey Windows binaries are built with Cygwin runtime and expect paths
+ * in /cygdrive/c/... format when passed as command-line arguments.
+ *
+ * Example: C:\Users\foo\config.conf -> /cygdrive/c/Users/foo/config.conf
+ */
+function toCygwinPath(windowsPath: string): string {
+  // Match drive letter at start (e.g., C:\ or D:/)
+  const driveMatch = windowsPath.match(/^([A-Za-z]):[/\\]/)
+  if (!driveMatch) {
+    // Not a Windows absolute path, return as-is with forward slashes
+    return windowsPath.replace(/\\/g, '/')
+  }
+
+  const driveLetter = driveMatch[1].toLowerCase()
+  const restOfPath = windowsPath.slice(3).replace(/\\/g, '/')
+  return `/cygdrive/${driveLetter}/${restOfPath}`
+}
+
 // Build a valkey-cli command for inline command execution
 export function buildValkeyCliCommand(
   valkeyCliPath: string,
@@ -399,7 +419,9 @@ export class ValkeyEngine extends BaseEngine {
           windowsHide: true,
         }
 
-        const proc = spawn(valkeyServer, [configPath], spawnOpts)
+        // Convert Windows path to Cygwin format for Cygwin-built binaries
+        const cygwinConfigPath = toCygwinPath(configPath)
+        const proc = spawn(valkeyServer, [cygwinConfigPath], spawnOpts)
         let settled = false
         let stderrOutput = ''
         let stdoutOutput = ''
