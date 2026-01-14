@@ -16,17 +16,28 @@
  * Must match versions available in hostdb releases.json.
  */
 export const POSTGRESQL_VERSION_MAP: Record<string, string> = {
+  // 1-part: major version → latest patch
   '15': '15.15.0',
   '16': '16.11.0',
   '17': '17.7.0',
   '18': '18.1.0',
+  // 2-part: major.minor → latest patch
+  '15.15': '15.15.0',
+  '16.11': '16.11.0',
+  '17.7': '17.7.0',
+  '18.1': '18.1.0',
+  // 3-part: exact version (identity mapping)
+  '15.15.0': '15.15.0',
+  '16.11.0': '16.11.0',
+  '17.7.0': '17.7.0',
+  '18.1.0': '18.1.0',
 }
 
 /**
- * Supported major PostgreSQL versions.
- * Derived from POSTGRESQL_VERSION_MAP keys.
+ * Supported major PostgreSQL versions (1-part format).
+ * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(POSTGRESQL_VERSION_MAP)
+export const SUPPORTED_MAJOR_VERSIONS = ['15', '16', '17', '18']
 
 /**
  * Get the full version string for a major version.
@@ -45,17 +56,29 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '17.7.0')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version only, use the map
+  // If it's a major version key in the map, return the full version
   const fullVersion = POSTGRESQL_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // Normalize to X.Y.Z format
-  const parts = version.split('.')
-  if (parts.length === 2) {
-    return `${version}.0`
+  // If it's already a known full version (a value in the map), return as-is
+  const knownVersions = Object.values(POSTGRESQL_VERSION_MAP)
+  if (knownVersions.includes(version)) {
+    return version
   }
 
+  // If it looks like a full version (X.Y.Z), return as-is but warn
+  if (/^\d+\.\d+\.\d+$/.test(version)) {
+    console.warn(
+      `PostgreSQL version '${version}' not in version map, may not be available in hostdb`,
+    )
+    return version
+  }
+
+  // Unknown version format - warn and return unchanged
+  console.warn(
+    `PostgreSQL version '${version}' not in version map, may not be available in hostdb`,
+  )
   return version
 }

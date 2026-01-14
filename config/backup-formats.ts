@@ -24,9 +24,7 @@ export type EngineBackupFormats = {
   defaultFormat: 'sql' | 'dump'
 }
 
-/**
- * Backup format configuration by engine
- */
+// Backup format configuration by engine
 export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
   postgresql: {
     sql: {
@@ -108,22 +106,39 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
+  valkey: {
+    sql: {
+      extension: '.valkey',
+      label: '.valkey',
+      description: 'Text commands - human-readable, editable',
+      spinnerLabel: 'text',
+    },
+    dump: {
+      extension: '.rdb',
+      label: '.rdb',
+      description: 'RDB snapshot - binary format, faster restore',
+      spinnerLabel: 'RDB',
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'dump',
+  },
 }
 
-/**
- * Get backup format info for an engine
- */
+// Get backup format info for an engine
 export function getBackupFormatInfo(
   engine: string,
   format: 'sql' | 'dump',
 ): BackupFormatInfo {
-  const engineFormats = BACKUP_FORMATS[engine] || BACKUP_FORMATS.postgresql
+  const engineFormats = BACKUP_FORMATS[engine]
+  if (!engineFormats) {
+    throw new Error(
+      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+    )
+  }
   return engineFormats[format]
 }
 
-/**
- * Get file extension for a backup format
- */
+// Get file extension for a backup format
 export function getBackupExtension(
   engine: string,
   format: 'sql' | 'dump',
@@ -131,9 +146,7 @@ export function getBackupExtension(
   return getBackupFormatInfo(engine, format).extension
 }
 
-/**
- * Get spinner label for a backup format
- */
+// Get spinner label for a backup format
 export function getBackupSpinnerLabel(
   engine: string,
   format: 'sql' | 'dump',
@@ -141,28 +154,30 @@ export function getBackupSpinnerLabel(
   return getBackupFormatInfo(engine, format).spinnerLabel
 }
 
-/**
- * Check if an engine supports format selection
- */
+// Check if an engine supports format selection
 export function supportsFormatChoice(engine: string): boolean {
   const engineFormats = BACKUP_FORMATS[engine]
-  return engineFormats?.supportsFormatChoice ?? true
+  if (!engineFormats) {
+    throw new Error(
+      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+    )
+  }
+  return engineFormats.supportsFormatChoice
 }
 
-/**
- * Get default format for an engine
- */
+// Get default format for an engine
 export function getDefaultFormat(engine: string): 'sql' | 'dump' {
   const engineFormats = BACKUP_FORMATS[engine]
-  return engineFormats?.defaultFormat ?? 'sql'
+  if (!engineFormats) {
+    throw new Error(
+      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+    )
+  }
+  return engineFormats.defaultFormat
 }
 
-/**
- * Large backup threshold (100MB) - warn user before restoring
- */
+// Large backup threshold (100MB) - warn user before restoring
 export const LARGE_BACKUP_THRESHOLD = 100 * 1024 * 1024
 
-/**
- * Very large backup threshold (1GB) - require confirmation
- */
+// Very large backup threshold (1GB) - require confirmation
 export const VERY_LARGE_BACKUP_THRESHOLD = 1024 * 1024 * 1024

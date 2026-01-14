@@ -71,21 +71,22 @@ describe('PostgreSQL Integration Tests', () => {
     )
 
     // Ensure PostgreSQL binaries are downloaded first
+    // NOTE: Version must match CI workflow download (spindb-pg-18 cache key)
     const engine = getEngine(ENGINE)
     console.log('   Ensuring PostgreSQL binaries are available...')
-    await engine.ensureBinaries('17', ({ message }) => {
+    await engine.ensureBinaries('18', ({ message }) => {
       console.log(`   ${message}`)
     })
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '17',
+      version: '18',
       port: testPorts[0],
       database: DATABASE,
     })
 
     // Initialize the database cluster
-    await engine.initDataDir(containerName, '17', { superuser: 'postgres' })
+    await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -167,14 +168,14 @@ describe('PostgreSQL Integration Tests', () => {
     // Create container
     await containerManager.create(clonedContainerName, {
       engine: ENGINE,
-      version: '17',
+      version: '18',
       port: testPorts[1],
       database: DATABASE,
     })
 
     // Initialize and start
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, '17', {
+    await engine.initDataDir(clonedContainerName, '18', {
       superuser: 'postgres',
     })
 
@@ -255,8 +256,14 @@ describe('PostgreSQL Integration Tests', () => {
     // Verify file contains SQL statements
     const { readFile } = await import('fs/promises')
     const content = await readFile(backupPath, 'utf-8')
-    assert(content.includes('CREATE TABLE'), 'Backup should contain CREATE TABLE')
-    assert(content.includes('test_user'), 'Backup should contain test_user table')
+    assert(
+      content.includes('CREATE TABLE'),
+      'Backup should contain CREATE TABLE',
+    )
+    assert(
+      content.includes('test_user'),
+      'Backup should contain test_user table',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -328,8 +335,17 @@ describe('PostgreSQL Integration Tests', () => {
     })
 
     // Verify data was restored
-    const rowCount = await getRowCount(ENGINE, testPorts[1], testDb, 'test_user')
-    assertEqual(rowCount, EXPECTED_ROW_COUNT, 'Restored data should match source')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      testDb,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should match source',
+    )
 
     // Clean up
     const { rm } = await import('fs/promises')
@@ -455,13 +471,13 @@ describe('PostgreSQL Integration Tests', () => {
     // Try to create container on a port that's already in use (testPorts[2])
     await containerManager.create(portConflictContainerName, {
       engine: ENGINE,
-      version: '17',
+      version: '18',
       port: testPorts[2], // This port is in use by renamed container
       database: 'conflictdb',
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '17', {
+    await engine.initDataDir(portConflictContainerName, '18', {
       superuser: 'postgres',
     })
 
@@ -505,9 +521,14 @@ describe('PostgreSQL Integration Tests', () => {
     const stillRunning = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(stillRunning, 'Container should still be running after duplicate start')
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
 
-    console.log('   ✓ Container is already running (duplicate start handled gracefully)')
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
   })
 
   it('should show warning when stopping already stopped container', async () => {

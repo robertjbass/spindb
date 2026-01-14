@@ -116,9 +116,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Check if the backup file is from the wrong engine and throw helpful error
- */
+// Check if the backup file is from the wrong engine and throw helpful error
 export function assertCompatibleFormat(format: BackupFormat): void {
   if (
     format.format === 'postgresql_custom' ||
@@ -151,9 +149,7 @@ export type RestoreOptions = {
   binPath: string
 }
 
-/**
- * Get the path to mariadb or mysql client from the binary path
- */
+// Get the path to mariadb or mysql client from the binary path
 function getMysqlClientPath(binPath: string): string {
   const { platform } = platformService.getPlatformInfo()
   const ext = platform === 'win32' ? '.exe' : ''
@@ -226,7 +222,11 @@ export async function restoreBackup(
   return new Promise((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
 
-    logDebug('Restoring backup with mariadb client', { mysql, args, spawnOptions })
+    logDebug('Restoring backup with mariadb client', {
+      mysql,
+      args,
+      spawnOptions,
+    })
 
     const proc = spawn(mysql, args, spawnOptions)
 
@@ -265,7 +265,9 @@ export async function restoreBackup(
       gunzip.on('error', (err) => {
         fileStream.unpipe(gunzip)
         gunzip.unpipe(proc.stdin!)
-        rejectOnce(new Error(`Failed to decompress backup file: ${err.message}`))
+        rejectOnce(
+          new Error(`Failed to decompress backup file: ${err.message}`),
+        )
       })
     } else {
       if (!proc.stdin) {

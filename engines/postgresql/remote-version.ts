@@ -123,9 +123,7 @@ export async function detectRemotePostgresVersion(
   }
 }
 
-/**
- * Detect the type of PostgreSQL server from version() output
- */
+// Detect the type of PostgreSQL server from version() output
 function detectServerType(
   versionString: string,
 ): RemoteVersionResult['serverType'] {

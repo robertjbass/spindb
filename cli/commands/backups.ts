@@ -8,6 +8,7 @@
 import { Command } from 'commander'
 import { readdirSync, statSync } from 'fs'
 import { join, extname } from 'path'
+import { homedir } from 'os'
 import chalk from 'chalk'
 import { formatBytes } from '../ui/theme'
 
@@ -20,10 +21,11 @@ type BackupInfo = {
   format: string
 }
 
-/**
- * Detect engine and format from file extension
- */
-function detectBackupType(filename: string): { engine: string | null; format: string } {
+// Detect engine and format from file extension
+function detectBackupType(filename: string): {
+  engine: string | null
+  format: string
+} {
   const ext = extname(filename).toLowerCase()
 
   // Check for double extensions like .sql.gz
@@ -54,9 +56,7 @@ function detectBackupType(filename: string): { engine: string | null; format: st
   }
 }
 
-/**
- * Check if a file looks like a backup file
- */
+// Check if a file looks like a backup file
 function isBackupFile(filename: string): boolean {
   const backupExtensions = [
     '.sql',
@@ -77,9 +77,7 @@ function isBackupFile(filename: string): boolean {
   return backupExtensions.includes(ext)
 }
 
-/**
- * Scan directory for backup files
- */
+// Scan directory for backup files
 function findBackups(directory: string): BackupInfo[] {
   const backups: BackupInfo[] = []
 
@@ -118,9 +116,7 @@ function findBackups(directory: string): BackupInfo[] {
   return backups
 }
 
-/**
- * Format a relative time string
- */
+// Format a relative time string
 function formatRelativeTime(date: Date): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -136,9 +132,7 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString()
 }
 
-/**
- * Get engine icon
- */
+// Get engine icon
 function getEngineIcon(engine: string | null): string {
   switch (engine) {
     case 'postgresql':
@@ -174,11 +168,7 @@ export const backupsCommand = new Command('backups')
       const searchDirs = [directory || process.cwd()]
 
       if (options.all) {
-        const homeBackups = join(
-          process.env.HOME || '',
-          '.spindb',
-          'backups',
-        )
+        const homeBackups = join(homedir(), '.spindb', 'backups')
         searchDirs.push(homeBackups)
       }
 
@@ -219,7 +209,9 @@ export const backupsCommand = new Command('backups')
         console.log(chalk.gray('  No backup files found'))
         console.log()
         console.log(chalk.gray('  Backup files are identified by extensions:'))
-        console.log(chalk.gray('    .sql, .dump, .sqlite, .archive, .rdb, .sql.gz'))
+        console.log(
+          chalk.gray('    .sql, .dump, .sqlite, .archive, .rdb, .sql.gz'),
+        )
         console.log()
         return
       }
@@ -248,7 +240,9 @@ export const backupsCommand = new Command('backups')
         const time = formatRelativeTime(backup.modified).padStart(10)
         const format = chalk.gray(backup.format)
 
-        console.log(`  ${icon} ${chalk.cyan(filename)} ${chalk.white(size)} ${chalk.gray(time)} ${format}`)
+        console.log(
+          `  ${icon} ${chalk.cyan(filename)} ${chalk.white(size)} ${chalk.gray(time)} ${format}`,
+        )
       }
 
       console.log()

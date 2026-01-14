@@ -1,8 +1,6 @@
 import ora, { type Ora } from 'ora'
 
-/**
- * Create a spinner with consistent styling
- */
+// Create a spinner with consistent styling
 export function createSpinner(text: string): Ora {
   return ora({
     text,
@@ -11,9 +9,7 @@ export function createSpinner(text: string): Ora {
   })
 }
 
-/**
- * Run an async operation with a spinner
- */
+// Run an async operation with a spinner
 export async function withSpinner<T>(
   text: string,
   operation: (updateText: (message: string) => void) => Promise<T>,
@@ -34,9 +30,7 @@ export async function withSpinner<T>(
   }
 }
 
-/**
- * Progress tracker for multi-step operations
- */
+// Progress tracker for multi-step operations
 export class ProgressTracker {
   private steps: string[]
   private currentStep: number

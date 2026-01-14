@@ -4,12 +4,11 @@ import { mariadbEngine } from './mariadb'
 import { sqliteEngine } from './sqlite'
 import { mongodbEngine } from './mongodb'
 import { redisEngine } from './redis'
+import { valkeyEngine } from './valkey'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
-/**
- * Registry of available database engines
- */
+// Registry of available database engines
 export const engines: Record<string, BaseEngine> = {
   // PostgreSQL and aliases
   postgresql: postgresqlEngine,
@@ -28,11 +27,11 @@ export const engines: Record<string, BaseEngine> = {
   mongo: mongodbEngine,
   // Redis and aliases
   redis: redisEngine,
+  // Valkey and aliases
+  valkey: valkeyEngine,
 }
 
-/**
- * Get an engine by name
- */
+// Get an engine by name
 export function getEngine(name: string): BaseEngine {
   const engine = engines[name.toLowerCase()]
   if (!engine) {
@@ -44,9 +43,7 @@ export function getEngine(name: string): BaseEngine {
   return engine
 }
 
-/**
- * List all available engines
- */
+// List all available engines
 export function listEngines(): EngineInfo[] {
   const seen = new Set<BaseEngine>()
   return Object.entries(engines)

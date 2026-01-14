@@ -25,18 +25,20 @@ describe('BinaryManager', () => {
       }
     })
 
-    it('should normalize two-part versions to three parts', () => {
+    it('should return unknown two-part versions unchanged', () => {
       const binaryManager = new BinaryManager()
 
+      // Unknown versions not in the map should be returned unchanged (with warning)
+      // This allows the download to fail with a clear error if the version doesn't exist
       assertEqual(
         binaryManager.getFullVersion('16.9'),
-        '16.9.0',
-        'Should add .0 to two-part versions',
+        '16.9',
+        'Unknown two-part versions should be unchanged',
       )
       assertEqual(
         binaryManager.getFullVersion('15.4'),
-        '15.4.0',
-        'Should add .0 to two-part versions',
+        '15.4',
+        'Unknown two-part versions should be unchanged',
       )
     })
 
@@ -315,17 +317,11 @@ describe('BinaryManager', () => {
 
       // Test darwin-arm64 uses standard naming
       const armUrl = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
-      assert(
-        armUrl.includes('darwin-arm64'),
-        'ARM Mac should use darwin-arm64',
-      )
+      assert(armUrl.includes('darwin-arm64'), 'ARM Mac should use darwin-arm64')
 
       // Test darwin-x64 uses standard naming
       const intelUrl = binaryManager.getDownloadUrl('17', 'darwin', 'x64')
-      assert(
-        intelUrl.includes('darwin-x64'),
-        'Intel Mac should use darwin-x64',
-      )
+      assert(intelUrl.includes('darwin-x64'), 'Intel Mac should use darwin-x64')
 
       // Test linux-x64 uses standard naming
       const linuxUrl = binaryManager.getDownloadUrl('17', 'linux', 'x64')

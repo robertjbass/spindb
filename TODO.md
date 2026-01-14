@@ -28,6 +28,7 @@
 See [ENGINES.md](ENGINES.md) for full engine status and details.
 
 - [x] Redis (in-memory key-value)
+- [x] Valkey (Redis fork with BSD-3 license)
 - [x] MongoDB (document database)
 - [x] MariaDB as standalone engine (using hostdb binaries)
 
@@ -35,34 +36,31 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 
 Migrate system-installed engines to downloadable hostdb binaries for multi-version support. Reference: MariaDB engine migration.
 
-- [ ] **MySQL migration to hostdb**
-  - [ ] Add `engines/mysql/version-maps.ts` synced with hostdb releases.json
-  - [ ] Add `engines/mysql/binary-urls.ts` for hostdb download URLs
-  - [ ] Add `engines/mysql/binary-manager.ts` for download/extraction
-  - [ ] Update MySQL engine to use `getMysqlClientPath()` instead of system binaries
-  - [ ] Register MySQL-native binary names (`mysql`, `mysqld`, `mysqldump`, `mysqladmin`)
-  - [ ] Update test helpers with MySQL-specific client path method
-  - [ ] Update shell handlers for MySQL with hostdb binaries
-  - [ ] Add MySQL to "Manage Engines" menu with delete option
-  - [ ] Update CI to download MySQL binaries via SpinDB
+**Detailed Plan:** `~/.claude/plans/declarative-toasting-quail.md` (MongoDB & Redis migration plan)
 
-- [ ] **MongoDB migration to hostdb**
-  - [ ] Add `engines/mongodb/version-maps.ts` synced with hostdb releases.json
-  - [ ] Add `engines/mongodb/binary-urls.ts` for hostdb download URLs
-  - [ ] Add `engines/mongodb/binary-manager.ts` for download/extraction
-  - [ ] Update MongoDB engine to use `getMongoClientPath()` instead of system binaries
-  - [ ] Register MongoDB-native binary names (`mongod`, `mongosh`, `mongodump`, `mongorestore`)
-  - [ ] Update test helpers with MongoDB-specific client path method
-  - [ ] Update shell handlers for MongoDB with hostdb binaries
-  - [ ] Add MongoDB to "Manage Engines" menu with delete option
-  - [ ] Update CI to download MongoDB binaries via SpinDB
+- [x] **MySQL migration to hostdb** - Completed in v0.15.0
+- [x] **MongoDB migration to hostdb** - Completed
+  - [x] Add `engines/mongodb/version-maps.ts` synced with hostdb releases.json
+  - [x] Add `engines/mongodb/binary-urls.ts` for hostdb download URLs
+  - [x] Add `engines/mongodb/binary-manager.ts` for download/extraction
+  - [x] Update MongoDB engine to use `getMongoshPath()` from downloaded binaries
+  - [x] Register MongoDB binary names (`mongod`, `mongosh`, `mongodump`, `mongorestore`)
+  - [x] Update backup.ts and restore.ts to use configManager
+  - [x] Update shell handlers for MongoDB with hostdb binaries
+  - [x] Add MongoDB to "Manage Engines" menu with delete option
+  - [x] Update CI to download MongoDB binaries via SpinDB (macOS/Linux)
 
-- [ ] **Redis migration to hostdb** (when available)
-  - [ ] Same pattern as MySQL/MongoDB above
+- [x] **Redis migration to hostdb** - Completed
+  - [x] Add `engines/redis/version-maps.ts` synced with hostdb releases.json
+  - [x] Add `engines/redis/binary-urls.ts` for hostdb download URLs
+  - [x] Add `engines/redis/binary-manager.ts` for download/extraction
+  - [x] Update Redis engine to use downloaded binaries on macOS/Linux
+  - [x] Register Redis binary names (`redis-server`, `redis-cli`)
+  - [x] Update backup.ts and restore.ts to use configManager
+  - [x] Add Redis to "Manage Engines" menu with delete option
+  - [x] Update CI to download Redis binaries via SpinDB (macOS/Linux)
 
-**Prerequisites:** hostdb must have releases for these engines. Check https://github.com/robertjbass/hostdb/blob/main/releases.json
-
-**Reference implementation:** See `engines/mariadb/` for the most recent hostdb migration.
+**Reference implementation:** See `engines/mariadb/` for hostdb migration pattern.
 
 ### v1.3 - Advanced Features
 
@@ -85,10 +83,9 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
     - Add `--migrate` flag that copies keys from remote to local
   - Current behavior: throws helpful error with manual migration instructions
 
-- [x] **Windows CI/CD tests for Redis** - Add `windows-latest` to Redis CI matrix
-  - ~~Currently skipped pending macOS/Linux verification~~
-  - Uses Redis installation via Chocolatey (`choco install redis-64`)
-  - Updated `.github/workflows/ci.yml` test-redis job matrix
+- [x] **Redis CI/CD tests** - Redis integration tests added to CI matrix
+  - All platforms: macOS (Intel/ARM), Linux (Ubuntu 22.04/24.04), Windows
+  - Uses hostdb binaries for all platforms
 
 ### CLI Improvements
 
@@ -234,6 +231,20 @@ For potential Electron/web frontend integration:
 - [ ] **Structured error format** - Standard `{ code, message, suggestion, context }` for all JSON errors
 - [ ] **Add timestamps to JSON output** - For audit trails and debugging
 - [ ] **Add event streaming mode** - WebSocket or SSE for real-time progress updates
+
+### Medium: Version Validation at Wrong Layer
+
+**Files:** `engines/redis/index.ts`, `engines/valkey/index.ts`, and other engines
+
+The `resolveFullVersion()` method in each engine silently falls back to `${version}.0.0` for invalid version inputs instead of validating. This means invalid versions like `"foo"` become `"foo.0.0"` and proceed to fail later in the download step with a confusing 404 error.
+
+**Problem:** Each engine independently handles (or doesn't handle) invalid versions, leading to inconsistent error messages.
+
+**Solution:** Add version validation at the CLI layer (`cli/commands/create.ts`, etc.) before reaching engine code. Validate against `supportedVersions` array and fail fast with a clear message like "Invalid version 'foo'. Supported versions: 7, 8, 9".
+
+- [ ] **Add CLI-layer version validation** - Validate version against engine's `supportedVersions` before calling engine methods
+- [ ] **Standardize error messages** - Consistent "Invalid version" message across all engines
+- [ ] **Consider removing engine fallbacks** - Once CLI validates, engines can throw on invalid versions instead of guessing
 
 ### Low: Progress Reporting
 

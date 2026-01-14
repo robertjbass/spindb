@@ -32,9 +32,7 @@ type HealthCheckResult = {
   }
 }
 
-/**
- * Check configuration file validity
- */
+// Check configuration file validity
 async function checkConfiguration(): Promise<HealthCheckResult> {
   const configPath = paths.config
 
@@ -83,9 +81,7 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check container status across all engines
- */
+// Check container status across all engines
 async function checkContainers(): Promise<HealthCheckResult> {
   try {
     const containers = await containerManager.list()
@@ -135,9 +131,7 @@ async function checkContainers(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check SQLite registry for orphaned entries
- */
+// Check SQLite registry for orphaned entries
 async function checkSqliteRegistry(): Promise<HealthCheckResult> {
   try {
     const entries = await sqliteRegistry.list()
@@ -199,9 +193,7 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check binary/tool availability for all engines
- */
+// Check binary/tool availability for all engines
 async function checkBinaries(): Promise<HealthCheckResult> {
   try {
     const engines = getSupportedEngines()
@@ -237,9 +229,7 @@ async function checkBinaries(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Display a single health check result
- */
+// Display a single health check result
 function displayResult(result: HealthCheckResult): void {
   const icon =
     result.status === 'ok'
@@ -290,7 +280,14 @@ export const doctorCommand = new Command('doctor')
     // Collect actions for warnings
     const actionsAvailable = checks.filter((c) => c.action)
 
-    if (actionsAvailable.length > 0) {
+    // Detect non-interactive environment (CI, no TTY)
+    const isNonInteractive = !!(
+      process.env.CI ||
+      process.env.GITHUB_ACTIONS ||
+      !process.stdin.isTTY
+    )
+
+    if (actionsAvailable.length > 0 && !isNonInteractive) {
       type ActionChoice = {
         name: string
         value: string
@@ -329,6 +326,22 @@ export const doctorCommand = new Command('doctor')
       const hasIssues = checks.some((c) => c.status !== 'ok')
       if (!hasIssues) {
         console.log(chalk.green('All systems healthy! ✓'))
+      } else if (isNonInteractive) {
+        // In CI/non-interactive mode, print summary and exit with non-zero code
+        const issues = checks.filter((c) => c.status !== 'ok')
+        const errors = issues.filter((c) => c.status === 'error')
+        const warnings = issues.filter((c) => c.status === 'warning')
+
+        const summary = []
+        if (errors.length > 0) {
+          summary.push(`${errors.length} error(s)`)
+        }
+        if (warnings.length > 0) {
+          summary.push(`${warnings.length} warning(s)`)
+        }
+
+        console.log(chalk.red(`Health check failed: ${summary.join(', ')}`))
+        process.exit(1)
       }
     }
 

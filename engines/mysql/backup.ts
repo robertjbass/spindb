@@ -9,12 +9,23 @@ import { createWriteStream } from 'fs'
 import { stat } from 'fs/promises'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
-import { getMysqldumpPath } from './binary-detection'
+import { configManager } from '../../core/config-manager'
 import { getWindowsSpawnOptions, isWindows } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
+
+// Get the mysqldump path from config
+async function getMysqldumpPath(): Promise<string> {
+  const configPath = await configManager.getBinaryPath('mysqldump')
+  if (configPath) return configPath
+
+  throw new Error(
+    'mysqldump not found. Ensure MySQL binaries are downloaded:\n' +
+      '  spindb engines download mysql',
+  )
+}
 
 /**
  * Create a backup of a MySQL database
@@ -32,13 +43,6 @@ export async function createBackup(
   const { database, format } = options
 
   const mysqldump = await getMysqldumpPath()
-  if (!mysqldump) {
-    throw new Error(
-      'mysqldump not found. Install MySQL client tools:\n' +
-        '  macOS: brew install mysql-client\n' +
-        '  Ubuntu/Debian: sudo apt install mysql-client',
-    )
-  }
 
   if (format === 'sql') {
     return createSqlBackup(mysqldump, port, database, outputPath)
@@ -47,9 +51,7 @@ export async function createBackup(
   }
 }
 
-/**
- * Create a plain SQL backup
- */
+// Create a plain SQL backup
 async function createSqlBackup(
   mysqldump: string,
   port: number,

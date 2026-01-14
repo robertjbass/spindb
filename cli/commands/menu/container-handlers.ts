@@ -98,9 +98,9 @@ export async function handleCreate(): Promise<'main' | void> {
   const name = containerName!
 
   // Step 4: Database name (defaults to container name, sanitized)
-  // Redis uses numbered databases 0-15, so skip prompt and default to "0"
+  // Redis and Valkey use numbered databases 0-15, so skip prompt and default to "0"
   let database: string
-  if (engine === 'redis') {
+  if (engine === 'redis' || engine === 'valkey') {
     database = '0'
   } else {
     database = await promptDatabaseName(name, engine)
@@ -622,9 +622,9 @@ export async function showContainerSubmenu(
 
   // Run SQL/script - always enabled for SQLite (if file exists), server databases need to be running
   const canRunSql = isSQLite ? existsSync(config.database) : isRunning
-  // Engine-specific terminology: Redis uses commands, MongoDB uses scripts, others use SQL
+  // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, others use SQL
   const runScriptLabel =
-    config.engine === 'redis'
+    config.engine === 'redis' || config.engine === 'valkey'
       ? 'Run command file'
       : config.engine === 'mongodb'
         ? 'Run script file'
@@ -927,15 +927,11 @@ async function handleStartContainer(containerName: string): Promise<void> {
       console.log(chalk.cyan(`    spindb edit ${containerName}`))
     } else {
       console.log(
-        uiWarning(
-          `Port ${config.port} is in use by another process.`,
-        ),
+        uiWarning(`Port ${config.port} is in use by another process.`),
       )
       console.log()
       console.log(
-        uiInfo(
-          'Stop the process using it or change this container\'s port.',
-        ),
+        uiInfo("Stop the process using it or change this container's port."),
       )
       console.log()
       console.log(

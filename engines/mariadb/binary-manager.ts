@@ -5,61 +5,19 @@
  * Similar to PostgreSQL binary manager but tailored for MariaDB.
  */
 
-import { createWriteStream, existsSync, createReadStream } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { exec, spawn } from 'child_process'
+import { exec } from 'child_process'
 import { promisify } from 'util'
-import unzipper from 'unzipper'
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
 import type { ProgressCallback, InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
-
-/**
- * Execute a command using spawn with argument array (safer than shell interpolation)
- */
-function spawnAsync(
-  command: string,
-  args: string[],
-  options?: { cwd?: string },
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: options?.cwd,
-    })
-
-    let stdout = ''
-    let stderr = ''
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve({ stdout, stderr })
-      } else {
-        reject(
-          new Error(
-            `Command "${command} ${args.join(' ')}" failed with code ${code}: ${stderr || stdout}`,
-          ),
-        )
-      }
-    })
-
-    proc.on('error', (err) => {
-      reject(new Error(`Failed to execute "${command}": ${err.message}`))
-    })
-  })
-}
 
 export class MariaDBBinaryManager {
   /**
@@ -78,16 +36,12 @@ export class MariaDBBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  /**
-   * Convert version to full version format (e.g., "11.8" -> "11.8.5")
-   */
+  // Convert version to full version format (e.g., "11.8" -> "11.8.5")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
 
-  /**
-   * Check if binaries for a specific version are already installed
-   */
+  // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
     platform: string,
@@ -107,9 +61,7 @@ export class MariaDBBinaryManager {
     return existsSync(mariadbPath) || existsSync(mysqldPath)
   }
 
-  /**
-   * List all installed MariaDB versions
-   */
+  // List all installed MariaDB versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -136,9 +88,7 @@ export class MariaDBBinaryManager {
     return installed
   }
 
-  /**
-   * Download and extract MariaDB binaries
-   */
+  // Download and extract MariaDB binaries
   async download(
     version: string,
     platform: string,
@@ -153,7 +103,10 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const tempDir = join(paths.bin, `temp-mariadb-${fullVersion}-${platform}-${arch}`)
+    const tempDir = join(
+      paths.bin,
+      `temp-mariadb-${fullVersion}-${platform}-${arch}`,
+    )
     const archiveFile = join(
       tempDir,
       platform === 'win32' ? 'mariadb.zip' : 'mariadb.tar.gz',
@@ -173,8 +126,15 @@ export class MariaDBBinaryManager {
 
       const response = await fetch(url)
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `MariaDB ${fullVersion} binaries not found (404). ` +
+              `This version may have been removed from hostdb. ` +
+              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+          )
+        }
         throw new Error(
-          `Failed to download binaries: ${response.status} ${response.statusText}`,
+          `Failed to download MariaDB binaries: ${response.status} ${response.statusText}`,
         )
       }
 
@@ -220,9 +180,7 @@ export class MariaDBBinaryManager {
     }
   }
 
-  /**
-   * Extract Windows binaries from ZIP file
-   */
+  // Extract Windows binaries from ZIP file
   private async extractWindowsBinaries(
     zipFile: string,
     binPath: string,
@@ -234,45 +192,13 @@ export class MariaDBBinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract ZIP to temp directory first
-    await new Promise<void>((resolve, reject) => {
-      createReadStream(zipFile)
-        .pipe(unzipper.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject)
-    })
+    // Extract ZIP using PowerShell Expand-Archive
+    await extractWindowsArchive(zipFile, tempDir)
 
-    // hostdb ZIPs have a mariadb/ directory - find it and move contents to binPath
-    const entries = await readdir(tempDir, { withFileTypes: true })
-    const mariadbDir = entries.find(
-      (e) =>
-        e.isDirectory() &&
-        (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
-    )
-
-    if (mariadbDir) {
-      // Move contents from mariadb/ to binPath
-      const sourceDir = join(tempDir, mariadbDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
-        }
-      }
-    } else {
-      throw new Error(
-        'Unexpected archive structure - no mariadb directory found',
-      )
-    }
+    await this.moveExtractedEntries(tempDir, binPath)
   }
 
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
+  // Extract Unix binaries from tar.gz file
   private async extractUnixBinaries(
     tarFile: string,
     binPath: string,
@@ -289,42 +215,46 @@ export class MariaDBBinaryManager {
     await mkdir(extractDir, { recursive: true })
     await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
-    // Check if there's a nested mariadb/ directory
+    await this.moveExtractedEntries(extractDir, binPath)
+  }
+
+  // Move extracted entries from extractDir to binPath, handling nested mariadb/ directories
+  private async moveExtractedEntries(
+    extractDir: string,
+    binPath: string,
+  ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
     const mariadbDir = entries.find(
-      (e) => e.isDirectory() && (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
+      (e) =>
+        e.isDirectory() &&
+        (e.name === 'mariadb' || e.name.startsWith('mariadb-')),
     )
 
-    if (mariadbDir) {
-      // Nested structure: move contents from mariadb/ to binPath
-      const sourceDir = join(extractDir, mariadbDir.name)
-      const sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch {
+    const sourceDir = mariadbDir
+      ? join(extractDir, mariadbDir.name)
+      : extractDir
+    const entriesToMove = mariadbDir
+      ? await readdir(sourceDir, { withFileTypes: true })
+      : entries
+
+    for (const entry of entriesToMove) {
+      const sourcePath = join(sourceDir, entry.name)
+      const destPath = join(binPath, entry.name)
+      try {
+        await rename(sourcePath, destPath)
+      } catch (error) {
+        // Fallback to cp for cross-device (EXDEV) or permission (EPERM) errors
+        const err = error as NodeJS.ErrnoException
+        if (err.code === 'EXDEV' || err.code === 'EPERM') {
           await cp(sourcePath, destPath, { recursive: true })
-        }
-      }
-    } else {
-      // Flat structure: move contents directly to binPath
-      for (const entry of entries) {
-        const sourcePath = join(extractDir, entry.name)
-        const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch {
-          await cp(sourcePath, destPath, { recursive: true })
+        } else {
+          throw error
         }
       }
     }
   }
 
-  /**
-   * Verify that MariaDB binaries are working
-   */
+  // Verify that MariaDB binaries are working
   async verify(
     version: string,
     platform: string,
@@ -384,9 +314,7 @@ export class MariaDBBinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (mariadbd, mysql, mysqldump, etc.)
-   */
+  // Get the path to a specific binary (mariadbd, mysql, mysqldump, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -404,9 +332,7 @@ export class MariaDBBinaryManager {
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -431,14 +357,8 @@ export class MariaDBBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  /**
-   * Delete installed binaries for a specific version
-   */
-  async delete(
-    version: string,
-    platform: string,
-    arch: string,
-  ): Promise<void> {
+  // Delete installed binaries for a specific version
+  async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mariadb',

@@ -4,17 +4,18 @@
 
 | Engine | Status | Binary Source | Binary Size | Notes |
 |--------|--------|---------------|-------------|-------|
-| 🐘 **PostgreSQL** | ✅ Complete | zonky.io (downloaded) | ~45 MB | Versions 14-18 |
-| 🐬 **MySQL** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Also supports MariaDB as drop-in replacement |
-| 🪶 **SQLite** | ✅ Complete | System | N/A (system) | File-based, stores in project directories |
-| 🍃 **MongoDB** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Versions 6.0, 7.0, 8.0 |
-| 🔴 **Redis** | ✅ Complete | System (Homebrew/apt) | N/A (system) | Versions 6, 7, 8 |
+| 🐘 **PostgreSQL** | ✅ Complete | hostdb (macOS/Linux), EDB (Windows) | ~45 MB | Versions 15-18 |
+| 🐬 **MySQL** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 8.0, 8.4, 9 |
+| 🦭 **MariaDB** | ✅ Complete | hostdb (all platforms) | ~120 MB | Versions 10.11, 11.4, 11.8 |
+| 🪶 **SQLite** | ✅ Complete | hostdb (all platforms) | ~5 MB | File-based, stores in project directories |
+| 🍃 **MongoDB** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 7.0, 8.0, 8.2 |
+| 🔴 **Redis** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 7, 8 |
+| 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 
 ## Planned
 
 | Engine | Status | Type | Binary Size | Notes |
 |--------|--------|------|-------------|-------|
-| 🦭 **MariaDB** | 🔜 Planned | SQL DB | N/A (system) | Standalone engine with MariaDB-specific features |
 | 🪳 **CockroachDB** | 🔜 Planned | Distributed SQL | ~100 MB | PostgreSQL-compatible distributed database |
 
 ---
@@ -39,13 +40,14 @@
 ### 🔴 Redis
 
 - **Status:** ✅ Complete
-- **Versions:** 6, 7, 8
+- **Versions:** 7, 8
 - **Data location:** `~/.spindb/containers/redis/{name}/`
 - **Process:** Server process (like MySQL/PostgreSQL)
-- **Binary source:** System install via Homebrew/apt/choco
+- **Binary source:** hostdb downloads (all platforms)
 - **Enhanced CLI:** `iredis` (use `--iredis` flag)
 - **Backup format:** RDB (Redis Database Backup) - Binary snapshot via BGSAVE
 - **Databases:** Uses numbered databases (0-15) instead of named databases
+- **Multi-version support:** Yes (all platforms)
 - **Implementation notes:**
   - Uses PING/PONG for status checks
   - Does NOT support remote dump (dumpFromConnectionString throws an error with guidance)
@@ -54,16 +56,38 @@
 ### 🍃 MongoDB
 
 - **Status:** ✅ Complete
-- **Versions:** 6.0, 7.0, 8.0
+- **Versions:** 7.0, 8.0, 8.2
 - **Data location:** `~/.spindb/containers/mongodb/{name}/`
 - **Process:** Server process (`mongod`)
-- **Binary source:** System install via Homebrew/apt/choco
-- **Enhanced CLI:** `mongosh` (MongoDB Shell - built-in)
+- **Binary source:** hostdb downloads (all platforms)
+- **Enhanced CLI:** `mongosh` (MongoDB Shell - bundled with hostdb)
 - **Backup format:** mongodump (BSON) - preserves all BSON types
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** mongod, mongosh, mongodump, mongorestore
 - **Implementation notes:**
   - Uses JavaScript for scripts instead of SQL
   - mongodump creates gzipped archive by default
   - Full cross-platform support (macOS, Linux, Windows)
+
+### 🔷 Valkey
+
+- **Status:** ✅ Complete
+- **Versions:** 8, 9
+- **Data location:** `~/.spindb/containers/valkey/{name}/`
+- **Process:** Server process (`valkey-server`)
+- **Binary source:** hostdb downloads (all platforms)
+- **Enhanced CLI:** `iredis` (Redis-protocol compatible)
+- **Backup formats:**
+  - `.valkey` - Text format (Redis commands, human-readable)
+  - `.rdb` - Binary RDB snapshot (faster, requires restart to restore)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** valkey-server, valkey-cli
+- **Implementation notes:**
+  - Redis fork created after Redis license change (BSD-3 license)
+  - Fully API-compatible with Redis
+  - Uses `redis://` connection scheme for client compatibility
+  - Uses numbered databases (0-15) like Redis
+  - Does NOT support remote dump (same as Redis)
 
 ---
 
@@ -74,7 +98,8 @@
 | PostgreSQL | `.sql` (pg_dump) | `.dump` (custom format) | `.dump` for full backup |
 | MySQL | `.sql` (mysqldump) | `.sql.gz` (gzipped SQL) | `.sql.gz` for storage |
 | SQLite | `.sql` (.dump) | `.db` (file copy) | File copy for speed |
-| Redis | N/A | `.rdb` (RDB snapshot) | RDB for backups |
+| Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
+| Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
 
 ---
@@ -87,6 +112,7 @@
 | MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
 | SQLite | `sqlite3` | `litecli` | Available in v0.9 |
 | Redis | `redis-cli` | `iredis` | Auto-completion, syntax highlighting |
+| Valkey | `valkey-cli` | `iredis` | Protocol-compatible with iredis |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
 
@@ -94,15 +120,13 @@
 
 ## Considerations
 
-### MariaDB as Separate Engine
+### MariaDB vs MySQL
 
-Currently MariaDB is treated as a drop-in replacement for MySQL on Linux systems. The MySQL engine auto-detects MariaDB and handles compatibility. However, MariaDB has diverged from MySQL in recent versions with unique features (e.g., sequences, system-versioned tables). Consider creating a dedicated MariaDB engine in the future if:
+MariaDB and MySQL are now **separate engines** with their own hostdb binaries:
+- `spindb create mydb --engine mariadb` - Uses MariaDB binaries
+- `spindb create mydb --engine mysql` - Uses MySQL binaries
 
-- Users need MariaDB-specific features not available in MySQL
-- Compatibility issues arise between MySQL and MariaDB dumps
-- MariaDB binary management differs significantly from MySQL
-
-For now, the MySQL engine's MariaDB support is sufficient for most use cases.
+Both engines support multi-version side-by-side installations. Client tools are bundled with the downloaded binaries.
 
 ### Engine Emojis
 
@@ -113,6 +137,7 @@ For now, the MySQL engine's MariaDB support is sufficient for most use cases.
 | 🐘 | PostgreSQL |
 | 🍃 | MongoDB |
 | 🔴 | Redis |
+| 🔷 | Valkey |
 | 🪶 | SQLite |
 
 ---

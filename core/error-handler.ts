@@ -103,9 +103,7 @@ export class SpinDBError extends Error {
     Error.captureStackTrace(this, SpinDBError)
   }
 
-  /**
-   * Create SpinDBError from an unknown error
-   */
+  // Create SpinDBError from an unknown error
   static from(
     error: unknown,
     code: string = ErrorCodes.UNKNOWN_ERROR,

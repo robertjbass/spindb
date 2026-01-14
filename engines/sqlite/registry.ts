@@ -26,9 +26,7 @@ class SQLiteRegistryManager {
     return configManager.getSqliteRegistry()
   }
 
-  /**
-   * Save the registry to config.json
-   */
+  // Save the registry to config.json
   async save(registry: SQLiteEngineRegistry): Promise<void> {
     await configManager.saveSqliteRegistry(registry)
   }
@@ -102,25 +100,19 @@ class SQLiteRegistryManager {
     return true
   }
 
-  /**
-   * List all entries in the registry
-   */
+  // List all entries in the registry
   async list(): Promise<SQLiteRegistryEntry[]> {
     const registry = await this.load()
     return registry.entries
   }
 
-  /**
-   * Check if a container with the given name exists
-   */
+  // Check if a container with the given name exists
   async exists(name: string): Promise<boolean> {
     const entry = await this.get(name)
     return entry !== null
   }
 
-  /**
-   * Find orphaned entries (where the file no longer exists)
-   */
+  // Find orphaned entries (where the file no longer exists)
   async findOrphans(): Promise<SQLiteRegistryEntry[]> {
     const registry = await this.load()
     return registry.entries.filter((e) => !existsSync(e.filePath))
@@ -144,16 +136,12 @@ class SQLiteRegistryManager {
     return removedCount
   }
 
-  /**
-   * Update the lastVerified timestamp for an entry
-   */
+  // Update the lastVerified timestamp for an entry
   async updateVerified(name: string): Promise<void> {
     await this.update(name, { lastVerified: new Date().toISOString() })
   }
 
-  /**
-   * Check if a file path is already registered (by any container)
-   */
+  // Check if a file path is already registered (by any container)
   async isPathRegistered(filePath: string): Promise<boolean> {
     const registry = await this.load()
     return registry.entries.some((e) => e.filePath === filePath)
@@ -172,17 +160,13 @@ class SQLiteRegistryManager {
   // Folder Ignore Methods
   // ============================================================
 
-  /**
-   * Check if a folder is in the ignore list
-   */
+  // Check if a folder is in the ignore list
   async isFolderIgnored(folderPath: string): Promise<boolean> {
     const registry = await this.load()
     return folderPath in registry.ignoreFolders
   }
 
-  /**
-   * Add a folder to the ignore list
-   */
+  // Add a folder to the ignore list
   async addIgnoreFolder(folderPath: string): Promise<void> {
     const registry = await this.load()
     registry.ignoreFolders[folderPath] = true
@@ -203,9 +187,7 @@ class SQLiteRegistryManager {
     return false
   }
 
-  /**
-   * List all ignored folders
-   */
+  // List all ignored folders
   async listIgnoredFolders(): Promise<string[]> {
     const registry = await this.load()
     return Object.keys(registry.ignoreFolders)

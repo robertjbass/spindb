@@ -30,9 +30,7 @@ const execAsync = promisify(exec)
 // Run CLI directly with tsx to avoid pnpm output pollution
 const CLI_PATH = join(__dirname, '../../cli/bin.ts')
 
-/**
- * Run a CLI command and return stdout/stderr
- */
+// Run a CLI command and return stdout/stderr
 async function runCLI(
   args: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {

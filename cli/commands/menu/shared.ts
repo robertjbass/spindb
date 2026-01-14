@@ -1,9 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 
-/**
- * Menu choice type for inquirer list prompts
- */
+// Menu choice type for inquirer list prompts
 export type MenuChoice =
   | {
       name: string
@@ -12,9 +10,7 @@ export type MenuChoice =
     }
   | inquirer.Separator
 
-/**
- * Helper to pause and wait for user to press Enter
- */
+// Helper to pause and wait for user to press Enter
 export async function pressEnterToContinue(): Promise<void> {
   await inquirer.prompt([
     {

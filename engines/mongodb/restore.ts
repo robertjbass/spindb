@@ -6,13 +6,11 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
-import { getMongorestorePath } from './binary-detection'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from './cli-utils'
 import type { BackupFormat, RestoreResult } from '../../types'
 
-/**
- * Detect the format of a MongoDB backup
- */
+// Detect the format of a MongoDB backup
 export async function detectBackupFormat(
   filePath: string,
 ): Promise<BackupFormat> {
@@ -85,9 +83,7 @@ export async function detectBackupFormat(
   }
 }
 
-/**
- * Restore options
- */
+// Restore options
 export type RestoreOptions = {
   port: number
   database: string
@@ -95,9 +91,7 @@ export type RestoreOptions = {
   validateVersion?: boolean
 }
 
-/**
- * Restore a MongoDB backup using mongorestore
- */
+// Restore a MongoDB backup using mongorestore
 export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
@@ -106,11 +100,7 @@ export async function restoreBackup(
 
   const mongorestore = await getMongorestorePath()
   if (!mongorestore) {
-    throw new Error(
-      'mongorestore not found. Install MongoDB database tools:\n' +
-        '  macOS: brew install mongodb-database-tools\n' +
-        '  Or download from: https://www.mongodb.com/try/download/database-tools',
-    )
+    throw new Error(MONGORESTORE_NOT_FOUND_ERROR)
   }
 
   // Detect backup format
@@ -158,7 +148,9 @@ export async function restoreBackup(
         })
         if (dbWithBson) {
           const sourceDbDir = join(backupPath, dbWithBson.name)
-          logDebug(`Using source database directory with BSON files: ${sourceDbDir}`)
+          logDebug(
+            `Using source database directory with BSON files: ${sourceDbDir}`,
+          )
           args.push(sourceDbDir)
         } else {
           args.push(backupPath)

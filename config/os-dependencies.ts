@@ -19,9 +19,7 @@ export type PackageManagerId =
 
 export type Platform = 'darwin' | 'linux' | 'win32'
 
-/**
- * Package definition for a specific package manager
- */
+// Package definition for a specific package manager
 export type PackageDefinition = {
   // Package name to install
   package: string
@@ -31,9 +29,7 @@ export type PackageDefinition = {
   preInstall?: string[]
 }
 
-/**
- * A single dependency (e.g., psql, pg_dump)
- */
+// A single dependency (e.g., psql, pg_dump)
 export type Dependency = {
   // Human-readable name
   name: string
@@ -47,9 +43,7 @@ export type Dependency = {
   manualInstall: Partial<Record<Platform, string[]>>
 }
 
-/**
- * Engine dependency configuration
- */
+// Engine dependency configuration
 export type EngineDependencies = {
   // Engine identifier
   engine: string
@@ -59,9 +53,7 @@ export type EngineDependencies = {
   dependencies: Dependency[]
 }
 
-/**
- * Package manager configuration
- */
+// Package manager configuration
 export type PackageManagerConfig = {
   id: PackageManagerId
   name: string
@@ -599,6 +591,67 @@ const redisDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// Valkey Dependencies
+// =============================================================================
+
+const valkeyDependencies: EngineDependencies = {
+  engine: 'valkey',
+  displayName: 'Valkey',
+  dependencies: [
+    {
+      name: 'valkey-server',
+      binary: 'valkey-server',
+      description: 'Valkey in-memory data store server (Redis fork)',
+      packages: {
+        // Valkey is relatively new - not yet in most package managers
+        // Primary distribution is via GitHub releases (hostdb)
+        brew: { package: 'valkey' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install valkey',
+          'Or use SpinDB: spindb engines download valkey 9',
+        ],
+        linux: [
+          'Valkey is not yet in most Linux package repositories.',
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+        win32: [
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+      },
+    },
+    {
+      name: 'valkey-cli',
+      binary: 'valkey-cli',
+      description: 'Valkey command-line interface client',
+      packages: {
+        brew: { package: 'valkey' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install valkey',
+          'Or use SpinDB: spindb engines download valkey 9',
+        ],
+        linux: [
+          'Valkey is not yet in most Linux package repositories.',
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+        win32: [
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -746,36 +799,29 @@ export const iredisDependency: Dependency = {
 // Registry
 // =============================================================================
 
-/**
- * All engine dependencies registry
- */
+// All engine dependencies registry
 export const engineDependencies: EngineDependencies[] = [
   postgresqlDependencies,
   mysqlDependencies,
   sqliteDependencies,
   mongodbDependencies,
   redisDependencies,
+  valkeyDependencies,
 ]
 
-/**
- * Get dependencies for a specific engine
- */
+// Get dependencies for a specific engine
 export function getEngineDependencies(
   engine: string,
 ): EngineDependencies | undefined {
   return engineDependencies.find((e) => e.engine === engine)
 }
 
-/**
- * Get all dependencies across all engines
- */
+// Get all dependencies across all engines
 export function getAllDependencies(): Dependency[] {
   return engineDependencies.flatMap((e) => e.dependencies)
 }
 
-/**
- * Get unique dependencies (deduplicated by binary name)
- */
+// Get unique dependencies (deduplicated by binary name)
 export function getUniqueDependencies(): Dependency[] {
   const seen = new Set<string>()
   const unique: Dependency[] = []
@@ -790,18 +836,14 @@ export function getUniqueDependencies(): Dependency[] {
   return unique
 }
 
-/**
- * Get package manager config by ID
- */
+// Get package manager config by ID
 export function getPackageManager(
   id: PackageManagerId,
 ): PackageManagerConfig | undefined {
   return packageManagers.find((pm) => pm.id === id)
 }
 
-/**
- * Get package managers available for a platform
- */
+// Get package managers available for a platform
 export function getPackageManagersForPlatform(
   platform: Platform,
 ): PackageManagerConfig[] {

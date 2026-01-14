@@ -83,11 +83,27 @@ describe('ConfigManager', () => {
     })
 
     it('should export ALL_TOOLS combining all categories', async () => {
-      const { ALL_TOOLS, POSTGRESQL_TOOLS, MYSQL_TOOLS, ENHANCED_SHELLS } =
-        await import('../../core/config-manager')
+      const {
+        ALL_TOOLS,
+        POSTGRESQL_TOOLS,
+        MYSQL_TOOLS,
+        MARIADB_TOOLS,
+        MONGODB_TOOLS,
+        REDIS_TOOLS,
+        VALKEY_TOOLS,
+        SQLITE_TOOLS,
+        ENHANCED_SHELLS,
+      } = await import('../../core/config-manager')
 
       const expectedLength =
-        POSTGRESQL_TOOLS.length + MYSQL_TOOLS.length + ENHANCED_SHELLS.length
+        POSTGRESQL_TOOLS.length +
+        MYSQL_TOOLS.length +
+        MARIADB_TOOLS.length +
+        MONGODB_TOOLS.length +
+        REDIS_TOOLS.length +
+        VALKEY_TOOLS.length +
+        SQLITE_TOOLS.length +
+        ENHANCED_SHELLS.length
 
       assertEqual(
         ALL_TOOLS.length,

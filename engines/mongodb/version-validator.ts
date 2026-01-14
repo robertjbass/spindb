@@ -1,6 +1,4 @@
-/**
- * MongoDB version validation and compatibility checking
- */
+// MongoDB version validation and compatibility checking
 
 import { existsSync, readdirSync } from 'fs'
 import { readFile } from 'fs/promises'
@@ -155,9 +153,7 @@ export function getMajorMinorVersion(version: string): string {
   return `${parsed.major}.${parsed.minor}`
 }
 
-/**
- * Validate that a version string matches supported format
- */
+// Validate that a version string matches supported format
 export function isValidVersionFormat(version: string): boolean {
   const parsed = parseVersion(version)
   return parsed !== null

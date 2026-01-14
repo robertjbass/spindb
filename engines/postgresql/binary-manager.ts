@@ -1,5 +1,7 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import { existsSync } from 'fs'
+import { readdir } from 'fs/promises'
 import chalk from 'chalk'
 import { createSpinner } from '../../cli/ui/spinner'
 import { uiWarning, uiError, uiSuccess } from '../../cli/ui/theme'
@@ -13,6 +15,8 @@ import { getEngineDependencies } from '../../config/os-dependencies'
 import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import { logDebug } from '../../core/error-handler'
 import { isWindows, platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
+import type { InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -33,9 +37,7 @@ export type PackageManager = {
   versionCheckCommand: (binary: string) => string
 }
 
-/**
- * Detect which package manager is available on the system
- */
+// Detect which package manager is available on the system
 export async function detectPackageManager(): Promise<PackageManager | null> {
   const pgPackage = getPostgresHomebrewPackage()
   const managers: PackageManager[] = [
@@ -90,9 +92,7 @@ export async function detectPackageManager(): Promise<PackageManager | null> {
   return null
 }
 
-/**
- * Get PostgreSQL version from pg_restore or psql
- */
+// Get PostgreSQL version from pg_restore or psql
 export async function getPostgresVersion(
   binary: 'pg_restore' | 'psql',
 ): Promise<string | null> {
@@ -108,9 +108,7 @@ export async function getPostgresVersion(
   }
 }
 
-/**
- * Find binary path using which/where command
- */
+// Find binary path using which/where command
 export async function findBinaryPath(binary: string): Promise<string | null> {
   try {
     const command = isWindows() ? 'where' : 'which'
@@ -124,9 +122,7 @@ export async function findBinaryPath(binary: string): Promise<string | null> {
   }
 }
 
-/**
- * Find binary path with fallback to refresh PATH cache
- */
+// Find binary path with fallback to refresh PATH cache
 export async function findBinaryPathFresh(
   binary: string,
 ): Promise<string | null> {
@@ -156,18 +152,29 @@ export async function findBinaryPathFresh(
   }
 }
 
-/**
- * Execute command with timeout
- */
+// Execute command with timeout
 async function execWithTimeout(
   command: string,
   timeoutMs: number = 60000,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    let settled = false
+
+    const timeoutId = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        child.kill()
+        reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`))
+      }
+    }, timeoutMs)
+
     const child = exec(
       command,
       { timeout: timeoutMs },
       (error, stdout, stderr) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutId)
         if (error) {
           reject(error)
         } else {
@@ -175,12 +182,6 @@ async function execWithTimeout(
         }
       },
     )
-
-    // Additional timeout safety
-    setTimeout(() => {
-      child.kill() // Cross-platform process termination
-      reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`))
-    }, timeoutMs)
   })
 }
 
@@ -236,9 +237,7 @@ export async function getDumpRequiredVersion(
   }
 }
 
-/**
- * Check if a PostgreSQL version is compatible with a dump
- */
+// Check if a PostgreSQL version is compatible with a dump
 export function isVersionCompatible(
   currentVersion: string,
   requiredVersion: string,
@@ -250,9 +249,7 @@ export function isVersionCompatible(
   return current >= required
 }
 
-/**
- * Get binary information including version and compatibility
- */
+// Get binary information including version and compatibility
 export async function getBinaryInfo(
   binary: 'pg_restore' | 'psql',
   dumpPath?: string,
@@ -319,9 +316,7 @@ export async function getBinaryInfo(
   }
 }
 
-/**
- * Install PostgreSQL client tools using the new dependency manager
- */
+// Install PostgreSQL client tools using the new dependency manager
 export async function installPostgresBinaries(): Promise<boolean> {
   const spinner = createSpinner('Checking package manager...')
   spinner.start()
@@ -388,9 +383,7 @@ export async function installPostgresBinaries(): Promise<boolean> {
   }
 }
 
-/**
- * Update individual PostgreSQL client tools to resolve conflicts
- */
+// Update individual PostgreSQL client tools to resolve conflicts
 export async function updatePostgresClientTools(): Promise<boolean> {
   const spinner = createSpinner('Updating PostgreSQL client tools...')
   spinner.start()
@@ -505,9 +498,7 @@ export async function updatePostgresBinaries(): Promise<boolean> {
   }
 }
 
-/**
- * Ensure PostgreSQL binary is available and compatible
- */
+// Ensure PostgreSQL binary is available and compatible
 export async function ensurePostgresBinary(
   binary: 'pg_restore' | 'psql',
   dumpPath?: string,
@@ -571,3 +562,39 @@ export async function ensurePostgresBinary(
 
   return { success: true, info, action: 'compatible' }
 }
+
+/**
+ * PostgreSQL Binary Manager class for consistency with other engines
+ * Provides listInstalled() for offline fallback in hostdb-releases
+ */
+export class PostgreSQLBinaryManager {
+  // List all installed PostgreSQL versions
+  async listInstalled(): Promise<InstalledBinary[]> {
+    const binDir = paths.bin
+    if (!existsSync(binDir)) {
+      return []
+    }
+
+    const entries = await readdir(binDir, { withFileTypes: true })
+    const installed: InstalledBinary[] = []
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        // Match postgresql-{version}-{platform}-{arch} pattern
+        const match = entry.name.match(/^postgresql-([\d.]+)-(\w+)-(\w+)$/)
+        if (match) {
+          installed.push({
+            engine: 'postgresql' as InstalledBinary['engine'],
+            version: match[1],
+            platform: match[2],
+            arch: match[3],
+          })
+        }
+      }
+    }
+
+    return installed
+  }
+}
+
+export const postgresqlBinaryManager = new PostgreSQLBinaryManager()

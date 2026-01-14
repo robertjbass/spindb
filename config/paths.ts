@@ -13,16 +13,12 @@ function getSpinDBHome(): string {
 
 const SPINDB_HOME = getSpinDBHome()
 
-/**
- * Options for container path functions
- */
+// Options for container path functions
 type ContainerPathOptions = {
   engine: string
 }
 
-/**
- * Options for binary path functions
- */
+// Options for binary path functions
 type BinaryPathOptions = {
   engine: string
   version: string
@@ -43,9 +39,7 @@ export const paths = {
   // Global config file
   config: join(SPINDB_HOME, 'config.json'),
 
-  /**
-   * Get path for a specific binary version
-   */
+  // Get path for a specific binary version
   getBinaryPath(options: BinaryPathOptions): string {
     const { engine, version, platform, arch } = options
     return join(this.bin, `${engine}-${version}-${platform}-${arch}`)
@@ -60,26 +54,20 @@ export const paths = {
     return join(this.containers, engine, name)
   },
 
-  /**
-   * Get path for container config file
-   */
+  // Get path for container config file
   getContainerConfigPath(name: string, options: ContainerPathOptions): string {
     const { engine } = options
     return join(this.containers, engine, name, 'container.json')
   },
 
-  /**
-   * Get path for container data directory
-   */
+  // Get path for container data directory
   getContainerDataPath(name: string, options: ContainerPathOptions): string {
     const { engine } = options
     const engineDef = getEngineDefaults(engine)
     return join(this.containers, engine, name, engineDef.dataSubdir)
   },
 
-  /**
-   * Get path for container log file
-   */
+  // Get path for container log file
   getContainerLogPath(name: string, options: ContainerPathOptions): string {
     const { engine } = options
     const engineDef = getEngineDefaults(engine)
@@ -108,9 +96,7 @@ export const paths = {
     return join(this.containers, engine, name, engineDef.pidFileName)
   },
 
-  /**
-   * Get path for engine-specific containers directory
-   */
+  // Get path for engine-specific containers directory
   getEngineContainersPath(engine: string): string {
     return join(this.containers, engine)
   },

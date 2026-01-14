@@ -9,9 +9,7 @@ import { watch, createReadStream } from 'fs'
 import { readFile, stat } from 'fs/promises'
 import { createInterface } from 'readline'
 
-/**
- * Get the last N lines from a string
- */
+// Get the last N lines from a string
 export function getLastNLines(content: string, n: number): string {
   const lines = content.split('\n')
   const nonEmptyLines =

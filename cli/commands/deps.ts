@@ -18,9 +18,7 @@ import {
   getEngineDependencies,
 } from '../../config/os-dependencies'
 
-/**
- * Format dependency status for display
- */
+// Format dependency status for display
 function formatStatus(status: DependencyStatus): string {
   const { dependency, installed, path, version } = status
 

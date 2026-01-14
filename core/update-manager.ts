@@ -24,9 +24,7 @@ export type UpdateResult = {
 }
 
 export class UpdateManager {
-  /**
-   * Get currently installed version from package.json
-   */
+  // Get currently installed version from package.json
   getCurrentVersion(): string {
     const pkg = require('../package.json') as { version: string }
     return pkg.version
@@ -81,9 +79,7 @@ export class UpdateManager {
     }
   }
 
-  /**
-   * Perform self-update via npm
-   */
+  // Perform self-update via npm
   async performUpdate(): Promise<UpdateResult> {
     const previousVersion = this.getCurrentVersion()
 
@@ -126,9 +122,7 @@ export class UpdateManager {
     }
   }
 
-  /**
-   * Get cached update info (for showing notification without network call)
-   */
+  // Get cached update info (for showing notification without network call)
   async getCachedUpdateInfo(): Promise<{
     latestVersion?: string
     autoCheckEnabled: boolean
@@ -140,9 +134,7 @@ export class UpdateManager {
     }
   }
 
-  /**
-   * Set whether auto-update checks are enabled
-   */
+  // Set whether auto-update checks are enabled
   async setAutoCheckEnabled(enabled: boolean): Promise<void> {
     const config = await configManager.load()
     config.update = {
@@ -152,9 +144,7 @@ export class UpdateManager {
     await configManager.save()
   }
 
-  /**
-   * Fetch latest version from npm registry
-   */
+  // Fetch latest version from npm registry
   private async fetchLatestVersion(): Promise<string> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 10000)

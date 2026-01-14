@@ -140,12 +140,13 @@ export async function promptVersion(
     | inquirer.Separator
 
   const majorChoices: Choice[] = []
+  const engineDefs = getEngineDefaults(engineName)
 
   for (let i = 0; i < majorVersions.length; i++) {
     const major = majorVersions[i]
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
-    const isLatestMajor = i === majorVersions.length - 1
+    const isLatestMajor = major === engineDefs.latestVersion
 
     const countLabel =
       versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
@@ -175,7 +176,7 @@ export async function promptVersion(
       name: 'majorVersion',
       message: 'Select major version:',
       choices: majorChoices,
-      default: majorVersions[majorVersions.length - 1], // Default to latest major
+      default: engineDefs.latestVersion, // Default to latest major
     },
   ])
 
@@ -302,9 +303,7 @@ export async function promptPort(
       ),
     )
     console.log(
-      chalk.gray(
-        '    Only one container can run on this port at a time.',
-      ),
+      chalk.gray('    Only one container can run on this port at a time.'),
     )
     console.log()
 
@@ -359,9 +358,7 @@ export async function promptPort(
   return port
 }
 
-/**
- * Prompt for confirmation using arrow-key selection
- */
+// Prompt for confirmation using arrow-key selection
 export async function promptConfirm(
   message: string,
   defaultValue: boolean = true,
@@ -607,11 +604,8 @@ export async function promptBackupFormat(
   options?: { includeBack?: boolean },
 ): Promise<'sql' | 'dump' | null> {
   // Import here to avoid circular dependencies
-  const {
-    BACKUP_FORMATS,
-    supportsFormatChoice,
-    getDefaultFormat,
-  } = await import('../../config/backup-formats')
+  const { BACKUP_FORMATS, supportsFormatChoice, getDefaultFormat } =
+    await import('../../config/backup-formats')
 
   // If engine doesn't support format choice (e.g., Redis), return default
   if (!supportsFormatChoice(engine)) {
@@ -868,9 +862,7 @@ export async function promptSqlitePath(
   return finalPath
 }
 
-/**
- * Full interactive create flow
- */
+// Full interactive create flow
 export async function promptCreateOptions(): Promise<CreateOptions> {
   console.log(chalk.cyan('\n  ▣  Create New Database Container\n'))
 

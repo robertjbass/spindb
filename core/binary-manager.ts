@@ -24,7 +24,7 @@ const execAsync = promisify(exec)
 function spawnAsync(
   command: string,
   args: string[],
-  options?: { cwd?: string },
+  options?: { cwd?: string; timeout?: number },
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -34,6 +34,25 @@ function spawnAsync(
 
     let stdout = ''
     let stderr = ''
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // Set up timeout if specified
+    if (options?.timeout && options.timeout > 0) {
+      timer = setTimeout(() => {
+        timedOut = true
+        proc.kill('SIGKILL')
+        reject(
+          new Error(
+            `Command "${command} ${args.join(' ')}" timed out after ${options.timeout}ms`,
+          ),
+        )
+      }, options.timeout)
+    }
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+    }
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -43,6 +62,8 @@ function spawnAsync(
     })
 
     proc.on('close', (code) => {
+      cleanup()
+      if (timedOut) return // Already rejected by timeout
       if (code === 0) {
         resolve({ stdout, stderr })
       } else {
@@ -55,6 +76,8 @@ function spawnAsync(
     })
 
     proc.on('error', (err) => {
+      cleanup()
+      if (timedOut) return // Already rejected by timeout
       reject(new Error(`Failed to execute "${command}": ${err.message}`))
     })
   })
@@ -116,9 +139,7 @@ export class BinaryManager {
     return existsSync(postgresPath)
   }
 
-  /**
-   * List all installed PostgreSQL versions
-   */
+  // List all installed PostgreSQL versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -176,17 +197,40 @@ export class BinaryManager {
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
+    let success = false
     try {
-      // Download the archive
+      // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
         message: 'Downloading PostgreSQL binaries...',
       })
 
-      const response = await fetch(url)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+      let response: Response
+      try {
+        response = await fetch(url, { signal: controller.signal })
+      } catch (error) {
+        const err = error as Error
+        if (err.name === 'AbortError') {
+          throw new Error('Download timed out after 5 minutes')
+        }
+        throw error
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(
+            `PostgreSQL ${fullVersion} binaries not found (404). ` +
+              `This version may have been removed from hostdb. ` +
+              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+          )
+        }
         throw new Error(
-          `Failed to download binaries: ${response.status} ${response.statusText}`,
+          `Failed to download PostgreSQL binaries: ${response.status} ${response.statusText}`,
         )
       }
 
@@ -223,14 +267,24 @@ export class BinaryManager {
         }
       }
 
+      // Fix hardcoded library paths on macOS (hostdb binaries have paths from build environment)
+      if (platform === 'darwin') {
+        await this.fixMacOSLibraryPaths(binPath, onProgress)
+      }
+
       // Verify the installation
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!success) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 
@@ -344,8 +398,83 @@ export class BinaryManager {
   }
 
   /**
-   * Verify that PostgreSQL binaries are working
+   * Fix hardcoded library paths in macOS binaries
+   *
+   * hostdb binaries are built in GitHub Actions and contain hardcoded paths
+   * like /Users/runner/work/hostdb/hostdb/install/postgresql/lib/libpq.5.dylib
+   * that don't exist on the user's machine.
+   *
+   * This method uses install_name_tool to rewrite those paths to use
+   * @loader_path-relative references that work on any machine.
    */
+  private async fixMacOSLibraryPaths(
+    binPath: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'configuring',
+      message: 'Fixing library paths for macOS...',
+    })
+
+    const binDir = join(binPath, 'bin')
+    if (!existsSync(binDir)) {
+      return
+    }
+
+    const binaries = await readdir(binDir)
+
+    // Pattern to match hostdb build paths (GitHub Actions runner paths)
+    const hostdbPathPattern =
+      /\/Users\/runner\/work\/hostdb\/[^/]+\/install\/postgresql\/lib\//
+
+    for (const binary of binaries) {
+      const binaryPath = join(binDir, binary)
+
+      try {
+        // Use otool to get the library dependencies
+        const { stdout } = await spawnAsync('otool', ['-L', binaryPath])
+
+        // Parse otool output to find hostdb library references
+        // Format: "\tlibrary_path (compatibility version X, current version Y)"
+        const lines = stdout.split('\n')
+
+        for (const line of lines) {
+          const match = line.match(/^\t([^\s]+)/)
+          if (!match) continue
+
+          const libPath = match[1]
+
+          // Check if this is a hostdb build path that needs fixing
+          if (hostdbPathPattern.test(libPath)) {
+            // Extract just the library filename (e.g., "libpq.5.dylib")
+            const libName = libPath.split('/').pop()
+            if (!libName) continue
+
+            // Create the new relative path
+            const newPath = `@loader_path/../lib/${libName}`
+
+            // Use install_name_tool to change the path
+            try {
+              await spawnAsync('install_name_tool', [
+                '-change',
+                libPath,
+                newPath,
+                binaryPath,
+              ])
+            } catch {
+              // Some binaries may not be writable or may not need fixing
+              // Continue with other binaries
+            }
+          }
+        }
+      } catch {
+        // otool may fail on non-Mach-O files (scripts, etc.)
+        // Continue with other binaries
+      }
+    }
+  }
+
+  // Verify that PostgreSQL binaries are working
   async verify(
     version: string,
     platform: string,
@@ -400,9 +529,7 @@ export class BinaryManager {
     }
   }
 
-  /**
-   * Get the path to a specific binary (postgres, pg_ctl, psql, etc.)
-   */
+  // Get the path to a specific binary (postgres, pg_ctl, psql, etc.)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -420,9 +547,7 @@ export class BinaryManager {
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  /**
-   * Ensure binaries are available, downloading if necessary
-   */
+  // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
     platform: string,
@@ -563,9 +688,7 @@ export class BinaryManager {
     }
   }
 
-  /**
-   * Get the download URL for PostgreSQL client package from apt repository
-   */
+  // Get the download URL for PostgreSQL client package from apt repository
   private async getClientPackageUrl(majorVersion: string): Promise<string> {
     const baseUrl = 'https://apt.postgresql.org/pub/repos/apt/pool/main/p'
     const packageDir = `postgresql-${majorVersion}`
@@ -618,8 +741,31 @@ export class BinaryManager {
         )
       }
 
-      // Sort to get the latest version and return the URL
-      matches.sort().reverse()
+      // Sort by semver to get the latest version
+      // Filename pattern: postgresql-client-17_17.2.0-1.pgdg+1_amd64.deb
+      // Extract version (e.g., "17.2.0-1") and compare numerically
+      const parseVersion = (filename: string): number[] => {
+        // Extract version after the underscore: "17.2.0-1.pgdg..."
+        const versionMatch = filename.match(/_(\d+)\.(\d+)\.(\d+)-(\d+)/)
+        if (versionMatch) {
+          return [
+            parseInt(versionMatch[1], 10),
+            parseInt(versionMatch[2], 10),
+            parseInt(versionMatch[3], 10),
+            parseInt(versionMatch[4], 10),
+          ]
+        }
+        return [0, 0, 0, 0]
+      }
+
+      matches.sort((a, b) => {
+        const vA = parseVersion(a)
+        const vB = parseVersion(b)
+        for (let i = 0; i < 4; i++) {
+          if (vA[i] !== vB[i]) return vB[i] - vA[i]
+        }
+        return 0
+      })
       const latestPackage = matches[0]
 
       return `${indexUrl}${latestPackage}`

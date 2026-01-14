@@ -120,9 +120,7 @@ function getEnginePortRange(engine: string): { start: number; end: number } {
   return engineDefaults.portRange
 }
 
-/**
- * Wrapper that simplifies the common use case
- */
+// Wrapper that simplifies the common use case
 export async function startContainerWithRetry(
   engine: BaseEngine,
   config: ContainerConfig,

@@ -262,43 +262,6 @@ describe('PlatformService', () => {
       assert(typeof result === 'boolean', 'Should return a boolean')
     })
   })
-
-  describe('getZonkyPlatform', () => {
-    it('should return platform string for supported platforms or null', () => {
-      const zonkyPlatform = platformService.getZonkyPlatform()
-      const info = platformService.getPlatformInfo()
-
-      if (info.platform === 'darwin' || info.platform === 'linux') {
-        assert(
-          zonkyPlatform !== null,
-          'Should return platform string for darwin/linux',
-        )
-        assert(
-          typeof zonkyPlatform === 'string' && zonkyPlatform.length > 0,
-          'Platform string should be non-empty',
-        )
-      }
-
-      if (info.platform === 'win32') {
-        assertEqual(
-          zonkyPlatform,
-          null,
-          'Windows should return null (not supported by zonky)',
-        )
-      }
-
-      if (zonkyPlatform !== null) {
-        // Check it returns expected zonky.io format (includes architecture)
-        // Examples: darwin-arm64v8, darwin-amd64, linux-arm64v8, linux-amd64
-        assert(
-          zonkyPlatform.startsWith('darwin-') ||
-            zonkyPlatform.startsWith('linux-') ||
-            zonkyPlatform.startsWith('alpine-linux-'),
-          `Zonky platform should start with darwin-, linux-, or alpine-linux-, got: ${zonkyPlatform}`,
-        )
-      }
-    })
-  })
 })
 
 describe('resolveHomeDir', () => {

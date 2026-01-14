@@ -4,9 +4,10 @@ export const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
   mariadb: '🦭 ', // Extra space - seal emoji renders narrow
-  sqlite: '🪶 ',  // Extra space - feather emoji renders narrow
+  sqlite: '🪶 ', // Extra space - feather emoji renders narrow
   mongodb: '🍃',
   redis: '🔴',
+  valkey: '🔷',
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

@@ -10,58 +10,42 @@ import { platformService } from '../../core/platform-service'
 
 const execAsync = promisify(exec)
 
-/**
- * Find a MySQL binary by name using the platform service
- */
+// Find a MySQL binary by name using the platform service
 export async function findMysqlBinary(name: string): Promise<string | null> {
   return platformService.findToolPath(name)
 }
 
-/**
- * Get the path to mysqld (MySQL server)
- */
+// Get the path to mysqld (MySQL server)
 export async function getMysqldPath(): Promise<string | null> {
   return findMysqlBinary('mysqld')
 }
 
-/**
- * Get the path to mysql client
- */
+// Get the path to mysql client
 export async function getMysqlClientPath(): Promise<string | null> {
   return findMysqlBinary('mysql')
 }
 
-/**
- * Get the path to mysqladmin
- */
+// Get the path to mysqladmin
 export async function getMysqladminPath(): Promise<string | null> {
   return findMysqlBinary('mysqladmin')
 }
 
-/**
- * Get the path to mysqldump
- */
+// Get the path to mysqldump
 export async function getMysqldumpPath(): Promise<string | null> {
   return findMysqlBinary('mysqldump')
 }
 
-/**
- * Get the path to mysql_install_db (MariaDB initialization script)
- */
+// Get the path to mysql_install_db (MariaDB initialization script)
 export async function getMysqlInstallDbPath(): Promise<string | null> {
   return findMysqlBinary('mysql_install_db')
 }
 
-/**
- * Get the path to mariadb-install-db (alternative MariaDB initialization)
- */
+// Get the path to mariadb-install-db (alternative MariaDB initialization)
 export async function getMariadbInstallDbPath(): Promise<string | null> {
   return findMysqlBinary('mariadb-install-db')
 }
 
-/**
- * Detect if the installed MySQL is actually MariaDB
- */
+// Detect if the installed MySQL is actually MariaDB
 export async function isMariaDB(): Promise<boolean> {
   const mysqld = await getMysqldPath()
   if (!mysqld) return false
@@ -74,9 +58,7 @@ export async function isMariaDB(): Promise<boolean> {
   }
 }
 
-/**
- * Get the MySQL server version from a mysqld binary
- */
+// Get the MySQL server version from a mysqld binary
 export async function getMysqlVersion(
   mysqldPath: string,
 ): Promise<string | null> {
@@ -92,10 +74,22 @@ export async function getMysqlVersion(
 
 /**
  * Get the major version from a full version string
- * e.g., "8.0.35" -> "8.0"
+ * e.g., "8.0.35" -> "8.0", "v8.0.35" -> "8.0", "8" -> "8"
  */
 export function getMajorVersion(fullVersion: string): string {
-  const parts = fullVersion.split('.')
+  if (!fullVersion) return ''
+
+  // Trim whitespace and strip leading "v" prefix
+  const normalized = fullVersion.trim().replace(/^v/i, '')
+  if (!normalized) return ''
+
+  const parts = normalized.split('.')
+
+  // If only one part (e.g., "8"), return it as-is
+  if (parts.length < 2) {
+    return parts[0] || ''
+  }
+
   return `${parts[0]}.${parts[1]}`
 }
 
@@ -165,15 +159,10 @@ const HOMEBREW_MYSQL_VERSION_PATHS: Record<string, string[]> = {
     '/usr/local/opt/mysql@8.4/bin',
     '/usr/local/opt/mysql/bin',
   ],
-  '5': [
-    '/opt/homebrew/opt/mysql@5.7/bin',
-    '/usr/local/opt/mysql@5.7/bin',
-  ],
+  '5': ['/opt/homebrew/opt/mysql@5.7/bin', '/usr/local/opt/mysql@5.7/bin'],
 }
 
-/**
- * Get mysqld path for a specific major version
- */
+// Get mysqld path for a specific major version
 export async function getMysqldPathForVersion(
   majorVersion: string,
 ): Promise<string | null> {
@@ -212,9 +201,7 @@ export async function getMysqldPathForVersion(
   return null
 }
 
-/**
- * Get install instructions for MySQL
- */
+// Get install instructions for MySQL
 export function getInstallInstructions(): string {
   const { platform } = platformService.getPlatformInfo()
 
@@ -257,9 +244,7 @@ export type MysqlInstallInfo = {
   isMariaDB: boolean
 }
 
-/**
- * Detect which package manager installed MySQL and get uninstall info
- */
+// Detect which package manager installed MySQL and get uninstall info
 export async function getMysqlInstallInfo(
   mysqldPath: string,
 ): Promise<MysqlInstallInfo> {
@@ -317,74 +302,18 @@ export async function getMysqlInstallInfo(
     }
   }
 
-  // Linux: Detect package manager from path or check installed packages
+  // Linux: Detect package manager using memoized helper
   if (platform === 'linux') {
-    // Check for apt (Debian/Ubuntu)
-    try {
-      const { stdout } = await execAsync('which apt 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
-        return {
-          packageManager: 'apt',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo apt remove ${packageName}`,
-          isMariaDB: mariadb,
-        }
+    const pm = await getLinuxPackageManager()
+    if (pm) {
+      const packageName = mariadb ? pm.mariadbPackage : pm.mysqlPackage
+      return {
+        packageManager: pm.name,
+        packageName,
+        path: mysqldPath,
+        uninstallCommand: pm.uninstallCmd(packageName),
+        isMariaDB: mariadb,
       }
-    } catch {
-      // Not apt
-    }
-
-    // Check for dnf (Fedora/RHEL 8+)
-    try {
-      const { stdout } = await execAsync('which dnf 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
-        return {
-          packageManager: 'dnf',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo dnf remove ${packageName}`,
-          isMariaDB: mariadb,
-        }
-      }
-    } catch {
-      // Not dnf
-    }
-
-    // Check for yum (CentOS/RHEL 7)
-    try {
-      const { stdout } = await execAsync('which yum 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb-server' : 'mysql-server'
-        return {
-          packageManager: 'yum',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo yum remove ${packageName}`,
-          isMariaDB: mariadb,
-        }
-      }
-    } catch {
-      // Not yum
-    }
-
-    // Check for pacman (Arch Linux)
-    try {
-      const { stdout } = await execAsync('which pacman 2>/dev/null')
-      if (stdout.trim()) {
-        const packageName = mariadb ? 'mariadb' : 'mysql'
-        return {
-          packageManager: 'pacman',
-          packageName,
-          path: mysqldPath,
-          uninstallCommand: `sudo pacman -Rs ${packageName}`,
-          isMariaDB: mariadb,
-        }
-      }
-    } catch {
-      // Not pacman
     }
   }
 
@@ -396,4 +325,83 @@ export async function getMysqlInstallInfo(
     uninstallCommand: 'Use your system package manager to uninstall',
     isMariaDB: mariadb,
   }
+}
+
+/**
+ * Linux package manager configuration
+ * Prioritized list: most common package managers first for faster detection
+ */
+type LinuxPackageManagerConfig = {
+  name: MysqlPackageManager
+  command: string
+  mysqlPackage: string
+  mariadbPackage: string
+  uninstallCmd: (pkg: string) => string
+}
+
+const LINUX_PACKAGE_MANAGERS: LinuxPackageManagerConfig[] = [
+  {
+    name: 'apt',
+    command: 'apt',
+    mysqlPackage: 'mysql-server',
+    mariadbPackage: 'mariadb-server',
+    uninstallCmd: (pkg) => `sudo apt remove ${pkg}`,
+  },
+  {
+    name: 'dnf',
+    command: 'dnf',
+    mysqlPackage: 'mysql-server',
+    mariadbPackage: 'mariadb-server',
+    uninstallCmd: (pkg) => `sudo dnf remove ${pkg}`,
+  },
+  {
+    name: 'yum',
+    command: 'yum',
+    mysqlPackage: 'mysql-server',
+    mariadbPackage: 'mariadb-server',
+    uninstallCmd: (pkg) => `sudo yum remove ${pkg}`,
+  },
+  {
+    name: 'pacman',
+    command: 'pacman',
+    mysqlPackage: 'mysql',
+    mariadbPackage: 'mariadb',
+    uninstallCmd: (pkg) => `sudo pacman -Rs ${pkg}`,
+  },
+]
+
+// Memoized Linux package manager detection result
+let cachedLinuxPackageManager: LinuxPackageManagerConfig | null | undefined
+
+/**
+ * Detect the Linux package manager (memoized)
+ * Returns the first available package manager from the prioritized list
+ */
+async function getLinuxPackageManager(): Promise<LinuxPackageManagerConfig | null> {
+  // Return cached result if available (undefined means not checked yet)
+  if (cachedLinuxPackageManager !== undefined) {
+    return cachedLinuxPackageManager
+  }
+
+  for (const pm of LINUX_PACKAGE_MANAGERS) {
+    try {
+      const { stdout } = await execAsync(`which ${pm.command} 2>/dev/null`)
+      if (stdout.trim()) {
+        cachedLinuxPackageManager = pm
+        return pm
+      }
+    } catch {
+      // Package manager not found, try next
+    }
+  }
+
+  cachedLinuxPackageManager = null
+  return null
+}
+
+/**
+ * Clear the memoized package manager cache (useful for testing)
+ */
+export function clearPackageManagerCache(): void {
+  cachedLinuxPackageManager = undefined
 }
