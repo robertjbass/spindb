@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-01-14
+
+### Changed
+- **CI workflow improvements**
+  - Add `hostdb-sync` to ci-status job dependencies array
+  - Add `hostdb-sync` result check to final status validation
+  - Update feature branch trigger to valkey branch
+  - Update TODO comment formatting for dev branch push
+
+### Fixed
+- **Documentation updates**
+  - Add file-based engine edge cases table to FEATURE.md (start/stop/port/status behavior differences)
+  - Various code quality improvements from CodeRabbit review suggestions
+
 ## [0.17.0] - 2026-01-14
 
 ### Added
