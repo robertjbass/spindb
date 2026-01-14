@@ -283,6 +283,8 @@ export class ValkeyBinaryManager {
   }
 
   // Move extracted entries from extractDir to binPath, handling nested valkey/ directories
+  // Unix archives have valkey/bin/ structure, Windows archives may have binaries directly in valkey/
+  // This method normalizes both to binPath/bin/ structure
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
@@ -295,20 +297,53 @@ export class ValkeyBinaryManager {
     )
 
     const sourceDir = valkeyDir ? join(extractDir, valkeyDir.name) : extractDir
-    const entriesToMove = valkeyDir
+    const sourceEntries = valkeyDir
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    for (const entry of entriesToMove) {
-      const sourcePath = join(sourceDir, entry.name)
-      const destPath = join(binPath, entry.name)
-      try {
-        await rename(sourcePath, destPath)
-      } catch (error) {
-        if (isRenameFallbackError(error)) {
-          await cp(sourcePath, destPath, { recursive: true })
-        } else {
-          throw error
+    // Check if source has a bin/ subdirectory (Unix structure)
+    const hasBinDir = sourceEntries.some(
+      (e) => e.isDirectory() && e.name === 'bin',
+    )
+
+    if (hasBinDir) {
+      // Unix structure: move all entries as-is (preserves bin/ subdirectory)
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
+        }
+      }
+    } else {
+      // Windows structure: binaries are directly in valkey/, need to create bin/ subdirectory
+      // Move .exe files to bin/, move other files (configs, DLLs) to root
+      const destBinDir = join(binPath, 'bin')
+      await mkdir(destBinDir, { recursive: true })
+
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        // Put executables and DLLs in bin/, configs and other files in root
+        const isExecutable = entry.name.endsWith('.exe')
+        const isDll = entry.name.endsWith('.dll')
+        const destPath =
+          isExecutable || isDll
+            ? join(destBinDir, entry.name)
+            : join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }

@@ -491,6 +491,7 @@ export class ValkeyEngine extends BaseEngine {
   }
 
   // Wait for Valkey to be ready to accept connections
+  // TODO - consider copying the mongodb logic for this
   private async waitForReady(
     port: number,
     version: string,
@@ -503,8 +504,12 @@ export class ValkeyEngine extends BaseEngine {
     try {
       valkeyCli = await this.getValkeyCliPathForVersion(version)
     } catch {
-      logWarning('valkey-cli not found, cannot verify Valkey is ready')
-      return false
+      logWarning(
+        'valkey-cli not found, cannot verify Valkey is ready. Assuming ready after brief delay.',
+      )
+      // Give Valkey a moment to start, then assume success
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      return true
     }
 
     while (Date.now() - startTime < timeoutMs) {

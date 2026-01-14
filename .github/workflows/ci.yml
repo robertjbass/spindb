@@ -454,6 +454,7 @@ jobs:
   # ============================================
   # Valkey Integration Tests
   # Uses SpinDB to download and manage Valkey binaries from hostdb
+  # NOTE: Windows excluded - Valkey does not provide Windows binaries
   # ============================================
   test-valkey:
     name: Valkey (${{ matrix.os }})
@@ -466,7 +467,7 @@ jobs:
           - ubuntu-24.04
           - macos-15 # Intel
           - macos-14 # ARM64
-          - windows-latest
+          # Windows excluded: Valkey does not provide Windows binaries (hostdb has no win32-x64 builds)
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -57,11 +57,12 @@ async function execRedisCommand(
 
 /**
  * Escape a string value for Redis command output
- * Wraps in single quotes and escapes internal single quotes
+ * Wraps in single quotes and escapes backslashes and single quotes
  */
 function escapeRedisValue(value: string): string {
-  // Use single quotes and escape any internal single quotes
-  return `'${value.replace(/'/g, "\\'")}'`
+  // Escape backslashes first, then single quotes (order matters!)
+  // e.g., "test\'value" → "test\\\'value" (backslash and quote both escaped)
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
 }
 
 /**

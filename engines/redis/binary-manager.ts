@@ -283,6 +283,8 @@ export class RedisBinaryManager {
   }
 
   // Move extracted entries from extractDir to binPath, handling nested redis/ directories
+  // Unix archives have redis/bin/ structure, Windows archives have binaries directly in redis/
+  // This method normalizes both to binPath/bin/ structure
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
@@ -294,20 +296,53 @@ export class RedisBinaryManager {
     )
 
     const sourceDir = redisDir ? join(extractDir, redisDir.name) : extractDir
-    const entriesToMove = redisDir
+    const sourceEntries = redisDir
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    for (const entry of entriesToMove) {
-      const sourcePath = join(sourceDir, entry.name)
-      const destPath = join(binPath, entry.name)
-      try {
-        await rename(sourcePath, destPath)
-      } catch (error) {
-        if (isRenameFallbackError(error)) {
-          await cp(sourcePath, destPath, { recursive: true })
-        } else {
-          throw error
+    // Check if source has a bin/ subdirectory (Unix structure)
+    const hasBinDir = sourceEntries.some(
+      (e) => e.isDirectory() && e.name === 'bin',
+    )
+
+    if (hasBinDir) {
+      // Unix structure: move all entries as-is (preserves bin/ subdirectory)
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
+        }
+      }
+    } else {
+      // Windows structure: binaries are directly in redis/, need to create bin/ subdirectory
+      // Move .exe files to bin/, move other files (configs, DLLs) to root
+      const destBinDir = join(binPath, 'bin')
+      await mkdir(destBinDir, { recursive: true })
+
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        // Put executables and DLLs in bin/, configs and other files in root
+        const isExecutable = entry.name.endsWith('.exe')
+        const isDll = entry.name.endsWith('.dll')
+        const destPath =
+          isExecutable || isDll
+            ? join(destBinDir, entry.name)
+            : join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }

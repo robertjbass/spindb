@@ -23,6 +23,8 @@ export function parseVersion(versionString: string): {
   const patch = parts[2] ? parseInt(parts[2], 10) : 0
 
   if (isNaN(major)) return null
+  if (parts[1] && isNaN(minor)) return null
+  if (parts[2] && isNaN(patch)) return null
 
   return { major, minor, patch, raw: cleaned }
 }
