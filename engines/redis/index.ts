@@ -88,13 +88,16 @@ function generateRedisConfig(options: {
   // Windows Redis doesn't support daemonize natively, use detached spawn instead
   const daemonizeValue = options.daemonize ?? true
 
+  // Redis config requires forward slashes even on Windows
+  const normalizePathForRedis = (p: string) => p.replace(/\\/g, '/')
+
   return `# SpinDB generated Redis configuration
 port ${options.port}
 bind 127.0.0.1
-dir ${options.dataDir}
+dir ${normalizePathForRedis(options.dataDir)}
 daemonize ${daemonizeValue ? 'yes' : 'no'}
-logfile ${options.logFile}
-pidfile ${options.pidFile}
+logfile ${normalizePathForRedis(options.logFile)}
+pidfile ${normalizePathForRedis(options.pidFile)}
 
 # Persistence - RDB snapshots
 save 900 1

@@ -88,13 +88,16 @@ function generateValkeyConfig(options: {
   // Windows Valkey doesn't support daemonize natively, use detached spawn instead
   const daemonizeValue = options.daemonize ?? true
 
+  // Valkey config requires forward slashes even on Windows
+  const normalizePathForValkey = (p: string) => p.replace(/\\/g, '/')
+
   return `# SpinDB generated Valkey configuration
 port ${options.port}
 bind 127.0.0.1
-dir ${options.dataDir}
+dir ${normalizePathForValkey(options.dataDir)}
 daemonize ${daemonizeValue ? 'yes' : 'no'}
-logfile ${options.logFile}
-pidfile ${options.pidFile}
+logfile ${normalizePathForValkey(options.logFile)}
+pidfile ${normalizePathForValkey(options.pidFile)}
 
 # Persistence - RDB snapshots
 save 900 1
