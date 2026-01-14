@@ -115,6 +115,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['redis-cli'],
     maxConnections: 0, // Not applicable for Redis
   },
+  valkey: {
+    defaultVersion: '9',
+    defaultPort: 6379,
+    portRange: { start: 6379, end: 6479 },
+    supportedVersions: ['8', '9'], // Keep in sync with engines/valkey/version-maps.ts
+    latestVersion: '9',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'redis', // Use redis:// scheme for client compatibility
+    logFileName: 'valkey.log',
+    pidFileName: 'valkey.pid',
+    dataSubdir: 'data',
+    clientTools: ['valkey-cli'],
+    maxConnections: 0, // Not applicable for Valkey
+  },
 }
 
 /**

@@ -44,6 +44,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'mongorestore',
   'redis-server',
   'redis-cli',
+  'valkey-server',
+  'valkey-cli',
   'pgcli',
   'mycli',
   'litecli',

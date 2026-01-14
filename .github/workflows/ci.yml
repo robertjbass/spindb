@@ -449,6 +449,57 @@ jobs:
         timeout-minutes: 15
 
   # ============================================
+  # Valkey Integration Tests
+  # Uses SpinDB to download and manage Valkey binaries from hostdb
+  # ============================================
+  test-valkey:
+    name: Valkey (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Valkey binaries - these are downloaded from hostdb
+      - name: Cache Valkey binaries
+        uses: actions/cache@v4
+        id: valkey-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Valkey binaries (all platforms)
+      - name: Install Valkey via SpinDB
+        run: pnpm start engines download valkey 9
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Valkey integration tests
+        run: pnpm test:valkey
+        timeout-minutes: 15
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -838,6 +889,7 @@ jobs:
         test-sqlite,
         test-mongodb,
         test-redis,
+        test-valkey,
         test-cli-e2e,
         test-fresh-install,
         test-upgrade,
@@ -874,6 +926,10 @@ jobs:
           fi
           if [ "${{ needs.test-redis.result }}" != "success" ]; then
             echo "Redis tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-valkey.result }}" != "success" ]; then
+            echo "Valkey tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

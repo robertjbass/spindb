@@ -1,0 +1,7 @@
+DEL user:1 user:2 user:3 user:4 user:5 user:count
+SET user:1 '{"id":1,"name":"Alice Johnson","email":"alice@example.com"}'
+SET user:2 '{"id":2,"name":"Bob Smith","email":"bob@example.com"}'
+SET user:3 '{"id":3,"name":"Charlie Brown","email":"charlie@example.com"}'
+SET user:4 '{"id":4,"name":"Diana Ross","email":"diana@example.com"}'
+SET user:5 '{"id":5,"name":"Eve Wilson","email":"eve@example.com"}'
+SET user:count 5

@@ -15,6 +15,7 @@ import {
   type InstalledSqliteEngine,
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
+  type InstalledValkeyEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -53,6 +54,7 @@ export async function handleEngines(): Promise<void> {
     sqliteEngines,
     mongodbEngines,
     redisEngines,
+    valkeyEngines,
   ] = [
     engines.filter(
       (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
@@ -62,6 +64,7 @@ export async function handleEngines(): Promise<void> {
     engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
     engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
     engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
+    engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
   ]
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -76,6 +79,7 @@ export async function handleEngines(): Promise<void> {
     0,
   )
   const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalValkeySize = valkeyEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   const COL_ENGINE = 14
   const COL_VERSION = 12
@@ -99,6 +103,7 @@ export async function handleEngines(): Promise<void> {
     ...sqliteEngines,
     ...mongodbEngines,
     ...redisEngines,
+    ...valkeyEngines,
   ]
 
   for (const engine of allEnginesSorted) {
@@ -157,6 +162,13 @@ export async function handleEngines(): Promise<void> {
     console.log(
       chalk.gray(
         `  Redis: ${redisEngines.length} version(s), ${formatBytes(totalRedisSize)}`,
+      ),
+    )
+  }
+  if (valkeyEngines.length > 0) {
+    console.log(
+      chalk.gray(
+        `  Valkey: ${valkeyEngines.length} version(s), ${formatBytes(totalValkeySize)}`,
       ),
     )
   }

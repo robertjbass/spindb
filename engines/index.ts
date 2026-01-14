@@ -4,6 +4,7 @@ import { mariadbEngine } from './mariadb'
 import { sqliteEngine } from './sqlite'
 import { mongodbEngine } from './mongodb'
 import { redisEngine } from './redis'
+import { valkeyEngine } from './valkey'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
@@ -26,6 +27,8 @@ export const engines: Record<string, BaseEngine> = {
   mongo: mongodbEngine,
   // Redis and aliases
   redis: redisEngine,
+  // Valkey and aliases
+  valkey: valkeyEngine,
 }
 
 // Get an engine by name

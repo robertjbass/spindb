@@ -9,14 +9,16 @@ This document provides the complete specification for adding a new database engi
 3. [Quick Start Checklist](#quick-start-checklist)
 4. [Core Implementation](#core-implementation)
 5. [Configuration Files](#configuration-files)
-6. [Testing Requirements](#testing-requirements)
-7. [GitHub Actions / CI](#github-actions--ci)
-8. [Binary Management](#binary-management)
-9. [OS Dependencies](#os-dependencies)
-10. [Windows Considerations](#windows-considerations)
-11. [Documentation Updates](#documentation-updates)
-12. [Pass/Fail Criteria](#passfail-criteria)
-13. [Reference Implementations](#reference-implementations)
+6. [CLI Menu Handlers](#cli-menu-handlers)
+7. [Testing Requirements](#testing-requirements)
+8. [GitHub Actions / CI](#github-actions--ci)
+9. [Docker Tests](#docker-tests)
+10. [Binary Management](#binary-management)
+11. [OS Dependencies](#os-dependencies)
+12. [Windows Considerations](#windows-considerations)
+13. [Documentation Updates](#documentation-updates)
+14. [Pass/Fail Criteria](#passfail-criteria)
+15. [Reference Implementations](#reference-implementations)
 
 ---
 
@@ -27,7 +29,7 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 **Key Principles:**
 
 1. **CLI-First**: All functionality must be available via command-line arguments
-2. **Wrapper Pattern**: Functions wrap CLI tools (psql, mysql, mongosh) rather than implementing database logic
+2. **Wrapper Pattern**: Functions wrap CLI tools (psql, mysql, mongosh, redis-cli) rather than implementing database logic
 3. **Cross-Platform**: Must work on macOS, Linux, and Windows
 4. **Transactional**: Multi-step operations must be atomic with rollback support
 
@@ -37,7 +39,7 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 
 SpinDB supports two types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MongoDB)
+### Server-Based Databases (PostgreSQL, MySQL, MongoDB, Redis, Valkey)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management
@@ -56,54 +58,65 @@ SpinDB supports two types of database engines:
 
 ## Quick Start Checklist
 
-Use this checklist to track implementation progress:
+Use this checklist to track implementation progress. **Reference: Valkey implementation** for a complete example.
 
-### Core Implementation
+### Core Engine Files (9 files)
 
 - [ ] `engines/{engine}/index.ts` - Main engine class extending `BaseEngine`
 - [ ] `engines/{engine}/backup.ts` - Backup creation wrapper
 - [ ] `engines/{engine}/restore.ts` - Backup detection and restore logic
 - [ ] `engines/{engine}/version-validator.ts` - Version parsing and compatibility
-- [ ] `engines/{engine}/binary-manager.ts` OR `binary-detection.ts` - Binary management
+- [ ] `engines/{engine}/version-maps.ts` - Major version to full version mapping (hostdb sync)
+- [ ] `engines/{engine}/binary-urls.ts` - hostdb download URL construction
+- [ ] `engines/{engine}/binary-manager.ts` - Download, extraction, verification
+- [ ] `engines/{engine}/hostdb-releases.ts` - Fetch versions from releases.json
+- [ ] `engines/{engine}/cli-utils.ts` - Shared CLI utilities (optional)
 
-### Configuration Files
+### Configuration Files (9 files)
 
 - [ ] `engines/index.ts` - Register engine with aliases
-- [ ] `types/index.ts` - Add to `Engine` enum and `BinaryTool` type
+- [ ] `types/index.ts` - Add to `Engine` enum, `ALL_ENGINES`, and `BinaryTool` type
 - [ ] `config/engine-defaults.ts` - Add engine defaults
+- [ ] `config/engines.json` - Add engine metadata (icon, versions, status)
 - [ ] `config/os-dependencies.ts` - Add system dependencies
-- [ ] `cli/constants.ts` - Add engine icon
-- [ ] `cli/helpers.ts` - Add engine type and detection function for engines list
+- [ ] `core/dependency-manager.ts` - Add binary tools to `KNOWN_BINARY_TOOLS` array
+- [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS`
+- [ ] `cli/helpers.ts` - Add `InstalledXxxEngine` type and detection function
+- [ ] `cli/commands/engines.ts` - Add download case and list display for the engine
 
-### Menu/CLI Terminology
+### CLI Menu Handlers (4 files)
 
-- [ ] `cli/commands/menu/container-handlers.ts` - Update "Run SQL file" label if not SQL-based
-- [ ] `cli/commands/menu/container-handlers.ts` - Skip database name prompt if engine uses numbered DBs
-- [ ] `cli/commands/menu/shell-handlers.ts` - Add engine-specific shell (e.g., redis-cli, iredis)
-- [ ] `cli/commands/menu/shell-handlers.ts` - Hide usql option for non-SQL engines
+- [ ] `cli/commands/menu/container-handlers.ts` - Skip database name prompt if numbered DBs
+- [ ] `cli/commands/menu/shell-handlers.ts` - Add engine-specific shell and enhanced CLI
 - [ ] `cli/commands/menu/sql-handlers.ts` - Update script type terminology (SQL/Script/Command)
-- [ ] `cli/commands/menu/engine-handlers.ts` - Add engine to "Manage Engines" menu display and info handler
+- [ ] `cli/commands/menu/engine-handlers.ts` - Add to "Manage Engines" display
 
-### Testing
+### Testing (6+ files)
 
-- [ ] `tests/fixtures/{engine}/seeds/sample-db.sql` - Test seed file
-- [ ] `tests/integration/{engine}.test.ts` - Integration tests (14+ tests)
+- [ ] `tests/fixtures/{engine}/seeds/sample-db.{ext}` - Test seed file
+- [ ] `tests/integration/{engine}.test.ts` - Integration tests (14+ tests minimum)
 - [ ] `tests/integration/helpers.ts` - Add engine to helper functions
-- [ ] Unit tests for version validator
-- [ ] Unit tests for binary detection/management
-- [ ] CLI E2E tests include engine
+- [ ] `tests/unit/{engine}-version-validator.test.ts` - Version validator unit tests
+- [ ] `tests/unit/{engine}-restore.test.ts` - Restore/backup format unit tests
+- [ ] `package.json` - Add `test:{engine}` script
 
-### CI/CD
+### CI/CD (2 files)
 
-- [ ] `.github/workflows/ci.yml` - Add integration test job
-- [ ] CI runs on all 3 OSes (or document exceptions)
-- [ ] CI success job updated with new engine
+- [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching
+- [ ] `.github/workflows/ci.yml` - Add to `ci-success` job needs and checks
 
-### Documentation
+### Docker Tests (2 files)
 
-- [ ] `README.md` - Add engine section
+- [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
+- [ ] `tests/docker/run-e2e.sh` - Add engine case and test execution
+
+### Documentation (5 files)
+
+- [ ] `README.md` - Add engine section with full documentation
 - [ ] `CHANGELOG.md` - Add to unreleased section
 - [ ] `TODO.md` - Update engine status
+- [ ] `ENGINES.md` - Add to supported engines table and details
+- [ ] `CLAUDE.md` - Update project documentation
 
 ---
 
@@ -111,221 +124,67 @@ Use this checklist to track implementation progress:
 
 ### Engine Directory Structure
 
-Create a new directory at `engines/{engine}/`:
+Create a new directory at `engines/{engine}/` with these files:
 
 ```
 engines/{engine}/
-├── index.ts           # Main engine class (required)
-├── backup.ts          # Backup wrapper (required)
-├── restore.ts         # Restore logic (required)
+├── index.ts              # Main engine class (required)
+├── backup.ts             # Backup wrapper (required)
+├── restore.ts            # Restore logic (required)
 ├── version-validator.ts  # Version parsing (required)
-└── binary-manager.ts  # For downloadable binaries
-    OR
-└── binary-detection.ts   # For system binaries
+├── version-maps.ts       # Version mapping for hostdb (required)
+├── binary-urls.ts        # Download URL construction (required)
+├── binary-manager.ts     # Binary download/extraction (required)
+├── hostdb-releases.ts    # Fetch versions from hostdb (required)
+└── cli-utils.ts          # Shared utilities (optional)
 ```
 
 ### BaseEngine Abstract Methods
 
-Your engine class must extend `BaseEngine` and implement ALL of these methods:
+Your engine class must extend `BaseEngine` and implement ALL abstract methods. See `engines/base-engine.ts` for the complete interface.
+
+Key methods to implement:
 
 ```ts
 import { BaseEngine } from '../base-engine'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
-} from '../../types'
+import type { ContainerConfig, ProgressCallback } from '../../types'
 
 export class YourEngine extends BaseEngine {
-  // =====================
-  // REQUIRED PROPERTIES
-  // =====================
+  // Required properties
+  name = 'yourengine'
+  displayName = 'YourEngine'
+  defaultPort = 6379
+  supportedVersions = ['8', '9']
 
-  name = 'yourengine' // Lowercase, used in CLI and paths
-  displayName = 'YourEngine' // Human-readable name
-  defaultPort = 27017 // Default port (0 for file-based)
-  supportedVersions = ['6', '7', '8'] // Major versions supported
-
-  // =====================
-  // BINARY MANAGEMENT
-  // =====================
-
-  /**
-   * Get download URL for binaries (server-based engines with downloadable binaries)
-   * Throw error with install instructions if binaries must be system-installed
-   */
+  // Binary management
   getBinaryUrl(version: string, platform: string, arch: string): string
-
-  /**
-   * Verify that binaries at the given path are functional
-   */
   async verifyBinary(binPath: string): Promise<boolean>
-
-  /**
-   * Check if binaries for a version are installed
-   */
   async isBinaryInstalled(version: string): Promise<boolean>
+  async ensureBinaries(version: string, onProgress?: ProgressCallback): Promise<string>
 
-  /**
-   * Ensure binaries are available, downloading or installing if necessary
-   * Should register tool paths with configManager after installation
-   */
-  async ensureBinaries(
-    version: string,
-    onProgress?: ProgressCallback,
-  ): Promise<string>
-
-  // =====================
-  // LIFECYCLE
-  // =====================
-
-  /**
-   * Initialize data directory for a new container
-   * Server-based: Create data directory, init database cluster
-   * File-based: Create database file, register in registry
-   */
-  async initDataDir(
-    containerName: string,
-    version: string,
-    options?: Record<string, unknown>,
-  ): Promise<string>
-
-  /**
-   * Start the database server
-   * Server-based: Start daemon, return port and connection string
-   * File-based: Verify file exists, return connection string
-   */
-  async start(
-    container: ContainerConfig,
-    onProgress?: ProgressCallback,
-  ): Promise<{ port: number; connectionString: string }>
-
-  /**
-   * Stop the database server
-   * Server-based: Send shutdown signal, wait for clean stop
-   * File-based: No-op
-   */
+  // Lifecycle
+  async initDataDir(name: string, version: string, options?: Record<string, unknown>): Promise<string>
+  async start(container: ContainerConfig, onProgress?: ProgressCallback): Promise<{ port: number; connectionString: string }>
   async stop(container: ContainerConfig): Promise<void>
-
-  /**
-   * Get status of the database
-   * Return running: true if database is ready to accept connections
-   */
   async status(container: ContainerConfig): Promise<StatusResult>
 
-  // =====================
-  // CONNECTION
-  // =====================
-
-  /**
-   * Build connection string for the container
-   * Examples:
-   *   postgresql://postgres@127.0.0.1:5432/mydb
-   *   mysql://root@127.0.0.1:3306/mydb
-   *   mongodb://127.0.0.1:27017/mydb
-   *   sqlite:///path/to/file.sqlite
-   */
+  // Connection
   getConnectionString(container: ContainerConfig, database?: string): string
-
-  /**
-   * Open interactive shell connection
-   * Spawn the database CLI (psql, mysql, mongosh) with inherited stdio
-   */
   async connect(container: ContainerConfig, database?: string): Promise<void>
 
-  // =====================
-  // DATABASE OPERATIONS
-  // =====================
+  // Database operations
+  async createDatabase(container: ContainerConfig, database: string): Promise<void>
+  async dropDatabase(container: ContainerConfig, database: string): Promise<void>
+  async runScript(container: ContainerConfig, options: { file?: string; sql?: string; database?: string }): Promise<void>
 
-  /**
-   * Create a new database within the container
-   * File-based: Often a no-op (file is the database)
-   */
-  async createDatabase(
-    container: ContainerConfig,
-    database: string,
-  ): Promise<void>
-
-  /**
-   * Drop a database within the container
-   */
-  async dropDatabase(
-    container: ContainerConfig,
-    database: string,
-  ): Promise<void>
-
-  /**
-   * Run a SQL/script file or inline statement
-   */
-  async runScript(
-    container: ContainerConfig,
-    options: { file?: string; sql?: string; database?: string },
-  ): Promise<void>
-
-  /**
-   * Get the size of the database in bytes
-   * Return null if not running or cannot be determined
-   */
-  async getDatabaseSize(container: ContainerConfig): Promise<number | null>
-
-  // =====================
-  // BACKUP & RESTORE
-  // =====================
-
-  /**
-   * Detect the format of a backup file
-   * Return format, description, and restore command hint
-   */
+  // Backup & restore
   async detectBackupFormat(filePath: string): Promise<BackupFormat>
+  async backup(container: ContainerConfig, outputPath: string, options: BackupOptions): Promise<BackupResult>
+  async restore(container: ContainerConfig, backupPath: string, options?: Record<string, unknown>): Promise<RestoreResult>
+  async dumpFromConnectionString(connectionString: string, outputPath: string): Promise<DumpResult>
 
-  /**
-   * Create a backup of the database
-   * options.format: 'sql' (plain text) or 'dump' (binary/compressed)
-   */
-  async backup(
-    container: ContainerConfig,
-    outputPath: string,
-    options: BackupOptions,
-  ): Promise<BackupResult>
-
-  /**
-   * Restore a backup to the container
-   */
-  async restore(
-    container: ContainerConfig,
-    backupPath: string,
-    options?: Record<string, unknown>,
-  ): Promise<RestoreResult>
-
-  /**
-   * Dump from a remote database using a connection string
-   * Used for `spindb create --from <connection-string>`
-   */
-  async dumpFromConnectionString(
-    connectionString: string,
-    outputPath: string,
-  ): Promise<DumpResult>
-
-  // =====================
-  // OPTIONAL OVERRIDES
-  // =====================
-
-  /**
-   * Fetch available versions from remote source (optional)
-   * Default implementation returns supportedVersions as single-item arrays
-   */
-  async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    const versions: Record<string, string[]> = {}
-    for (const v of this.supportedVersions) {
-      versions[v] = [v]
-    }
-    return versions
-  }
+  // Engine-specific client path (add to base-engine.ts too)
+  async getYourEngineClientPath(): Promise<string>
 }
 
 export const yourEngine = new YourEngine()
@@ -340,10 +199,8 @@ import { yourEngine } from './yourengine'
 
 export const engines: Record<string, BaseEngine> = {
   // ... existing engines
-
-  // Your engine and aliases
   yourengine: yourEngine,
-  alias1: yourEngine,  // e.g., 'mongo' for 'mongodb'
+  alias: yourEngine,  // Optional alias (e.g., 'mongo' for 'mongodb')
 }
 ```
 
@@ -353,30 +210,39 @@ export const engines: Record<string, BaseEngine> = {
 
 ### 1. Types (`types/index.ts`)
 
-Add to the `Engine` enum:
+Add to the `Engine` enum and `ALL_ENGINES` array:
 
 ```ts
 export enum Engine {
   PostgreSQL = 'postgresql',
   MySQL = 'mysql',
   SQLite = 'sqlite',
+  MongoDB = 'mongodb',
+  Redis = 'redis',
+  Valkey = 'valkey',
   YourEngine = 'yourengine',  // Add this
 }
+
+// ALL_ENGINES must include all enum values - TypeScript will error if you miss one
+export const ALL_ENGINES = [
+  Engine.PostgreSQL,
+  Engine.MySQL,
+  Engine.SQLite,
+  Engine.MongoDB,
+  Engine.Redis,
+  Engine.Valkey,
+  Engine.YourEngine,  // Add this
+] as const
 ```
 
-Add any new binary tools to `BinaryTool`:
+Add binary tools to `BinaryTool` type:
 
 ```ts
 export type BinaryTool =
-  // PostgreSQL tools
-  | 'psql'
-  | 'pg_dump'
   // ... existing tools
-
-  // Your engine tools
-  | 'mongosh'      // Add these
-  | 'mongodump'
-  | 'mongorestore'
+  // YourEngine tools
+  | 'yourengine-server'
+  | 'yourengine-cli'
 ```
 
 ### 2. Engine Defaults (`config/engine-defaults.ts`)
@@ -388,25 +254,49 @@ export const engineDefaults: Record<string, EngineDefaults> = {
   // ... existing engines
 
   yourengine: {
-    defaultVersion: '7',
-    defaultPort: 27017,
-    portRange: { start: 27017, end: 27100 },
-    supportedVersions: ['6', '7', '8'],
-    latestVersion: '7',
-    superuser: 'admin',  // or '' if no auth
-    connectionScheme: 'mongodb',
-    logFileName: 'mongodb.log',
-    pidFileName: 'mongodb.pid',
+    defaultVersion: '9',
+    defaultPort: 6379,
+    portRange: { start: 6379, end: 6479 },
+    supportedVersions: ['8', '9'],
+    latestVersion: '9',
+    superuser: '',  // Empty if no auth
+    connectionScheme: 'redis',  // Use existing scheme if protocol-compatible
+    logFileName: 'yourengine.log',
+    pidFileName: 'yourengine.pid',
     dataSubdir: 'data',
-    clientTools: ['mongosh', 'mongodump', 'mongorestore'],
-    maxConnections: 0,  // 0 if not applicable
+    clientTools: ['yourengine-cli'],
   },
 }
 ```
 
-### 3. OS Dependencies (`config/os-dependencies.ts`)
+### 3. Engines JSON (`config/engines.json`)
 
-Add system dependencies for each package manager:
+Add your engine to the JSON registry:
+
+```json
+{
+  "yourengine": {
+    "displayName": "YourEngine",
+    "icon": "🔷",
+    "status": "integrated",
+    "binarySource": "hostdb",
+    "supportedVersions": ["8.0.6", "9.0.1"],
+    "defaultVersion": "9.0.1",
+    "defaultPort": 6379,
+    "runtime": "server",
+    "queryLanguage": "redis",
+    "connectionScheme": "redis",
+    "superuser": null,
+    "clientTools": ["yourengine-server", "yourengine-cli"],
+    "licensing": "BSD-3-Clause",
+    "notes": "Optional notes about the engine"
+  }
+}
+```
+
+### 4. OS Dependencies (`config/os-dependencies.ts`)
+
+Add system dependencies for fallback installation:
 
 ```ts
 const yourengineDependencies: EngineDependencies = {
@@ -414,373 +304,329 @@ const yourengineDependencies: EngineDependencies = {
   displayName: 'YourEngine',
   dependencies: [
     {
-      name: 'mongosh',
-      binary: 'mongosh',
-      description: 'MongoDB Shell',
+      name: 'yourengine-server',
+      binary: 'yourengine-server',
+      description: 'YourEngine server daemon',
       packages: {
-        brew: { package: 'mongosh' },
-        apt: { package: 'mongodb-mongosh' },
-        yum: { package: 'mongodb-mongosh' },
-        dnf: { package: 'mongodb-mongosh' },
-        pacman: { package: 'mongosh' },
-        choco: { package: 'mongodb-shell' },
-        winget: { package: 'MongoDB.Shell' },
-        scoop: { package: 'mongosh' },
+        brew: { package: 'yourengine' },
+        // Add other package managers as available
       },
       manualInstall: {
         darwin: [
-          'Install with Homebrew: brew install mongosh',
-          'Or download from: https://www.mongodb.com/try/download/shell',
+          'brew install yourengine',
+          'Or use SpinDB: spindb engines download yourengine 9',
         ],
         linux: [
-          'Ubuntu/Debian: Follow MongoDB install guide at https://www.mongodb.com/docs/manual/administration/install-on-linux/',
+          'Use SpinDB to download binaries: spindb engines download yourengine 9',
         ],
         win32: [
-          'Using Chocolatey: choco install mongodb-shell',
-          'Or download from: https://www.mongodb.com/try/download/shell',
+          'Use SpinDB to download binaries: spindb engines download yourengine 9',
         ],
       },
     },
-    // Add more dependencies as needed (mongodump, mongorestore, mongod)
+    {
+      name: 'yourengine-cli',
+      binary: 'yourengine-cli',
+      description: 'YourEngine command-line client',
+      packages: {
+        brew: { package: 'yourengine' },
+      },
+      manualInstall: {
+        // ... same as above
+      },
+    },
   ],
 }
 
 // Add to registry
 export const engineDependencies: EngineDependencies[] = [
-  postgresqlDependencies,
-  mysqlDependencies,
-  sqliteDependencies,
-  yourengineDependencies,  // Add this
+  // ... existing engines
+  yourengineDependencies,
 ]
 ```
 
-### 4. Config Schema (`types/index.ts` - SpinDBConfig)
+### 5. Dependency Manager (`core/dependency-manager.ts`)
 
-If your engine needs registry-based tracking (like SQLite for file-based databases), add to the config schema:
+**CRITICAL:** Add your binary tools to the `KNOWN_BINARY_TOOLS` array. Without this, `findBinary()` cannot look up your tools from the config cache, causing "Missing tools" errors even after binaries are downloaded.
 
 ```ts
-export type SpinDBConfig = {
-  binaries: {
-    // ... existing tools
-
-    // Your engine tools
-    mongosh?: BinaryConfig
-    mongodump?: BinaryConfig
-    mongorestore?: BinaryConfig
-  }
-  // ...
-}
+const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
+  // ... existing tools
+  'redis-server',
+  'redis-cli',
+  'valkey-server',    // Add your engine's server
+  'valkey-cli',       // Add your engine's client
+  'yourengine-server',
+  'yourengine-cli',
+  // ... other tools
+] as const
 ```
 
-### 5. Engine Icon (`cli/constants.ts`)
+### 6. Engine Icon (`cli/constants.ts`)
 
-Add your engine's icon to the `ENGINE_ICONS` map. This icon appears in the interactive menu when selecting database engines.
+Add your engine's icon:
 
 ```ts
 export const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
+  mariadb: '🦭',
   sqlite: '🪶',
   mongodb: '🍃',
-  yourengine: '🔴',  // Add your engine icon
+  redis: '🔴',
+  valkey: '🔷',
+  yourengine: '🔶',  // Add your engine icon
 }
 ```
 
-**Icon conventions:**
-- Use an emoji that represents the database (e.g., animal mascot, related symbol)
-- Keep it simple and recognizable
-- If no obvious icon exists, check the database's official branding
+### 7. CLI Helpers (`cli/helpers.ts`)
 
-**Common engine icons:**
-| Engine | Icon | Reason |
-|--------|------|--------|
-| PostgreSQL | 🐘 | Elephant mascot |
-| MySQL | 🐬 | Dolphin mascot |
-| SQLite | 🪶 | Feather (lightweight) |
-| MongoDB | 🍃 | Leaf (from logo) |
-| Redis | 🔴 | Red circle (from name/logo) |
+Add installed engine type and detection function:
 
-If no icon is provided, the default `▣` will be used, which looks generic in the menu.
+```ts
+export type InstalledYourEngineEngine = {
+  engine: 'yourengine'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
 
-### 6. CLI Helpers (`cli/helpers.ts`)
+export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineEngine[]> {
+  const binDir = paths.binaries
+  if (!existsSync(binDir)) return []
 
-This file provides helper functions for listing installed engines in the "Manage Engines" menu. The implementation differs based on whether your engine uses **downloaded binaries** or **system binaries**.
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledYourEngineEngine[] = []
 
-#### For Downloaded Binary Engines (like PostgreSQL, MariaDB)
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    // Match pattern: yourengine-{version}-{platform}-{arch}
+    const match = entry.name.match(/^yourengine-(\d+\.\d+\.\d+)-(\w+)-(\w+)$/)
+    if (!match) continue
 
-Downloaded binaries are stored in `~/.spindb/bin/{engine}-{version}-{platform}-{arch}/` and can be deleted from the menu.
+    const [, version, platform, arch] = match
+    const fullPath = join(binDir, entry.name)
 
-1. **Add installed engine type:**
-   ```ts
-   export type InstalledYourEngineEngine = {
-     engine: 'yourengine'
-     version: string
-     platform: string    // e.g., 'darwin', 'linux', 'win32'
-     arch: string        // e.g., 'arm64', 'x64'
-     path: string
-     sizeBytes: number
-     source: 'downloaded'
-   }
-   ```
+    engines.push({
+      engine: 'yourengine',
+      version,
+      platform,
+      arch,
+      path: fullPath,
+      sizeBytes: await getDirectorySize(fullPath),
+      source: 'downloaded',
+    })
+  }
+  return engines
+}
+```
 
-2. **Add version detection function:**
-   ```ts
-   async function getYourEngineVersion(binPath: string): Promise<string | null> {
-     const ext = platformService.getExecutableExtension()
-     const serverPath = join(binPath, 'bin', `yourengine${ext}`)
-     if (!existsSync(serverPath)) {
-       return null
-     }
+Update the union type and `getInstalledEngines()` function to include your engine.
 
-     try {
-       const { stdout } = await execFileAsync(serverPath, ['--version'])
-       const match = stdout.match(/Ver\s+([\d.]+)/)
-       return match ? match[1] : null
-     } catch {
-       return null
-     }
-   }
-   ```
+### 8. Engines Command (`cli/commands/engines.ts`)
 
-3. **Add detection function that scans `~/.spindb/bin/`:**
-   ```ts
-   export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineEngine[]> {
-     const binDir = paths.bin
-     if (!existsSync(binDir)) {
-       return []
-     }
+**CRITICAL:** This file handles `spindb engines download` and `spindb engines list`. Without this update, the Docker E2E tests will fail.
 
-     const entries = await readdir(binDir, { withFileTypes: true })
-     const engines: InstalledYourEngineEngine[] = []
+1. **Import the binary manager:**
 
-     for (const entry of entries) {
-       if (entry.isDirectory()) {
-         // Match yourengine-{version}-{platform}-{arch} directories
-         const match = entry.name.match(/^(\w+)-([\d.]+)-(\w+)-(\w+)$/)
-         if (match && match[1] === 'yourengine') {
-           const [, , majorVersion, platform, arch] = match
-           const dirPath = join(binDir, entry.name)
-           const actualVersion = (await getYourEngineVersion(dirPath)) || majorVersion
+```ts
+import { yourengineBinaryManager } from '../../engines/yourengine/binary-manager'
+```
 
-           // Calculate directory size
-           let sizeBytes = 0
-           // ... size calculation logic
+2. **Import the installed engine type:**
 
-           engines.push({
-             engine: 'yourengine',
-             version: actualVersion,
-             platform,
-             arch,
-             path: dirPath,
-             sizeBytes,
-             source: 'downloaded',
-           })
-         }
-       }
-     }
+```ts
+import {
+  // ... existing imports
+  type InstalledYourEngineEngine,
+} from '../helpers'
+```
 
-     engines.sort((a, b) => compareVersions(b.version, a.version))
-     return engines
-   }
-   ```
+3. **Add case in download subcommand (after Redis case):**
 
-4. **Add to `InstalledEngine` union type and `getInstalledEngines()`.**
+```ts
+if (normalizedEngine === 'yourengine') {
+  if (!version) {
+    console.error(uiError('YourEngine requires a version (e.g., 9)'))
+    process.exit(1)
+  }
 
-5. **Export the detection function for use in engine-handlers.ts.**
+  const engine = getEngine(Engine.YourEngine)
 
-#### For System-Installed Engines (like MySQL, MongoDB, Redis)
+  const spinner = createSpinner(`Checking YourEngine ${version} binaries...`)
+  spinner.start()
 
-System binaries are installed via package managers (Homebrew, apt, etc.) and show an "Info" screen in the menu.
+  let wasCached = false
+  await engine.ensureBinaries(version, ({ stage, message }) => {
+    if (stage === 'cached') {
+      wasCached = true
+      spinner.text = `YourEngine ${version} binaries ready (cached)`
+    } else {
+      spinner.text = message
+    }
+  })
 
-1. **Add installed engine type:**
-   ```ts
-   export type InstalledYourEngineType = {
-     engine: 'yourengine'
-     version: string
-     path: string
-     source: 'system'
-     formulaName: string  // e.g., 'yourengine', 'yourengine@8.0'
-   }
-   ```
+  if (wasCached) {
+    spinner.succeed(`YourEngine ${version} binaries already installed`)
+  } else {
+    spinner.succeed(`YourEngine ${version} binaries downloaded`)
+  }
 
-2. **Add detection function:**
-   ```ts
-   async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineType[]> {
-     const engines: InstalledYourEngineType[] = []
-     const seenFormulas = new Set<string>()
+  const { platform, arch } = platformService.getPlatformInfo()
+  const fullVersion = yourengineBinaryManager.getFullVersion(version)
+  const binPath = paths.getBinaryPath({
+    engine: 'yourengine',
+    version: fullVersion,
+    platform,
+    arch,
+  })
+  console.log(chalk.gray(`  Location: ${binPath}`))
 
-     // Check Homebrew paths (macOS)
-     for (const path of HOMEBREW_YOURENGINE_PATHS) {
-       if (existsSync(path)) {
-         const formulaName = extractHomebrewFormula(path, 'yourengine')
-         if (seenFormulas.has(formulaName)) continue
-         seenFormulas.add(formulaName)
+  await checkAndInstallClientTools('yourengine', binPath)
+  return
+}
+```
 
-         const version = await getYourEngineVersion(path)
-         if (version) {
-           engines.push({
-             engine: 'yourengine',
-             version,
-             path,
-             source: 'system',
-             formulaName,
-           })
-         }
-       }
-     }
+4. **Update error message to include your engine:**
 
-     // Also check system PATH
-     const pathBinary = await getYourEnginePath()
-     if (pathBinary && !seenFormulas.has(extractHomebrewFormula(pathBinary, 'yourengine'))) {
-       // ... add from PATH
-     }
+```ts
+console.error(
+  uiError(
+    `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis, valkey, yourengine`,
+  ),
+)
+```
 
-     return engines
-   }
-   ```
+5. **Add to `listEngines()` function:**
 
-3. **Add to `InstalledEngine` union type and `getInstalledEngines()`.**
+```ts
+// Filter engines
+const yourengineEngines = engines.filter(
+  (e): e is InstalledYourEngineEngine => e.engine === 'yourengine',
+)
 
-### 7. Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
+// Display rows (after Redis rows)
+for (const engine of yourengineEngines) {
+  const icon = ENGINE_ICONS.yourengine
+  const platformInfo = `${engine.platform}-${engine.arch}`
+  const engineDisplay = `${icon} yourengine`
 
-The shell handlers file controls which CLI tools are offered when connecting to a container. Each engine needs its own shell configuration to avoid defaulting to PostgreSQL tools.
+  console.log(
+    chalk.gray('  ') +
+      chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+      chalk.yellow(engine.version.padEnd(12)) +
+      chalk.gray(platformInfo.padEnd(18)) +
+      chalk.white(formatBytes(engine.sizeBytes)),
+  )
+}
 
-**Required changes:**
+// Summary (after Redis summary)
+if (yourengineEngines.length > 0) {
+  const totalSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  console.log(
+    chalk.gray(
+      `  YourEngine: ${yourengineEngines.length} version(s), ${formatBytes(totalSize)}`,
+    ),
+  )
+}
+```
 
-1. **Add engine to shell option selection (around line 109-140):**
+---
 
-   The `handleOpenShell` function has a series of `if/else if` statements that determine:
-   - `defaultShellName` - The native CLI tool (e.g., `mysql`, `mongosh`, `redis-cli`)
-   - `engineSpecificCli` - Enhanced CLI tool if available (e.g., `mycli`, `iredis`)
-   - `engineSpecificInstalled` - Whether the enhanced CLI is installed
-   - `engineSpecificValue` / `engineSpecificInstallValue` - Menu choice values
+## CLI Menu Handlers
 
-   ```ts
-   if (config.engine === 'sqlite') {
-     defaultShellName = 'sqlite3'
-     engineSpecificCli = 'litecli'
-     // ...
-   } else if (config.engine === 'mysql' || config.engine === 'mariadb') {
-     defaultShellName = 'mysql'
-     engineSpecificCli = 'mycli'
-     // ...
-   } else if (config.engine === 'yourengine') {
-     defaultShellName = 'yourcli'           // Add your engine
-     engineSpecificCli = 'enhanced-yourcli' // Or null if no enhanced CLI
-     engineSpecificInstalled = yourCliInstalled
-     engineSpecificValue = 'yourcli'
-     engineSpecificInstallValue = 'install-yourcli'
-   } else {
-     // DEFAULT: PostgreSQL - catch-all fallback
-     defaultShellName = 'psql'
-     engineSpecificCli = 'pgcli'
-     // ...
-   }
-   ```
+### 1. Container Handlers (`cli/commands/menu/container-handlers.ts`)
 
-   **IMPORTANT:** If you don't add your engine here, it falls through to the `else` block and shows PostgreSQL tools (psql, pgcli) which is incorrect.
+If your engine uses numbered databases (like Redis 0-15) instead of named databases:
 
-2. **Update usql eligibility (around line 167):**
+```ts
+// Skip database name prompt for engines with numbered DBs
+if (engine === 'redis' || engine === 'valkey' || engine === 'yourengine') {
+  database = '0'
+} else {
+  // Prompt for database name
+}
+```
 
-   usql is a universal SQL client. Skip it for non-SQL engines:
+### 2. Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
 
-   ```ts
-   const isNonSqlEngine = config.engine === 'redis' || config.engine === 'mongodb' || config.engine === 'yourengine'
-   ```
+**CRITICAL:** Add your engine to avoid defaulting to PostgreSQL tools.
 
-3. **Add install handler if engine has an enhanced CLI:**
+1. **Add to shell option selection (around line 110):**
 
-   If your engine has an enhanced CLI (like pgcli, mycli, litecli, iredis), add an install handler:
+```ts
+} else if (config.engine === 'yourengine') {
+  defaultShellName = 'yourengine-cli'
+  engineSpecificCli = 'enhanced-cli'  // Or null if no enhanced CLI
+  engineSpecificInstalled = enhancedCliInstalled
+  engineSpecificValue = 'enhanced-cli'
+  engineSpecificInstallValue = 'install-enhanced-cli'
+}
+```
 
-   ```ts
-   if (shellChoice === 'install-yourcli') {
-     console.log(uiInfo('Installing yourcli for enhanced YourEngine shell...'))
-     const pm = await detectPackageManager()
-     // ... installation logic
-   }
-   ```
+2. **Update usql eligibility for non-SQL engines:**
 
-4. **Update launchShell function (around line 411-446):**
+```ts
+const isNonSqlEngine = config.engine === 'redis' || config.engine === 'valkey' ||
+                        config.engine === 'mongodb' || config.engine === 'yourengine'
+```
 
-   Add your engine's default shell command:
+3. **Add to launchShell function:**
 
-   ```ts
-   } else if (config.engine === 'yourengine') {
-     shellCmd = 'yourcli'
-     shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), config.database]
-     installHint = 'brew install yourcli'
-   } else {
-     // DEFAULT: PostgreSQL - catch-all fallback
-     shellCmd = 'psql'
-     shellArgs = [connectionString]
-     installHint = 'brew install libpq && brew link --force libpq'
-   }
-   ```
+```ts
+} else if (config.engine === 'yourengine') {
+  const clientPath = await configManager.getBinaryPath('yourengine-cli')
+  shellCmd = clientPath || 'yourengine-cli'
+  shellArgs = ['-h', '127.0.0.1', '-p', String(config.port)]
+  installHint = 'spindb engines download yourengine'
+}
+```
 
-5. **Add detection functions in dependency-manager (if enhanced CLI exists):**
+### 3. SQL Handlers (`cli/commands/menu/sql-handlers.ts`)
 
-   ```ts
-   export async function isYourCliInstalled(): Promise<boolean> {
-     // Check if enhanced CLI is in PATH
-   }
+Update terminology for non-SQL engines:
 
-   export async function installYourCli(pm: PackageManager): Promise<InstallResult> {
-     // Install via package manager
-   }
+```ts
+const isRedisLike = config.engine === 'redis' || config.engine === 'valkey' || config.engine === 'yourengine'
+const isMongoDB = config.engine === 'mongodb'
+const scriptType = isRedisLike ? 'Command' : isMongoDB ? 'Script' : 'SQL'
+```
 
-   export function getYourCliManualInstructions(): string[] {
-     // Return manual install instructions
-   }
-   ```
+### 4. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
 
-**Common mistake:** Forgetting to add the engine to shell-handlers.ts causes it to fall through to the PostgreSQL defaults, showing "Use default shell (psql)" even for MySQL, MongoDB, Redis, etc.
+Add to "Manage Engines" menu:
 
-### 8. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
+```ts
+import { type InstalledYourEngineEngine } from '../../helpers'
 
-The "Manage Engines" menu displays installed engines with delete options. All engines now use hostdb downloads.
+// Filter engines
+const yourengineEngines = engines.filter(
+  (e): e is InstalledYourEngineEngine => e.engine === 'yourengine',
+)
 
-**Required changes:**
+// Calculate size
+const totalYourEngineSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
-1. **Add type import:**
-   ```ts
-   import {
-     // ... existing types
-     type InstalledYourengineEngine,
-   } from '../../helpers'
-   ```
+// Add to sorted array
+const allEnginesSorted = [
+  ...pgEngines,
+  ...mariadbEngines,
+  ...mysqlEngines,
+  ...sqliteEngines,
+  ...mongodbEngines,
+  ...redisEngines,
+  ...valkeyEngines,
+  ...yourengineEngines,
+]
 
-2. **Add engine filtering:**
-   ```ts
-   const yourengineEngines = engines.filter(
-     (e): e is InstalledYourengineEngine => e.engine === 'yourengine',
-   )
-   ```
-
-3. **Add totalSize calculation:**
-   ```ts
-   const totalYourengineSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-   ```
-
-4. **Add to `allEnginesSorted` array** (maintains display grouping):
-   ```ts
-   const allEnginesSorted = [
-     ...pgEngines,
-     ...mariadbEngines,
-     // ... other engines ...
-     ...yourengineEngines,
-   ]
-   ```
-
-5. **Add summary display block:**
-   ```ts
-   if (yourengineEngines.length > 0) {
-     console.log(
-       chalk.gray(`  Yourengine: ${yourengineEngines.length} version(s), ${formatBytes(totalYourengineSize)}`),
-     )
-   }
-   ```
-
-**Note:** The table display, delete menu choices, and delete handling all work automatically via the `allEnginesSorted` array - no additional changes needed for those.
+// Add summary display
+if (yourengineEngines.length > 0) {
+  console.log(chalk.gray(`  YourEngine: ${yourengineEngines.length} version(s), ${formatBytes(totalYourEngineSize)}`))
+}
+```
 
 ---
 
@@ -788,32 +634,22 @@ The "Manage Engines" menu displays installed engines with delete options. All en
 
 ### Test Fixtures
 
-Create test fixtures for your engine:
+Create test fixtures with the appropriate file extension:
 
 ```
 tests/fixtures/{engine}/
-├── seeds/
-│   └── sample-db.sql    # Required: Basic seed file for testing
-└── dumps/               # Optional: For restore format detection tests
-    └── {engine}-{version}-plain.sql
+└── seeds/
+    └── sample-db.{ext}    # Use .sql for SQL, .redis/.valkey for Redis-like, etc.
 ```
 
-**Sample seed file requirements:**
-- Create a simple table (e.g., `test_user`)
-- Insert exactly 5 rows (tests verify `EXPECTED_ROW_COUNT = 5`)
-- Use engine-compatible SQL syntax
-
-Example (`tests/fixtures/yourengine/seeds/sample-db.sql`):
-
+**For SQL databases** (`sample-db.sql`):
 ```sql
--- Create test table
 CREATE TABLE IF NOT EXISTS test_user (
     id INT PRIMARY KEY,
     name VARCHAR(100),
     email VARCHAR(100)
 );
 
--- Insert test data (exactly 5 rows)
 INSERT INTO test_user (id, name, email) VALUES
     (1, 'Alice', 'alice@example.com'),
     (2, 'Bob', 'bob@example.com'),
@@ -822,57 +658,68 @@ INSERT INTO test_user (id, name, email) VALUES
     (5, 'Eve', 'eve@example.com');
 ```
 
-### Integration Test Helpers
+**For Redis-like databases** (`sample-db.yourengine`):
+```
+DEL user:1 user:2 user:3 user:4 user:5 user:count
+SET user:1 '{"id":1,"name":"Alice","email":"alice@example.com"}'
+SET user:2 '{"id":2,"name":"Bob","email":"bob@example.com"}'
+SET user:3 '{"id":3,"name":"Charlie","email":"charlie@example.com"}'
+SET user:4 '{"id":4,"name":"Diana","email":"diana@example.com"}'
+SET user:5 '{"id":5,"name":"Eve","email":"eve@example.com"}'
+SET user:count 5
+```
 
-Update `tests/integration/helpers.ts` to support your engine:
+### Integration Test Helpers (`tests/integration/helpers.ts`)
+
+Add your engine to all helper functions:
 
 ```ts
 // 1. Add to TEST_PORTS
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
-  yourengine: { base: 27050, clone: 27052, renamed: 27051 },  // Add this
+  // ... other engines
+  yourengine: { base: 6420, clone: 6422, renamed: 6421 },
 }
 
-// 2. Update executeSQL function
-export async function executeSQL(
-  engine: Engine,
-  port: number,
-  database: string,
-  sql: string,
-): Promise<{ stdout: string; stderr: string }> {
+// 2. Add to executeSQL function
+export async function executeSQL(engine: Engine, port: number, database: string, sql: string) {
   if (engine === Engine.YourEngine) {
-    // Add engine-specific SQL execution
-    const cmd = `mongosh --host 127.0.0.1 --port ${port} ${database} --eval "${sql.replace(/"/g, '\\"')}"`
+    const engineImpl = getEngine(engine)
+    const clientPath = await engineImpl.getYourEngineClientPath().catch(() => 'yourengine-cli')
+    const cmd = `"${clientPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
     return execAsync(cmd)
   }
   // ... existing engines
 }
 
-// 3. Update waitForReady function
-export async function waitForReady(
-  engine: Engine,
-  port: number,
-  timeoutMs = 30000,
-): Promise<boolean> {
-  // Add engine-specific readiness check
+// 3. Add to waitForReady function
+export async function waitForReady(engine: Engine, port: number, timeoutMs = 30000): Promise<boolean> {
   if (engine === Engine.YourEngine) {
-    await execAsync(`mongosh --host 127.0.0.1 --port ${port} --eval "db.runCommand({ ping: 1 })"`)
+    // Use PING or equivalent health check
+    const engineImpl = getEngine(engine)
+    const clientPath = await engineImpl.getYourEngineClientPath().catch(() => 'yourengine-cli')
+    await execAsync(`"${clientPath}" -h 127.0.0.1 -p ${port} PING`)
     return true
   }
   // ... existing engines
 }
 
-// 4. Update getConnectionString function
-export function getConnectionString(
-  engine: Engine,
-  port: number,
-  database: string,
-): string {
+// 4. Add to getConnectionString function
+export function getConnectionString(engine: Engine, port: number, database: string): string {
   if (engine === Engine.YourEngine) {
-    return `mongodb://127.0.0.1:${port}/${database}`
+    return `redis://127.0.0.1:${port}/${database}`
   }
   // ... existing engines
+}
+
+// 5. Add engine-specific helper functions
+export async function getYourEngineValue(port: number, db: string, key: string): Promise<string | null> {
+  // Implementation for getting values from your engine
+}
+
+export async function getYourEngineKeyCount(port: number, db: string, pattern: string): Promise<number> {
+  // Implementation for counting keys
 }
 ```
 
@@ -884,6 +731,8 @@ Create `tests/integration/{engine}.test.ts` with **at least 14 tests**:
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { tmpdir } from 'os'
+import { rm } from 'fs/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 import {
@@ -891,14 +740,10 @@ import {
   generateTestName,
   findConsecutiveFreePorts,
   cleanupTestContainers,
-  getRowCount,
   waitForReady,
   containerDataExists,
-  getConnectionString,
   assert,
   assertEqual,
-  runScriptFile,
-  runScriptSQL,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -906,40 +751,38 @@ import { getEngine } from '../../engines'
 import { Engine } from '../../types'
 
 const ENGINE = Engine.YourEngine
-const DATABASE = 'testdb'
-const SEED_FILE = join(__dirname, '../fixtures/yourengine/seeds/sample-db.sql')
-const EXPECTED_ROW_COUNT = 5
+const DATABASE = '0'  // Or 'testdb' for SQL databases
+const SEED_FILE = join(__dirname, '../fixtures/yourengine/seeds/sample-db.yourengine')
 
 describe('YourEngine Integration Tests', () => {
   let testPorts: number[]
   let containerName: string
   let clonedContainerName: string
   let renamedContainerName: string
-  let portConflictContainerName: string
 
   before(async () => {
-    // ... setup (see postgresql.test.ts for reference)
+    // Setup: cleanup, find ports, generate names
   })
 
   after(async () => {
-    // ... cleanup
+    // Cleanup: stop and delete test containers
   })
 
-  // Required tests (14 minimum):
-  it('should create container without starting (--no-start)', async () => { /* ... */ })
-  it('should start the container', async () => { /* ... */ })
-  it('should seed the database with test data using runScript', async () => { /* ... */ })
-  it('should create a new container from connection string (dump/restore)', async () => { /* ... */ })
-  it('should verify restored data matches source', async () => { /* ... */ })
-  it('should stop and delete the restored container', async () => { /* ... */ })
-  it('should modify data using runScript inline SQL', async () => { /* ... */ })
-  it('should stop, rename container, and change port', async () => { /* ... */ })
-  it('should verify data persists after rename', async () => { /* ... */ })
-  it('should handle port conflict gracefully', async () => { /* ... */ })
-  it('should show warning when starting already running container', async () => { /* ... */ })
-  it('should show warning when stopping already stopped container', async () => { /* ... */ })
-  it('should delete container with --force', async () => { /* ... */ })
-  it('should have no test containers remaining', async () => { /* ... */ })
+  // Required tests (minimum 14):
+  it('should create container without starting (--no-start)', async () => { })
+  it('should start the container', async () => { })
+  it('should seed the database with test data using runScript', async () => { })
+  it('should clone via backup and restore to new container', async () => { })
+  it('should verify cloned data matches source', async () => { })
+  it('should stop and delete the cloned container', async () => { })
+  it('should create text format backup', async () => { })
+  it('should restore from text format backup (merge mode)', async () => { })
+  it('should restore from text format backup (replace mode)', async () => { })
+  it('should detect backup format from file content', async () => { })
+  it('should modify data using runScript inline command', async () => { })
+  it('should stop, rename container, and change port', async () => { })
+  it('should verify data persists after rename', async () => { })
+  it('should delete container with --force', async () => { })
 })
 ```
 
@@ -947,42 +790,112 @@ describe('YourEngine Integration Tests', () => {
 
 Create unit tests for engine-specific logic:
 
+**`tests/unit/{engine}-version-validator.test.ts`:**
+```ts
+import { describe, it } from 'node:test'
+import {
+  parseVersion,
+  isVersionSupported,
+  getMajorVersion,
+  compareVersions,
+  isVersionCompatible,
+} from '../../engines/yourengine/version-validator'
+import { assert, assertEqual } from '../utils/assertions'
+
+describe('YourEngine Version Validator', () => {
+  describe('parseVersion', () => {
+    it('should parse standard version string', () => { })
+    it('should parse version with just major.minor', () => { })
+    it('should return null on invalid version', () => { })
+  })
+
+  describe('isVersionSupported', () => {
+    it('should return true for supported versions', () => { })
+    it('should return false for unsupported versions', () => { })
+  })
+
+  describe('compareVersions', () => {
+    it('should compare versions correctly', () => { })
+  })
+
+  describe('isVersionCompatible', () => {
+    it('should check backup/restore compatibility', () => { })
+  })
+})
 ```
-tests/unit/
-├── {engine}-version-validator.test.ts  # Version parsing/compatibility
-├── {engine}-windows.test.ts            # Windows-specific command building
-└── {engine}-binary-*.test.ts           # Binary management (if applicable)
+
+**`tests/unit/{engine}-restore.test.ts`:**
+```ts
+import { describe, it, before, after } from 'node:test'
+import { writeFile, mkdir, rm } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import {
+  detectBackupFormat,
+  parseConnectionString,
+} from '../../engines/yourengine/restore'
+import { assert, assertEqual } from '../utils/assertions'
+
+describe('YourEngine Restore', () => {
+  describe('detectBackupFormat', () => {
+    it('should detect binary format by magic bytes', async () => { })
+    it('should detect format by extension as fallback', async () => { })
+    it('should return unknown for unrecognized files', async () => { })
+  })
+
+  describe('parseConnectionString', () => {
+    it('should parse connection URL', () => { })
+    it('should handle password in URL', () => { })
+    it('should throw for invalid URL', () => { })
+  })
+})
 ```
 
-### CLI E2E Tests
+### Add Test Script to package.json
 
-Ensure your engine works with CLI E2E tests in `tests/integration/cli-e2e.test.ts`. The existing tests should work if you've properly implemented the engine, but verify that:
+```json
+{
+  "scripts": {
+    "test:yourengine": "node --import tsx --test --experimental-test-isolation=none tests/integration/yourengine.test.ts"
+  }
+}
+```
 
-1. `spindb engines list` shows your engine
-2. `spindb create <name> --engine yourengine` works
-3. All container lifecycle commands work
+Also add to `test:integration`:
+
+```json
+{
+  "scripts": {
+    "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:mongodb test:redis test:valkey test:yourengine"
+  }
+}
+```
 
 ---
 
 ## GitHub Actions / CI
 
-### Adding to ci.yml
+### Adding Integration Test Job
 
-Add a new job for your engine in `.github/workflows/ci.yml`:
+Add to `.github/workflows/ci.yml`:
 
 ```yaml
 # ============================================
 # YourEngine Integration Tests
+# Uses SpinDB to download and manage YourEngine binaries from hostdb
 # ============================================
 test-yourengine:
   name: YourEngine (${{ matrix.os }})
   runs-on: ${{ matrix.os }}
-  needs: unit-tests
   strategy:
     fail-fast: false
     matrix:
-      # Include all OSes, or document why one is excluded
-      os: [ubuntu-latest, macos-latest, windows-latest]
+      os:
+        - ubuntu-22.04
+        - ubuntu-24.04
+        - macos-15  # Intel
+        - macos-14  # ARM64
+        - windows-latest
   steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -999,26 +912,17 @@ test-yourengine:
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
 
-    # Install engine binaries via SpinDB or system package manager
-    - name: Install YourEngine via SpinDB
-      run: pnpm start engines download yourengine
+    # Cache binaries - REQUIRED for hostdb-based engines
+    - name: Cache YourEngine binaries
+      uses: actions/cache@v4
+      id: yourengine-cache
+      with:
+        path: ~/.spindb/bin
+        key: spindb-yourengine-9-${{ runner.os }}-${{ runner.arch }}
 
-    # Windows often needs PATH updates after package manager install
-    - name: Add YourEngine to PATH (Windows)
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        $possiblePaths = @(
-          "C:\Program Files\MongoDB\Server\7.0\bin",
-          "C:\tools\mongodb\current\bin"
-        )
-        foreach ($path in $possiblePaths) {
-          if (Test-Path $path) {
-            echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            echo "Found YourEngine at: $path"
-            break
-          }
-        }
+    # Download binaries via SpinDB
+    - name: Install YourEngine via SpinDB
+      run: pnpm start engines download yourengine 9
 
     - name: Show installed engines
       run: pnpm start engines list
@@ -1030,14 +934,26 @@ test-yourengine:
 
 ### Update CI Success Job
 
-Add your engine to the `ci-success` job:
+Add to `needs` and checks:
 
 ```yaml
 ci-success:
   name: CI Success
   runs-on: ubuntu-latest
   needs:
-    [unit-tests, test-postgresql, test-mysql, test-sqlite, test-yourengine, test-cli-e2e, lint]
+    [
+      unit-tests,
+      test-postgresql,
+      test-mariadb,
+      test-mysql,
+      test-sqlite,
+      test-mongodb,
+      test-redis,
+      test-valkey,
+      test-yourengine,  # Add this
+      test-cli-e2e,
+      # ... other jobs
+    ]
   if: always()
   steps:
     - name: Check all jobs passed
@@ -1047,251 +963,105 @@ ci-success:
           echo "YourEngine tests failed"
           exit 1
         fi
-        echo "All CI checks passed!"
 ```
 
-### Add Test Script to package.json
+---
 
-```json
-{
-  "scripts": {
-    "test:yourengine": "node --import tsx --test tests/integration/yourengine.test.ts"
-  }
-}
+## Docker Tests
+
+Update the Docker E2E test environment to include your engine.
+
+### Dockerfile (`tests/docker/Dockerfile`)
+
+Add your engine to the comment listing downloaded engines:
+
+```dockerfile
+# NOT pre-installed (SpinDB downloads from hostdb automatically):
+# - PostgreSQL: server + client tools (psql, pg_dump, pg_restore)
+# - MySQL: server + client tools (mysql, mysqldump, mysqladmin)
+# - MariaDB: server + client tools (mariadb, mariadb-dump, mariadb-admin)
+# - MongoDB: server + client tools (mongod, mongosh, mongodump, mongorestore)
+# - Redis: server + client tools (redis-server, redis-cli)
+# - Valkey: server + client tools (valkey-server, valkey-cli)
+# - YourEngine: server + client tools (yourengine-server, yourengine-cli)
+# - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+```
+
+### E2E Script (`tests/docker/run-e2e.sh`)
+
+1. **Add connectivity test case:**
+
+```bash
+    yourengine)
+      if ! spindb run "$container_name" -c "PING"; then
+        echo "FAILED: Could not run YourEngine command"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "PING failed"
+        FAILED=$((FAILED+1))
+        return 1
+      fi
+      ;;
+```
+
+2. **Add test execution:**
+
+```bash
+# YourEngine
+YOURENGINE_VERSION=$(get_default_version yourengine)
+[ -n "$YOURENGINE_VERSION" ] && run_test yourengine "$YOURENGINE_VERSION" || echo "Skipping YourEngine (no default version)"
 ```
 
 ---
 
 ## Binary Management
 
-### Downloadable Binaries (like PostgreSQL)
+### hostdb Binary Files
 
-If your engine has binaries that can be downloaded:
+For engines using [hostdb](https://github.com/robertjbass/hostdb), create these files:
 
-1. Create `engines/{engine}/binary-urls.ts`:
-
+**`engines/{engine}/version-maps.ts`:**
 ```ts
-export const SUPPORTED_MAJOR_VERSIONS = ['6', '7', '8']
-
-// Fallback version map for offline use
-export const FALLBACK_VERSION_MAP: Record<string, string> = {
-  '6': '6.0.15',
-  '7': '7.0.12',
-  '8': '8.0.0',
+/**
+ * IMPORTANT: Keep this in sync with hostdb releases.json:
+ * https://github.com/robertjbass/hostdb/blob/main/releases.json
+ */
+export const YOURENGINE_VERSION_MAP: Record<string, string> = {
+  '8': '8.0.6',
+  '9': '9.0.1',
 }
 
-/**
- * Get download URL for binaries
- * Must handle: darwin-arm64, darwin-x64, linux-x64, win32-x64
- */
-export function getBinaryUrl(
-  version: string,
-  platform: string,
-  arch: string,
-): string {
-  // Example: Construct URL based on platform/arch
-  const platformMap: Record<string, string> = {
-    'darwin-arm64': 'macos-arm64',
-    'darwin-x64': 'macos-x86_64',
-    'linux-x64': 'linux-x86_64',
-    'win32-x64': 'windows-x86_64',
-  }
+export const SUPPORTED_MAJOR_VERSIONS = Object.keys(YOURENGINE_VERSION_MAP)
+export const FALLBACK_VERSION_MAP = YOURENGINE_VERSION_MAP
+```
 
+**`engines/{engine}/binary-urls.ts`:**
+```ts
+import { FALLBACK_VERSION_MAP } from './version-maps'
+
+const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
+
+export function getBinaryUrl(version: string, platform: string, arch: string): string {
+  const fullVersion = FALLBACK_VERSION_MAP[version] || version
   const platformKey = `${platform}-${arch}`
-  const binaryPlatform = platformMap[platformKey]
-
-  if (!binaryPlatform) {
-    throw new Error(`Unsupported platform: ${platformKey}`)
-  }
-
-  return `https://example.com/releases/${version}/yourengine-${version}-${binaryPlatform}.tar.gz`
+  return `${HOSTDB_BASE_URL}/yourengine-${fullVersion}/yourengine-${fullVersion}-${platformKey}.tar.gz`
 }
+```
 
-/**
- * Fetch available versions from remote source
- */
+**`engines/{engine}/hostdb-releases.ts`:**
+```ts
+import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
+
 export async function fetchAvailableVersions(): Promise<Record<string, string[]>> {
-  // Fetch from API or scrape releases page
-  // Return map of major version -> array of full versions
+  // Fetch from hostdb releases.json or use fallback
+  // Filter by SUPPORTED_MAJOR_VERSIONS
 }
 ```
 
-2. Document binary sources in a comment at the top of the file:
-
+**`engines/{engine}/binary-manager.ts`:**
 ```ts
-/**
- * Binary URLs for YourEngine
- *
- * Sources:
- * - macOS/Linux: https://example.com/releases
- * - Windows: https://example.com/windows/downloads
- *
- * Supported platforms:
- * - darwin-arm64: macOS Apple Silicon
- * - darwin-x64: macOS Intel
- * - linux-x64: Linux x86_64
- * - win32-x64: Windows x64
- */
-```
-
-### hostdb Binaries (PostgreSQL, MariaDB, MySQL, MongoDB, Redis)
-
-For engines using the [hostdb](https://github.com/robertjbass/hostdb) repository for downloadable binaries, you must keep version-maps.ts synchronized with the releases.json file.
-
-**Required files:**
-
-1. **`engines/{engine}/version-maps.ts`** - Defines supported versions:
-
-   ```ts
-   /**
-    * IMPORTANT: Keep this in sync with versions available in hostdb releases.json:
-    * https://github.com/robertjbass/hostdb/blob/main/releases.json
-    */
-   export const YOURENGINE_VERSION_MAP: Record<string, string> = {
-     '10.11': '10.11.15',  // major version -> full version
-     '11.4': '11.4.5',
-     '11.8': '11.8.5',
-   }
-
-   export const SUPPORTED_MAJOR_VERSIONS = Object.keys(YOURENGINE_VERSION_MAP)
-   ```
-
-2. **`engines/{engine}/hostdb-releases.ts`** - Fetches versions from releases.json:
-
-   ```ts
-   export async function fetchAvailableVersions(): Promise<Record<string, string[]>> {
-     const releases = await fetchHostdbReleases()
-     // Filter by SUPPORTED_MAJOR_VERSIONS from version-maps.ts
-     // Return grouped versions
-   }
-   ```
-
-**Critical: Keeping versions in sync**
-
-When new versions are added to hostdb releases.json:
-
-1. Check hostdb releases.json for new database versions
-2. Add new major versions to `YOURENGINE_VERSION_MAP`
-3. The `SUPPORTED_MAJOR_VERSIONS` is automatically derived from the map keys
-4. `fetchAvailableVersions()` will now include the new versions
-
-**Why this design?**
-
-- The version map serves as both a fallback (offline use) and a filter
-- `fetchAvailableVersions()` only returns versions that match `SUPPORTED_MAJOR_VERSIONS`
-- Versions not in the map are ignored, even if present in releases.json
-- This prevents showing versions that haven't been tested with SpinDB
-
-### Cross-Platform Binary Sources
-
-Binary sources vary by engine and platform:
-
-**PostgreSQL:**
-- **macOS/Linux:** hostdb binaries
-- **Windows:** EDB (EnterpriseDB) official binaries - hostdb doesn't package Windows PostgreSQL
-
-**MariaDB, MySQL, MongoDB, Redis:**
-- **All platforms:** hostdb binaries
-
-When adding a new engine with downloadable binaries, check if hostdb provides builds for all platforms. If Windows binaries aren't available from hostdb, you may need to use an alternative source (see `engines/postgresql/edb-binary-urls.ts` for EDB fallback reference).
-
-### System Binaries (SQLite)
-
-**SQLite** uses system-installed binaries on all platforms since it's a lightweight tool typically pre-installed.
-
----
-
-## OS Dependencies
-
-### Finding Package Names
-
-Research the correct package names for each package manager:
-
-| Package Manager | Platform | Research Method |
-|-----------------|----------|-----------------|
-| brew | macOS | `brew search <name>`, check formulae.brew.sh |
-| apt | Debian/Ubuntu | `apt search <name>`, check packages.ubuntu.com |
-| yum/dnf | RHEL/Fedora | `dnf search <name>` |
-| pacman | Arch | `pacman -Ss <name>`, check archlinux.org/packages |
-| choco | Windows | `choco search <name>`, check community.chocolatey.org |
-| winget | Windows | `winget search <name>` |
-| scoop | Windows | `scoop search <name>`, check scoop.sh |
-
-### Enhanced CLI Tools
-
-If your engine has an enhanced CLI (like pgcli, mycli, litecli):
-
-1. Add to `config/os-dependencies.ts`:
-
-```ts
-export const yourcliDependency: Dependency = {
-  name: 'yourcli',
-  binary: 'yourcli',
-  description: 'YourEngine CLI with auto-completion and syntax highlighting',
-  packages: {
-    brew: { package: 'yourcli' },
-    // ... other package managers
-  },
-  manualInstall: {
-    // ... install instructions
-  },
-}
-```
-
-2. Add to `BinaryTool` type in `types/index.ts`
-3. Support `--yourcli` flag in connect command
-
----
-
-## Windows Considerations
-
-Windows requires special handling in several areas:
-
-### Command Quoting
-
-```ts
-import { isWindows } from '../../core/platform-service'
-
-// Use double quotes on Windows, single quotes on Unix
-const sql = `SELECT * FROM users`
-const cmd = isWindows()
-  ? `"${toolPath}" -c "${sql.replace(/"/g, '\\"')}"`
-  : `"${toolPath}" -c '${sql}'`
-```
-
-### Spawn Options
-
-```ts
-import { getWindowsSpawnOptions } from '../../core/platform-service'
-
-const spawnOptions: SpawnOptions = {
-  stdio: 'inherit',
-  ...getWindowsSpawnOptions(),  // Adds shell: true on Windows
-}
-```
-
-### Executable Extensions
-
-```ts
-import { platformService } from '../../core/platform-service'
-
-const ext = platformService.getExecutableExtension()  // '.exe' on Windows, '' otherwise
-const toolPath = join(binPath, 'bin', `tool${ext}`)
-```
-
-### PATH Updates in CI
-
-Windows package managers (choco, winget, scoop) often don't update PATH in the current session. Add explicit PATH updates in CI:
-
-```yaml
-- name: Add to PATH (Windows)
-  if: runner.os == 'Windows'
-  shell: pwsh
-  run: |
-    $path = "C:\Program Files\YourEngine\bin"
-    if (Test-Path $path) {
-      echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-    }
+// Handle download, extraction, verification
+// Register binary paths with configManager after installation
 ```
 
 ---
@@ -1300,165 +1070,124 @@ Windows package managers (choco, winget, scoop) often don't update PATH in the c
 
 ### README.md
 
-Add your engine to the "Supported Engines" section:
-
-```markdown
-### YourEngine
-
-| Version | Port | Binary Source |
-|---------|------|---------------|
-| 6.x     | 27017 | Downloaded from mongodb.com |
-| 7.x     | 27017 | Downloaded from mongodb.com |
-| 8.x     | 27017 | Downloaded from mongodb.com |
-
-**Requirements:**
-- mongosh (installed automatically or via package manager)
-```
-
-Update the "Enhanced CLI Tools" table if applicable.
+Add engine section with:
+- Supported versions table
+- Backup formats
+- Enhanced CLI tools (if any)
+- Usage examples
 
 ### CHANGELOG.md
 
-Add to `[Unreleased]` section:
-
+Add to `[Unreleased]`:
 ```markdown
 ### Added
-- YourEngine support (versions 6.x, 7.x, 8.x)
+- YourEngine support (versions 8, 9)
   - Full container lifecycle (create, start, stop, delete)
-  - Backup and restore
-  - Clone containers
-  - Enhanced CLI support (yourcli)
+  - Backup and restore (text and binary formats)
+  - Clone containers via backup/restore
+  - Cross-platform support (macOS, Linux, Windows)
 ```
+
+### ENGINES.md
+
+Add to:
+- Supported engines table
+- Engine Details section
+- Backup Format Summary table
+- Enhanced CLI Tools table
+- Engine Emojis table
+
+### CLAUDE.md
+
+Update:
+- Project Overview (list of supported engines)
+- Engine descriptions section
+- Project structure (engines directory)
+- Backup & Restore Formats table
+- File Structure diagram
+- Test commands section
+- CI Binary Caching list
+- Port Management section
+- Binary Sources by Engine section
+- Engine Icons list
 
 ### TODO.md
 
-Update engine status in the roadmap.
+Mark engine as completed in the roadmap.
 
 ---
 
 ## Pass/Fail Criteria
 
-An engine implementation is considered **complete** when ALL of the following pass:
+An engine implementation is **complete** when ALL of the following pass:
 
 ### Required Checks
 
-1. **Unit Tests**: `pnpm test:unit` passes on all 3 OSes
-2. **Integration Tests**: `pnpm test:yourengine` passes (14+ tests)
-3. **CLI E2E Tests**: `pnpm test:cli` includes and passes engine tests
-4. **Linting**: `pnpm lint` passes with no errors
-5. **Type Check**: `pnpm tsc --noEmit` passes
+1. **Lint**: `pnpm lint` passes with no errors
+2. **Unit Tests**: `pnpm test:unit` passes (includes new engine tests)
+3. **Integration Tests**: `pnpm test:{engine}` passes (14+ tests)
+4. **All Integration Tests**: `pnpm test:integration` passes (no regressions)
 
 ### CI Verification
 
-1. GitHub Actions CI runs on all 3 OSes (ubuntu-latest, macos-latest, windows-latest)
-2. If an OS is excluded, document the reason in ci.yml comments
-3. CI success job includes your engine in its checks
+1. GitHub Actions runs on all platforms (ubuntu, macos, windows)
+2. Binary caching is configured for hostdb downloads
+3. CI success job includes your engine
 
-### Manual Verification Checklist
+### File Count Verification
 
-Run these commands and verify they work:
+Verify all files are created (use Valkey as reference):
 
 ```bash
-# Create and start
-pnpm start create mytest --engine yourengine --port 27050
-pnpm start start mytest
-pnpm start info mytest
+# Engine files (9)
+ls engines/yourengine/
 
-# Connect and run SQL
-pnpm start connect mytest
-pnpm start run mytest --sql "db.test.insertOne({name: 'test'})"
-pnpm start url mytest
+# Configuration updates (check git diff)
+git diff --name-only | grep -E "(types|config|cli)" | wc -l
 
-# Backup and restore
-pnpm start backup mytest --output ./backups/
-pnpm start restore mytest ./backups/mytest-*.dump
+# Test files
+ls tests/integration/yourengine.test.ts
+ls tests/unit/yourengine-*.test.ts
+ls tests/fixtures/yourengine/seeds/
 
-# Clone
-pnpm start stop mytest
-pnpm start clone mytest mytest-clone
-pnpm start start mytest-clone
-
-# Edit
-pnpm start stop mytest-clone
-pnpm start edit mytest-clone --name mytest-renamed
-pnpm start edit mytest-renamed --port 27051
-
-# Cleanup
-pnpm start delete mytest --force
-pnpm start delete mytest-renamed --force
-
-# List and engines
-pnpm start list
-pnpm start engines list
-pnpm start deps check --engine yourengine
-
-# Interactive menu - verify engine appears in "Manage Engines"
-pnpm start
-# Navigate to "Manage engines" and verify:
-# - Engine appears in the table with correct icon
-# - Engine appears in menu choices with info option
-# - Selecting info shows installation details
+# Documentation
+git diff README.md CHANGELOG.md TODO.md ENGINES.md CLAUDE.md
 ```
 
-### Regression Check
-
-Verify existing engines still work:
+### Manual Verification
 
 ```bash
-pnpm test:pg
-pnpm test:mysql
-pnpm test:sqlite
+# Full lifecycle test
+pnpm start engines download yourengine 9
+pnpm start create mytest --engine yourengine
+pnpm start start mytest
+pnpm start info mytest
+pnpm start connect mytest
+pnpm start backup mytest
+pnpm start stop mytest
+pnpm start clone mytest mytest-clone
+pnpm start delete mytest --force
+pnpm start delete mytest-clone --force
+
+# Verify in interactive menu
+pnpm start
+# Check "Manage engines" shows your engine
 ```
 
 ---
 
 ## Reference Implementations
 
-Use these existing implementations as references:
+Use these implementations as references:
 
-### Server-Based Database with Downloadable Binaries (All Platforms)
+| Engine | Type | Binary Source | Key Features |
+|--------|------|---------------|--------------|
+| **Valkey** | Server | hostdb (all platforms) | Redis fork, newest implementation, full example |
+| **Redis** | Server | hostdb (all platforms) | Key-value, numbered DBs, text + RDB backup |
+| **MongoDB** | Server | hostdb (all platforms) | Document DB, JavaScript queries, BSON backup |
+| **PostgreSQL** | Server | hostdb + EDB (Windows) | SQL, Windows fallback example |
+| **MySQL** | Server | hostdb (all platforms) | SQL, root user, socket handling |
+| **MariaDB** | Server | hostdb (all platforms) | MySQL-compatible, separate binaries |
+| **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
 
-**MariaDB** (`engines/mariadb/`), **MySQL** (`engines/mysql/`), **MongoDB** (`engines/mongodb/`), **Redis** (`engines/redis/`):
-- Binary downloads from hostdb for all platforms (macOS, Linux, Windows)
-- Client tools bundled with server binaries
-- Complex version resolution (major -> full version)
-
-### Server-Based Database with Downloadable Binaries (Windows EDB Fallback)
-
-**PostgreSQL** (`engines/postgresql/`):
-- Binary downloads from hostdb (macOS/Linux) and EDB (Windows)
-- Example of Windows-specific alternative source (when hostdb doesn't provide Windows binaries for an engine)
-
-### File-Based Database
-
-**SQLite** (`engines/sqlite/`):
-- No start/stop (file-based)
-- Registry-based tracking
-- File stored in project directories
-- HTTP/HTTPS URL support for remote restore
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**"Binary not found" errors:**
-- Verify binary is in PATH
-- Check config manager cache: `spindb config show`
-- Refresh cache: `spindb config detect`
-
-**Integration tests timing out:**
-- Increase timeout in test file
-- Check if database is slow to start
-- Verify `waitForReady()` implementation
-
-**Windows tests failing:**
-- Check shell quoting
-- Verify PATH includes binary location
-- Use `getWindowsSpawnOptions()` for spawn calls
-
-**CI failing on specific OS:**
-- Check package manager availability
-- Verify binary download URLs for that platform
-- Check PATH updates in workflow
+**Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example.

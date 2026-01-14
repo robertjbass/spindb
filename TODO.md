@@ -28,6 +28,7 @@
 See [ENGINES.md](ENGINES.md) for full engine status and details.
 
 - [x] Redis (in-memory key-value)
+- [x] Valkey (Redis fork with BSD-3 license)
 - [x] MongoDB (document database)
 - [x] MariaDB as standalone engine (using hostdb binaries)
 

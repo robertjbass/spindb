@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Valkey engine support** - Full container lifecycle for Valkey, the Redis fork with BSD-3 licensing
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Multi-version support: Run Valkey 8 and 9 simultaneously
+  - Supported versions: 8, 9 (synced with hostdb releases.json)
+  - Tools bundled: valkey-server, valkey-cli
+  - Default port 6379 (same as Redis, auto-increments if occupied)
+  - Uses `redis://` connection scheme for client compatibility
+  - Backup formats: `.valkey` (text commands) and `.rdb` (RDB snapshot)
+  - Full integration tests across macOS, Linux, and Windows CI
+  - Support for `iredis` enhanced CLI (Redis-protocol compatible)
 - **MongoDB binary downloads from hostdb** - MongoDB now uses pre-built binaries from [hostdb](https://github.com/robertjbass/hostdb) instead of system package managers
   - Downloadable binaries for all platforms (macOS, Linux, Windows)
   - Multi-version support: Run MongoDB 7.0 and 8.0 simultaneously

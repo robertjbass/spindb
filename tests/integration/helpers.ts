@@ -23,6 +23,7 @@ export const TEST_PORTS = {
   mariadb: { base: 3340, clone: 3342, renamed: 3341 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
   redis: { base: 6399, clone: 6401, renamed: 6400 },
+  valkey: { base: 6410, clone: 6412, renamed: 6411 },
 }
 
 /**
@@ -191,6 +192,15 @@ export async function executeSQL(
     // For Redis, sql is a Redis command
     const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
     return execAsync(cmd)
+  } else if (engine === Engine.Valkey) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled valkey-cli if available
+    const valkeyCliPath = await engineImpl
+      .getValkeyCliPath()
+      .catch(() => 'valkey-cli')
+    // For Valkey, sql is a Redis-compatible command
+    const cmd = `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -246,6 +256,14 @@ export async function executeSQLFile(
       .catch(() => 'redis-cli')
     // Redis uses pipe for file input: redis-cli -n <db> < file.redis
     const cmd = `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.Valkey) {
+    const engineImpl = getEngine(engine)
+    const valkeyCliPath = await engineImpl
+      .getValkeyCliPath()
+      .catch(() => 'valkey-cli')
+    // Valkey uses pipe for file input: valkey-cli -n <db> < file.valkey
+    const cmd = `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${database} < "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -310,16 +328,21 @@ export async function getKeyCount(
   port: number,
   database: string,
   pattern: string,
+  engine: Engine = Engine.Redis,
 ): Promise<number> {
-  const engineImpl = getEngine(Engine.Redis)
-  const redisCliPath = await engineImpl
-    .getRedisCliPath()
-    .catch(() => 'redis-cli')
+  let cliPath: string
+  if (engine === Engine.Valkey) {
+    const engineImpl = getEngine(Engine.Valkey)
+    cliPath = await engineImpl.getValkeyCliPath().catch(() => 'valkey-cli')
+  } else {
+    const engineImpl = getEngine(Engine.Redis)
+    cliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  }
 
   // Use DBSIZE for full wildcard (O(1) vs O(N) for KEYS)
   if (pattern === '*' || pattern === '') {
     const { stdout } = await execAsync(
-      `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} DBSIZE`,
+      `"${cliPath}" -h 127.0.0.1 -p ${port} -n ${database} DBSIZE`,
     )
     const count = parseInt(stdout.trim(), 10)
     if (isNaN(count)) {
@@ -330,7 +353,7 @@ export async function getKeyCount(
 
   // Use KEYS for filtered patterns
   const { stdout } = await execAsync(
-    `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} KEYS "${pattern}"`,
+    `"${cliPath}" -h 127.0.0.1 -p ${port} -n ${database} KEYS "${pattern}"`,
   )
   const trimmed = stdout.trim()
   if (trimmed === '') {
@@ -340,20 +363,43 @@ export async function getKeyCount(
   return lines.length
 }
 
-// Get the value of a key in Redis
+// Get the value of a key in Redis or Valkey
 export async function getRedisValue(
   port: number,
   database: string,
   key: string,
+  engine: Engine = Engine.Redis,
 ): Promise<string> {
-  const engineImpl = getEngine(Engine.Redis)
-  const redisCliPath = await engineImpl
-    .getRedisCliPath()
-    .catch(() => 'redis-cli')
+  let cliPath: string
+  if (engine === Engine.Valkey) {
+    const engineImpl = getEngine(Engine.Valkey)
+    cliPath = await engineImpl.getValkeyCliPath().catch(() => 'valkey-cli')
+  } else {
+    const engineImpl = getEngine(Engine.Redis)
+    cliPath = await engineImpl.getRedisCliPath().catch(() => 'redis-cli')
+  }
   const { stdout } = await execAsync(
-    `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${database} GET "${key}"`,
+    `"${cliPath}" -h 127.0.0.1 -p ${port} -n ${database} GET "${key}"`,
   )
   return stdout.trim()
+}
+
+// Alias for Valkey value retrieval (uses same protocol)
+export async function getValkeyValue(
+  port: number,
+  database: string,
+  key: string,
+): Promise<string> {
+  return getRedisValue(port, database, key, Engine.Valkey)
+}
+
+// Alias for Valkey key count (uses same protocol)
+export async function getValkeyKeyCount(
+  port: number,
+  database: string,
+  pattern: string,
+): Promise<number> {
+  return getKeyCount(port, database, pattern, Engine.Valkey)
 }
 
 // Wait for a database to be ready to accept connections
@@ -397,6 +443,19 @@ export async function waitForReady(
           .catch(() => 'redis-cli')
         const { stdout } = await execAsync(
           `"${redisCliPath}" -h 127.0.0.1 -p ${port} PING`,
+          { timeout: 5000 },
+        )
+        if (stdout.trim() === 'PONG') {
+          return true
+        }
+      } else if (engine === Engine.Valkey) {
+        // Use valkey-cli to ping Valkey
+        const engineImpl = getEngine(engine)
+        const valkeyCliPath = await engineImpl
+          .getValkeyCliPath()
+          .catch(() => 'valkey-cli')
+        const { stdout } = await execAsync(
+          `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} PING`,
           { timeout: 5000 },
         )
         if (stdout.trim() === 'PONG') {
@@ -455,7 +514,7 @@ export function getConnectionString(
   if (engine === Engine.MongoDB) {
     return `mongodb://127.0.0.1:${port}/${database}`
   }
-  if (engine === Engine.Redis) {
+  if (engine === Engine.Redis || engine === Engine.Valkey) {
     return `redis://127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`

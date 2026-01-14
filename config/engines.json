@@ -88,6 +88,22 @@
       "superuser": null,
       "clientTools": ["redis-server", "redis-cli"],
       "licensing": ["RSALv2", "SSPLv1", "AGPLv3"]
+    },
+    "valkey": {
+      "displayName": "Valkey",
+      "icon": "🔷",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["8.0.6", "9.0.1"],
+      "defaultVersion": "9.0.1",
+      "defaultPort": 6379,
+      "runtime": "server",
+      "queryLanguage": "redis",
+      "connectionScheme": "redis",
+      "superuser": null,
+      "clientTools": ["valkey-server", "valkey-cli"],
+      "licensing": "BSD-3-Clause",
+      "notes": "Redis fork with permissive licensing"
     }
   }
 }

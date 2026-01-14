@@ -143,6 +143,12 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = iredisInstalled
     engineSpecificValue = 'iredis'
     engineSpecificInstallValue = 'install-iredis'
+  } else if (config.engine === 'valkey') {
+    defaultShellName = 'valkey-cli'
+    engineSpecificCli = 'iredis' // iredis is protocol-compatible with Valkey
+    engineSpecificInstalled = iredisInstalled
+    engineSpecificValue = 'iredis'
+    engineSpecificInstallValue = 'install-iredis'
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -175,9 +181,11 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis and MongoDB
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, and MongoDB
   const isNonSqlEngine =
-    config.engine === 'redis' || config.engine === 'mongodb'
+    config.engine === 'redis' ||
+    config.engine === 'valkey' ||
+    config.engine === 'mongodb'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -486,6 +494,19 @@ async function launchShell(
       config.database,
     ]
     installHint = 'brew install redis'
+  } else if (config.engine === 'valkey') {
+    // Default Valkey shell
+    const valkeyCliPath = await configManager.getBinaryPath('valkey-cli')
+    shellCmd = valkeyCliPath || 'valkey-cli'
+    shellArgs = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(config.port),
+      '-n',
+      config.database,
+    ]
+    installHint = 'spindb engines download valkey'
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]

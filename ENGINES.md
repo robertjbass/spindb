@@ -10,6 +10,7 @@
 | 🪶 **SQLite** | ✅ Complete | hostdb (all platforms) | ~5 MB | File-based, stores in project directories |
 | 🍃 **MongoDB** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 7.0, 8.0, 8.2 |
 | 🔴 **Redis** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 7, 8 |
+| 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 
 ## Planned
 
@@ -68,6 +69,26 @@
   - mongodump creates gzipped archive by default
   - Full cross-platform support (macOS, Linux, Windows)
 
+### 🔷 Valkey
+
+- **Status:** ✅ Complete
+- **Versions:** 8, 9
+- **Data location:** `~/.spindb/containers/valkey/{name}/`
+- **Process:** Server process (`valkey-server`)
+- **Binary source:** hostdb downloads (all platforms)
+- **Enhanced CLI:** `iredis` (Redis-protocol compatible)
+- **Backup formats:**
+  - `.valkey` - Text format (Redis commands, human-readable)
+  - `.rdb` - Binary RDB snapshot (faster, requires restart to restore)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** valkey-server, valkey-cli
+- **Implementation notes:**
+  - Redis fork created after Redis license change (BSD-3 license)
+  - Fully API-compatible with Redis
+  - Uses `redis://` connection scheme for client compatibility
+  - Uses numbered databases (0-15) like Redis
+  - Does NOT support remote dump (same as Redis)
+
 ---
 
 ## Backup Format Summary
@@ -77,7 +98,8 @@
 | PostgreSQL | `.sql` (pg_dump) | `.dump` (custom format) | `.dump` for full backup |
 | MySQL | `.sql` (mysqldump) | `.sql.gz` (gzipped SQL) | `.sql.gz` for storage |
 | SQLite | `.sql` (.dump) | `.db` (file copy) | File copy for speed |
-| Redis | N/A | `.rdb` (RDB snapshot) | RDB for backups |
+| Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
+| Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
 
 ---
@@ -90,6 +112,7 @@
 | MySQL | `mysql` | `mycli` | Auto-completion, syntax highlighting |
 | SQLite | `sqlite3` | `litecli` | Available in v0.9 |
 | Redis | `redis-cli` | `iredis` | Auto-completion, syntax highlighting |
+| Valkey | `valkey-cli` | `iredis` | Protocol-compatible with iredis |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
 
@@ -114,6 +137,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🐘 | PostgreSQL |
 | 🍃 | MongoDB |
 | 🔴 | Redis |
+| 🔷 | Valkey |
 | 🪶 | SQLite |
 
 ---

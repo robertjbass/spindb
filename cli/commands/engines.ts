@@ -38,6 +38,7 @@ import {
   type InstalledSqliteEngine,
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
+  type InstalledValkeyEngine,
 } from '../helpers'
 import { Engine } from '../../types'
 import {
@@ -48,6 +49,7 @@ import { mysqlBinaryManager } from '../../engines/mysql/binary-manager'
 import { mariadbBinaryManager } from '../../engines/mariadb/binary-manager'
 import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
 import { redisBinaryManager } from '../../engines/redis/binary-manager'
+import { valkeyBinaryManager } from '../../engines/valkey/binary-manager'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
@@ -407,6 +409,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const redisEngines = engines.filter(
     (e): e is InstalledRedisEngine => e.engine === 'redis',
   )
+  const valkeyEngines = engines.filter(
+    (e): e is InstalledValkeyEngine => e.engine === 'valkey',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -496,6 +501,21 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // Valkey rows
+  for (const engine of valkeyEngines) {
+    const icon = ENGINE_ICONS.valkey
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} valkey`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -536,6 +556,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  Redis: ${redisEngines.length} version(s), ${formatBytes(totalRedisSize)}`,
+      ),
+    )
+  }
+  if (valkeyEngines.length > 0) {
+    const totalValkeySize = valkeyEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  Valkey: ${valkeyEngines.length} version(s), ${formatBytes(totalValkeySize)}`,
       ),
     )
   }
@@ -1122,9 +1153,54 @@ enginesCommand
         return
       }
 
+      if (normalizedEngine === 'valkey') {
+        if (!version) {
+          console.error(uiError('Valkey requires a version (e.g., 9)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.Valkey)
+
+        const spinner = createSpinner(`Checking Valkey ${version} binaries...`)
+        spinner.start()
+
+        // Always call ensureBinaries - it handles cached binaries gracefully
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `Valkey ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`Valkey ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`Valkey ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: valkeyPlatform, arch: valkeyArch } =
+          platformService.getPlatformInfo()
+        const valkeyFullVersion = valkeyBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'valkey',
+          version: valkeyFullVersion,
+          platform: valkeyPlatform,
+          arch: valkeyArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('valkey', binPath)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis, valkey`,
         ),
       )
       process.exit(1)

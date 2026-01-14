@@ -114,6 +114,15 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the valkey-cli client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured valkey-cli should override this method.
+   */
+  async getValkeyCliPath(): Promise<string> {
+    throw new Error('valkey-cli not found')
+  }
+
+  /**
    * Get the path to the sqlite3 client if available
    * Default implementation returns null; SQLite engine overrides this method.
    */

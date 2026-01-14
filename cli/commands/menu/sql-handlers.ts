@@ -56,11 +56,11 @@ export async function handleRunSql(containerName: string): Promise<void> {
   // Strip quotes that terminals add when drag-and-dropping files
   const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
-  // MongoDB uses JavaScript scripts, Redis uses commands, others use SQL
+  // MongoDB uses JavaScript scripts, Redis/Valkey use commands, others use SQL
   const isMongoDB = config.engine === 'mongodb'
-  const isRedis = config.engine === 'redis'
-  const scriptType = isRedis ? 'Command' : isMongoDB ? 'Script' : 'SQL'
-  const scriptTypeLower = isRedis ? 'command' : isMongoDB ? 'script' : 'SQL'
+  const isRedisOrValkey = config.engine === 'redis' || config.engine === 'valkey'
+  const scriptType = isRedisOrValkey ? 'Command' : isMongoDB ? 'Script' : 'SQL'
+  const scriptTypeLower = isRedisOrValkey ? 'command' : isMongoDB ? 'script' : 'SQL'
 
   // Prompt for file path (empty input = go back)
   console.log(

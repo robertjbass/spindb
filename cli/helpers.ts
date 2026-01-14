@@ -124,6 +124,16 @@ export type InstalledRedisEngine = {
   source: 'downloaded'
 }
 
+export type InstalledValkeyEngine = {
+  engine: 'valkey'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -131,6 +141,7 @@ export type InstalledEngine =
   | InstalledSqliteEngine
   | InstalledMongodbEngine
   | InstalledRedisEngine
+  | InstalledValkeyEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -470,6 +481,62 @@ async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
   return engines
 }
 
+// Get Valkey version from binary path
+async function getValkeyVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const serverPath = join(binPath, 'bin', `valkey-server${ext}`)
+  if (!existsSync(serverPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(serverPath, ['--version'])
+    // Parse output like "Valkey server v=8.0.6 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=..."
+    const match = stdout.match(/v=([\d.]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed Valkey engines from downloaded binaries
+async function getInstalledValkeyEngines(): Promise<InstalledValkeyEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledValkeyEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('valkey-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'valkey-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getValkeyVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'valkey',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -503,6 +570,9 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
   const redisEngines = await getInstalledRedisEngines()
   engines.push(...redisEngines)
 
+  const valkeyEngines = await getInstalledValkeyEngines()
+  engines.push(...valkeyEngines)
+
   return engines
 }
 
@@ -512,4 +582,5 @@ export {
   getInstalledSqliteEngines,
   getInstalledMongodbEngines,
   getInstalledRedisEngines,
+  getInstalledValkeyEngines,
 }
