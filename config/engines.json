@@ -21,7 +21,7 @@
       "icon": "🐬",
       "status": "integrated",
       "binarySource": "hostdb",
-      "supportedVersions": ["8.0.40", "8.4.3", "9.1.0"],
+      "supportedVersions": ["8.0.40", "8.4.3", "9.5.0"],
       "defaultVersion": "8.0.40",
       "defaultPort": 3306,
       "runtime": "server",
@@ -88,6 +88,22 @@
       "superuser": null,
       "clientTools": ["redis-server", "redis-cli"],
       "licensing": ["RSALv2", "SSPLv1", "AGPLv3"]
+    },
+    "valkey": {
+      "displayName": "Valkey",
+      "icon": "🔷",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["8.0.6", "9.0.1"],
+      "defaultVersion": "9.0.1",
+      "defaultPort": 6379,
+      "runtime": "server",
+      "queryLanguage": "redis",
+      "connectionScheme": "redis",
+      "superuser": null,
+      "clientTools": ["valkey-server", "valkey-cli"],
+      "licensing": "BSD-3-Clause",
+      "notes": "Redis fork with permissive licensing. Shares default port 6379 with Redis; port conflicts are resolved automatically."
     }
   }
 }

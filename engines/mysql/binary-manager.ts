@@ -124,7 +124,10 @@ export class MySQLBinaryManager {
 
       // Set up fetch with timeout using AbortController
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        DOWNLOAD_TIMEOUT_MS,
+      )
 
       let response: Response
       try {

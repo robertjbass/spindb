@@ -155,8 +155,12 @@ describe('Redis Restore', () => {
       let threw = false
       try {
         parseConnectionString('redis://127.0.0.1:6379/-1')
-      } catch {
+      } catch (error) {
         threw = true
+        assert(
+          (error as Error).message.includes('0-15'),
+          'Error should mention valid range 0-15',
+        )
       }
       assert(threw, 'Should throw for negative database')
     })

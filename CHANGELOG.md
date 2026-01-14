@@ -7,7 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-01-14
+
+### Fixed
+- **Windows Redis and Valkey CI tests** - Fixed servers failing to start on Windows with "Connection refused" errors
+  - Root cause: MSYS2/Cygwin-built binaries expect paths in `/cygdrive/c/...` format, not `C:\...`
+  - Added `toCygwinPath()` helper to convert Windows paths for Redis and Valkey config files
+  - Added Promise-based spawn with proper error handling (following MySQL's working pattern)
+  - Added diagnostic output capturing stderr/stdout and log file content on failure
+
+### Changed
+- **Valkey port conflict test** - Aligned with Redis test behavior (verifies container creation without attempting conflicting start)
+- **CI workflow** - Added Valkey to commented-out Linux ARM64 test section for future enablement
+- **FEATURE.md** - Added documentation notes:
+  - Updating ARM64 tests when adding new engines
+  - Adding engine keyword to package.json for npm discoverability
+
+## [0.17.1] - 2026-01-14
+
+### Changed
+- **CI workflow improvements**
+  - Add `hostdb-sync` to ci-status job dependencies array
+  - Add `hostdb-sync` result check to final status validation
+  - Update feature branch trigger to valkey branch
+  - Update TODO comment formatting for dev branch push
+
+### Fixed
+- **Documentation updates**
+  - Add file-based engine edge cases table to FEATURE.md (start/stop/port/status behavior differences)
+  - Various code quality improvements from CodeRabbit review suggestions
+
+## [0.17.0] - 2026-01-14
+
 ### Added
+- **Valkey engine support** - Full container lifecycle for Valkey, the Redis fork with BSD-3 licensing
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Multi-version support: Run Valkey 8 and 9 simultaneously
+  - Supported versions: 8, 9 (synced with hostdb releases.json)
+  - Tools bundled: valkey-server, valkey-cli
+  - Default port 6379 (same as Redis, auto-increments if occupied)
+  - Uses `redis://` connection scheme for client compatibility
+  - Backup formats: `.valkey` (text commands) and `.rdb` (RDB snapshot)
+  - Full integration tests across macOS, Linux, and Windows CI
+  - Support for `iredis` enhanced CLI (Redis-protocol compatible)
 - **MongoDB binary downloads from hostdb** - MongoDB now uses pre-built binaries from [hostdb](https://github.com/robertjbass/hostdb) instead of system package managers
   - Downloadable binaries for all platforms (macOS, Linux, Windows)
   - Multi-version support: Run MongoDB 7.0 and 8.0 simultaneously

@@ -106,6 +106,22 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
+  valkey: {
+    sql: {
+      extension: '.valkey',
+      label: '.valkey',
+      description: 'Text commands - human-readable, editable',
+      spinnerLabel: 'text',
+    },
+    dump: {
+      extension: '.rdb',
+      label: '.rdb',
+      description: 'RDB snapshot - binary format, faster restore',
+      spinnerLabel: 'RDB',
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'dump',
+  },
 }
 
 // Get backup format info for an engine
@@ -113,7 +129,12 @@ export function getBackupFormatInfo(
   engine: string,
   format: 'sql' | 'dump',
 ): BackupFormatInfo {
-  const engineFormats = BACKUP_FORMATS[engine] || BACKUP_FORMATS.postgresql
+  const engineFormats = BACKUP_FORMATS[engine]
+  if (!engineFormats) {
+    throw new Error(
+      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+    )
+  }
   return engineFormats[format]
 }
 
@@ -136,13 +157,23 @@ export function getBackupSpinnerLabel(
 // Check if an engine supports format selection
 export function supportsFormatChoice(engine: string): boolean {
   const engineFormats = BACKUP_FORMATS[engine]
-  return engineFormats?.supportsFormatChoice ?? true
+  if (!engineFormats) {
+    throw new Error(
+      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+    )
+  }
+  return engineFormats.supportsFormatChoice
 }
 
 // Get default format for an engine
 export function getDefaultFormat(engine: string): 'sql' | 'dump' {
   const engineFormats = BACKUP_FORMATS[engine]
-  return engineFormats?.defaultFormat ?? 'sql'
+  if (!engineFormats) {
+    throw new Error(
+      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+    )
+  }
+  return engineFormats.defaultFormat
 }
 
 // Large backup threshold (100MB) - warn user before restoring

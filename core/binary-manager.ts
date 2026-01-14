@@ -424,7 +424,8 @@ export class BinaryManager {
     const binaries = await readdir(binDir)
 
     // Pattern to match hostdb build paths (GitHub Actions runner paths)
-    const hostdbPathPattern = /\/Users\/runner\/work\/hostdb\/[^/]+\/install\/postgresql\/lib\//
+    const hostdbPathPattern =
+      /\/Users\/runner\/work\/hostdb\/[^/]+\/install\/postgresql\/lib\//
 
     for (const binary of binaries) {
       const binaryPath = join(binDir, binary)

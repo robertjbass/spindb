@@ -591,6 +591,67 @@ const redisDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// Valkey Dependencies
+// =============================================================================
+
+const valkeyDependencies: EngineDependencies = {
+  engine: 'valkey',
+  displayName: 'Valkey',
+  dependencies: [
+    {
+      name: 'valkey-server',
+      binary: 'valkey-server',
+      description: 'Valkey in-memory data store server (Redis fork)',
+      packages: {
+        // Valkey is relatively new - not yet in most package managers
+        // Primary distribution is via GitHub releases (hostdb)
+        brew: { package: 'valkey' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install valkey',
+          'Or use SpinDB: spindb engines download valkey 9',
+        ],
+        linux: [
+          'Valkey is not yet in most Linux package repositories.',
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+        win32: [
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+      },
+    },
+    {
+      name: 'valkey-cli',
+      binary: 'valkey-cli',
+      description: 'Valkey command-line interface client',
+      packages: {
+        brew: { package: 'valkey' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install valkey',
+          'Or use SpinDB: spindb engines download valkey 9',
+        ],
+        linux: [
+          'Valkey is not yet in most Linux package repositories.',
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+        win32: [
+          'Use SpinDB to download binaries: spindb engines download valkey 9',
+          'Or build from source: https://github.com/valkey-io/valkey',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -745,6 +806,7 @@ export const engineDependencies: EngineDependencies[] = [
   sqliteDependencies,
   mongodbDependencies,
   redisDependencies,
+  valkeyDependencies,
 ]
 
 // Get dependencies for a specific engine

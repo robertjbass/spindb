@@ -8,6 +8,7 @@
 import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
+import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -171,8 +172,17 @@ export class RedisBinaryManager {
       }
 
       const fileStream = createWriteStream(archiveFile)
-      // @ts-expect-error - response.body is ReadableStream
-      await pipeline(response.body, fileStream)
+
+      if (!response.body) {
+        fileStream.destroy()
+        throw new Error(
+          `Download failed: response has no body (status ${response.status})`,
+        )
+      }
+
+      // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
+      const nodeStream = Readable.fromWeb(response.body)
+      await pipeline(nodeStream, fileStream)
 
       if (platform === 'win32') {
         await this.extractWindowsBinaries(
@@ -256,17 +266,25 @@ export class RedisBinaryManager {
     // Escape single quotes for PowerShell (double them)
     const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
 
-    // Use PowerShell's Expand-Archive for zip extraction
+    // Build the PowerShell command
+    const command = `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`
+
+    // Use -EncodedCommand to avoid shell parsing issues with special characters
+    // (e.g., $ in usernames like C:\Users\John$Doe would be interpreted as variables)
+    const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
+
     await spawnAsync('powershell', [
       '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
+      '-EncodedCommand',
+      encodedCommand,
     ])
 
     await this.moveExtractedEntries(extractDir, binPath)
   }
 
   // Move extracted entries from extractDir to binPath, handling nested redis/ directories
+  // Unix archives have redis/bin/ structure, Windows archives have binaries directly in redis/
+  // This method normalizes both to binPath/bin/ structure
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
@@ -278,20 +296,53 @@ export class RedisBinaryManager {
     )
 
     const sourceDir = redisDir ? join(extractDir, redisDir.name) : extractDir
-    const entriesToMove = redisDir
+    const sourceEntries = redisDir
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    for (const entry of entriesToMove) {
-      const sourcePath = join(sourceDir, entry.name)
-      const destPath = join(binPath, entry.name)
-      try {
-        await rename(sourcePath, destPath)
-      } catch (error) {
-        if (isRenameFallbackError(error)) {
-          await cp(sourcePath, destPath, { recursive: true })
-        } else {
-          throw error
+    // Check if source has a bin/ subdirectory (Unix structure)
+    const hasBinDir = sourceEntries.some(
+      (e) => e.isDirectory() && e.name === 'bin',
+    )
+
+    if (hasBinDir) {
+      // Unix structure: move all entries as-is (preserves bin/ subdirectory)
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
+        }
+      }
+    } else {
+      // Windows structure: binaries are directly in redis/, need to create bin/ subdirectory
+      // Move .exe files to bin/, move other files (configs, DLLs) to root
+      const destBinDir = join(binPath, 'bin')
+      await mkdir(destBinDir, { recursive: true })
+
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        // Put executables and DLLs in bin/, configs and other files in root
+        const isExecutable = entry.name.endsWith('.exe')
+        const isDll = entry.name.endsWith('.dll')
+        const destPath =
+          isExecutable || isDll
+            ? join(destBinDir, entry.name)
+            : join(binPath, entry.name)
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
         }
       }
     }
@@ -319,7 +370,11 @@ export class RedisBinaryManager {
     }
 
     try {
-      const { stdout } = await execAsync(`"${serverPath}" --version`)
+      const { stdout, stderr } = await execAsync(`"${serverPath}" --version`)
+      // Log stderr if present (may contain warnings)
+      if (stderr && stderr.trim()) {
+        console.warn(`redis-server stderr: ${stderr.trim()}`)
+      }
       // Extract version from output like "Redis server v=7.4.7 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=..."
       const match = stdout.match(/v=(\d+\.\d+\.\d+)/)
       const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+)/) : null
@@ -345,8 +400,12 @@ export class RedisBinaryManager {
         `Version mismatch: expected ${version}, got ${reportedVersion}`,
       )
     } catch (error) {
-      const err = error as Error
-      throw new Error(`Failed to verify Redis binaries: ${err.message}`)
+      const err = error as Error & { stderr?: string; code?: number }
+      // Include stderr and exit code in error message for better debugging
+      const details = [err.message]
+      if (err.stderr) details.push(`stderr: ${err.stderr.trim()}`)
+      if (err.code !== undefined) details.push(`exit code: ${err.code}`)
+      throw new Error(`Failed to verify Redis binaries: ${details.join(', ')}`)
     }
   }
 

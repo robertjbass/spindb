@@ -180,7 +180,7 @@ export class MySQLEngine extends BaseEngine {
    * Verification is delegated to `mysqlBinaryManager.verify(version, platform, arch)`.
    *
    * @param binPath - Path to the binary directory (used for fallback version extraction)
-   * @param version - Explicit version string (e.g., "8.0.40", "9.1.0"). Always pass this
+   * @param version - Explicit version string (e.g., "8.0.40", "9.5.0"). Always pass this
    *   when available to avoid relying on path-based extraction.
    * @returns `true` if binaries are verified, `false` if verification fails or version
    *   cannot be determined
@@ -327,13 +327,39 @@ export class MySQLEngine extends BaseEngine {
       args.push(`--user=${process.env.USER}`)
     }
 
+    // Timeout for initialization (same as Windows path)
+    const INIT_TIMEOUT_MS = 120000
+
     return new Promise((resolve, reject) => {
+      let settled = false
+      let timeoutId: NodeJS.Timeout | null = null
+
       const proc = spawn(mysqld, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
       let stdout = ''
       let stderr = ''
+
+      // Set up timeout
+      timeoutId = setTimeout(async () => {
+        if (settled) return
+        settled = true
+
+        // Kill the process
+        try {
+          proc.kill('SIGKILL')
+        } catch {
+          // Ignore errors if process already exited
+        }
+
+        await cleanupOnFailure()
+        reject(
+          new Error(
+            `MySQL initialization timed out after ${INIT_TIMEOUT_MS / 1000}s. Check logs at: ${logFile}`,
+          ),
+        )
+      }, INIT_TIMEOUT_MS)
 
       proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
@@ -343,6 +369,14 @@ export class MySQLEngine extends BaseEngine {
       })
 
       proc.on('close', async (code) => {
+        if (settled) return
+        settled = true
+
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+
         if (code === 0) {
           resolve(dataDir)
         } else {
@@ -356,6 +390,14 @@ export class MySQLEngine extends BaseEngine {
       })
 
       proc.on('error', async (err) => {
+        if (settled) return
+        settled = true
+
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+
         await cleanupOnFailure()
         reject(err)
       })
@@ -609,9 +651,7 @@ export class MySQLEngine extends BaseEngine {
             logDebug(`Process ${pid} already terminated (ESRCH)`)
             return true
           }
-          logDebug(
-            `terminateProcess failed for PID ${pid}: ${termErr.message}`,
-          )
+          logDebug(`terminateProcess failed for PID ${pid}: ${termErr.message}`)
           return false
         }
       }

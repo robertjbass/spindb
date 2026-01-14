@@ -138,12 +138,12 @@ describe('Orphaned Container Behavior', () => {
       )
     })
 
-    it('should detect when MySQL engine is not installed', async () => {
+    it('should detect when MySQL engine is not installed', () => {
       // MySQL now uses hostdb binaries (not system-installed)
       const containerConfig = {
         name: 'mysql-db',
         engine: Engine.MySQL,
-        version: '9.1.0',
+        version: '9.5.0',
         port: 3306,
         database: 'testdb',
       }
@@ -160,7 +160,7 @@ describe('Orphaned Container Behavior', () => {
       )
     })
 
-    it('should detect when MongoDB engine is not installed', async () => {
+    it('should detect when MongoDB engine is not installed', () => {
       // MongoDB now uses hostdb binaries (not system-installed)
       const containerConfig = {
         name: 'mongo-db',
@@ -182,7 +182,7 @@ describe('Orphaned Container Behavior', () => {
       )
     })
 
-    it('should detect when Redis engine is not installed', async () => {
+    it('should detect when Redis engine is not installed', () => {
       // Redis now uses hostdb binaries (not system-installed)
       const containerConfig = {
         name: 'redis-db',
@@ -413,6 +413,19 @@ describe('MySQL Engine Binary Check', () => {
     )
   })
 
+  it('should have supportedVersions defined', async () => {
+    const { mysqlEngine } = await import('../../engines/mysql')
+
+    const versions = mysqlEngine.supportedVersions
+
+    assert(Array.isArray(versions), 'supportedVersions should be an array')
+    assert(versions.length > 0, 'Should have at least one supported version')
+    assert(
+      versions.some((v) => v.startsWith('9')),
+      'Should support MySQL 9.x',
+    )
+  })
+
   it('should resolve major version to full version', async () => {
     const { mysqlEngine } = await import('../../engines/mysql')
 
@@ -429,9 +442,9 @@ describe('MySQL Engine Binary Check', () => {
   it('should return full version unchanged', async () => {
     const { mysqlEngine } = await import('../../engines/mysql')
 
-    const fullVersion = mysqlEngine.resolveFullVersion('9.1.0')
+    const fullVersion = mysqlEngine.resolveFullVersion('9.5.0')
 
-    assertEqual(fullVersion, '9.1.0', 'Full version should be unchanged')
+    assertEqual(fullVersion, '9.5.0', 'Full version should be unchanged')
   })
 
   it('should construct correct binary path', async () => {
@@ -552,7 +565,10 @@ describe('Redis Engine Binary Check', () => {
 
     assert(Array.isArray(versions), 'supportedVersions should be an array')
     assert(versions.length > 0, 'Should have at least one supported version')
-    assert(versions.some((v) => v.startsWith('8')), 'Should support Redis 8.x')
+    assert(
+      versions.some((v) => v.startsWith('8')),
+      'Should support Redis 8.x',
+    )
   })
 
   it('should resolve major version to full version', async () => {

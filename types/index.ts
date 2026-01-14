@@ -23,6 +23,7 @@ export enum Engine {
   SQLite = 'sqlite',
   MongoDB = 'mongodb',
   Redis = 'redis',
+  Valkey = 'valkey',
 }
 
 /**
@@ -36,6 +37,7 @@ export const ALL_ENGINES = [
   Engine.SQLite,
   Engine.MongoDB,
   Engine.Redis,
+  Engine.Valkey,
 ] as const
 
 /**
@@ -190,6 +192,9 @@ export type BinaryTool =
   // Redis tools
   | 'redis-server'
   | 'redis-cli'
+  // Valkey tools
+  | 'valkey-server'
+  | 'valkey-cli'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -249,6 +254,10 @@ export type SpinDBConfig = {
     'redis-server'?: BinaryConfig
     // Redis client tools
     'redis-cli'?: BinaryConfig
+    // Valkey server tools
+    'valkey-server'?: BinaryConfig
+    // Valkey client tools
+    'valkey-cli'?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

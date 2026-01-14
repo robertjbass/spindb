@@ -13,6 +13,7 @@ import { processManager } from '../../core/process-manager'
 import { redisBinaryManager } from './binary-manager'
 import { getBinaryUrl, VERSION_MAP } from './binary-urls'
 import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
@@ -60,6 +61,26 @@ function validateCommand(command: string): void {
   }
 }
 
+/**
+ * Convert a Windows path to Cygwin path format.
+ * Redis Windows binaries (from redis-windows) are built with MSYS2/Cygwin runtime
+ * and expect paths in /cygdrive/c/... format when passed as command-line arguments.
+ *
+ * Example: C:\Users\foo\config.conf -> /cygdrive/c/Users/foo/config.conf
+ */
+function toCygwinPath(windowsPath: string): string {
+  // Match drive letter at start (e.g., C:\ or D:/)
+  const driveMatch = windowsPath.match(/^([A-Za-z]):[/\\]/)
+  if (!driveMatch) {
+    // Not a Windows absolute path, return as-is with forward slashes
+    return windowsPath.replace(/\\/g, '/')
+  }
+
+  const driveLetter = driveMatch[1].toLowerCase()
+  const restOfPath = windowsPath.slice(3).replace(/\\/g, '/')
+  return `/cygdrive/${driveLetter}/${restOfPath}`
+}
+
 // Build a redis-cli command for inline command execution
 export function buildRedisCliCommand(
   redisCliPath: string,
@@ -71,14 +92,9 @@ export function buildRedisCliCommand(
   validateCommand(command)
 
   const db = options?.database || '0'
-  if (isWindows()) {
-    // Windows: use double quotes
-    const escaped = command.replace(/"/g, '\\"')
-    return `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${escaped}`
-  } else {
-    // Unix: pass command directly (Redis commands are simple)
-    return `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${command}`
-  }
+  // Escape double quotes consistently on all platforms to prevent shell interpretation issues
+  const escaped = command.replace(/"/g, '\\"')
+  return `"${redisCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${escaped}`
 }
 
 // Generate Redis configuration file content
@@ -92,13 +108,16 @@ function generateRedisConfig(options: {
   // Windows Redis doesn't support daemonize natively, use detached spawn instead
   const daemonizeValue = options.daemonize ?? true
 
+  // Redis config requires forward slashes even on Windows
+  const normalizePathForRedis = (p: string) => p.replace(/\\/g, '/')
+
   return `# SpinDB generated Redis configuration
 port ${options.port}
 bind 127.0.0.1
-dir ${options.dataDir}
+dir ${normalizePathForRedis(options.dataDir)}
 daemonize ${daemonizeValue ? 'yes' : 'no'}
-logfile ${options.logFile}
-pidfile ${options.pidFile}
+logfile ${normalizePathForRedis(options.logFile)}
+pidfile ${normalizePathForRedis(options.pidFile)}
 
 # Persistence - RDB snapshots
 save 900 1
@@ -122,15 +141,9 @@ export class RedisEngine extends BaseEngine {
     return platformService.getPlatformInfo()
   }
 
-  // Fetch available versions from hostdb
+  // Fetch available versions from hostdb (dynamically or from cache/fallback)
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    const versions: Record<string, string[]> = {}
-
-    for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      versions[major] = [VERSION_MAP[major]]
-    }
-
-    return versions
+    return fetchHostdbVersions()
   }
 
   // Get binary download URL from hostdb
@@ -162,7 +175,8 @@ export class RedisEngine extends BaseEngine {
 
   // Verify that Redis binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
-    const serverPath = join(binPath, 'bin', 'redis-server')
+    const ext = platformService.getExecutableExtension()
+    const serverPath = join(binPath, 'bin', `redis-server${ext}`)
     return existsSync(serverPath)
   }
 
@@ -253,7 +267,8 @@ export class RedisEngine extends BaseEngine {
       platform,
       arch,
     })
-    const serverPath = join(binPath, 'bin', 'redis-server')
+    const ext = platformService.getExecutableExtension()
+    const serverPath = join(binPath, 'bin', `redis-server${ext}`)
     if (existsSync(serverPath)) {
       return serverPath
     }
@@ -280,7 +295,8 @@ export class RedisEngine extends BaseEngine {
         platform,
         arch,
       })
-      const cliPath = join(binPath, 'bin', 'redis-cli')
+      const ext = platformService.getExecutableExtension()
+      const cliPath = join(binPath, 'bin', `redis-cli${ext}`)
       if (existsSync(cliPath)) {
         return cliPath
       }
@@ -394,42 +410,99 @@ export class RedisEngine extends BaseEngine {
     }
 
     if (useDetachedSpawn) {
-      // Windows: spawn detached process (no daemonize support)
-      const spawnOpts: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true,
-        windowsHide: true,
-      }
-
-      const proc = spawn(redisServer, [configPath], spawnOpts)
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`redis-server stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        logDebug(`redis-server stderr: ${data.toString()}`)
-      })
-
-      // Detach the process so it continues running after parent exits
-      proc.unref()
-
-      // Wait for Redis to be ready
-      const ready = await this.waitForReady(port, version)
-      if (ready) {
-        return {
-          port,
-          connectionString: this.getConnectionString(container),
+      // Windows: spawn detached process with proper error handling
+      // This follows the pattern used by MySQL which works on Windows
+      return new Promise((resolve, reject) => {
+        const spawnOpts: SpawnOptions = {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: true,
+          windowsHide: true,
         }
-      } else {
-        // Check log for errors
-        const portError = await checkLogForPortError()
-        if (portError) {
-          throw new Error(portError)
-        }
-        throw new Error(
-          `Redis failed to start within timeout. Check logs at: ${logFile}`,
-        )
-      }
+
+        // Convert Windows path to Cygwin format for MSYS2/Cygwin-built binaries
+        const cygwinConfigPath = toCygwinPath(configPath)
+        const proc = spawn(redisServer, [cygwinConfigPath], spawnOpts)
+        let settled = false
+        let stderrOutput = ''
+        let stdoutOutput = ''
+
+        // Handle spawn errors (binary not found, DLL issues, etc.)
+        proc.on('error', (err) => {
+          if (settled) return
+          settled = true
+          reject(new Error(`Failed to spawn Redis server: ${err.message}`))
+        })
+
+        proc.stdout?.on('data', (data: Buffer) => {
+          const str = data.toString()
+          stdoutOutput += str
+          logDebug(`redis-server stdout: ${str}`)
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          const str = data.toString()
+          stderrOutput += str
+          logDebug(`redis-server stderr: ${str}`)
+        })
+
+        // Detach the process so it continues running after parent exits
+        proc.unref()
+
+        // Give spawn a moment to fail if it's going to, then check readiness
+        setTimeout(async () => {
+          if (settled) return
+
+          // Verify process actually started
+          if (!proc.pid) {
+            settled = true
+            reject(new Error('Redis server process failed to start (no PID)'))
+            return
+          }
+
+          // Write PID file for consistency with other engines
+          try {
+            await writeFile(pidFile, String(proc.pid))
+          } catch {
+            // Non-fatal - process is running, PID file is for convenience
+          }
+
+          // Wait for Redis to be ready
+          const ready = await this.waitForReady(port, version)
+          if (settled) return
+
+          if (ready) {
+            settled = true
+            resolve({
+              port,
+              connectionString: this.getConnectionString(container),
+            })
+          } else {
+            settled = true
+            const portError = await checkLogForPortError()
+
+            // Read log file content for better error diagnostics
+            let logContent = ''
+            try {
+              logContent = await readFile(logFile, 'utf-8')
+            } catch {
+              logContent = '(log file not found or empty)'
+            }
+
+            const errorDetails = [
+              portError || 'Redis failed to start within timeout.',
+              `Binary: ${redisServer}`,
+              `Config: ${configPath}`,
+              `Log file: ${logFile}`,
+              `Log content:\n${logContent || '(empty)'}`,
+              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
+              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n')
+
+            reject(new Error(errorDetails))
+          }
+        }, 500)
+      })
     }
 
     // Unix: Redis with daemonize: yes handles its own forking
@@ -506,10 +579,12 @@ export class RedisEngine extends BaseEngine {
     const startTime = Date.now()
     const checkInterval = 500
 
-    const redisCli = await this.getRedisCliPathForVersion(version)
-    if (!redisCli) {
+    let redisCli: string
+    try {
+      redisCli = await this.getRedisCliPathForVersion(version)
+    } catch {
       logWarning('redis-cli not found, cannot verify Redis is ready')
-      return true
+      return false
     }
 
     while (Date.now() - startTime < timeoutMs) {

@@ -187,7 +187,10 @@ export class PostgreSQLEngine extends BaseEngine {
 
     // On macOS/Linux, zonky.io binaries don't include client tools
     // Try to find and register system-installed tools for any that are missing
-    if (foundTools.size < clientTools.length && (p === 'darwin' || p === 'linux')) {
+    if (
+      foundTools.size < clientTools.length &&
+      (p === 'darwin' || p === 'linux')
+    ) {
       const missingTools = clientTools.filter((t) => !foundTools.has(t))
       await this.registerSystemClientTools(missingTools)
     }
@@ -217,7 +220,9 @@ export class PostgreSQLEngine extends BaseEngine {
       if (result) {
         await configManager.setBinaryPath(tool, result.path, 'system')
       } else {
-        logDebug(`PostgreSQL client tool '${tool}' not found on system, will remain unregistered`)
+        logDebug(
+          `PostgreSQL client tool '${tool}' not found on system, will remain unregistered`,
+        )
       }
     }
   }

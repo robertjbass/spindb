@@ -362,7 +362,7 @@ describe('getMajorVersion', () => {
     })
 
     it('should extract major.minor from three-part version', () => {
-      assert.equal(getMajorVersion('9.1.0'), '9.1')
+      assert.equal(getMajorVersion('9.5.0'), '9.5')
     })
 
     it('should handle four-part versions', () => {
@@ -384,7 +384,7 @@ describe('getMajorVersion', () => {
     })
 
     it('should handle version with leading "V" (uppercase)', () => {
-      assert.equal(getMajorVersion('V9.1.0'), '9.1')
+      assert.equal(getMajorVersion('V9.5.0'), '9.5')
     })
 
     it('should handle version with whitespace', () => {

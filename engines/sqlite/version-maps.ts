@@ -47,27 +47,15 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '3.51.2')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version key in the map, return the full version
+  // If it's a version key in the map (major, major.minor, or full), return the mapped version
+  // Identity mappings for 3-part versions (e.g., '3.51.2' -> '3.51.2') are already in the map
   const fullVersion = SQLITE_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it's already a known full version (a value in the map), return as-is
-  const knownVersions = Object.values(SQLITE_VERSION_MAP)
-  if (knownVersions.includes(version)) {
-    return version
-  }
-
-  // If it looks like a full version (X.Y.Z), return as-is but warn
-  if (/^\d+\.\d+\.\d+$/.test(version)) {
-    console.warn(
-      `SQLite version '${version}' not in version map, may not be available in hostdb`,
-    )
-    return version
-  }
-
-  // Unknown version format - warn and return unchanged
+  // Unknown version - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
   console.warn(
     `SQLite version '${version}' not in version map, may not be available in hostdb`,
   )

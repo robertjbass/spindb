@@ -148,8 +148,17 @@ export async function getHostdbDownloadUrl(
     }
 
     return platformData.url
-  } catch {
+  } catch (error) {
     // Fallback to constructing URL manually if fetch fails
+    logDebug(
+      'Failed to fetch MariaDB download URL from hostdb, using fallback',
+      {
+        version,
+        platform,
+        arch,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    )
     return buildDownloadUrl('mariadb', version, platform, arch)
   }
 }

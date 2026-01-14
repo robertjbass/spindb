@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  # TODO uncomment to test on dev branch push
+  # TODO - uncomment to test on dev branch push
   # push:
   #   branches: [dev]
   workflow_dispatch:
@@ -46,7 +46,7 @@ jobs:
           - ubuntu-22.04
           - ubuntu-24.04
           - macos-15 # Intel
-          - macos-14 # ARM64 (M1/M2)
+          - macos-14 # ARM64
           - windows-latest
     steps:
       - name: Checkout
@@ -430,12 +430,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache Redis binaries - these are downloaded from hostdb
+      # Cache key includes version suffix to bust cache when extraction logic changes
       - name: Cache Redis binaries
         uses: actions/cache@v4
         id: redis-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-redis-8-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-redis-8-v5-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download Redis binaries (all platforms)
       - name: Install Redis via SpinDB
@@ -447,6 +448,102 @@ jobs:
       - name: Run Redis integration tests
         run: pnpm test:redis
         timeout-minutes: 15
+
+      - name: Show Redis logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Redis container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Redis binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "redis*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Redis log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+          Write-Host ""
+          Write-Host "=== Redis config files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Filter "*.conf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # Valkey Integration Tests
+  # Uses SpinDB to download and manage Valkey binaries from hostdb
+  # ============================================
+  test-valkey:
+    name: Valkey (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Valkey binaries - these are downloaded from hostdb
+      # Cache key includes version suffix to bust cache when extraction logic changes
+      - name: Cache Valkey binaries
+        uses: actions/cache@v4
+        id: valkey-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-valkey-9-v5-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Valkey binaries (all platforms)
+      - name: Install Valkey via SpinDB
+        run: pnpm start engines download valkey 9
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Valkey integration tests
+        run: pnpm test:valkey
+        timeout-minutes: 15
+
+      - name: Show Valkey logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Valkey container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Valkey binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "valkey*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Valkey log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+          Write-Host ""
+          Write-Host "=== Valkey config files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Filter "*.conf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
 
   # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
@@ -736,6 +833,7 @@ jobs:
   #         - sqlite
   #         - mongodb
   #         - redis
+  #         - valkey
   #   steps:
   #     - name: Checkout
   #       uses: actions/checkout@v4
@@ -784,6 +882,10 @@ jobs:
   #       if: matrix.test == 'redis'
   #       run: pnpm start engines download redis 8
   #
+  #     - name: Download Valkey
+  #       if: matrix.test == 'valkey'
+  #       run: pnpm start engines download valkey 9
+  #
   #     - name: Show installed engines
   #       run: pnpm start engines list
   #
@@ -822,6 +924,11 @@ jobs:
   #       if: matrix.test == 'redis'
   #       run: pnpm test:redis
   #       timeout-minutes: 15
+  #
+  #     - name: Run Valkey tests
+  #       if: matrix.test == 'valkey'
+  #       run: pnpm test:valkey
+  #       timeout-minutes: 15
 
   # ============================================
   # Summary Job - Ensures all tests pass
@@ -838,11 +945,13 @@ jobs:
         test-sqlite,
         test-mongodb,
         test-redis,
+        test-valkey,
         test-cli-e2e,
         test-fresh-install,
         test-upgrade,
         test-docker-linux,
         lint,
+        hostdb-sync,
       ]
     if: always()
     steps:
@@ -876,6 +985,10 @@ jobs:
             echo "Redis tests failed"
             exit 1
           fi
+          if [ "${{ needs.test-valkey.result }}" != "success" ]; then
+            echo "Valkey tests failed"
+            exit 1
+          fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
             echo "CLI E2E tests failed"
             exit 1
@@ -894,6 +1007,10 @@ jobs:
           fi
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "Lint check failed"
+            exit 1
+          fi
+          if [ "${{ needs.hostdb-sync.result }}" != "success" ]; then
+            echo "hostdb sync check failed"
             exit 1
           fi
           echo "All CI checks passed!"

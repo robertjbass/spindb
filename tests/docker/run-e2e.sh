@@ -193,6 +193,16 @@ run_test() {
         return 1
       fi
       ;;
+    valkey)
+      if ! spindb run "$container_name" -c "PING"; then
+        echo "FAILED: Could not run Valkey command"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "PING failed"
+        FAILED=$((FAILED+1))
+        return 1
+      fi
+      ;;
     sqlite)
       if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
         echo "FAILED: Could not run SQLite query"
@@ -294,6 +304,10 @@ MONGODB_VERSION=$(get_default_version mongodb)
 # Redis
 REDIS_VERSION=$(get_default_version redis)
 [ -n "$REDIS_VERSION" ] && run_test redis "$REDIS_VERSION" || echo "Skipping Redis (no default version)"
+
+# Valkey
+VALKEY_VERSION=$(get_default_version valkey)
+[ -n "$VALKEY_VERSION" ] && run_test valkey "$VALKEY_VERSION" || echo "Skipping Valkey (no default version)"
 
 # Summary
 echo ""

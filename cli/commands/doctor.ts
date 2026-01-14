@@ -326,6 +326,22 @@ export const doctorCommand = new Command('doctor')
       const hasIssues = checks.some((c) => c.status !== 'ok')
       if (!hasIssues) {
         console.log(chalk.green('All systems healthy! ✓'))
+      } else if (isNonInteractive) {
+        // In CI/non-interactive mode, print summary and exit with non-zero code
+        const issues = checks.filter((c) => c.status !== 'ok')
+        const errors = issues.filter((c) => c.status === 'error')
+        const warnings = issues.filter((c) => c.status === 'warning')
+
+        const summary = []
+        if (errors.length > 0) {
+          summary.push(`${errors.length} error(s)`)
+        }
+        if (warnings.length > 0) {
+          summary.push(`${warnings.length} warning(s)`)
+        }
+
+        console.log(chalk.red(`Health check failed: ${summary.join(', ')}`))
+        process.exit(1)
       }
     }
 

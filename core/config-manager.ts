@@ -57,6 +57,8 @@ const MONGODB_TOOLS: BinaryTool[] = [
 
 const REDIS_TOOLS: BinaryTool[] = ['redis-server', 'redis-cli']
 
+const VALKEY_TOOLS: BinaryTool[] = ['valkey-server', 'valkey-cli']
+
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
 const ENHANCED_SHELLS: BinaryTool[] = [
@@ -73,6 +75,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...MARIADB_TOOLS,
   ...MONGODB_TOOLS,
   ...REDIS_TOOLS,
+  ...VALKEY_TOOLS,
   ...SQLITE_TOOLS,
   ...ENHANCED_SHELLS,
 ]
@@ -85,6 +88,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.MariaDB]: MARIADB_TOOLS,
   [Engine.MongoDB]: MONGODB_TOOLS,
   [Engine.Redis]: REDIS_TOOLS,
+  [Engine.Valkey]: VALKEY_TOOLS,
 }
 
 export class ConfigManager {
@@ -313,6 +317,7 @@ export class ConfigManager {
     mariadb: { found: BinaryTool[]; missing: BinaryTool[] }
     mongodb: { found: BinaryTool[]; missing: BinaryTool[] }
     redis: { found: BinaryTool[]; missing: BinaryTool[] }
+    valkey: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
     // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
@@ -353,6 +358,10 @@ export class ConfigManager {
       redis: {
         found: found.filter((t) => REDIS_TOOLS.includes(t)),
         missing: missing.filter((t) => REDIS_TOOLS.includes(t)),
+      },
+      valkey: {
+        found: found.filter((t) => VALKEY_TOOLS.includes(t)),
+        missing: missing.filter((t) => VALKEY_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
@@ -452,7 +461,7 @@ export class ConfigManager {
         if (!entry.isDirectory()) continue
 
         // Parse directory name: {engine}-{version}-{platform}-{arch}
-        // e.g., postgresql-18.1.0-darwin-arm64, mysql-9.1.0-darwin-arm64
+        // e.g., postgresql-18.1.0-darwin-arm64, mysql-9.5.0-darwin-arm64
         // Also handles prerelease versions like 18.1.0-beta1 or 8.0.0-rc1
         const match = entry.name.match(
           /^(\w+)-(\d+\.\d+\.\d+(?:-[\w.]+)?)-(\w+)-(\w+)$/,
@@ -462,7 +471,9 @@ export class ConfigManager {
         const [, engineName] = match
 
         // Validate engineName is a known engine before casting
-        if (!Object.prototype.hasOwnProperty.call(ENGINE_BINARY_MAP, engineName)) {
+        if (
+          !Object.prototype.hasOwnProperty.call(ENGINE_BINARY_MAP, engineName)
+        ) {
           continue
         }
         const engine = engineName as Engine
@@ -519,6 +530,7 @@ export {
   MARIADB_CLIENT_TOOLS,
   MONGODB_TOOLS,
   REDIS_TOOLS,
+  VALKEY_TOOLS,
   SQLITE_TOOLS,
   ENHANCED_SHELLS,
   ALL_TOOLS,

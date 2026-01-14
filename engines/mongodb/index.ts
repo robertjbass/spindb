@@ -172,7 +172,8 @@ export class MongoDBEngine extends BaseEngine {
     }
 
     // Last resort: just check file existence
-    const mongodPath = join(binPath, 'bin', 'mongod')
+    const ext = platformService.getExecutableExtension()
+    const mongodPath = join(binPath, 'bin', `mongod${ext}`)
     return existsSync(mongodPath)
   }
 

@@ -204,6 +204,10 @@ describe('Redis Integration Tests', () => {
     await engine.start(sourceConfig!)
     await containerManager.updateConfig(containerName, { status: 'running' })
 
+    // Wait for source container to be ready
+    const sourceReady = await waitForReady(ENGINE, testPorts[0])
+    assert(sourceReady, 'Source Redis should be ready after restart')
+
     console.log('   ✓ Container cloned via backup/restore')
   })
 
@@ -575,7 +579,7 @@ describe('Redis Integration Tests', () => {
     )
   })
 
-  it('should show warning when stopping already stopped container', async () => {
+  it('should handle stopping already stopped container gracefully', async () => {
     console.log(`\n⚠️  Testing stop on already stopped container...`)
 
     // First stop the container
@@ -594,9 +598,20 @@ describe('Redis Integration Tests', () => {
     })
     assert(!running, 'Container should be stopped')
 
-    // Attempting to stop again should not throw
-    // (In real CLI usage, this would show a warning message)
-    console.log('   ✓ Container is already stopped (would show warning in CLI)')
+    // Attempting to stop again should not throw (idempotent behavior)
+    // Note: Warning message is logged but not verified here to keep test simple
+    await engine.stop(config!)
+
+    // Still stopped
+    const stillStopped = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(
+      !stillStopped,
+      'Container should still be stopped after duplicate stop',
+    )
+
+    console.log('   ✓ Duplicate stop handled gracefully (idempotent)')
   })
 
   it('should delete container with --force', async () => {

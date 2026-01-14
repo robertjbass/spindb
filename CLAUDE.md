@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and SQLite (all via hostdb downloads).
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, and SQLite (all via hostdb downloads).
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -113,8 +113,17 @@ engines/
 │   ├── backup.ts           # mongodump wrapper
 │   ├── restore.ts          # mongorestore wrapper
 │   └── version-validator.ts
-└── redis/
-    ├── index.ts            # Redis engine
+├── redis/
+│   ├── index.ts            # Redis engine
+│   ├── binary-urls.ts      # hostdb URL builder
+│   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   ├── version-maps.ts     # Version mapping
+│   ├── binary-manager.ts   # Download/extraction
+│   ├── backup.ts           # BGSAVE/RDB wrapper
+│   ├── restore.ts          # RDB restore
+│   └── version-validator.ts
+└── valkey/
+    ├── index.ts            # Valkey engine (Redis fork)
     ├── binary-urls.ts      # hostdb URL builder
     ├── hostdb-releases.ts  # hostdb GitHub releases API
     ├── version-maps.ts     # Version mapping
@@ -171,6 +180,15 @@ abstract class BaseEngine {
 - Versions: 7, 8
 - Uses numbered databases (0-15) instead of named databases
 - Uses Redis commands instead of SQL
+
+**Valkey 🔷**
+- Redis fork with BSD-3 license (created after Redis license change)
+- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
+- Client tools (valkey-server, valkey-cli) bundled with hostdb binaries
+- Versions: 8, 9
+- Fully API-compatible with Redis
+- Uses `redis://` connection scheme for client compatibility
+- Uses numbered databases (0-15) like Redis
 
 ### Engines JSON Registry
 
@@ -229,15 +247,16 @@ Each engine supports specific backup formats with different restore behaviors:
 | SQLite | `.sql` (plain SQL) | `.sqlite` (binary copy) | Direct file operations |
 | MongoDB | `.bson` (BSON) | `.archive` (compressed) | mongodump/mongorestore |
 | Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | See notes below |
+| Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | Same as Redis |
 
-**Redis-specific restore behavior:**
+**Redis/Valkey-specific restore behavior:**
 - **RDB (`.rdb`)**: Binary snapshot. Requires stopping Redis, copying file to data dir, then restart.
 - **Text (`.redis`)**: Human-readable Redis commands. Pipes to running Redis instance.
   - Content-based detection: Files are recognized as Redis commands by analyzing content (looking for SET, HSET, DEL, etc.), not just extension. This allows restoring files like `users.txt` or `data.dump`.
   - Merge vs Replace: For text restores, user chooses:
     - **Replace all**: Runs `FLUSHDB` first (clean slate)
     - **Merge**: Adds/updates keys, keeps existing keys not in backup
-- **No "Create new database"**: Redis uses numbered databases 0-15 that always exist.
+- **No "Create new database"**: Redis/Valkey use numbered databases 0-15 that always exist.
 
 ### File Structure
 
@@ -261,11 +280,16 @@ Each engine supports specific backup formats with different restore behaviors:
 │   │       ├── container.json
 │   │       ├── data/
 │   │       └── mongodb.log
-│   └── redis/
+│   ├── redis/
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── redis.log
+│   └── valkey/
 │       └── mydb/
 │           ├── container.json
 │           ├── data/
-│           └── redis.log
+│           └── valkey.log
 └── config.json                       # Tool paths cache
 ```
 
@@ -274,7 +298,7 @@ Each engine supports specific backup formats with different restore behaviors:
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis'
+  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis' | 'valkey'
   version: string
   port: number
   database: string        // Primary database
@@ -346,6 +370,7 @@ pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
 pnpm test:mongodb   # MongoDB integration
 pnpm test:redis     # Redis integration
+pnpm test:valkey    # Valkey integration
 ```
 
 **Note:** All test scripts use `--test-concurrency=1 --experimental-test-isolation=none` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." The `--test-concurrency=1` alone only limits parallelism but still uses workers for isolation; `--experimental-test-isolation=none` completely disables worker isolation.
@@ -415,6 +440,7 @@ Current engines with CI caching:
 - MySQL: `spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}`
 - MongoDB: `spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}`
 - Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
+- Valkey: `spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}`
 - SQLite: `spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}`
 
 **Reference implementations:**
@@ -423,10 +449,11 @@ Current engines with CI caching:
 - **MariaDB** - Server database with downloadable binaries (hostdb)
 - **MongoDB** - Server database with downloadable binaries (hostdb), uses JavaScript instead of SQL
 - **Redis** - Key-value store with downloadable binaries (hostdb), uses Redis commands instead of SQL
+- **Valkey** - Redis fork with downloadable binaries (hostdb), uses Redis commands (API-compatible)
 - **SQLite** - File-based (embedded) database with downloadable binaries (hostdb), uses SQL
 
 **Engine Types:**
-- **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis): Data in `~/.spindb/containers/`, port management, start/stop
+- **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey): Data in `~/.spindb/containers/`, port management, start/stop
 - **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
 
 ### Migrating an Engine from System Binaries to hostdb
@@ -434,7 +461,7 @@ Current engines with CI caching:
 When hostdb adds support for a new engine, follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as an example.
 
 **Current status:** All engines now use hostdb downloads:
-- PostgreSQL, MySQL, MariaDB, MongoDB, Redis: Complete bundles from hostdb (server + all client tools)
+- PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey: Complete bundles from hostdb (server + all client tools)
 - SQLite: Tools from hostdb (sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync)
 
 #### Prerequisites
@@ -664,27 +691,27 @@ async get{Engine}ClientPath(): Promise<string> {
 
 4. **Update `cli/commands/menu/engine-handlers.ts`:**
    ```ts
-   import { type InstalledNewengineEngine } from '../../helpers'
+   import { type Installed{Engine}Engine } from '../../helpers'
 
    // Add filter for the new engine type
-   const newengineEngines = engines.filter(
-     (e): e is InstalledNewengineEngine => e.engine === 'newengine',
+   const {engine}Engines = engines.filter(
+     (e): e is Installed{Engine}Engine => e.engine === '{engine}',
    )
 
    // Add totalSize calculation
-   const totalNewengineSize = newengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+   const total{Engine}Size = {engine}Engines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
    // Add to allEnginesSorted array (maintains display grouping)
    const allEnginesSorted = [
      ...pgEngines,
      ...mariadbEngines,
      // ... other engines ...
-     ...newengineEngines,
+     ...{engine}Engines,
    ]
 
    // Add summary display block
-   if (newengineEngines.length > 0) {
-     console.log(chalk.gray(`  Newengine: ${newengineEngines.length} version(s), ${formatBytes(totalNewengineSize)}`))
+   if ({engine}Engines.length > 0) {
+     console.log(chalk.gray(`  {Engine}: ${{{engine}Engines.length}} version(s), ${formatBytes(total{Engine}Size)}`))
    }
    ```
 
@@ -777,6 +804,7 @@ When new versions are added to hostdb releases.json:
 - MySQL default: 3306 (range: 3306-3400)
 - MongoDB default: 27017 (range: 27017-27100)
 - Redis default: 6379 (range: 6379-6400)
+- Valkey default: 6379 (range: 6379-6400)
 - Auto-increment on conflict
 
 ### Process Management
@@ -840,6 +868,12 @@ SpinDB uses different binary sourcing strategies by engine:
 - Enables multi-version support (7, 8 side-by-side)
 - Tools bundled: redis-server, redis-cli
 
+**Valkey (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Enables multi-version support (8, 9 side-by-side)
+- Tools bundled: valkey-server, valkey-cli
+- Redis fork with BSD-3 license
+
 **SQLite (Downloadable Binaries):**
 - All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
 - Version 3 (only major version)
@@ -876,6 +910,7 @@ Error messages should include actionable fix suggestions.
 - MySQL: 🐬
 - MongoDB: 🍃
 - Redis: 🔴
+- Valkey: 🔷
 - SQLite: 🗄️
 
 ## Known Limitations

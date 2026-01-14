@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.16.0",
+  "version": "0.17.2",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -16,10 +16,11 @@
     "test:sqlite": "node --import tsx --test --experimental-test-isolation=none tests/integration/sqlite.test.ts",
     "test:mongodb": "node --import tsx --test --experimental-test-isolation=none tests/integration/mongodb.test.ts",
     "test:redis": "node --import tsx --test --experimental-test-isolation=none tests/integration/redis.test.ts",
+    "test:valkey": "node --import tsx --test --experimental-test-isolation=none tests/integration/valkey.test.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
     "test:hostdb-sync": "node --import tsx --test --experimental-test-isolation=none tests/integration/hostdb-sync.test.ts",
-    "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:mongodb test:redis",
+    "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:mongodb test:redis test:valkey",
     "test:all": "run-s test:unit test:integration",
     "test:local": "./scripts/test-local.sh",
     "test:local:quick": "./scripts/test-local.sh --quick",
@@ -30,6 +31,8 @@
     "prepare": "husky"
   },
   "keywords": [
+    "hostdb",
+    "spindb",
     "postgres",
     "postgresql",
     "mysql",
@@ -40,6 +43,7 @@
     "mongodb",
     "redis",
     "valkey",
+    "clickhouse",
     "mariadb",
     "ferretdb",
     "sqlite",

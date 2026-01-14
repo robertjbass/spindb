@@ -7,7 +7,7 @@
 
 **The first npm CLI for running local databases without Docker.**
 
-Spin up PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, and Redis instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Redis, and Valkey instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -301,6 +301,48 @@ spindb connect myredis --iredis
 
 **Note:** Redis doesn't support remote dump/restore. Creating containers from remote Redis connection strings is not supported. Use `backup` and `restore` commands for data migration.
 
+#### Valkey
+
+| | |
+|---|---|
+| Versions | 8, 9 |
+| Default port | 6379 |
+| Default user | None (no auth by default) |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
+
+Valkey is a Redis fork created after Redis changed its license (RSALv2/SSPLv1). It's fully API-compatible with Redis, making it a drop-in replacement with permissive BSD-3 licensing.
+
+SpinDB downloads Valkey server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases. This provides multi-version support on all platforms.
+
+```bash
+# Create a Valkey container (downloads binaries automatically)
+spindb create mydb --engine valkey
+
+# Create with specific version
+spindb create mydb --engine valkey --version 9
+
+# Check what's available
+spindb deps check --engine valkey
+```
+
+Valkey uses the same commands as Redis:
+
+```bash
+# Set a key
+spindb run myvalkey -c "SET mykey myvalue"
+
+# Get a key
+spindb run myvalkey -c "GET mykey"
+
+# Run a command file
+spindb run myvalkey --file ./scripts/seed.valkey
+
+# Use iredis for enhanced shell experience (Redis-protocol compatible)
+spindb connect myvalkey --iredis
+```
+
+**Note:** Valkey uses `redis://` connection scheme for client compatibility since it's wire-compatible with Redis.
+
 ### hostdb Platform Coverage
 
 SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/hostdb), a repository of pre-built database binaries for all major platforms. The following table shows current platform support and integration status:
@@ -310,7 +352,6 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | ✅ | Integrated with SpinDB |
 | 🟦 | Pending SpinDB integration (hostdb ready) |
 | 🟪 | Planned for hostdb (pending/in-progress) |
-| ❌ | Not available (unsupported or platform limitation) |
 
 | Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
 |----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
@@ -321,8 +362,7 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | SQLite | ✅ | ✅ | ✅ | ✅ | ✅ |
 | MongoDB* | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Redis* | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Pending SpinDB** |||||
-| Valkey | 🟦 | 🟦 | 🟦 | 🟦 | 🟦 |
+| Valkey | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Planned for hostdb** |||||
 | CockroachDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | TimescaleDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
@@ -333,23 +373,22 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | FerretDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | TiDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | ArangoDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| Qdrant | 🟪 | 🟪 | 🟪 | ❌ | 🟪 |
+| Qdrant | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | Apache Cassandra | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| **Not available** |||||
-| ClickHouse | ❌ | ❌ | ❌ | ❌ | ❌ |
-| InfluxDB | ❌ | ❌ | ❌ | ❌ | ❌ |
-| CouchDB | ❌ | ❌ | ❌ | ❌ | ❌ |
-| KeyDB | ❌ | ❌ | ❌ | ❌ | ❌ |
-| libSQL | ❌ | ❌ | ❌ | ❌ | ❌ |
-| FoundationDB | ❌ | ❌ | ❌ | ❌ | ❌ |
-| RocksDB | ❌ | ❌ | ❌ | ❌ | ❌ |
+| ClickHouse | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
+| InfluxDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
+| CouchDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
+| KeyDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
+| libSQL | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
+| FoundationDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
+| RocksDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 
 **Notes:**
 - **\*** Licensing considerations for commercial use — consider Valkey (Redis) or FerretDB (MongoDB) as alternatives
 - **PostgreSQL** uses [EDB](https://www.enterprisedb.com/) binaries on Windows instead of hostdb
 - **Valkey** is a Redis-compatible drop-in replacement with permissive licensing
 - **CockroachDB** is planned for both hostdb and SpinDB (see [roadmap](TODO.md))
-- **Qdrant** has no Linux ARM64 builds available
+- All databases under "Planned for hostdb" have permissive open-source licenses (Apache 2.0, MIT, or BSD)
 
 For the latest platform support, see the [hostdb databases.json](https://github.com/robertjbass/hostdb/blob/main/databases.json).
 
@@ -390,8 +429,8 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `mongodb`, `redis`) |
-| `--db-version` | Engine version (e.g., 17 for PostgreSQL, 11.8 for MariaDB, 8 for Redis) |
+| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `mongodb`, `redis`, `valkey`) |
+| `--db-version` | Engine version (e.g., 17 for PostgreSQL, 11.8 for MariaDB, 8 for Redis, 9 for Valkey) |
 | `--port`, `-p` | Port number (not applicable for SQLite) |
 | `--database`, `-d` | Primary database name (Redis uses 0-15) |
 | `--path` | File path for SQLite databases |
@@ -509,6 +548,7 @@ Format by engine:
 - SQLite: `.sql` (plain SQL) / `.sqlite` (binary copy)
 - MongoDB: `.bson` (BSON dump) / `.archive` (compressed archive)
 - Redis: `.redis` (text commands) / `.rdb` (RDB snapshot)
+- Valkey: `.valkey` (text commands) / `.rdb` (RDB snapshot)
 
 <details>
 <summary>All options</summary>
@@ -663,6 +703,26 @@ Each engine has specific backup formats and restore behaviors:
 
 </details>
 
+<details>
+<summary>Valkey</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
+| Text | `.valkey` | Custom | Human-readable Redis-compatible commands |
+
+**Text format detection:** Files are detected as Valkey text commands if they contain valid Redis commands (SET, HSET, DEL, etc.), regardless of file extension.
+
+**Restore behavior:** Same as Redis (Valkey is Redis-compatible).
+- **RDB (`.rdb`):** Requires stopping Valkey, copies file to data directory, restart loads data
+- **Text (`.valkey`):** Pipes commands to running Valkey instance. Prompts for:
+  - **Replace all:** Runs `FLUSHDB` first (clean slate)
+  - **Merge:** Adds/updates keys, keeps existing keys not in backup
+
+**Note:** Valkey uses numbered databases (0-15) that always exist. "Create new database" is not applicable.
+
+</details>
+
 ### Container Management
 
 #### `list` - List all containers
@@ -745,6 +805,7 @@ SQLite: 1 version(s), 5.0 MB
 🪶 sqlite
 🍃 mongodb
 🔴 redis
+🔷 valkey
 ```
 
 #### `deps` - Manage client tools
@@ -829,6 +890,7 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 | SQLite | `sqlite3` | `litecli` | `usql` |
 | MongoDB | `mongosh` | - | `usql` |
 | Redis | `redis-cli` | `iredis` | - |
+| Valkey | `valkey-cli` | `iredis` | - |
 
 **pgcli / mycli** provide:
 - Intelligent auto-completion (tables, columns, keywords)
@@ -938,7 +1000,7 @@ This means Redis may lose up to ~60 seconds of writes on an unexpected crash. Fo
 - **macOS/Linux:** From [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases
 - **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
 
-**MariaDB, MySQL, MongoDB, Redis:** Server binaries are downloaded automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases for all platforms.
+**MariaDB, MySQL, MongoDB, Redis, Valkey:** Server binaries are downloaded automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases for all platforms.
 
 ### Why Precompiled Binaries?
 
@@ -989,7 +1051,6 @@ These engines are under consideration but not yet on the roadmap. Community inte
 |--------|------|-------|
 | **DuckDB** | Embedded analytical | File-based like SQLite, popular for data/analytics work |
 | **libSQL** | Embedded relational | SQLite fork by Turso with replication and edge support |
-| **Valkey** | Key-value store | Redis fork (post-license change), growing adoption |
 | **Meilisearch** | Search engine | Developer-friendly search, good binary distribution |
 | **Elasticsearch/OpenSearch** | Search engine | Full-text search, common in web applications |
 | **Neo4j** | Graph database | Most popular graph database |
@@ -1053,7 +1114,7 @@ See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, 
 
 SpinDB wouldn't be possible without:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite) that make Docker-free local databases possible. Hosted on GitHub Releases for reliable, fast downloads.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, SQLite) that make Docker-free local databases possible. Hosted on GitHub Releases for reliable, fast downloads.
 
 ---
 
