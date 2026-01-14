@@ -63,7 +63,9 @@ export function normalizeVersion(version: string): string {
 
   // Validate format: must be 1-3 numeric segments (e.g., "7", "7.4", "7.4.7")
   const isValidFormat =
-    parts.length >= 1 && parts.length <= 3 && parts.every((p) => /^\d+$/.test(p))
+    parts.length >= 1 &&
+    parts.length <= 3 &&
+    parts.every((p) => /^\d+$/.test(p))
 
   if (!isValidFormat) {
     console.warn(

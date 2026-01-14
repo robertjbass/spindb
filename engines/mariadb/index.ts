@@ -167,7 +167,12 @@ export class MariaDBEngine extends BaseEngine {
     // Register all MariaDB binaries from downloaded package
     // Using native names only (not mysql-named ones to avoid conflicts with MySQL engine)
     const ext = platformService.getExecutableExtension()
-    const tools = ['mariadbd', 'mariadb-admin', 'mariadb', 'mariadb-dump'] as const
+    const tools = [
+      'mariadbd',
+      'mariadb-admin',
+      'mariadb',
+      'mariadb-dump',
+    ] as const
 
     for (const tool of tools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)

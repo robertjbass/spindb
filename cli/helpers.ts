@@ -293,8 +293,7 @@ async function getInstalledMysqlEngines(): Promise<InstalledMysqlEngine[]> {
     const parsed = parseEngineDirectory(entry.name, 'mysql-', binDir)
     if (!parsed) continue
 
-    const actualVersion =
-      (await getMysqlVersion(parsed.path)) || parsed.version
+    const actualVersion = (await getMysqlVersion(parsed.path)) || parsed.version
     const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({
@@ -461,8 +460,7 @@ async function getInstalledRedisEngines(): Promise<InstalledRedisEngine[]> {
     const parsed = parseEngineDirectory(entry.name, 'redis-', binDir)
     if (!parsed) continue
 
-    const actualVersion =
-      (await getRedisVersion(parsed.path)) || parsed.version
+    const actualVersion = (await getRedisVersion(parsed.path)) || parsed.version
     const sizeBytes = await calculateDirectorySize(parsed.path)
 
     engines.push({

@@ -606,7 +606,10 @@ describe('Redis Integration Tests', () => {
     const stillStopped = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(!stillStopped, 'Container should still be stopped after duplicate stop')
+    assert(
+      !stillStopped,
+      'Container should still be stopped after duplicate stop',
+    )
 
     console.log('   ✓ Duplicate stop handled gracefully (idempotent)')
   })

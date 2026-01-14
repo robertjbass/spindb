@@ -148,19 +148,14 @@ export const stopCommand = new Command('stop')
         // If not, use fallback process kill
         let usedFallback = false
         if (config.engine === Engine.PostgreSQL) {
-          const isInstalled = await engine.isBinaryInstalled(
-            config.version,
-          )
+          const isInstalled = await engine.isBinaryInstalled(config.version)
           if (!isInstalled) {
             if (spinner) {
               spinner.text = `Stopping ${containerName} (engine missing, using fallback)...`
             }
-            const killed = await processManager.killProcess(
-              containerName,
-              {
-                engine: config.engine,
-              },
-            )
+            const killed = await processManager.killProcess(containerName, {
+              engine: config.engine,
+            })
             if (!killed) {
               spinner?.fail(`Failed to stop "${containerName}"`)
               console.log(

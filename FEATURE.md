@@ -135,6 +135,10 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `cli/commands/menu/sql-handlers.ts` - Update script type terminology (SQL/Script/Command)
 - [ ] `cli/commands/menu/engine-handlers.ts` - Add to "Manage Engines" display
 
+### Package Metadata (1 file)
+
+- [ ] `package.json` - Add engine name to `keywords` array for npm discoverability
+
 ### Testing (6+ files)
 
 - [ ] `tests/fixtures/{engine}/seeds/sample-db.{ext}` - Test seed file
@@ -1180,6 +1184,16 @@ ci-success:
           exit 1
         fi
 ```
+
+### Linux ARM64 Tests (Commented Out)
+
+There is a **commented-out** Linux ARM64 test section in `ci.yml` that will be enabled when GitHub adds free ARM64 runners. When adding a new engine, you must also add it to this section:
+
+1. Add engine to the `matrix.test` array
+2. Add a download step: `Download YourEngine`
+3. Add a test step: `Run YourEngine tests`
+
+Search for `test-linux-arm64` in `ci.yml` to find this section. Even though it's commented out, keeping it in sync ensures ARM64 testing will work when enabled.
 
 ---
 

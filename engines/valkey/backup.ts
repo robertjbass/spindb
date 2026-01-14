@@ -115,9 +115,10 @@ async function createTextBackup(
     const ttl = parseInt(ttlOutput.trim(), 10)
 
     // Quote the key for output commands
-    const quotedKey = key.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(key)
-      ? `"${key.replace(/"/g, '\\"')}"`
-      : key
+    const quotedKey =
+      key.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(key)
+        ? `"${key.replace(/"/g, '\\"')}"`
+        : key
 
     switch (keyType) {
       case 'string': {
@@ -146,9 +147,10 @@ async function createTextBackup(
             const field = lines[i].trim()
             const value = lines[i + 1]?.trim() || ''
             // Quote field if it contains special chars
-            const quotedField = field.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(field)
-              ? `"${field.replace(/"/g, '\\"')}"`
-              : field
+            const quotedField =
+              field.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(field)
+                ? `"${field.replace(/"/g, '\\"')}"`
+                : field
             pairs.push(`${quotedField} ${escapeValkeyValue(value)}`)
           }
           commands.push(`HSET ${quotedKey} ${pairs.join(' ')}`)
@@ -302,7 +304,11 @@ async function createRdbBackup(
   const timeout = 60000 // 1 minute timeout
 
   while (Date.now() - startTime < timeout) {
-    const infoOutput = await execValkeyCommand(valkeyCli, port, 'INFO persistence')
+    const infoOutput = await execValkeyCommand(
+      valkeyCli,
+      port,
+      'INFO persistence',
+    )
 
     // Check if BGSAVE is still in progress
     const inProgress = infoOutput.includes('rdb_bgsave_in_progress:1')

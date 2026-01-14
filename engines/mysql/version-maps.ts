@@ -71,7 +71,9 @@ export function normalizeVersion(version: string): string {
 
   // Validate format: must be 1-3 numeric segments (e.g., "9", "8.0", "8.0.40")
   const isValidFormat =
-    parts.length >= 1 && parts.length <= 3 && parts.every((p) => /^\d+$/.test(p))
+    parts.length >= 1 &&
+    parts.length <= 3 &&
+    parts.every((p) => /^\d+$/.test(p))
 
   if (!isValidFormat) {
     console.warn(

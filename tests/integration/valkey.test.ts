@@ -68,9 +68,7 @@ describe('Valkey Integration Tests', () => {
   })
 
   it('should create container without starting (--no-start)', async () => {
-    console.log(
-      `\n Creating container "${containerName}" without starting...`,
-    )
+    console.log(`\n Creating container "${containerName}" without starting...`)
 
     // Ensure Valkey binaries are downloaded first
     const engine = getEngine(ENGINE)
@@ -129,9 +127,7 @@ describe('Valkey Integration Tests', () => {
   })
 
   it('should seed the database with test data using runScript', async () => {
-    console.log(
-      `\n Seeding database with test data using engine.runScript...`,
-    )
+    console.log(`\n Seeding database with test data using engine.runScript...`)
 
     // Use runScriptFile which internally calls engine.runScript
     // This tests the `spindb run` command functionality
@@ -348,9 +344,7 @@ describe('Valkey Integration Tests', () => {
   })
 
   it('should restore from text format with replace mode (FLUSHDB)', async () => {
-    console.log(
-      `\n Testing text format restore (replace mode with FLUSHDB)...`,
-    )
+    console.log(`\n Testing text format restore (replace mode with FLUSHDB)...`)
 
     const engine = getEngine(ENGINE)
     const config = await containerManager.getConfig(containerName)
@@ -358,7 +352,10 @@ describe('Valkey Integration Tests', () => {
 
     // Create a text backup first
     const { tmpdir } = await import('os')
-    const backupPath = join(tmpdir(), `valkey-replace-test-${Date.now()}.valkey`)
+    const backupPath = join(
+      tmpdir(),
+      `valkey-replace-test-${Date.now()}.valkey`,
+    )
 
     await engine.backup(config!, backupPath, {
       database: DATABASE,
@@ -607,7 +604,10 @@ describe('Valkey Integration Tests', () => {
     const stillStopped = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
     })
-    assert(!stillStopped, 'Container should still be stopped after duplicate stop')
+    assert(
+      !stillStopped,
+      'Container should still be stopped after duplicate stop',
+    )
 
     console.log('   Duplicate stop handled gracefully (idempotent)')
   })

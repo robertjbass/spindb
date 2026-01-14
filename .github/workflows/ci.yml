@@ -6,9 +6,6 @@ on:
   # TODO - uncomment to test on dev branch push
   # push:
   #   branches: [dev]
-  # TODO - delete before merging
-  push:
-    branches: [feature/valkey]
   workflow_dispatch:
 
 # =============================================================================
@@ -836,6 +833,7 @@ jobs:
   #         - sqlite
   #         - mongodb
   #         - redis
+  #         - valkey
   #   steps:
   #     - name: Checkout
   #       uses: actions/checkout@v4
@@ -884,6 +882,10 @@ jobs:
   #       if: matrix.test == 'redis'
   #       run: pnpm start engines download redis 8
   #
+  #     - name: Download Valkey
+  #       if: matrix.test == 'valkey'
+  #       run: pnpm start engines download valkey 9
+  #
   #     - name: Show installed engines
   #       run: pnpm start engines list
   #
@@ -921,6 +923,11 @@ jobs:
   #     - name: Run Redis tests
   #       if: matrix.test == 'redis'
   #       run: pnpm test:redis
+  #       timeout-minutes: 15
+  #
+  #     - name: Run Valkey tests
+  #       if: matrix.test == 'valkey'
+  #       run: pnpm test:valkey
   #       timeout-minutes: 15
 
   # ============================================

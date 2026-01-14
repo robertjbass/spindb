@@ -40,7 +40,9 @@ describe('hostdb Version Sync Verification', () => {
     console.log('\n🌐 Fetching hostdb releases.json...')
     try {
       hostdbReleases = await fetchHostdbReleases()
-      console.log(`   ✓ Fetched releases (updated: ${hostdbReleases.updatedAt})`)
+      console.log(
+        `   ✓ Fetched releases (updated: ${hostdbReleases.updatedAt})`,
+      )
     } catch (error) {
       const err = error as Error
       console.error(`   ✗ Failed to fetch releases: ${err.message}`)

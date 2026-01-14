@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-01-14
+
+### Fixed
+- **Windows Redis and Valkey CI tests** - Fixed servers failing to start on Windows with "Connection refused" errors
+  - Root cause: MSYS2/Cygwin-built binaries expect paths in `/cygdrive/c/...` format, not `C:\...`
+  - Added `toCygwinPath()` helper to convert Windows paths for Redis and Valkey config files
+  - Added Promise-based spawn with proper error handling (following MySQL's working pattern)
+  - Added diagnostic output capturing stderr/stdout and log file content on failure
+
+### Changed
+- **Valkey port conflict test** - Aligned with Redis test behavior (verifies container creation without attempting conflicting start)
+- **CI workflow** - Added Valkey to commented-out Linux ARM64 test section for future enablement
+- **FEATURE.md** - Added documentation notes:
+  - Updating ARM64 tests when adding new engines
+  - Adding engine keyword to package.json for npm discoverability
+
 ## [0.17.1] - 2026-01-14
 
 ### Changed
