@@ -370,7 +370,11 @@ export class RedisBinaryManager {
     }
 
     try {
-      const { stdout } = await execAsync(`"${serverPath}" --version`)
+      const { stdout, stderr } = await execAsync(`"${serverPath}" --version`)
+      // Log stderr if present (may contain warnings)
+      if (stderr && stderr.trim()) {
+        console.warn(`redis-server stderr: ${stderr.trim()}`)
+      }
       // Extract version from output like "Redis server v=7.4.7 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=..."
       const match = stdout.match(/v=(\d+\.\d+\.\d+)/)
       const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+)/) : null
@@ -396,8 +400,12 @@ export class RedisBinaryManager {
         `Version mismatch: expected ${version}, got ${reportedVersion}`,
       )
     } catch (error) {
-      const err = error as Error
-      throw new Error(`Failed to verify Redis binaries: ${err.message}`)
+      const err = error as Error & { stderr?: string; code?: number }
+      // Include stderr and exit code in error message for better debugging
+      const details = [err.message]
+      if (err.stderr) details.push(`stderr: ${err.stderr.trim()}`)
+      if (err.code !== undefined) details.push(`exit code: ${err.code}`)
+      throw new Error(`Failed to verify Redis binaries: ${details.join(', ')}`)
     }
   }
 
