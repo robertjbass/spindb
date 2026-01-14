@@ -390,42 +390,75 @@ export class ValkeyEngine extends BaseEngine {
     }
 
     if (useDetachedSpawn) {
-      // Windows: spawn detached process (no daemonize support)
-      const spawnOpts: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true,
-        windowsHide: true,
-      }
-
-      const proc = spawn(valkeyServer, [configPath], spawnOpts)
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`valkey-server stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        logDebug(`valkey-server stderr: ${data.toString()}`)
-      })
-
-      // Detach the process so it continues running after parent exits
-      proc.unref()
-
-      // Wait for Valkey to be ready
-      const ready = await this.waitForReady(port, version)
-      if (ready) {
-        return {
-          port,
-          connectionString: this.getConnectionString(container),
+      // Windows: spawn detached process with proper error handling
+      // This follows the pattern used by MySQL which works on Windows
+      return new Promise((resolve, reject) => {
+        const spawnOpts: SpawnOptions = {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: true,
+          windowsHide: true,
         }
-      } else {
-        // Check log for errors
-        const portError = await checkLogForPortError()
-        if (portError) {
-          throw new Error(portError)
-        }
-        throw new Error(
-          `Valkey failed to start within timeout. Check logs at: ${logFile}`,
-        )
-      }
+
+        const proc = spawn(valkeyServer, [configPath], spawnOpts)
+        let settled = false
+
+        // Handle spawn errors (binary not found, DLL issues, etc.)
+        proc.on('error', (err) => {
+          if (settled) return
+          settled = true
+          reject(new Error(`Failed to spawn Valkey server: ${err.message}`))
+        })
+
+        proc.stdout?.on('data', (data: Buffer) => {
+          logDebug(`valkey-server stdout: ${data.toString()}`)
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          logDebug(`valkey-server stderr: ${data.toString()}`)
+        })
+
+        // Detach the process so it continues running after parent exits
+        proc.unref()
+
+        // Give spawn a moment to fail if it's going to, then check readiness
+        setTimeout(async () => {
+          if (settled) return
+
+          // Verify process actually started
+          if (!proc.pid) {
+            settled = true
+            reject(new Error('Valkey server process failed to start (no PID)'))
+            return
+          }
+
+          // Write PID file for consistency with other engines
+          try {
+            await writeFile(pidFile, String(proc.pid))
+          } catch {
+            // Non-fatal - process is running, PID file is for convenience
+          }
+
+          // Wait for Valkey to be ready
+          const ready = await this.waitForReady(port, version)
+          if (settled) return
+
+          if (ready) {
+            settled = true
+            resolve({
+              port,
+              connectionString: this.getConnectionString(container),
+            })
+          } else {
+            settled = true
+            const portError = await checkLogForPortError()
+            reject(
+              new Error(
+                portError ||
+                  `Valkey failed to start within timeout. Check logs at: ${logFile}`,
+              ),
+            )
+          }
+        }, 500)
+      })
     }
 
     // Unix: Valkey with daemonize: yes handles its own forking

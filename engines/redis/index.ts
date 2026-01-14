@@ -390,42 +390,75 @@ export class RedisEngine extends BaseEngine {
     }
 
     if (useDetachedSpawn) {
-      // Windows: spawn detached process (no daemonize support)
-      const spawnOpts: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true,
-        windowsHide: true,
-      }
-
-      const proc = spawn(redisServer, [configPath], spawnOpts)
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`redis-server stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        logDebug(`redis-server stderr: ${data.toString()}`)
-      })
-
-      // Detach the process so it continues running after parent exits
-      proc.unref()
-
-      // Wait for Redis to be ready
-      const ready = await this.waitForReady(port, version)
-      if (ready) {
-        return {
-          port,
-          connectionString: this.getConnectionString(container),
+      // Windows: spawn detached process with proper error handling
+      // This follows the pattern used by MySQL which works on Windows
+      return new Promise((resolve, reject) => {
+        const spawnOpts: SpawnOptions = {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: true,
+          windowsHide: true,
         }
-      } else {
-        // Check log for errors
-        const portError = await checkLogForPortError()
-        if (portError) {
-          throw new Error(portError)
-        }
-        throw new Error(
-          `Redis failed to start within timeout. Check logs at: ${logFile}`,
-        )
-      }
+
+        const proc = spawn(redisServer, [configPath], spawnOpts)
+        let settled = false
+
+        // Handle spawn errors (binary not found, DLL issues, etc.)
+        proc.on('error', (err) => {
+          if (settled) return
+          settled = true
+          reject(new Error(`Failed to spawn Redis server: ${err.message}`))
+        })
+
+        proc.stdout?.on('data', (data: Buffer) => {
+          logDebug(`redis-server stdout: ${data.toString()}`)
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          logDebug(`redis-server stderr: ${data.toString()}`)
+        })
+
+        // Detach the process so it continues running after parent exits
+        proc.unref()
+
+        // Give spawn a moment to fail if it's going to, then check readiness
+        setTimeout(async () => {
+          if (settled) return
+
+          // Verify process actually started
+          if (!proc.pid) {
+            settled = true
+            reject(new Error('Redis server process failed to start (no PID)'))
+            return
+          }
+
+          // Write PID file for consistency with other engines
+          try {
+            await writeFile(pidFile, String(proc.pid))
+          } catch {
+            // Non-fatal - process is running, PID file is for convenience
+          }
+
+          // Wait for Redis to be ready
+          const ready = await this.waitForReady(port, version)
+          if (settled) return
+
+          if (ready) {
+            settled = true
+            resolve({
+              port,
+              connectionString: this.getConnectionString(container),
+            })
+          } else {
+            settled = true
+            const portError = await checkLogForPortError()
+            reject(
+              new Error(
+                portError ||
+                  `Redis failed to start within timeout. Check logs at: ${logFile}`,
+              ),
+            )
+          }
+        }, 500)
+      })
     }
 
     // Unix: Redis with daemonize: yes handles its own forking
