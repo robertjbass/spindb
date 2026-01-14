@@ -54,6 +54,44 @@ SpinDB supports two types of database engines:
 - Connection string is the file path
 - Use a registry to track file locations
 
+**Edge cases for file-based engines:**
+
+When implementing a file-based engine like SQLite, these operations behave differently:
+
+| Operation | Server DB (PostgreSQL, etc.) | File-Based (SQLite) |
+|-----------|------------------------------|---------------------|
+| `start()` | Starts server process | No-op or skip |
+| `stop()` | Stops server process | No-op or skip |
+| `port` | Allocated from port range | Always `0` |
+| `status` | `running` / `stopped` | Always `created` or `stopped` |
+| `waitForReady()` | Poll until server responds | Run query directly (no wait) |
+| `test_engine_lifecycle()` | Full start/stop/status cycle | Skip start/stop, just query |
+| Connection string | `scheme://host:port/db` | File path (e.g., `/path/to/db.sqlite`) |
+
+**In integration tests and test-local.sh:**
+
+```ts
+// Integration test example - skip start/stop for file-based engines
+if (engine !== Engine.SQLite) {
+  await engineInstance.start(container)
+  const ready = await waitForReady(engine, port)
+  // ...
+  await engineInstance.stop(container)
+}
+
+// Query test works for all engines (SQLite runs query directly)
+const result = await executeSQL(engine, port, database, 'SELECT 1;')
+```
+
+```bash
+# In test-local.sh - lifecycle skips start/stop for sqlite
+if [ "$engine" != "sqlite" ]; then
+  pnpm start start "$container_name"
+  # wait_for_ready, status check, etc.
+fi
+# Query test runs for all engines including sqlite
+```
+
 ---
 
 ## Quick Start Checklist
@@ -72,17 +110,23 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `engines/{engine}/hostdb-releases.ts` - Fetch versions from releases.json
 - [ ] `engines/{engine}/cli-utils.ts` - Shared CLI utilities (optional)
 
-### Configuration Files (9 files)
+### Configuration Files (11 files)
 
 - [ ] `engines/index.ts` - Register engine with aliases
 - [ ] `types/index.ts` - Add to `Engine` enum, `ALL_ENGINES`, and `BinaryTool` type
 - [ ] `config/engine-defaults.ts` - Add engine defaults
 - [ ] `config/engines.json` - Add engine metadata (icon, versions, status)
+- [ ] `config/backup-formats.ts` - Add backup format configuration (extensions, labels, defaults)
 - [ ] `config/os-dependencies.ts` - Add system dependencies
 - [ ] `core/dependency-manager.ts` - Add binary tools to `KNOWN_BINARY_TOOLS` array
+- [ ] `core/config-manager.ts` - Add `XXX_TOOLS` constant and to `ENGINE_BINARY_MAP`
 - [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS`
 - [ ] `cli/helpers.ts` - Add `InstalledXxxEngine` type and detection function
 - [ ] `cli/commands/engines.ts` - Add download case and list display for the engine
+
+### CLI Commands (1 file)
+
+- [ ] `cli/commands/create.ts` - Update `--engine` help text and `detectLocationType()` for connection strings
 
 ### CLI Menu Handlers (4 files)
 
@@ -294,7 +338,36 @@ Add your engine to the JSON registry:
 }
 ```
 
-### 4. OS Dependencies (`config/os-dependencies.ts`)
+### 4. Backup Formats (`config/backup-formats.ts`)
+
+Add your engine's backup format configuration:
+
+```ts
+export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
+  // ... existing engines
+
+  yourengine: {
+    sql: {
+      extension: '.yourengine',      // Text format extension
+      label: '.yourengine',
+      description: 'Text commands - human-readable, editable',
+      spinnerLabel: 'text',
+    },
+    dump: {
+      extension: '.rdb',             // Binary format extension
+      label: '.rdb',
+      description: 'RDB snapshot - binary format, faster restore',
+      spinnerLabel: 'RDB',
+    },
+    supportsFormatChoice: true,      // Whether user can choose format
+    defaultFormat: 'dump',           // Default when not specified
+  },
+}
+```
+
+**Note:** All helper functions (`getBackupFormatInfo`, `supportsFormatChoice`, `getDefaultFormat`) will throw an error if your engine is not configured here. This ensures configuration errors are caught early rather than silently falling back to defaults.
+
+### 5. OS Dependencies (`config/os-dependencies.ts`)
 
 Add system dependencies for fallback installation:
 
@@ -345,7 +418,7 @@ export const engineDependencies: EngineDependencies[] = [
 ]
 ```
 
-### 5. Dependency Manager (`core/dependency-manager.ts`)
+### 6. Dependency Manager (`core/dependency-manager.ts`)
 
 **CRITICAL:** Add your binary tools to the `KNOWN_BINARY_TOOLS` array. Without this, `findBinary()` cannot look up your tools from the config cache, causing "Missing tools" errors even after binaries are downloaded.
 
@@ -362,7 +435,69 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
 ] as const
 ```
 
-### 6. Engine Icon (`cli/constants.ts`)
+### 7. Config Manager (`core/config-manager.ts`)
+
+**CRITICAL:** Add your engine to the binary scanning system. Without this, `scanInstalledBinaries()` won't re-register your binaries if the config is cleared.
+
+1. **Add tools constant:**
+
+```ts
+const YOURENGINE_TOOLS: BinaryTool[] = ['yourengine-server', 'yourengine-cli']
+```
+
+2. **Add to ALL_TOOLS array:**
+
+```ts
+const ALL_TOOLS: BinaryTool[] = [
+  // ... existing tools
+  ...REDIS_TOOLS,
+  ...VALKEY_TOOLS,
+  ...YOURENGINE_TOOLS,  // Add your engine
+  ...SQLITE_TOOLS,
+  ...ENHANCED_SHELLS,
+]
+```
+
+3. **Add to ENGINE_BINARY_MAP:**
+
+```ts
+const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
+  // ... existing engines
+  [Engine.Redis]: REDIS_TOOLS,
+  [Engine.Valkey]: VALKEY_TOOLS,
+  [Engine.YourEngine]: YOURENGINE_TOOLS,  // Add your engine
+}
+```
+
+4. **Add to `initialize()` return type and implementation:**
+
+```ts
+async initialize(): Promise<{
+  // ... existing fields
+  valkey: { found: BinaryTool[]; missing: BinaryTool[] }
+  yourengine: { found: BinaryTool[]; missing: BinaryTool[] }  // Add this
+  enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
+}> {
+  // ... in the return object:
+  yourengine: {
+    found: found.filter((t) => YOURENGINE_TOOLS.includes(t)),
+    missing: missing.filter((t) => YOURENGINE_TOOLS.includes(t)),
+  },
+}
+```
+
+5. **Export the tools constant:**
+
+```ts
+export {
+  // ... existing exports
+  VALKEY_TOOLS,
+  YOURENGINE_TOOLS,  // Add your engine
+  // ...
+}
+```
+
+### 8. Engine Icon (`cli/constants.ts`)
 
 Add your engine's icon:
 
@@ -379,7 +514,7 @@ export const ENGINE_ICONS: Record<string, string> = {
 }
 ```
 
-### 7. CLI Helpers (`cli/helpers.ts`)
+### 9. CLI Helpers (`cli/helpers.ts`)
 
 Add installed engine type and detection function:
 
@@ -426,7 +561,7 @@ export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngi
 
 Update the union type and `getInstalledEngines()` function to include your engine.
 
-### 8. Engines Command (`cli/commands/engines.ts`)
+### 10. Engines Command (`cli/commands/engines.ts`)
 
 **CRITICAL:** This file handles `spindb engines download` and `spindb engines list`. Without this update, the Docker E2E tests will fail.
 
@@ -533,6 +668,45 @@ if (yourengineEngines.length > 0) {
   )
 }
 ```
+
+---
+
+## CLI Commands
+
+### Create Command (`cli/commands/create.ts`)
+
+Two updates are required:
+
+**1. Update `--engine` help text:**
+
+```ts
+.option(
+  '-e, --engine <engine>',
+  'Database engine (postgresql, mysql, mariadb, sqlite, mongodb, redis, valkey, yourengine)',
+)
+```
+
+**2. Update `detectLocationType()` for connection string inference:**
+
+If your engine uses a connection string scheme (like `yourengine://`), add detection:
+
+```ts
+function detectLocationType(location: string): {
+  type: 'connection' | 'file' | 'not_found'
+  inferredEngine?: Engine
+} {
+  // ... existing checks ...
+
+  // Add your engine's connection string scheme
+  if (location.startsWith('yourengine://') || location.startsWith('yourengines://')) {
+    return { type: 'connection', inferredEngine: Engine.YourEngine }
+  }
+
+  // ... rest of function
+}
+```
+
+This enables `spindb create mydb --from yourengine://host:port/db` to auto-detect the engine.
 
 ---
 
@@ -783,6 +957,48 @@ describe('YourEngine Integration Tests', () => {
   it('should stop, rename container, and change port', async () => { })
   it('should verify data persists after rename', async () => { })
   it('should delete container with --force', async () => { })
+})
+```
+
+### Integration Test Best Practices
+
+**Always wait for readiness after starting/restarting containers:**
+
+```ts
+// After starting a container, always call waitForReady before proceeding
+await engine.start(config)
+await containerManager.updateConfig(containerName, { status: 'running' })
+
+const ready = await waitForReady(ENGINE, port)
+assert(ready, 'Container should be ready to accept connections')
+
+// Now safe to run queries, backups, etc.
+```
+
+**Clone test pattern (backup/restore):**
+
+The clone test stops the source container to perform the restore, then restarts both containers. **Both containers need readiness checks:**
+
+```ts
+it('should clone via backup and restore', async () => {
+  // 1. Create backup from running source
+  await engine.backup(sourceConfig, backupPath, options)
+
+  // 2. Stop source for restore
+  await engine.stop(sourceConfig)
+
+  // 3. Restore to target container
+  await engine.restore(targetConfig, backupPath, options)
+
+  // 4. Start target and wait for ready
+  await engine.start(targetConfig)
+  const targetReady = await waitForReady(ENGINE, targetPort)
+  assert(targetReady, 'Target should be ready')
+
+  // 5. Restart source and wait for ready
+  await engine.start(sourceConfig)
+  const sourceReady = await waitForReady(ENGINE, sourcePort)
+  assert(sourceReady, 'Source should be ready after restart')
 })
 ```
 
@@ -1066,6 +1282,87 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
 
 ---
 
+## OS Dependencies
+
+See `config/os-dependencies.ts` for examples of how to define system package dependencies for your engine. This provides fallback installation instructions when hostdb binaries are not available.
+
+---
+
+## Windows Considerations
+
+Windows has several platform-specific behaviors that must be handled correctly.
+
+### Executable Extensions
+
+**CRITICAL:** On Windows, executable files have the `.exe` extension. All code that constructs paths to binaries MUST use `platformService.getExecutableExtension()` to append the correct extension.
+
+```ts
+import { platformService } from '../../core/platform-service'
+
+// CORRECT: Uses platform-specific extension
+const ext = platformService.getExecutableExtension()
+const serverPath = join(binPath, 'bin', `yourengine-server${ext}`)
+const cliPath = join(binPath, 'bin', `yourengine-cli${ext}`)
+
+// INCORRECT: Will fail on Windows because file doesn't exist without .exe
+const serverPath = join(binPath, 'bin', 'yourengine-server')  // ❌ WRONG
+```
+
+**Where to apply this:**
+
+1. **`verifyBinary()`** - When checking if a binary exists
+2. **`getXxxServerPath()`** - When returning server binary path
+3. **`getXxxCliPath()`** - When returning client binary path
+4. **`ensureBinaries()`** - When registering binaries with configManager (usually already correct)
+5. **`start()`** - When constructing server path from stored binaryPath (usually already correct)
+
+**Reference:** See `engines/redis/index.ts` or `engines/valkey/index.ts` for correct implementation.
+
+### Detached Process Spawning
+
+Windows doesn't support Unix-style daemonize. Use detached spawn instead:
+
+```ts
+import { isWindows } from '../../core/platform-service'
+
+const useDetachedSpawn = isWindows()
+
+if (useDetachedSpawn) {
+  const spawnOpts: SpawnOptions = {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+    windowsHide: true,  // Hide console window
+  }
+  const proc = spawn(serverPath, [configPath], spawnOpts)
+  proc.unref()  // Allow parent to exit independently
+}
+```
+
+### Shell Execution
+
+Windows uses different shell quoting. When using `execAsync()` with inline commands:
+
+```ts
+if (isWindows()) {
+  const escaped = command.replace(/"/g, '\\"')
+  cmd = `"${cliPath}" -h 127.0.0.1 -p ${port} ${escaped}`
+} else {
+  cmd = `"${cliPath}" -h 127.0.0.1 -p ${port} ${command}`
+}
+```
+
+**Better approach:** Use `spawn()` with stdin piping to avoid shell quoting issues entirely:
+
+```ts
+const proc = spawn(cliPath, ['-h', '127.0.0.1', '-p', String(port)], {
+  stdio: ['pipe', 'inherit', 'inherit'],
+})
+proc.stdin?.write(command + '\n')
+proc.stdin?.end()
+```
+
+---
+
 ## Documentation Updates
 
 ### README.md
@@ -1155,6 +1452,31 @@ git diff README.md CHANGELOG.md TODO.md ENGINES.md CLAUDE.md
 ```
 
 ### Manual Verification
+
+**Use the test-local.sh script** for comprehensive manual testing:
+
+```bash
+# Run all engine tests (recommended before PRs)
+./scripts/test-local.sh
+
+# Test specific engine only
+./scripts/test-local.sh --engine yourengine
+
+# Quick smoke test (PostgreSQL only)
+./scripts/test-local.sh --quick
+
+# Simulate fresh install (wipes ~/.spindb)
+./scripts/test-local.sh --fresh
+```
+
+**Important:** When adding a new engine, update `scripts/test-local.sh`:
+
+1. Add your engine version to the `ENGINE_VERSIONS` associative array at the top
+2. Add your engine to `wait_for_ready()` case statement with appropriate readiness check
+3. Add your engine to the query test case statement in `test_engine_lifecycle()`
+4. Update the "Available engines" lists in usage messages
+
+**Individual command testing** (alternative to test-local.sh):
 
 ```bash
 # Full lifecycle test

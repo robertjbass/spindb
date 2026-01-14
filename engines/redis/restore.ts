@@ -6,7 +6,7 @@
  */
 
 import { spawn } from 'child_process'
-import { copyFile, readFile } from 'fs/promises'
+import { copyFile, readFile, open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
@@ -142,7 +142,7 @@ export async function detectBackupFormat(
   // Check file contents for RDB format (binary, starts with "REDIS")
   try {
     const buffer = Buffer.alloc(5)
-    const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
+    const fd = await open(filePath, 'r')
     try {
       await fd.read(buffer, 0, 5, 0)
       const header = buffer.toString('ascii')

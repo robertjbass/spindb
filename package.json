@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -31,6 +31,8 @@
     "prepare": "husky"
   },
   "keywords": [
+    "hostdb",
+    "spindb",
     "postgres",
     "postgresql",
     "mysql",
@@ -41,6 +43,7 @@
     "mongodb",
     "redis",
     "valkey",
+    "clickhouse",
     "mariadb",
     "ferretdb",
     "sqlite",

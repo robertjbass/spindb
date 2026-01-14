@@ -232,6 +232,20 @@ For potential Electron/web frontend integration:
 - [ ] **Add timestamps to JSON output** - For audit trails and debugging
 - [ ] **Add event streaming mode** - WebSocket or SSE for real-time progress updates
 
+### Medium: Version Validation at Wrong Layer
+
+**Files:** `engines/redis/index.ts`, `engines/valkey/index.ts`, and other engines
+
+The `resolveFullVersion()` method in each engine silently falls back to `${version}.0.0` for invalid version inputs instead of validating. This means invalid versions like `"foo"` become `"foo.0.0"` and proceed to fail later in the download step with a confusing 404 error.
+
+**Problem:** Each engine independently handles (or doesn't handle) invalid versions, leading to inconsistent error messages.
+
+**Solution:** Add version validation at the CLI layer (`cli/commands/create.ts`, etc.) before reaching engine code. Validate against `supportedVersions` array and fail fast with a clear message like "Invalid version 'foo'. Supported versions: 7, 8, 9".
+
+- [ ] **Add CLI-layer version validation** - Validate version against engine's `supportedVersions` before calling engine methods
+- [ ] **Standardize error messages** - Consistent "Invalid version" message across all engines
+- [ ] **Consider removing engine fallbacks** - Once CLI validates, engines can throw on invalid versions instead of guessing
+
 ### Low: Progress Reporting
 
 - [ ] **Define progress stages enum** - Standardize stages: downloading, extracting, verifying, initializing, starting

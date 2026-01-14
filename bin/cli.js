@@ -26,10 +26,18 @@ const tsxLoaderPaths = [
   join(packageRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs'),
 ]
 
-let tsxLoader = tsxLoaderPaths.find((p) => existsSync(p))
+const tsxLoader = tsxLoaderPaths.find((p) => existsSync(p))
+
+if (!tsxLoader) {
+  console.error('Error: tsx loader not found.')
+  console.error('Searched paths:')
+  tsxLoaderPaths.forEach((p) => console.error(`  - ${p}`))
+  console.error('\nTry running: pnpm install')
+  process.exit(1)
+}
 
 // Convert to file URL for --import (required on Windows)
-const tsxLoaderUrl = tsxLoader ? pathToFileURL(tsxLoader).href : 'tsx'
+const tsxLoaderUrl = pathToFileURL(tsxLoader).href
 
 const child = spawn(
   process.execPath,

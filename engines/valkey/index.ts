@@ -13,6 +13,7 @@ import { processManager } from '../../core/process-manager'
 import { valkeyBinaryManager } from './binary-manager'
 import { getBinaryUrl, VERSION_MAP } from './binary-urls'
 import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
@@ -71,14 +72,9 @@ export function buildValkeyCliCommand(
   validateCommand(command)
 
   const db = options?.database || '0'
-  if (isWindows()) {
-    // Windows: use double quotes
-    const escaped = command.replace(/"/g, '\\"')
-    return `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${escaped}`
-  } else {
-    // Unix: pass command directly (Valkey commands are simple)
-    return `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${command}`
-  }
+  // Escape double quotes consistently on all platforms to prevent shell interpretation issues
+  const escaped = command.replace(/"/g, '\\"')
+  return `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${db} ${escaped}`
 }
 
 // Generate Valkey configuration file content
@@ -122,15 +118,9 @@ export class ValkeyEngine extends BaseEngine {
     return platformService.getPlatformInfo()
   }
 
-  // Fetch available versions from hostdb
+  // Fetch available versions from hostdb (dynamically or from cache/fallback)
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    const versions: Record<string, string[]> = {}
-
-    for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      versions[major] = [VERSION_MAP[major]]
-    }
-
-    return versions
+    return fetchHostdbVersions()
   }
 
   // Get binary download URL from hostdb
@@ -162,7 +152,8 @@ export class ValkeyEngine extends BaseEngine {
 
   // Verify that Valkey binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
-    const serverPath = join(binPath, 'bin', 'valkey-server')
+    const ext = platformService.getExecutableExtension()
+    const serverPath = join(binPath, 'bin', `valkey-server${ext}`)
     return existsSync(serverPath)
   }
 
@@ -253,7 +244,8 @@ export class ValkeyEngine extends BaseEngine {
       platform,
       arch,
     })
-    const serverPath = join(binPath, 'bin', 'valkey-server')
+    const ext = platformService.getExecutableExtension()
+    const serverPath = join(binPath, 'bin', `valkey-server${ext}`)
     if (existsSync(serverPath)) {
       return serverPath
     }
@@ -280,7 +272,8 @@ export class ValkeyEngine extends BaseEngine {
         platform,
         arch,
       })
-      const cliPath = join(binPath, 'bin', 'valkey-cli')
+      const ext = platformService.getExecutableExtension()
+      const cliPath = join(binPath, 'bin', `valkey-cli${ext}`)
       if (existsSync(cliPath)) {
         return cliPath
       }
@@ -506,10 +499,12 @@ export class ValkeyEngine extends BaseEngine {
     const startTime = Date.now()
     const checkInterval = 500
 
-    const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    if (!valkeyCli) {
+    let valkeyCli: string
+    try {
+      valkeyCli = await this.getValkeyCliPathForVersion(version)
+    } catch {
       logWarning('valkey-cli not found, cannot verify Valkey is ready')
-      return true
+      return false
     }
 
     while (Date.now() - startTime < timeoutMs) {

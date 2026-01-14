@@ -691,27 +691,27 @@ async get{Engine}ClientPath(): Promise<string> {
 
 4. **Update `cli/commands/menu/engine-handlers.ts`:**
    ```ts
-   import { type InstalledNewengineEngine } from '../../helpers'
+   import { type Installed{Engine}Engine } from '../../helpers'
 
    // Add filter for the new engine type
-   const newengineEngines = engines.filter(
-     (e): e is InstalledNewengineEngine => e.engine === 'newengine',
+   const {engine}Engines = engines.filter(
+     (e): e is Installed{Engine}Engine => e.engine === '{engine}',
    )
 
    // Add totalSize calculation
-   const totalNewengineSize = newengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+   const total{Engine}Size = {engine}Engines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
    // Add to allEnginesSorted array (maintains display grouping)
    const allEnginesSorted = [
      ...pgEngines,
      ...mariadbEngines,
      // ... other engines ...
-     ...newengineEngines,
+     ...{engine}Engines,
    ]
 
    // Add summary display block
-   if (newengineEngines.length > 0) {
-     console.log(chalk.gray(`  Newengine: ${newengineEngines.length} version(s), ${formatBytes(totalNewengineSize)}`))
+   if ({engine}Engines.length > 0) {
+     console.log(chalk.gray(`  {Engine}: ${{{engine}Engines.length}} version(s), ${formatBytes(total{Engine}Size)}`))
    }
    ```
 

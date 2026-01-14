@@ -113,15 +113,13 @@ export function isVersionCompatible(
     return { compatible: true }
   }
 
-  // Allow upgrading from older major version
-  if (restore.major > backup.major) {
-    return {
-      compatible: true,
-      warning: `Restoring Valkey ${backupVersion} RDB backup to ${restoreVersion} server. Valkey will upgrade the RDB format on next save.`,
-    }
+  // Allow upgrading from older major version (restore.major > backup.major)
+  // This is the only remaining case since we've handled: !backup || !restore,
+  // backup.major > restore.major, and backup.major === restore.major
+  return {
+    compatible: true,
+    warning: `Restoring Valkey ${backupVersion} RDB backup to ${restoreVersion} server. Valkey will upgrade the RDB format on next save.`,
   }
-
-  return { compatible: true }
 }
 
 // Validate that a version string matches supported format

@@ -50,29 +50,29 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '8.0.6')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version key in the map, return the full version
+  // If it's in the version map (major, major.minor, or full version), return the mapped value
+  // Note: Full versions have identity mappings (e.g., '8.0.6' => '8.0.6')
   const fullVersion = VALKEY_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it's already a known full version (a value in the map), return as-is
-  const knownVersions = Object.values(VALKEY_VERSION_MAP)
-  if (knownVersions.includes(version)) {
-    return version
-  }
+  // Unknown version - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
+  const parts = version.split('.')
 
-  // If it looks like a full version (X.Y.Z), return as-is but warn
-  if (/^\d+\.\d+\.\d+$/.test(version)) {
+  // Validate format: must be 1-3 numeric segments (e.g., "8", "8.0", "8.0.6")
+  const isValidFormat =
+    parts.length >= 1 && parts.length <= 3 && parts.every((p) => /^\d+$/.test(p))
+
+  if (!isValidFormat) {
+    console.warn(
+      `Valkey version '${version}' has invalid format, may not be available in hostdb`,
+    )
+  } else {
     console.warn(
       `Valkey version '${version}' not in version map, may not be available in hostdb`,
     )
-    return version
   }
-
-  // Unknown version format - warn and return unchanged
-  console.warn(
-    `Valkey version '${version}' not in version map, may not be available in hostdb`,
-  )
   return version
 }

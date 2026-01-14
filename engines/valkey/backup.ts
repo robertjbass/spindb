@@ -5,54 +5,54 @@
  * - Text: Human-readable Valkey commands (.valkey file)
  */
 
-import { exec } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import { copyFile, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { isWindows } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { getValkeyCliPath, VALKEY_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
-const execAsync = promisify(exec)
-
 /**
- * Build a valkey-cli command with proper shell escaping
- * Uses different quoting strategies for Windows (cmd.exe) vs Unix shells
+ * Execute a Valkey command via stdin piping
+ * This is safer than shell command construction as it handles
+ * keys/values with spaces and special characters correctly
  */
-function buildValkeyCliCommand(
+async function execValkeyCommand(
   valkeyCli: string,
   port: number,
   command: string,
-): string {
-  // Split command into parts and quote any parts containing shell special chars
-  const parts = command.split(/\s+/)
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(valkeyCli, ['-h', '127.0.0.1', '-p', String(port)], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
 
-  if (isWindows()) {
-    // Windows cmd.exe: use double quotes, escape internal double quotes with backslash
-    const quotedParts = parts.map((part) => {
-      // If part contains shell special chars or spaces, wrap in double quotes
-      if (/[*?[\]{}$`"'\\!<>|;&()\s]/.test(part)) {
-        const escaped = part.replace(/"/g, '\\"')
-        return `"${escaped}"`
-      }
-      return part
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString()
     })
-    return `"${valkeyCli}" -h 127.0.0.1 -p ${port} ${quotedParts.join(' ')}`
-  } else {
-    // Unix: use single quotes (safer for most special chars)
-    const quotedParts = parts.map((part) => {
-      if (/[*?[\]{}$`"'\\!<>|;&()]/.test(part)) {
-        // Escape any single quotes in the part
-        const escaped = part.replace(/'/g, "'\"'\"'")
-        return `'${escaped}'`
-      }
-      return part
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString()
     })
-    return `"${valkeyCli}" -h 127.0.0.1 -p ${port} ${quotedParts.join(' ')}`
-  }
+
+    proc.on('error', reject)
+
+    proc.on('close', (code) => {
+      if (code === 0 || code === null) {
+        resolve(stdout)
+      } else {
+        reject(new Error(stderr || `valkey-cli exited with code ${code}`))
+      }
+    })
+
+    // Write command to stdin and close
+    proc.stdin.write(command + '\n')
+    proc.stdin.end()
+  })
 }
 
 /**
@@ -86,8 +86,7 @@ async function createTextBackup(
 
   // Get all keys using KEYS * (for small datasets this is fine)
   // For production with millions of keys, SCAN would be better
-  const keysCmd = buildValkeyCliCommand(valkeyCli, port, 'KEYS *')
-  const { stdout: keysOutput } = await execAsync(keysCmd)
+  const keysOutput = await execValkeyCommand(valkeyCli, port, 'KEYS *')
   // Use /\r?\n/ to handle both Unix (\n) and Windows (\r\n) line endings
   const keys = keysOutput
     .trim()
@@ -98,30 +97,43 @@ async function createTextBackup(
   logDebug(`Found ${keys.length} keys to backup`)
 
   for (const key of keys) {
-    // Get key type
-    const typeCmd = buildValkeyCliCommand(valkeyCli, port, `TYPE ${key}`)
-    const { stdout: typeOutput } = await execAsync(typeCmd)
+    // Get key type - quote key to handle spaces/special chars
+    const typeOutput = await execValkeyCommand(
+      valkeyCli,
+      port,
+      `TYPE "${key.replace(/"/g, '\\"')}"`,
+    )
     const keyType = typeOutput.trim()
 
     // Get TTL
-    const ttlCmd = buildValkeyCliCommand(valkeyCli, port, `TTL ${key}`)
-    const { stdout: ttlOutput } = await execAsync(ttlCmd)
+    const ttlOutput = await execValkeyCommand(
+      valkeyCli,
+      port,
+      `TTL "${key.replace(/"/g, '\\"')}"`,
+    )
     const ttl = parseInt(ttlOutput.trim(), 10)
+
+    // Quote the key for output commands
+    const quotedKey = key.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(key)
+      ? `"${key.replace(/"/g, '\\"')}"`
+      : key
 
     switch (keyType) {
       case 'string': {
-        const getCmd = buildValkeyCliCommand(valkeyCli, port, `GET ${key}`)
-        const { stdout: value } = await execAsync(getCmd)
-        commands.push(`SET ${key} ${escapeValkeyValue(value.trim())}`)
+        const value = await execValkeyCommand(
+          valkeyCli,
+          port,
+          `GET "${key.replace(/"/g, '\\"')}"`,
+        )
+        commands.push(`SET ${quotedKey} ${escapeValkeyValue(value.trim())}`)
         break
       }
       case 'hash': {
-        const hgetallCmd = buildValkeyCliCommand(
+        const hashData = await execValkeyCommand(
           valkeyCli,
           port,
-          `HGETALL ${key}`,
+          `HGETALL "${key.replace(/"/g, '\\"')}"`,
         )
-        const { stdout: hashData } = await execAsync(hgetallCmd)
         const lines = hashData
           .trim()
           .split(/\r?\n/)
@@ -132,19 +144,22 @@ async function createTextBackup(
           for (let i = 0; i < lines.length; i += 2) {
             const field = lines[i].trim()
             const value = lines[i + 1]?.trim() || ''
-            pairs.push(`${field} ${escapeValkeyValue(value)}`)
+            // Quote field if it contains special chars
+            const quotedField = field.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(field)
+              ? `"${field.replace(/"/g, '\\"')}"`
+              : field
+            pairs.push(`${quotedField} ${escapeValkeyValue(value)}`)
           }
-          commands.push(`HSET ${key} ${pairs.join(' ')}`)
+          commands.push(`HSET ${quotedKey} ${pairs.join(' ')}`)
         }
         break
       }
       case 'list': {
-        const lrangeCmd = buildValkeyCliCommand(
+        const listData = await execValkeyCommand(
           valkeyCli,
           port,
-          `LRANGE ${key} 0 -1`,
+          `LRANGE "${key.replace(/"/g, '\\"')}" 0 -1`,
         )
-        const { stdout: listData } = await execAsync(lrangeCmd)
         const items = listData
           .trim()
           .split(/\r?\n/)
@@ -154,17 +169,16 @@ async function createTextBackup(
           const escapedItems = items.map((item) =>
             escapeValkeyValue(item.trim()),
           )
-          commands.push(`RPUSH ${key} ${escapedItems.join(' ')}`)
+          commands.push(`RPUSH ${quotedKey} ${escapedItems.join(' ')}`)
         }
         break
       }
       case 'set': {
-        const smembersCmd = buildValkeyCliCommand(
+        const setData = await execValkeyCommand(
           valkeyCli,
           port,
-          `SMEMBERS ${key}`,
+          `SMEMBERS "${key.replace(/"/g, '\\"')}"`,
         )
-        const { stdout: setData } = await execAsync(smembersCmd)
         const members = setData
           .trim()
           .split(/\r?\n/)
@@ -172,17 +186,16 @@ async function createTextBackup(
           .filter((l) => l)
         if (members.length > 0) {
           const escapedMembers = members.map((m) => escapeValkeyValue(m.trim()))
-          commands.push(`SADD ${key} ${escapedMembers.join(' ')}`)
+          commands.push(`SADD ${quotedKey} ${escapedMembers.join(' ')}`)
         }
         break
       }
       case 'zset': {
-        const zrangeCmd = buildValkeyCliCommand(
+        const zsetData = await execValkeyCommand(
           valkeyCli,
           port,
-          `ZRANGE ${key} 0 -1 WITHSCORES`,
+          `ZRANGE "${key.replace(/"/g, '\\"')}" 0 -1 WITHSCORES`,
         )
-        const { stdout: zsetData } = await execAsync(zrangeCmd)
         const lines = zsetData
           .trim()
           .split(/\r?\n/)
@@ -195,7 +208,7 @@ async function createTextBackup(
             const score = lines[i + 1]?.trim() || '0'
             pairs.push(`${score} ${escapeValkeyValue(member)}`)
           }
-          commands.push(`ZADD ${key} ${pairs.join(' ')}`)
+          commands.push(`ZADD ${quotedKey} ${pairs.join(' ')}`)
         }
         break
       }
@@ -205,7 +218,7 @@ async function createTextBackup(
 
     // Add EXPIRE if key has TTL
     if (ttl > 0) {
-      commands.push(`EXPIRE ${key} ${ttl}`)
+      commands.push(`EXPIRE ${quotedKey} ${ttl}`)
     }
   }
 
@@ -249,24 +262,13 @@ async function createRdbBackup(
   }
 
   // Trigger background save
-  const bgsaveCmd = buildValkeyCliCommand(valkeyCli, port, 'BGSAVE')
   let bgsaveResponse: string
   try {
-    const { stdout, stderr } = await execAsync(bgsaveCmd)
-    bgsaveResponse = stdout.trim()
-
-    // Log stderr as warning if present (valkey-cli may emit non-fatal warnings)
-    // Actual errors are caught via non-zero exit code or Valkey protocol errors in stdout
-    if (stderr && stderr.trim()) {
-      logWarning(`valkey-cli stderr: ${stderr.trim()}`)
-    }
+    bgsaveResponse = await execValkeyCommand(valkeyCli, port, 'BGSAVE')
+    bgsaveResponse = bgsaveResponse.trim()
   } catch (error) {
-    // execAsync throws on non-zero exit code
-    const execError = error as Error & { stderr?: string; code?: number }
-    throw new Error(
-      `BGSAVE command failed (exit code ${execError.code ?? 'unknown'}): ${execError.message}` +
-        (execError.stderr ? `\nstderr: ${execError.stderr}` : ''),
-    )
+    const execError = error as Error
+    throw new Error(`BGSAVE command failed: ${execError.message}`)
   }
 
   logDebug(`BGSAVE response: ${bgsaveResponse}`)
@@ -298,10 +300,8 @@ async function createRdbBackup(
   const startTime = Date.now()
   const timeout = 60000 // 1 minute timeout
 
-  const infoCmd = buildValkeyCliCommand(valkeyCli, port, 'INFO persistence')
-
   while (Date.now() - startTime < timeout) {
-    const { stdout: infoOutput } = await execAsync(infoCmd)
+    const infoOutput = await execValkeyCommand(valkeyCli, port, 'INFO persistence')
 
     // Check if BGSAVE is still in progress
     const inProgress = infoOutput.includes('rdb_bgsave_in_progress:1')

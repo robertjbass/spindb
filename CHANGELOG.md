@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-01-14
+
 ### Added
 - **Valkey engine support** - Full container lifecycle for Valkey, the Redis fork with BSD-3 licensing
   - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)

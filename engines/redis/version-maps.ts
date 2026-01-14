@@ -50,29 +50,29 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '7.4.7')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version key in the map, return the full version
+  // If it's in the version map (major, major.minor, or full version), return the mapped value
+  // Note: Full versions have identity mappings (e.g., '7.4.7' => '7.4.7')
   const fullVersion = REDIS_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it's already a known full version (a value in the map), return as-is
-  const knownVersions = Object.values(REDIS_VERSION_MAP)
-  if (knownVersions.includes(version)) {
-    return version
-  }
+  // Unknown version - warn and return as-is
+  // This may cause download failures if the version doesn't exist in hostdb
+  const parts = version.split('.')
 
-  // If it looks like a full version (X.Y.Z), return as-is but warn
-  if (/^\d+\.\d+\.\d+$/.test(version)) {
+  // Validate format: must be 1-3 numeric segments (e.g., "7", "7.4", "7.4.7")
+  const isValidFormat =
+    parts.length >= 1 && parts.length <= 3 && parts.every((p) => /^\d+$/.test(p))
+
+  if (!isValidFormat) {
+    console.warn(
+      `Redis version '${version}' has invalid format, may not be available in hostdb`,
+    )
+  } else {
     console.warn(
       `Redis version '${version}' not in version map, may not be available in hostdb`,
     )
-    return version
   }
-
-  // Unknown version format - warn and return unchanged
-  console.warn(
-    `Redis version '${version}' not in version map, may not be available in hostdb`,
-  )
   return version
 }

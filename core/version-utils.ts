@@ -59,6 +59,9 @@ export function compareVersions(a: string, b: string): number {
     if (segA.suffix !== segB.suffix) {
       if (segA.suffix === '') return 1 // a is release, b is prerelease
       if (segB.suffix === '') return -1 // b is release, a is prerelease
+      // NOTE: Lexicographic comparison means -rc10 < -rc2 (incorrect for numeric suffixes).
+      // This is acceptable for hostdb versions which use single-digit prereleases.
+      // If multi-digit prereleases are needed, parse numeric suffix separately.
       return segA.suffix.localeCompare(segB.suffix)
     }
   }

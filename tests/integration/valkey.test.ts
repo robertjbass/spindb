@@ -205,6 +205,10 @@ describe('Valkey Integration Tests', () => {
     await engine.start(sourceConfig!)
     await containerManager.updateConfig(containerName, { status: 'running' })
 
+    // Wait for source container to be ready
+    const sourceReady = await waitForReady(ENGINE, testPorts[0])
+    assert(sourceReady, 'Source Valkey should be ready after restart')
+
     console.log('   Container cloned via backup/restore')
   })
 
@@ -526,8 +530,7 @@ describe('Valkey Integration Tests', () => {
     const engine = getEngine(ENGINE)
     await engine.initDataDir(portConflictContainerName, TEST_VERSION, {})
 
-    // The container should be created but when we try to start, it should detect conflict
-    // In real usage, the start command would auto-assign a new port
+    // The container should be created with the conflicting port
     const config = await containerManager.getConfig(portConflictContainerName)
     assert(config !== null, 'Container should be created')
     assertEqual(
@@ -536,12 +539,29 @@ describe('Valkey Integration Tests', () => {
       'Port should be set to conflicting port initially',
     )
 
-    // Clean up this test container
-    await containerManager.delete(portConflictContainerName, { force: true })
+    // Try to start - should fail because port is already in use by renamed container
+    let startFailed = false
+    try {
+      await engine.start(config!)
+    } catch (error) {
+      startFailed = true
+      const message = (error as Error).message.toLowerCase()
+      // Error should indicate port/address conflict
+      assert(
+        message.includes('port') ||
+          message.includes('address') ||
+          message.includes('use') ||
+          message.includes('bind'),
+        `Error should mention port conflict, got: ${(error as Error).message}`,
+      )
+    } finally {
+      // Clean up regardless of outcome
+      await containerManager.delete(portConflictContainerName, { force: true })
+    }
 
-    console.log(
-      '   Container created with conflicting port (would auto-reassign on start)',
-    )
+    assert(startFailed, 'Starting on conflicting port should fail')
+
+    console.log('   Port conflict correctly detected and reported')
   })
 
   it('should show warning when starting already running container', async () => {
@@ -576,7 +596,7 @@ describe('Valkey Integration Tests', () => {
     )
   })
 
-  it('should show warning when stopping already stopped container', async () => {
+  it('should handle stopping already stopped container gracefully', async () => {
     console.log(`\n Testing stop on already stopped container...`)
 
     // First stop the container
@@ -595,9 +615,17 @@ describe('Valkey Integration Tests', () => {
     })
     assert(!running, 'Container should be stopped')
 
-    // Attempting to stop again should not throw
-    // (In real CLI usage, this would show a warning message)
-    console.log('   Container is already stopped (would show warning in CLI)')
+    // Attempting to stop again should not throw (idempotent behavior)
+    // Note: Warning message is logged but not verified here to keep test simple
+    await engine.stop(config!)
+
+    // Still stopped
+    const stillStopped = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(!stillStopped, 'Container should still be stopped after duplicate stop')
+
+    console.log('   Duplicate stop handled gracefully (idempotent)')
   })
 
   it('should delete container with --force', async () => {

@@ -40,7 +40,7 @@ export async function fetchAvailableVersions(): Promise<
     if (versions && versions.length > 0) {
       // Group versions by major version
       // MySQL uses X.Y format for major versions (e.g., 8.0.40 matches 8.0)
-      // But also supports single digit major (e.g., 9.1.0 matches 9)
+      // But also supports single digit major (e.g., 9.5.0 matches 9)
       const grouped: Record<string, string[]> = {}
 
       for (const version of versions) {
@@ -115,7 +115,12 @@ export async function getLatestVersion(major: string): Promise<string> {
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
   }
-  return MYSQL_VERSION_MAP[major] || `${major}.0.0`
+  if (MYSQL_VERSION_MAP[major]) {
+    return MYSQL_VERSION_MAP[major]
+  }
+  // Fallback: append .0 or .0.0 depending on format
+  // "8.0" -> "8.0.0", "8" -> "8.0.0"
+  return major.includes('.') ? `${major}.0` : `${major}.0.0`
 }
 
 /**

@@ -90,6 +90,7 @@ describe('ConfigManager', () => {
         MARIADB_TOOLS,
         MONGODB_TOOLS,
         REDIS_TOOLS,
+        VALKEY_TOOLS,
         SQLITE_TOOLS,
         ENHANCED_SHELLS,
       } = await import('../../core/config-manager')
@@ -100,6 +101,7 @@ describe('ConfigManager', () => {
         MARIADB_TOOLS.length +
         MONGODB_TOOLS.length +
         REDIS_TOOLS.length +
+        VALKEY_TOOLS.length +
         SQLITE_TOOLS.length +
         ENHANCED_SHELLS.length
 

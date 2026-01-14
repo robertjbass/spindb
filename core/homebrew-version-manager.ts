@@ -1,11 +1,18 @@
 /**
- * PostgreSQL Version Manager
+ * PostgreSQL System Version Manager (FALLBACK / DEPRECATED)
  *
- * Manages multiple PostgreSQL versions installed on the system.
- * - macOS: Homebrew versioned installations (/opt/homebrew/opt/postgresql@17/bin)
- * - Linux: APT/YUM versioned installations (/usr/lib/postgresql/17/bin)
+ * @deprecated SpinDB now downloads PostgreSQL binaries from hostdb, which include
+ * all client tools (psql, pg_dump, pg_restore). This module is a legacy fallback
+ * for users who have PostgreSQL installed via system package managers. Consider
+ * removing this module once hostdb adoption is complete.
  *
- * Provides detection of installed versions and direct paths to versioned binaries.
+ * FALLBACK USE CASE:
+ * Detects PostgreSQL versions installed via system package managers:
+ * - macOS: Homebrew (/opt/homebrew/opt/postgresql@17/bin)
+ * - Linux: APT/YUM (/usr/lib/postgresql/17/bin)
+ *
+ * Used when hostdb binaries are unavailable and system tools are needed for
+ * dump/restore operations with version compatibility requirements.
  */
 
 import { exec } from 'child_process'
@@ -16,8 +23,11 @@ import { logDebug } from './error-handler'
 
 const execAsync = promisify(exec)
 
-// PostgreSQL versions supported by SpinDB
-const SUPPORTED_PG_VERSIONS = ['14', '15', '16', '17']
+// PostgreSQL versions to detect on system (via Homebrew/apt)
+// NOTE: This is for SYSTEM-INSTALLED PostgreSQL only (fallback path).
+// Primary path uses hostdb binaries. If this module is removed, these
+// versions become irrelevant.
+const SUPPORTED_PG_VERSIONS = ['14', '15', '16', '17', '18']
 
 export type InstalledPostgresVersion = {
   majorVersion: string // e.g., "14", "17"

@@ -3,9 +3,12 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  # TODO uncomment to test on dev branch push
+  # TODO - uncomment to test on dev branch push
   # push:
   #   branches: [dev]
+  # TODO - delete before merging
+  push:
+    branches: [feature/valkey]
   workflow_dispatch:
 
 # =============================================================================
@@ -895,6 +898,7 @@ jobs:
         test-upgrade,
         test-docker-linux,
         lint,
+        hostdb-sync,
       ]
     if: always()
     steps:
@@ -950,6 +954,10 @@ jobs:
           fi
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "Lint check failed"
+            exit 1
+          fi
+          if [ "${{ needs.hostdb-sync.result }}" != "success" ]; then
+            echo "hostdb sync check failed"
             exit 1
           fi
           echo "All CI checks passed!"

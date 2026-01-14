@@ -266,11 +266,17 @@ export class MongoDBBinaryManager {
     // Escape single quotes for PowerShell (double them)
     const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
 
-    // Use PowerShell's Expand-Archive for zip extraction
+    // Build the PowerShell command
+    const command = `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`
+
+    // Use -EncodedCommand to avoid shell parsing issues with special characters
+    // (e.g., $ in usernames like C:\Users\John$Doe would be interpreted as variables)
+    const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
+
     await spawnAsync('powershell', [
       '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
+      '-EncodedCommand',
+      encodedCommand,
     ])
 
     await this.moveExtractedEntries(extractDir, binPath)

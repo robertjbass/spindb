@@ -70,7 +70,10 @@ export function getBinaryUrl(
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)
   if (!hostdbPlatform) {
-    throw new Error(`Unsupported platform: ${platformKey}`)
+    const supported = Array.from(SUPPORTED_PLATFORMS).join(', ')
+    throw new Error(
+      `Unsupported platform: ${platformKey}. Supported platforms: ${supported}`,
+    )
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)

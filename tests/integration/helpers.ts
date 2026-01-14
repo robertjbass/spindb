@@ -524,20 +524,19 @@ export function getConnectionString(
 export { assert, assertEqual } from '../utils/assertions'
 
 /**
- * Get an available version for an engine.
- * All engines now use hostdb downloads, so this fetches available versions
- * from hostdb or the fallback version map.
+ * Get the highest available version for an engine.
+ * Fetches available versions from hostdb or the fallback version map.
  */
-export async function getInstalledVersion(engine: Engine): Promise<string> {
+export async function getAvailableVersion(engine: Engine): Promise<string> {
   const engineImpl = getEngine(engine)
   const versions = await engineImpl.fetchAvailableVersions()
   const availableVersions = Object.keys(versions)
 
   if (availableVersions.length === 0) {
-    throw new Error(`No installed versions found for ${engine}`)
+    throw new Error(`No available versions found for ${engine}`)
   }
 
-  // Return the highest semantic version (using semver-aware comparison)
+  // Return the highest available semantic version
   return availableVersions.sort((a, b) => compareVersions(b, a))[0]
 }
 

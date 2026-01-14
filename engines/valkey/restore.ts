@@ -6,7 +6,7 @@
  */
 
 import { spawn } from 'child_process'
-import { copyFile, readFile } from 'fs/promises'
+import { copyFile, readFile, open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
@@ -144,7 +144,7 @@ export async function detectBackupFormat(
   // Note: Valkey uses the same RDB format as Redis for compatibility
   try {
     const buffer = Buffer.alloc(5)
-    const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
+    const fd = await open(filePath, 'r')
     try {
       await fd.read(buffer, 0, 5, 0)
       const header = buffer.toString('ascii')
@@ -219,6 +219,7 @@ async function restoreTextBackup(
     throw new Error(VALKEY_CLI_NOT_FOUND_ERROR)
   }
 
+  // TODO - Reading the entire backup file into memory (line 223) could cause issues with large backups. For production use, consider streaming the content to valkey-cli stdin instead of loading it all at once.
   // Read the backup file
   let content = await readFile(backupPath, 'utf-8')
 

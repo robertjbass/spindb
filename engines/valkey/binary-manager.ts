@@ -8,6 +8,7 @@
 import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
+import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -171,8 +172,17 @@ export class ValkeyBinaryManager {
       }
 
       const fileStream = createWriteStream(archiveFile)
-      // @ts-expect-error - response.body is ReadableStream
-      await pipeline(response.body, fileStream)
+
+      if (!response.body) {
+        fileStream.destroy()
+        throw new Error(
+          `Download failed: response has no body (status ${response.status})`,
+        )
+      }
+
+      // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
+      const nodeStream = Readable.fromWeb(response.body)
+      await pipeline(nodeStream, fileStream)
 
       if (platform === 'win32') {
         await this.extractWindowsBinaries(
@@ -256,11 +266,17 @@ export class ValkeyBinaryManager {
     // Escape single quotes for PowerShell (double them)
     const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
 
-    // Use PowerShell's Expand-Archive for zip extraction
+    // Build the PowerShell command
+    const command = `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`
+
+    // Use -EncodedCommand to avoid shell parsing issues with special characters
+    // (e.g., $ in usernames like C:\Users\John$Doe would be interpreted as variables)
+    const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
+
     await spawnAsync('powershell', [
       '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`,
+      '-EncodedCommand',
+      encodedCommand,
     ])
 
     await this.moveExtractedEntries(extractDir, binPath)

@@ -1,7 +1,10 @@
 import { describe, it } from 'node:test'
 import { assert, assertEqual } from '../utils/assertions'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
-import { getBinaryUrl, getHostdbPlatform } from '../../engines/sqlite/binary-urls'
+import {
+  getBinaryUrl,
+  getHostdbPlatform,
+} from '../../engines/sqlite/binary-urls'
 import {
   normalizeVersion,
   getFullVersion,
@@ -13,6 +16,7 @@ import {
 // Version Maps Tests
 // =============================================================================
 
+// TODO - derive versions from single source of truth
 describe('SQLite version-maps', () => {
   describe('normalizeVersion', () => {
     it('should map major version 3 to full version', () => {
@@ -58,10 +62,7 @@ describe('SQLite version-maps', () => {
 
   describe('SQLITE_VERSION_MAP', () => {
     it('should have entries for major version 3', () => {
-      assert(
-        '3' in SQLITE_VERSION_MAP,
-        'Should have entry for major version 3',
-      )
+      assert('3' in SQLITE_VERSION_MAP, 'Should have entry for major version 3')
     })
 
     it('should have entries for minor version 3.51', () => {
@@ -138,10 +139,7 @@ describe('SQLite binary-urls', () => {
         url.includes('releases/download'),
         'URL should reference GitHub releases',
       )
-      assert(
-        url.includes('darwin-arm64'),
-        'URL should include darwin-arm64',
-      )
+      assert(url.includes('darwin-arm64'), 'URL should include darwin-arm64')
       assert(url.endsWith('.tar.gz'), 'URL should point to tar.gz file')
     })
 
@@ -175,10 +173,7 @@ describe('SQLite binary-urls', () => {
     it('should include full version in URL', () => {
       const url = getBinaryUrl('3', 'darwin', 'arm64')
 
-      assert(
-        url.includes('3.51.2'),
-        'URL should include full version 3.51.2',
-      )
+      assert(url.includes('3.51.2'), 'URL should include full version 3.51.2')
     })
 
     it('should include sqlite tag in URL', () => {
@@ -234,14 +229,8 @@ describe('SQLiteBinaryManager', () => {
         url.includes('github.com/robertjbass/hostdb'),
         'URL should use hostdb GitHub',
       )
-      assert(
-        url.includes('3.51.2'),
-        'URL should include full version',
-      )
-      assert(
-        url.includes('darwin-arm64'),
-        'URL should include platform',
-      )
+      assert(url.includes('3.51.2'), 'URL should include full version')
+      assert(url.includes('darwin-arm64'), 'URL should include platform')
     })
 
     it('should use correct file extension for platform', () => {
@@ -350,11 +339,7 @@ describe('SQLiteBinaryManager', () => {
       )
 
       assert(typeof result === 'boolean', 'Should return boolean')
-      assertEqual(
-        result,
-        false,
-        'Non-existent version should not be installed',
-      )
+      assertEqual(result, false, 'Non-existent version should not be installed')
     })
 
     it('should use full version for path checking', async () => {
@@ -406,29 +391,32 @@ describe('SQLiteBinaryManager', () => {
         'arm64',
       )
 
-      if (isInstalled) {
-        const progressCalls: Array<{ stage: string; message: string }> = []
-
-        await sqliteBinaryManager.ensureInstalled(
-          '3',
-          'darwin',
-          'arm64',
-          (progress) => {
-            progressCalls.push(progress)
-          },
-        )
-
-        assert(progressCalls.length > 0, 'Progress callback should be invoked')
-        assertEqual(
-          progressCalls[0].stage,
-          'cached',
-          'Should report cached stage',
-        )
-        assert(
-          progressCalls[0].message.includes('cached'),
-          'Message should mention cached',
-        )
+      if (!isInstalled) {
+        // Skip: SQLite binary not installed locally - this test requires cached binaries
+        return
       }
+
+      const progressCalls: Array<{ stage: string; message: string }> = []
+
+      await sqliteBinaryManager.ensureInstalled(
+        '3',
+        'darwin',
+        'arm64',
+        (progress) => {
+          progressCalls.push(progress)
+        },
+      )
+
+      assert(progressCalls.length > 0, 'Progress callback should be invoked')
+      assertEqual(
+        progressCalls[0].stage,
+        'cached',
+        'Should report cached stage',
+      )
+      assert(
+        progressCalls[0].message.includes('cached'),
+        'Message should mention cached',
+      )
     })
 
     it('should return path to binary directory', async () => {
@@ -438,20 +426,20 @@ describe('SQLiteBinaryManager', () => {
         'arm64',
       )
 
-      if (isInstalled) {
-        const binPath = await sqliteBinaryManager.ensureInstalled(
-          '3',
-          'darwin',
-          'arm64',
-        )
-
-        assert(typeof binPath === 'string', 'Should return path string')
-        assert(binPath.includes('3.51.2'), 'Path should include full version')
-        assert(
-          binPath.includes('darwin-arm64'),
-          'Path should include platform',
-        )
+      if (!isInstalled) {
+        // Skip: SQLite binary not installed locally - this test requires cached binaries
+        return
       }
+
+      const binPath = await sqliteBinaryManager.ensureInstalled(
+        '3',
+        'darwin',
+        'arm64',
+      )
+
+      assert(typeof binPath === 'string', 'Should return path string')
+      assert(binPath.includes('3.51.2'), 'Path should include full version')
+      assert(binPath.includes('darwin-arm64'), 'Path should include platform')
     })
   })
 })

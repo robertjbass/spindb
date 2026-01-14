@@ -55,19 +55,14 @@ export function getFullVersion(majorVersion: string): string | null {
  * @returns Normalized version (e.g., '11.8.5')
  */
 export function normalizeVersion(version: string): string {
-  // If it's a major version key in the map, return the full version
+  // If it's a version key in the map (major, major.minor, or full), return the mapped version
+  // Identity mappings for 3-part versions (e.g., '11.8.5' -> '11.8.5') are already in the map
   const fullVersion = MARIADB_VERSION_MAP[version]
   if (fullVersion) {
     return fullVersion
   }
 
-  // If it's already a known full version (a value in the map), return as-is
-  const knownVersions = Object.values(MARIADB_VERSION_MAP)
-  if (knownVersions.includes(version)) {
-    return version
-  }
-
-  // Unknown version (either X.Y.Z format or other) - warn and return as-is
+  // Unknown version - warn and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
   console.warn(
     `MariaDB version '${version}' not in version map, may not be available in hostdb`,

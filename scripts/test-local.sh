@@ -8,6 +8,8 @@
 #   ./scripts/test-local.sh --engine pg  # Test specific engine
 #   ./scripts/test-local.sh --fresh      # Simulate fresh install (wipes ~/.spindb)
 #
+# Available engines: postgresql (pg), mysql, mariadb, sqlite, mongodb, redis, valkey
+#
 # This script tests SpinDB as a real user would experience it, not through
 # the development environment. It helps catch issues that unit/integration
 # tests might miss.
@@ -40,7 +42,7 @@ while [[ $# -gt 0 ]]; do
       if [ -z "$2" ] || [[ "$2" == -* ]]; then
         echo "Error: --engine requires a value"
         echo "Usage: $0 [--quick] [--fresh] [--engine <engine>]"
-        echo "Available engines: postgresql, mysql, mariadb, sqlite, mongodb, redis"
+        echo "Available engines: postgresql, mysql, mariadb, sqlite, mongodb, redis, valkey"
         exit 1
       fi
       SPECIFIC_ENGINE="$2"
@@ -53,6 +55,18 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Centralized engine versions - update these when new versions are released
+# These should match the default/latest versions in config/engine-defaults.ts
+declare -A ENGINE_VERSIONS=(
+  ["postgresql"]="18"
+  ["mysql"]="9"
+  ["mariadb"]="11.8"
+  ["sqlite"]="3"
+  ["mongodb"]="8.0"
+  ["redis"]="8"
+  ["valkey"]="8"
+)
 
 # Configurable timeouts (can be overridden via environment)
 STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-30}  # seconds to wait for database readiness
@@ -112,7 +126,7 @@ wait_for_ready() {
           ready=true
         fi
         ;;
-      redis)
+      redis|valkey)
         if pnpm start run "$container_name" -c "PING" >/dev/null 2>&1; then
           ready=true
         fi
@@ -175,9 +189,15 @@ print_summary() {
 
     printf "│ %b %-56s │\n" "$icon" "$name"
     if [ -n "$message" ] && [ "$status" != "PASS" ]; then
-      local pad=$((52 - ${#message}))
+      # Truncate long messages to fit table width (max 49 chars + "...")
+      local truncated_message="$message"
+      local max_width=49
+      if [ ${#message} -gt $max_width ]; then
+        truncated_message="${message:0:$max_width}..."
+      fi
+      local pad=$((52 - ${#truncated_message}))
       [ $pad -lt 0 ] && pad=0
-      printf "│   ${YELLOW}→ %s${NC}%*s│\n" "$message" $pad ""
+      printf "│   ${YELLOW}→ %s${NC}%*s│\n" "$truncated_message" $pad ""
     fi
   done
 
@@ -345,7 +365,7 @@ test_engine_lifecycle() {
         query_result=true
       fi
       ;;
-    redis)
+    redis|valkey)
       if pnpm start run "$container_name" -c "PING" >/dev/null 2>&1; then
         query_result=true
       fi
@@ -388,44 +408,31 @@ test_engine_lifecycle() {
 set +e
 
 if [ -n "$SPECIFIC_ENGINE" ]; then
-  # Test specific engine
-  case $SPECIFIC_ENGINE in
-    pg|postgresql)
-      test_engine_lifecycle postgresql 18
-      ;;
-    mysql)
-      test_engine_lifecycle mysql 9
-      ;;
-    mariadb)
-      test_engine_lifecycle mariadb 11.8
-      ;;
-    sqlite)
-      test_engine_lifecycle sqlite 3
-      ;;
-    mongodb)
-      test_engine_lifecycle mongodb 7.0.28
-      ;;
-    redis)
-      test_engine_lifecycle redis 7.4.7
-      ;;
-    *)
-      log_error "Unknown engine: $SPECIFIC_ENGINE"
-      echo "Available engines: postgresql, mysql, mariadb, sqlite, mongodb, redis"
-      set -e
-      exit 1
-      ;;
-  esac
+  # Test specific engine - normalize "pg" to "postgresql"
+  engine_key="$SPECIFIC_ENGINE"
+  [ "$engine_key" = "pg" ] && engine_key="postgresql"
+
+  # Validate engine exists in our version map
+  if [ -z "${ENGINE_VERSIONS[$engine_key]}" ]; then
+    log_error "Unknown engine: $SPECIFIC_ENGINE"
+    echo "Available engines: postgresql, mysql, mariadb, sqlite, mongodb, redis, valkey"
+    set -e
+    exit 1
+  fi
+
+  test_engine_lifecycle "$engine_key" "${ENGINE_VERSIONS[$engine_key]}"
 elif [ "$QUICK_MODE" = true ]; then
   # Quick mode - just PostgreSQL
-  test_engine_lifecycle postgresql 18
+  test_engine_lifecycle postgresql "${ENGINE_VERSIONS[postgresql]}"
 else
   # Full test - all engines
-  test_engine_lifecycle postgresql 18
-  test_engine_lifecycle mysql 9
-  test_engine_lifecycle mariadb 11.8
-  test_engine_lifecycle sqlite 3
-  test_engine_lifecycle mongodb 7.0.28
-  test_engine_lifecycle redis 7.4.7
+  test_engine_lifecycle postgresql "${ENGINE_VERSIONS[postgresql]}"
+  test_engine_lifecycle mysql "${ENGINE_VERSIONS[mysql]}"
+  test_engine_lifecycle mariadb "${ENGINE_VERSIONS[mariadb]}"
+  test_engine_lifecycle sqlite "${ENGINE_VERSIONS[sqlite]}"
+  test_engine_lifecycle mongodb "${ENGINE_VERSIONS[mongodb]}"
+  test_engine_lifecycle redis "${ENGINE_VERSIONS[redis]}"
+  test_engine_lifecycle valkey "${ENGINE_VERSIONS[valkey]}"
 fi
 
 # Re-enable errexit for summary

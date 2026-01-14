@@ -110,10 +110,16 @@ async function installMissingClientTools(
   engine: string,
   bundledTools: string[],
   onProgress?: (msg: string) => void,
-): Promise<{ installed: string[]; failed: string[]; skipped: string[] }> {
+): Promise<{
+  installed: string[]
+  failed: string[]
+  skipped: string[]
+  needsPathRefresh: string[]
+}> {
   const installed: string[] = []
   const failed: string[] = []
   const skipped: string[] = []
+  const needsPathRefresh: string[] = []
 
   // Timeout for package installation commands (5 minutes)
   const INSTALL_TIMEOUT_MS = 5 * 60 * 1000
@@ -121,7 +127,7 @@ async function installMissingClientTools(
   // Get required client tools from hostdb databases.json
   const requiredTools = await getRequiredClientTools(engine)
   if (requiredTools.length === 0) {
-    return { installed, failed, skipped }
+    return { installed, failed, skipped, needsPathRefresh }
   }
 
   // Find which tools are missing (not bundled and not already installed)
@@ -149,14 +155,14 @@ async function installMissingClientTools(
   }
 
   if (missingTools.length === 0) {
-    return { installed, failed, skipped }
+    return { installed, failed, skipped, needsPathRefresh }
   }
 
   // Detect package manager
   const pm = await detectPackageManager()
   if (!pm) {
     // No package manager available, all missing tools fail
-    return { installed, failed: missingTools, skipped }
+    return { installed, failed: missingTools, skipped, needsPathRefresh }
   }
 
   // Package manager keys supported by hostdb
@@ -188,7 +194,7 @@ async function installMissingClientTools(
     console.warn(
       `Unknown package manager: ${pm.name}, skipping automatic installation`,
     )
-    return { installed, failed: missingTools, skipped }
+    return { installed, failed: missingTools, skipped, needsPathRefresh }
   }
 
   // Get the packages needed for missing tools
@@ -284,14 +290,9 @@ async function installMissingClientTools(
           )
           installed.push(tool)
         } else {
-          // Package installed but binary not found - don't count as usable
-          console.warn(
-            chalk.yellow(
-              `  Warning: ${tool} was installed but its binary was not found. ` +
-                'You may need to refresh your PATH and re-run this command.',
-            ),
-          )
-          failed.push(tool)
+          // Package installed but binary not found in PATH
+          // This is likely a PATH refresh issue, not an installation failure
+          needsPathRefresh.push(tool)
         }
       }
     } catch (error) {
@@ -312,7 +313,7 @@ async function installMissingClientTools(
     }
   }
 
-  return { installed, failed, skipped }
+  return { installed, failed, skipped, needsPathRefresh }
 }
 
 /**
@@ -352,15 +353,34 @@ async function checkAndInstallClientTools(
     messages.push(`already available: ${result.skipped.join(', ')}`)
   }
 
-  if (result.failed.length > 0) {
+  // Determine overall status
+  const hasFailures = result.failed.length > 0
+  const hasPathIssues = result.needsPathRefresh.length > 0
+
+  if (hasFailures || hasPathIssues) {
+    // Build warning message
+    const warnings: string[] = []
+    if (result.failed.length > 0) {
+      warnings.push(`failed: ${result.failed.join(', ')}`)
+    }
+    if (result.needsPathRefresh.length > 0) {
+      warnings.push(`needs PATH refresh: ${result.needsPathRefresh.join(', ')}`)
+    }
+
     if (messages.length > 0) {
-      clientSpinner.warn(
-        `${messages.join('; ')}; failed: ${result.failed.join(', ')}`,
-      )
+      clientSpinner.warn(`${messages.join('; ')}; ${warnings.join('; ')}`)
     } else {
-      clientSpinner.warn(
-        `Could not install: ${result.failed.join(', ')}. Install manually.`,
+      clientSpinner.warn(warnings.join('; '))
+    }
+
+    // Show additional help for PATH issues
+    if (hasPathIssues) {
+      console.log(
+        chalk.yellow(
+          '  Some tools were installed but not found in PATH. Refresh your shell and re-run:',
+        ),
       )
+      console.log(chalk.gray(`    spindb engines download ${engineName}`))
     }
   } else if (messages.length > 0) {
     clientSpinner.succeed(messages.join('; '))
