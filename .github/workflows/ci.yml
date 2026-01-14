@@ -48,8 +48,8 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-15 # ARM64 (Apple Silicon)
-          - macos-13 # Intel x64
+          - macos-15 # Intel
+          - macos-14 # ARM64
           - windows-latest
     steps:
       - name: Checkout
