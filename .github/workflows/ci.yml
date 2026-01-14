@@ -439,7 +439,7 @@ jobs:
         id: redis-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-redis-8-v3-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-redis-8-v5-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download Redis binaries (all platforms)
       - name: Install Redis via SpinDB
@@ -513,7 +513,7 @@ jobs:
         id: valkey-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-valkey-9-v3-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-valkey-9-v5-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download Valkey binaries (all platforms)
       - name: Install Valkey via SpinDB
