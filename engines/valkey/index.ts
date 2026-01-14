@@ -401,6 +401,8 @@ export class ValkeyEngine extends BaseEngine {
 
         const proc = spawn(valkeyServer, [configPath], spawnOpts)
         let settled = false
+        let stderrOutput = ''
+        let stdoutOutput = ''
 
         // Handle spawn errors (binary not found, DLL issues, etc.)
         proc.on('error', (err) => {
@@ -410,10 +412,14 @@ export class ValkeyEngine extends BaseEngine {
         })
 
         proc.stdout?.on('data', (data: Buffer) => {
-          logDebug(`valkey-server stdout: ${data.toString()}`)
+          const str = data.toString()
+          stdoutOutput += str
+          logDebug(`valkey-server stdout: ${str}`)
         })
         proc.stderr?.on('data', (data: Buffer) => {
-          logDebug(`valkey-server stderr: ${data.toString()}`)
+          const str = data.toString()
+          stderrOutput += str
+          logDebug(`valkey-server stderr: ${str}`)
         })
 
         // Detach the process so it continues running after parent exits
@@ -450,12 +456,28 @@ export class ValkeyEngine extends BaseEngine {
           } else {
             settled = true
             const portError = await checkLogForPortError()
-            reject(
-              new Error(
-                portError ||
-                  `Valkey failed to start within timeout. Check logs at: ${logFile}`,
-              ),
-            )
+
+            // Read log file content for better error diagnostics
+            let logContent = ''
+            try {
+              logContent = await readFile(logFile, 'utf-8')
+            } catch {
+              logContent = '(log file not found or empty)'
+            }
+
+            const errorDetails = [
+              portError || 'Valkey failed to start within timeout.',
+              `Binary: ${valkeyServer}`,
+              `Config: ${configPath}`,
+              `Log file: ${logFile}`,
+              `Log content:\n${logContent || '(empty)'}`,
+              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
+              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n')
+
+            reject(new Error(errorDetails))
           }
         }, 500)
       })

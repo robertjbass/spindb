@@ -401,6 +401,8 @@ export class RedisEngine extends BaseEngine {
 
         const proc = spawn(redisServer, [configPath], spawnOpts)
         let settled = false
+        let stderrOutput = ''
+        let stdoutOutput = ''
 
         // Handle spawn errors (binary not found, DLL issues, etc.)
         proc.on('error', (err) => {
@@ -410,10 +412,14 @@ export class RedisEngine extends BaseEngine {
         })
 
         proc.stdout?.on('data', (data: Buffer) => {
-          logDebug(`redis-server stdout: ${data.toString()}`)
+          const str = data.toString()
+          stdoutOutput += str
+          logDebug(`redis-server stdout: ${str}`)
         })
         proc.stderr?.on('data', (data: Buffer) => {
-          logDebug(`redis-server stderr: ${data.toString()}`)
+          const str = data.toString()
+          stderrOutput += str
+          logDebug(`redis-server stderr: ${str}`)
         })
 
         // Detach the process so it continues running after parent exits
@@ -450,12 +456,28 @@ export class RedisEngine extends BaseEngine {
           } else {
             settled = true
             const portError = await checkLogForPortError()
-            reject(
-              new Error(
-                portError ||
-                  `Redis failed to start within timeout. Check logs at: ${logFile}`,
-              ),
-            )
+
+            // Read log file content for better error diagnostics
+            let logContent = ''
+            try {
+              logContent = await readFile(logFile, 'utf-8')
+            } catch {
+              logContent = '(log file not found or empty)'
+            }
+
+            const errorDetails = [
+              portError || 'Redis failed to start within timeout.',
+              `Binary: ${redisServer}`,
+              `Config: ${configPath}`,
+              `Log file: ${logFile}`,
+              `Log content:\n${logContent || '(empty)'}`,
+              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
+              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n')
+
+            reject(new Error(errorDetails))
           }
         }, 500)
       })
