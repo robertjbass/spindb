@@ -48,8 +48,8 @@ jobs:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64 (M1/M2)
+          - macos-15 # ARM64 (Apple Silicon)
+          - macos-13 # Intel x64
           - windows-latest
     steps:
       - name: Checkout
@@ -433,12 +433,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache Redis binaries - these are downloaded from hostdb
+      # Cache key includes version suffix to bust cache when extraction logic changes
       - name: Cache Redis binaries
         uses: actions/cache@v4
         id: redis-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-redis-8-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-redis-8-v2-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download Redis binaries (all platforms)
       - name: Install Redis via SpinDB
@@ -451,10 +452,31 @@ jobs:
         run: pnpm test:redis
         timeout-minutes: 15
 
+      - name: Show Redis logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Redis container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Redis binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "redis*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Redis log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+          Write-Host ""
+          Write-Host "=== Redis config files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Filter "*.conf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
   # ============================================
   # Valkey Integration Tests
   # Uses SpinDB to download and manage Valkey binaries from hostdb
-  # NOTE: Windows excluded - Valkey does not provide Windows binaries
   # ============================================
   test-valkey:
     name: Valkey (${{ matrix.os }})
@@ -467,7 +489,7 @@ jobs:
           - ubuntu-24.04
           - macos-15 # Intel
           - macos-14 # ARM64
-          # Windows excluded: Valkey does not provide Windows binaries (hostdb has no win32-x64 builds)
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -485,12 +507,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache Valkey binaries - these are downloaded from hostdb
+      # Cache key includes version suffix to bust cache when extraction logic changes
       - name: Cache Valkey binaries
         uses: actions/cache@v4
         id: valkey-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-valkey-9-v2-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download Valkey binaries (all platforms)
       - name: Install Valkey via SpinDB
@@ -502,6 +525,28 @@ jobs:
       - name: Run Valkey integration tests
         run: pnpm test:valkey
         timeout-minutes: 15
+
+      - name: Show Valkey logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Valkey container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Valkey binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "valkey*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Valkey log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+          Write-Host ""
+          Write-Host "=== Valkey config files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Filter "*.conf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
 
   # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
