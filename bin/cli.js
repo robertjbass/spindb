@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 
 // Get the directory of this file
 const __filename = fileURLToPath(import.meta.url)
@@ -20,18 +21,24 @@ const mainScript = join(packageRoot, 'cli', 'bin.ts')
 // 3. Arguments pass through without shell interpretation (shell: false)
 // 4. Works on Windows without needing to spawn .cmd files
 
-// Find tsx ESM loader - check common paths
-const tsxLoaderPaths = [
-  join(packageRoot, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs'),
-  join(packageRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs'),
-]
+// Find tsx ESM loader using Node's module resolution
+// This works with npm, pnpm, yarn regardless of hoisting/symlink structure
+let tsxLoader = null
 
-const tsxLoader = tsxLoaderPaths.find((p) => existsSync(p))
+try {
+  const require = createRequire(import.meta.url)
+  const tsxDir = dirname(require.resolve('tsx/package.json'))
+  const loaderPaths = [
+    join(tsxDir, 'dist', 'esm', 'index.mjs'),
+    join(tsxDir, 'dist', 'loader.mjs'),
+  ]
+  tsxLoader = loaderPaths.find((p) => existsSync(p))
+} catch {
+  // tsx not found via module resolution
+}
 
 if (!tsxLoader) {
   console.error('Error: tsx loader not found.')
-  console.error('Searched paths:')
-  tsxLoaderPaths.forEach((p) => console.error(`  - ${p}`))
   console.error('\nTry running: pnpm install')
   process.exit(1)
 }
