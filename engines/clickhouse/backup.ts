@@ -92,11 +92,12 @@ async function getCreateTableStatement(
   database: string,
   table: string,
 ): Promise<string> {
+  // Use TSVRaw format to get unescaped output (newlines as actual newlines, not \n)
   const result = await execClickHouseQuery(
     clickhousePath,
     port,
     database,
-    `SHOW CREATE TABLE ${database}.${table}`,
+    `SHOW CREATE TABLE ${database}.${table} FORMAT TSVRaw`,
   )
   return result.trim()
 }
@@ -151,7 +152,9 @@ async function createSqlBackup(
         `SELECT * FROM ${database}.${table} FORMAT SQLInsert`,
       )
       if (data.trim()) {
-        lines.push(data.trim())
+        // SQLInsert format uses literal "table" as placeholder, replace with actual table name
+        const insertData = data.trim().replace(/^INSERT INTO table \(/i, `INSERT INTO ${table} (`)
+        lines.push(insertData)
         lines.push('')
       }
     } catch (error) {

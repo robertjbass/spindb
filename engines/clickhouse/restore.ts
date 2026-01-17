@@ -6,8 +6,12 @@
 import { spawn } from 'child_process'
 import { readFile } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
-import { logDebug } from '../../core/error-handler'
-import { requireClickHousePath } from './cli-utils'
+import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  requireClickHousePath,
+  validateClickHouseIdentifier,
+  escapeClickHouseIdentifier,
+} from './cli-utils'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 /**
@@ -123,6 +127,126 @@ export type RestoreOptions = {
 }
 
 /**
+ * Execute a ClickHouse query and return the result
+ */
+async function executeQuery(
+  clickhousePath: string,
+  port: number,
+  database: string,
+  query: string,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const args = [
+      'client',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--database',
+      database,
+      '--query',
+      query,
+    ]
+
+    const proc = spawn(clickhousePath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout.trim())
+      } else {
+        reject(new Error(`Query failed: ${stderr || `exit code ${code}`}`))
+      }
+    })
+
+    proc.on('error', reject)
+  })
+}
+
+/**
+ * Get list of tables in a database
+ */
+async function getTablesInDatabase(
+  clickhousePath: string,
+  port: number,
+  database: string,
+): Promise<string[]> {
+  try {
+    // Validate database name
+    validateClickHouseIdentifier(database, 'database')
+    const escapedDb = database.replace(/'/g, "''")
+
+    const result = await executeQuery(
+      clickhousePath,
+      port,
+      database,
+      `SELECT name FROM system.tables WHERE database = '${escapedDb}'`,
+    )
+
+    if (!result) {
+      return []
+    }
+
+    return result
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+  } catch (error) {
+    logDebug(`Failed to get tables: ${error}`)
+    return []
+  }
+}
+
+/**
+ * Drop all tables in a database (for clean restore)
+ */
+async function dropAllTables(
+  clickhousePath: string,
+  port: number,
+  database: string,
+): Promise<void> {
+  const tables = await getTablesInDatabase(clickhousePath, port, database)
+
+  if (tables.length === 0) {
+    logDebug('No existing tables to drop')
+    return
+  }
+
+  logDebug(`Dropping ${tables.length} existing table(s) in database "${database}"`)
+
+  for (const table of tables) {
+    try {
+      // Validate table name
+      validateClickHouseIdentifier(table, 'table')
+      const escapedTable = escapeClickHouseIdentifier(table)
+
+      await executeQuery(
+        clickhousePath,
+        port,
+        database,
+        `DROP TABLE IF EXISTS ${escapedTable}`,
+      )
+      logDebug(`Dropped table: ${table}`)
+    } catch (error) {
+      // Log warning but continue with other tables
+      logWarning(`Failed to drop table "${table}": ${error}`)
+    }
+  }
+}
+
+/**
  * Restore from SQL backup
  * Executes SQL statements via clickhouse client
  */
@@ -138,10 +262,10 @@ async function restoreSqlBackup(
   // Read the backup file
   const content = await readFile(backupPath, 'utf-8')
 
-  // If clean mode, we need to drop existing tables first
+  // If clean mode, drop existing tables first
   if (clean) {
     logDebug('Clean mode: dropping existing tables before restore')
-    // This will be handled by the restore process - tables will be recreated
+    await dropAllTables(clickhousePath, port, database)
   }
 
   // Pipe SQL to clickhouse client

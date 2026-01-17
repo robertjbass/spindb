@@ -1,5 +1,4 @@
-import { spawn, exec, type SpawnOptions } from 'child_process'
-import { promisify } from 'util'
+import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
@@ -19,6 +18,10 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
+import {
+  validateClickHouseIdentifier,
+  escapeClickHouseIdentifier,
+} from './cli-utils'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -29,8 +32,6 @@ import type {
   DumpResult,
   StatusResult,
 } from '../../types'
-
-const execAsync = promisify(exec)
 
 const ENGINE = 'clickhouse'
 const engineDef = getEngineDefaults(ENGINE)
@@ -379,13 +380,10 @@ export class ClickHouseEngine extends BaseEngine {
             // So we manually find and write the PID after server is ready
             logDebug(`Finding PID for port ${port}...`)
             try {
-              const { stdout: pidOutput } = await execAsync(
-                `lsof -ti tcp:${port} 2>/dev/null || true`,
-              )
-              logDebug(`lsof output: "${pidOutput}"`)
-              const pids = pidOutput.trim().split('\n').filter(Boolean)
+              const pids = await platformService.findProcessByPort(port)
+              logDebug(`findProcessByPort output: ${JSON.stringify(pids)}`)
               if (pids.length > 0) {
-                const serverPid = pids[0]
+                const serverPid = String(pids[0])
                 logDebug(`Writing PID ${serverPid} to ${pidFile}`)
                 await writeFile(pidFile, serverPid, 'utf8')
                 logDebug(`Wrote PID ${serverPid} to ${pidFile}`)
@@ -494,17 +492,14 @@ export class ClickHouseEngine extends BaseEngine {
 
     logDebug(`Stopping ClickHouse container "${name}" on port ${port}`)
 
-    // Find PID by checking the process
+    // Find PID by checking the process using cross-platform helper
     let pid: number | null = null
 
     // Try to find ClickHouse process by port
     try {
-      const { stdout } = await execAsync(
-        `lsof -ti tcp:${port} 2>/dev/null || true`,
-      )
-      const pids = stdout.trim().split('\n').filter(Boolean)
+      const pids = await platformService.findProcessByPort(port)
       if (pids.length > 0) {
-        pid = parseInt(pids[0], 10)
+        pid = pids[0]
       }
     } catch {
       // Ignore
@@ -636,6 +631,10 @@ export class ClickHouseEngine extends BaseEngine {
   ): Promise<void> {
     const { port, version } = container
 
+    // Validate database identifier to prevent SQL injection
+    validateClickHouseIdentifier(database, 'database')
+    const escapedDb = escapeClickHouseIdentifier(database)
+
     const clickhouse = await this.getClickHouseClientPath(version)
 
     const args = [
@@ -645,7 +644,7 @@ export class ClickHouseEngine extends BaseEngine {
       '--port',
       String(port),
       '--query',
-      `CREATE DATABASE IF NOT EXISTS ${database}`,
+      `CREATE DATABASE IF NOT EXISTS ${escapedDb}`,
     ]
 
     await new Promise<void>((resolve, reject) => {
@@ -683,6 +682,10 @@ export class ClickHouseEngine extends BaseEngine {
       throw new Error(`Cannot drop system database: ${database}`)
     }
 
+    // Validate database identifier to prevent SQL injection
+    validateClickHouseIdentifier(database, 'database')
+    const escapedDb = escapeClickHouseIdentifier(database)
+
     const clickhouse = await this.getClickHouseClientPath(version)
 
     const args = [
@@ -692,7 +695,7 @@ export class ClickHouseEngine extends BaseEngine {
       '--port',
       String(port),
       '--query',
-      `DROP DATABASE IF EXISTS ${database}`,
+      `DROP DATABASE IF EXISTS ${escapedDb}`,
     ]
 
     await new Promise<void>((resolve, reject) => {
@@ -725,7 +728,12 @@ export class ClickHouseEngine extends BaseEngine {
 
     try {
       const clickhouse = await this.getClickHouseClientPath(version)
-      const query = `SELECT sum(bytes_on_disk) FROM system.parts WHERE database = '${database || 'default'}'`
+      // Validate and escape the database name to prevent SQL injection
+      const dbName = database || 'default'
+      validateClickHouseIdentifier(dbName, 'database')
+      // Escape single quotes for string literal in WHERE clause
+      const escapedDbName = dbName.replace(/'/g, "''")
+      const query = `SELECT sum(bytes_on_disk) FROM system.parts WHERE database = '${escapedDbName}'`
 
       const result = await new Promise<string>((resolve, reject) => {
         const args = [

@@ -115,7 +115,7 @@ spindb deps install                     # Install missing tools
 | MariaDB    | 3307    | 3307-3400     |
 | MongoDB    | 27017   | 27017-27100   |
 | Redis      | 6379    | 6379-6400     |
-| Valkey     | 6379    | 6379-6400     |
+| Valkey     | 6379    | 6379-6479     |
 | ClickHouse | 9000    | 9000-9100     |
 | SQLite     | N/A     | File-based    |
 

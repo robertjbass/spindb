@@ -3,6 +3,9 @@
  *
  * Tests the full container lifecycle with real ClickHouse processes.
  * ClickHouse is a column-oriented OLAP database.
+ *
+ * Note: ClickHouse binaries from hostdb are only available for macOS and Linux.
+ * Windows is not supported - these tests will be skipped on Windows.
  */
 
 import { describe, it, before, after } from 'node:test'
@@ -10,6 +13,10 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// ClickHouse is not available on Windows via hostdb
+const IS_WINDOWS = process.platform === 'win32'
+
 import {
   TEST_PORTS,
   generateTestName,
@@ -32,9 +39,9 @@ const ENGINE = Engine.ClickHouse
 const DATABASE = 'default' // ClickHouse default database
 const SEED_FILE = join(__dirname, '../fixtures/clickhouse/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5 // 5 user rows
-const TEST_VERSION = '25.12' // YY.MM format version
+const TEST_VERSION = '25.12' // YY.MM format version (macOS/Linux only, no Windows support)
 
-describe('ClickHouse Integration Tests', () => {
+describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binaries not available for Windows' : false }, () => {
   let testPorts: number[]
   let containerName: string
   let clonedContainerName: string
@@ -49,8 +56,11 @@ describe('ClickHouse Integration Tests', () => {
     }
 
     console.log('\n Finding available test ports...')
-    testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.clickhouse.base)
-    console.log(`   Using ports: ${testPorts.join(', ')}`)
+    // ClickHouse uses 2 ports per container (TCP + HTTP), so we need 6 consecutive ports
+    // and use every other one for TCP: [0], [2], [4] to avoid HTTP port conflicts
+    const allPorts = await findConsecutiveFreePorts(6, TEST_PORTS.clickhouse.base)
+    testPorts = [allPorts[0], allPorts[2], allPorts[4]]
+    console.log(`   Using ports: ${testPorts.join(', ')} (with HTTP on +1 each)`)
 
     containerName = generateTestName('clickhouse-test')
     clonedContainerName = generateTestName('clickhouse-test-clone')
@@ -84,7 +94,7 @@ describe('ClickHouse Integration Tests', () => {
     })
 
     // Initialize the data directory
-    await engine.initDataDir(containerName, TEST_VERSION, {})
+    await engine.initDataDir(containerName, TEST_VERSION, { port: testPorts[0] })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -156,7 +166,7 @@ describe('ClickHouse Integration Tests', () => {
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, TEST_VERSION, {})
+    await engine.initDataDir(clonedContainerName, TEST_VERSION, { port: testPorts[1] })
 
     // Start cloned container first (needed for SQL restore)
     const clonedConfig = await containerManager.getConfig(clonedContainerName)
@@ -271,6 +281,9 @@ describe('ClickHouse Integration Tests', () => {
       port: testPorts[2],
     })
 
+    // ClickHouse uses config.xml for ports, so we need to regenerate it with new port
+    await engine.initDataDir(renamedContainerName, TEST_VERSION, { port: testPorts[2] })
+
     // Verify rename
     const oldConfig = await containerManager.getConfig(containerName)
     assert(oldConfig === null, 'Old container name should not exist')
@@ -324,7 +337,7 @@ describe('ClickHouse Integration Tests', () => {
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, TEST_VERSION, {})
+    await engine.initDataDir(portConflictContainerName, TEST_VERSION, { port: testPorts[2] })
 
     // The container should be created but when we try to start, it should detect conflict
     // In real usage, the start command would auto-assign a new port
