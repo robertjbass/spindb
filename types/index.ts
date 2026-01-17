@@ -24,6 +24,7 @@ export enum Engine {
   MongoDB = 'mongodb',
   Redis = 'redis',
   Valkey = 'valkey',
+  ClickHouse = 'clickhouse',
 }
 
 /**
@@ -38,6 +39,7 @@ export const ALL_ENGINES = [
   Engine.MongoDB,
   Engine.Redis,
   Engine.Valkey,
+  Engine.ClickHouse,
 ] as const
 
 /**
@@ -195,6 +197,8 @@ export type BinaryTool =
   // Valkey tools
   | 'valkey-server'
   | 'valkey-cli'
+  // ClickHouse tools
+  | 'clickhouse'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -258,6 +262,8 @@ export type SpinDBConfig = {
     'valkey-server'?: BinaryConfig
     // Valkey client tools
     'valkey-cli'?: BinaryConfig
+    // ClickHouse tools
+    clickhouse?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

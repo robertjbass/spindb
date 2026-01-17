@@ -129,6 +129,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['valkey-cli'],
     maxConnections: 0, // Not applicable for Valkey
   },
+  clickhouse: {
+    defaultVersion: '25.12',
+    defaultPort: 9000, // Native TCP port (HTTP is 8123)
+    portRange: { start: 9000, end: 9100 },
+    supportedVersions: ['25.12'], // Keep in sync with engines/clickhouse/version-maps.ts
+    latestVersion: '25.12',
+    superuser: 'default', // Default user in ClickHouse
+    connectionScheme: 'clickhouse',
+    logFileName: 'clickhouse-server.log',
+    pidFileName: 'clickhouse.pid',
+    dataSubdir: 'data',
+    clientTools: ['clickhouse'],
+    maxConnections: 0, // Not applicable
+  },
 }
 
 /**

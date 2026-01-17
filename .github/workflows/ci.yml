@@ -546,6 +546,58 @@ jobs:
           }
 
   # ============================================
+  # ClickHouse Integration Tests
+  # Uses SpinDB to download and manage ClickHouse binaries from hostdb
+  # Note: ClickHouse is not available for Windows on hostdb
+  # ============================================
+  test-clickhouse:
+    name: ClickHouse (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          # Note: Windows excluded - ClickHouse not available on hostdb for Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache ClickHouse binaries - these are downloaded from hostdb
+      - name: Cache ClickHouse binaries
+        uses: actions/cache@v4
+        id: clickhouse-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download ClickHouse binaries
+      - name: Install ClickHouse via SpinDB
+        run: pnpm start engines download clickhouse 25.12
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run ClickHouse integration tests
+        run: pnpm test:clickhouse
+        timeout-minutes: 15
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -834,6 +886,7 @@ jobs:
   #         - mongodb
   #         - redis
   #         - valkey
+  #         - clickhouse
   #   steps:
   #     - name: Checkout
   #       uses: actions/checkout@v4
@@ -886,6 +939,10 @@ jobs:
   #       if: matrix.test == 'valkey'
   #       run: pnpm start engines download valkey 9
   #
+  #     - name: Download ClickHouse
+  #       if: matrix.test == 'clickhouse'
+  #       run: pnpm start engines download clickhouse 25.12
+  #
   #     - name: Show installed engines
   #       run: pnpm start engines list
   #
@@ -929,6 +986,11 @@ jobs:
   #       if: matrix.test == 'valkey'
   #       run: pnpm test:valkey
   #       timeout-minutes: 15
+  #
+  #     - name: Run ClickHouse tests
+  #       if: matrix.test == 'clickhouse'
+  #       run: pnpm test:clickhouse
+  #       timeout-minutes: 15
 
   # ============================================
   # Summary Job - Ensures all tests pass
@@ -946,6 +1008,7 @@ jobs:
         test-mongodb,
         test-redis,
         test-valkey,
+        test-clickhouse,
         test-cli-e2e,
         test-fresh-install,
         test-upgrade,
@@ -987,6 +1050,10 @@ jobs:
           fi
           if [ "${{ needs.test-valkey.result }}" != "success" ]; then
             echo "Valkey tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-clickhouse.result }}" != "success" ]; then
+            echo "ClickHouse tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

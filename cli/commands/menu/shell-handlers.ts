@@ -507,6 +507,20 @@ async function launchShell(
       config.database,
     ]
     installHint = 'spindb engines download valkey'
+  } else if (config.engine === 'clickhouse') {
+    // ClickHouse uses a unified binary with subcommands
+    const clickhousePath = await configManager.getBinaryPath('clickhouse')
+    shellCmd = clickhousePath || 'clickhouse'
+    shellArgs = [
+      'client',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(config.port),
+      '--database',
+      config.database,
+    ]
+    installHint = 'spindb engines download clickhouse'
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]

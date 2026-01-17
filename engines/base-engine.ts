@@ -123,6 +123,15 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the clickhouse client if available
+   * Default implementation throws; engines that can provide a bundled or
+   * configured clickhouse should override this method.
+   */
+  async getClickHouseClientPath(): Promise<string> {
+    throw new Error('clickhouse client not found')
+  }
+
+  /**
    * Get the path to the sqlite3 client if available
    * Default implementation returns null; SQLite engine overrides this method.
    */
