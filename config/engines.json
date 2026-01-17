@@ -104,6 +104,22 @@
       "clientTools": ["valkey-server", "valkey-cli"],
       "licensing": "BSD-3-Clause",
       "notes": "Redis fork with permissive licensing. Shares default port 6379 with Redis; port conflicts are resolved automatically."
+    },
+    "clickhouse": {
+      "displayName": "ClickHouse",
+      "icon": "🏠",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["25.12.3.21"],
+      "defaultVersion": "25.12.3.21",
+      "defaultPort": 9000,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "connectionScheme": "clickhouse",
+      "superuser": "default",
+      "clientTools": ["clickhouse"],
+      "licensing": "Apache-2.0",
+      "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123."
     }
   }
 }

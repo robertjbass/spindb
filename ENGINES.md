@@ -11,6 +11,7 @@
 | 🍃 **MongoDB** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 7.0, 8.0, 8.2 |
 | 🔴 **Redis** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 7, 8 |
 | 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
+| 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
 
 ## Planned
 
@@ -89,6 +90,25 @@
   - Uses numbered databases (0-15) like Redis
   - Does NOT support remote dump (same as Redis)
 
+### 🏠 ClickHouse
+
+- **Status:** ✅ Complete
+- **Versions:** 25.12
+- **Data location:** `~/.spindb/containers/clickhouse/{name}/`
+- **Process:** Server process (`clickhouse server`)
+- **Binary source:** hostdb downloads (macOS/Linux only, no Windows)
+- **Enhanced CLI:** `clickhouse client` (bundled)
+- **Backup format:** `.sql` (DDL + INSERT statements)
+- **Multi-version support:** Yes (macOS/Linux)
+- **Bundled tools:** `clickhouse` unified binary (server, client subcommands)
+- **Implementation notes:**
+  - Column-oriented OLAP database for analytics
+  - Uses SQL with ClickHouse-specific extensions
+  - Uses XML configuration (config.xml, users.xml)
+  - Default port 9000 (native TCP), 8123 (HTTP)
+  - YY.MM versioning format (e.g., 25.12)
+  - Apache-2.0 license
+
 ---
 
 ## Backup Format Summary
@@ -101,6 +121,7 @@
 | Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
+| ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL for portability |
 
 ---
 

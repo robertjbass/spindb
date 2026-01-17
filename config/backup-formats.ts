@@ -122,6 +122,22 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
+  clickhouse: {
+    sql: {
+      extension: '.sql',
+      label: '.sql',
+      description: 'SQL dump - DDL + INSERT statements',
+      spinnerLabel: 'SQL',
+    },
+    dump: {
+      extension: '.sql',
+      label: '.sql',
+      description: 'SQL dump - DDL + INSERT statements',
+      spinnerLabel: 'SQL',
+    },
+    supportsFormatChoice: false, // Only SQL format supported
+    defaultFormat: 'sql',
+  },
 }
 
 // Get backup format info for an engine

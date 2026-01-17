@@ -16,6 +16,7 @@ import {
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
+  type InstalledClickHouseEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -55,6 +56,7 @@ export async function handleEngines(): Promise<void> {
     mongodbEngines,
     redisEngines,
     valkeyEngines,
+    clickhouseEngines,
   ] = [
     engines.filter(
       (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
@@ -65,6 +67,9 @@ export async function handleEngines(): Promise<void> {
     engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
     engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
     engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
+    engines.filter(
+      (e): e is InstalledClickHouseEngine => e.engine === 'clickhouse',
+    ),
   ]
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -80,6 +85,10 @@ export async function handleEngines(): Promise<void> {
   )
   const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   const totalValkeySize = valkeyEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalClickhouseSize = clickhouseEngines.reduce(
+    (acc, e) => acc + e.sizeBytes,
+    0,
+  )
 
   const COL_ENGINE = 14
   const COL_VERSION = 12
@@ -104,6 +113,7 @@ export async function handleEngines(): Promise<void> {
     ...mongodbEngines,
     ...redisEngines,
     ...valkeyEngines,
+    ...clickhouseEngines,
   ]
 
   for (const engine of allEnginesSorted) {
@@ -169,6 +179,13 @@ export async function handleEngines(): Promise<void> {
     console.log(
       chalk.gray(
         `  Valkey: ${valkeyEngines.length} version(s), ${formatBytes(totalValkeySize)}`,
+      ),
+    )
+  }
+  if (clickhouseEngines.length > 0) {
+    console.log(
+      chalk.gray(
+        `  ClickHouse: ${clickhouseEngines.length} version(s), ${formatBytes(totalClickhouseSize)}`,
       ),
     )
   }

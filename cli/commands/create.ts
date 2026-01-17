@@ -515,6 +515,7 @@ export const createCommand = new Command('create')
 
         try {
           await dbEngine.initDataDir(containerName, version, {
+            port,
             superuser: engineDefaults.superuser,
             maxConnections: options.maxConnections
               ? parseInt(options.maxConnections, 10)

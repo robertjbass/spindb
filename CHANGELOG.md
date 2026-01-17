@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-01-17
+
+### Added
+- **ClickHouse engine support** - Full container lifecycle for ClickHouse, the column-oriented OLAP database
+  - Downloadable binaries for macOS and Linux (Intel/ARM) from hostdb
+  - Note: Windows not supported (hostdb doesn't provide Windows binaries)
+  - Version 25.12 supported (YY.MM format versioning)
+  - Uses unified `clickhouse` binary with subcommands (server, client)
+  - Default port 9000 (native TCP), HTTP port 8123
+  - Uses SQL query language (ClickHouse SQL dialect)
+  - XML configuration files (config.xml, users.xml)
+  - Backup format: `.sql` (DDL + INSERT statements)
+  - Full integration tests across macOS and Linux CI
+  - Apache-2.0 licensed
+
 ## [0.17.3] - 2026-01-16
 
 ### Fixed

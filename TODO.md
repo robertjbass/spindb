@@ -4,6 +4,8 @@
 
 - [ ] Review and update `EVALUATION.md` periodically (last updated: 2025-12-06, v0.9.0)
 
+- [ ] Add examples for each database in `CHEATSHEET.md`
+
 ---
 
 ## Roadmap
@@ -31,6 +33,7 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 - [x] Valkey (Redis fork with BSD-3 license)
 - [x] MongoDB (document database)
 - [x] MariaDB as standalone engine (using hostdb binaries)
+- [x] ClickHouse (column-oriented OLAP database)
 
 ### Engine Binary Migration (hostdb)
 
