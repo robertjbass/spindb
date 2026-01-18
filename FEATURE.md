@@ -172,10 +172,14 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching
 - [ ] `.github/workflows/ci.yml` - Add to `ci-success` job needs and checks
 
-### Docker Tests (2 files)
+### Docker Tests (2 files) - CRITICAL
+
+**Run `pnpm test:docker` to verify your engine works on Linux.** This catches library dependency issues.
 
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
-- [ ] `tests/docker/run-e2e.sh` - Add engine case and test execution
+- [ ] `tests/docker/run-e2e.sh` - Add engine case in `run_test()` function
+- [ ] `tests/docker/run-e2e.sh` - Add engine test execution at bottom of file
+- [ ] For file-based engines: Update start/stop skip conditions to include your engine
 
 ### Documentation (7 files)
 
@@ -1220,7 +1224,27 @@ Search for `test-linux-arm64` in `ci.yml` to find this section. Even though it's
 
 ## Docker Tests
 
-Update the Docker E2E test environment to include your engine.
+**CRITICAL:** Update the Docker E2E test environment to include your engine. Run `pnpm test:docker` to verify.
+
+### File-Based vs Server-Based Engines
+
+The Docker E2E tests handle two types of engines differently:
+
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse):
+- Have a daemon process that runs in the background
+- Require `spindb start` before running queries
+- Require `spindb stop` before deletion
+- Status is "running" when the process is active
+
+**File-based engines** (SQLite, DuckDB):
+- No daemon process - the database is just a file
+- Do NOT call `spindb start` or `spindb stop`
+- Status is "running" if the file exists (no actual process)
+- The `run-e2e.sh` script has skip conditions for start/stop operations
+
+If you're adding a file-based engine, you must update:
+1. `run-e2e.sh` - Add to start/stop skip conditions
+2. `cli/commands/run.ts` - Add to file-based engine check (so `spindb run` works without "not running" error)
 
 ### Dockerfile (`tests/docker/Dockerfile`)
 
@@ -1234,28 +1258,40 @@ Add your engine to the comment listing downloaded engines:
 # - MongoDB: server + client tools (mongod, mongosh, mongodump, mongorestore)
 # - Redis: server + client tools (redis-server, redis-cli)
 # - Valkey: server + client tools (valkey-server, valkey-cli)
-# - YourEngine: server + client tools (yourengine-server, yourengine-cli)
+# - ClickHouse: clickhouse (unified binary with subcommands)
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+# - DuckDB: duckdb
+# - YourEngine: yourengine-server, yourengine-cli
 ```
 
 ### E2E Script (`tests/docker/run-e2e.sh`)
 
-1. **Add connectivity test case:**
+**For file-based engines (like SQLite, DuckDB):** Also update the start/stop skip conditions:
+
+```bash
+# Start container (skip for sqlite/duckdb - they're file-based, no server process)
+if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ] && [ "$engine" != "yourengine" ]; then
+
+# Stop container (skip for sqlite/duckdb - they're embedded)
+if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ] && [ "$engine" != "yourengine" ]; then
+```
+
+1. **Add connectivity test case** (in the `case $engine in` block):
 
 ```bash
     yourengine)
-      if ! spindb run "$container_name" -c "PING"; then
-        echo "FAILED: Could not run YourEngine command"
-        spindb stop "$container_name" 2>/dev/null || true
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run YourEngine query"
+        # For server-based engines, add: spindb stop "$container_name" 2>/dev/null || true
         spindb delete "$container_name" --yes 2>/dev/null || true
-        record_result "$engine" "$version" "FAILED" "PING failed"
+        record_result "$engine" "$version" "FAILED" "Query failed"
         FAILED=$((FAILED+1))
         return 1
       fi
       ;;
 ```
 
-2. **Add test execution:**
+2. **Add test execution** (at the bottom with other engines):
 
 ```bash
 # YourEngine

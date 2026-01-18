@@ -28,25 +28,46 @@ import type { BinaryTool } from '../types'
 const execAsync = promisify(exec)
 
 const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
+  // PostgreSQL
+  'postgres',
+  'pg_ctl',
+  'initdb',
   'psql',
   'pg_dump',
   'pg_restore',
   'pg_basebackup',
+  // MySQL
   'mysql',
   'mysqldump',
   'mysqlpump',
   'mysqld',
   'mysqladmin',
+  // MariaDB
+  'mariadb',
+  'mariadb-dump',
+  'mariadbd',
+  'mariadb-admin',
+  // SQLite
   'sqlite3',
+  'sqldiff',
+  'sqlite3_analyzer',
+  'sqlite3_rsync',
+  // DuckDB
   'duckdb',
+  // MongoDB
   'mongod',
   'mongosh',
   'mongodump',
   'mongorestore',
+  // Redis
   'redis-server',
   'redis-cli',
+  // Valkey
   'valkey-server',
   'valkey-cli',
+  // ClickHouse
+  'clickhouse',
+  // Enhanced shells (optional)
   'pgcli',
   'mycli',
   'litecli',

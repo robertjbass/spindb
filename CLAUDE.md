@@ -496,7 +496,7 @@ All engines that download binaries from hostdb MUST have a cache step in `.githu
 Current engines with CI caching:
 - PostgreSQL: `spindb-pg-18-${{ runner.os }}-${{ runner.arch }}`
 - MariaDB: `spindb-mariadb-11.8-${{ runner.os }}-${{ runner.arch }}`
-- MySQL: `spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}`
+- MySQL: `spindb-mysql-8.0-${{ runner.os }}-${{ runner.arch }}`
 - MongoDB: `spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}`
 - Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
 - Valkey: `spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}`

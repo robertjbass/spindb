@@ -103,8 +103,8 @@ run_test() {
     return 1
   fi
 
-  # Start container (skip for sqlite - it's file-based, no server process)
-  if [ "$engine" != "sqlite" ]; then
+  # Start container (skip for sqlite/duckdb - they're file-based, no server process)
+  if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ]; then
     echo "Starting container..."
     if ! spindb start "$container_name"; then
       echo "FAILED: Could not start $container_name"
@@ -212,10 +212,29 @@ run_test() {
         return 1
       fi
       ;;
+    duckdb)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run DuckDB query"
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        FAILED=$((FAILED+1))
+        return 1
+      fi
+      ;;
+    clickhouse)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run ClickHouse query"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        FAILED=$((FAILED+1))
+        return 1
+      fi
+      ;;
   esac
 
-  # Stop container (skip for sqlite - it's embedded)
-  if [ "$engine" != "sqlite" ]; then
+  # Stop container (skip for sqlite/duckdb - they're embedded)
+  if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ]; then
     echo "Stopping container..."
     if ! spindb stop "$container_name"; then
       echo "WARNING: Could not stop $container_name gracefully"
@@ -308,6 +327,14 @@ REDIS_VERSION=$(get_default_version redis)
 # Valkey
 VALKEY_VERSION=$(get_default_version valkey)
 [ -n "$VALKEY_VERSION" ] && run_test valkey "$VALKEY_VERSION" || echo "Skipping Valkey (no default version)"
+
+# ClickHouse
+CLICKHOUSE_VERSION=$(get_default_version clickhouse)
+[ -n "$CLICKHOUSE_VERSION" ] && run_test clickhouse "$CLICKHOUSE_VERSION" || echo "Skipping ClickHouse (no default version)"
+
+# DuckDB
+DUCKDB_VERSION=$(get_default_version duckdb)
+[ -n "$DUCKDB_VERSION" ] && run_test duckdb "$DUCKDB_VERSION" || echo "Skipping DuckDB (no default version)"
 
 # Summary
 echo ""

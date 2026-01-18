@@ -281,11 +281,11 @@ jobs:
         id: mysql-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-mysql-8.0-${{ runner.os }}-${{ runner.arch }}
 
-      # Use SpinDB to download MySQL binaries
+      # Use SpinDB to download MySQL binaries (8.0 is the default in engines.json)
       - name: Install MySQL via SpinDB
-        run: pnpm start engines download mysql 9
+        run: pnpm start engines download mysql 8.0
 
       # Show what SpinDB installed
       - name: Show installed engines
@@ -983,7 +983,7 @@ jobs:
   #
   #     - name: Download MySQL
   #       if: matrix.test == 'mysql'
-  #       run: pnpm start engines download mysql 9
+  #       run: pnpm start engines download mysql 8.0
   #
   #     - name: Download MariaDB
   #       if: matrix.test == 'mariadb'

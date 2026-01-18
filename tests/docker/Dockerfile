@@ -28,7 +28,9 @@
 # - MongoDB: server + client tools (mongod, mongosh, mongodump, mongorestore)
 # - Redis: server + client tools (redis-server, redis-cli)
 # - Valkey: server + client tools (valkey-server, valkey-cli)
+# - ClickHouse: clickhouse (unified binary with subcommands)
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+# - DuckDB: duckdb
 
 FROM ubuntu:22.04
 

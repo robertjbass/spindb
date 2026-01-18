@@ -22,9 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Binary extraction for flat archives** - DuckDB hostdb archive has flat structure (binary at root, no `bin/` subdirectory). Updated binary managers for both DuckDB and SQLite to detect flat archives and create the `bin/` subdirectory during extraction for consistent structure across all engines.
 - **Container manager registry handling** - Added DuckDB registry support to container-manager.ts for `getConfig`, `exists`, `list`, `rename`, and `delete` operations. File-based databases (SQLite, DuckDB) use registries instead of container directories.
+- **MySQL CI cache version mismatch** - CI was caching MySQL version 9 but engines.json default is 8.0.40, causing Docker tests to re-download MySQL every run. Fixed by aligning CI cache key to `mysql-8.0`.
+- **ClickHouse binary not found after download** - `KNOWN_BINARY_TOOLS` in dependency-manager.ts was missing 'clickhouse' and several other tools. This caused `findBinary()` to skip the config lookup and fall back to PATH search only. Fixed by adding all missing tools: clickhouse, postgres, pg_ctl, initdb, mariadb tools, and sqlite tools.
+- **DuckDB "not running" error** - The `spindb run` command only checked for SQLite as a file-based database, causing DuckDB containers to fail with "not running" error. Fixed by adding DuckDB to the file-based engine check.
 
 ### Changed
 - **Test reliability for file-based databases** - SQLite and DuckDB integration tests now verify they're using downloaded binaries (`source: 'bundled'`), not system binaries (`source: 'system'`). Tests fail fast with clear instructions if system binaries are configured, ensuring extraction bugs are caught.
+- **Docker E2E tests** - Added ClickHouse and DuckDB to the Docker test suite (`pnpm test:docker`). Updated FEATURE.md with clearer guidance on adding new engines to Docker tests, including file-based engine handling.
 
 ## [0.18.1] - 2026-01-18
 

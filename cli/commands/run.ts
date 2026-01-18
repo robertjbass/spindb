@@ -49,11 +49,11 @@ export const runCommand = new Command('run')
 
         const { engine: engineName } = config
 
-        // SQLite: check file exists instead of running status
-        if (engineName === Engine.SQLite) {
+        // File-based databases (SQLite, DuckDB): check file exists instead of running status
+        if (engineName === Engine.SQLite || engineName === Engine.DuckDB) {
           if (!existsSync(config.database)) {
             console.error(
-              uiError(`SQLite database file not found: ${config.database}`),
+              uiError(`Database file not found: ${config.database}`),
             )
             process.exit(1)
           }
