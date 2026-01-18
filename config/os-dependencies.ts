@@ -652,6 +652,41 @@ const valkeyDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// ClickHouse Dependencies
+// =============================================================================
+
+const clickhouseDependencies: EngineDependencies = {
+  engine: 'clickhouse',
+  displayName: 'ClickHouse',
+  dependencies: [
+    {
+      name: 'clickhouse',
+      binary: 'clickhouse',
+      description: 'ClickHouse server and client (unified binary)',
+      packages: {
+        brew: { package: 'clickhouse' },
+        // ClickHouse requires their own apt repository
+      },
+      manualInstall: {
+        darwin: [
+          'Install with Homebrew: brew install clickhouse',
+          'Or use SpinDB: spindb engines download clickhouse 25.12',
+        ],
+        linux: [
+          'ClickHouse provides official packages.',
+          'Add their apt repository: https://clickhouse.com/docs/en/install#install-from-deb-packages',
+          'Or use SpinDB: spindb engines download clickhouse 25.12',
+        ],
+        win32: [
+          'ClickHouse does not officially support Windows.',
+          'Use WSL2 with Linux installation instructions.',
+        ],
+      },
+    },
+  ],
+}
+
+// =============================================================================
 // Optional Tools (engine-agnostic)
 // =============================================================================
 
@@ -807,6 +842,7 @@ export const engineDependencies: EngineDependencies[] = [
   mongodbDependencies,
   redisDependencies,
   valkeyDependencies,
+  clickhouseDependencies,
 ]
 
 // Get dependencies for a specific engine

@@ -7,7 +7,7 @@
 
 **The first npm CLI for running local databases without Docker.**
 
-Spin up PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Redis, and Valkey instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Redis, Valkey, and ClickHouse instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -343,6 +343,46 @@ spindb connect myvalkey --iredis
 
 **Note:** Valkey uses `redis://` connection scheme for client compatibility since it's wire-compatible with Redis.
 
+#### ClickHouse
+
+| | |
+|---|---|
+| Versions | 25.12 |
+| Default port | 9000 (native TCP), 8123 (HTTP) |
+| Default user | `default` |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
+
+ClickHouse is a column-oriented OLAP database designed for fast analytics on large datasets. SpinDB downloads ClickHouse server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases.
+
+**Note:** ClickHouse is only available on macOS and Linux. Windows is not supported.
+
+```bash
+# Create a ClickHouse container (downloads binaries automatically)
+spindb create mydb --engine clickhouse
+
+# Create with specific version
+spindb create mydb --engine clickhouse --version 25.12
+
+# Check what's available
+spindb deps check --engine clickhouse
+```
+
+ClickHouse uses SQL (with ClickHouse-specific extensions):
+
+```bash
+# Create a table
+spindb run mych -c "CREATE TABLE users (id UInt64, name String) ENGINE = MergeTree() ORDER BY id"
+
+# Insert data
+spindb run mych -c "INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')"
+
+# Query data
+spindb run mych -c "SELECT * FROM users"
+
+# Run a SQL file
+spindb run mych --file ./scripts/seed.sql
+```
+
 ### hostdb Platform Coverage
 
 SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/hostdb), a repository of pre-built database binaries for all major platforms. The following table shows current platform support and integration status:
@@ -363,6 +403,7 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | MongoDB* | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Redis* | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Valkey | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ClickHouse* | ✅ | ✅ | ✅ | ✅ | ❌ |
 | **Planned for hostdb** |||||
 | CockroachDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | TimescaleDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
@@ -375,7 +416,6 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | ArangoDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | Qdrant | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | Apache Cassandra | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| ClickHouse | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | InfluxDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | CouchDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | KeyDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
@@ -386,6 +426,7 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 **Notes:**
 - **\*** Licensing considerations for commercial use — consider Valkey (Redis) or FerretDB (MongoDB) as alternatives
 - **PostgreSQL** uses [EDB](https://www.enterprisedb.com/) binaries on Windows instead of hostdb
+- **ClickHouse** Windows binaries are not available on hostdb (macOS and Linux only)
 - **Valkey** is a Redis-compatible drop-in replacement with permissive licensing
 - **CockroachDB** is planned for both hostdb and SpinDB (see [roadmap](TODO.md))
 - All databases under "Planned for hostdb" have permissive open-source licenses (Apache 2.0, MIT, or BSD)

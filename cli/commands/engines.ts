@@ -51,6 +51,7 @@ import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
 import { redisBinaryManager } from '../../engines/redis/binary-manager'
 import { valkeyBinaryManager } from '../../engines/valkey/binary-manager'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
+import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -1218,9 +1219,69 @@ enginesCommand
         return
       }
 
+      if (['clickhouse', 'ch'].includes(normalizedEngine)) {
+        // Check platform support
+        const { platform } = platformService.getPlatformInfo()
+        if (platform === 'win32') {
+          console.error(
+            uiError('ClickHouse is not supported on Windows via hostdb'),
+          )
+          console.log(
+            chalk.gray(
+              '  ClickHouse binaries are only available for macOS and Linux.',
+            ),
+          )
+          process.exit(1)
+        }
+
+        if (!version) {
+          console.error(uiError('ClickHouse requires a version (e.g., 25.12)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.ClickHouse)
+
+        const spinner = createSpinner(
+          `Checking ClickHouse ${version} binaries...`,
+        )
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `ClickHouse ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`ClickHouse ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`ClickHouse ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: chPlatform, arch: chArch } =
+          platformService.getPlatformInfo()
+        const chFullVersion = clickhouseBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'clickhouse',
+          version: chFullVersion,
+          platform: chPlatform,
+          arch: chArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('clickhouse', binPath)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis, valkey`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis, valkey, clickhouse`,
         ),
       )
       process.exit(1)

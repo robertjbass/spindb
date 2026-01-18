@@ -120,6 +120,13 @@ export abstract class BasePlatformService {
   // Check if a process is running by PID
   abstract isProcessRunning(pid: number): boolean
 
+  /**
+   * Find process PIDs listening on a specific port
+   * @param port - Port number to check
+   * @returns Array of PIDs listening on the port (empty if none found)
+   */
+  abstract findProcessByPort(port: number): Promise<number[]>
+
   // Copy text to clipboard
   async copyToClipboard(text: string): Promise<boolean> {
     const config = this.getClipboardConfig()
@@ -344,6 +351,21 @@ class DarwinPlatformService extends BasePlatformService {
     }
   }
 
+  async findProcessByPort(port: number): Promise<number[]> {
+    try {
+      const { stdout } = await execAsync(`lsof -ti tcp:${port} 2>/dev/null || true`)
+      const pids = stdout
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((pid) => parseInt(pid, 10))
+        .filter((pid) => !isNaN(pid))
+      return pids
+    } catch {
+      return []
+    }
+  }
+
   protected buildToolPath(dir: string, toolName: string): string {
     return `${dir}/${toolName}`
   }
@@ -544,6 +566,21 @@ class LinuxPlatformService extends BasePlatformService {
     }
   }
 
+  async findProcessByPort(port: number): Promise<number[]> {
+    try {
+      const { stdout } = await execAsync(`lsof -ti tcp:${port} 2>/dev/null || true`)
+      const pids = stdout
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((pid) => parseInt(pid, 10))
+        .filter((pid) => !isNaN(pid))
+      return pids
+    } catch {
+      return []
+    }
+  }
+
   protected buildToolPath(dir: string, toolName: string): string {
     return `${dir}/${toolName}`
   }
@@ -697,6 +734,37 @@ class Win32PlatformService extends BasePlatformService {
       return true
     } catch {
       return false
+    }
+  }
+
+  async findProcessByPort(port: number): Promise<number[]> {
+    try {
+      // Use netstat to find PIDs listening on the port
+      // -a = all connections, -n = numeric, -o = owner PID
+      const { stdout } = await execAsync(`netstat -ano | findstr :${port}`)
+      const pids: number[] = []
+
+      // Parse netstat output to find LISTENING processes on this exact port
+      // Format: TCP    0.0.0.0:PORT    0.0.0.0:0    LISTENING    PID
+      const lines = stdout.trim().split('\n')
+      for (const line of lines) {
+        // Match lines with LISTENING state on the specific port
+        const parts = line.trim().split(/\s+/)
+        if (parts.length >= 5 && parts[3] === 'LISTENING') {
+          const localAddress = parts[1]
+          // Check if this is the exact port (not just containing the port number)
+          if (localAddress.endsWith(`:${port}`)) {
+            const pid = parseInt(parts[4], 10)
+            if (!isNaN(pid) && !pids.includes(pid)) {
+              pids.push(pid)
+            }
+          }
+        }
+      }
+
+      return pids
+    } catch {
+      return []
     }
   }
 

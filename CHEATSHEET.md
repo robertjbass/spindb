@@ -10,6 +10,8 @@ spindb create mydb -e mysql             # Create MySQL
 spindb create mydb -e sqlite            # Create SQLite
 spindb create mydb -e mongodb           # Create MongoDB
 spindb create mydb -e redis             # Create Redis
+spindb create mydb -e valkey            # Create Valkey
+spindb create mydb -e clickhouse        # Create ClickHouse
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -36,6 +38,7 @@ spindb run mydb -c "SELECT 1"           # Run inline SQL/JS/command
 spindb run mydb ./schema.sql            # Run SQL file
 spindb run mydb -d analytics ./init.sql # Run on specific database
 spindb run myredis -c "SET foo bar"     # Run Redis command
+spindb run mych -c "SELECT 1"           # Run ClickHouse SQL
 ```
 
 ## Connection Strings
@@ -109,8 +112,11 @@ spindb deps install                     # Install missing tools
 |------------|---------|---------------|
 | PostgreSQL | 5432    | 5432-5500     |
 | MySQL      | 3306    | 3306-3400     |
+| MariaDB    | 3307    | 3307-3400     |
 | MongoDB    | 27017   | 27017-27100   |
 | Redis      | 6379    | 6379-6400     |
+| Valkey     | 6379    | 6379-6479     |
+| ClickHouse | 9000    | 9000-9100     |
 | SQLite     | N/A     | File-based    |
 
 ## Connection String Formats
@@ -118,8 +124,11 @@ spindb deps install                     # Install missing tools
 ```
 PostgreSQL: postgresql://postgres@127.0.0.1:5432/mydb
 MySQL:      mysql://root@127.0.0.1:3306/mydb
+MariaDB:    mysql://root@127.0.0.1:3307/mydb
 MongoDB:    mongodb://127.0.0.1:27017/mydb
 Redis:      redis://127.0.0.1:6379/0
+Valkey:     redis://127.0.0.1:6379/0
+ClickHouse: clickhouse://default@127.0.0.1:9000/default
 SQLite:     sqlite:///path/to/file.sqlite
 ```
 

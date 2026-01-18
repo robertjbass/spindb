@@ -8,6 +8,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   mongodb: '🍃',
   redis: '🔴',
   valkey: '🔷',
+  clickhouse: '🏠',
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, and SQLite (all via hostdb downloads).
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, and SQLite (all via hostdb downloads).
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -122,14 +122,23 @@ engines/
 │   ├── backup.ts           # BGSAVE/RDB wrapper
 │   ├── restore.ts          # RDB restore
 │   └── version-validator.ts
-└── valkey/
-    ├── index.ts            # Valkey engine (Redis fork)
+├── valkey/
+│   ├── index.ts            # Valkey engine (Redis fork)
+│   ├── binary-urls.ts      # hostdb URL builder
+│   ├── hostdb-releases.ts  # hostdb GitHub releases API
+│   ├── version-maps.ts     # Version mapping
+│   ├── binary-manager.ts   # Download/extraction
+│   ├── backup.ts           # BGSAVE/RDB wrapper
+│   ├── restore.ts          # RDB restore
+│   └── version-validator.ts
+└── clickhouse/
+    ├── index.ts            # ClickHouse engine (OLAP)
     ├── binary-urls.ts      # hostdb URL builder
     ├── hostdb-releases.ts  # hostdb GitHub releases API
     ├── version-maps.ts     # Version mapping
     ├── binary-manager.ts   # Download/extraction
-    ├── backup.ts           # BGSAVE/RDB wrapper
-    ├── restore.ts          # RDB restore
+    ├── backup.ts           # SQL dump wrapper
+    ├── restore.ts          # SQL restore
     └── version-validator.ts
 types/index.ts              # TypeScript types
 tests/
@@ -190,6 +199,16 @@ abstract class BaseEngine {
 - Uses `redis://` connection scheme for client compatibility
 - Uses numbered databases (0-15) like Redis
 
+**ClickHouse 🏠**
+- Column-oriented OLAP database for fast analytics
+- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for macOS and Linux (no Windows support)
+- Uses unified `clickhouse` binary with subcommands (server, client)
+- Version: 25.12 (YY.MM versioning format)
+- Default port 9000 (native TCP), HTTP port 8123
+- Uses SQL query language with ClickHouse-specific extensions
+- XML configuration files (config.xml, users.xml)
+- Apache-2.0 license
+
 ### Engines JSON Registry
 
 The `config/engines.json` file is the source of truth for all supported database engines. It contains metadata like display names, icons, supported versions, binary sources, and status.
@@ -248,6 +267,7 @@ Each engine supports specific backup formats with different restore behaviors:
 | MongoDB | `.bson` (BSON) | `.archive` (compressed) | mongodump/mongorestore |
 | Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | See notes below |
 | Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | Same as Redis |
+| ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL dump via clickhouse client |
 
 **Redis/Valkey-specific restore behavior:**
 - **RDB (`.rdb`)**: Binary snapshot. Requires stopping Redis, copying file to data dir, then restart.
@@ -285,11 +305,16 @@ Each engine supports specific backup formats with different restore behaviors:
 │   │       ├── container.json
 │   │       ├── data/
 │   │       └── redis.log
-│   └── valkey/
+│   ├── valkey/
+│   │   └── mydb/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── valkey.log
+│   └── clickhouse/
 │       └── mydb/
 │           ├── container.json
 │           ├── data/
-│           └── valkey.log
+│           └── clickhouse-server.log
 └── config.json                       # Tool paths cache
 ```
 
@@ -298,7 +323,7 @@ Each engine supports specific backup formats with different restore behaviors:
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis' | 'valkey'
+  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse'
   version: string
   port: number
   database: string        // Primary database
@@ -371,6 +396,7 @@ pnpm test:mysql     # MySQL integration
 pnpm test:mongodb   # MongoDB integration
 pnpm test:redis     # Redis integration
 pnpm test:valkey    # Valkey integration
+pnpm test:clickhouse # ClickHouse integration
 ```
 
 **Note:** All test scripts use `--test-concurrency=1 --experimental-test-isolation=none` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." The `--test-concurrency=1` alone only limits parallelism but still uses workers for isolation; `--experimental-test-isolation=none` completely disables worker isolation.
@@ -442,6 +468,7 @@ Current engines with CI caching:
 - Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
 - Valkey: `spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}`
 - SQLite: `spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}`
+- ClickHouse: `spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}` (macOS/Linux only)
 
 **Reference implementations:**
 - **PostgreSQL** - Server database with downloadable binaries (hostdb/EDB)
@@ -450,10 +477,11 @@ Current engines with CI caching:
 - **MongoDB** - Server database with downloadable binaries (hostdb), uses JavaScript instead of SQL
 - **Redis** - Key-value store with downloadable binaries (hostdb), uses Redis commands instead of SQL
 - **Valkey** - Redis fork with downloadable binaries (hostdb), uses Redis commands (API-compatible)
+- **ClickHouse** - Column-oriented OLAP database with downloadable binaries (hostdb, macOS/Linux only), uses SQL
 - **SQLite** - File-based (embedded) database with downloadable binaries (hostdb), uses SQL
 
 **Engine Types:**
-- **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey): Data in `~/.spindb/containers/`, port management, start/stop
+- **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse): Data in `~/.spindb/containers/`, port management, start/stop
 - **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
 
 ### Migrating an Engine from System Binaries to hostdb
@@ -805,6 +833,7 @@ When new versions are added to hostdb releases.json:
 - MongoDB default: 27017 (range: 27017-27100)
 - Redis default: 6379 (range: 6379-6400)
 - Valkey default: 6379 (range: 6379-6400)
+- ClickHouse default: 9000 (range: 9000-9100)
 - Auto-increment on conflict
 
 ### Process Management
@@ -825,6 +854,12 @@ mysqladmin -h 127.0.0.1 -P {port} -u root shutdown
 ```bash
 mongod --dbpath {dataDir} --port {port} --logpath {logFile} --fork
 mongosh --port {port} --eval "db.adminCommand({shutdown: 1})"
+```
+
+**ClickHouse:**
+```bash
+clickhouse server --config-file={configPath} --pid-file={pidFile}
+# Stop via SIGTERM to PID
 ```
 
 ### Version Resolution (PostgreSQL)
@@ -874,6 +909,14 @@ SpinDB uses different binary sourcing strategies by engine:
 - Tools bundled: valkey-server, valkey-cli
 - Redis fork with BSD-3 license
 
+**ClickHouse (Downloadable Binaries):**
+- macOS/Linux only: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Note: Windows not supported (hostdb doesn't provide Windows binaries)
+- Version 25.12 (YY.MM versioning format)
+- Uses unified `clickhouse` binary with subcommands (server, client)
+- ~300 MB per version
+- Apache-2.0 license
+
 **SQLite (Downloadable Binaries):**
 - All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
 - Version 3 (only major version)
@@ -908,9 +951,11 @@ Error messages should include actionable fix suggestions.
 ### Engine Icons
 - PostgreSQL: 🐘
 - MySQL: 🐬
+- MariaDB: 🦭
 - MongoDB: 🍃
 - Redis: 🔴
 - Valkey: 🔷
+- ClickHouse: 🏠
 - SQLite: 🗄️
 
 ## Known Limitations

@@ -24,6 +24,7 @@ export const TEST_PORTS = {
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
   redis: { base: 6399, clone: 6401, renamed: 6400 },
   valkey: { base: 6410, clone: 6412, renamed: 6411 },
+  clickhouse: { base: 9050, clone: 9052, renamed: 9051 },
 }
 
 /**
@@ -201,6 +202,15 @@ export async function executeSQL(
     // For Valkey, sql is a Redis-compatible command
     const cmd = `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${database} ${sql}`
     return execAsync(cmd)
+  } else if (engine === Engine.ClickHouse) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled clickhouse if available
+    const clickhousePath = await engineImpl
+      .getClickHouseClientPath()
+      .catch(() => 'clickhouse')
+    // For ClickHouse, use clickhouse client
+    const cmd = `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --database ${database} --query "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -264,6 +274,14 @@ export async function executeSQLFile(
       .catch(() => 'valkey-cli')
     // Valkey uses pipe for file input: valkey-cli -n <db> < file.valkey
     const cmd = `"${valkeyCliPath}" -h 127.0.0.1 -p ${port} -n ${database} < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.ClickHouse) {
+    const engineImpl = getEngine(engine)
+    const clickhousePath = await engineImpl
+      .getClickHouseClientPath()
+      .catch(() => 'clickhouse')
+    // ClickHouse uses pipe for file input with --multiquery flag
+    const cmd = `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --database ${database} --multiquery < "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -461,6 +479,16 @@ export async function waitForReady(
         if (stdout.trim() === 'PONG') {
           return true
         }
+      } else if (engine === Engine.ClickHouse) {
+        // Use clickhouse client to ping ClickHouse
+        const engineImpl = getEngine(engine)
+        const clickhousePath = await engineImpl
+          .getClickHouseClientPath()
+          .catch(() => 'clickhouse')
+        await execAsync(
+          `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --query "SELECT 1"`,
+          { timeout: 5000 },
+        )
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -516,6 +544,9 @@ export function getConnectionString(
   }
   if (engine === Engine.Redis || engine === Engine.Valkey) {
     return `redis://127.0.0.1:${port}/${database}`
+  }
+  if (engine === Engine.ClickHouse) {
+    return `clickhouse://default@127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

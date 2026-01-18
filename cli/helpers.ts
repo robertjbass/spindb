@@ -134,6 +134,16 @@ export type InstalledValkeyEngine = {
   source: 'downloaded'
 }
 
+export type InstalledClickHouseEngine = {
+  engine: 'clickhouse'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -142,6 +152,7 @@ export type InstalledEngine =
   | InstalledMongodbEngine
   | InstalledRedisEngine
   | InstalledValkeyEngine
+  | InstalledClickHouseEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -535,6 +546,61 @@ async function getInstalledValkeyEngines(): Promise<InstalledValkeyEngine[]> {
   return engines
 }
 
+// Get ClickHouse version from binary path
+async function getClickHouseVersion(binPath: string): Promise<string | null> {
+  const clickhousePath = join(binPath, 'bin', 'clickhouse')
+  if (!existsSync(clickhousePath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(clickhousePath, ['client', '--version'])
+    // Parse output like "ClickHouse client version 25.12.3.21 (official build)"
+    const match = stdout.match(/version\s+([\d.]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed ClickHouse engines from downloaded binaries
+async function getInstalledClickHouseEngines(): Promise<InstalledClickHouseEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledClickHouseEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('clickhouse-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'clickhouse-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getClickHouseVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'clickhouse',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -571,6 +637,9 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
   const valkeyEngines = await getInstalledValkeyEngines()
   engines.push(...valkeyEngines)
 
+  const clickhouseEngines = await getInstalledClickHouseEngines()
+  engines.push(...clickhouseEngines)
+
   return engines
 }
 
@@ -581,4 +650,5 @@ export {
   getInstalledMongodbEngines,
   getInstalledRedisEngines,
   getInstalledValkeyEngines,
+  getInstalledClickHouseEngines,
 }
