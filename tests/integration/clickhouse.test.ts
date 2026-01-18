@@ -11,6 +11,10 @@
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -60,9 +64,7 @@ async function waitForMutationsComplete(
   while (Date.now() - startTime < timeoutMs) {
     try {
       // Query system.mutations for pending mutations on this table
-      // We need to use a container to run the query, so we create a temp query
       const clickhouse = await engine.getClickHouseClientPath()
-      const { execAsync } = await import('../../core/exec-async')
 
       const query = `SELECT count() FROM system.mutations WHERE database = '${database}' AND table = '${table}' AND is_done = 0`
       const { stdout } = await execAsync(
@@ -73,8 +75,12 @@ async function waitForMutationsComplete(
       if (isNaN(pendingCount) || pendingCount === 0) {
         return // All mutations complete
       }
-    } catch {
-      // Query failed, mutations table might not have entries yet
+    } catch (err) {
+      // Log the error for debugging flaky tests, then return
+      // Query may fail if mutations table has no entries yet or connection issues
+      console.debug(
+        `[waitForMutationsComplete] Error polling mutations for ${database}.${table} on port ${port}: ${err instanceof Error ? err.message : String(err)}`,
+      )
       return
     }
 

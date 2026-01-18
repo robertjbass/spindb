@@ -330,6 +330,13 @@ async function _createNativeBackup(
  * Currently only supports SQL format (DDL + INSERT statements).
  * Native format support is planned but not yet implemented for restore.
  * See _createNativeBackup for the future native implementation.
+ *
+ * @param container - Container configuration
+ * @param outputPath - Path to write backup file
+ * @param options - Backup options (BackupOptions type)
+ * @param options.format - Reserved for future use. Currently ignored; all backups
+ *   use SQL format. When native format support is added, 'dump' will use
+ *   _createNativeBackup for faster, more compact backups.
  */
 export async function createBackup(
   container: ContainerConfig,
@@ -337,6 +344,14 @@ export async function createBackup(
   options: BackupOptions,
 ): Promise<BackupResult> {
   const database = options.database || container.database || 'default'
+
+  // Log when a non-SQL format is requested but not yet supported
+  if (options.format && options.format !== 'sql') {
+    logDebug(
+      `ClickHouse backup: format '${options.format}' requested but not yet supported. ` +
+        `Using SQL format instead. See _createNativeBackup for future native support.`,
+    )
+  }
 
   // Currently only SQL format is supported
   // Native format (_createNativeBackup) will be enabled when restore support is added
