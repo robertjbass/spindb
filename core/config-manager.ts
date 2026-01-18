@@ -13,6 +13,7 @@ import {
   type BinaryTool,
   type BinarySource,
   type SQLiteEngineRegistry,
+  type DuckDBEngineRegistry,
 } from '../types'
 
 const execAsync = promisify(exec)
@@ -61,6 +62,8 @@ const VALKEY_TOOLS: BinaryTool[] = ['valkey-server', 'valkey-cli']
 
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
+const DUCKDB_TOOLS: BinaryTool[] = ['duckdb']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -77,6 +80,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...REDIS_TOOLS,
   ...VALKEY_TOOLS,
   ...SQLITE_TOOLS,
+  ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
 ]
 
@@ -431,6 +435,27 @@ export class ConfigManager {
     await this.save()
   }
 
+  // DuckDB Registry Methods
+  async getDuckDBRegistry(): Promise<DuckDBEngineRegistry> {
+    const config = await this.load()
+    return (
+      config.registry?.duckdb ?? {
+        version: 1,
+        entries: [],
+        ignoreFolders: {},
+      }
+    )
+  }
+
+  async saveDuckDBRegistry(registry: DuckDBEngineRegistry): Promise<void> {
+    const config = await this.load()
+    if (!config.registry) {
+      config.registry = {}
+    }
+    config.registry.duckdb = registry
+    await this.save()
+  }
+
   /**
    * Scan ~/.spindb/bin/ for installed engine binaries and register any missing ones.
    * This ensures that binaries downloaded previously are available in the config
@@ -532,6 +557,7 @@ export {
   REDIS_TOOLS,
   VALKEY_TOOLS,
   SQLITE_TOOLS,
+  DUCKDB_TOOLS,
   ENHANCED_SHELLS,
   ALL_TOOLS,
   ENGINE_BINARY_MAP,

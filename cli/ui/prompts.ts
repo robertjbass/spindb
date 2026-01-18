@@ -754,17 +754,19 @@ export type CreateOptions = {
 }
 
 /**
- * Prompt for SQLite database file location
+ * Prompt for file-based database (SQLite/DuckDB) file location
  * Similar to the relocate logic in container-handlers.ts
  */
 export async function promptSqlitePath(
   containerName: string,
+  extension: string = '.sqlite',
 ): Promise<string | undefined> {
-  const defaultPath = `./${containerName}.sqlite`
+  const defaultPath = `./${containerName}${extension}`
+  const dbType = extension === '.duckdb' ? 'DuckDB' : 'SQLite'
 
   console.log(
     chalk.gray(
-      '  SQLite databases are stored as files in your project directory.',
+      `  ${dbType} databases are stored as files in your project directory.`,
     ),
   )
   console.log(chalk.gray(`  Default: ${defaultPath}`))
@@ -813,7 +815,7 @@ export async function promptSqlitePath(
   }
 
   // Check if path looks like a file (has db extension) or directory
-  const hasDbExtension = /\.(sqlite3?|db)$/i.test(expandedPath)
+  const hasDbExtension = /\.(sqlite3?|db|duckdb|ddb)$/i.test(expandedPath)
 
   // Treat as directory if:
   // - ends with /
@@ -830,7 +832,7 @@ export async function promptSqlitePath(
     const dirPath = expandedPath.endsWith('/')
       ? expandedPath.slice(0, -1)
       : expandedPath
-    finalPath = join(dirPath, `${containerName}.sqlite`)
+    finalPath = join(dirPath, `${containerName}${extension}`)
   } else {
     finalPath = expandedPath
   }
@@ -856,7 +858,7 @@ export async function promptSqlitePath(
     }
 
     // Recursively prompt again
-    return promptSqlitePath(containerName)
+    return promptSqlitePath(containerName, extension)
   }
 
   return finalPath
@@ -871,11 +873,13 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
   const name = await promptContainerName()
   const database = await promptDatabaseName(name, engine) // Default to container name
 
-  // SQLite is file-based, no port needed but needs path
+  // File-based databases (SQLite/DuckDB) don't need a port but need a path
   let port = 0
   let path: string | undefined
   if (engine === 'sqlite') {
-    path = await promptSqlitePath(name)
+    path = await promptSqlitePath(name, '.sqlite')
+  } else if (engine === 'duckdb') {
+    path = await promptSqlitePath(name, '.duckdb')
   } else {
     const engineDefaults = getEngineDefaults(engine)
     port = await promptPort(engineDefaults.defaultPort, engine)

@@ -5,6 +5,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   mysql: '🐬',
   mariadb: '🦭 ', // Extra space - seal emoji renders narrow
   sqlite: '🪶 ', // Extra space - feather emoji renders narrow
+  duckdb: '🦆',
   mongodb: '🍃',
   redis: '🔴',
   valkey: '🔷',

@@ -2,6 +2,7 @@ import { postgresqlEngine } from './postgresql'
 import { mysqlEngine } from './mysql'
 import { mariadbEngine } from './mariadb'
 import { sqliteEngine } from './sqlite'
+import { duckdbEngine } from './duckdb'
 import { mongodbEngine } from './mongodb'
 import { redisEngine } from './redis'
 import { valkeyEngine } from './valkey'
@@ -23,6 +24,9 @@ export const engines: Record<string, BaseEngine> = {
   // SQLite and aliases
   sqlite: sqliteEngine,
   lite: sqliteEngine,
+  // DuckDB and aliases
+  duckdb: duckdbEngine,
+  duck: duckdbEngine,
   // MongoDB and aliases
   mongodb: mongodbEngine,
   mongo: mongodbEngine,

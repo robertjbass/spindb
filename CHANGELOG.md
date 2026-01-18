@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-01-18
+
+### Added
+- **DuckDB engine support** - Full container lifecycle for DuckDB, the embedded OLAP database
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - File-based database (like SQLite) - no server process, no port management
+  - Version 1 supported (1.4.3 from hostdb)
+  - Uses `duckdb://` connection scheme
+  - Backup formats: `.sql` (SQL dump), `.duckdb` (binary copy)
+  - Full integration with SpinDB registry for tracking database files
+  - MIT licensed
+
+### Fixed
+- **Binary extraction for flat archives** - DuckDB hostdb archive has flat structure (binary at root, no `bin/` subdirectory). Updated binary managers for both DuckDB and SQLite to detect flat archives and create the `bin/` subdirectory during extraction for consistent structure across all engines.
+- **Container manager registry handling** - Added DuckDB registry support to container-manager.ts for `getConfig`, `exists`, `list`, `rename`, and `delete` operations. File-based databases (SQLite, DuckDB) use registries instead of container directories.
+
+### Changed
+- **Test reliability for file-based databases** - SQLite and DuckDB integration tests now verify they're using downloaded binaries (`source: 'bundled'`), not system binaries (`source: 'system'`). Tests fail fast with clear instructions if system binaries are configured, ensuring extraction bugs are caught.
+
 ## [0.18.1] - 2026-01-18
 
 ### Fixed

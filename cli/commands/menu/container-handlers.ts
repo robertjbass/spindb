@@ -17,6 +17,7 @@ import { portManager } from '../../../core/port-manager'
 import { processManager } from '../../../core/process-manager'
 import { getEngine } from '../../../engines'
 import { sqliteRegistry } from '../../../engines/sqlite/registry'
+import { duckdbRegistry } from '../../../engines/duckdb/registry'
 import { defaults } from '../../../config/defaults'
 import { paths } from '../../../config/paths'
 import {
@@ -61,7 +62,6 @@ export async function handleCreate(): Promise<'main' | void> {
   let selectedEngine: string | null = null
   let selectedVersion: string | null = null
   let containerName: string | null = null
-  let sqlitePath: string | undefined = undefined
 
   // Step 1: Engine selection (back returns to main menu)
   while (selectedEngine === null) {
@@ -106,12 +106,16 @@ export async function handleCreate(): Promise<'main' | void> {
     database = await promptDatabaseName(name, engine)
   }
 
-  // Step 5: Port or SQLite path
+  // Step 5: Port or file path (SQLite/DuckDB)
   const isSQLite = engine === 'sqlite'
+  const isDuckDB = engine === 'duckdb'
+  const isFileBasedDB = isSQLite || isDuckDB
   let port: number
-  if (isSQLite) {
-    // SQLite doesn't need a port, but needs a path
-    sqlitePath = await promptSqlitePath(name)
+  let filePath: string | undefined = undefined
+  if (isFileBasedDB) {
+    // File-based databases don't need a port, but need a path
+    const defaultExtension = isDuckDB ? '.duckdb' : '.sqlite'
+    filePath = await promptSqlitePath(name, defaultExtension)
     port = 0
   } else {
     const engineDefaults = getEngineDefaults(engine)
@@ -128,11 +132,13 @@ export async function handleCreate(): Promise<'main' | void> {
   const dbEngine = getEngine(engine)
   const isPostgreSQL = engine === 'postgresql'
 
-  // For PostgreSQL, download binaries FIRST - they include client tools (psql, pg_dump, etc.)
-  // This avoids requiring a separate system installation of client tools
+  // For PostgreSQL and file-based DBs, download binaries FIRST
+  // They include client tools needed for subsequent operations
   let portAvailable = true
-  if (isPostgreSQL) {
-    portAvailable = await portManager.isPortAvailable(port)
+  if (isPostgreSQL || isFileBasedDB) {
+    if (!isFileBasedDB) {
+      portAvailable = await portManager.isPortAvailable(port)
+    }
 
     const binarySpinner = createSpinner(
       `Checking ${dbEngine.displayName} ${version} binaries...`,
@@ -201,7 +207,7 @@ export async function handleCreate(): Promise<'main' | void> {
 
   // Server databases (MySQL): check port and binaries
   // PostgreSQL already handled above
-  if (!isSQLite && !isPostgreSQL) {
+  if (!isFileBasedDB && !isPostgreSQL) {
     portAvailable = await portManager.isPortAvailable(port)
 
     const binarySpinner = createSpinner(
@@ -250,21 +256,21 @@ export async function handleCreate(): Promise<'main' | void> {
   createSpinnerInstance.succeed('Container created')
 
   const initSpinner = createSpinner(
-    isSQLite ? 'Creating database file...' : 'Initializing database cluster...',
+    isFileBasedDB ? 'Creating database file...' : 'Initializing database cluster...',
   )
   initSpinner.start()
 
   await dbEngine.initDataDir(containerNameFinal, version, {
     superuser: defaults.superuser,
-    path: sqlitePath, // SQLite file path (undefined for server databases)
+    path: filePath, // File-based DB path (undefined for server databases)
   })
 
   initSpinner.succeed(
-    isSQLite ? 'Database file created' : 'Database cluster initialized',
+    isFileBasedDB ? 'Database file created' : 'Database cluster initialized',
   )
 
-  // SQLite: show file path, no start needed
-  if (isSQLite) {
+  // File-based databases (SQLite/DuckDB): show file path, no start needed
+  if (isFileBasedDB) {
     const config = await containerManager.getConfig(containerNameFinal)
     if (config) {
       const connectionString = dbEngine.getConnectionString(config)
@@ -435,10 +441,10 @@ export async function handleList(
   for (let i = 0; i < containers.length; i++) {
     const container = containers[i]
     const size = sizes[i]
-    const isSQLite = container.engine === Engine.SQLite
+    const isFileBasedDB = container.engine === Engine.SQLite || container.engine === Engine.DuckDB
 
-    // SQLite uses available/missing, server databases use running/stopped
-    const statusDisplay = isSQLite
+    // File-based DBs use available/missing, server databases use running/stopped
+    const statusDisplay = isFileBasedDB
       ? container.status === 'running'
         ? chalk.blue('● available')
         : chalk.gray('○ missing')
@@ -454,8 +460,8 @@ export async function handleList(
         ? container.name.slice(0, 14) + '…'
         : container.name
 
-    // SQLite shows dash instead of port
-    const portDisplay = isSQLite ? '—' : String(container.port)
+    // File-based DBs show dash instead of port
+    const portDisplay = isFileBasedDB ? '—' : String(container.port)
 
     console.log(
       chalk.gray('  ') +
@@ -470,24 +476,28 @@ export async function handleList(
 
   console.log()
 
-  // Separate counts for server databases and SQLite
-  const serverContainers = containers.filter((c) => c.engine !== Engine.SQLite)
-  const sqliteContainers = containers.filter((c) => c.engine === Engine.SQLite)
+  // Separate counts for server databases and file-based databases
+  const serverContainers = containers.filter(
+    (c) => c.engine !== Engine.SQLite && c.engine !== Engine.DuckDB
+  )
+  const fileBasedContainers = containers.filter(
+    (c) => c.engine === Engine.SQLite || c.engine === Engine.DuckDB
+  )
 
   const running = serverContainers.filter((c) => c.status === 'running').length
   const stopped = serverContainers.filter((c) => c.status !== 'running').length
-  const available = sqliteContainers.filter(
+  const available = fileBasedContainers.filter(
     (c) => c.status === 'running',
   ).length
-  const missing = sqliteContainers.filter((c) => c.status !== 'running').length
+  const missing = fileBasedContainers.filter((c) => c.status !== 'running').length
 
   const parts: string[] = []
   if (serverContainers.length > 0) {
     parts.push(`${running} running, ${stopped} stopped`)
   }
-  if (sqliteContainers.length > 0) {
+  if (fileBasedContainers.length > 0) {
     parts.push(
-      `${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`,
+      `${available} file-based available${missing > 0 ? `, ${missing} missing` : ''}`,
     )
   }
 
@@ -499,14 +509,14 @@ export async function handleList(
   const containerChoices = [
     ...containers.map((c) => {
       // Simpler selector - table already shows details
-      const statusLabel =
-        c.engine === Engine.SQLite
-          ? c.status === 'running'
-            ? chalk.blue('● available')
-            : chalk.gray('○ missing')
-          : c.status === 'running'
-            ? chalk.green('● running')
-            : chalk.gray('○ stopped')
+      const isFileBasedEngine = c.engine === Engine.SQLite || c.engine === Engine.DuckDB
+      const statusLabel = isFileBasedEngine
+        ? c.status === 'running'
+          ? chalk.blue('● available')
+          : chalk.gray('○ missing')
+        : c.status === 'running'
+          ? chalk.green('● running')
+          : chalk.gray('○ stopped')
 
       return {
         name: `${c.name} ${statusLabel}`,
@@ -559,15 +569,17 @@ export async function showContainerSubmenu(
     return
   }
 
-  // SQLite: Check file existence instead of running status
+  // File-based databases: Check file existence instead of running status
   const isSQLite = config.engine === Engine.SQLite
+  const isDuckDB = config.engine === Engine.DuckDB
+  const isFileBasedDB = isSQLite || isDuckDB
   let isRunning: boolean
   let status: string
   let locationInfo: string
 
-  if (isSQLite) {
+  if (isFileBasedDB) {
     const fileExists = existsSync(config.database)
-    isRunning = fileExists // For SQLite, "running" means "file exists"
+    isRunning = fileExists // For file-based DBs, "running" means "file exists"
     status = fileExists ? 'available' : 'missing'
     locationInfo = `at ${config.database}`
   } else {
@@ -591,8 +603,8 @@ export async function showContainerSubmenu(
   // Build action choices based on engine type
   const actionChoices: MenuChoice[] = []
 
-  // Start/Stop buttons only for server databases (not SQLite)
-  if (!isSQLite) {
+  // Start/Stop buttons only for server databases (not file-based)
+  if (!isFileBasedDB) {
     if (!isRunning) {
       actionChoices.push({
         name: `${chalk.green('▶')} Start container`,
@@ -606,8 +618,8 @@ export async function showContainerSubmenu(
     }
   }
 
-  // Open shell - always enabled for SQLite (if file exists), server databases need to be running
-  const canOpenShell = isSQLite ? existsSync(config.database) : isRunning
+  // Open shell - always enabled for file-based DBs (if file exists), server databases need to be running
+  const canOpenShell = isFileBasedDB ? existsSync(config.database) : isRunning
   actionChoices.push({
     name: canOpenShell
       ? `${chalk.blue('⌘')} Open shell`
@@ -615,13 +627,13 @@ export async function showContainerSubmenu(
     value: 'shell',
     disabled: canOpenShell
       ? false
-      : isSQLite
+      : isFileBasedDB
         ? 'Database file missing'
         : 'Start container first',
   })
 
-  // Run SQL/script - always enabled for SQLite (if file exists), server databases need to be running
-  const canRunSql = isSQLite ? existsSync(config.database) : isRunning
+  // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
+  const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
   // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, others use SQL
   const runScriptLabel =
     config.engine === 'redis' || config.engine === 'valkey'
@@ -636,13 +648,13 @@ export async function showContainerSubmenu(
     value: 'run-sql',
     disabled: canRunSql
       ? false
-      : isSQLite
+      : isFileBasedDB
         ? 'Database file missing'
         : 'Start container first',
   })
 
-  // Edit container - SQLite can always edit (no running state), server databases must be stopped
-  const canEdit = isSQLite ? true : !isRunning
+  // Edit container - file-based DBs can always edit (no running state), server databases must be stopped
+  const canEdit = isFileBasedDB ? true : !isRunning
   actionChoices.push({
     name: canEdit
       ? `${chalk.white('⚙')} Edit container`
@@ -651,8 +663,8 @@ export async function showContainerSubmenu(
     disabled: canEdit ? false : 'Stop container first',
   })
 
-  // Clone container - SQLite can always clone, server databases must be stopped
-  const canClone = isSQLite ? true : !isRunning
+  // Clone container - file-based DBs can always clone, server databases must be stopped
+  const canClone = isFileBasedDB ? true : !isRunning
   actionChoices.push({
     name: canClone
       ? `${chalk.cyan('⧉')} Clone container`
@@ -666,8 +678,8 @@ export async function showContainerSubmenu(
     value: 'copy',
   })
 
-  // Backup - requires running for server databases, file exists for SQLite
-  const canBackup = isSQLite ? existsSync(config.database) : isRunning
+  // Backup - requires running for server databases, file exists for file-based DBs
+  const canBackup = isFileBasedDB ? existsSync(config.database) : isRunning
   actionChoices.push({
     name: canBackup
       ? `${chalk.magenta('↓')} Backup database`
@@ -675,13 +687,13 @@ export async function showContainerSubmenu(
     value: 'backup',
     disabled: canBackup
       ? false
-      : isSQLite
+      : isFileBasedDB
         ? 'Database file missing'
         : 'Start container first',
   })
 
-  // Restore - requires running for server databases, file exists for SQLite
-  const canRestore = isSQLite ? existsSync(config.database) : isRunning
+  // Restore - requires running for server databases, file exists for file-based DBs
+  const canRestore = isFileBasedDB ? existsSync(config.database) : isRunning
   actionChoices.push({
     name: canRestore
       ? `${chalk.magenta('↑')} Restore from backup`
@@ -689,29 +701,29 @@ export async function showContainerSubmenu(
     value: 'restore',
     disabled: canRestore
       ? false
-      : isSQLite
+      : isFileBasedDB
         ? 'Database file missing'
         : 'Start container first',
   })
 
-  // View logs - not available for SQLite (no log file)
-  if (!isSQLite) {
+  // View logs - not available for file-based DBs (no log file)
+  if (!isFileBasedDB) {
     actionChoices.push({
       name: `${chalk.gray('☰')} View logs`,
       value: 'logs',
     })
   }
 
-  // Detach - only for SQLite (unregisters without deleting file)
-  if (isSQLite) {
+  // Detach - only for file-based DBs (unregisters without deleting file)
+  if (isFileBasedDB) {
     actionChoices.push({
       name: `${chalk.yellow('⊘')} Detach from SpinDB`,
       value: 'detach',
     })
   }
 
-  // Delete container - SQLite can always delete, server databases must be stopped
-  const canDelete = isSQLite ? true : !isRunning
+  // Delete container - file-based DBs can always delete, server databases must be stopped
+  const canDelete = isFileBasedDB ? true : !isRunning
   actionChoices.push({
     name: canDelete
       ? `${chalk.red('✕')} Delete container`
@@ -808,9 +820,9 @@ export async function showContainerSubmenu(
 
 export async function handleStart(): Promise<void> {
   const containers = await containerManager.list()
-  // Filter for stopped containers, excluding SQLite (no server process to start)
+  // Filter for stopped containers, excluding file-based DBs (no server process to start)
   const stopped = containers.filter(
-    (c) => c.status !== 'running' && c.engine !== Engine.SQLite,
+    (c) => c.status !== 'running' && c.engine !== Engine.SQLite && c.engine !== Engine.DuckDB,
   )
 
   if (stopped.length === 0) {
@@ -859,9 +871,9 @@ export async function handleStart(): Promise<void> {
 
 export async function handleStop(): Promise<void> {
   const containers = await containerManager.list()
-  // Filter for running containers, excluding SQLite (no server process to stop)
+  // Filter for running containers, excluding file-based DBs (no server process to stop)
   const running = containers.filter(
-    (c) => c.status === 'running' && c.engine !== Engine.SQLite,
+    (c) => c.status === 'running' && c.engine !== Engine.SQLite && c.engine !== Engine.DuckDB,
   )
 
   if (running.length === 0) {
@@ -1009,6 +1021,8 @@ async function handleEditContainer(
   }
 
   const isSQLite = config.engine === Engine.SQLite
+  const isDuckDB = config.engine === Engine.DuckDB
+  const isFileBasedDB = isSQLite || isDuckDB
 
   console.clear()
   console.log(header(`Edit: ${containerName}`))
@@ -1023,8 +1037,8 @@ async function handleEditContainer(
     },
   ]
 
-  // SQLite: show relocate option with file path; others: show port
-  if (isSQLite) {
+  // File-based DBs: show relocate option with file path; others: show port
+  if (isFileBasedDB) {
     editChoices.push({
       name: `Location: ${chalk.white(config.database)}`,
       value: 'relocate',
@@ -1171,7 +1185,7 @@ async function handleEditContainer(
     }
 
     // Check if path looks like a file (has db extension) or directory
-    const hasDbExtension = /\.(sqlite3?|db)$/i.test(expandedPath)
+    const hasDbExtension = /\.(sqlite3?|db|duckdb|ddb)$/i.test(expandedPath)
 
     // Treat as directory if:
     // - ends with /
@@ -1275,11 +1289,16 @@ async function handleEditContainer(
         }
       }
 
-      // Update the container config and SQLite registry
+      // Update the container config and registry
       await containerManager.updateConfig(containerName, {
         database: finalPath,
       })
-      await sqliteRegistry.update(containerName, { filePath: finalPath })
+      // Use appropriate registry based on engine
+      if (isSQLite) {
+        await sqliteRegistry.update(containerName, { filePath: finalPath })
+      } else if (isDuckDB) {
+        await duckdbRegistry.update(containerName, { filePath: finalPath })
+      }
       spinner.succeed(`Moved database to ${finalPath}`)
 
       // Wait for user to see success message before refreshing
@@ -1357,6 +1376,13 @@ async function handleDetachContainer(
   containerName: string,
   showMainMenu: () => Promise<void>,
 ): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
   const confirmed = await promptConfirm(
     `Detach "${containerName}" from SpinDB? (file will be kept on disk)`,
     true,
@@ -1369,15 +1395,24 @@ async function handleDetachContainer(
     return
   }
 
-  const entry = await sqliteRegistry.get(containerName)
-  await sqliteRegistry.remove(containerName)
+  let filePath: string | undefined
+  // Use appropriate registry based on engine
+  if (config.engine === Engine.SQLite) {
+    const entry = await sqliteRegistry.get(containerName)
+    filePath = entry?.filePath
+    await sqliteRegistry.remove(containerName)
+  } else if (config.engine === Engine.DuckDB) {
+    const entry = await duckdbRegistry.get(containerName)
+    filePath = entry?.filePath
+    await duckdbRegistry.remove(containerName)
+  }
 
   console.log(uiSuccess(`Detached "${containerName}" from SpinDB`))
-  if (entry?.filePath) {
-    console.log(chalk.gray(`  File remains at: ${entry.filePath}`))
+  if (filePath) {
+    console.log(chalk.gray(`  File remains at: ${filePath}`))
     console.log()
     console.log(chalk.gray('  Re-attach with:'))
-    console.log(chalk.cyan(`    spindb attach ${entry.filePath}`))
+    console.log(chalk.cyan(`    spindb attach ${filePath}`))
   }
   await pressEnterToContinue()
   await handleList(showMainMenu)

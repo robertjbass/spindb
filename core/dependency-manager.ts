@@ -38,6 +38,7 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'mysqld',
   'mysqladmin',
   'sqlite3',
+  'duckdb',
   'mongod',
   'mongosh',
   'mongodump',

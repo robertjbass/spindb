@@ -21,6 +21,7 @@ export enum Engine {
   MySQL = 'mysql',
   MariaDB = 'mariadb',
   SQLite = 'sqlite',
+  DuckDB = 'duckdb',
   MongoDB = 'mongodb',
   Redis = 'redis',
   Valkey = 'valkey',
@@ -36,6 +37,7 @@ export const ALL_ENGINES = [
   Engine.MySQL,
   Engine.MariaDB,
   Engine.SQLite,
+  Engine.DuckDB,
   Engine.MongoDB,
   Engine.Redis,
   Engine.Valkey,
@@ -186,6 +188,8 @@ export type BinaryTool =
   | 'sqldiff'
   | 'sqlite3_analyzer'
   | 'sqlite3_rsync'
+  // DuckDB tools
+  | 'duckdb'
   // MongoDB tools
   | 'mongod'
   | 'mongosh'
@@ -248,6 +252,8 @@ export type SpinDBConfig = {
     sqldiff?: BinaryConfig
     sqlite3_analyzer?: BinaryConfig
     sqlite3_rsync?: BinaryConfig
+    // DuckDB tools
+    duckdb?: BinaryConfig
     // MongoDB server tools
     mongod?: BinaryConfig
     // MongoDB client tools
@@ -311,17 +317,32 @@ export type SQLiteEngineRegistry = {
 }
 
 /**
- * Engine registries stored in config.json
- * Currently only SQLite uses this (file-based databases)
+ * DuckDB registry entry - tracks external database files
+ * Unlike PostgreSQL/MySQL, DuckDB databases are stored in user project directories
  */
-export type EngineRegistries = {
-  sqlite?: SQLiteEngineRegistry
+export type DuckDBRegistryEntry = {
+  name: string // Container name (used in spindb commands)
+  filePath: string // Absolute path to .duckdb file
+  created: string // ISO timestamp
+  lastVerified?: string // ISO timestamp of last existence check
 }
 
 /**
- * @deprecated Use SQLiteEngineRegistry instead - now stored in config.json
+ * DuckDB engine registry stored in config.json under registry.duckdb
+ * Includes entries and folder ignore list for CWD scanning
  */
-export type SQLiteRegistry = {
+export type DuckDBEngineRegistry = {
   version: 1
-  entries: SQLiteRegistryEntry[]
+  entries: DuckDBRegistryEntry[]
+  ignoreFolders: Record<string, true> // O(1) lookup for ignored folders
 }
+
+/**
+ * Engine registries stored in config.json
+ * SQLite and DuckDB use this (file-based databases)
+ */
+export type EngineRegistries = {
+  sqlite?: SQLiteEngineRegistry
+  duckdb?: DuckDBEngineRegistry
+}
+

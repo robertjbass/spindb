@@ -7,7 +7,7 @@
 
 **The first npm CLI for running local databases without Docker.**
 
-Spin up PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Redis, Valkey, and ClickHouse instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+Spin up PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, and ClickHouse instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
 
 ---
 
@@ -226,6 +226,32 @@ spindb connect mydb --litecli
 
 **Note:** Unlike server databases, SQLite databases don't need to be "started" or "stopped"—they're always available as long as the file exists.
 
+#### DuckDB
+
+| | |
+|---|---|
+| Version | 1 |
+| Default port | N/A (file-based) |
+| Data location | Project directory (CWD) |
+| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
+
+DuckDB is an embedded analytical database—file-based like SQLite, but optimized for OLAP workloads and analytics. No server process, no ports. Databases are stored in your project directory by default, not `~/.spindb/`. SpinDB tracks registered DuckDB databases in a registry file.
+
+**Tools included:** DuckDB binary `duckdb` for all operations. No system installation required.
+
+```bash
+# Create in current directory
+spindb create mydb --engine duckdb
+
+# Create with custom path
+spindb create mydb --engine duckdb --path ./data/analytics.duckdb
+
+# Connect to it
+spindb connect mydb
+```
+
+**Note:** Unlike server databases, DuckDB databases don't need to be "started" or "stopped"—they're always available as long as the file exists.
+
 #### MongoDB
 
 | | |
@@ -400,6 +426,7 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | MySQL | ✅ | ✅ | ✅ | ✅ | ✅ |
 | MariaDB | ✅ | ✅ | ✅ | ✅ | ✅ |
 | SQLite | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DuckDB | ✅ | ✅ | ✅ | ✅ | ✅ |
 | MongoDB* | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Redis* | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Valkey | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -407,7 +434,6 @@ SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/
 | **Planned for hostdb** |||||
 | CockroachDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | TimescaleDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| DuckDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | Meilisearch | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | OpenSearch | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
 | QuestDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
@@ -470,7 +496,7 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`) |
+| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `duckdb`, `mongodb`, `redis`, `valkey`, `clickhouse`) |
 | `--db-version` | Engine version (e.g., 17 for PostgreSQL, 11.8 for MariaDB, 8 for Redis, 9 for Valkey) |
 | `--port`, `-p` | Port number (not applicable for SQLite) |
 | `--database`, `-d` | Primary database name (Redis uses 0-15) |
@@ -587,6 +613,7 @@ Format by engine:
 - MariaDB: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
 - MySQL: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
 - SQLite: `.sql` (plain SQL) / `.sqlite` (binary copy)
+- DuckDB: `.sql` (plain SQL) / `.duckdb` (binary copy)
 - MongoDB: `.bson` (BSON dump) / `.archive` (compressed archive)
 - Redis: `.redis` (text commands) / `.rdb` (RDB snapshot)
 - Valkey: `.valkey` (text commands) / `.rdb` (RDB snapshot)
@@ -707,6 +734,18 @@ Each engine has specific backup formats and restore behaviors:
 |--------|-----------|------|-------|
 | SQL | `.sql` | .dump | Plain text SQL |
 | Binary | `.sqlite` | File copy | Exact copy of database file |
+
+**Restore behavior:** Creates new file or replaces existing.
+
+</details>
+
+<details>
+<summary>DuckDB</summary>
+
+| Format | Extension | Tool | Notes |
+|--------|-----------|------|-------|
+| SQL | `.sql` | duckdb -c | Plain text SQL |
+| Binary | `.duckdb` | File copy | Exact copy of database file |
 
 **Restore behavior:** Creates new file or replaces existing.
 
@@ -844,9 +883,11 @@ SQLite: 1 version(s), 5.0 MB
 🐬 mysql
 🦭 mariadb
 🪶 sqlite
+🦆 duckdb
 🍃 mongodb
 🔴 redis
 🔷 valkey
+🏠 clickhouse
 ```
 
 #### `deps` - Manage client tools
@@ -929,6 +970,7 @@ SpinDB supports enhanced database shells that provide features like auto-complet
 | MariaDB | `mariadb` | `mycli` | `usql` |
 | MySQL | `mysql` | `mycli` | `usql` |
 | SQLite | `sqlite3` | `litecli` | `usql` |
+| DuckDB | `duckdb` | - | `usql` |
 | MongoDB | `mongosh` | - | `usql` |
 | Redis | `redis-cli` | `iredis` | - |
 | Valkey | `valkey-cli` | `iredis` | - |
@@ -1090,7 +1132,6 @@ These engines are under consideration but not yet on the roadmap. Community inte
 
 | Engine | Type | Notes |
 |--------|------|-------|
-| **DuckDB** | Embedded analytical | File-based like SQLite, popular for data/analytics work |
 | **libSQL** | Embedded relational | SQLite fork by Turso with replication and edge support |
 | **Meilisearch** | Search engine | Developer-friendly search, good binary distribution |
 | **Elasticsearch/OpenSearch** | Search engine | Full-text search, common in web applications |
@@ -1155,7 +1196,7 @@ See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, 
 
 SpinDB wouldn't be possible without:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, SQLite) that make Docker-free local databases possible. Hosted on GitHub Releases for reliable, fast downloads.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries (PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, ClickHouse) that make Docker-free local databases possible. Hosted on GitHub Releases for reliable, fast downloads.
 
 ---
 

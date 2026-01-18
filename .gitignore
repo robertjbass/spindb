@@ -150,5 +150,8 @@ _dumps
 *.sqlite3
 *.db
 
+# DuckDB
+*.duckdb
+
 # Private docs
 MONETIZATION.md

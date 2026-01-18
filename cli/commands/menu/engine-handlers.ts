@@ -13,6 +13,7 @@ import {
   type InstalledMariadbEngine,
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
+  type InstalledDuckDBEngine,
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
@@ -53,6 +54,7 @@ export async function handleEngines(): Promise<void> {
     mariadbEngines,
     mysqlEngines,
     sqliteEngines,
+    duckdbEngines,
     mongodbEngines,
     redisEngines,
     valkeyEngines,
@@ -64,6 +66,7 @@ export async function handleEngines(): Promise<void> {
     engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
     engines.filter((e): e is InstalledMysqlEngine => e.engine === 'mysql'),
     engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
+    engines.filter((e): e is InstalledDuckDBEngine => e.engine === 'duckdb'),
     engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
     engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
     engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
@@ -79,6 +82,7 @@ export async function handleEngines(): Promise<void> {
   )
   const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   const totalSqliteSize = sqliteEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  const totalDuckdbSize = duckdbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
   const totalMongodbSize = mongodbEngines.reduce(
     (acc, e) => acc + e.sizeBytes,
     0,
@@ -110,6 +114,7 @@ export async function handleEngines(): Promise<void> {
     ...mariadbEngines,
     ...mysqlEngines,
     ...sqliteEngines,
+    ...duckdbEngines,
     ...mongodbEngines,
     ...redisEngines,
     ...valkeyEngines,
@@ -158,6 +163,13 @@ export async function handleEngines(): Promise<void> {
     console.log(
       chalk.gray(
         `  SQLite: ${sqliteEngines.length} version(s), ${formatBytes(totalSqliteSize)}`,
+      ),
+    )
+  }
+  if (duckdbEngines.length > 0) {
+    console.log(
+      chalk.gray(
+        `  DuckDB: ${duckdbEngines.length} version(s), ${formatBytes(totalDuckdbSize)}`,
       ),
     )
   }

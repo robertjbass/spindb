@@ -36,6 +36,7 @@ import {
   type InstalledPostgresEngine,
   type InstalledMysqlEngine,
   type InstalledSqliteEngine,
+  type InstalledDuckDBEngine,
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
@@ -51,6 +52,7 @@ import { mongodbBinaryManager } from '../../engines/mongodb/binary-manager'
 import { redisBinaryManager } from '../../engines/redis/binary-manager'
 import { valkeyBinaryManager } from '../../engines/valkey/binary-manager'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
+import { duckdbBinaryManager } from '../../engines/duckdb/binary-manager'
 import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
@@ -424,6 +426,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const sqliteEngine = engines.find(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
   )
+  const duckdbEngine = engines.find(
+    (e): e is InstalledDuckDBEngine => e.engine === 'duckdb',
+  )
   const mongodbEngines = engines.filter(
     (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
   )
@@ -487,6 +492,20 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
       chalk.gray('  ') +
         chalk.cyan(padWithEmoji(engineDisplay, 13)) +
         chalk.yellow(sqliteEngine.version.padEnd(12)) +
+        chalk.gray('system'.padEnd(18)) +
+        chalk.gray('(system-installed)'),
+    )
+  }
+
+  // DuckDB row
+  if (duckdbEngine) {
+    const icon = ENGINE_ICONS.duckdb
+    const engineDisplay = `${icon} duckdb`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(duckdbEngine.version.padEnd(12)) +
         chalk.gray('system'.padEnd(18)) +
         chalk.gray('(system-installed)'),
     )
@@ -559,6 +578,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   if (sqliteEngine) {
     console.log(
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
+    )
+  }
+  if (duckdbEngine) {
+    console.log(
+      chalk.gray(`  DuckDB: system-installed at ${duckdbEngine.path}`),
     )
   }
   if (mongodbEngines.length > 0) {
@@ -1085,6 +1109,46 @@ enginesCommand
         return
       }
 
+      if (['duckdb', 'duck'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('DuckDB requires a version (e.g., 1)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.DuckDB)
+
+        const spinner = createSpinner(`Checking DuckDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `DuckDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`DuckDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`DuckDB ${version} binaries downloaded`)
+        }
+
+        const { platform: duckdbPlatform, arch: duckdbArch } =
+          platformService.getPlatformInfo()
+        const duckdbFullVersion = duckdbBinaryManager.getFullVersion(version)
+        const duckdbBinPath = paths.getBinaryPath({
+          engine: 'duckdb',
+          version: duckdbFullVersion,
+          platform: duckdbPlatform,
+          arch: duckdbArch,
+        })
+        console.log(chalk.gray(`  Location: ${duckdbBinPath}`))
+        return
+      }
+
       if (['mongodb', 'mongo'].includes(normalizedEngine)) {
         if (!version) {
           console.error(uiError('MongoDB requires a version (e.g., 7.0, 8.0)'))
@@ -1281,7 +1345,7 @@ enginesCommand
 
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, mongodb, redis, valkey, clickhouse`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse`,
         ),
       )
       process.exit(1)

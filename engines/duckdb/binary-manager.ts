@@ -1,9 +1,9 @@
 /**
- * SQLite Binary Manager
+ * DuckDB Binary Manager
  *
- * Handles downloading, extracting, and managing SQLite binaries from hostdb.
- * Unlike other engines, SQLite is an embedded database (not a server).
- * This manager handles the sqlite3 CLI and related tools.
+ * Handles downloading, extracting, and managing DuckDB binaries from hostdb.
+ * Unlike other engines, DuckDB is an embedded database (not a server).
+ * This manager handles the duckdb CLI tool.
  */
 
 import { createWriteStream, existsSync } from 'fs'
@@ -33,9 +33,9 @@ function isRenameFallbackError(error: unknown): boolean {
   return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
 }
 
-export class SQLiteBinaryManager {
+export class DuckDBBinaryManager {
   /**
-   * Get the download URL for a SQLite version
+   * Get the download URL for a DuckDB version
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
@@ -44,7 +44,7 @@ export class SQLiteBinaryManager {
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  // Convert version to full version format (e.g., "3" -> "3.51.2")
+  // Convert version to full version format (e.g., "1" -> "1.4.3")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
@@ -57,17 +57,17 @@ export class SQLiteBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'sqlite',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
     const ext = platform === 'win32' ? '.exe' : ''
-    const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
-    return existsSync(sqlite3Path)
+    const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
+    return existsSync(duckdbPath)
   }
 
-  // List all installed SQLite versions
+  // List all installed DuckDB versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -80,11 +80,11 @@ export class SQLiteBinaryManager {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
 
-      // Match sqlite-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^sqlite-([\d.]+)-(\w+)-(\w+)$/)
+      // Match duckdb-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^duckdb-([\d.]+)-(\w+)-(\w+)$/)
       if (match) {
         installed.push({
-          engine: Engine.SQLite,
+          engine: Engine.DuckDB,
           version: match[1],
           platform: match[2],
           arch: match[3],
@@ -95,7 +95,7 @@ export class SQLiteBinaryManager {
     return installed
   }
 
-  // Download and extract SQLite binaries
+  // Download and extract DuckDB binaries
   async download(
     version: string,
     platform: string,
@@ -105,18 +105,18 @@ export class SQLiteBinaryManager {
     const fullVersion = this.getFullVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
-      engine: 'sqlite',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
     const tempDir = join(
       paths.bin,
-      `temp-sqlite-${fullVersion}-${platform}-${arch}`,
+      `temp-duckdb-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
     const ext = platform === 'win32' ? 'zip' : 'tar.gz'
-    const archiveFile = join(tempDir, `sqlite.${ext}`)
+    const archiveFile = join(tempDir, `duckdb.${ext}`)
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -128,7 +128,7 @@ export class SQLiteBinaryManager {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
-        message: 'Downloading SQLite binaries...',
+        message: 'Downloading DuckDB binaries...',
       })
 
       const controller = new AbortController()
@@ -150,13 +150,13 @@ export class SQLiteBinaryManager {
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
-            `SQLite ${fullVersion} binaries not found (404). ` +
+            `DuckDB ${fullVersion} binaries not found (404). ` +
               `This version may have been removed from hostdb. ` +
               `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
           )
         }
         throw new Error(
-          `Failed to download SQLite binaries: ${response.status} ${response.statusText}`,
+          `Failed to download DuckDB binaries: ${response.status} ${response.statusText}`,
         )
       }
 
@@ -220,11 +220,11 @@ export class SQLiteBinaryManager {
 
   /**
    * Move extracted entries from extractDir to binPath.
-   * Handles both nested (sqlite/ or sqlite-* /) and flat archive structures.
+   * Handles both nested (duckdb/ or duckdb-* /) and flat archive structures.
    * (Note: space before / prevents early comment termination)
    * Uses rename with fallback to cp for cross-device or permission errors.
    *
-   * For flat archives (executables at root without bin/), creates a bin/ subdirectory
+   * For flat archives (executable at root without bin/), creates a bin/ subdirectory
    * to maintain consistent structure across all engines.
    */
   private async moveExtractedEntries(
@@ -234,16 +234,16 @@ export class SQLiteBinaryManager {
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
-    // Check if there's a nested sqlite/ directory
-    const sqliteDir = entries.find(
+    // Check if there's a nested duckdb/ directory
+    const duckdbDir = entries.find(
       (e) =>
         e.isDirectory() &&
-        (e.name === 'sqlite' || e.name.startsWith('sqlite-')),
+        (e.name === 'duckdb' || e.name.startsWith('duckdb-')),
     )
 
     // Determine source directory and entries to move
-    const sourceDir = sqliteDir ? join(extractDir, sqliteDir.name) : extractDir
-    const sourceEntries = sqliteDir
+    const sourceDir = duckdbDir ? join(extractDir, duckdbDir.name) : extractDir
+    const sourceEntries = duckdbDir
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
@@ -253,19 +253,13 @@ export class SQLiteBinaryManager {
     )
 
     // If no bin/ directory, create one and put executables there
-    // This handles flat archives where sqlite3 is at the root
+    // This handles flat archives where duckdb is at the root
     if (!hasBinDir) {
       const binDir = join(binPath, 'bin')
       await mkdir(binDir, { recursive: true })
 
       const ext = platform === 'win32' ? '.exe' : ''
-      // SQLite tools that should go in bin/
-      const executableNames = [
-        `sqlite3${ext}`,
-        `sqldiff${ext}`,
-        `sqlite3_analyzer${ext}`,
-        `sqlite3_rsync${ext}`,
-      ]
+      const executableNames = [`duckdb${ext}`]
 
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
@@ -362,7 +356,7 @@ export class SQLiteBinaryManager {
     await this.moveExtractedEntries(extractDir, binPath, platform)
   }
 
-  // Verify that SQLite binaries are working
+  // Verify that DuckDB binaries are working
   async verify(
     version: string,
     platform: string,
@@ -370,23 +364,23 @@ export class SQLiteBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'sqlite',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
 
     const ext = platform === 'win32' ? '.exe' : ''
-    const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
+    const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
 
-    if (!existsSync(sqlite3Path)) {
-      throw new Error(`SQLite binary not found at ${binPath}/bin/`)
+    if (!existsSync(duckdbPath)) {
+      throw new Error(`DuckDB binary not found at ${binPath}/bin/`)
     }
 
     try {
-      const { stdout } = await spawnAsync(sqlite3Path, ['--version'])
-      // Extract version from output like "3.51.2 2025-01-08 12:00:00 ..."
-      const match = stdout.match(/^(\d+\.\d+\.\d+)/)
+      const { stdout } = await spawnAsync(duckdbPath, ['--version'])
+      // Extract version from output like "v1.4.3 abcdef123"
+      const match = stdout.match(/v?(\d+\.\d+\.\d+)/)
       const reportedVersion = match?.[1]
 
       if (!reportedVersion) {
@@ -403,7 +397,7 @@ export class SQLiteBinaryManager {
       const reportedMajor = reportedVersion.split('.')[0]
       if (expectedMajor === reportedMajor) {
         console.debug(
-          `SQLite version match by major version: requested ${version} (normalized to ${fullVersion}), binary reports ${reportedVersion}`,
+          `DuckDB version match by major version: requested ${version} (normalized to ${fullVersion}), binary reports ${reportedVersion}`,
         )
         return true
       }
@@ -413,11 +407,11 @@ export class SQLiteBinaryManager {
       )
     } catch (error) {
       const err = error as Error
-      throw new Error(`Failed to verify SQLite binaries: ${err.message}`)
+      throw new Error(`Failed to verify DuckDB binaries: ${err.message}`)
     }
   }
 
-  // Get the path to a specific binary (sqlite3, sqldiff, etc.)
+  // Get the path to a specific binary (duckdb)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -426,7 +420,7 @@ export class SQLiteBinaryManager {
   ): string {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'sqlite',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
@@ -447,10 +441,10 @@ export class SQLiteBinaryManager {
     if (await this.isInstalled(version, platform, arch)) {
       onProgress?.({
         stage: 'cached',
-        message: 'Using cached SQLite binaries',
+        message: 'Using cached DuckDB binaries',
       })
       return paths.getBinaryPath({
-        engine: 'sqlite',
+        engine: 'duckdb',
         version: fullVersion,
         platform,
         arch,
@@ -464,7 +458,7 @@ export class SQLiteBinaryManager {
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'sqlite',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
@@ -476,4 +470,4 @@ export class SQLiteBinaryManager {
   }
 }
 
-export const sqliteBinaryManager = new SQLiteBinaryManager()
+export const duckdbBinaryManager = new DuckDBBinaryManager()

@@ -118,6 +118,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = litecliInstalled
     engineSpecificValue = 'litecli'
     engineSpecificInstallValue = 'install-litecli'
+  } else if (config.engine === 'duckdb') {
+    defaultShellName = 'duckdb'
+    // DuckDB has no separate enhanced CLI tool
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else if (config.engine === 'mysql') {
     defaultShellName = 'mysql'
     engineSpecificCli = 'mycli'
@@ -438,6 +445,12 @@ async function launchShell(
     shellCmd = 'sqlite3'
     shellArgs = [config.database]
     installHint = 'brew install sqlite3'
+  } else if (config.engine === 'duckdb') {
+    // DuckDB shell
+    const duckdbPath = await configManager.getBinaryPath('duckdb')
+    shellCmd = duckdbPath || 'duckdb'
+    shellArgs = [config.database]
+    installHint = 'spindb engines download duckdb'
   } else if (config.engine === 'mysql') {
     // MySQL uses downloaded binaries - get the actual path
     const mysqlPath = await configManager.getBinaryPath('mysql')

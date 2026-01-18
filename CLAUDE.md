@@ -6,7 +6,7 @@ See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, and SQLite (all via hostdb downloads).
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, and ClickHouse (all via hostdb downloads).
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -104,6 +104,14 @@ engines/
 │   ├── binary-manager.ts   # Download/extraction
 │   ├── registry.ts         # File tracking in config.json
 │   └── scanner.ts          # CWD scanning for .sqlite files
+├── duckdb/
+│   ├── index.ts            # DuckDB engine (file-based OLAP)
+│   ├── binary-urls.ts      # hostdb URL builder
+│   ├── version-maps.ts     # Version mapping
+│   ├── binary-manager.ts   # Download/extraction (handles flat archives)
+│   ├── registry.ts         # File tracking in config.json
+│   ├── backup.ts           # SQL dump / binary copy
+│   └── restore.ts          # Restore logic
 ├── mongodb/
 │   ├── index.ts            # MongoDB engine
 │   ├── binary-urls.ts      # hostdb URL builder
@@ -209,6 +217,23 @@ abstract class BaseEngine {
 - XML configuration files (config.xml, users.xml)
 - Apache-2.0 license
 
+**SQLite 🗄️**
+- File-based database with no server process
+- CLI tools from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
+- Tools bundled: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+- Version: 3
+- Uses registry in `~/.spindb/config.json` to track database files
+- Data stored in user project directories (CWD), not `~/.spindb/containers/`
+
+**DuckDB 🦆**
+- File-based OLAP database with no server process
+- CLI from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
+- Tool bundled: duckdb
+- Version: 1
+- Uses registry in `~/.spindb/config.json` to track database files
+- Data stored in user project directories (CWD), not `~/.spindb/containers/`
+- MIT license
+
 ### Engines JSON Registry
 
 The `config/engines.json` file is the source of truth for all supported database engines. It contains metadata like display names, icons, supported versions, binary sources, and status.
@@ -264,6 +289,7 @@ Each engine supports specific backup formats with different restore behaviors:
 | PostgreSQL | `.sql` (plain SQL) | `.dump` (pg_dump custom) | Standard pg_dump/pg_restore |
 | MySQL | `.sql` (plain SQL) | `.sql.gz` (compressed) | Standard mysqldump |
 | SQLite | `.sql` (plain SQL) | `.sqlite` (binary copy) | Direct file operations |
+| DuckDB | `.sql` (plain SQL) | `.duckdb` (binary copy) | Direct file operations |
 | MongoDB | `.bson` (BSON) | `.archive` (compressed) | mongodump/mongorestore |
 | Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | See notes below |
 | Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | Same as Redis |
@@ -282,9 +308,12 @@ Each engine supports specific backup formats with different restore behaviors:
 
 ```
 ~/.spindb/
-├── bin/                              # PostgreSQL server binaries
-│   └── postgresql-18.1.0-darwin-arm64/
-├── containers/
+├── bin/                              # Downloaded engine binaries
+│   ├── postgresql-18.1.0-darwin-arm64/
+│   ├── mysql-9.3.0-darwin-arm64/
+│   ├── sqlite-3.50.1-darwin-arm64/
+│   └── duckdb-1.4.3-darwin-arm64/
+├── containers/                       # Server-based engine data
 │   ├── postgresql/
 │   │   └── mydb/
 │   │       ├── container.json
@@ -315,15 +344,17 @@ Each engine supports specific backup formats with different restore behaviors:
 │           ├── container.json
 │           ├── data/
 │           └── clickhouse-server.log
-└── config.json                       # Tool paths cache
+└── config.json                       # Tool paths + SQLite/DuckDB registries
 ```
+
+**Note:** SQLite and DuckDB are file-based databases. Their data files live in user project directories (not `~/.spindb/containers/`). The `config.json` file contains registries that track these files by name.
 
 ### Container Config
 
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse'
+  engine: 'postgresql' | 'mysql' | 'sqlite' | 'duckdb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse'
   version: string
   port: number
   database: string        // Primary database
@@ -397,6 +428,8 @@ pnpm test:mongodb   # MongoDB integration
 pnpm test:redis     # Redis integration
 pnpm test:valkey    # Valkey integration
 pnpm test:clickhouse # ClickHouse integration
+pnpm test:sqlite    # SQLite integration
+pnpm test:duckdb    # DuckDB integration
 ```
 
 **Note:** All test scripts use `--test-concurrency=1 --experimental-test-isolation=none` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." The `--test-concurrency=1` alone only limits parallelism but still uses workers for isolation; `--experimental-test-isolation=none` completely disables worker isolation.
@@ -468,6 +501,7 @@ Current engines with CI caching:
 - Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
 - Valkey: `spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}`
 - SQLite: `spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}`
+- DuckDB: `spindb-duckdb-1-${{ runner.os }}-${{ runner.arch }}`
 - ClickHouse: `spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}` (macOS/Linux only)
 
 **Reference implementations:**
@@ -479,10 +513,11 @@ Current engines with CI caching:
 - **Valkey** - Redis fork with downloadable binaries (hostdb), uses Redis commands (API-compatible)
 - **ClickHouse** - Column-oriented OLAP database with downloadable binaries (hostdb, macOS/Linux only), uses SQL
 - **SQLite** - File-based (embedded) database with downloadable binaries (hostdb), uses SQL
+- **DuckDB** - File-based (embedded) OLAP database with downloadable binaries (hostdb), uses SQL
 
 **Engine Types:**
 - **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse): Data in `~/.spindb/containers/`, port management, start/stop
-- **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
+- **File-based databases** (SQLite, DuckDB): Data in project directory (CWD), no port/process management
 
 ### Migrating an Engine from System Binaries to hostdb
 
@@ -491,6 +526,7 @@ When hostdb adds support for a new engine, follow these steps to migrate from sy
 **Current status:** All engines now use hostdb downloads:
 - PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey: Complete bundles from hostdb (server + all client tools)
 - SQLite: Tools from hostdb (sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync)
+- DuckDB: CLI from hostdb (duckdb)
 
 #### Prerequisites
 
@@ -923,6 +959,13 @@ SpinDB uses different binary sourcing strategies by engine:
 - Tools bundled: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
 - File-based database - no server process, data stored in user project directories
 
+**DuckDB (Downloadable Binaries):**
+- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
+- Version 1 (major version)
+- CLI bundled: duckdb
+- File-based OLAP database - no server process, data stored in user project directories
+- MIT license
+
 ### Orphaned Container Support (PostgreSQL)
 
 When a PostgreSQL engine is deleted while containers still reference it:
@@ -957,6 +1000,7 @@ Error messages should include actionable fix suggestions.
 - Valkey: 🔷
 - ClickHouse: 🏠
 - SQLite: 🗄️
+- DuckDB: 🦆
 
 ## Known Limitations
 

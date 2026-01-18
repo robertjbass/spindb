@@ -59,6 +59,22 @@
       "superuser": null,
       "clientTools": ["sqlite3", "sqldiff", "sqlite3_analyzer", "sqlite3_rsync"]
     },
+    "duckdb": {
+      "displayName": "DuckDB",
+      "icon": "🦆",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["1.4.3"],
+      "defaultVersion": "1.4.3",
+      "defaultPort": null,
+      "runtime": "embedded",
+      "queryLanguage": "sql",
+      "connectionScheme": "duckdb",
+      "superuser": null,
+      "clientTools": ["duckdb"],
+      "licensing": "MIT",
+      "notes": "Embedded OLAP database optimized for analytical queries. File-based like SQLite."
+    },
     "mongodb": {
       "displayName": "MongoDB",
       "icon": "🍃",

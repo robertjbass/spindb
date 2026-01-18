@@ -347,6 +347,57 @@ jobs:
         timeout-minutes: 10
 
   # ============================================
+  # DuckDB Integration Tests
+  # Uses SpinDB to download and manage DuckDB binaries from hostdb
+  # ============================================
+  test-duckdb:
+    name: DuckDB (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache DuckDB binaries - these are downloaded from hostdb
+      - name: Cache DuckDB binaries
+        uses: actions/cache@v4
+        id: duckdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-duckdb-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download DuckDB binaries (all platforms)
+      - name: Install DuckDB via SpinDB
+        run: pnpm start engines download duckdb 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run DuckDB integration tests
+        run: pnpm test:duckdb
+        timeout-minutes: 10
+
+  # ============================================
   # MongoDB Integration Tests
   # Uses SpinDB to download and manage MongoDB binaries from hostdb
   # ============================================
@@ -1020,6 +1071,7 @@ jobs:
         test-mariadb,
         test-mysql,
         test-sqlite,
+        test-duckdb,
         test-mongodb,
         test-redis,
         test-valkey,
@@ -1053,6 +1105,10 @@ jobs:
           fi
           if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
             echo "SQLite tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-duckdb.result }}" != "success" ]; then
+            echo "DuckDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-mongodb.result }}" != "success" ]; then

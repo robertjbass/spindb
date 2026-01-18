@@ -15,6 +15,7 @@ import { portManager } from './port-manager'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
+import { duckdbRegistry } from '../engines/duckdb/registry'
 import type { ContainerConfig } from '../types'
 import { Engine } from '../types'
 
@@ -104,8 +105,16 @@ export class ContainerManager {
       return sqliteConfig
     }
 
-    // Search all engine directories (excluding sqlite which uses registry)
-    const engines = getSupportedEngines().filter((e) => e !== 'sqlite')
+    // Search DuckDB registry
+    const duckdbConfig = await this.getDuckDBConfig(name)
+    if (duckdbConfig) {
+      return duckdbConfig
+    }
+
+    // Search all engine directories (excluding file-based engines which use registries)
+    const engines = getSupportedEngines().filter(
+      (e) => e !== 'sqlite' && e !== 'duckdb',
+    )
     for (const eng of engines) {
       const configPath = paths.getContainerConfigPath(name, { engine: eng })
       if (existsSync(configPath)) {
@@ -132,6 +141,26 @@ export class ContainerManager {
       version: '3',
       port: 0,
       database: entry.filePath, // For SQLite, database field stores file path
+      databases: [entry.filePath],
+      created: entry.created,
+      status: fileExists ? 'running' : 'stopped', // "running" = file exists
+    }
+  }
+
+  private async getDuckDBConfig(name: string): Promise<ContainerConfig | null> {
+    const entry = await duckdbRegistry.get(name)
+    if (!entry) {
+      return null
+    }
+
+    // Convert registry entry to ContainerConfig format
+    const fileExists = existsSync(entry.filePath)
+    return {
+      name: entry.name,
+      engine: Engine.DuckDB,
+      version: '1',
+      port: 0,
+      database: entry.filePath, // For DuckDB, database field stores file path
       databases: [entry.filePath],
       created: entry.created,
       status: fileExists ? 'running' : 'stopped', // "running" = file exists
@@ -205,8 +234,15 @@ export class ContainerManager {
       return true
     }
 
-    // Check all engine directories (excluding sqlite)
-    const engines = getSupportedEngines().filter((e) => e !== 'sqlite')
+    // Check DuckDB registry
+    if (await duckdbRegistry.exists(name)) {
+      return true
+    }
+
+    // Check all engine directories (excluding file-based engines)
+    const engines = getSupportedEngines().filter(
+      (e) => e !== 'sqlite' && e !== 'duckdb',
+    )
     for (const eng of engines) {
       const configPath = paths.getContainerConfigPath(name, { engine: eng })
       if (existsSync(configPath)) {
@@ -236,13 +272,31 @@ export class ContainerManager {
       })
     }
 
-    // List server-based containers (PostgreSQL, MySQL)
+    // List DuckDB containers from registry
+    const duckdbEntries = await duckdbRegistry.list()
+    for (const entry of duckdbEntries) {
+      const fileExists = existsSync(entry.filePath)
+      containers.push({
+        name: entry.name,
+        engine: Engine.DuckDB,
+        version: '1',
+        port: 0,
+        database: entry.filePath,
+        databases: [entry.filePath],
+        created: entry.created,
+        status: fileExists ? 'running' : 'stopped', // "running" = file exists
+      })
+    }
+
+    // List server-based containers (PostgreSQL, MySQL, etc.)
     const containersDir = paths.containers
     if (!existsSync(containersDir)) {
       return containers
     }
 
-    const engines = getSupportedEngines().filter((e) => e !== 'sqlite')
+    const engines = getSupportedEngines().filter(
+      (e) => e !== 'sqlite' && e !== 'duckdb',
+    )
 
     for (const engine of engines) {
       const engineDir = paths.getEngineContainersPath(engine)
@@ -290,6 +344,22 @@ export class ContainerManager {
         await unlink(entry.filePath)
       }
       await sqliteRegistry.remove(name)
+
+      // Also remove the container directory (created by containerManager.create)
+      const containerPath = paths.getContainerPath(name, { engine })
+      if (existsSync(containerPath)) {
+        await rm(containerPath, { recursive: true, force: true })
+      }
+      return
+    }
+
+    // DuckDB: delete file, remove from registry, and clean up container directory
+    if (engine === Engine.DuckDB) {
+      const entry = await duckdbRegistry.get(name)
+      if (entry && existsSync(entry.filePath)) {
+        await unlink(entry.filePath)
+      }
+      await duckdbRegistry.remove(name)
 
       // Also remove the container directory (created by containerManager.create)
       const containerPath = paths.getContainerPath(name, { engine })
@@ -419,6 +489,29 @@ export class ContainerManager {
       // Now update registry - remove old entry and add new one with updated name
       await sqliteRegistry.remove(oldName)
       await sqliteRegistry.add({
+        name: newName,
+        filePath: entry.filePath,
+        created: entry.created,
+        lastVerified: entry.lastVerified,
+      })
+
+      // Return updated config
+      return {
+        ...sourceConfig,
+        name: newName,
+      }
+    }
+
+    // DuckDB: rename in registry (file-based like SQLite)
+    if (engine === Engine.DuckDB) {
+      const entry = await duckdbRegistry.get(oldName)
+      if (!entry) {
+        throw new Error(`DuckDB container "${oldName}" not found in registry`)
+      }
+
+      // Now update registry - remove old entry and add new one with updated name
+      await duckdbRegistry.remove(oldName)
+      await duckdbRegistry.add({
         name: newName,
         filePath: entry.filePath,
         created: entry.created,

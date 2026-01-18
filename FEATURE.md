@@ -46,24 +46,25 @@ SpinDB supports two types of database engines:
 - Use port allocation and process management
 - Have log files and PID tracking
 
-### File-Based Databases (SQLite)
+### File-Based Databases (SQLite, DuckDB)
 
 - Data stored in user project directories (CWD)
 - No start/stop required (embedded)
 - No port management needed (`port: 0`)
 - Connection string is the file path
 - Use a registry to track file locations
+- Status is `running` when file exists, `stopped` when missing
 
 **Edge cases for file-based engines:**
 
-When implementing a file-based engine like SQLite, these operations behave differently:
+When implementing a file-based engine like SQLite or DuckDB, these operations behave differently:
 
-| Operation | Server DB (PostgreSQL, etc.) | File-Based (SQLite) |
+| Operation | Server DB (PostgreSQL, etc.) | File-Based (SQLite, DuckDB) |
 |-----------|------------------------------|---------------------|
 | `start()` | Starts server process | No-op or skip |
 | `stop()` | Stops server process | No-op or skip |
 | `port` | Allocated from port range | Always `0` |
-| `status` | `running` / `stopped` | Always `created` or `stopped` |
+| `status` | `running` / `stopped` based on process | `running` / `stopped` based on file existence |
 | `waitForReady()` | Poll until server responds | Run query directly (no wait) |
 | `test_engine_lifecycle()` | Full start/stop/status cycle | Skip start/stop, just query |
 | Connection string | `scheme://host:port/db` | File path (e.g., `/path/to/db.sqlite`) |
@@ -72,24 +73,42 @@ When implementing a file-based engine like SQLite, these operations behave diffe
 
 ```ts
 // Integration test example - skip start/stop for file-based engines
-if (engine !== Engine.SQLite) {
+const isFileBased = engine === Engine.SQLite || engine === Engine.DuckDB
+if (!isFileBased) {
   await engineInstance.start(container)
   const ready = await waitForReady(engine, port)
   // ...
   await engineInstance.stop(container)
 }
 
-// Query test works for all engines (SQLite runs query directly)
+// Query test works for all engines (file-based engines run query directly)
 const result = await executeSQL(engine, port, database, 'SELECT 1;')
 ```
 
 ```bash
-# In test-local.sh - lifecycle skips start/stop for sqlite
-if [ "$engine" != "sqlite" ]; then
+# In test-local.sh - lifecycle skips start/stop for file-based engines
+if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ]; then
   pnpm start start "$container_name"
   # wait_for_ready, status check, etc.
 fi
-# Query test runs for all engines including sqlite
+# Query test runs for all engines including file-based
+```
+
+**Test reliability for file-based engines:**
+
+Integration tests for file-based engines (SQLite, DuckDB) verify they're using downloaded binaries, not system-installed ones. This ensures tests actually validate the binary extraction pipeline:
+
+```ts
+// In before() hook of sqlite.test.ts and duckdb.test.ts
+async function verifyUsingDownloadedBinaries(): Promise<void> {
+  const config = await configManager.getBinaryConfig('sqlite3') // or 'duckdb'
+  if (config?.source === 'system') {
+    throw new Error(
+      'Tests are using system binary, not downloaded binaries. ' +
+        'Run: spindb engines download sqlite 3',
+    )
+  }
+}
 ```
 
 ---
@@ -1527,5 +1546,6 @@ Use these implementations as references:
 | **MySQL** | Server | hostdb (all platforms) | SQL, root user, socket handling |
 | **MariaDB** | Server | hostdb (all platforms) | MySQL-compatible, separate binaries |
 | **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
+| **DuckDB** | File-based | hostdb (all platforms) | Embedded OLAP, flat archive handling example |
 
 **Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example.

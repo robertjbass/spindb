@@ -158,6 +158,139 @@ async function createSqliteContainer(
   }
 }
 
+/**
+ * Simplified DuckDB container creation flow
+ * DuckDB is file-based, so no port, start/stop, or server management needed
+ */
+async function createDuckDBContainer(
+  containerName: string,
+  dbEngine: BaseEngine,
+  version: string,
+  options: {
+    path?: string
+    from?: string | null
+    connect?: boolean
+    json?: boolean
+  },
+): Promise<void> {
+  const { path: filePath, from: restoreLocation, connect, json } = options
+
+  // Check dependencies
+  const depsSpinner = createSpinner('Checking required tools...')
+  depsSpinner.start()
+
+  const missingDeps = await getMissingDependencies('duckdb')
+  if (missingDeps.length > 0) {
+    depsSpinner.warn(
+      `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+    )
+    const installed = await promptInstallDependencies(
+      missingDeps[0].binary,
+      'duckdb',
+    )
+    if (!installed) {
+      process.exit(1)
+    }
+  } else {
+    depsSpinner.succeed('Required tools available')
+  }
+
+  // Check if container already exists
+  while (await containerManager.exists(containerName)) {
+    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+    containerName = await promptContainerName()
+  }
+
+  // Determine file path
+  const defaultPath = `./${containerName}.duckdb`
+  const absolutePath = resolve(filePath || defaultPath)
+
+  // Check if file already exists
+  if (existsSync(absolutePath)) {
+    console.error(uiError(`File already exists: ${absolutePath}`))
+    process.exit(1)
+  }
+
+  const createSpinnerInstance = createSpinner('Creating DuckDB database...')
+  createSpinnerInstance.start()
+
+  try {
+    // Initialize the DuckDB database file and register in registry
+    await dbEngine.initDataDir(containerName, version, { path: absolutePath })
+    createSpinnerInstance.succeed('DuckDB database created')
+  } catch (error) {
+    createSpinnerInstance.fail('Failed to create DuckDB database')
+    throw error
+  }
+
+  // Handle --from restore
+  if (restoreLocation) {
+    const config = await containerManager.getConfig(containerName)
+    if (config) {
+      const format = await dbEngine.detectBackupFormat(restoreLocation)
+      const restoreSpinner = createSpinner(
+        `Restoring from ${format.description}...`,
+      )
+      restoreSpinner.start()
+
+      try {
+        await dbEngine.restore(config, restoreLocation)
+        restoreSpinner.succeed('Backup restored successfully')
+      } catch (error) {
+        restoreSpinner.fail('Failed to restore backup')
+        // Clean up the created container on restore failure
+        try {
+          await containerManager.delete(containerName, { force: true })
+        } catch {
+          // Ignore cleanup errors - still throw the original restore error
+        }
+        throw error
+      }
+    }
+  }
+
+  const connectionString = `duckdb:///${absolutePath}`
+
+  // Display success
+  if (json) {
+    console.log(
+      JSON.stringify({
+        success: true,
+        name: containerName,
+        engine: 'duckdb',
+        version,
+        path: absolutePath,
+        database: containerName,
+        connectionString,
+        restored: !!restoreLocation,
+      }),
+    )
+  } else {
+    console.log()
+    console.log(chalk.green('  ✓ DuckDB database ready'))
+    console.log()
+    console.log(chalk.gray('  File path:'))
+    console.log(chalk.cyan(`    ${absolutePath}`))
+    console.log()
+    console.log(chalk.gray('  Connection string:'))
+    console.log(chalk.cyan(`    ${connectionString}`))
+    console.log()
+
+    if (connect) {
+      const config = await containerManager.getConfig(containerName)
+      if (config) {
+        console.log(chalk.gray('  Opening shell...'))
+        console.log()
+        await dbEngine.connect(config)
+      }
+    } else {
+      console.log(chalk.gray('  Connect with:'))
+      console.log(chalk.cyan(`    spindb connect ${containerName}`))
+      console.log()
+    }
+  }
+}
+
 function detectLocationType(location: string): {
   type: 'connection' | 'file' | 'not_found'
   inferredEngine?: Engine
@@ -177,6 +310,10 @@ function detectLocationType(location: string): {
     return { type: 'connection', inferredEngine: Engine.SQLite }
   }
 
+  if (location.startsWith('duckdb://')) {
+    return { type: 'connection', inferredEngine: Engine.DuckDB }
+  }
+
   if (location.startsWith('redis://') || location.startsWith('rediss://')) {
     return { type: 'connection', inferredEngine: Engine.Redis }
   }
@@ -190,10 +327,17 @@ function detectLocationType(location: string): {
     const lowerLocation = location.toLowerCase()
     if (
       lowerLocation.endsWith('.sqlite') ||
-      lowerLocation.endsWith('.db') ||
       lowerLocation.endsWith('.sqlite3')
     ) {
       return { type: 'file', inferredEngine: Engine.SQLite }
+    }
+    // Check if it's a DuckDB file (case-insensitive)
+    if (
+      lowerLocation.endsWith('.duckdb') ||
+      lowerLocation.endsWith('.ddb') ||
+      lowerLocation.endsWith('.db')
+    ) {
+      return { type: 'file', inferredEngine: Engine.DuckDB }
     }
     return { type: 'file' }
   }
@@ -206,14 +350,14 @@ export const createCommand = new Command('create')
   .argument('[name]', 'Container name')
   .option(
     '-e, --engine <engine>',
-    'Database engine (postgresql, mysql, mariadb, sqlite, mongodb, redis, valkey)',
+    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, redis, valkey)',
   )
   .option('--db-version <version>', 'Database version (e.g., 17, 8.0)')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
   .option(
     '--path <path>',
-    'Path for SQLite database file (default: ./<name>.sqlite)',
+    'Path for SQLite/DuckDB database file (default: ./<name>.sqlite or ./<name>.duckdb)',
   )
   .option(
     '--max-connections <number>',
@@ -331,6 +475,17 @@ export const createCommand = new Command('create')
         // SQLite has a simplified flow (no port, no start/stop)
         if (engine === Engine.SQLite) {
           await createSqliteContainer(containerName, dbEngine, version, {
+            path: options.path,
+            from: restoreLocation,
+            connect: options.connect,
+            json: options.json,
+          })
+          return
+        }
+
+        // DuckDB has a simplified flow (no port, no start/stop)
+        if (engine === Engine.DuckDB) {
+          await createDuckDBContainer(containerName, dbEngine, version, {
             path: options.path,
             from: restoreLocation,
             connect: options.connect,
