@@ -176,7 +176,15 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 
 **Run `pnpm test:docker` to verify your engine works on Linux.** This catches library dependency issues.
 
+```bash
+pnpm test:docker              # Run all engine tests
+pnpm test:docker -- {engine}  # Run single engine test (faster for debugging)
+```
+
+Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`, `duckdb`
+
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
+- [ ] `tests/docker/Dockerfile` - Add any required library dependencies (e.g., `libaio1` for MySQL, `libncurses6` for MariaDB)
 - [ ] `tests/docker/run-e2e.sh` - Add engine case in `run_test()` function
 - [ ] `tests/docker/run-e2e.sh` - Add engine test execution at bottom of file
 - [ ] For file-based engines: Update start/stop skip conditions to include your engine

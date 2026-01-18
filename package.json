@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -27,7 +27,7 @@
     "test:local": "./scripts/test-local.sh",
     "test:local:quick": "./scripts/test-local.sh --quick",
     "test:local:fresh": "./scripts/test-local.sh --fresh",
-    "test:docker": "docker build -t spindb-e2e -f tests/docker/Dockerfile . && docker run --rm spindb-e2e; docker rmi spindb-e2e 2>/dev/null || true",
+    "test:docker": "bash tests/docker/run-docker-test.sh",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
     "prepare": "husky"

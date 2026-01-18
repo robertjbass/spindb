@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-01-18
+
+### Added
+- **MIGRATION.md** - Historical guide for migrating engines from system binaries to hostdb, extracted from CLAUDE.md for reference.
+
+### Changed
+- **Docker E2E single-engine testing** - Run Docker tests for a single engine with `pnpm test:docker -- {engine}` for faster debugging cycles.
+- **CLAUDE.md refactored** - Reduced from 1043 to 271 lines (74% reduction). Added Related Documentation table, Supported Versions table with query languages, Container Config type, critical patterns (KNOWN_BINARY_TOOLS, version-maps sync), engine aliases, test port allocation, and platform philosophy. Moved migration guide to MIGRATION.md.
+- **Platform philosophy documented** - Engines no longer require universal OS/architecture support. Future: hostdb and SpinDB will merge to dynamically show available engines per platform.
+
 ## [0.19.1] - 2026-01-18
 
 ### Changed
