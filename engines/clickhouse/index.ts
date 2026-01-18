@@ -343,9 +343,11 @@ export class ClickHouseEngine extends BaseEngine {
 
     logDebug(`Starting ClickHouse with config: ${configPath}`)
 
-    return new Promise((resolve, reject) => {
-      const args = ['server', '--config-file', configPath, '--daemon']
+    const args = ['server', '--config-file', configPath, '--daemon']
 
+    // Spawn the daemon process and wait for it to exit
+    // ClickHouse with --daemon forks immediately and the parent exits
+    const spawnResult = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
       const proc = spawn(clickhouseBinary!, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
@@ -363,58 +365,57 @@ export class ClickHouseEngine extends BaseEngine {
         logDebug(`clickhouse stderr: ${data.toString()}`)
       })
 
-      proc.unref()
-
       proc.on('error', reject)
 
-      proc.on('close', async (code) => {
+      proc.on('close', (code) => {
         logDebug(`ClickHouse spawn process closed with code: ${code}`)
-        // ClickHouse with --daemon exits immediately after forking
-        if (code === 0 || code === null) {
-          // Wait for server to be ready
-          logDebug(`Waiting for ClickHouse server to be ready on port ${port}...`)
-          const ready = await this.waitForReady(port, version)
-          logDebug(`waitForReady returned: ${ready}`)
-          if (ready) {
-            // ClickHouse in daemon mode doesn't respect <pid_file> config
-            // So we manually find and write the PID after server is ready
-            logDebug(`Finding PID for port ${port}...`)
-            try {
-              const pids = await platformService.findProcessByPort(port)
-              logDebug(`findProcessByPort output: ${JSON.stringify(pids)}`)
-              if (pids.length > 0) {
-                const serverPid = String(pids[0])
-                logDebug(`Writing PID ${serverPid} to ${pidFile}`)
-                await writeFile(pidFile, serverPid, 'utf8')
-                logDebug(`Wrote PID ${serverPid} to ${pidFile}`)
-              } else {
-                logDebug(`No PIDs found for port ${port}`)
-              }
-            } catch (pidError) {
-              // Non-fatal: PID file is optional for operation
-              logDebug(`Could not write PID file: ${pidError}`)
-            }
-
-            resolve({
-              port,
-              connectionString: this.getConnectionString(container),
-            })
-          } else {
-            reject(
-              new Error(
-                `ClickHouse failed to start within timeout. Check logs at: ${logFile}`,
-              ),
-            )
-          }
-        } else {
-          reject(
-            new Error(
-              stderr || stdout || `clickhouse server exited with code ${code}`,
-            ),
-          )
-        }
+        // Don't unref until we capture the result
+        proc.unref()
+        resolve({ code, stdout, stderr })
       })
     })
+
+    // Check if spawn was successful
+    if (spawnResult.code !== 0 && spawnResult.code !== null) {
+      throw new Error(
+        spawnResult.stderr || spawnResult.stdout || `clickhouse server exited with code ${spawnResult.code}`,
+      )
+    }
+
+    // Wait for server to be ready (outside of event handler to keep event loop alive)
+    logDebug(`Waiting for ClickHouse server to be ready on port ${port}...`)
+    const ready = await this.waitForReady(port, version)
+    logDebug(`waitForReady returned: ${ready}`)
+
+    if (!ready) {
+      throw new Error(
+        `ClickHouse failed to start within timeout. Check logs at: ${logFile}`,
+      )
+    }
+
+    // ClickHouse in daemon mode doesn't respect <pid_file> config
+    // So we manually find and write the PID after server is ready
+    logDebug(`Finding PID for port ${port}...`)
+    try {
+      const pids = await platformService.findProcessByPort(port)
+      logDebug(`findProcessByPort output: ${JSON.stringify(pids)}`)
+      if (pids.length > 0) {
+        const serverPid = String(pids[0])
+        logDebug(`Writing PID ${serverPid} to ${pidFile}`)
+        await writeFile(pidFile, serverPid, 'utf8')
+        logDebug(`Wrote PID ${serverPid} to ${pidFile}`)
+      } else {
+        logDebug(`No PIDs found for port ${port}`)
+      }
+    } catch (pidError) {
+      // Non-fatal: PID file is optional for operation
+      logDebug(`Could not write PID file: ${pidError}`)
+    }
+
+    return {
+      port,
+      connectionString: this.getConnectionString(container),
+    }
   }
 
   // Wait for ClickHouse to be ready
