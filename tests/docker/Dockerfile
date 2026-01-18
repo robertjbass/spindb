@@ -28,7 +28,9 @@
 # - MongoDB: server + client tools (mongod, mongosh, mongodump, mongorestore)
 # - Redis: server + client tools (redis-server, redis-cli)
 # - Valkey: server + client tools (valkey-server, valkey-cli)
+# - ClickHouse: clickhouse (unified binary with subcommands)
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+# - DuckDB: duckdb
 
 FROM ubuntu:22.04
 
@@ -56,6 +58,7 @@ RUN apt-get update && apt-get install -y \
 # libxml2: XML library required by PostgreSQL (hostdb binaries compiled with XML support)
 # libicu70: ICU library required by PostgreSQL (Ubuntu 22.04 ships ICU 70)
 # sudo: needed for non-root user to run privileged commands
+# lsof: needed by SpinDB's findProcessByPort() to detect running database processes
 RUN apt-get update && apt-get install -y \
     git \
     procps \
@@ -68,6 +71,7 @@ RUN apt-get update && apt-get install -y \
     libxml2 \
     libicu70 \
     sudo \
+    lsof \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm (pinned for reproducible builds)
@@ -105,5 +109,10 @@ RUN pnpm link --global
 # Set working directory for tests
 WORKDIR /home/spindb
 
-# Default command runs the E2E test script
-CMD ["bash", "/home/spindb/spindb/tests/docker/run-e2e.sh"]
+# Run the E2E test script, allowing engine filter to be passed as argument
+# Usage: docker run --rm spindb-e2e [engine]
+# Examples:
+#   docker run --rm spindb-e2e           # Run all tests
+#   docker run --rm spindb-e2e clickhouse # Run only ClickHouse tests
+ENTRYPOINT ["bash", "/home/spindb/spindb/tests/docker/run-e2e.sh"]
+CMD []

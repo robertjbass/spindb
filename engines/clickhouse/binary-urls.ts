@@ -3,6 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { CLICKHOUSE_VERSION_MAP } from './version-maps'
+import { logWarning } from '../../core/error-handler'
 
 /**
  * Version map for ClickHouse - used as fallback when hostdb repository is unreachable
@@ -125,7 +126,7 @@ function normalizeVersion(
   }
 
   // Unknown version format - warn and return as-is
-  console.warn(
+  logWarning(
     `ClickHouse version '${version}' not in version map, may not be available in hostdb`,
   )
   return version

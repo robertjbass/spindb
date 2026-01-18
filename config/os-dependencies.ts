@@ -662,7 +662,8 @@ const clickhouseDependencies: EngineDependencies = {
     {
       name: 'clickhouse',
       binary: 'clickhouse',
-      description: 'ClickHouse server and client (unified binary)',
+      description:
+        'ClickHouse database binaries (clickhouse-server, clickhouse-client, clickhouse-local, clickhouse-benchmark). Homebrew installs the unified clickhouse binary with subcommands.',
       packages: {
         brew: { package: 'clickhouse' },
         // ClickHouse requires their own apt repository

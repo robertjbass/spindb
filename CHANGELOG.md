@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DuckDB engine inference** - Removed `.db` extension from DuckDB file detection. This extension is commonly used by SQLite, so inferring DuckDB was causing misidentification. Now only `.duckdb` and `.ddb` trigger DuckDB inference.
+- **DuckDB engines display** - Fixed `spindb engines list` showing DuckDB as "system-installed" even when downloaded from hostdb. Now correctly displays platform, architecture, and size like other engines.
+- **DuckDB container rename** - Fixed rename leaving orphaned container directories. Now properly moves the directory before updating the registry (matching SQLite behavior).
+- **DuckDB registry race conditions** - Added file-based locking for registry mutations to prevent corruption when multiple processes access the registry concurrently.
+- **DuckDB SQL dump escaping** - Fixed potential SQL injection in table names by properly escaping embedded double quotes during backup.
+- **ClickHouse multiquery support** - Added `--multiquery` flag to ClickHouse client for running scripts with multiple statements.
+- **ClickHouse test reliability** - Improved `waitForMutationsComplete` to distinguish transient errors (connection refused, network issues) from unexpected errors, reducing flaky test failures.
+- **DuckDB test isolation** - Fixed tests using shared directory that could cause conflicts. Each test run now uses a unique timestamped directory.
+
+### Changed
+- **DuckDB version display** - Updated CLAUDE.md to show full version "1.4.3" instead of just "1" in the Supported Versions table.
+- **DuckDB version validation** - `compareVersions()` now throws `TypeError` for invalid version strings instead of silently returning 0. Renamed `getSupportedVersions()` to `getSupportedMajorVersions()` for clarity.
+- **Logging guidelines** - Added logging section to CLAUDE.md: use `logDebug()` from `core/error-handler.ts` instead of `console.warn`/`console.log` to avoid polluting stdout/stderr and breaking JSON output modes.
+- **FEATURE.md audit** - Fixed incomplete engine lists (added MariaDB, ClickHouse), clarified file counts, fixed incorrect `paths.binaries` reference, added ClickHouse to reference implementations table.
+- **FerretDB planning** - Expanded FERRETDB.md with Windows support decision, detailed platform support table, hostdb build guide, and stretch goals section.
+
+## [0.19.2] - 2026-01-18
+
+### Added
+- **MIGRATION.md** - Historical guide for migrating engines from system binaries to hostdb, extracted from CLAUDE.md for reference.
+
+### Changed
+- **Docker E2E single-engine testing** - Run Docker tests for a single engine with `pnpm test:docker -- {engine}` for faster debugging cycles.
+- **CLAUDE.md refactored** - Reduced from 1043 to 271 lines (74% reduction). Added Related Documentation table, Supported Versions table with query languages, Container Config type, critical patterns (KNOWN_BINARY_TOOLS, version-maps sync), engine aliases, test port allocation, and platform philosophy. Moved migration guide to MIGRATION.md.
+- **Platform philosophy documented** - Engines no longer require universal OS/architecture support. Future: hostdb and SpinDB will merge to dynamically show available engines per platform.
+
+## [0.19.1] - 2026-01-18
+
+### Changed
+- **Faster menu startup** - Parallelized async operations in the interactive menu for faster startup:
+  - Container list and engine checks now run concurrently
+  - All 9 engine detection checks (PostgreSQL, MySQL, MariaDB, etc.) now run in parallel
+  - Container status checks (`isRunning`) now run in parallel instead of sequentially
+
+## [0.19.0] - 2026-01-18
+
+### Added
+- **DuckDB engine support** - Full container lifecycle for DuckDB, the embedded OLAP database
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - File-based database (like SQLite) - no server process, no port management
+  - Version 1 supported (1.4.3 from hostdb)
+  - Uses `duckdb://` connection scheme
+  - Backup formats: `.sql` (SQL dump), `.duckdb` (binary copy)
+  - Full integration with SpinDB registry for tracking database files
+  - MIT licensed
+
+### Fixed
+- **Binary extraction for flat archives** - DuckDB hostdb archive has flat structure (binary at root, no `bin/` subdirectory). Updated binary managers for both DuckDB and SQLite to detect flat archives and create the `bin/` subdirectory during extraction for consistent structure across all engines.
+- **Container manager registry handling** - Added DuckDB registry support to container-manager.ts for `getConfig`, `exists`, `list`, `rename`, and `delete` operations. File-based databases (SQLite, DuckDB) use registries instead of container directories.
+- **MySQL CI cache version mismatch** - CI was caching MySQL version 9 but engines.json default is 8.0.40, causing Docker tests to re-download MySQL every run. Fixed by aligning CI cache key to `mysql-8.0`.
+- **ClickHouse binary not found after download** - `KNOWN_BINARY_TOOLS` in dependency-manager.ts was missing 'clickhouse' and several other tools. This caused `findBinary()` to skip the config lookup and fall back to PATH search only. Fixed by adding all missing tools: clickhouse, postgres, pg_ctl, initdb, mariadb tools, and sqlite tools.
+- **DuckDB "not running" error** - The `spindb run` command only checked for SQLite as a file-based database, causing DuckDB containers to fail with "not running" error. Fixed by adding DuckDB to the file-based engine check.
+
+### Changed
+- **Test reliability for file-based databases** - SQLite and DuckDB integration tests now verify they're using downloaded binaries (`source: 'bundled'`), not system binaries (`source: 'system'`). Tests fail fast with clear instructions if system binaries are configured, ensuring extraction bugs are caught.
+- **Docker E2E tests** - Added ClickHouse and DuckDB to the Docker test suite (`pnpm test:docker`). Updated FEATURE.md with clearer guidance on adding new engines to Docker tests, including file-based engine handling.
+
+## [0.18.1] - 2026-01-18
+
+### Fixed
+- **ClickHouse engine** - Fixed unstable tests
+  - Added timeout to connection attempts
+  - Added retry logic for connection attempts
+
+
 ## [0.18.0] - 2026-01-17
 
 ### Added

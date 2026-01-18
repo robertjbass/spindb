@@ -109,7 +109,18 @@ export async function getLatestVersion(major: string): Promise<string> {
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
   }
-  return CLICKHOUSE_VERSION_MAP[major] || `${major}.0.0`
+
+  // Check version map fallback
+  if (CLICKHOUSE_VERSION_MAP[major]) {
+    return CLICKHOUSE_VERSION_MAP[major]
+  }
+
+  // Normalize to 4-segment ClickHouse version format (YY.MM.patch.build)
+  const parts = major.split('.')
+  while (parts.length < 4) {
+    parts.push('0')
+  }
+  return parts.slice(0, 4).join('.')
 }
 
 /**
@@ -177,11 +188,15 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     const versions = await getHostdbVersions('clickhouse')
     return versions ? versions.includes(version) : false
   } catch {
-    // Fallback to checking version map
+    // Fallback to checking version map using explicit key/value checks
     const major = getMajorVersion(version)
+    const mapKeys = Object.keys(CLICKHOUSE_VERSION_MAP)
+    const mapValues = Object.values(CLICKHOUSE_VERSION_MAP)
+
     return (
-      version in CLICKHOUSE_VERSION_MAP ||
-      CLICKHOUSE_VERSION_MAP[major] === version
+      mapKeys.includes(version) || // version is a major key (e.g., "25.12")
+      mapValues.includes(version) || // version is a full version value
+      CLICKHOUSE_VERSION_MAP[major] === version // version matches the mapped full version for its major
     )
   }
 }

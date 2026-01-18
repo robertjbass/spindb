@@ -12,7 +12,11 @@ import { stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync, createWriteStream } from 'fs'
 import { dirname } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { requireClickHousePath } from './cli-utils'
+import {
+  requireClickHousePath,
+  validateClickHouseIdentifier,
+  escapeClickHouseIdentifier,
+} from './cli-utils'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 /**
@@ -71,11 +75,16 @@ async function getTables(
   port: number,
   database: string,
 ): Promise<string[]> {
+  // Validate database identifier to prevent SQL injection
+  validateClickHouseIdentifier(database, 'database')
+  // Escape single quotes for use in string literal (WHERE clause)
+  const escapedDbLiteral = database.replace(/'/g, "''")
+
   const result = await execClickHouseQuery(
     clickhousePath,
     port,
     database,
-    `SELECT name FROM system.tables WHERE database = '${database}' ORDER BY name`,
+    `SELECT name FROM system.tables WHERE database = '${escapedDbLiteral}' ORDER BY name`,
   )
   return result
     .trim()
@@ -92,12 +101,18 @@ async function getCreateTableStatement(
   database: string,
   table: string,
 ): Promise<string> {
+  // Validate and escape identifiers to prevent SQL injection
+  validateClickHouseIdentifier(database, 'database')
+  validateClickHouseIdentifier(table, 'table')
+  const escapedDb = escapeClickHouseIdentifier(database)
+  const escapedTable = escapeClickHouseIdentifier(table)
+
   // Use TSVRaw format to get unescaped output (newlines as actual newlines, not \n)
   const result = await execClickHouseQuery(
     clickhousePath,
     port,
     database,
-    `SHOW CREATE TABLE ${database}.${table} FORMAT TSVRaw`,
+    `SHOW CREATE TABLE ${escapedDb}.${escapedTable} FORMAT TSVRaw`,
   )
   return result.trim()
 }
@@ -145,15 +160,22 @@ async function createSqlBackup(
 
     // Export data using INSERT format
     try {
+      // Validate and escape identifiers for SQL injection protection
+      // Note: table names from getTables are already validated, but escape for query safety
+      validateClickHouseIdentifier(table, 'table')
+      const escapedDb = escapeClickHouseIdentifier(database)
+      const escapedTable = escapeClickHouseIdentifier(table)
+
       const data = await execClickHouseQuery(
         clickhousePath,
         port,
         database,
-        `SELECT * FROM ${database}.${table} FORMAT SQLInsert`,
+        `SELECT * FROM ${escapedDb}.${escapedTable} FORMAT SQLInsert`,
       )
       if (data.trim()) {
-        // SQLInsert format uses literal "table" as placeholder, replace with actual table name
-        const insertData = data.trim().replace(/^INSERT INTO table \(/i, `INSERT INTO ${table} (`)
+        // SQLInsert format uses literal "table" as placeholder, replace ALL occurrences with actual table name
+        // Use global flag to handle multi-statement output
+        const insertData = data.trim().replace(/INSERT INTO table \(/gi, `INSERT INTO ${escapedTable} (`)
         lines.push(insertData)
         lines.push('')
       }
@@ -183,7 +205,24 @@ async function createSqlBackup(
 
 /**
  * Create a native format backup (faster, more compact)
- * Note: Currently unused - SQL format is preferred for restore compatibility
+ *
+ * TODO: Enable native backup format when restore support is implemented.
+ * Native format is ~10x faster and more compact than SQL, but requires
+ * parsing the binary format for restore. SQL format is currently preferred
+ * for portability and ease of restore via clickhouse client --multiquery.
+ *
+ * ARCHITECTURAL NOTE: The current implementation mixes text markers
+ * (-- TABLE:, -- CREATE:, -- DATA:) with binary Native format data in
+ * the same stream. Before enabling this feature, refactor to use a
+ * structured container format for deterministic parsing during restore:
+ * - Tar archive with separate files per table (schema.sql + data.native)
+ * - Or length-prefixed binary sections
+ * - Or separate metadata JSON file alongside pure binary data
+ *
+ * To enable: export this function, add 'native' to BACKUP_FORMATS in
+ * config/backup-formats.ts, and implement native restore in restore.ts.
+ *
+ * @internal Kept for future native backup support
  */
 async function _createNativeBackup(
   container: ContainerConfig,
@@ -232,6 +271,11 @@ async function _createNativeBackup(
     // Export data in Native format (binary, fast)
     fileStream.write(`-- DATA (Native format):\n`)
 
+    // Validate and escape identifiers for SQL injection protection
+    validateClickHouseIdentifier(table, 'table')
+    const escapedDb = escapeClickHouseIdentifier(database)
+    const escapedTable = escapeClickHouseIdentifier(table)
+
     await new Promise<void>((resolve, reject) => {
       const args = [
         'client',
@@ -242,7 +286,7 @@ async function _createNativeBackup(
         '--database',
         database,
         '--query',
-        `SELECT * FROM ${database}.${table} FORMAT Native`,
+        `SELECT * FROM ${escapedDb}.${escapedTable} FORMAT Native`,
       ]
 
       const proc = spawn(clickhousePath, args, {
@@ -290,9 +334,17 @@ async function _createNativeBackup(
 
 /**
  * Create a backup
- * Supports two formats:
- * - 'sql': SQL statements (DDL + INSERT)
- * - 'dump' (default): Native format (faster, more compact)
+ *
+ * Currently only supports SQL format (DDL + INSERT statements).
+ * Native format support is planned but not yet implemented for restore.
+ * See _createNativeBackup for the future native implementation.
+ *
+ * @param container - Container configuration
+ * @param outputPath - Path to write backup file
+ * @param options - Backup options (BackupOptions type)
+ * @param options.format - Reserved for future use. Currently ignored; all backups
+ *   use SQL format. When native format support is added, 'dump' will use
+ *   _createNativeBackup for faster, more compact backups.
  */
 export async function createBackup(
   container: ContainerConfig,
@@ -301,11 +353,16 @@ export async function createBackup(
 ): Promise<BackupResult> {
   const database = options.database || container.database || 'default'
 
-  // 'sql' format means SQL statements
-  if (options.format === 'sql') {
-    return createSqlBackup(container, outputPath, database)
+  // Log when a non-SQL format is requested but not yet supported
+  if (options.format && options.format !== 'sql') {
+    logDebug(
+      `ClickHouse backup: format '${options.format}' requested but not yet supported. ` +
+        `Using SQL format instead. See _createNativeBackup for future native support.`,
+    )
   }
-  // Default to SQL format since native format is complex for restore
+
+  // Currently only SQL format is supported
+  // Native format (_createNativeBackup) will be enabled when restore support is added
   return createSqlBackup(container, outputPath, database)
 }
 

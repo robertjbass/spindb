@@ -38,12 +38,18 @@ async function looksLikeClickHouseSql(filePath: string): Promise<boolean> {
 
     let sqlStatementsFound = 0
     const linesToCheck = 20
+    let checkedLines = 0
 
     for (const line of lines) {
+      // Stop after checking linesToCheck lines
+      if (checkedLines >= linesToCheck) break
+
       const trimmed = line.trim().toUpperCase()
 
-      // Skip empty lines and comments
+      // Skip empty lines and comments (don't count toward linesToCheck)
       if (!trimmed || trimmed.startsWith('--')) continue
+
+      checkedLines++
 
       // Check for SQL keywords
       for (const keyword of CLICKHOUSE_SQL_KEYWORDS) {
@@ -53,11 +59,10 @@ async function looksLikeClickHouseSql(filePath: string): Promise<boolean> {
         }
       }
 
+      // Early success if we found 2 or more SQL statements
       if (sqlStatementsFound >= 2) {
         return true
       }
-
-      if (sqlStatementsFound >= linesToCheck) break
     }
 
     return sqlStatementsFound > 0

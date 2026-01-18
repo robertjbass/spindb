@@ -1,8 +1,8 @@
 /**
- * SQLite System Integration Tests
+ * DuckDB Integration Tests
  *
- * Tests the full container lifecycle for SQLite.
- * Unlike PostgreSQL/MySQL, SQLite is file-based with no server process.
+ * Tests the full container lifecycle for DuckDB.
+ * Like SQLite, DuckDB is file-based with no server process.
  */
 
 import { describe, it, before, after } from 'node:test'
@@ -17,49 +17,69 @@ import {
   cleanupTestContainers,
   assert,
   assertEqual,
-  runScriptFile,
-  runScriptSQL,
-  sqliteFileExists,
 } from './helpers'
 import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
-import { sqliteRegistry } from '../../engines/sqlite/registry'
+import { duckdbRegistry } from '../../engines/duckdb/registry'
 import { configManager } from '../../core/config-manager'
 import { Engine } from '../../types'
 
-// Helper to get sqlite3 path from the engine
-async function getSqlite3Path(): Promise<string> {
-  const engine = getEngine(Engine.SQLite)
-  const path = await engine.getSqlite3Path()
+// Helper to get duckdb path from the engine
+async function getDuckDBPath(): Promise<string> {
+  const engine = getEngine(Engine.DuckDB)
+  const path = await engine.getDuckDBPath()
   if (!path) {
-    throw new Error('sqlite3 not found. Run: spindb engines download sqlite')
+    throw new Error('duckdb not found. Run: spindb engines download duckdb')
   }
   return path
 }
 
 // Verify we're using downloaded binaries, not system ones
 async function verifyUsingDownloadedBinaries(): Promise<void> {
-  const config = await configManager.getBinaryConfig('sqlite3')
+  const config = await configManager.getBinaryConfig('duckdb')
   if (!config) {
     throw new Error(
-      'sqlite3 not configured. Run: spindb engines download sqlite',
+      'duckdb not configured. Run: spindb engines download duckdb',
     )
   }
   if (config.source === 'system') {
     throw new Error(
-      'Tests are using system sqlite3, not downloaded binaries. ' +
+      'Tests are using system duckdb, not downloaded binaries. ' +
         'This makes tests unreliable for catching extraction bugs. ' +
-        'Run: spindb engines download sqlite 3',
+        'Run: spindb engines download duckdb 1',
     )
   }
 }
 
-const ENGINE = Engine.SQLite
-const SEED_FILE = join(__dirname, '../fixtures/sqlite/seeds/sample-db.sql')
-const EXPECTED_ROW_COUNT = 5
-const TEST_DIR = join(__dirname, '../.test-sqlite')
+// Helper to check if DuckDB file exists
+function duckdbFileExists(filePath: string): boolean {
+  return existsSync(filePath)
+}
 
-describe('SQLite Integration Tests', () => {
+// Helper to execute a SQL query against a DuckDB database file
+async function queryDuckDB(dbPath: string, sql: string): Promise<string> {
+  const { execFile } = await import('child_process')
+  const { promisify } = await import('util')
+  const execFileAsync = promisify(execFile)
+  const duckdb = await getDuckDBPath()
+
+  const { stdout } = await execFileAsync(duckdb, [
+    dbPath,
+    '-noheader',
+    '-list',
+    '-c',
+    sql,
+  ])
+  return stdout.trim()
+}
+
+const ENGINE = Engine.DuckDB
+const SEED_FILE = join(__dirname, '../fixtures/duckdb/seeds/sample-db.sql')
+const EXPECTED_ROW_COUNT = 5
+const TEST_DIR_BASE = join(__dirname, '../.test-duckdb')
+
+describe('DuckDB Integration Tests', () => {
+  let testDir: string
   let containerName: string
   let backupContainerName: string
   let renamedContainerName: string
@@ -71,48 +91,50 @@ describe('SQLite Integration Tests', () => {
     // This ensures tests actually validate the binary extraction pipeline
     await verifyUsingDownloadedBinaries()
 
-    console.log('\n🧹 Cleaning up any existing test containers...')
+    console.log('\n Cleaning up any existing test containers...')
     const deleted = await cleanupTestContainers()
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
 
-    // Create test directory
-    await mkdir(TEST_DIR, { recursive: true })
+    // Create unique test directory per run to avoid conflicts
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    testDir = `${TEST_DIR_BASE}-${runId}`
+    await mkdir(testDir, { recursive: true })
 
-    containerName = generateTestName('sqlite-test')
-    backupContainerName = generateTestName('sqlite-test-backup')
-    renamedContainerName = generateTestName('sqlite-test-renamed')
-    dbPath = join(TEST_DIR, `${containerName}.sqlite`)
-    backupDbPath = join(TEST_DIR, `${backupContainerName}.sqlite`)
+    containerName = generateTestName('duckdb-test')
+    backupContainerName = generateTestName('duckdb-test-backup')
+    renamedContainerName = generateTestName('duckdb-test-renamed')
+    dbPath = join(testDir, `${containerName}.duckdb`)
+    backupDbPath = join(testDir, `${backupContainerName}.duckdb`)
   })
 
   after(async () => {
-    console.log('\n🧹 Final cleanup...')
+    console.log('\n Final cleanup...')
     const deleted = await cleanupTestContainers()
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
 
     // Clean up test directory
-    if (existsSync(TEST_DIR)) {
-      await rm(TEST_DIR, { recursive: true, force: true })
+    if (testDir && existsSync(testDir)) {
+      await rm(testDir, { recursive: true, force: true })
     }
   })
 
-  it('should create SQLite database with --path option', async () => {
-    console.log(`\n📦 Creating SQLite database "${containerName}"...`)
+  it('should create DuckDB database with --path option', async () => {
+    console.log(`\n Creating DuckDB database "${containerName}"...`)
 
     await containerManager.create(containerName, {
       engine: ENGINE,
-      version: '3',
-      port: 0, // SQLite doesn't use ports
+      version: '1',
+      port: 0, // DuckDB doesn't use ports
       database: dbPath,
     })
 
     // Initialize the database (creates the file)
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(containerName, '3', { path: dbPath })
+    await engine.initDataDir(containerName, '1', { path: dbPath })
 
     // Verify container exists
     const config = await containerManager.getConfig(containerName)
@@ -120,52 +142,50 @@ describe('SQLite Integration Tests', () => {
     assertEqual(config?.database, dbPath, 'Database path should match')
 
     // Verify file exists
-    assert(sqliteFileExists(dbPath), 'SQLite database file should exist')
+    assert(duckdbFileExists(dbPath), 'DuckDB database file should exist')
 
-    console.log(`   ✓ Database created at ${dbPath}`)
+    console.log(`   Database created at ${dbPath}`)
   })
 
-  it('should list SQLite container with "available" status', async () => {
-    console.log(`\n📋 Listing SQLite containers...`)
+  it('should list DuckDB container with "available" status', async () => {
+    console.log(`\n Listing DuckDB containers...`)
 
     const containers = await containerManager.list()
-    const sqliteContainers = containers.filter((c) => c.engine === ENGINE)
+    const duckdbContainers = containers.filter((c) => c.engine === ENGINE)
 
     assert(
-      sqliteContainers.length > 0,
-      'Should have at least one SQLite container',
+      duckdbContainers.length > 0,
+      'Should have at least one DuckDB container',
     )
 
-    const ourContainer = sqliteContainers.find((c) => c.name === containerName)
+    const ourContainer = duckdbContainers.find((c) => c.name === containerName)
     assert(ourContainer !== undefined, 'Should find our test container')
 
-    // SQLite uses 'running' status to indicate file exists
+    // DuckDB uses 'running' status to indicate file exists
     assertEqual(
       ourContainer?.status,
       'running',
       'Status should be "running" (file exists)',
     )
 
-    console.log(`   ✓ Found ${sqliteContainers.length} SQLite container(s)`)
+    console.log(`   Found ${duckdbContainers.length} DuckDB container(s)`)
   })
 
   it('should seed database with test data using runScript', async () => {
-    console.log(`\n🌱 Seeding database with test data...`)
+    console.log(`\n Seeding database with test data...`)
 
-    // Use runScriptFile which internally calls engine.runScript
-    await runScriptFile(containerName, SEED_FILE)
+    // Use engine.runScript to seed the database
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
 
-    // Query row count directly via sqlite3
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const sqlite3 = await getSqlite3Path()
+    await engine.runScript(config!, { file: SEED_FILE })
 
-    const { stdout } = await execFileAsync(sqlite3, [
-      dbPath,
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    const rowCount = parseInt(stdout.trim(), 10)
+    // Query row count directly via duckdb
+    const rowCount = parseInt(
+      await queryDuckDB(dbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
 
     assertEqual(
       rowCount,
@@ -173,66 +193,40 @@ describe('SQLite Integration Tests', () => {
       'Should have correct row count after seeding',
     )
 
-    console.log(`   ✓ Seeded ${rowCount} rows`)
+    console.log(`   Seeded ${rowCount} rows`)
   })
 
   it('should run inline SQL using runScript', async () => {
-    console.log(`\n✏️  Running inline SQL...`)
+    console.log(`\n Running inline SQL...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
 
     // Delete one row
-    await runScriptSQL(
-      containerName,
-      "DELETE FROM test_user WHERE email = 'eve@example.com'",
-    )
+    await engine.runScript(config!, {
+      sql: "DELETE FROM test_user WHERE email = 'eve@example.com'",
+    })
 
     // Verify deletion
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const sqlite3 = await getSqlite3Path()
-
-    const { stdout } = await execFileAsync(sqlite3, [
-      dbPath,
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(dbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
 
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
-    console.log(`   ✓ Row deleted, now have ${rowCount} rows`)
-  })
-
-  it('should backup database (SQL format)', async () => {
-    console.log(`\n💾 Creating SQL backup...`)
-
-    const config = await containerManager.getConfig(containerName)
-    assert(config !== null, 'Container config should exist')
-
-    const engine = getEngine(ENGINE)
-    const backupPath = join(TEST_DIR, 'backup.sql')
-
-    const result = await engine.backup(config!, backupPath, {
-      format: 'sql',
-      database: config!.database,
-    })
-
-    assert(existsSync(result.path), 'Backup file should exist')
-    assertEqual(result.format, 'sql', 'Backup format should be SQL')
-
-    // Clean up
-    await rm(backupPath, { force: true })
-
-    console.log(`   ✓ SQL backup created (${result.size} bytes)`)
+    console.log(`   Row deleted, now have ${rowCount} rows`)
   })
 
   it('should backup database (binary format) and restore', async () => {
-    console.log(`\n💾 Creating binary backup and restoring...`)
+    console.log(`\n Creating binary backup and restoring...`)
 
     const config = await containerManager.getConfig(containerName)
     assert(config !== null, 'Container config should exist')
 
     const engine = getEngine(ENGINE)
-    const backupPath = join(TEST_DIR, 'backup.sqlite')
+    const backupPath = join(testDir, 'backup.duckdb')
 
     // Create binary backup
     const result = await engine.backup(config!, backupPath, {
@@ -244,11 +238,11 @@ describe('SQLite Integration Tests', () => {
     // Create new container and restore
     await containerManager.create(backupContainerName, {
       engine: ENGINE,
-      version: '3',
+      version: '1',
       port: 0,
       database: backupDbPath,
     })
-    await engine.initDataDir(backupContainerName, '3', { path: backupDbPath })
+    await engine.initDataDir(backupContainerName, '1', { path: backupDbPath })
 
     const backupConfig = await containerManager.getConfig(backupContainerName)
     assert(backupConfig !== null, 'Backup container config should exist')
@@ -256,16 +250,10 @@ describe('SQLite Integration Tests', () => {
     await engine.restore(backupConfig!, backupPath)
 
     // Verify restored data
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const sqlite3 = await getSqlite3Path()
-
-    const { stdout } = await execFileAsync(sqlite3, [
-      backupDbPath,
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(backupDbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
 
     assertEqual(
       rowCount,
@@ -276,17 +264,17 @@ describe('SQLite Integration Tests', () => {
     // Clean up backup file
     await rm(backupPath, { force: true })
 
-    console.log(`   ✓ Binary backup created and restored with ${rowCount} rows`)
+    console.log(`   Binary backup created and restored with ${rowCount} rows`)
   })
 
   it('should relocate database file and update registry', async () => {
-    console.log(`\n📍 Relocating database file...`)
+    console.log(`\n Relocating database file...`)
 
     // Create a subdirectory for relocation
-    const relocateDir = join(TEST_DIR, 'relocated')
+    const relocateDir = join(testDir, 'relocated')
     await mkdir(relocateDir, { recursive: true })
 
-    const newDbPath = join(relocateDir, `${containerName}.sqlite`)
+    const newDbPath = join(relocateDir, `${containerName}.duckdb`)
 
     // Get current config
     const config = await containerManager.getConfig(containerName)
@@ -301,7 +289,7 @@ describe('SQLite Integration Tests', () => {
 
     // Update container config and registry (what container-handlers.ts does)
     await containerManager.updateConfig(containerName, { database: newDbPath })
-    await sqliteRegistry.update(containerName, { filePath: newDbPath })
+    await duckdbRegistry.update(containerName, { filePath: newDbPath })
 
     // Verify file exists at new location
     assert(existsSync(newDbPath), 'File should exist at new location')
@@ -319,7 +307,7 @@ describe('SQLite Integration Tests', () => {
     )
 
     // Verify registry is updated
-    const registryEntry = await sqliteRegistry.get(containerName)
+    const registryEntry = await duckdbRegistry.get(containerName)
     assertEqual(
       registryEntry?.filePath,
       newDbPath,
@@ -336,16 +324,10 @@ describe('SQLite Integration Tests', () => {
     )
 
     // Verify data is intact
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const sqlite3 = await getSqlite3Path()
-
-    const { stdout } = await execFileAsync(sqlite3, [
-      newDbPath,
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(newDbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT - 1,
@@ -355,11 +337,11 @@ describe('SQLite Integration Tests', () => {
     // Update dbPath for subsequent tests
     dbPath = newDbPath
 
-    console.log(`   ✓ Relocated from ${originalPath} to ${newDbPath}`)
+    console.log(`   Relocated from ${originalPath} to ${newDbPath}`)
   })
 
   it('should rename container', async () => {
-    console.log(`\n📝 Renaming container...`)
+    console.log(`\n Renaming container...`)
 
     // Rename container
     await containerManager.rename(containerName, renamedContainerName)
@@ -376,23 +358,23 @@ describe('SQLite Integration Tests', () => {
       'Database path should be unchanged',
     )
 
-    console.log(`   ✓ Renamed to "${renamedContainerName}"`)
+    console.log(`   Renamed to "${renamedContainerName}"`)
   })
 
   it('should delete container and remove file', async () => {
-    console.log(`\n🗑️  Deleting containers...`)
+    console.log(`\n Deleting containers...`)
 
     // Delete backup container first
     await containerManager.delete(backupContainerName, { force: true })
     assert(
-      !sqliteFileExists(backupDbPath),
+      !duckdbFileExists(backupDbPath),
       'Backup database file should be deleted',
     )
 
     // Delete renamed container
     await containerManager.delete(renamedContainerName, { force: true })
     assert(
-      !sqliteFileExists(dbPath),
+      !duckdbFileExists(dbPath),
       'Original database file should be deleted',
     )
 
@@ -401,17 +383,17 @@ describe('SQLite Integration Tests', () => {
     const testContainers = containers.filter((c) => c.name.includes('-test'))
     assertEqual(testContainers.length, 0, 'No test containers should remain')
 
-    console.log('   ✓ Containers and files deleted')
+    console.log('   Containers and files deleted')
   })
 
   it('should have no test containers remaining', async () => {
-    console.log(`\n✅ Verifying no test containers remain...`)
+    console.log(`\n Verifying no test containers remain...`)
 
     const containers = await containerManager.list()
     const testContainers = containers.filter((c) => c.name.includes('-test'))
 
     assertEqual(testContainers.length, 0, 'No test containers should remain')
 
-    console.log('   ✓ All test containers cleaned up')
+    console.log('   All test containers cleaned up')
   })
 })

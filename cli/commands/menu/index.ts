@@ -21,7 +21,12 @@ async function showMainMenu(): Promise<void> {
   console.log(header('SpinDB - Local Database Manager'))
   console.log()
 
-  const containers = await containerManager.list()
+  // Parallelize container list and engine checks for faster startup
+  const [containers, engines] = await Promise.all([
+    containerManager.list(),
+    getInstalledEngines(),
+  ])
+
   const running = containers.filter((c) => c.status === 'running').length
   const stopped = containers.filter((c) => c.status !== 'running').length
 
@@ -38,7 +43,6 @@ async function showMainMenu(): Promise<void> {
   const canClone = containers.length > 0
 
   // Check if any engines are installed
-  const engines = await getInstalledEngines()
   const hasEngines = engines.length > 0
 
   // If containers exist, show List first; otherwise show Create first

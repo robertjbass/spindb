@@ -1,8 +1,9 @@
 /**
- * ClickHouse Binary Manager
+ * DuckDB Binary Manager
  *
- * Handles downloading, extracting, and managing ClickHouse binaries from hostdb.
- * ClickHouse uses a single unified binary that handles server, client, and local modes.
+ * Handles downloading, extracting, and managing DuckDB binaries from hostdb.
+ * Unlike other engines, DuckDB is an embedded database (not a server).
+ * This manager handles the duckdb CLI tool.
  */
 
 import { createWriteStream, existsSync } from 'fs'
@@ -10,20 +11,16 @@ import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
-import { exec } from 'child_process'
-import { promisify } from 'util'
+
 import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
-import { logDebug } from '../../core/error-handler'
 import {
   Engine,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
-
-const execAsync = promisify(exec)
 
 /**
  * Check if an error is a filesystem error that should trigger cp fallback
@@ -36,19 +33,18 @@ function isRenameFallbackError(error: unknown): boolean {
   return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
 }
 
-export class ClickHouseBinaryManager {
+export class DuckDBBinaryManager {
   /**
-   * Get the download URL for a ClickHouse version
+   * Get the download URL for a DuckDB version
    *
-   * Uses hostdb GitHub releases for all platforms (macOS, Linux).
-   * Note: Windows is not supported by ClickHouse on hostdb.
+   * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
   getDownloadUrl(version: string, platform: string, arch: string): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
 
-  // Convert version to full version format (e.g., "25.12" -> "25.12.3.21")
+  // Convert version to full version format (e.g., "1" -> "1.4.3")
   getFullVersion(version: string): string {
     return normalizeVersion(version)
   }
@@ -61,17 +57,17 @@ export class ClickHouseBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
-    // ClickHouse uses a single binary named 'clickhouse'
-    const clickhousePath = join(binPath, 'bin', 'clickhouse')
-    return existsSync(clickhousePath)
+    const ext = platform === 'win32' ? '.exe' : ''
+    const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
+    return existsSync(duckdbPath)
   }
 
-  // List all installed ClickHouse versions
+  // List all installed DuckDB versions
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -83,24 +79,15 @@ export class ClickHouseBinaryManager {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
-      if (!entry.name.startsWith('clickhouse-')) continue
 
-      // Split from end to handle versions with dashes
-      // Format: clickhouse-{version}-{platform}-{arch}
-      const rest = entry.name.slice('clickhouse-'.length)
-      const parts = rest.split('-')
-      if (parts.length < 3) continue
-
-      const arch = parts.pop()!
-      const platform = parts.pop()!
-      const version = parts.join('-')
-
-      if (version && platform && arch) {
+      // Match duckdb-{version}-{platform}-{arch} directories
+      const match = entry.name.match(/^duckdb-([\d.]+)-(\w+)-(\w+)$/)
+      if (match) {
         installed.push({
-          engine: Engine.ClickHouse,
-          version,
-          platform,
-          arch,
+          engine: Engine.DuckDB,
+          version: match[1],
+          platform: match[2],
+          arch: match[3],
         })
       }
     }
@@ -108,7 +95,7 @@ export class ClickHouseBinaryManager {
     return installed
   }
 
-  // Download and extract ClickHouse binaries
+  // Download and extract DuckDB binaries
   async download(
     version: string,
     platform: string,
@@ -118,16 +105,18 @@ export class ClickHouseBinaryManager {
     const fullVersion = this.getFullVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
     const tempDir = join(
       paths.bin,
-      `temp-clickhouse-${fullVersion}-${platform}-${arch}`,
+      `temp-duckdb-${fullVersion}-${platform}-${arch}`,
     )
-    const archiveFile = join(tempDir, 'clickhouse.tar.gz')
+    // Windows uses .zip, Unix uses .tar.gz
+    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const archiveFile = join(tempDir, `duckdb.${ext}`)
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -139,7 +128,7 @@ export class ClickHouseBinaryManager {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
-        message: 'Downloading ClickHouse binaries...',
+        message: 'Downloading DuckDB binaries...',
       })
 
       const controller = new AbortController()
@@ -161,13 +150,13 @@ export class ClickHouseBinaryManager {
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
-            `ClickHouse ${fullVersion} binaries not found (404). ` +
+            `DuckDB ${fullVersion} binaries not found (404). ` +
               `This version may have been removed from hostdb. ` +
               `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
           )
         }
         throw new Error(
-          `Failed to download ClickHouse binaries: ${response.status} ${response.statusText}`,
+          `Failed to download DuckDB binaries: ${response.status} ${response.statusText}`,
         )
       }
 
@@ -184,14 +173,32 @@ export class ClickHouseBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+      if (platform === 'win32') {
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          platform,
+          onProgress,
+        )
+      } else {
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          platform,
+          onProgress,
+        )
+      }
 
-      // Make binaries executable
-      const binDir = join(binPath, 'bin')
-      if (existsSync(binDir)) {
-        const binaries = await readdir(binDir)
-        for (const binary of binaries) {
-          await chmod(join(binDir, binary), 0o755)
+      // Make binaries executable (Unix only)
+      if (platform !== 'win32') {
+        const binDir = join(binPath, 'bin')
+        if (existsSync(binDir)) {
+          const binaries = await readdir(binDir)
+          for (const binary of binaries) {
+            await chmod(join(binDir, binary), 0o755)
+          }
         }
       }
 
@@ -211,54 +218,69 @@ export class ClickHouseBinaryManager {
     }
   }
 
-  // Extract Unix binaries from tar.gz file
-  private async extractUnixBinaries(
-    tarFile: string,
-    binPath: string,
-    tempDir: string,
-    onProgress?: ProgressCallback,
-  ): Promise<void> {
-    onProgress?.({
-      stage: 'extracting',
-      message: 'Extracting binaries...',
-    })
-
-    // Extract tar.gz to temp directory first
-    const extractDir = join(tempDir, 'extract')
-    await mkdir(extractDir, { recursive: true })
-    await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
-
-    await this.moveExtractedEntries(extractDir, binPath)
-  }
-
-  // Move extracted entries from extractDir to binPath
+  /**
+   * Move extracted entries from extractDir to binPath.
+   * Handles both nested (duckdb/ or duckdb-* /) and flat archive structures.
+   * (Note: space before / prevents early comment termination)
+   * Uses rename with fallback to cp for cross-device or permission errors.
+   *
+   * For flat archives (executable at root without bin/), creates a bin/ subdirectory
+   * to maintain consistent structure across all engines.
+   */
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
+    platform: string,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
-    // Check for a clickhouse subdirectory
-    const clickhouseDir = entries.find(
+    // Check if there's a nested duckdb/ directory
+    const duckdbDir = entries.find(
       (e) =>
         e.isDirectory() &&
-        (e.name === 'clickhouse' || e.name.startsWith('clickhouse-')),
+        (e.name === 'duckdb' || e.name.startsWith('duckdb-')),
     )
 
-    const sourceDir = clickhouseDir
-      ? join(extractDir, clickhouseDir.name)
-      : extractDir
-    const sourceEntries = clickhouseDir
+    // Determine source directory and entries to move
+    const sourceDir = duckdbDir ? join(extractDir, duckdbDir.name) : extractDir
+    const sourceEntries = duckdbDir
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    // Check if source has a bin/ subdirectory
+    // Check if the source already has a bin/ directory
     const hasBinDir = sourceEntries.some(
       (e) => e.isDirectory() && e.name === 'bin',
     )
 
-    if (hasBinDir) {
-      // Standard structure: move all entries as-is (preserves bin/ subdirectory)
+    // If no bin/ directory, create one and put executables there
+    // This handles flat archives where duckdb is at the root
+    if (!hasBinDir) {
+      const binDir = join(binPath, 'bin')
+      await mkdir(binDir, { recursive: true })
+
+      const ext = platform === 'win32' ? '.exe' : ''
+      const executableNames = [`duckdb${ext}`]
+
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        // Put executables in bin/, everything else in binPath root
+        const isExecutable = executableNames.includes(entry.name)
+        const destPath = isExecutable
+          ? join(binDir, entry.name)
+          : join(binPath, entry.name)
+
+        try {
+          await rename(sourcePath, destPath)
+        } catch (error) {
+          if (isRenameFallbackError(error)) {
+            await cp(sourcePath, destPath, { recursive: true })
+          } else {
+            throw error
+          }
+        }
+      }
+    } else {
+      // Has bin/ directory - move everything as-is
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
@@ -272,35 +294,69 @@ export class ClickHouseBinaryManager {
           }
         }
       }
-    } else {
-      // Flat structure: create bin/ and move binaries there
-      const destBinDir = join(binPath, 'bin')
-      await mkdir(destBinDir, { recursive: true })
-
-      for (const entry of sourceEntries) {
-        const sourcePath = join(sourceDir, entry.name)
-        // Check if it's an executable (no extension on Unix)
-        const isExecutable =
-          entry.isFile() &&
-          !entry.name.includes('.') &&
-          entry.name.startsWith('clickhouse')
-        const destPath = isExecutable
-          ? join(destBinDir, entry.name)
-          : join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
-      }
     }
   }
 
-  // Verify that ClickHouse binaries are working
+  // Extract Unix binaries from tar.gz file
+  private async extractUnixBinaries(
+    tarFile: string,
+    binPath: string,
+    tempDir: string,
+    platform: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries...',
+    })
+
+    // Extract tar.gz to temp directory first
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+    await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
+
+    // Move extracted entries to binPath
+    await this.moveExtractedEntries(extractDir, binPath, platform)
+  }
+
+  // Extract Windows binaries from zip file
+  private async extractWindowsBinaries(
+    zipFile: string,
+    binPath: string,
+    tempDir: string,
+    platform: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries...',
+    })
+
+    // Extract zip to temp directory first using PowerShell
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+
+    // Escape single quotes for PowerShell (double them)
+    const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
+
+    // Build the PowerShell command
+    const command = `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`
+
+    // Use -EncodedCommand to avoid shell parsing issues with special characters
+    // (e.g., $ in usernames like C:\Users\John$Doe would be interpreted as variables)
+    const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
+
+    await spawnAsync('powershell', [
+      '-NoProfile',
+      '-EncodedCommand',
+      encodedCommand,
+    ])
+
+    // Move extracted entries to binPath
+    await this.moveExtractedEntries(extractDir, binPath, platform)
+  }
+
+  // Verify that DuckDB binaries are working
   async verify(
     version: string,
     platform: string,
@@ -308,44 +364,41 @@ export class ClickHouseBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
 
-    const clickhousePath = join(binPath, 'bin', 'clickhouse')
+    const ext = platform === 'win32' ? '.exe' : ''
+    const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
 
-    if (!existsSync(clickhousePath)) {
-      throw new Error(`ClickHouse binary not found at ${binPath}/bin/`)
+    if (!existsSync(duckdbPath)) {
+      throw new Error(`DuckDB binary not found at ${binPath}/bin/`)
     }
 
     try {
-      const { stdout, stderr } = await execAsync(
-        `"${clickhousePath}" client --version`,
-      )
-      // Log stderr if present (may contain benign warnings about config, etc.)
-      if (stderr && stderr.trim()) {
-        logDebug(`clickhouse client stderr during version check: ${stderr.trim()}`)
-      }
-      // Extract version from output like "ClickHouse client version 25.12.3.21 (official build)"
-      const match = stdout.match(/version\s+(\d+\.\d+\.\d+\.\d+)/)
-      const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+\.\d+)/) : null
-      const reportedVersion = match?.[1] ?? altMatch?.[1]
+      const { stdout } = await spawnAsync(duckdbPath, ['--version'])
+      // Extract version from output like "v1.4.3 abcdef123"
+      const match = stdout.match(/v?(\d+\.\d+\.\d+)/)
+      const reportedVersion = match?.[1]
 
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
-      // Check if major versions match (YY.MM format)
-      const expectedMajor = version.split('.').slice(0, 2).join('.')
-      const reportedMajor = reportedVersion.split('.').slice(0, 2).join('.')
-      if (expectedMajor === reportedMajor) {
+      // Check if full versions match exactly
+      if (reportedVersion === fullVersion) {
         return true
       }
 
-      // Check if full versions match
-      if (reportedVersion === fullVersion) {
+      // Check if major versions match (relaxed match due to version normalization)
+      const expectedMajor = version.split('.')[0]
+      const reportedMajor = reportedVersion.split('.')[0]
+      if (expectedMajor === reportedMajor) {
+        console.debug(
+          `DuckDB version match by major version: requested ${version} (normalized to ${fullVersion}), binary reports ${reportedVersion}`,
+        )
         return true
       }
 
@@ -353,18 +406,12 @@ export class ClickHouseBinaryManager {
         `Version mismatch: expected ${version}, got ${reportedVersion}`,
       )
     } catch (error) {
-      const err = error as Error & { stderr?: string; code?: number }
-      // Include stderr and exit code in error message for better debugging
-      const details = [err.message]
-      if (err.stderr) details.push(`stderr: ${err.stderr.trim()}`)
-      if (err.code !== undefined) details.push(`exit code: ${err.code}`)
-      throw new Error(
-        `Failed to verify ClickHouse binaries: ${details.join(', ')}`,
-      )
+      const err = error as Error
+      throw new Error(`Failed to verify DuckDB binaries: ${err.message}`)
     }
   }
 
-  // Get the path to a specific binary
+  // Get the path to a specific binary (duckdb)
   getBinaryExecutable(
     version: string,
     platform: string,
@@ -373,12 +420,13 @@ export class ClickHouseBinaryManager {
   ): string {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
     })
-    return join(binPath, 'bin', binary)
+    const ext = platform === 'win32' ? '.exe' : ''
+    return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
@@ -393,10 +441,10 @@ export class ClickHouseBinaryManager {
     if (await this.isInstalled(version, platform, arch)) {
       onProgress?.({
         stage: 'cached',
-        message: 'Using cached ClickHouse binaries',
+        message: 'Using cached DuckDB binaries',
       })
       return paths.getBinaryPath({
-        engine: 'clickhouse',
+        engine: 'duckdb',
         version: fullVersion,
         platform,
         arch,
@@ -410,7 +458,7 @@ export class ClickHouseBinaryManager {
   async delete(version: string, platform: string, arch: string): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: 'duckdb',
       version: fullVersion,
       platform,
       arch,
@@ -422,4 +470,4 @@ export class ClickHouseBinaryManager {
   }
 }
 
-export const clickhouseBinaryManager = new ClickHouseBinaryManager()
+export const duckdbBinaryManager = new DuckDBBinaryManager()

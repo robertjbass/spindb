@@ -115,10 +115,11 @@ export function isVersionCompatible(
   }
 
   // Cannot restore backup from much newer version
-  const backupMajor = backup.year * 100 + backup.month
-  const restoreMajor = restore.year * 100 + restore.month
+  // Calculate total months to handle year boundaries correctly
+  const backupMonths = backup.year * 12 + backup.month
+  const restoreMonths = restore.year * 12 + restore.month
 
-  if (backupMajor > restoreMajor + 6) {
+  if (backupMonths > restoreMonths + 6) {
     // More than 6 months newer
     return {
       compatible: false,
@@ -127,12 +128,12 @@ export function isVersionCompatible(
   }
 
   // Allow same or close versions
-  if (backupMajor === restoreMajor) {
+  if (backupMonths === restoreMonths) {
     return { compatible: true }
   }
 
   // Allow upgrading from older version
-  if (restoreMajor > backupMajor) {
+  if (restoreMonths > backupMonths) {
     return {
       compatible: true,
       warning: `Restoring ClickHouse ${backupVersion} backup to ${restoreVersion} server. Schema may need updates.`,

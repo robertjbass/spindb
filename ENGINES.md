@@ -160,6 +160,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🔴 | Redis |
 | 🔷 | Valkey |
 | 🪶 | SQLite |
+| 🏠 | ClickHouse |
 
 ---
 

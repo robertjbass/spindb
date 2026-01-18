@@ -35,6 +35,21 @@ function isRenameFallbackError(error: unknown): boolean {
 
 export class SQLiteBinaryManager {
   /**
+   * Move a file or directory, falling back to copy if rename fails across filesystems.
+   */
+  private async moveEntry(sourcePath: string, destPath: string): Promise<void> {
+    try {
+      await rename(sourcePath, destPath)
+    } catch (error) {
+      if (isRenameFallbackError(error)) {
+        await cp(sourcePath, destPath, { recursive: true })
+      } else {
+        throw error
+      }
+    }
+  }
+
+  /**
    * Get the download URL for a SQLite version
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
@@ -178,6 +193,7 @@ export class SQLiteBinaryManager {
           archiveFile,
           binPath,
           tempDir,
+          platform,
           onProgress,
         )
       } else {
@@ -185,6 +201,7 @@ export class SQLiteBinaryManager {
           archiveFile,
           binPath,
           tempDir,
+          platform,
           onProgress,
         )
       }
@@ -221,10 +238,14 @@ export class SQLiteBinaryManager {
    * Handles both nested (sqlite/ or sqlite-* /) and flat archive structures.
    * (Note: space before / prevents early comment termination)
    * Uses rename with fallback to cp for cross-device or permission errors.
+   *
+   * For flat archives (executables at root without bin/), creates a bin/ subdirectory
+   * to maintain consistent structure across all engines.
    */
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
+    platform: string,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
@@ -241,18 +262,42 @@ export class SQLiteBinaryManager {
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    // Move each entry to binPath
-    for (const entry of sourceEntries) {
-      const sourcePath = join(sourceDir, entry.name)
-      const destPath = join(binPath, entry.name)
-      try {
-        await rename(sourcePath, destPath)
-      } catch (error) {
-        if (isRenameFallbackError(error)) {
-          await cp(sourcePath, destPath, { recursive: true })
-        } else {
-          throw error
-        }
+    // Check if the source already has a bin/ directory
+    const hasBinDir = sourceEntries.some(
+      (e) => e.isDirectory() && e.name === 'bin',
+    )
+
+    // If no bin/ directory, create one and put executables there
+    // This handles flat archives where sqlite3 is at the root
+    if (!hasBinDir) {
+      const binDir = join(binPath, 'bin')
+      await mkdir(binDir, { recursive: true })
+
+      const ext = platform === 'win32' ? '.exe' : ''
+      // SQLite tools that should go in bin/
+      const executableNames = [
+        `sqlite3${ext}`,
+        `sqldiff${ext}`,
+        `sqlite3_analyzer${ext}`,
+        `sqlite3_rsync${ext}`,
+      ]
+
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        // Put executables in bin/, everything else in binPath root
+        const isExecutable = executableNames.includes(entry.name)
+        const destPath = isExecutable
+          ? join(binDir, entry.name)
+          : join(binPath, entry.name)
+
+        await this.moveEntry(sourcePath, destPath)
+      }
+    } else {
+      // Has bin/ directory - move everything as-is
+      for (const entry of sourceEntries) {
+        const sourcePath = join(sourceDir, entry.name)
+        const destPath = join(binPath, entry.name)
+        await this.moveEntry(sourcePath, destPath)
       }
     }
   }
@@ -262,6 +307,7 @@ export class SQLiteBinaryManager {
     tarFile: string,
     binPath: string,
     tempDir: string,
+    platform: string,
     onProgress?: ProgressCallback,
   ): Promise<void> {
     onProgress?.({
@@ -275,7 +321,7 @@ export class SQLiteBinaryManager {
     await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
 
     // Move extracted entries to binPath
-    await this.moveExtractedEntries(extractDir, binPath)
+    await this.moveExtractedEntries(extractDir, binPath, platform)
   }
 
   // Extract Windows binaries from zip file
@@ -283,6 +329,7 @@ export class SQLiteBinaryManager {
     zipFile: string,
     binPath: string,
     tempDir: string,
+    platform: string,
     onProgress?: ProgressCallback,
   ): Promise<void> {
     onProgress?.({
@@ -311,7 +358,7 @@ export class SQLiteBinaryManager {
     ])
 
     // Move extracted entries to binPath
-    await this.moveExtractedEntries(extractDir, binPath)
+    await this.moveExtractedEntries(extractDir, binPath, platform)
   }
 
   // Verify that SQLite binaries are working

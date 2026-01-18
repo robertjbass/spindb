@@ -87,6 +87,20 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['sqlite3'],
     maxConnections: 0, // N/A - file-based
   },
+  duckdb: {
+    defaultVersion: '1',
+    defaultPort: 0, // File-based, no port
+    portRange: { start: 0, end: 0 }, // N/A
+    supportedVersions: ['1'], // Keep in sync with engines/duckdb/version-maps.ts
+    latestVersion: '1',
+    superuser: '', // No authentication
+    connectionScheme: 'duckdb',
+    logFileName: '', // No log file
+    pidFileName: '', // No PID file (no server process)
+    dataSubdir: '', // File is the data
+    clientTools: ['duckdb'],
+    maxConnections: 0, // N/A - file-based
+  },
   mongodb: {
     defaultVersion: '8.0',
     defaultPort: 27017,

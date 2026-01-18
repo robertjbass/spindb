@@ -139,6 +139,14 @@ export abstract class BaseEngine {
     return null
   }
 
+  /**
+   * Get the path to the duckdb client if available
+   * Default implementation returns null; DuckDB engine overrides this method.
+   */
+  async getDuckDBPath(_version?: string): Promise<string | null> {
+    return null
+  }
+
   // Open an interactive shell/CLI connection
   abstract connect(container: ContainerConfig, database?: string): Promise<void>
 

@@ -74,6 +74,22 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
+  duckdb: {
+    sql: {
+      extension: '.sql',
+      label: '.sql',
+      description: 'SQL dump - human-readable, portable',
+      spinnerLabel: 'SQL',
+    },
+    dump: {
+      extension: '.duckdb',
+      label: '.duckdb',
+      description: 'Binary copy - exact replica, faster',
+      spinnerLabel: 'binary',
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'dump',
+  },
   mongodb: {
     sql: {
       extension: '', // Directory, no extension

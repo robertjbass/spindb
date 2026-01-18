@@ -39,31 +39,32 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 
 SpinDB supports two types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MongoDB, Redis, Valkey)
+### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management
 - Use port allocation and process management
 - Have log files and PID tracking
 
-### File-Based Databases (SQLite)
+### File-Based Databases (SQLite, DuckDB)
 
 - Data stored in user project directories (CWD)
 - No start/stop required (embedded)
 - No port management needed (`port: 0`)
 - Connection string is the file path
 - Use a registry to track file locations
+- Status is `running` when file exists, `stopped` when missing
 
 **Edge cases for file-based engines:**
 
-When implementing a file-based engine like SQLite, these operations behave differently:
+When implementing a file-based engine like SQLite or DuckDB, these operations behave differently:
 
-| Operation | Server DB (PostgreSQL, etc.) | File-Based (SQLite) |
+| Operation | Server DB (PostgreSQL, etc.) | File-Based (SQLite, DuckDB) |
 |-----------|------------------------------|---------------------|
 | `start()` | Starts server process | No-op or skip |
 | `stop()` | Stops server process | No-op or skip |
 | `port` | Allocated from port range | Always `0` |
-| `status` | `running` / `stopped` | Always `created` or `stopped` |
+| `status` | `running` / `stopped` based on process | `running` / `stopped` based on file existence |
 | `waitForReady()` | Poll until server responds | Run query directly (no wait) |
 | `test_engine_lifecycle()` | Full start/stop/status cycle | Skip start/stop, just query |
 | Connection string | `scheme://host:port/db` | File path (e.g., `/path/to/db.sqlite`) |
@@ -72,24 +73,42 @@ When implementing a file-based engine like SQLite, these operations behave diffe
 
 ```ts
 // Integration test example - skip start/stop for file-based engines
-if (engine !== Engine.SQLite) {
+const isFileBased = engine === Engine.SQLite || engine === Engine.DuckDB
+if (!isFileBased) {
   await engineInstance.start(container)
   const ready = await waitForReady(engine, port)
   // ...
   await engineInstance.stop(container)
 }
 
-// Query test works for all engines (SQLite runs query directly)
+// Query test works for all engines (file-based engines run query directly)
 const result = await executeSQL(engine, port, database, 'SELECT 1;')
 ```
 
 ```bash
-# In test-local.sh - lifecycle skips start/stop for sqlite
-if [ "$engine" != "sqlite" ]; then
+# In test-local.sh - lifecycle skips start/stop for file-based engines
+if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ]; then
   pnpm start start "$container_name"
   # wait_for_ready, status check, etc.
 fi
-# Query test runs for all engines including sqlite
+# Query test runs for all engines including file-based
+```
+
+**Test reliability for file-based engines:**
+
+Integration tests for file-based engines (SQLite, DuckDB) verify they're using downloaded binaries, not system-installed ones. This ensures tests actually validate the binary extraction pipeline:
+
+```ts
+// In before() hook of sqlite.test.ts and duckdb.test.ts
+async function verifyUsingDownloadedBinaries(): Promise<void> {
+  const config = await configManager.getBinaryConfig('sqlite3') // or 'duckdb'
+  if (config?.source === 'system') {
+    throw new Error(
+      'Tests are using system binary, not downloaded binaries. ' +
+        'Run: spindb engines download sqlite 3',
+    )
+  }
+}
 ```
 
 ---
@@ -98,7 +117,7 @@ fi
 
 Use this checklist to track implementation progress. **Reference: Valkey implementation** for a complete example.
 
-### Core Engine Files (9 files)
+### Core Engine Files (8 required + 1 optional)
 
 - [ ] `engines/{engine}/index.ts` - Main engine class extending `BaseEngine`
 - [ ] `engines/{engine}/backup.ts` - Backup creation wrapper
@@ -153,17 +172,31 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching
 - [ ] `.github/workflows/ci.yml` - Add to `ci-success` job needs and checks
 
-### Docker Tests (2 files)
+### Docker Tests (2 files) - CRITICAL
+
+**Run `pnpm test:docker` to verify your engine works on Linux.** This catches library dependency issues.
+
+```bash
+pnpm test:docker              # Run all engine tests
+pnpm test:docker -- {engine}  # Run single engine test (faster for debugging)
+```
+
+Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`, `duckdb`
 
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
-- [ ] `tests/docker/run-e2e.sh` - Add engine case and test execution
+- [ ] `tests/docker/Dockerfile` - Add any required library dependencies (e.g., `libaio1` for MySQL, `libncurses6` for MariaDB)
+- [ ] `tests/docker/run-e2e.sh` - Add engine case in `run_test()` function
+- [ ] `tests/docker/run-e2e.sh` - Add engine test execution at bottom of file
+- [ ] For file-based engines: Update start/stop skip conditions to include your engine
 
-### Documentation (5 files)
+### Documentation (7 files)
 
 - [ ] `README.md` - Add engine section with full documentation
+- [ ] `README.md` - Update `--engine` option help text to include new engine
 - [ ] `CHANGELOG.md` - Add to unreleased section
 - [ ] `TODO.md` - Update engine status
 - [ ] `ENGINES.md` - Add to supported engines table and details
+- [ ] `ENGINES.md` - Add to Engine Emojis table
 - [ ] `CLAUDE.md` - Update project documentation
 
 ---
@@ -534,7 +567,7 @@ export type InstalledYourEngineEngine = {
 }
 
 export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineEngine[]> {
-  const binDir = paths.binaries
+  const binDir = paths.bin
   if (!existsSync(binDir)) return []
 
   const entries = await readdir(binDir, { withFileTypes: true })
@@ -1199,7 +1232,27 @@ Search for `test-linux-arm64` in `ci.yml` to find this section. Even though it's
 
 ## Docker Tests
 
-Update the Docker E2E test environment to include your engine.
+**CRITICAL:** Update the Docker E2E test environment to include your engine. Run `pnpm test:docker` to verify.
+
+### File-Based vs Server-Based Engines
+
+The Docker E2E tests handle two types of engines differently:
+
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse):
+- Have a daemon process that runs in the background
+- Require `spindb start` before running queries
+- Require `spindb stop` before deletion
+- Status is "running" when the process is active
+
+**File-based engines** (SQLite, DuckDB):
+- No daemon process - the database is just a file
+- Do NOT call `spindb start` or `spindb stop`
+- Status is "running" if the file exists (no actual process)
+- The `run-e2e.sh` script has skip conditions for start/stop operations
+
+If you're adding a file-based engine, you must update:
+1. `run-e2e.sh` - Add to start/stop skip conditions
+2. `cli/commands/run.ts` - Add to file-based engine check (so `spindb run` works without "not running" error)
 
 ### Dockerfile (`tests/docker/Dockerfile`)
 
@@ -1213,28 +1266,40 @@ Add your engine to the comment listing downloaded engines:
 # - MongoDB: server + client tools (mongod, mongosh, mongodump, mongorestore)
 # - Redis: server + client tools (redis-server, redis-cli)
 # - Valkey: server + client tools (valkey-server, valkey-cli)
-# - YourEngine: server + client tools (yourengine-server, yourengine-cli)
+# - ClickHouse: clickhouse (unified binary with subcommands)
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
+# - DuckDB: duckdb
+# - YourEngine: yourengine-server, yourengine-cli
 ```
 
 ### E2E Script (`tests/docker/run-e2e.sh`)
 
-1. **Add connectivity test case:**
+**For file-based engines (like SQLite, DuckDB):** Also update the start/stop skip conditions:
+
+```bash
+# Start container (skip for sqlite/duckdb - they're file-based, no server process)
+if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ] && [ "$engine" != "yourengine" ]; then
+
+# Stop container (skip for sqlite/duckdb - they're embedded)
+if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ] && [ "$engine" != "yourengine" ]; then
+```
+
+1. **Add connectivity test case** (in the `case $engine in` block):
 
 ```bash
     yourengine)
-      if ! spindb run "$container_name" -c "PING"; then
-        echo "FAILED: Could not run YourEngine command"
-        spindb stop "$container_name" 2>/dev/null || true
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run YourEngine query"
+        # For server-based engines, add: spindb stop "$container_name" 2>/dev/null || true
         spindb delete "$container_name" --yes 2>/dev/null || true
-        record_result "$engine" "$version" "FAILED" "PING failed"
+        record_result "$engine" "$version" "FAILED" "Query failed"
         FAILED=$((FAILED+1))
         return 1
       fi
       ;;
 ```
 
-2. **Add test execution:**
+2. **Add test execution** (at the bottom with other engines):
 
 ```bash
 # YourEngine
@@ -1524,6 +1589,8 @@ Use these implementations as references:
 | **PostgreSQL** | Server | hostdb + EDB (Windows) | SQL, Windows fallback example |
 | **MySQL** | Server | hostdb (all platforms) | SQL, root user, socket handling |
 | **MariaDB** | Server | hostdb (all platforms) | MySQL-compatible, separate binaries |
+| **ClickHouse** | Server | hostdb (macOS/Linux) | OLAP, XML configs, YY.MM versioning |
 | **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
+| **DuckDB** | File-based | hostdb (all platforms) | Embedded OLAP, flat archive handling example |
 
 **Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example.

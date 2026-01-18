@@ -1,12 +1,20 @@
 # CLAUDE.md - Project Context for Claude Code
 
-## Style Guide
+## Related Documentation
 
-See [STYLEGUIDE.md](STYLEGUIDE.md) for coding conventions and style guidelines.
+| File | Purpose |
+|------|---------|
+| [STYLEGUIDE.md](STYLEGUIDE.md) | Coding conventions and style guidelines |
+| [FEATURE.md](FEATURE.md) | **Authoritative guide** for adding new database engines |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | High-level design, layers, data flow |
+| [MIGRATION.md](MIGRATION.md) | Historical guide for migrating engines to hostdb |
+| [ENGINES.md](ENGINES.md) | Supported engines overview |
+| [TODO.md](TODO.md) | Roadmap and backlog |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, and SQLite (all via hostdb downloads).
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, and ClickHouse.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -22,300 +30,124 @@ SpinDB is a CLI tool for running local databases without Docker. It's a lightwei
 ## Project Structure
 
 ```
-cli/
-├── bin.ts                  # Entry point (#!/usr/bin/env tsx)
-├── index.ts                # Commander setup, routes to commands
-├── commands/               # CLI commands
-│   ├── menu/               # Interactive menu (default command)
-│   │   ├── index.ts        # Main menu orchestrator
-│   │   ├── shared.ts       # MenuChoice type, pressEnterToContinue
-│   │   ├── container-handlers.ts  # Create, list, start, stop, edit, delete
-│   │   ├── backup-handlers.ts     # Backup, restore, clone
-│   │   ├── shell-handlers.ts      # Open shell, copy connection string
-│   │   ├── sql-handlers.ts        # Run SQL, view logs
-│   │   ├── engine-handlers.ts     # List/delete engines
-│   │   └── update-handlers.ts     # Check for updates
-│   ├── create.ts           # Create container
-│   ├── start.ts            # Start container
-│   ├── stop.ts             # Stop container
-│   ├── delete.ts           # Delete container
-│   ├── list.ts             # List containers
-│   ├── info.ts             # Show container details (alias: status)
-│   ├── connect.ts          # Connect to shell (alias: shell)
-│   ├── clone.ts            # Clone container
-│   ├── restore.ts          # Restore from backup
-│   ├── backup.ts           # Create backup
-│   ├── run.ts              # Run SQL files/statements
-│   ├── logs.ts             # View container logs
-│   ├── edit.ts             # Rename/change port
-│   ├── url.ts              # Connection string output
-│   ├── config.ts           # Configuration management
-│   ├── deps.ts             # Dependency management
-│   ├── engines.ts          # Engine management
-│   ├── self-update.ts      # Self-update command
-│   └── version.ts          # Version info
-└── ui/
-    ├── prompts.ts          # Inquirer prompts
-    ├── spinner.ts          # Ora spinner helpers
-    └── theme.ts            # Chalk color theme
-core/
-├── binary-manager.ts       # PostgreSQL binary downloads
-├── config-manager.ts       # ~/.spindb/config.json
-├── container-manager.ts    # Container CRUD
-├── port-manager.ts         # Port availability
-├── process-manager.ts      # Process start/stop
-├── dependency-manager.ts   # Tool detection/installation
-├── error-handler.ts        # SpinDBError class
-├── transaction-manager.ts  # Rollback support
-├── start-with-retry.ts     # Port conflict retry
-└── platform-service.ts     # Platform abstractions
-config/
-├── paths.ts                # ~/.spindb/ paths
-├── defaults.ts             # Default values
-├── os-dependencies.ts      # OS-specific deps
-├── engines.json            # Engines registry (source of truth)
-└── engines-registry.ts     # Type-safe loader for engines.json
-engines/
-├── base-engine.ts          # Abstract base class
-├── index.ts                # Engine registry
-├── postgresql/
-│   ├── index.ts            # PostgreSQL engine
-│   ├── binary-urls.ts      # hostdb URL builder (macOS/Linux)
-│   ├── hostdb-releases.ts  # hostdb GitHub releases API
-│   ├── edb-binary-urls.ts  # Windows EDB URL builder
-│   ├── binary-manager.ts   # Client tool management
-│   ├── backup.ts           # pg_dump wrapper
-│   ├── restore.ts          # Restore logic
-│   └── version-validator.ts
-├── mysql/
-│   ├── index.ts            # MySQL engine
-│   ├── binary-urls.ts      # hostdb URL builder
-│   ├── hostdb-releases.ts  # hostdb GitHub releases API
-│   ├── version-maps.ts     # Version mapping
-│   ├── binary-manager.ts   # Download/extraction
-│   ├── binary-detection.ts # Legacy system binary detection
-│   ├── backup.ts           # mysqldump wrapper
-│   ├── restore.ts          # Restore logic
-│   └── version-validator.ts
-├── sqlite/
-│   ├── index.ts            # SQLite engine (file-based)
-│   ├── binary-urls.ts      # hostdb URL builder
-│   ├── version-maps.ts     # Version mapping
-│   ├── binary-manager.ts   # Download/extraction
-│   ├── registry.ts         # File tracking in config.json
-│   └── scanner.ts          # CWD scanning for .sqlite files
-├── mongodb/
-│   ├── index.ts            # MongoDB engine
-│   ├── binary-urls.ts      # hostdb URL builder
-│   ├── hostdb-releases.ts  # hostdb GitHub releases API
-│   ├── version-maps.ts     # Version mapping
-│   ├── binary-manager.ts   # Download/extraction
-│   ├── backup.ts           # mongodump wrapper
-│   ├── restore.ts          # mongorestore wrapper
-│   └── version-validator.ts
-├── redis/
-│   ├── index.ts            # Redis engine
-│   ├── binary-urls.ts      # hostdb URL builder
-│   ├── hostdb-releases.ts  # hostdb GitHub releases API
-│   ├── version-maps.ts     # Version mapping
-│   ├── binary-manager.ts   # Download/extraction
-│   ├── backup.ts           # BGSAVE/RDB wrapper
-│   ├── restore.ts          # RDB restore
-│   └── version-validator.ts
-├── valkey/
-│   ├── index.ts            # Valkey engine (Redis fork)
-│   ├── binary-urls.ts      # hostdb URL builder
-│   ├── hostdb-releases.ts  # hostdb GitHub releases API
-│   ├── version-maps.ts     # Version mapping
-│   ├── binary-manager.ts   # Download/extraction
-│   ├── backup.ts           # BGSAVE/RDB wrapper
-│   ├── restore.ts          # RDB restore
-│   └── version-validator.ts
-└── clickhouse/
-    ├── index.ts            # ClickHouse engine (OLAP)
-    ├── binary-urls.ts      # hostdb URL builder
-    ├── hostdb-releases.ts  # hostdb GitHub releases API
-    ├── version-maps.ts     # Version mapping
-    ├── binary-manager.ts   # Download/extraction
-    ├── backup.ts           # SQL dump wrapper
-    ├── restore.ts          # SQL restore
-    └── version-validator.ts
-types/index.ts              # TypeScript types
+cli/                    # CLI commands and UI
+  commands/             # CLI commands (create, start, stop, etc.)
+    menu/               # Interactive menu handlers
+  ui/                   # Prompts, spinners, theme
+core/                   # Core business logic
+  container-manager.ts  # Container CRUD
+  process-manager.ts    # Process start/stop
+  config-manager.ts     # ~/.spindb/config.json
+  dependency-manager.ts # Tool detection/installation (see KNOWN_BINARY_TOOLS)
+config/                 # Configuration files
+  engines.json          # Engines registry (source of truth)
+  engine-defaults.ts    # Default ports, versions
+engines/                # Database engine implementations
+  base-engine.ts        # Abstract base class
+  {engine}/             # Each engine: index.ts, backup.ts, restore.ts, version-maps.ts
+types/index.ts          # TypeScript types (Engine enum, BinaryTool type)
 tests/
-├── unit/                   # Unit tests (381 tests)
-├── integration/            # Integration tests
-└── fixtures/               # Test data
+  unit/                 # Unit tests
+  integration/          # Integration tests (use reserved ports, see below)
+  fixtures/             # Test data
 ```
 
 ## Key Architecture
 
 ### Multi-Engine Support
 
-Engines extend `BaseEngine` abstract class:
+Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for full method list.
+
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse):
+- Data in `~/.spindb/containers/{engine}/{name}/`
+- Port management, start/stop lifecycle
+
+**File-based engines** (SQLite, DuckDB):
+- Data in user project directories (CWD), not `~/.spindb/`
+- No server process - `start()`/`stop()` are no-ops
+- Status determined by file existence, not process state
+- Registry in `~/.spindb/config.json` tracks files by name
+- Use `spindb attach <path>` / `spindb detach <name>` to manage registry
+
+### Engine Aliases
+
+Engines can be referenced by aliases in CLI commands:
+- `postgresql`, `postgres`, `pg` → PostgreSQL
+- `mongodb`, `mongo` → MongoDB
+- `sqlite`, `lite` → SQLite
+
+### Supported Versions & Query Languages
+
+| Engine | Versions | Query Language | Notes |
+|--------|----------|----------------|-------|
+| PostgreSQL 🐘 | 14, 15, 16, 17, 18 | SQL | |
+| MySQL 🐬 | 8.0, 8.4, 9 | SQL | |
+| MariaDB 🦭 | 10.11, 11.4, 11.8 | SQL | |
+| MongoDB 🍃 | 7.0, 8.0, 8.2 | JavaScript | Uses mongosh |
+| Redis 🔴 | 7, 8 | Redis commands | Databases 0-15 (numbered) |
+| Valkey 🔷 | 8, 9 | Redis commands | Uses `redis://` scheme for compatibility |
+| ClickHouse 🏠 | 25.12 | SQL | XML configs, HTTP port 8123 |
+| SQLite 🗄️ | 3 | SQL | File-based |
+| DuckDB 🦆 | 1.4.3 | SQL | File-based, OLAP |
+
+### Binary Sources
+
+All engines download binaries from [hostdb](https://github.com/robertjbass/hostdb) except:
+- **PostgreSQL on Windows**: Uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries. File IDs in `engines/postgresql/edb-binary-urls.ts`.
+- **ClickHouse**: macOS/Linux only (no Windows support in hostdb)
+
+**Platform Philosophy:** Originally, engines were only added if binaries were available for all OS/architectures. This changed when ClickHouse couldn't be built for Windows on hostdb. The new approach: engines can be added even with partial platform support. **Future direction:** hostdb and SpinDB will be combined to provide better UX - dynamically showing available engines based on the user's OS and architecture rather than requiring universal availability.
+
+### Critical: Version Maps Sync
+
+Each engine has a `version-maps.ts` that **MUST stay in sync** with [hostdb releases.json](https://github.com/robertjbass/hostdb/blob/main/releases.json):
 
 ```ts
-abstract class BaseEngine {
-  abstract name: string
-  abstract displayName: string
-  abstract supportedVersions: string[]
-  abstract start(container: ContainerConfig): Promise<void>
-  abstract stop(container: ContainerConfig): Promise<void>
-  abstract initDataDir(name: string, version: string, options: InitOptions): Promise<void>
-  // ...
+// engines/{engine}/version-maps.ts
+export const {ENGINE}_VERSION_MAP: Record<string, string> = {
+  '17': '17.7.0',  // Must match releases.json exactly
+  '18': '18.1.0',
 }
 ```
 
-**PostgreSQL 🐘**
-- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) (macOS/Linux) or EDB (Windows)
-- Client tools (psql, pg_dump) bundled with hostdb binaries
-- Versions: 14, 15, 16, 17, 18
-- Orphaned container support: if engine is deleted, containers remain and prompt to re-download on start
+If a version is in releases.json but not in version-maps.ts, SpinDB won't offer it. If a version is in version-maps.ts but not releases.json, downloads will fail.
 
-**MySQL 🐬**
-- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
-- Client tools (mysql, mysqldump, mysqladmin) bundled with hostdb binaries
-- Versions: 8.0, 8.4, 9
-- Orphaned container support: if engine is deleted, containers remain and prompt to re-download on start
+### Critical: KNOWN_BINARY_TOOLS
 
-**MongoDB 🍃**
-- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
-- Client tools (mongod, mongosh, mongodump, mongorestore) bundled with hostdb binaries
-- Versions: 7.0, 8.0, 8.2
-- Uses JavaScript for queries instead of SQL
-
-**Redis 🔴**
-- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
-- Client tools (redis-server, redis-cli) bundled with hostdb binaries
-- Versions: 7, 8
-- Uses numbered databases (0-15) instead of named databases
-- Uses Redis commands instead of SQL
-
-**Valkey 🔷**
-- Redis fork with BSD-3 license (created after Redis license change)
-- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for all platforms
-- Client tools (valkey-server, valkey-cli) bundled with hostdb binaries
-- Versions: 8, 9
-- Fully API-compatible with Redis
-- Uses `redis://` connection scheme for client compatibility
-- Uses numbered databases (0-15) like Redis
-
-**ClickHouse 🏠**
-- Column-oriented OLAP database for fast analytics
-- Server binaries from [hostdb](https://github.com/robertjbass/hostdb) for macOS and Linux (no Windows support)
-- Uses unified `clickhouse` binary with subcommands (server, client)
-- Version: 25.12 (YY.MM versioning format)
-- Default port 9000 (native TCP), HTTP port 8123
-- Uses SQL query language with ClickHouse-specific extensions
-- XML configuration files (config.xml, users.xml)
-- Apache-2.0 license
-
-### Engines JSON Registry
-
-The `config/engines.json` file is the source of truth for all supported database engines. It contains metadata like display names, icons, supported versions, binary sources, and status.
-
-**Type-Safe Engine Handling:**
-
-The `Engine` enum in `types/index.ts` defines all supported engines. When adding a new engine:
-
-1. Add to `Engine` enum in `types/index.ts`
-2. Add to `ALL_ENGINES` array in `types/index.ts` (TypeScript will error if missing)
-3. Add to `config/engines.json` (runtime validation will error if missing)
+When adding tools to an engine, they **MUST** be added to `KNOWN_BINARY_TOOLS` in `core/dependency-manager.ts`:
 
 ```ts
-// types/index.ts
-export enum Engine {
-  PostgreSQL = 'postgresql',
-  MySQL = 'mysql',
-  // ... add new engine here
-}
-
-// ALL_ENGINES must include all enum values - compile-time checked
-export const ALL_ENGINES = [
-  Engine.PostgreSQL,
-  Engine.MySQL,
-  // ... if you forget to add here, TypeScript errors
-] as const
-
-// Use assertExhaustive in switch statements
-function getPort(engine: Engine): number {
-  switch (engine) {
-    case Engine.PostgreSQL: return 5432
-    case Engine.MySQL: return 3306
-    // ... if you forget a case, TypeScript errors in default
-    default: assertExhaustive(engine)
-  }
-}
+const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
+  'psql', 'pg_dump', 'clickhouse', 'duckdb', // etc.
+]
 ```
 
-**CLI Command:**
+Missing entries cause `findBinary()` to skip config lookup and fall back to PATH search, which silently fails if the tool isn't in PATH.
 
-```bash
-spindb engines supported          # List all supported engines
-spindb engines supported --json   # Full config as JSON
-spindb engines supported --all    # Include pending/planned engines
+### Type-Safe Engine Handling
+
+```ts
+// types/index.ts - ALL THREE must be updated together
+export enum Engine { PostgreSQL = 'postgresql', MySQL = 'mysql', /* ... */ }
+export const ALL_ENGINES = [Engine.PostgreSQL, Engine.MySQL, /* ... */] as const
+// config/engines.json - runtime validation
 ```
+
+Use `assertExhaustive(engine)` in switch statements for compile-time exhaustiveness checking.
 
 ### Backup & Restore Formats
 
-Each engine supports specific backup formats with different restore behaviors:
+Examples: PostgreSQL (`.sql`, `.dump`), Redis/Valkey (`.redis`/`.valkey`, `.rdb`), SQLite/DuckDB (`.sql`, binary copy)
 
-| Engine | Format 1 | Format 2 | Notes |
-|--------|----------|----------|-------|
-| PostgreSQL | `.sql` (plain SQL) | `.dump` (pg_dump custom) | Standard pg_dump/pg_restore |
-| MySQL | `.sql` (plain SQL) | `.sql.gz` (compressed) | Standard mysqldump |
-| SQLite | `.sql` (plain SQL) | `.sqlite` (binary copy) | Direct file operations |
-| MongoDB | `.bson` (BSON) | `.archive` (compressed) | mongodump/mongorestore |
-| Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | See notes below |
-| Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | Same as Redis |
-| ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL dump via clickhouse client |
-
-**Redis/Valkey-specific restore behavior:**
-- **RDB (`.rdb`)**: Binary snapshot. Requires stopping Redis, copying file to data dir, then restart.
-- **Text (`.redis`)**: Human-readable Redis commands. Pipes to running Redis instance.
-  - Content-based detection: Files are recognized as Redis commands by analyzing content (looking for SET, HSET, DEL, etc.), not just extension. This allows restoring files like `users.txt` or `data.dump`.
-  - Merge vs Replace: For text restores, user chooses:
-    - **Replace all**: Runs `FLUSHDB` first (clean slate)
-    - **Merge**: Adds/updates keys, keeps existing keys not in backup
-- **No "Create new database"**: Redis/Valkey use numbered databases 0-15 that always exist.
+See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
 
 ### File Structure
 
 ```
 ~/.spindb/
-├── bin/                              # PostgreSQL server binaries
-│   └── postgresql-18.1.0-darwin-arm64/
-├── containers/
-│   ├── postgresql/
-│   │   └── mydb/
-│   │       ├── container.json
-│   │       ├── data/
-│   │       └── postgres.log
-│   ├── mysql/
-│   │   └── mydb/
-│   │       ├── container.json
-│   │       ├── data/
-│   │       └── mysql.log
-│   ├── mongodb/
-│   │   └── mydb/
-│   │       ├── container.json
-│   │       ├── data/
-│   │       └── mongodb.log
-│   ├── redis/
-│   │   └── mydb/
-│   │       ├── container.json
-│   │       ├── data/
-│   │       └── redis.log
-│   ├── valkey/
-│   │   └── mydb/
-│   │       ├── container.json
-│   │       ├── data/
-│   │       └── valkey.log
-│   └── clickhouse/
-│       └── mydb/
-│           ├── container.json
-│           ├── data/
-│           └── clickhouse-server.log
-└── config.json                       # Tool paths cache
+├── bin/                    # Downloaded engine binaries
+├── containers/             # Server-based engine data only
+└── config.json             # Tool paths + SQLite/DuckDB registries
 ```
 
 ### Container Config
@@ -323,675 +155,123 @@ Each engine supports specific backup formats with different restore behaviors:
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'sqlite' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse'
   version: string
-  port: number
-  database: string        // Primary database
-  databases?: string[]    // All databases
-  created: string
+  port: number              // 0 for file-based engines
+  database: string          // Primary database name
+  databases?: string[]      // All databases (PostgreSQL, MySQL)
+  created: string           // ISO timestamp
   status: 'created' | 'running' | 'stopped'
-  clonedFrom?: string
+  clonedFrom?: string       // Source container if cloned
 }
 ```
 
 ## Core Principles
 
-### CLI-First Design
-All functionality must be available via command-line arguments. Interactive menus are syntactic sugar for CLI commands.
-
-```bash
-# These are equivalent:
-spindb create mydb -p 5433              # CLI
-spindb → Create container → mydb → 5433 # Interactive
-```
-
-### Wrapper Pattern
-Functions should wrap CLI tools, not implement database logic directly:
-
-```ts
-// CORRECT: Wraps psql CLI
-async createDatabase(container: ContainerConfig, database: string): Promise<void> {
-  await execAsync(
-    `"${psqlPath}" -h 127.0.0.1 -p ${port} -U postgres -d postgres -c 'CREATE DATABASE "${database}"'`
-  )
-}
-```
-
-### Transactional Operations
-Multi-step operations must be atomic. Use `TransactionManager` for rollback support:
-
-```ts
-const tx = new TransactionManager()
-tx.addRollback(async () => await cleanup())
-try {
-  await step1()
-  await step2()
-  tx.commit()
-} catch (error) {
-  await tx.rollback()
-  throw error
-}
-```
+- **CLI-First**: All functionality via command-line arguments. Menus are syntactic sugar.
+- **Wrapper Pattern**: Functions wrap CLI tools, don't implement database logic directly.
+- **Transactional**: Multi-step operations use `TransactionManager` for rollback.
 
 ## Common Tasks
 
 ### Running the CLI
 
-**IMPORTANT:** During development, always use `pnpm start` instead of `spindb` to ensure you're running the development version, not the globally installed version.
+**IMPORTANT:** Use `pnpm start` during development, not `spindb` (global install).
 
 ```bash
-pnpm start              # Interactive menu
-pnpm start create mydb  # Direct command
-pnpm start --help       # Help
+pnpm start                    # Interactive menu
+pnpm start create mydb        # Direct command
+pnpm start create mydb --from postgres://...  # Infer engine from connection string
 ```
 
-Note: `pnpm start` and `pnpm run start` are equivalent.
+### Additional CLI Commands
+
+```bash
+spindb attach <path>          # Register existing SQLite/DuckDB file
+spindb detach <name>          # Unregister from registry (keeps file)
+spindb doctor                 # System health check
+spindb url <container>        # Connection string (--copy, --json flags)
+spindb config show            # Display configuration
+spindb config detect          # Re-detect tool paths
+```
 
 ### Running Tests
+
 ```bash
-pnpm test           # All tests
 pnpm test:unit      # Unit only
 pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
-pnpm test:mongodb   # MongoDB integration
-pnpm test:redis     # Redis integration
-pnpm test:valkey    # Valkey integration
-pnpm test:clickhouse # ClickHouse integration
+pnpm test:duckdb    # DuckDB integration
+pnpm test:docker    # Docker Linux E2E (all engines)
+pnpm test:docker -- clickhouse  # Single engine
 ```
 
-**Note:** All test scripts use `--test-concurrency=1 --experimental-test-isolation=none` to disable Node's test runner worker threads. This prevents a macOS-specific serialization bug in Node 22 where worker thread IPC fails with "Unable to deserialize cloned data." The `--test-concurrency=1` alone only limits parallelism but still uses workers for isolation; `--experimental-test-isolation=none` completely disables worker isolation.
+**Test Port Allocation**: Integration tests use reserved ports to avoid conflicts:
+- PostgreSQL: 5454-5456 (not 5432)
+- MySQL: 3333-3335 (not 3306)
+- Redis: 6399-6401 (not 6379)
 
-### Adding a New Command
-1. Create `cli/commands/{name}.ts`
-2. Export a Commander `Command` instance
-3. Import and register in `cli/index.ts`
-4. Add to `cli/commands/menu.ts` if needed
-
-### After Adding Any New Feature
-After completing a feature, ensure these files are updated:
-
-1. **CLAUDE.md** - Update with new conventions, architecture changes, or commands
-2. **README.md** - Document new commands and usage examples
-3. **TODO.md** - Check off completed items, add any discovered future enhancements
-4. **CHANGELOG.md** - Add entry under `[Unreleased]` section (check git history if needed)
-5. **Tests** - Add unit and/or integration tests for new functionality
+**Node 22 Worker Thread Bug**: Tests use `--experimental-test-isolation=none` due to macOS serialization bug. Don't remove this flag.
 
 ### Adding a New Engine
 
-**IMPORTANT:** [FEATURE.md](FEATURE.md) is the authoritative guide for adding new database engines. It contains the complete specification including:
-
-- **Quick Start Checklist** - All files and tests that must be created
-- **BaseEngine Methods** - Full list of abstract methods with implementation guidance
-- **Configuration Files** - All files requiring updates (`types/index.ts`, `config/engine-defaults.ts`, etc.)
-- **Testing Requirements** - Integration tests (14+ tests), unit tests, CLI E2E tests, test fixtures
-- **GitHub Actions / CI** - How to add your engine to the CI workflow for all 3 OSes
-- **Binary Management** - Downloadable binaries vs system binaries approach
-- **OS Dependencies** - Package manager definitions for Homebrew, apt, choco, etc.
-- **Windows Considerations** - Command quoting, spawn options, PATH handling
-- **Pass/Fail Criteria** - Explicit verification steps before an engine is complete
-
-**Summary of what's involved:**
-1. Create `engines/{engine}/` directory with index.ts, backup.ts, restore.ts, version-validator.ts
-2. Implement ALL `BaseEngine` abstract methods
-3. Register engine in `engines/index.ts` with aliases
-4. Add to `types/index.ts` (Engine enum, BinaryTool type)
-5. Add to `config/engine-defaults.ts` and `config/os-dependencies.ts`
-6. Create test fixtures: `tests/fixtures/{engine}/seeds/sample-db.sql`
-7. Create integration tests: `tests/integration/{engine}.test.ts` (14+ tests)
-8. Update `tests/integration/helpers.ts` with engine support
-9. Add integration test job to `.github/workflows/ci.yml` for all 3 OSes (see CI Binary Caching below)
-10. Update documentation: README.md, CHANGELOG.md, TODO.md
-
-**CI Binary Caching (REQUIRED for hostdb-based engines):**
-
-All engines that download binaries from hostdb MUST have a cache step in `.github/workflows/ci.yml` to avoid re-downloading ~100MB+ binaries on every CI run:
-
-```yaml
-# Cache {Engine} binaries - these are downloaded from hostdb
-- name: Cache {Engine} binaries
-  uses: actions/cache@v4
-  id: {engine}-cache
-  with:
-    path: ~/.spindb/bin
-    key: spindb-{engine}-{version}-${{ runner.os }}-${{ runner.arch }}
-
-# Download {Engine} binaries via hostdb
-- name: Install {Engine} via SpinDB
-  run: pnpm start engines download {engine} {version}
-```
-
-Current engines with CI caching:
-- PostgreSQL: `spindb-pg-18-${{ runner.os }}-${{ runner.arch }}`
-- MariaDB: `spindb-mariadb-11.8-${{ runner.os }}-${{ runner.arch }}`
-- MySQL: `spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}`
-- MongoDB: `spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}`
-- Redis: `spindb-redis-8-${{ runner.os }}-${{ runner.arch }}`
-- Valkey: `spindb-valkey-9-${{ runner.os }}-${{ runner.arch }}`
-- SQLite: `spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}`
-- ClickHouse: `spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}` (macOS/Linux only)
-
-**Reference implementations:**
-- **PostgreSQL** - Server database with downloadable binaries (hostdb/EDB)
-- **MySQL** - Server database with downloadable binaries (hostdb)
-- **MariaDB** - Server database with downloadable binaries (hostdb)
-- **MongoDB** - Server database with downloadable binaries (hostdb), uses JavaScript instead of SQL
-- **Redis** - Key-value store with downloadable binaries (hostdb), uses Redis commands instead of SQL
-- **Valkey** - Redis fork with downloadable binaries (hostdb), uses Redis commands (API-compatible)
-- **ClickHouse** - Column-oriented OLAP database with downloadable binaries (hostdb, macOS/Linux only), uses SQL
-- **SQLite** - File-based (embedded) database with downloadable binaries (hostdb), uses SQL
-
-**Engine Types:**
-- **Server databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse): Data in `~/.spindb/containers/`, port management, start/stop
-- **File-based databases** (SQLite): Data in project directory (CWD), no port/process management
-
-### Migrating an Engine from System Binaries to hostdb
-
-When hostdb adds support for a new engine, follow these steps to migrate from system-installed binaries to downloadable hostdb binaries. **Reference: MariaDB engine** as an example.
-
-**Current status:** All engines now use hostdb downloads:
-- PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey: Complete bundles from hostdb (server + all client tools)
-- SQLite: Tools from hostdb (sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync)
-
-#### Prerequisites
-
-**CRITICAL: Check hostdb releases.json first**
-
-Before starting, verify binaries exist and note exact versions:
-1. View https://github.com/robertjbass/hostdb/blob/main/releases.json
-2. Find the engine under `databases.{engine}`
-3. Note ALL available versions (e.g., `"8.0.5"`, `"8.2.0"`) - these become your version map
-4. Note supported platforms (darwin-arm64, darwin-x64, linux-x64)
-5. **The version-maps.ts file MUST match releases.json exactly** - any version not in releases.json will fail to download
-
-**MySQL Migration Note (Historical):** MySQL now uses hostdb binaries on ALL platforms. Previously, SpinDB used MariaDB as a drop-in replacement for MySQL on Linux (since MySQL wasn't easily available via apt). With hostdb providing MySQL binaries directly, this workaround is no longer needed. MySQL and MariaDB are now fully separate engines with their own binaries.
-
-#### Step 1: Create Binary Management Files
-
-Create these new files in `engines/{engine}/`:
-
-**`version-maps.ts`** - Maps major versions to full versions
-
-**SYNC REQUIREMENT:** This file must match hostdb releases.json exactly. Check releases.json first, then create this file with those exact versions.
-
-```ts
-/**
- * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
- * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
- * https://github.com/robertjbass/hostdb/blob/main/releases.json
- *
- * To update: Check releases.json, find databases.{engine}, copy all version strings.
- */
-export const {ENGINE}_VERSION_MAP: Record<string, string> = {
-  // Copy ALL versions from releases.json - extract major version as key
-  '8': '8.0.5',    // From releases.json: "8.0.5"
-  '8.2': '8.2.0',  // From releases.json: "8.2.0" (if minor versions differ)
-}
-
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys({ENGINE}_VERSION_MAP)
-export const FALLBACK_VERSION_MAP = {ENGINE}_VERSION_MAP
-```
-
-**`binary-urls.ts`** - Generates download URLs for hostdb releases
-```ts
-const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
-
-export function getBinaryUrl(version: string, platform: string, arch: string): string {
-  const fullVersion = FALLBACK_VERSION_MAP[version] || version
-  const platformKey = `${platform}-${arch}`
-  return `${HOSTDB_BASE_URL}/{engine}-${fullVersion}/${engine}-${fullVersion}-${platformKey}.tar.gz`
-}
-```
-
-**`binary-manager.ts`** - Handles download, extraction, verification
-- Copy structure from `engines/mariadb/binary-manager.ts` or `engines/postgresql/binary-manager.ts`
-- Update engine name, binary names, and verification logic
-
-#### Step 2: Update Main Engine File (`index.ts`)
-
-Key changes to make:
-
-1. **Import new modules:**
-   ```ts
-   import { {engine}BinaryManager } from './binary-manager'
-   import { getBinaryUrl, SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './binary-urls'
-   ```
-
-2. **Update `supportedVersions`:**
-   ```ts
-   supportedVersions = SUPPORTED_MAJOR_VERSIONS
-   ```
-
-3. **Update `ensureBinaries()` to register engine-native binaries only:**
-   ```ts
-   async ensureBinaries(version: string, onProgress?: ProgressCallback): Promise<string> {
-     const { platform, arch } = this.getPlatformInfo()
-     const binPath = await binaryManager.ensureInstalled(version, platform, arch, onProgress)
-
-     // CRITICAL: Register ONLY engine-native binary names to avoid conflicts
-     // e.g., for MariaDB: 'mariadb', 'mariadb-dump', 'mariadb-admin'
-     // NOT: 'mysql', 'mysqldump', 'mysqladmin' (those belong to MySQL engine)
-     const ext = platformService.getExecutableExtension()
-     const clientTools = ['{engine}', '{engine}-dump', '{engine}-admin'] as const
-
-     for (const tool of clientTools) {
-       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
-       if (existsSync(toolPath)) {
-         await configManager.setBinaryPath(tool, toolPath, 'bundled')
-       }
-     }
-     return binPath
-   }
-   ```
-
-4. **Create engine-specific client path method:**
-   ```ts
-   override async get{Engine}ClientPath(): Promise<string> {
-     const configPath = await configManager.getBinaryPath('{engine}')
-     if (configPath) return configPath
-     throw new Error('{engine} client not found. Run: spindb engines download {engine}')
-   }
-   ```
-
-5. **Update all internal methods to use engine-specific client:**
-   - Replace calls like `getMysqlClientPath()` with `get{Engine}ClientPath()`
-   - Update dump/restore methods to use engine-specific binary keys
-
-#### Step 3: Update Type Definitions (`types/index.ts`)
-
-1. **Add to `BinaryTool` type:**
-   ```ts
-   // {Engine} tools (native names only - no conflicts with other engines)
-   | '{engine}'
-   | '{engine}-dump'
-   | '{engine}d'  // server binary if applicable
-   | '{engine}-admin'
-   ```
-
-2. **Add to `SpinDBConfig.binaries`:**
-   ```ts
-   // {Engine} tools
-   {engine}?: BinaryConfig
-   '{engine}-dump'?: BinaryConfig
-   '{engine}d'?: BinaryConfig
-   '{engine}-admin'?: BinaryConfig
-   ```
-
-#### Step 4: Update BaseEngine (`engines/base-engine.ts`)
-
-Add the engine-specific client path method with default implementation:
-```ts
-/**
- * Get the path to the {engine} client if available
- * Default implementation throws; {Engine} engine overrides this method.
- */
-async get{Engine}ClientPath(): Promise<string> {
-  throw new Error('{engine} client not found')
-}
-```
-
-#### Step 5: Update Test Helpers (`tests/integration/helpers.ts`)
-
-**CRITICAL:** Each engine must have its own case in `executeSQL()` and `executeSQLFile()`:
-
-```ts
-} else if (engine === Engine.{Engine}) {
-  const engineImpl = getEngine(engine)
-  const clientPath = await engineImpl.get{Engine}ClientPath().catch(() => '{engine}')
-  const cmd = `"${clientPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql}"`
-  return execAsync(cmd)
-}
-```
-
-**Why separate cases?** Using a shared case (e.g., `MySQL || MariaDB`) and calling `getMysqlClientPath()` will fail for the new engine because that method returns the wrong binary. Each engine must call its own client path method.
-
-#### Step 6: Update Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
-
-1. **Add to shell option selection (around line 110):**
-   ```ts
-   } else if (config.engine === '{engine}') {
-     defaultShellName = '{engine}'
-     engineSpecificCli = 'mycli'  // or appropriate enhanced CLI
-     // ...
-   }
-   ```
-
-2. **Add to `launchShell()` function (around line 435):**
-   ```ts
-   } else if (config.engine === '{engine}') {
-     const clientPath = await configManager.getBinaryPath('{engine}')
-     shellCmd = clientPath || '{engine}'
-     shellArgs = ['-u', 'root', '-h', '127.0.0.1', '-P', String(config.port), config.database]
-     installHint = 'spindb engines download {engine}'
-   }
-   ```
-
-#### Step 7: Update Manage Engines Screen
-
-**Why this matters:** System-installed engines (MySQL, MongoDB, Redis) don't appear in the "Manage Engines" menu because there's nothing to manage - they're installed via Homebrew/apt. Once migrated to hostdb, the engine WILL appear in this menu and users can download/delete versions. This requires adding detection functions.
-
-1. **Add type in `cli/helpers.ts`:**
-   ```ts
-   export type Installed{Engine}Engine = {
-     engine: '{engine}'
-     version: string
-     platform: string
-     arch: string
-     path: string
-     sizeBytes: number
-     source: 'downloaded'
-   }
-   ```
-
-2. **Add detection function in `cli/helpers.ts`:**
-   ```ts
-   export async function getInstalled{Engine}Engines(): Promise<Installed{Engine}Engine[]> {
-     const binDir = paths.binaries
-     if (!existsSync(binDir)) return []
-
-     const entries = await readdir(binDir, { withFileTypes: true })
-     const engines: Installed{Engine}Engine[] = []
-
-     for (const entry of entries) {
-       if (!entry.isDirectory()) continue
-       // Match pattern: {engine}-{version}-{platform}-{arch}
-       const match = entry.name.match(/^{engine}-(\d+\.\d+\.\d+)-(\w+)-(\w+)$/)
-       if (!match) continue
-
-       const [, version, platform, arch] = match
-       const fullPath = join(binDir, entry.name)
-       const stats = await stat(fullPath)
-
-       engines.push({
-         engine: '{engine}',
-         version,
-         platform,
-         arch,
-         path: fullPath,
-         sizeBytes: await getDirectorySize(fullPath),
-         source: 'downloaded',
-       })
-     }
-     return engines
-   }
-   ```
-
-3. **Export from `cli/helpers.ts`** - add to exports
-
-4. **Update `cli/commands/menu/engine-handlers.ts`:**
-   ```ts
-   import { type Installed{Engine}Engine } from '../../helpers'
-
-   // Add filter for the new engine type
-   const {engine}Engines = engines.filter(
-     (e): e is Installed{Engine}Engine => e.engine === '{engine}',
-   )
-
-   // Add totalSize calculation
-   const total{Engine}Size = {engine}Engines.reduce((acc, e) => acc + e.sizeBytes, 0)
-
-   // Add to allEnginesSorted array (maintains display grouping)
-   const allEnginesSorted = [
-     ...pgEngines,
-     ...mariadbEngines,
-     // ... other engines ...
-     ...{engine}Engines,
-   ]
-
-   // Add summary display block
-   if ({engine}Engines.length > 0) {
-     console.log(chalk.gray(`  {Engine}: ${{{engine}Engines.length}} version(s), ${formatBytes(total{Engine}Size)}`))
-   }
-   ```
-
-   Note: The delete functionality works automatically via `allEnginesSorted` - no additional changes needed.
-
-#### Step 8: Update Config Defaults (`config/engine-defaults.ts`)
-
-```ts
-{engine}: {
-  supportedVersions: ['8', '9'],  // Keep in sync with version-maps.ts
-  defaultVersion: '8',
-  latestVersion: '9',
-  // ...
-}
-```
-
-#### Step 9: Clean Up and Test
-
-1. **Clear stale config entries:** Users with old installations may have binaries registered under wrong keys. They need to:
-   ```bash
-   # Delete old config entries pointing to wrong binaries
-   # Re-download engine: spindb engines download {engine}
-   ```
-
-2. **Run all tests:**
-   ```bash
-   pnpm lint                    # TypeScript compilation
-   pnpm test:unit              # Unit tests
-   pnpm test:{engine}          # Integration tests for this engine
-   pnpm test:mysql             # Verify no regression on similar engines
-   ```
-
-#### Common Pitfalls
-
-1. **Binary key conflicts:** Never register binaries under keys used by another engine. MariaDB must use `mariadb`, not `mysql`.
-
-2. **Forgetting BaseEngine method:** If you add `get{Engine}ClientPath()` to the engine but not to `BaseEngine`, TypeScript will fail when test helpers call it.
-
-3. **Shared test helper cases:** Don't combine engines in test helpers like `MySQL || MariaDB`. Each needs its own case calling its own client path method.
-
-4. **Stale config.json:** After migration, old binary registrations may point to wrong paths. Clear and re-register.
-
-5. **Missing `override` keyword:** When overriding BaseEngine methods, always use `override` keyword.
-
-### Updating Supported Engine Versions
-
-#### For hostdb-based engines (PostgreSQL, MariaDB)
-
-When new versions are added to hostdb releases.json:
-
-1. **Check hostdb releases.json:**
-   - View: https://github.com/robertjbass/hostdb/blob/main/releases.json
-   - Look for new versions under `databases.postgresql` or `databases.mariadb`
-
-2. **Update version-maps.ts:**
-   - Add new major versions to `engines/{engine}/version-maps.ts`
-   - Example for MariaDB:
-     ```ts
-     export const MARIADB_VERSION_MAP: Record<string, string> = {
-       '10.11': '10.11.15',
-       '11.4': '11.4.5',
-       '11.8': '11.8.5',  // New version
-     }
-     ```
-   - `SUPPORTED_MAJOR_VERSIONS` is automatically derived from map keys
-   - **IMPORTANT:** Versions not in this map will NOT appear in SpinDB, even if in releases.json
-
-3. **Update config/engine-defaults.ts:**
-   - Add to `supportedVersions` array
-   - Update `defaultVersion` and `latestVersion` if needed
-
-4. **Windows-specific (PostgreSQL only):**
-   - PostgreSQL Windows binaries require EDB file IDs
-   - Visit: https://www.enterprisedb.com/download-postgresql-binaries
-   - Add file ID to `engines/postgresql/edb-binary-urls.ts`
-
-5. **Update tests:**
-   - `tests/unit/{engine}-*.test.ts` - Add test cases for new versions
-
-6. **Update CI workflow (if changing default):**
-   - `.github/workflows/ci.yml` - Update `engines download {engine} <version>`
-
-7. **Update documentation:**
-   - README.md, CLAUDE.md, CHANGELOG.md
+See [FEATURE.md](FEATURE.md) for complete guide. Quick checklist:
+1. Create `engines/{engine}/` with index.ts, backup.ts, restore.ts, version-maps.ts
+2. Add to `Engine` enum, `ALL_ENGINES`, and `config/engines.json`
+3. Add tools to `KNOWN_BINARY_TOOLS` in dependency-manager.ts
+4. Add CI cache step in `.github/workflows/ci.yml`
+
+### After Adding Any Feature
+
+Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 ## Implementation Details
 
 ### Port Management
-- PostgreSQL default: 5432 (range: 5432-5500)
-- MySQL default: 3306 (range: 3306-3400)
-- MongoDB default: 27017 (range: 27017-27100)
-- Redis default: 6379 (range: 6379-6400)
-- Valkey default: 6379 (range: 6379-6400)
-- ClickHouse default: 9000 (range: 9000-9100)
-- Auto-increment on conflict
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000
 
-### Process Management
+Auto-increments on conflict (e.g., 5432 → 5433).
 
-**PostgreSQL:**
-```bash
-pg_ctl start -D {dataDir} -l {logFile} -w -o "-p {port}"
-pg_ctl stop -D {dataDir} -m fast -w
-```
+### Version Resolution
+Major versions resolve to full versions via hostdb API or `version-maps.ts` fallback.
 
-**MySQL:**
-```bash
-mysqld --datadir={dataDir} --port={port} --socket={socket} ...
-mysqladmin -h 127.0.0.1 -P {port} -u root shutdown
-```
-
-**MongoDB:**
-```bash
-mongod --dbpath {dataDir} --port {port} --logpath {logFile} --fork
-mongosh --port {port} --eval "db.adminCommand({shutdown: 1})"
-```
-
-**ClickHouse:**
-```bash
-clickhouse server --config-file={configPath} --pid-file={pidFile}
-# Stop via SIGTERM to PID
-```
-
-### Version Resolution (PostgreSQL)
-Major versions (e.g., `"17"`) resolve to full versions (e.g., `"17.7.0"`) via hostdb GitHub API or fallback map. Full versions used everywhere.
+**ClickHouse Note**: Uses YY.MM versioning (e.g., `25.12.3.21`), not semver.
 
 ### Config Cache
-Tool paths cached in `~/.spindb/config.json` with 7-day staleness. Refresh after package manager interactions:
+Tool paths cached in `~/.spindb/config.json` with 7-day staleness.
 
-```ts
-await configManager.refreshAllBinaries()
-```
-
-### Binary Sources by Engine
-
-SpinDB uses different binary sourcing strategies by engine:
-
-**PostgreSQL (Downloadable Binaries):**
-- macOS/Linux: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Windows: [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
-- Enables multi-version support (14, 15, 16, 17, 18 side-by-side)
-- ~45 MB per version
-- macOS: Includes client tools (psql, pg_dump, pg_restore)
-- Linux: Client tools downloaded separately from PostgreSQL apt repository if missing
-
-**MariaDB (Downloadable Binaries):**
-- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Enables multi-version support (10.11, 11.4, 11.8 side-by-side)
-
-**MySQL (Downloadable Binaries):**
-- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Enables multi-version support (8.0, 8.4, 9 side-by-side)
-- Includes client tools (mysql, mysqldump, mysqladmin)
-
-**MongoDB (Downloadable Binaries):**
-- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Enables multi-version support (7.0, 8.0, 8.2 side-by-side)
-- All tools bundled: mongod, mongosh, mongodump, mongorestore
-
-**Redis (Downloadable Binaries):**
-- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Enables multi-version support (7, 8 side-by-side)
-- Tools bundled: redis-server, redis-cli
-
-**Valkey (Downloadable Binaries):**
-- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Enables multi-version support (8, 9 side-by-side)
-- Tools bundled: valkey-server, valkey-cli
-- Redis fork with BSD-3 license
-
-**ClickHouse (Downloadable Binaries):**
-- macOS/Linux only: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Note: Windows not supported (hostdb doesn't provide Windows binaries)
-- Version 25.12 (YY.MM versioning format)
-- Uses unified `clickhouse` binary with subcommands (server, client)
-- ~300 MB per version
-- Apache-2.0 license
-
-**SQLite (Downloadable Binaries):**
-- All platforms: [hostdb](https://github.com/robertjbass/hostdb) via GitHub Releases
-- Version 3 (only major version)
-- Tools bundled: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
-- File-based database - no server process, data stored in user project directories
-
-### Orphaned Container Support (PostgreSQL)
-
-When a PostgreSQL engine is deleted while containers still reference it:
-
-1. **Engine deletion**: Stops any running containers first, then deletes the engine binary
-2. **Orphaned containers**: Container data remains intact in `~/.spindb/containers/`
-3. **Starting orphaned container**: Detects missing engine, prompts to download from hostdb
-4. **Fallback stop**: If engine is missing, uses direct process kill (SIGTERM/SIGKILL) instead of pg_ctl
-
-This allows users to delete engines to free disk space and re-download them later when needed.
+### Orphaned Container Support
+Deleted engines leave container data intact. Starting prompts to re-download.
 
 ## Error Handling
 
-**Interactive mode:** Log error, show "Press Enter to continue"
-**Direct CLI:** Log error, write to `~/.spindb/logs/`, exit non-zero
-
-Error messages should include actionable fix suggestions.
+**Interactive**: Log error, "Press Enter to continue"
+**CLI**: Log error, exit non-zero. Include actionable fix suggestions.
 
 ## UI Conventions
 
-### Menu Navigation
+Menu navigation patterns:
 - Submenus have "Back" and "Back to main menu" options
-- Back buttons: `${chalk.blue('←')} Back`
-- Main menu: `${chalk.blue('⌂')} Back to main menu`
-
-### Engine Icons
-- PostgreSQL: 🐘
-- MySQL: 🐬
-- MariaDB: 🦭
-- MongoDB: 🍃
-- Redis: 🔴
-- Valkey: 🔷
-- ClickHouse: 🏠
-- SQLite: 🗄️
+- Back button: `chalk.blue('←')` Back
+- Main menu: `chalk.blue('⌂')` Back to main menu
 
 ## Known Limitations
 
-1. **Local only** - Binds to 127.0.0.1 (remote connections planned for v1.1)
-2. **hostdb binary size** - Pre-built binaries are ~50-200MB per engine version
+1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
+2. **ClickHouse Windows** - Not supported (no hostdb binaries)
+3. **Redis/Valkey** - No `dumpFromConnectionString()` support
+4. **Large backups** - Redis text restore reads entire file into memory
 
-## Future Considerations
+## Publishing
 
-- **zonky.io integration**: For smaller embedded PostgreSQL binaries (~10MB), [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) may be integrated as an alternative binary source for use cases where size matters more than having the full toolset
-
-## Publishing & Versioning
-
-npm publishing via GitHub Actions with OIDC trusted publishing.
-
-### Release Process
-1. Create PR to `main`
-2. Bump version in `package.json`
-3. **Update CHANGELOG.md:**
-   - Move items from `[Unreleased]` to new version section
-   - Add date in format `[X.Y.Z] - YYYY-MM-DD`
-   - Keep `[Unreleased]` section for future changes
-4. Merge PR
-5. GitHub Actions publishes automatically
-
-### Version Bump Checklist
-When bumping the version in `package.json`, always:
-1. Update `CHANGELOG.md` with the new version and date
-2. Move unreleased items to the new version section
-3. Ensure all changes since last release are documented
+npm via GitHub Actions with OIDC. Bump version in `package.json`, update CHANGELOG.md, merge to main.
 
 ## Code Style
 
-- ESM imports, no `.js` extensions
-- `async/await` over callbacks
-- Ora spinners for long operations
-- Conventional commits (`feat:`, `fix:`, `chore:`)
+ESM imports, `async/await`, Ora spinners, conventional commits (`feat:`, `fix:`, `chore:`).
 
-See `TODO.md` for roadmap and `CHANGELOG.md` for release history.
+### Logging
+
+- **User-facing output**: Use Ora spinners and Chalk for CLI feedback
+- **Internal warnings/debug**: Use `logDebug()` from `core/error-handler.ts`, never `console.warn` or `console.log`
+- **Rationale**: `console.warn` pollutes stdout/stderr and breaks JSON output modes. `logDebug()` respects the `--debug` flag and writes to the debug log file only.

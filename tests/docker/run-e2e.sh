@@ -13,10 +13,29 @@
 
 set -e
 
+# Parse command line arguments
+ENGINE_FILTER="${1:-}"
+
+# Valid engines list for validation
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb"
+
+# If engine filter provided, validate it
+if [ -n "$ENGINE_FILTER" ]; then
+  if ! echo "$VALID_ENGINES" | grep -qw "$ENGINE_FILTER"; then
+    echo "Error: Invalid engine '$ENGINE_FILTER'"
+    echo "Valid engines: $VALID_ENGINES"
+    exit 1
+  fi
+fi
+
 echo "════════════════════════════════════════════════════════════════"
 echo "  SpinDB Docker Linux Edge Case Tests"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
+if [ -n "$ENGINE_FILTER" ]; then
+  echo "Testing single engine: $ENGINE_FILTER"
+  echo ""
+fi
 echo "Environment:"
 echo "  Node: $(node --version)"
 echo "  pnpm: $(pnpm --version)"
@@ -103,8 +122,8 @@ run_test() {
     return 1
   fi
 
-  # Start container (skip for sqlite - it's file-based, no server process)
-  if [ "$engine" != "sqlite" ]; then
+  # Start container (skip for sqlite/duckdb - they're file-based, no server process)
+  if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ]; then
     echo "Starting container..."
     if ! spindb start "$container_name"; then
       echo "FAILED: Could not start $container_name"
@@ -142,6 +161,25 @@ run_test() {
     echo "Verifying container status..."
     if [ "$status" != "running" ]; then
       echo "FAILED: Container status is '$status', expected 'running'"
+
+      # Show logs for debugging
+      echo ""
+      echo "=== Container Logs ==="
+      local log_dir="$HOME/.spindb/containers/$engine/$container_name"
+      if [ -d "$log_dir" ]; then
+        for log_file in "$log_dir"/*.log "$log_dir"/*.err.log; do
+          if [ -f "$log_file" ]; then
+            echo "--- $(basename "$log_file") ---"
+            tail -50 "$log_file" 2>/dev/null || true
+            echo ""
+          fi
+        done
+      else
+        echo "No log directory found at: $log_dir"
+      fi
+      echo "======================"
+      echo ""
+
       spindb stop "$container_name" 2>/dev/null || true
       spindb delete "$container_name" --yes 2>/dev/null || true
       record_result "$engine" "$version" "FAILED" "Status: $status"
@@ -212,10 +250,29 @@ run_test() {
         return 1
       fi
       ;;
+    duckdb)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run DuckDB query"
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        FAILED=$((FAILED+1))
+        return 1
+      fi
+      ;;
+    clickhouse)
+      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+        echo "FAILED: Could not run ClickHouse query"
+        spindb stop "$container_name" 2>/dev/null || true
+        spindb delete "$container_name" --yes 2>/dev/null || true
+        record_result "$engine" "$version" "FAILED" "Query failed"
+        FAILED=$((FAILED+1))
+        return 1
+      fi
+      ;;
   esac
 
-  # Stop container (skip for sqlite - it's embedded)
-  if [ "$engine" != "sqlite" ]; then
+  # Stop container (skip for sqlite/duckdb - they're embedded)
+  if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ]; then
     echo "Stopping container..."
     if ! spindb stop "$container_name"; then
       echo "WARNING: Could not stop $container_name gracefully"
@@ -238,6 +295,17 @@ run_test() {
 get_default_version() {
   local engine=$1
   spindb engines supported --json 2>/dev/null | jq -r ".engines.$engine.defaultVersion" 2>/dev/null || echo ""
+}
+
+# Check if we should run test for this engine
+should_run_test() {
+  local engine=$1
+  # If no filter, run all tests
+  [ -z "$ENGINE_FILTER" ] && return 0
+  # If filter matches, run this test
+  [ "$ENGINE_FILTER" = "$engine" ] && return 0
+  # Otherwise skip
+  return 1
 }
 
 # Print results table
@@ -282,32 +350,58 @@ print_results_table() {
 echo "=== Running E2E Tests ==="
 
 # PostgreSQL
-PG_VERSION=$(get_default_version postgresql)
-[ -n "$PG_VERSION" ] && run_test postgresql "$PG_VERSION" || echo "Skipping PostgreSQL (no default version)"
+if should_run_test postgresql; then
+  PG_VERSION=$(get_default_version postgresql)
+  [ -n "$PG_VERSION" ] && run_test postgresql "$PG_VERSION" || echo "Skipping PostgreSQL (no default version)"
+fi
 
 # MySQL
-MYSQL_VERSION=$(get_default_version mysql)
-[ -n "$MYSQL_VERSION" ] && run_test mysql "$MYSQL_VERSION" || echo "Skipping MySQL (no default version)"
+if should_run_test mysql; then
+  MYSQL_VERSION=$(get_default_version mysql)
+  [ -n "$MYSQL_VERSION" ] && run_test mysql "$MYSQL_VERSION" || echo "Skipping MySQL (no default version)"
+fi
 
 # MariaDB
-MARIADB_VERSION=$(get_default_version mariadb)
-[ -n "$MARIADB_VERSION" ] && run_test mariadb "$MARIADB_VERSION" || echo "Skipping MariaDB (no default version)"
+if should_run_test mariadb; then
+  MARIADB_VERSION=$(get_default_version mariadb)
+  [ -n "$MARIADB_VERSION" ] && run_test mariadb "$MARIADB_VERSION" || echo "Skipping MariaDB (no default version)"
+fi
 
 # SQLite
-SQLITE_VERSION=$(get_default_version sqlite)
-[ -n "$SQLITE_VERSION" ] && run_test sqlite "$SQLITE_VERSION" || echo "Skipping SQLite (no default version)"
+if should_run_test sqlite; then
+  SQLITE_VERSION=$(get_default_version sqlite)
+  [ -n "$SQLITE_VERSION" ] && run_test sqlite "$SQLITE_VERSION" || echo "Skipping SQLite (no default version)"
+fi
 
 # MongoDB
-MONGODB_VERSION=$(get_default_version mongodb)
-[ -n "$MONGODB_VERSION" ] && run_test mongodb "$MONGODB_VERSION" || echo "Skipping MongoDB (no default version)"
+if should_run_test mongodb; then
+  MONGODB_VERSION=$(get_default_version mongodb)
+  [ -n "$MONGODB_VERSION" ] && run_test mongodb "$MONGODB_VERSION" || echo "Skipping MongoDB (no default version)"
+fi
 
 # Redis
-REDIS_VERSION=$(get_default_version redis)
-[ -n "$REDIS_VERSION" ] && run_test redis "$REDIS_VERSION" || echo "Skipping Redis (no default version)"
+if should_run_test redis; then
+  REDIS_VERSION=$(get_default_version redis)
+  [ -n "$REDIS_VERSION" ] && run_test redis "$REDIS_VERSION" || echo "Skipping Redis (no default version)"
+fi
 
 # Valkey
-VALKEY_VERSION=$(get_default_version valkey)
-[ -n "$VALKEY_VERSION" ] && run_test valkey "$VALKEY_VERSION" || echo "Skipping Valkey (no default version)"
+if should_run_test valkey; then
+  VALKEY_VERSION=$(get_default_version valkey)
+  [ -n "$VALKEY_VERSION" ] && run_test valkey "$VALKEY_VERSION" || echo "Skipping Valkey (no default version)"
+fi
+
+# ClickHouse
+if should_run_test clickhouse; then
+  CLICKHOUSE_VERSION=$(get_default_version clickhouse)
+  [ -n "$CLICKHOUSE_VERSION" ] && run_test clickhouse "$CLICKHOUSE_VERSION" || echo "Skipping ClickHouse (no default version)"
+fi
+
+# DuckDB
+if should_run_test duckdb; then
+  DUCKDB_VERSION=$(get_default_version duckdb)
+  [ -n "$DUCKDB_VERSION" ] && run_test duckdb "$DUCKDB_VERSION" || echo "Skipping DuckDB (no default version)"
+fi
 
 # Summary
 echo ""

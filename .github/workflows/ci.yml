@@ -281,11 +281,11 @@ jobs:
         id: mysql-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-mysql-9-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-mysql-8.0-${{ runner.os }}-${{ runner.arch }}
 
-      # Use SpinDB to download MySQL binaries
+      # Use SpinDB to download MySQL binaries (8.0 is the default in engines.json)
       - name: Install MySQL via SpinDB
-        run: pnpm start engines download mysql 9
+        run: pnpm start engines download mysql 8.0
 
       # Show what SpinDB installed
       - name: Show installed engines
@@ -344,6 +344,57 @@ jobs:
 
       - name: Run SQLite integration tests
         run: pnpm test:sqlite
+        timeout-minutes: 10
+
+  # ============================================
+  # DuckDB Integration Tests
+  # Uses SpinDB to download and manage DuckDB binaries from hostdb
+  # ============================================
+  test-duckdb:
+    name: DuckDB (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache DuckDB binaries - these are downloaded from hostdb
+      - name: Cache DuckDB binaries
+        uses: actions/cache@v4
+        id: duckdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-duckdb-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download DuckDB binaries (all platforms)
+      - name: Install DuckDB via SpinDB
+        run: pnpm start engines download duckdb 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run DuckDB integration tests
+        run: pnpm test:duckdb
         timeout-minutes: 10
 
   # ============================================
@@ -596,6 +647,21 @@ jobs:
       - name: Run ClickHouse integration tests
         run: pnpm test:clickhouse
         timeout-minutes: 15
+
+      - name: Show ClickHouse logs on failure
+        if: failure()
+        run: |
+          echo "=== ClickHouse container directories ==="
+          ls -la ~/.spindb/containers/clickhouse/ 2>/dev/null || echo "No ClickHouse containers directory"
+          echo ""
+          echo "=== ClickHouse binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i clickhouse || echo "No ClickHouse binaries found"
+          echo ""
+          echo "=== ClickHouse log files ==="
+          find ~/.spindb/containers/clickhouse -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== ClickHouse config files ==="
+          find ~/.spindb/containers/clickhouse -name "*.xml" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No config files found"
 
   # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
@@ -917,7 +983,7 @@ jobs:
   #
   #     - name: Download MySQL
   #       if: matrix.test == 'mysql'
-  #       run: pnpm start engines download mysql 9
+  #       run: pnpm start engines download mysql 8.0
   #
   #     - name: Download MariaDB
   #       if: matrix.test == 'mariadb'
@@ -1005,6 +1071,7 @@ jobs:
         test-mariadb,
         test-mysql,
         test-sqlite,
+        test-duckdb,
         test-mongodb,
         test-redis,
         test-valkey,
@@ -1038,6 +1105,10 @@ jobs:
           fi
           if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
             echo "SQLite tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-duckdb.result }}" != "success" ]; then
+            echo "DuckDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-mongodb.result }}" != "success" ]; then

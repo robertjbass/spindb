@@ -835,7 +835,7 @@ export class ClickHouseEngine extends BaseEngine {
         proc.stdin?.end()
       })
     } else if (options.sql) {
-      // Run inline SQL
+      // Run inline SQL via stdin to avoid command injection
       const args = [
         'client',
         '--host',
@@ -844,13 +844,12 @@ export class ClickHouseEngine extends BaseEngine {
         String(port),
         '--database',
         db,
-        '--query',
-        options.sql,
+        '--multiquery',
       ]
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(clickhouse, args, {
-          stdio: ['ignore', 'inherit', 'inherit'],
+          stdio: ['pipe', 'inherit', 'inherit'],
         })
 
         proc.on('error', reject)
@@ -858,6 +857,9 @@ export class ClickHouseEngine extends BaseEngine {
           if (code === 0 || code === null) resolve()
           else reject(new Error(`clickhouse client exited with code ${code}`))
         })
+
+        proc.stdin?.write(options.sql)
+        proc.stdin?.end()
       })
     } else {
       throw new Error('Either file or sql option must be provided')

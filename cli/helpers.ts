@@ -104,6 +104,16 @@ export type InstalledSqliteEngine = {
   source: 'downloaded'
 }
 
+export type InstalledDuckDBEngine = {
+  engine: 'duckdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledMongodbEngine = {
   engine: 'mongodb'
   version: string
@@ -149,6 +159,7 @@ export type InstalledEngine =
   | InstalledMariadbEngine
   | InstalledMysqlEngine
   | InstalledSqliteEngine
+  | InstalledDuckDBEngine
   | InstalledMongodbEngine
   | InstalledRedisEngine
   | InstalledValkeyEngine
@@ -365,6 +376,62 @@ async function getInstalledSqliteEngines(): Promise<InstalledSqliteEngine[]> {
 
     engines.push({
       engine: 'sqlite',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
+// Get DuckDB version from binary path
+async function getDuckDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
+  if (!existsSync(duckdbPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(duckdbPath, ['--version'])
+    // duckdb --version outputs: "v1.4.3 abcdef123" or just "1.4.3"
+    const match = stdout.match(/v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed DuckDB engines from downloaded binaries
+async function getInstalledDuckDBEngines(): Promise<InstalledDuckDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledDuckDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('duckdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'duckdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getDuckDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'duckdb',
       version: actualVersion,
       platform: parsed.platform,
       arch: parsed.arch,
@@ -614,39 +681,47 @@ export function compareVersions(a: string, b: string): number {
 }
 
 export async function getInstalledEngines(): Promise<InstalledEngine[]> {
-  const engines: InstalledEngine[] = []
+  // Parallelize all engine checks for faster startup
+  const [
+    pgEngines,
+    mariadbEngines,
+    mysqlEngines,
+    sqliteEngines,
+    duckdbEngines,
+    mongodbEngines,
+    redisEngines,
+    valkeyEngines,
+    clickhouseEngines,
+  ] = await Promise.all([
+    getInstalledPostgresEngines(),
+    getInstalledMariadbEngines(),
+    getInstalledMysqlEngines(),
+    getInstalledSqliteEngines(),
+    getInstalledDuckDBEngines(),
+    getInstalledMongodbEngines(),
+    getInstalledRedisEngines(),
+    getInstalledValkeyEngines(),
+    getInstalledClickHouseEngines(),
+  ])
 
-  const pgEngines = await getInstalledPostgresEngines()
-  engines.push(...pgEngines)
-
-  const mariadbEngines = await getInstalledMariadbEngines()
-  engines.push(...mariadbEngines)
-
-  const mysqlEngines = await getInstalledMysqlEngines()
-  engines.push(...mysqlEngines)
-
-  const sqliteEngines = await getInstalledSqliteEngines()
-  engines.push(...sqliteEngines)
-
-  const mongodbEngines = await getInstalledMongodbEngines()
-  engines.push(...mongodbEngines)
-
-  const redisEngines = await getInstalledRedisEngines()
-  engines.push(...redisEngines)
-
-  const valkeyEngines = await getInstalledValkeyEngines()
-  engines.push(...valkeyEngines)
-
-  const clickhouseEngines = await getInstalledClickHouseEngines()
-  engines.push(...clickhouseEngines)
-
-  return engines
+  return [
+    ...pgEngines,
+    ...mariadbEngines,
+    ...mysqlEngines,
+    ...sqliteEngines,
+    ...duckdbEngines,
+    ...mongodbEngines,
+    ...redisEngines,
+    ...valkeyEngines,
+    ...clickhouseEngines,
+  ]
 }
 
 // Export individual engine detection functions for use in other modules
 export {
   getInstalledMysqlEngines,
   getInstalledSqliteEngines,
+  getInstalledDuckDBEngines,
   getInstalledMongodbEngines,
   getInstalledRedisEngines,
   getInstalledValkeyEngines,

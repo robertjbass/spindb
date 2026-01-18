@@ -11,6 +11,10 @@
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -40,6 +44,86 @@ const DATABASE = 'default' // ClickHouse default database
 const SEED_FILE = join(__dirname, '../fixtures/clickhouse/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5 // 5 user rows
 const TEST_VERSION = '25.12' // YY.MM format version (macOS/Linux only, no Windows support)
+
+/**
+ * Check if an error is a known transient/benign error that should be retried
+ */
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+
+  const message = err.message.toLowerCase()
+  const errWithCode = err as NodeJS.ErrnoException
+
+  // ENOENT - binary not found yet (during startup)
+  if (errWithCode.code === 'ENOENT') return true
+
+  // Connection refused - server not ready yet
+  if (message.includes('connection refused')) return true
+  if (message.includes('econnrefused')) return true
+
+  // Network unreachable during startup
+  if (message.includes('network unreachable')) return true
+
+  // ClickHouse-specific transient errors
+  if (message.includes('code: 210')) return true // NETWORK_ERROR
+  if (message.includes('code: 209')) return true // SOCKET_TIMEOUT
+
+  return false
+}
+
+/**
+ * Wait for all mutations on a table to complete
+ * ClickHouse mutations (ALTER TABLE DELETE/UPDATE) are async operations
+ * that run in the background. This polls system.mutations until done.
+ */
+async function waitForMutationsComplete(
+  port: number,
+  database: string,
+  table: string,
+  timeoutMs: number = 10000,
+): Promise<void> {
+  const startTime = Date.now()
+  const pollInterval = 200
+
+  const engine = getEngine(ENGINE)
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      // Query system.mutations for pending mutations on this table
+      const clickhouse = await engine.getClickHouseClientPath()
+
+      const query = `SELECT count() FROM system.mutations WHERE database = '${database}' AND table = '${table}' AND is_done = 0`
+      const { stdout } = await execAsync(
+        `"${clickhouse}" client --host 127.0.0.1 --port ${port} --database ${database} --query "${query}"`,
+      )
+
+      const pendingCount = parseInt(stdout.trim(), 10)
+      if (isNaN(pendingCount) || pendingCount === 0) {
+        return // All mutations complete
+      }
+    } catch (err) {
+      // Only retry on known transient errors
+      if (isTransientError(err)) {
+        console.debug(
+          `[waitForMutationsComplete] Transient error, retrying: ${err instanceof Error ? err.message : String(err)}`,
+        )
+        // Continue to next poll iteration
+      } else {
+        // Unexpected error - fail the test visibly
+        throw new Error(
+          `[waitForMutationsComplete] Unexpected error polling mutations for ${database}.${table} on port ${port}: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollInterval))
+  }
+
+  throw new Error(
+    `Timeout waiting for mutations to complete on ${database}.${table}`,
+  )
+}
 
 describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binaries not available for Windows' : false }, () => {
   let testPorts: number[]
@@ -252,8 +336,9 @@ describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binari
       DATABASE,
     )
 
-    // Wait a moment for mutation to complete (ClickHouse mutations are async)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // Wait for mutation to complete (ClickHouse mutations are async)
+    // Poll system.mutations until the DELETE mutation is finished
+    await waitForMutationsComplete(testPorts[0], DATABASE, 'test_user')
 
     const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
     // Should have 4 rows now
