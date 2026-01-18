@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DuckDB engine inference** - Removed `.db` extension from DuckDB file detection. This extension is commonly used by SQLite, so inferring DuckDB was causing misidentification. Now only `.duckdb` and `.ddb` trigger DuckDB inference.
+- **DuckDB engines display** - Fixed `spindb engines list` showing DuckDB as "system-installed" even when downloaded from hostdb. Now correctly displays platform, architecture, and size like other engines.
+- **DuckDB container rename** - Fixed rename leaving orphaned container directories. Now properly moves the directory before updating the registry (matching SQLite behavior).
+- **DuckDB registry race conditions** - Added file-based locking for registry mutations to prevent corruption when multiple processes access the registry concurrently.
+- **DuckDB SQL dump escaping** - Fixed potential SQL injection in table names by properly escaping embedded double quotes during backup.
+- **ClickHouse multiquery support** - Added `--multiquery` flag to ClickHouse client for running scripts with multiple statements.
+- **ClickHouse test reliability** - Improved `waitForMutationsComplete` to distinguish transient errors (connection refused, network issues) from unexpected errors, reducing flaky test failures.
+- **DuckDB test isolation** - Fixed tests using shared directory that could cause conflicts. Each test run now uses a unique timestamped directory.
+
+### Changed
+- **DuckDB version display** - Updated CLAUDE.md to show full version "1.4.3" instead of just "1" in the Supported Versions table.
+- **DuckDB version validation** - `compareVersions()` now throws `TypeError` for invalid version strings instead of silently returning 0. Renamed `getSupportedVersions()` to `getSupportedMajorVersions()` for clarity.
+- **Logging guidelines** - Added logging section to CLAUDE.md: use `logDebug()` from `core/error-handler.ts` instead of `console.warn`/`console.log` to avoid polluting stdout/stderr and breaking JSON output modes.
+- **FEATURE.md audit** - Fixed incomplete engine lists (added MariaDB, ClickHouse), clarified file counts, fixed incorrect `paths.binaries` reference, added ClickHouse to reference implementations table.
+- **FerretDB planning** - Expanded FERRETDB.md with Windows support decision, detailed platform support table, hostdb build guide, and stretch goals section.
+
 ## [0.19.2] - 2026-01-18
 
 ### Added

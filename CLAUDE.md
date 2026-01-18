@@ -88,7 +88,7 @@ Engines can be referenced by aliases in CLI commands:
 | Valkey 🔷 | 8, 9 | Redis commands | Uses `redis://` scheme for compatibility |
 | ClickHouse 🏠 | 25.12 | SQL | XML configs, HTTP port 8123 |
 | SQLite 🗄️ | 3 | SQL | File-based |
-| DuckDB 🦆 | 1 | SQL | File-based, OLAP |
+| DuckDB 🦆 | 1.4.3 | SQL | File-based, OLAP |
 
 ### Binary Sources
 
@@ -269,3 +269,9 @@ npm via GitHub Actions with OIDC. Bump version in `package.json`, update CHANGEL
 ## Code Style
 
 ESM imports, `async/await`, Ora spinners, conventional commits (`feat:`, `fix:`, `chore:`).
+
+### Logging
+
+- **User-facing output**: Use Ora spinners and Chalk for CLI feedback
+- **Internal warnings/debug**: Use `logDebug()` from `core/error-handler.ts`, never `console.warn` or `console.log`
+- **Rationale**: `console.warn` pollutes stdout/stderr and breaks JSON output modes. `logDebug()` respects the `--debug` flag and writes to the debug log file only.

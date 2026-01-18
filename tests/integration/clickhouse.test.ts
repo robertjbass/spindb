@@ -46,6 +46,32 @@ const EXPECTED_ROW_COUNT = 5 // 5 user rows
 const TEST_VERSION = '25.12' // YY.MM format version (macOS/Linux only, no Windows support)
 
 /**
+ * Check if an error is a known transient/benign error that should be retried
+ */
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+
+  const message = err.message.toLowerCase()
+  const errWithCode = err as NodeJS.ErrnoException
+
+  // ENOENT - binary not found yet (during startup)
+  if (errWithCode.code === 'ENOENT') return true
+
+  // Connection refused - server not ready yet
+  if (message.includes('connection refused')) return true
+  if (message.includes('econnrefused')) return true
+
+  // Network unreachable during startup
+  if (message.includes('network unreachable')) return true
+
+  // ClickHouse-specific transient errors
+  if (message.includes('code: 210')) return true // NETWORK_ERROR
+  if (message.includes('code: 209')) return true // SOCKET_TIMEOUT
+
+  return false
+}
+
+/**
  * Wait for all mutations on a table to complete
  * ClickHouse mutations (ALTER TABLE DELETE/UPDATE) are async operations
  * that run in the background. This polls system.mutations until done.
@@ -76,12 +102,18 @@ async function waitForMutationsComplete(
         return // All mutations complete
       }
     } catch (err) {
-      // Log the error for debugging flaky tests, then return
-      // Query may fail if mutations table has no entries yet or connection issues
-      console.debug(
-        `[waitForMutationsComplete] Error polling mutations for ${database}.${table} on port ${port}: ${err instanceof Error ? err.message : String(err)}`,
-      )
-      return
+      // Only retry on known transient errors
+      if (isTransientError(err)) {
+        console.debug(
+          `[waitForMutationsComplete] Transient error, retrying: ${err instanceof Error ? err.message : String(err)}`,
+        )
+        // Continue to next poll iteration
+      } else {
+        // Unexpected error - fail the test visibly
+        throw new Error(
+          `[waitForMutationsComplete] Unexpected error polling mutations for ${database}.${table} on port ${port}: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
     }
 
     // Wait before next poll

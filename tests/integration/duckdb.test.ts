@@ -76,9 +76,10 @@ async function queryDuckDB(dbPath: string, sql: string): Promise<string> {
 const ENGINE = Engine.DuckDB
 const SEED_FILE = join(__dirname, '../fixtures/duckdb/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
-const TEST_DIR = join(__dirname, '../.test-duckdb')
+const TEST_DIR_BASE = join(__dirname, '../.test-duckdb')
 
 describe('DuckDB Integration Tests', () => {
+  let testDir: string
   let containerName: string
   let backupContainerName: string
   let renamedContainerName: string
@@ -96,14 +97,16 @@ describe('DuckDB Integration Tests', () => {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
 
-    // Create test directory
-    await mkdir(TEST_DIR, { recursive: true })
+    // Create unique test directory per run to avoid conflicts
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    testDir = `${TEST_DIR_BASE}-${runId}`
+    await mkdir(testDir, { recursive: true })
 
     containerName = generateTestName('duckdb-test')
     backupContainerName = generateTestName('duckdb-test-backup')
     renamedContainerName = generateTestName('duckdb-test-renamed')
-    dbPath = join(TEST_DIR, `${containerName}.duckdb`)
-    backupDbPath = join(TEST_DIR, `${backupContainerName}.duckdb`)
+    dbPath = join(testDir, `${containerName}.duckdb`)
+    backupDbPath = join(testDir, `${backupContainerName}.duckdb`)
   })
 
   after(async () => {
@@ -114,8 +117,8 @@ describe('DuckDB Integration Tests', () => {
     }
 
     // Clean up test directory
-    if (existsSync(TEST_DIR)) {
-      await rm(TEST_DIR, { recursive: true, force: true })
+    if (testDir && existsSync(testDir)) {
+      await rm(testDir, { recursive: true, force: true })
     }
   })
 
@@ -223,7 +226,7 @@ describe('DuckDB Integration Tests', () => {
     assert(config !== null, 'Container config should exist')
 
     const engine = getEngine(ENGINE)
-    const backupPath = join(TEST_DIR, 'backup.duckdb')
+    const backupPath = join(testDir, 'backup.duckdb')
 
     // Create binary backup
     const result = await engine.backup(config!, backupPath, {
@@ -268,7 +271,7 @@ describe('DuckDB Integration Tests', () => {
     console.log(`\n Relocating database file...`)
 
     // Create a subdirectory for relocation
-    const relocateDir = join(TEST_DIR, 'relocated')
+    const relocateDir = join(testDir, 'relocated')
     await mkdir(relocateDir, { recursive: true })
 
     const newDbPath = join(relocateDir, `${containerName}.duckdb`)

@@ -844,6 +844,7 @@ export class ClickHouseEngine extends BaseEngine {
         String(port),
         '--database',
         db,
+        '--multiquery',
       ]
 
       await new Promise<void>((resolve, reject) => {

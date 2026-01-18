@@ -511,11 +511,19 @@ export class ContainerManager {
       }
     }
 
-    // DuckDB: rename in registry (file-based like SQLite)
+    // DuckDB: rename in registry and handle container directory
     if (engine === Engine.DuckDB) {
       const entry = await duckdbRegistry.get(oldName)
       if (!entry) {
         throw new Error(`DuckDB container "${oldName}" not found in registry`)
+      }
+
+      // Move container directory first (if it exists) - do filesystem ops before registry
+      // This way if the move fails, registry is unchanged
+      const oldContainerPath = paths.getContainerPath(oldName, { engine })
+      const newContainerPath = paths.getContainerPath(newName, { engine })
+      if (existsSync(oldContainerPath)) {
+        await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
       }
 
       // Now update registry - remove old entry and add new one with updated name

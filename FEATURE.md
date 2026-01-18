@@ -39,7 +39,7 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 
 SpinDB supports two types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MongoDB, Redis, Valkey)
+### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management
@@ -117,7 +117,7 @@ async function verifyUsingDownloadedBinaries(): Promise<void> {
 
 Use this checklist to track implementation progress. **Reference: Valkey implementation** for a complete example.
 
-### Core Engine Files (9 files)
+### Core Engine Files (8 required + 1 optional)
 
 - [ ] `engines/{engine}/index.ts` - Main engine class extending `BaseEngine`
 - [ ] `engines/{engine}/backup.ts` - Backup creation wrapper
@@ -567,7 +567,7 @@ export type InstalledYourEngineEngine = {
 }
 
 export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngineEngine[]> {
-  const binDir = paths.binaries
+  const binDir = paths.bin
   if (!existsSync(binDir)) return []
 
   const entries = await readdir(binDir, { withFileTypes: true })
@@ -1589,6 +1589,7 @@ Use these implementations as references:
 | **PostgreSQL** | Server | hostdb + EDB (Windows) | SQL, Windows fallback example |
 | **MySQL** | Server | hostdb (all platforms) | SQL, root user, socket handling |
 | **MariaDB** | Server | hostdb (all platforms) | MySQL-compatible, separate binaries |
+| **ClickHouse** | Server | hostdb (macOS/Linux) | OLAP, XML configs, YY.MM versioning |
 | **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
 | **DuckDB** | File-based | hostdb (all platforms) | Embedded OLAP, flat archive handling example |
 

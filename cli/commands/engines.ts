@@ -426,7 +426,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const sqliteEngine = engines.find(
     (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
   )
-  const duckdbEngine = engines.find(
+  const duckdbEngines = engines.filter(
     (e): e is InstalledDuckDBEngine => e.engine === 'duckdb',
   )
   const mongodbEngines = engines.filter(
@@ -497,17 +497,18 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
-  // DuckDB row
-  if (duckdbEngine) {
+  // DuckDB rows
+  for (const engine of duckdbEngines) {
     const icon = ENGINE_ICONS.duckdb
+    const platformInfo = `${engine.platform}-${engine.arch}`
     const engineDisplay = `${icon} duckdb`
 
     console.log(
       chalk.gray('  ') +
         chalk.cyan(padWithEmoji(engineDisplay, 13)) +
-        chalk.yellow(duckdbEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
-        chalk.gray('(system-installed)'),
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
@@ -580,9 +581,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
       chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
     )
   }
-  if (duckdbEngine) {
+  if (duckdbEngines.length > 0) {
+    const totalDuckdbSize = duckdbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
     console.log(
-      chalk.gray(`  DuckDB: system-installed at ${duckdbEngine.path}`),
+      chalk.gray(
+        `  DuckDB: ${duckdbEngines.length} version(s), ${formatBytes(totalDuckdbSize)}`,
+      ),
     )
   }
   if (mongodbEngines.length > 0) {

@@ -222,15 +222,16 @@ This must be completed before any SpinDB work begins.
 
 **FerretDB binary:**
 - [ ] Add FerretDB to hostdb releases.json
-- [ ] Build FerretDB 2.x binaries for darwin-arm64, darwin-x64, linux-x64
-- [ ] FerretDB is a Go binary - should be straightforward
+- [ ] Build FerretDB 2.x binaries for darwin-arm64, darwin-x64, linux-x64, linux-arm64, win32-x64
+- [ ] FerretDB is a Go binary - cross-compiles easily to all platforms
 
 **PostgreSQL+DocumentDB binary:**
 - [ ] Create new `postgresql-documentdb` engine in hostdb
 - [ ] Build PostgreSQL 17 with DocumentDB extension compiled in
-- [ ] Include pg_cron extension
+- [ ] Include required extensions: pg_cron, tsm_system_rows, vector (pgvector), PostGIS, rum
 - [ ] Test extension loads correctly with `shared_preload_libraries`
-- [ ] Build for darwin-arm64, darwin-x64, linux-x64
+- [ ] Build for darwin-arm64, darwin-x64, linux-x64, linux-arm64
+- [ ] **Note:** Windows (win32-x64) is out of scope - see [Stretch Goals](#stretch-goals-windows-support)
 
 **References:**
 - [FerretDB releases](https://github.com/FerretDB/FerretDB/releases)
@@ -282,16 +283,15 @@ This must be completed before any SpinDB work begins.
 1. **FerretDB version:** 2.x only (requires DocumentDB extension)
 2. **Backup strategy:** PostgreSQL native (pg_dump), no MongoDB tools required
 3. **Architecture:** Embedded PostgreSQL per container (isolated, simple mental model)
+4. **Windows support:** PostgreSQL+DocumentDB will not be available on Windows initially due to extension build complexity (PostGIS, rum dependencies). FerretDB binary itself supports Windows but cannot function without the backend. See [Stretch Goals: Windows Support](#stretch-goals-windows-support) for future plans.
 
 ## Remaining Open Questions
 
-1. **Windows support:** FerretDB is a Go binary (easy), but can DocumentDB extension be built for Windows? May need to skip Windows initially.
-
-2. **Connection strings:** Should `spindb url myferret` return:
+1. **Connection strings:** Should `spindb url myferret` return:
    - `mongodb://localhost:27017` (FerretDB endpoint) - **recommended default**
    - `postgresql://localhost:54320/ferretdb` (direct backend access) - optional `--backend` flag?
 
-3. **mongosh for `spindb connect`:** If user has mongosh installed system-wide, use it. Otherwise:
+2. **mongosh for `spindb connect`:** If user has mongosh installed system-wide, use it. Otherwise:
    - Skip interactive shell support?
    - Prompt user to install mongosh?
    - Include mongosh in hostdb builds?
@@ -480,13 +480,24 @@ The `postgresql-documentdb` version format is `{pg_major}-{documentdb_version}` 
 
 | Platform | FerretDB | PostgreSQL+DocumentDB | Notes |
 |----------|----------|----------------------|-------|
-| darwin-arm64 | ✅ Easy (Go) | ⚠️ Needs building | Apple Silicon |
-| darwin-x64 | ✅ Easy (Go) | ⚠️ Needs building | Intel Mac |
-| linux-x64 | ✅ Easy (Go) | ⚠️ Needs building | Standard Linux |
-| linux-arm64 | ✅ Easy (Go) | ⚠️ Needs building | ARM Linux (Raspberry Pi, etc.) |
-| win32-x64 | ✅ Easy (Go) | ❌ Unlikely | DocumentDB extension unlikely to build on Windows |
+| darwin-arm64 | ✅ Easy (Go) | ⚠️ Build from source | Apple Silicon |
+| darwin-x64 | ✅ Easy (Go) | ⚠️ Build from source | Intel Mac |
+| linux-x64 | ✅ Easy (Go) | ✅ Official .deb/.rpm | Standard Linux |
+| linux-arm64 | ✅ Easy (Go) | ✅ Official .deb/.rpm | ARM Linux (Raspberry Pi, etc.) |
+| win32-x64 | ✅ Easy (Go) | ❌ Not feasible | See below |
 
-**Recommendation:** Skip Windows initially. FerretDB itself would work, but DocumentDB extension compilation on Windows is uncharted territory.
+**Why Windows is not feasible for PostgreSQL+DocumentDB:**
+
+DocumentDB requires these PostgreSQL extensions, all of which would need Windows builds:
+- `pg_cron` - Likely buildable
+- `tsm_system_rows` - Part of PostgreSQL contrib, should work
+- `vector` (pgvector) - Has Windows support
+- `PostGIS` - **Notoriously difficult** to build on Windows
+- `rum` - Unknown Windows support
+
+PostGIS alone has complex dependencies (GEOS, PROJ, GDAL) that make Windows builds a significant undertaking. This is tracked as a [stretch goal](#stretch-goals-windows-support).
+
+**Recommendation:** FerretDB binary supports Windows, but Windows users cannot run FerretDB without Docker/WSL due to PostgreSQL+DocumentDB limitations.
 
 ### Testing the Build
 
@@ -522,9 +533,53 @@ mongosh mongodb://localhost:27017
 
 ---
 
+## Stretch Goals: Windows Support
+
+These are long-term goals that would expand Windows platform support but are not required for initial release.
+
+### Engines Currently Missing Windows Support
+
+| Engine | Blocker | Effort | Notes |
+|--------|---------|--------|-------|
+| **PostgreSQL+DocumentDB** | PostGIS, rum extensions | High | PostGIS has GEOS/PROJ/GDAL dependencies |
+| **ClickHouse** | No hostdb binaries | Medium | ClickHouse official releases include Windows |
+
+### PostgreSQL+DocumentDB on Windows
+
+**Required work:**
+1. Build PostGIS for Windows (complex dependency chain: GEOS, PROJ, GDAL, libtiff, etc.)
+2. Build rum extension for Windows (unknown complexity)
+3. Integrate all extensions into a cohesive Windows package
+4. Test DocumentDB functionality on Windows PostgreSQL
+
+**Potential shortcuts:**
+- Check if [OSGeo4W](https://trac.osgeo.org/osgeo4w/) provides usable PostGIS binaries
+- Check if [PostgreSQL Windows installers](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads) include PostGIS via Stack Builder
+
+### ClickHouse on Windows
+
+**Current status:** ClickHouse is not in hostdb for Windows, but [official ClickHouse releases](https://clickhouse.com/docs/en/install#available-installation-options) include Windows binaries.
+
+**Required work:**
+1. Add ClickHouse Windows binaries to hostdb
+2. Test SpinDB ClickHouse engine on Windows
+3. Handle any Windows-specific path or process management differences
+
+**Effort:** Medium - binaries exist, just need integration and testing.
+
+### Tracking
+
+These stretch goals should be tracked in:
+- [ ] `TODO.md` under a "Windows Platform Expansion" section
+- [ ] GitHub issues for visibility and community contribution
+
+---
+
 ## Sources
 
 - [FerretDB Official Site](https://www.ferretdb.com/)
 - [FerretDB GitHub](https://github.com/FerretDB/FerretDB)
 - [FerretDB 2.0 Announcement](https://thenewstack.io/ferretdb-2-0-open-source-mongodb-alternative-with-postgresql-power/)
 - [FerretDB Documentation](https://docs.ferretdb.io/)
+- [DocumentDB GitHub](https://github.com/FerretDB/documentdb)
+- [DocumentDB Releases](https://github.com/FerretDB/documentdb/releases)

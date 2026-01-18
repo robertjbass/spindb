@@ -1,4 +1,5 @@
 import { DUCKDB_VERSION_MAP } from './version-maps'
+import { logDebug } from '../../core/error-handler'
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -89,21 +90,16 @@ function normalizeVersion(
   }
 
   const parts = version.split('.')
-  const knownVersions = Object.values(versionMap)
 
-  // If it's already a full version (X.Y.Z), validate against known versions
+  // If it's already a full version (X.Y.Z), return as-is
+  // This is a valid format even if not in the version map
   if (parts.length === 3) {
-    if (!knownVersions.includes(version)) {
-      console.warn(
-        `DuckDB version '${version}' not in version map, may not be available in hostdb`,
-      )
-    }
     return version
   }
 
-  // Unknown version format - warn and return as-is
+  // Unknown version format - log at debug level and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
-  console.warn(
+  logDebug(
     `DuckDB version '${version}' not in version map, may not be available in hostdb`,
   )
   return version

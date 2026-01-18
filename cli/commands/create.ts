@@ -291,7 +291,7 @@ async function createDuckDBContainer(
   }
 }
 
-function detectLocationType(location: string): {
+export function detectLocationType(location: string): {
   type: 'connection' | 'file' | 'not_found'
   inferredEngine?: Engine
 } {
@@ -332,11 +332,8 @@ function detectLocationType(location: string): {
       return { type: 'file', inferredEngine: Engine.SQLite }
     }
     // Check if it's a DuckDB file (case-insensitive)
-    if (
-      lowerLocation.endsWith('.duckdb') ||
-      lowerLocation.endsWith('.ddb') ||
-      lowerLocation.endsWith('.db')
-    ) {
+    // Note: We don't infer DuckDB from '.db' extension because it's commonly used by SQLite
+    if (lowerLocation.endsWith('.duckdb') || lowerLocation.endsWith('.ddb')) {
       return { type: 'file', inferredEngine: Engine.DuckDB }
     }
     return { type: 'file' }

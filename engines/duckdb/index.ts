@@ -421,8 +421,9 @@ export class DuckDBEngine extends BaseEngine {
     ]
 
     for (const table of tables) {
-      // Quote table name to handle special characters
-      dumpCommands.push(`SELECT * FROM "${table}";`)
+      // Quote table name and escape embedded double quotes
+      const escapedTable = table.replace(/"/g, '""')
+      dumpCommands.push(`SELECT * FROM "${escapedTable}";`)
     }
 
     const dumpScript = dumpCommands.join('\n')
