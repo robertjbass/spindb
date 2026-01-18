@@ -597,6 +597,21 @@ jobs:
         run: pnpm test:clickhouse
         timeout-minutes: 15
 
+      - name: Show ClickHouse logs on failure
+        if: failure()
+        run: |
+          echo "=== ClickHouse container directories ==="
+          ls -la ~/.spindb/containers/clickhouse/ 2>/dev/null || echo "No ClickHouse containers directory"
+          echo ""
+          echo "=== ClickHouse binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i clickhouse || echo "No ClickHouse binaries found"
+          echo ""
+          echo "=== ClickHouse log files ==="
+          find ~/.spindb/containers/clickhouse -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== ClickHouse config files ==="
+          find ~/.spindb/containers/clickhouse -name "*.xml" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No config files found"
+
   # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================

@@ -16,6 +16,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
+import { logDebug } from '../../core/error-handler'
 import {
   Engine,
   type ProgressCallback,
@@ -323,9 +324,9 @@ export class ClickHouseBinaryManager {
       const { stdout, stderr } = await execAsync(
         `"${clickhousePath}" client --version`,
       )
-      // Log stderr if present (may contain warnings)
+      // Log stderr if present (may contain benign warnings about config, etc.)
       if (stderr && stderr.trim()) {
-        console.warn(`clickhouse stderr: ${stderr.trim()}`)
+        logDebug(`clickhouse client stderr during version check: ${stderr.trim()}`)
       }
       // Extract version from output like "ClickHouse client version 25.12.3.21 (official build)"
       const match = stdout.match(/version\s+(\d+\.\d+\.\d+\.\d+)/)

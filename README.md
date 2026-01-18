@@ -470,7 +470,7 @@ spindb create mydb --from "postgresql://user:pass@host:5432/production"
 
 | Option | Description |
 |--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `mongodb`, `redis`, `valkey`) |
+| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`) |
 | `--db-version` | Engine version (e.g., 17 for PostgreSQL, 11.8 for MariaDB, 8 for Redis, 9 for Valkey) |
 | `--port`, `-p` | Port number (not applicable for SQLite) |
 | `--database`, `-d` | Primary database name (Redis uses 0-15) |

@@ -158,12 +158,14 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
 - [ ] `tests/docker/run-e2e.sh` - Add engine case and test execution
 
-### Documentation (5 files)
+### Documentation (7 files)
 
 - [ ] `README.md` - Add engine section with full documentation
+- [ ] `README.md` - Update `--engine` option help text to include new engine
 - [ ] `CHANGELOG.md` - Add to unreleased section
 - [ ] `TODO.md` - Update engine status
 - [ ] `ENGINES.md` - Add to supported engines table and details
+- [ ] `ENGINES.md` - Add to Engine Emojis table
 - [ ] `CLAUDE.md` - Update project documentation
 
 ---

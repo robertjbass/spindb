@@ -41,6 +41,52 @@ const SEED_FILE = join(__dirname, '../fixtures/clickhouse/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5 // 5 user rows
 const TEST_VERSION = '25.12' // YY.MM format version (macOS/Linux only, no Windows support)
 
+/**
+ * Wait for all mutations on a table to complete
+ * ClickHouse mutations (ALTER TABLE DELETE/UPDATE) are async operations
+ * that run in the background. This polls system.mutations until done.
+ */
+async function waitForMutationsComplete(
+  port: number,
+  database: string,
+  table: string,
+  timeoutMs: number = 10000,
+): Promise<void> {
+  const startTime = Date.now()
+  const pollInterval = 200
+
+  const engine = getEngine(ENGINE)
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      // Query system.mutations for pending mutations on this table
+      // We need to use a container to run the query, so we create a temp query
+      const clickhouse = await engine.getClickHouseClientPath()
+      const { execAsync } = await import('../../core/exec-async')
+
+      const query = `SELECT count() FROM system.mutations WHERE database = '${database}' AND table = '${table}' AND is_done = 0`
+      const { stdout } = await execAsync(
+        `"${clickhouse}" client --host 127.0.0.1 --port ${port} --database ${database} --query "${query}"`,
+      )
+
+      const pendingCount = parseInt(stdout.trim(), 10)
+      if (isNaN(pendingCount) || pendingCount === 0) {
+        return // All mutations complete
+      }
+    } catch {
+      // Query failed, mutations table might not have entries yet
+      return
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollInterval))
+  }
+
+  throw new Error(
+    `Timeout waiting for mutations to complete on ${database}.${table}`,
+  )
+}
+
 describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binaries not available for Windows' : false }, () => {
   let testPorts: number[]
   let containerName: string
@@ -252,8 +298,9 @@ describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binari
       DATABASE,
     )
 
-    // Wait a moment for mutation to complete (ClickHouse mutations are async)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // Wait for mutation to complete (ClickHouse mutations are async)
+    // Poll system.mutations until the DELETE mutation is finished
+    await waitForMutationsComplete(testPorts[0], DATABASE, 'test_user')
 
     const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
     // Should have 4 rows now
