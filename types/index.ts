@@ -45,6 +45,19 @@ export const ALL_ENGINES = [
 ] as const
 
 /**
+ * File-based engines (no server process, data stored in user project directories)
+ */
+export const FILE_BASED_ENGINES = new Set([Engine.SQLite, Engine.DuckDB])
+
+/**
+ * Check if an engine is file-based (SQLite, DuckDB)
+ * File-based engines have no server process and store data in user project directories.
+ */
+export function isFileBasedEngine(engine: Engine): boolean {
+  return FILE_BASED_ENGINES.has(engine)
+}
+
+/**
  * Type helper for exhaustive switch statements
  * Use in the default case to ensure all enum values are handled
  *

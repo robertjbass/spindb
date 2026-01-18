@@ -56,6 +56,23 @@ function duckdbFileExists(filePath: string): boolean {
   return existsSync(filePath)
 }
 
+// Helper to execute a SQL query against a DuckDB database file
+async function queryDuckDB(dbPath: string, sql: string): Promise<string> {
+  const { execFile } = await import('child_process')
+  const { promisify } = await import('util')
+  const execFileAsync = promisify(execFile)
+  const duckdb = await getDuckDBPath()
+
+  const { stdout } = await execFileAsync(duckdb, [
+    dbPath,
+    '-noheader',
+    '-list',
+    '-c',
+    sql,
+  ])
+  return stdout.trim()
+}
+
 const ENGINE = Engine.DuckDB
 const SEED_FILE = join(__dirname, '../fixtures/duckdb/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
@@ -162,20 +179,10 @@ describe('DuckDB Integration Tests', () => {
     await engine.runScript(config!, { file: SEED_FILE })
 
     // Query row count directly via duckdb
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const duckdb = await getDuckDBPath()
-
-    const { stdout } = await execFileAsync(duckdb, [
-      dbPath,
-      '-noheader',
-      '-list',
-      '-c',
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    // With -noheader -list, output is just the value
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(dbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
 
     assertEqual(
       rowCount,
@@ -199,20 +206,10 @@ describe('DuckDB Integration Tests', () => {
     })
 
     // Verify deletion
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const duckdb = await getDuckDBPath()
-
-    const { stdout } = await execFileAsync(duckdb, [
-      dbPath,
-      '-noheader',
-      '-list',
-      '-c',
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    // With -noheader -list, output is just the value
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(dbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
 
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
@@ -250,20 +247,10 @@ describe('DuckDB Integration Tests', () => {
     await engine.restore(backupConfig!, backupPath)
 
     // Verify restored data
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const duckdb = await getDuckDBPath()
-
-    const { stdout } = await execFileAsync(duckdb, [
-      backupDbPath,
-      '-noheader',
-      '-list',
-      '-c',
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    // With -noheader -list, output is just the value
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(backupDbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
 
     assertEqual(
       rowCount,
@@ -334,20 +321,10 @@ describe('DuckDB Integration Tests', () => {
     )
 
     // Verify data is intact
-    const { execFile } = await import('child_process')
-    const { promisify } = await import('util')
-    const execFileAsync = promisify(execFile)
-    const duckdb = await getDuckDBPath()
-
-    const { stdout } = await execFileAsync(duckdb, [
-      newDbPath,
-      '-noheader',
-      '-list',
-      '-c',
-      'SELECT COUNT(*) FROM test_user',
-    ])
-    // With -noheader -list, output is just the value
-    const rowCount = parseInt(stdout.trim(), 10)
+    const rowCount = parseInt(
+      await queryDuckDB(newDbPath, 'SELECT COUNT(*) FROM test_user'),
+      10,
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT - 1,

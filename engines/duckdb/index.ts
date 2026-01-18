@@ -386,28 +386,61 @@ export class DuckDBEngine extends BaseEngine {
     }
   }
 
-  // Uses spawn to avoid shell injection.
+  /**
+   * Dumps a DuckDB database to a SQL file.
+   *
+   * Uses a two-step approach:
+   * 1. Get schema (CREATE TABLE statements)
+   * 2. For each table, output INSERT statements
+   *
+   * Uses spawn to avoid shell injection.
+   */
   private async dumpToFile(
     duckdbPath: string,
     dbPath: string,
     outputPath: string,
   ): Promise<void> {
+    // Step 1: Get list of tables
+    const tablesResult = await execFileAsync(duckdbPath, [
+      dbPath,
+      '-csv',
+      '-noheader',
+      '-c',
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' AND table_type = 'BASE TABLE'",
+    ])
+    const tables = tablesResult.stdout
+      .trim()
+      .split('\n')
+      .filter((t) => t.length > 0)
+
+    // Step 2: Build dump script - schema first, then data for each table
+    // Using .mode insert for INSERT statements
+    const dumpCommands = [
+      '.schema', // Output CREATE TABLE statements
+      '.mode insert', // Switch to INSERT mode for data
+    ]
+
+    for (const table of tables) {
+      // Quote table name to handle special characters
+      dumpCommands.push(`SELECT * FROM "${table}";`)
+    }
+
+    const dumpScript = dumpCommands.join('\n')
+
+    // Step 3: Execute dump script and write to file
     return new Promise((resolve, reject) => {
       const output = createWriteStream(outputPath)
-      // DuckDB doesn't have a .dump command like SQLite
-      // We use a SQL query to export tables
-      const exportQuery = `
-        .mode insert
-        .schema
-        SELECT * FROM information_schema.tables WHERE table_schema = 'main';
-      `
-      const proc = spawn(duckdbPath, [dbPath, '-c', exportQuery])
+      const proc = spawn(duckdbPath, [dbPath])
 
       proc.stdout.pipe(output)
 
+      // Write the dump script to stdin
+      proc.stdin.write(dumpScript)
+      proc.stdin.end()
+
       proc.stderr.on('data', (data: Buffer) => {
-        // Collect stderr but don't fail immediately
-        console.error(data.toString())
+        // Log stderr but don't fail (warnings are common)
+        logDebug('duckdb dump stderr', { message: data.toString() })
       })
 
       proc.on('error', (err) => {
@@ -496,16 +529,56 @@ export class DuckDBEngine extends BaseEngine {
     }
   }
 
-  // DuckDB files have a specific magic header
+  /**
+   * Validates that a file is a DuckDB database.
+   *
+   * DuckDB files have a specific binary header. We check:
+   * 1. File is not empty and has minimum size (DuckDB files are at least 4KB)
+   * 2. First bytes are not ASCII text (rules out SQL files)
+   * 3. Try to execute a simple query to verify it's a valid database
+   */
   private async isValidDuckDBFile(filePath: string): Promise<boolean> {
     try {
-      const buffer = Buffer.alloc(8)
+      // Check minimum file size (DuckDB databases are at least a few KB)
+      const stats = statSync(filePath)
+      if (stats.size < 4096) {
+        return false
+      }
+
+      // Read first 16 bytes to check for text content
+      const buffer = Buffer.alloc(16)
       const fd = await open(filePath, 'r')
-      await fd.read(buffer, 0, 8, 0)
+      await fd.read(buffer, 0, 16, 0)
       await fd.close()
-      // DuckDB magic bytes (varies by version, so we do a basic check)
-      // The first few bytes should contain 'DUCK' or specific patterns
-      return buffer[0] !== 0 // Basic check - file is not empty
+
+      // Check if file starts with common SQL text patterns (not a binary DuckDB file)
+      const header = buffer.toString('utf8', 0, 16).toLowerCase()
+      const textPatterns = ['create', 'insert', 'select', 'drop', '--', '/*', 'pragma']
+      for (const pattern of textPatterns) {
+        if (header.startsWith(pattern)) {
+          return false // This is a SQL text file, not a DuckDB binary
+        }
+      }
+
+      // Final validation: try to open with DuckDB and run a simple query
+      const duckdb = await this.getDuckDBPath()
+      if (duckdb) {
+        try {
+          await execFileAsync(duckdb, [filePath, '-c', 'SELECT 1'], {
+            timeout: 5000,
+          })
+          return true
+        } catch {
+          return false
+        }
+      }
+
+      // If we can't run DuckDB, fall back to binary header check
+      // DuckDB files should have non-printable bytes in the header
+      const hasNonPrintable = buffer.some(
+        (b) => b !== 0 && (b < 32 || b > 126),
+      )
+      return hasNonPrintable
     } catch {
       return false
     }

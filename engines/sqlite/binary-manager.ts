@@ -35,6 +35,21 @@ function isRenameFallbackError(error: unknown): boolean {
 
 export class SQLiteBinaryManager {
   /**
+   * Move a file or directory, falling back to copy if rename fails across filesystems.
+   */
+  private async moveEntry(sourcePath: string, destPath: string): Promise<void> {
+    try {
+      await rename(sourcePath, destPath)
+    } catch (error) {
+      if (isRenameFallbackError(error)) {
+        await cp(sourcePath, destPath, { recursive: true })
+      } else {
+        throw error
+      }
+    }
+  }
+
+  /**
    * Get the download URL for a SQLite version
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
@@ -275,30 +290,14 @@ export class SQLiteBinaryManager {
           ? join(binDir, entry.name)
           : join(binPath, entry.name)
 
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
+        await this.moveEntry(sourcePath, destPath)
       }
     } else {
       // Has bin/ directory - move everything as-is
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
-        try {
-          await rename(sourcePath, destPath)
-        } catch (error) {
-          if (isRenameFallbackError(error)) {
-            await cp(sourcePath, destPath, { recursive: true })
-          } else {
-            throw error
-          }
-        }
+        await this.moveEntry(sourcePath, destPath)
       }
     }
   }

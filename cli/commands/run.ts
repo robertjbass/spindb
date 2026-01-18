@@ -7,7 +7,7 @@ import { getEngine } from '../../engines'
 import { promptInstallDependencies } from '../ui/prompts'
 import { uiError, uiWarning } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
-import { Engine } from '../../types'
+import { Engine, isFileBasedEngine } from '../../types'
 
 export const runCommand = new Command('run')
   .description('Run script file or command against a container')
@@ -49,8 +49,8 @@ export const runCommand = new Command('run')
 
         const { engine: engineName } = config
 
-        // File-based databases (SQLite, DuckDB): check file exists instead of running status
-        if (engineName === Engine.SQLite || engineName === Engine.DuckDB) {
+        // File-based databases: check file exists instead of running status
+        if (isFileBasedEngine(engineName)) {
           if (!existsSync(config.database)) {
             console.error(
               uiError(`Database file not found: ${config.database}`),

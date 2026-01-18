@@ -211,6 +211,14 @@ async function createSqlBackup(
  * parsing the binary format for restore. SQL format is currently preferred
  * for portability and ease of restore via clickhouse client --multiquery.
  *
+ * ARCHITECTURAL NOTE: The current implementation mixes text markers
+ * (-- TABLE:, -- CREATE:, -- DATA:) with binary Native format data in
+ * the same stream. Before enabling this feature, refactor to use a
+ * structured container format for deterministic parsing during restore:
+ * - Tar archive with separate files per table (schema.sql + data.native)
+ * - Or length-prefixed binary sections
+ * - Or separate metadata JSON file alongside pure binary data
+ *
  * To enable: export this function, add 'native' to BACKUP_FORMATS in
  * config/backup-formats.ts, and implement native restore in restore.ts.
  *

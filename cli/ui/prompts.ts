@@ -757,7 +757,7 @@ export type CreateOptions = {
  * Prompt for file-based database (SQLite/DuckDB) file location
  * Similar to the relocate logic in container-handlers.ts
  */
-export async function promptSqlitePath(
+export async function promptFileDatabasePath(
   containerName: string,
   extension: string = '.sqlite',
 ): Promise<string | undefined> {
@@ -858,7 +858,7 @@ export async function promptSqlitePath(
     }
 
     // Recursively prompt again
-    return promptSqlitePath(containerName, extension)
+    return promptFileDatabasePath(containerName, extension)
   }
 
   return finalPath
@@ -877,9 +877,9 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
   let port = 0
   let path: string | undefined
   if (engine === 'sqlite') {
-    path = await promptSqlitePath(name, '.sqlite')
+    path = await promptFileDatabasePath(name, '.sqlite')
   } else if (engine === 'duckdb') {
-    path = await promptSqlitePath(name, '.duckdb')
+    path = await promptFileDatabasePath(name, '.duckdb')
   } else {
     const engineDefaults = getEngineDefaults(engine)
     port = await promptPort(engineDefaults.defaultPort, engine)

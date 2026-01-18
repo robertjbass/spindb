@@ -11,6 +11,8 @@
  * 3. Update config/engine-defaults.ts supportedVersions array
  */
 
+import { logWarning } from '../../core/error-handler'
+
 /**
  * Map of major DuckDB versions to their latest stable patch versions.
  * Must match versions available in hostdb releases.json.
@@ -56,7 +58,7 @@ export function normalizeVersion(version: string): string {
 
   // Unknown version - warn and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
-  console.warn(
+  logWarning(
     `DuckDB version '${version}' not in version map, may not be available in hostdb`,
   )
   return version

@@ -29,7 +29,7 @@ import {
   promptVersion,
   promptPort,
   promptDatabaseName,
-  promptSqlitePath,
+  promptFileDatabasePath,
   BACK_VALUE,
   MAIN_MENU_VALUE,
 } from '../../ui/prompts'
@@ -50,7 +50,7 @@ import {
   handleBackupForContainer,
   handleRestoreForContainer,
 } from './backup-handlers'
-import { Engine } from '../../../types'
+import { Engine, isFileBasedEngine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 
 export async function handleCreate(): Promise<'main' | void> {
@@ -115,7 +115,7 @@ export async function handleCreate(): Promise<'main' | void> {
   if (isFileBasedDB) {
     // File-based databases don't need a port, but need a path
     const defaultExtension = isDuckDB ? '.duckdb' : '.sqlite'
-    filePath = await promptSqlitePath(name, defaultExtension)
+    filePath = await promptFileDatabasePath(name, defaultExtension)
     port = 0
   } else {
     const engineDefaults = getEngineDefaults(engine)
@@ -441,7 +441,7 @@ export async function handleList(
   for (let i = 0; i < containers.length; i++) {
     const container = containers[i]
     const size = sizes[i]
-    const isFileBasedDB = container.engine === Engine.SQLite || container.engine === Engine.DuckDB
+    const isFileBasedDB = isFileBasedEngine(container.engine)
 
     // File-based DBs use available/missing, server databases use running/stopped
     const statusDisplay = isFileBasedDB
@@ -478,10 +478,10 @@ export async function handleList(
 
   // Separate counts for server databases and file-based databases
   const serverContainers = containers.filter(
-    (c) => c.engine !== Engine.SQLite && c.engine !== Engine.DuckDB
+    (c) => !isFileBasedEngine(c.engine),
   )
-  const fileBasedContainers = containers.filter(
-    (c) => c.engine === Engine.SQLite || c.engine === Engine.DuckDB
+  const fileBasedContainers = containers.filter((c) =>
+    isFileBasedEngine(c.engine),
   )
 
   const running = serverContainers.filter((c) => c.status === 'running').length
@@ -509,8 +509,8 @@ export async function handleList(
   const containerChoices = [
     ...containers.map((c) => {
       // Simpler selector - table already shows details
-      const isFileBasedEngine = c.engine === Engine.SQLite || c.engine === Engine.DuckDB
-      const statusLabel = isFileBasedEngine
+      const isFileBased = isFileBasedEngine(c.engine)
+      const statusLabel = isFileBased
         ? c.status === 'running'
           ? chalk.blue('● available')
           : chalk.gray('○ missing')
@@ -822,7 +822,7 @@ export async function handleStart(): Promise<void> {
   const containers = await containerManager.list()
   // Filter for stopped containers, excluding file-based DBs (no server process to start)
   const stopped = containers.filter(
-    (c) => c.status !== 'running' && c.engine !== Engine.SQLite && c.engine !== Engine.DuckDB,
+    (c) => c.status !== 'running' && !isFileBasedEngine(c.engine),
   )
 
   if (stopped.length === 0) {
@@ -873,7 +873,7 @@ export async function handleStop(): Promise<void> {
   const containers = await containerManager.list()
   // Filter for running containers, excluding file-based DBs (no server process to stop)
   const running = containers.filter(
-    (c) => c.status === 'running' && c.engine !== Engine.SQLite && c.engine !== Engine.DuckDB,
+    (c) => c.status === 'running' && !isFileBasedEngine(c.engine),
   )
 
   if (running.length === 0) {
