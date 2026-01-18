@@ -1,8 +1,8 @@
-import { describe, it, before, after } from 'node:test'
+import { describe, it, after } from 'node:test'
 import { writeFileSync, unlinkSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { assert, assertEqual } from '../utils/assertions'
+import { assertEqual } from '../utils/assertions'
 import { detectLocationType } from '../../cli/commands/create'
 import { Engine } from '../../types'
 
