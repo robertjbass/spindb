@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-01-18
+
+### Changed
+- **Faster menu startup** - Parallelized async operations in the interactive menu for faster startup:
+  - Container list and engine checks now run concurrently
+  - All 9 engine detection checks (PostgreSQL, MySQL, MariaDB, etc.) now run in parallel
+  - Container status checks (`isRunning`) now run in parallel instead of sequentially
+
 ## [0.19.0] - 2026-01-18
 
 ### Added

@@ -298,6 +298,9 @@ export class ContainerManager {
       (e) => e !== 'sqlite' && e !== 'duckdb',
     )
 
+    // Collect all container check promises for parallel execution
+    const containerChecks: Promise<ContainerConfig | null>[] = []
+
     for (const engine of engines) {
       const engineDir = paths.getEngineContainersPath(engine)
       if (!existsSync(engineDir)) {
@@ -308,20 +311,26 @@ export class ContainerManager {
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          const config = await this.getConfig(entry.name, { engine })
-          if (config) {
-            // Check if actually running
-            const running = await processManager.isRunning(entry.name, {
-              engine,
-            })
-            containers.push({
-              ...config,
-              status: running ? 'running' : 'stopped',
-            })
-          }
+          // Push async check as promise (don't await yet)
+          containerChecks.push(
+            (async () => {
+              const config = await this.getConfig(entry.name, { engine })
+              if (!config) return null
+              const running = await processManager.isRunning(entry.name, {
+                engine,
+              })
+              return { ...config, status: running ? 'running' : 'stopped' }
+            })(),
+          )
         }
       }
     }
+
+    // Execute all container checks in parallel
+    const results = await Promise.all(containerChecks)
+    containers.push(
+      ...results.filter((c): c is ContainerConfig => c !== null),
+    )
 
     return containers
   }

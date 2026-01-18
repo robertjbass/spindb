@@ -681,36 +681,40 @@ export function compareVersions(a: string, b: string): number {
 }
 
 export async function getInstalledEngines(): Promise<InstalledEngine[]> {
-  const engines: InstalledEngine[] = []
+  // Parallelize all engine checks for faster startup
+  const [
+    pgEngines,
+    mariadbEngines,
+    mysqlEngines,
+    sqliteEngines,
+    duckdbEngines,
+    mongodbEngines,
+    redisEngines,
+    valkeyEngines,
+    clickhouseEngines,
+  ] = await Promise.all([
+    getInstalledPostgresEngines(),
+    getInstalledMariadbEngines(),
+    getInstalledMysqlEngines(),
+    getInstalledSqliteEngines(),
+    getInstalledDuckDBEngines(),
+    getInstalledMongodbEngines(),
+    getInstalledRedisEngines(),
+    getInstalledValkeyEngines(),
+    getInstalledClickHouseEngines(),
+  ])
 
-  const pgEngines = await getInstalledPostgresEngines()
-  engines.push(...pgEngines)
-
-  const mariadbEngines = await getInstalledMariadbEngines()
-  engines.push(...mariadbEngines)
-
-  const mysqlEngines = await getInstalledMysqlEngines()
-  engines.push(...mysqlEngines)
-
-  const sqliteEngines = await getInstalledSqliteEngines()
-  engines.push(...sqliteEngines)
-
-  const duckdbEngines = await getInstalledDuckDBEngines()
-  engines.push(...duckdbEngines)
-
-  const mongodbEngines = await getInstalledMongodbEngines()
-  engines.push(...mongodbEngines)
-
-  const redisEngines = await getInstalledRedisEngines()
-  engines.push(...redisEngines)
-
-  const valkeyEngines = await getInstalledValkeyEngines()
-  engines.push(...valkeyEngines)
-
-  const clickhouseEngines = await getInstalledClickHouseEngines()
-  engines.push(...clickhouseEngines)
-
-  return engines
+  return [
+    ...pgEngines,
+    ...mariadbEngines,
+    ...mysqlEngines,
+    ...sqliteEngines,
+    ...duckdbEngines,
+    ...mongodbEngines,
+    ...redisEngines,
+    ...valkeyEngines,
+    ...clickhouseEngines,
+  ]
 }
 
 // Export individual engine detection functions for use in other modules
