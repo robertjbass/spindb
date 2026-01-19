@@ -152,6 +152,7 @@ _dumps
 
 # DuckDB
 *.duckdb
+*.duckdb.wal
 
 # Private docs
 MONETIZATION.md

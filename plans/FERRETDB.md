@@ -83,12 +83,65 @@ async create(name: string, options: CreateOptions): Promise<ContainerConfig> {
 
 ```ts
 async start(container: ContainerConfig): Promise<{ port, connectionString }> {
-  // 1. Find available port for PostgreSQL backend (internal)
+  // 1. Load saved backendPort from container.json, or allocate a new one
+  //    - If saved backendPort exists, check if it's available
+  //    - If not available, allocate a new port and update container.json
   // 2. Start PostgreSQL on backend port, pointing to pg_data/
-  // 3. Wait for PostgreSQL to be ready
+  // 3. Wait for PostgreSQL to be ready with health check
+  //    - On failure: stop PostgreSQL, reset status to 'stopped', clear backendPort, throw error
   // 4. Start FerretDB with --postgresql-url=postgres://localhost:{backendPort}/ferretdb
-  // 5. Update container status and backendPort
-  // 6. Return MongoDB connection string: mongodb://localhost:{port}
+  //    - On failure: stop PostgreSQL, reset status to 'stopped', throw error
+  // 5. Verify FerretDB can connect to PostgreSQL
+  //    - On failure: stop FerretDB, stop PostgreSQL, reset status to 'stopped', throw error
+  // 6. Update container status to 'running' and persist backendPort to container.json
+  // 7. Return MongoDB connection string: mongodb://localhost:{port}
+
+  let pgStarted = false
+  let ferretStarted = false
+
+  try {
+    // Load or allocate backendPort
+    let backendPort = container.backendPort
+    if (!backendPort || !await portManager.isPortAvailable(backendPort)) {
+      backendPort = await portManager.getAvailablePort(54320)
+    }
+    // Persist backendPort immediately
+    container.backendPort = backendPort
+    await this.saveContainerConfig(container)
+
+    // Start PostgreSQL
+    await this.startPostgreSQL(container, backendPort)
+    pgStarted = true
+
+    // Health check PostgreSQL
+    if (!await this.waitForPostgreSQLReady(backendPort)) {
+      throw new Error('PostgreSQL failed health check')
+    }
+
+    // Start FerretDB
+    await this.startFerretDB(container, backendPort)
+    ferretStarted = true
+
+    // Verify FerretDB can connect
+    if (!await this.verifyFerretDBConnection(container.port)) {
+      throw new Error('FerretDB failed to connect to PostgreSQL backend')
+    }
+
+    container.status = 'running'
+    await this.saveContainerConfig(container)
+    return { port: container.port, connectionString: `mongodb://localhost:${container.port}` }
+  } catch (error) {
+    // Rollback: stop any started processes
+    if (ferretStarted) {
+      await this.stopFerretDB(container).catch(() => {})
+    }
+    if (pgStarted) {
+      await this.stopPostgreSQL(container).catch(() => {})
+    }
+    container.status = 'stopped'
+    await this.saveContainerConfig(container)
+    throw error
+  }
 }
 ```
 
@@ -105,11 +158,63 @@ async stop(container: ContainerConfig): Promise<void> {
 ### Status
 
 ```ts
+type ComponentStatus = {
+  running: boolean
+  pid?: number
+  error?: string
+}
+
+type StatusResult = {
+  status: 'running' | 'stopped'
+  components: {
+    ferretdb: ComponentStatus
+    postgresql: ComponentStatus
+  }
+}
+
 async status(container: ContainerConfig): Promise<StatusResult> {
-  // Check both processes:
-  // - FerretDB running? (check PID file)
-  // - PostgreSQL running? (pg_ctl status on pg_data/)
-  // Return 'running' only if BOTH are running
+  // Check FerretDB process (from PID file)
+  const ferretdbStatus = await this.getFerretDBStatus(container)
+
+  // Check PostgreSQL process (pg_ctl status on pg_data/)
+  const postgresStatus = await this.getPostgreSQLStatus(container)
+
+  // Overall status is 'running' only if BOTH components are running
+  const overallStatus = ferretdbStatus.running && postgresStatus.running
+    ? 'running'
+    : 'stopped'
+
+  return {
+    status: overallStatus,
+    components: {
+      ferretdb: ferretdbStatus,
+      postgresql: postgresStatus,
+    },
+  }
+}
+
+// Helper: Check FerretDB status from PID file
+private async getFerretDBStatus(container: ContainerConfig): Promise<ComponentStatus> {
+  const pidFile = paths.getContainerPath(container.name, { engine: 'ferretdb' }) + '/ferretdb.pid'
+  try {
+    const pid = parseInt(await readFile(pidFile, 'utf-8'), 10)
+    const running = await this.isProcessRunning(pid)
+    return { running, pid: running ? pid : undefined }
+  } catch {
+    return { running: false, error: 'PID file not found' }
+  }
+}
+
+// Helper: Check PostgreSQL status via pg_ctl
+private async getPostgreSQLStatus(container: ContainerConfig): Promise<ComponentStatus> {
+  const pgDataDir = paths.getContainerPath(container.name, { engine: 'ferretdb' }) + '/pg_data'
+  try {
+    const { stdout } = await execAsync(`${await this.getPgCtlPath()} status -D "${pgDataDir}"`)
+    const pidMatch = stdout.match(/PID: (\d+)/)
+    return { running: true, pid: pidMatch ? parseInt(pidMatch[1], 10) : undefined }
+  } catch (error) {
+    return { running: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
 }
 ```
 
@@ -122,6 +227,12 @@ Each FerretDB container uses TWO ports:
 ```ts
 const ferretdbPort = await portManager.getAvailablePort(27017)  // User sees this
 const backendPort = await portManager.getAvailablePort(54320)   // Internal only
+
+// backendPort persistence and revalidation:
+// - On create: allocate and save to container.json immediately
+// - On start: read from container.json, verify availability, reallocate if needed
+// - On stop/delete: call portManager.releasePort(backendPort) to free the port
+// - Always read backendPort from ContainerConfig, never hardcode
 ```
 
 ## Backup & Restore
@@ -137,19 +248,52 @@ const backendPort = await portManager.getAvailablePort(54320)   // Internal only
 
 ### Implementation
 
+**Precondition:** Both backup and restore require the container to be running. The embedded PostgreSQL must be accepting connections on `backendPort`. If the container is stopped, the operation will fail with a clear error message instructing the user to start the container first.
+
 ```ts
 // Backup: use pg_dump on embedded PostgreSQL
 async backup(container, outputPath, options): Promise<BackupResult> {
+  // Require container to be running
+  const status = await this.status(container)
+  if (status.status !== 'running') {
+    throw new Error(
+      `Cannot backup stopped container "${container.name}". ` +
+      `Run "spindb start ${container.name}" first.`
+    )
+  }
+  if (!status.components.postgresql.running) {
+    throw new Error(
+      `PostgreSQL backend is not running for container "${container.name}". ` +
+      `FerretDB status: ${status.components.ferretdb.running ? 'running' : 'stopped'}. ` +
+      `Try restarting the container.`
+    )
+  }
+
   const pgDumpPath = await this.getPgDumpPath()
-  const pgDataDir = paths.getContainerPath(container.name, { engine: 'ferretdb' }) + '/pg_data'
-  // Connect to embedded PostgreSQL on backendPort
-  await execAsync(`${pgDumpPath} -h 127.0.0.1 -p ${container.backendPort} -U postgres -F c -f "${outputPath}" ferretdb`)
+  const database = container.backendDatabase || 'ferretdb'
+  await execAsync(`${pgDumpPath} -h 127.0.0.1 -p ${container.backendPort} -U postgres -F c -f "${outputPath}" ${database}`)
 }
 
 // Restore: use pg_restore on embedded PostgreSQL
 async restore(container, backupPath, options): Promise<RestoreResult> {
+  // Require container to be running
+  const status = await this.status(container)
+  if (status.status !== 'running') {
+    throw new Error(
+      `Cannot restore to stopped container "${container.name}". ` +
+      `Run "spindb start ${container.name}" first.`
+    )
+  }
+  if (!status.components.postgresql.running) {
+    throw new Error(
+      `PostgreSQL backend is not running for container "${container.name}". ` +
+      `Try restarting the container.`
+    )
+  }
+
   const pgRestorePath = await this.getPgRestorePath()
-  await execAsync(`${pgRestorePath} -h 127.0.0.1 -p ${container.backendPort} -U postgres -d ferretdb "${backupPath}"`)
+  const database = container.backendDatabase || 'ferretdb'
+  await execAsync(`${pgRestorePath} -h 127.0.0.1 -p ${container.backendPort} -U postgres -d ${database} "${backupPath}"`)
 }
 ```
 
@@ -197,6 +341,10 @@ The `postgresql-documentdb` build must include:
 - PostgreSQL 17+ binaries
 - DocumentDB extension compiled (`pg_documentdb.so`, `pg_documentdb_core.so`)
 - pg_cron extension
+- tsm_system_rows extension
+- vector (pgvector) extension
+- postgis extension
+- rum extension
 - Proper `postgresql.conf.sample` with `shared_preload_libraries` pre-configured
 
 ### Version Map
@@ -209,7 +357,7 @@ export const FERRETDB_VERSION_MAP: Record<string, string> = {
 
 // Maps FerretDB version to required postgresql-documentdb version
 export const FERRETDB_PG_DOCUMENTDB_COMPAT: Record<string, string> = {
-  '2.7.0': '17-0.107.0',
+  '2.7.0': '17-0.108.0',
   '2.0.0': '17-0.102.0',
 }
 ```
@@ -285,16 +433,52 @@ This must be completed before any SpinDB work begins.
 3. **Architecture:** Embedded PostgreSQL per container (isolated, simple mental model)
 4. **Windows support:** PostgreSQL+DocumentDB will not be available on Windows initially due to extension build complexity (PostGIS, rum dependencies). FerretDB binary itself supports Windows but cannot function without the backend. See [Stretch Goals: Windows Support](#stretch-goals-windows-support) for future plans.
 
-## Remaining Open Questions
+## Resolved Questions
 
-1. **Connection strings:** Should `spindb url myferret` return:
-   - `mongodb://localhost:27017` (FerretDB endpoint) - **recommended default**
-   - `postgresql://localhost:54320/ferretdb` (direct backend access) - optional `--backend` flag?
+### 1. Connection strings (`spindb url`)
 
-2. **mongosh for `spindb connect`:** If user has mongosh installed system-wide, use it. Otherwise:
-   - Skip interactive shell support?
-   - Prompt user to install mongosh?
-   - Include mongosh in hostdb builds?
+**Decision:** Return MongoDB endpoint by default, with `--backend` flag for PostgreSQL access.
+
+```ts
+// Default: FerretDB endpoint
+spindb url myferret
+// → mongodb://localhost:27017
+
+// With --backend flag: direct PostgreSQL access (for debugging)
+spindb url myferret --backend
+// → postgresql://localhost:54320/ferretdb
+```
+
+### 2. Interactive shell (`spindb connect`)
+
+**Decision:** Detect mongosh in PATH; if not found, print a helpful message and exit. Do not bundle mongosh.
+
+```ts
+async function handleConnectCommand(containerName: string): Promise<void> {
+  const container = await containerManager.getConfig(containerName)
+  if (!container) throw new Error(`Container "${containerName}" not found`)
+
+  const mongoshPath = await findMongoshInPath()
+  if (!mongoshPath) {
+    console.log('mongosh not found in PATH.')
+    console.log('Install mongosh to use interactive shell:')
+    console.log('  https://www.mongodb.com/docs/mongodb-shell/install/')
+    return
+  }
+
+  const connectionString = `mongodb://localhost:${container.port}`
+  await spawnInteractive(mongoshPath, [connectionString])
+}
+
+async function findMongoshInPath(): Promise<string | null> {
+  try {
+    const { stdout } = await execAsync(process.platform === 'win32' ? 'where mongosh' : 'which mongosh')
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+```
 
 ## Binary Dependency Management
 
@@ -445,7 +629,7 @@ postgresql-documentdb-17-0.107.0-darwin-arm64/
 
 **Critical: postgresql.conf.sample must include:**
 ```
-shared_preload_libraries = 'pg_documentdb_core,pg_cron'
+shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb'
 ```
 
 This ensures `initdb` creates a `postgresql.conf` with the extensions pre-loaded.

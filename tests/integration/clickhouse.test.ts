@@ -98,7 +98,12 @@ async function waitForMutationsComplete(
       )
 
       const pendingCount = parseInt(stdout.trim(), 10)
-      if (isNaN(pendingCount) || pendingCount === 0) {
+      if (isNaN(pendingCount)) {
+        throw new Error(
+          `[waitForMutationsComplete] Failed to parse mutation count from stdout: "${stdout.trim()}". Query: "${query}"`,
+        )
+      }
+      if (pendingCount === 0) {
         return // All mutations complete
       }
     } catch (err) {
