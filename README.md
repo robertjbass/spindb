@@ -3,1200 +3,821 @@
 [![npm version](https://img.shields.io/npm/v/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![npm downloads](https://img.shields.io/npm/dm/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
-[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#platform-support-vs-alternatives)
+[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#platform-coverage)
 
-**The first npm CLI for running local databases without Docker.**
+**One CLI for all your local databases.**
 
-Spin up PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, and ClickHouse instances for local development. No Docker daemon, no container networking, no volume mounts. Just databases running on localhost, ready in seconds.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 9 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+
+```bash
+npm install -g spindb
+
+# PostgreSQL for your API
+spindb create api-db
+
+# MongoDB for analytics
+spindb create analytics --engine mongodb
+
+# Redis for caching
+spindb create cache --engine redis
+
+# All running side-by-side, all managed the same way
+```
+
+---
+
+## What is SpinDB?
+
+SpinDB is **three tools in one**:
+
+### 1. **Database Package Manager**
+Download and manage multiple database engines and versions—just like `apt`, `brew`, or `npm`, but for databases.
+
+```bash
+# Run PostgreSQL 14 for legacy projects, 18 for new ones
+spindb create old-project --engine postgresql --db-version 14
+spindb create new-project --engine postgresql --db-version 18
+
+# Or MySQL 8.0 alongside MySQL 9
+spindb create legacy-mysql --engine mysql --db-version 8.0
+spindb create modern-mysql --engine mysql --db-version 9
+```
+
+### 2. **Unified Database API**
+One consistent interface across SQL databases, document stores, key-value stores, and analytics engines.
+
+```bash
+# Same commands work for ANY database
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|redis|valkey|clickhouse|sqlite|duckdb]
+spindb start mydb
+spindb connect mydb
+spindb backup mydb
+spindb restore mydb backup.dump
+```
+
+### 3. **Native Database Client**
+Access built-in shells, run queries, and execute scripts—all without installing separate clients.
+
+```bash
+# Execute SQL/NoSQL/commands across any engine
+spindb run mydb script.sql                              # PostgreSQL/MySQL/SQLite
+spindb run mydb -c "db.users.find().pretty()"           # MongoDB
+spindb run mydb -c "SET mykey myvalue"                  # Redis/Valkey
+spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
+```
+
+---
+
+## Platform Coverage
+
+SpinDB works across **9 database engines** and **5 platform architectures** with a **single, consistent API**.
+
+| Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
+|----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
+| 🐘 **PostgreSQL** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🐬 **MySQL** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦭 **MariaDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🪶 **SQLite** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦆 **DuckDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🍃 **MongoDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔴 **Redis** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
+
+**45 combinations. One CLI. Zero configuration.**
 
 ---
 
 ## Quick Start
 
+Install SpinDB globally using your preferred package manager:
+
 ```bash
-# Install globally (or use pnpm/yarn)
+# Using npm
 npm install -g spindb
 
-# Create and start a PostgreSQL database
-spindb create myapp
+# Using pnpm (recommended - faster, more efficient)
+pnpm add -g spindb
 
-# Connect to it
-spindb connect myapp
-
-# You're in! Run some SQL:
-# postgres=# CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+# Or run without installing
+npx spindb
 ```
 
-That's it. Your database is running on `localhost:5432`, and your data persists in `~/.spindb/containers/postgresql/myapp/`.
+Create and start a database in seconds:
+
+```bash
+# PostgreSQL (default engine)
+spindb create myapp
+spindb start myapp
+spindb connect myapp
+
+# Or all in one command
+spindb create myapp --start --connect
+```
+
+That's it! Your PostgreSQL database is now running on `localhost:5432`, and data persists in `~/.spindb/containers/postgresql/myapp/`.
+
+### Try Other Engines
+
+```bash
+# MySQL for relational data
+spindb create shop --engine mysql --start --connect
+
+# MongoDB for document storage
+spindb create logs --engine mongodb --start
+
+# Redis for caching and real-time features
+spindb create sessions --engine redis --start
+
+# DuckDB for analytics
+spindb create analytics --engine duckdb --start
+```
+
+Every engine works the same way. Learn one, use them all.
 
 ---
 
 ## Why SpinDB?
 
-Docker is great for production parity and complex multi-service setups. But for local development databases, it's often overkill:
+### The Problem with Current Tools
 
-- **Resource overhead** - Docker Desktop runs a Linux VM on macOS/Windows
-- **Complexity** - Volumes, networks, compose files for a single database
-- **Startup time** - Container initialization vs native process launch
-- **Licensing** - Docker Desktop requires a paid subscription for larger organizations
+**Docker** is powerful but heavy—requires a daemon, runs containers in a VM (on macOS/Windows), and adds complexity for simple local databases.
 
-Sometimes you just want PostgreSQL on `localhost:5432` without the ceremony.
+**GUI tools** like DBngin and Postgres.app are great but platform-specific, don't support scripting, and lack a unified interface across engines.
 
-SpinDB runs databases as native processes with isolated data directories. No VM, no daemon, no container networking. Just databases.
+**System package managers** (brew, apt, etc.) work but create version conflicts, require manual configuration, and don't provide consistent management across databases.
 
-### SpinDB vs Alternatives
+### SpinDB's Approach
+
+SpinDB runs databases as **native processes** with **isolated data directories**:
+
+- **No Docker daemon or VM overhead** - Direct process execution
+- **No system installation conflicts** - Each database version lives in `~/.spindb/bin/`
+- **No manual configuration** - Databases start with sensible defaults
+- **Cross-platform consistency** - Same commands work on macOS, Linux, and Windows
+- **Multi-version support** - Run PostgreSQL 14 and 18 side-by-side
+- **Unified interface** - Manage PostgreSQL, MongoDB, and Redis the same way
+
+### Comparison Matrix
 
 | Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
 |---------|--------|--------|--------|--------------|-------|
 | No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Multiple DB engines | ✅ | ✅ | ✅ | ❌ | ⚠️ MySQL only |
-| CLI-first | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Multiple DB engines | ✅ 9 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
+| CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
 | Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
-| Low resource usage | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Backup/restore built-in | ✅ | Manual | ✅ | ❌ | ❌ |
+| Low resource usage | ✅ Native | ❌ VM on macOS/Win | ✅ Native | ✅ Native | ✅ Native |
 | Linux support | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Free | ✅ | ⚠️ | ✅ | ✅ | ✅ |
-
-### Platform Support vs Alternatives
-
-| Platform | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
-|----------|--------|--------|--------|--------------|-------|
-| macOS (ARM64) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| macOS (Intel) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Linux (x64) | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Linux (ARM64) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Windows (x64) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| ARM64 support | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Free for commercial use | ❌ | ⚠️ Paid for orgs | ✅ | ✅ | ✅ |
 
 ---
 
-## Installation
+## Supported Databases
 
-SpinDB is distributed via npm. A global install is recommended so you can run `spindb` from anywhere.
+SpinDB supports **9 database engines** with **multiple versions** for each:
 
-We recommend [pnpm](https://pnpm.io/) as a faster, more disk-efficient alternative to npm.
+| Engine | Type | Versions | Default Port | Query Language |
+|--------|------|----------|--------------|----------------|
+| 🐘 **PostgreSQL** | Relational (SQL) | 15, 16, 17, 18 | 5432 | SQL |
+| 🐬 **MySQL** | Relational (SQL) | 8.0, 8.4, 9 | 3306 | SQL |
+| 🦭 **MariaDB** | Relational (SQL) | 10.11, 11.4, 11.8 | 3307 | SQL |
+| 🪶 **SQLite** | Embedded (SQL) | 3 | N/A (file-based) | SQL |
+| 🦆 **DuckDB** | Embedded OLAP | 1.4.3 | N/A (file-based) | SQL |
+| 🍃 **MongoDB** | Document Store | 7.0, 8.0, 8.2 | 27017 | JavaScript (mongosh) |
+| 🔴 **Redis** | Key-Value Store | 7, 8 | 6379 | Redis commands |
+| 🔷 **Valkey** | Key-Value Store | 8, 9 | 6379 | Redis commands |
+| 🏠 **ClickHouse** | Columnar OLAP | 25.12 | 9000 (TCP), 8123 (HTTP) | SQL (ClickHouse dialect) |
 
-```bash
-# Using pnpm (recommended)
-pnpm add -g spindb
+### Engine Categories
 
-# Using npm
-npm install -g spindb
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse):
+- Start/stop server processes
+- Bind to localhost ports
+- Data stored in `~/.spindb/containers/{engine}/{name}/`
 
-# Or run directly without installing
-pnpx spindb
-npx spindb
-```
+**File-Based Databases** (SQLite, DuckDB):
+- No server process required
+- Data stored in your project directories
+- Always "running" (embedded, no daemon)
 
-### Updating
+### Binary Sources
 
-SpinDB checks for updates automatically and notifies you when a new version is available.
+All engines download pre-compiled binaries from [**hostdb**](https://github.com/robertjbass/hostdb), a repository of portable database binaries for all major platforms:
 
-```bash
-# Update to latest version
-spindb self-update
+- **PostgreSQL**: hostdb (macOS/Linux), [EnterpriseDB](https://www.enterprisedb.com/) (Windows)
+- **All other engines**: hostdb (all supported platforms)
 
-# Or check manually
-spindb version --check
-
-# Disable automatic update checks
-spindb config update-check off
-```
-
----
-
-## The Interactive Menu
-
-Most of the time, you don't need to remember commands. Just run:
-
-```bash
-spindb
-```
-
-You'll get an interactive menu with arrow-key navigation:
-
-```
-? What would you like to do?
-❯ Create a new container
-  Manage containers
-  View installed engines
-  Check dependencies
-  Settings
-  Exit
-```
-
-**Everything in the menu is also available as a CLI command.** The menu is just a friendlier interface for the same operations. If you prefer typing commands or scripting, SpinDB has full CLI support.
+This enables **multi-version support** without system package conflicts. Run PostgreSQL 14 for legacy projects and 18 for new ones—simultaneously.
 
 ---
 
-## Database Engines
+## Core Commands
 
-### Supported Engines
-
-#### PostgreSQL
-
-| | |
-|---|---|
-| Versions | 15, 16, 17, 18 |
-| Default port | 5432 |
-| Default user | `postgres` |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) (macOS/Linux), [EDB](https://www.enterprisedb.com/) (Windows) |
-
-SpinDB downloads PostgreSQL server binaries automatically:
-- **macOS/Linux:** Pre-compiled binaries from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases
-- **Windows:** Official binaries from EnterpriseDB (EDB)
-
-**Why download binaries instead of using system PostgreSQL?** The hostdb project provides pre-configured, portable PostgreSQL binaries—just extract and run. This lets you run PostgreSQL 14 for one project and 18 for another, side-by-side, without conflicts.
-
-**Client tools included:** PostgreSQL binaries include `psql`, `pg_dump`, and `pg_restore` for all operations.
-
-#### MariaDB
-
-| | |
-|---|---|
-| Versions | 10.11, 11.4, 11.8 |
-| Default port | 3307 |
-| Default user | `root` |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-SpinDB downloads MariaDB server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases—just like PostgreSQL. This provides multi-version support and works across all platforms.
-
-```bash
-# Create a MariaDB container
-spindb create mydb --engine mariadb
-
-# Or using the alias
-spindb create mydb -e maria
-
-# Check what's available
-spindb deps check --engine mariadb
-```
-
-MariaDB is MySQL-compatible, so most MySQL tools and clients work seamlessly. If you need MySQL-specific features, use the `mysql` engine instead.
-
-#### MySQL
-
-| | |
-|---|---|
-| Versions | 8.0, 8.4, 9 |
-| Default port | 3306 |
-| Default user | `root` |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-SpinDB downloads MySQL server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases—just like PostgreSQL and MariaDB. This provides multi-version support and works across all platforms.
-
-```bash
-# Create a MySQL container
-spindb create mydb --engine mysql
-
-# Create with specific version
-spindb create mydb --engine mysql --version 8.0
-
-# Check what's available
-spindb deps check --engine mysql
-```
-
-**Client tools included:** MySQL binaries include `mysql`, `mysqldump`, and `mysqladmin` for all operations. No system installation required.
-
-#### SQLite
-
-| | |
-|---|---|
-| Version | 3 |
-| Default port | N/A (file-based) |
-| Data location | Project directory (CWD) |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-SQLite is a file-based database—no server process, no ports. Databases are stored in your project directory by default, not `~/.spindb/`. SpinDB tracks registered SQLite databases in a registry file.
-
-**Tools included:** SQLite binaries include `sqlite3`, `sqldiff`, `sqlite3_analyzer`, and `sqlite3_rsync`. No system installation required.
-
-```bash
-# Create in current directory
-spindb create mydb --engine sqlite
-
-# Create with custom path
-spindb create mydb --engine sqlite --path ./data/mydb.sqlite
-
-# Connect to it
-spindb connect mydb
-
-# Use litecli for enhanced experience
-spindb connect mydb --litecli
-```
-
-**Note:** Unlike server databases, SQLite databases don't need to be "started" or "stopped"—they're always available as long as the file exists.
-
-#### DuckDB
-
-| | |
-|---|---|
-| Version | 1 |
-| Default port | N/A (file-based) |
-| Data location | Project directory (CWD) |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-DuckDB is an embedded analytical database—file-based like SQLite, but optimized for OLAP workloads and analytics. No server process, no ports. Databases are stored in your project directory by default, not `~/.spindb/`. SpinDB tracks registered DuckDB databases in a registry file.
-
-**Tools included:** DuckDB binary `duckdb` for all operations. No system installation required.
-
-```bash
-# Create in current directory
-spindb create mydb --engine duckdb
-
-# Create with custom path
-spindb create mydb --engine duckdb --path ./data/analytics.duckdb
-
-# Connect to it
-spindb connect mydb
-```
-
-**Note:** Unlike server databases, DuckDB databases don't need to be "started" or "stopped"—they're always available as long as the file exists.
-
-#### MongoDB
-
-| | |
-|---|---|
-| Versions | 7.0, 8.0, 8.2 |
-| Default port | 27017 |
-| Default user | None (no auth by default) |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-SpinDB downloads MongoDB server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases—just like PostgreSQL, MariaDB, and MySQL. This provides multi-version support on all platforms.
-
-```bash
-# Create a MongoDB container (downloads binaries automatically)
-spindb create mydb --engine mongodb
-
-# Create with specific version
-spindb create mydb --engine mongodb --version 8.0
-
-# Check what's available
-spindb deps check --engine mongodb
-```
-
-MongoDB uses JavaScript for queries instead of SQL. When using `spindb run`, pass JavaScript code:
-
-```bash
-# Insert a document
-spindb run mydb -c "db.users.insertOne({name: 'Alice', email: 'alice@example.com'})"
-
-# Query documents
-spindb run mydb -c "db.users.find().pretty()"
-
-# Run a JavaScript file
-spindb run mydb --file ./scripts/seed.js
-```
-
-#### Redis
-
-| | |
-|---|---|
-| Versions | 7, 8 |
-| Default port | 6379 |
-| Default user | None (no auth by default) |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-SpinDB downloads Redis server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases—just like PostgreSQL, MariaDB, MySQL, and MongoDB. This provides multi-version support on all platforms.
-
-```bash
-# Create a Redis container (downloads binaries automatically)
-spindb create mydb --engine redis
-
-# Create with specific version
-spindb create mydb --engine redis --version 8
-
-# Check what's available
-spindb deps check --engine redis
-```
-
-Redis uses numbered databases (0-15) instead of named databases. When using `spindb run`, pass Redis commands:
-
-```bash
-# Set a key
-spindb run myredis -c "SET mykey myvalue"
-
-# Get a key
-spindb run myredis -c "GET mykey"
-
-# Run a Redis command file
-spindb run myredis --file ./scripts/seed.redis
-
-# Use iredis for enhanced shell experience
-spindb connect myredis --iredis
-```
-
-**Note:** Redis doesn't support remote dump/restore. Creating containers from remote Redis connection strings is not supported. Use `backup` and `restore` commands for data migration.
-
-#### Valkey
-
-| | |
-|---|---|
-| Versions | 8, 9 |
-| Default port | 6379 |
-| Default user | None (no auth by default) |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-Valkey is a Redis fork created after Redis changed its license (RSALv2/SSPLv1). It's fully API-compatible with Redis, making it a drop-in replacement with permissive BSD-3 licensing.
-
-SpinDB downloads Valkey server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases. This provides multi-version support on all platforms.
-
-```bash
-# Create a Valkey container (downloads binaries automatically)
-spindb create mydb --engine valkey
-
-# Create with specific version
-spindb create mydb --engine valkey --version 9
-
-# Check what's available
-spindb deps check --engine valkey
-```
-
-Valkey uses the same commands as Redis:
-
-```bash
-# Set a key
-spindb run myvalkey -c "SET mykey myvalue"
-
-# Get a key
-spindb run myvalkey -c "GET mykey"
-
-# Run a command file
-spindb run myvalkey --file ./scripts/seed.valkey
-
-# Use iredis for enhanced shell experience (Redis-protocol compatible)
-spindb connect myvalkey --iredis
-```
-
-**Note:** Valkey uses `redis://` connection scheme for client compatibility since it's wire-compatible with Redis.
-
-#### ClickHouse
-
-| | |
-|---|---|
-| Versions | 25.12 |
-| Default port | 9000 (native TCP), 8123 (HTTP) |
-| Default user | `default` |
-| Binary source | [hostdb](https://github.com/robertjbass/hostdb) |
-
-ClickHouse is a column-oriented OLAP database designed for fast analytics on large datasets. SpinDB downloads ClickHouse server binaries automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases.
-
-**Note:** ClickHouse is only available on macOS and Linux. Windows is not supported.
-
-```bash
-# Create a ClickHouse container (downloads binaries automatically)
-spindb create mydb --engine clickhouse
-
-# Create with specific version
-spindb create mydb --engine clickhouse --version 25.12
-
-# Check what's available
-spindb deps check --engine clickhouse
-```
-
-ClickHouse uses SQL (with ClickHouse-specific extensions):
-
-```bash
-# Create a table
-spindb run mych -c "CREATE TABLE users (id UInt64, name String) ENGINE = MergeTree() ORDER BY id"
-
-# Insert data
-spindb run mych -c "INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')"
-
-# Query data
-spindb run mych -c "SELECT * FROM users"
-
-# Run a SQL file
-spindb run mych --file ./scripts/seed.sql
-```
-
-### hostdb Platform Coverage
-
-SpinDB downloads database binaries from [hostdb](https://github.com/robertjbass/hostdb), a repository of pre-built database binaries for all major platforms. The following table shows current platform support and integration status:
-
-| Icon | Meaning |
-|:----:|---------|
-| ✅ | Integrated with SpinDB |
-| 🟦 | Pending SpinDB integration (hostdb ready) |
-| 🟪 | Planned for hostdb (pending/in-progress) |
-
-| Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
-|----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
-| **Integrated** |||||
-| PostgreSQL | ✅ | ✅ | ✅ | ✅ | ✅ |
-| MySQL | ✅ | ✅ | ✅ | ✅ | ✅ |
-| MariaDB | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SQLite | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DuckDB | ✅ | ✅ | ✅ | ✅ | ✅ |
-| MongoDB* | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Redis* | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Valkey | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ClickHouse* | ✅ | ✅ | ✅ | ✅ | ❌ |
-| **Planned for hostdb** |||||
-| CockroachDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| TimescaleDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| Meilisearch | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| OpenSearch | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| QuestDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| FerretDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| TiDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| ArangoDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| Qdrant | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| Apache Cassandra | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| InfluxDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| CouchDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| KeyDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| libSQL | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| FoundationDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-| RocksDB | 🟪 | 🟪 | 🟪 | 🟪 | 🟪 |
-
-**Notes:**
-- **\*** Licensing considerations for commercial use — consider Valkey (Redis) or FerretDB (MongoDB) as alternatives
-- **PostgreSQL** uses [EDB](https://www.enterprisedb.com/) binaries on Windows instead of hostdb
-- **ClickHouse** Windows binaries are not available on hostdb (macOS and Linux only)
-- **Valkey** is a Redis-compatible drop-in replacement with permissive licensing
-- **CockroachDB** is planned for both hostdb and SpinDB (see [roadmap](TODO.md))
-- All databases under "Planned for hostdb" have permissive open-source licenses (Apache 2.0, MIT, or BSD)
-
-For the latest platform support, see the [hostdb databases.json](https://github.com/robertjbass/hostdb/blob/main/databases.json).
-
----
-
-## Commands
+SpinDB provides a comprehensive CLI with commands for every database lifecycle operation.
 
 ### Container Lifecycle
 
-#### `create` - Create a new container
-
 ```bash
-spindb create mydb                           # PostgreSQL (default)
-spindb create mydb --engine mariadb          # MariaDB
-spindb create mydb --engine mysql            # MySQL
-spindb create mydb --engine sqlite           # SQLite (file-based)
-spindb create mydb --db-version 16           # Specific PostgreSQL version
-spindb create mydb --port 5433               # Custom port
-spindb create mydb --database my_app         # Custom database name
-spindb create mydb --no-start                # Create without starting
+# Create a new database
+spindb create mydb                              # PostgreSQL (default)
+spindb create mydb --engine mongodb             # MongoDB
+spindb create mydb --engine mysql --db-version 8.0  # MySQL 8.0
+spindb create mydb --port 5433                  # Custom port
+spindb create mydb --start --connect            # Create, start, and connect
 
-# Create, start, and connect in one command
-spindb create mydb --start --connect
-
-# SQLite with custom path
-spindb create mydb --engine sqlite --path ./data/app.sqlite
-```
-
-Create and restore in one command:
-
-```bash
-spindb create mydb --from ./backup.dump
-spindb create mydb --from "postgresql://user:pass@host:5432/production"
-```
-
-<details>
-<summary>All options</summary>
-
-| Option | Description |
-|--------|-------------|
-| `--engine`, `-e` | Database engine (`postgresql`, `mariadb`, `mysql`, `sqlite`, `duckdb`, `mongodb`, `redis`, `valkey`, `clickhouse`) |
-| `--db-version` | Engine version (e.g., 17 for PostgreSQL, 11.8 for MariaDB, 8 for Redis, 9 for Valkey) |
-| `--port`, `-p` | Port number (not applicable for SQLite) |
-| `--database`, `-d` | Primary database name (Redis uses 0-15) |
-| `--path` | File path for SQLite databases |
-| `--max-connections` | Maximum database connections (default: 200) |
-| `--from` | Restore from backup file or connection string |
-| `--start` | Start container after creation (skip prompt) |
-| `--no-start` | Create without starting |
-| `--connect` | Open a shell connection after creation |
-
-</details>
-
-#### `start` - Start a container
-
-```bash
+# Start/stop databases
 spindb start mydb
-```
-
-#### `stop` - Stop a container
-
-```bash
 spindb stop mydb
-```
 
-#### `delete` - Delete a container
-
-```bash
+# Delete database (with confirmation)
 spindb delete mydb
-spindb delete mydb --yes      # Skip confirmation prompt
-spindb delete mydb --force    # Force stop if running
-spindb delete mydb -fy        # Both: force stop + skip confirmation
+spindb delete mydb --yes --force                # Skip prompts, force stop
 ```
-
-<details>
-<summary>All options</summary>
-
-| Option | Description |
-|--------|-------------|
-| `--force`, `-f` | Force stop if container is running before deleting |
-| `--yes`, `-y` | Skip confirmation prompt (for scripts/automation) |
-| `--json`, `-j` | Output result as JSON |
-
-</details>
 
 ### Data Operations
 
-#### `connect` - Open database shell
-
 ```bash
-spindb connect mydb                 # Standard shell (psql/mysql)
-spindb connect mydb --pgcli         # Enhanced PostgreSQL shell
-spindb connect mydb --mycli         # Enhanced MySQL shell
-spindb connect mydb --tui           # Universal SQL client (usql)
-```
+# Connect to database shell
+spindb connect mydb                             # Standard client (psql, mysql, etc.)
+spindb connect mydb --pgcli                     # Enhanced PostgreSQL shell
+spindb connect mydb --mycli                     # Enhanced MySQL shell
+spindb connect mydb --tui                       # Universal SQL client (usql)
 
-Install enhanced shells on-the-fly:
+# Execute queries and scripts
+spindb run mydb script.sql                      # Run SQL file
+spindb run mydb -c "SELECT * FROM users"        # Inline SQL
+spindb run mydb seed.js                         # JavaScript (MongoDB)
+spindb run mydb -c "SET foo bar"                # Redis command
 
-```bash
-spindb connect mydb --install-pgcli
-spindb connect mydb --install-mycli
-spindb connect mydb --install-tui
-```
-
-#### `run` - Execute SQL/scripts/commands
-
-```bash
-spindb run mydb script.sql                  # Run a SQL file
-spindb run mydb -c "SELECT * FROM users"    # Run inline SQL
-spindb run mydb seed.sql --database my_app  # Target specific database
-
-# MongoDB uses JavaScript instead of SQL
-spindb run mydb seed.js                               # Run a JavaScript file
-spindb run mydb -c "db.users.find().pretty()"         # Run inline JavaScript
-
-# Redis uses Redis commands
-spindb run myredis -c "SET foo bar"                   # Run inline command
-spindb run myredis seed.redis                         # Run command file
-```
-
-#### `url` - Get connection string
-
-```bash
-spindb url mydb                    # postgresql://postgres@localhost:5432/mydb
-spindb url mydb --copy             # Copy to clipboard
-spindb url mydb --json             # JSON output with details
+# Get connection string
+spindb url mydb                                 # postgresql://postgres@localhost:5432/mydb
+spindb url mydb --copy                          # Copy to clipboard
+spindb url mydb --json                          # JSON output with details
 
 # Use in scripts
 export DATABASE_URL=$(spindb url mydb)
 psql $(spindb url mydb)
 ```
 
-#### `backup` - Create a backup
+### Backup & Restore
 
 ```bash
-spindb backup mydb                          # Auto-generated filename
-spindb backup mydb --name my-backup         # Custom name
-spindb backup mydb --output ./backups/      # Custom directory
-spindb backup mydb --database my_app        # Backup specific database
-```
+# Create backups
+spindb backup mydb                              # Auto-generated filename
+spindb backup mydb --name production-backup     # Custom name
+spindb backup mydb --output ./backups/          # Custom directory
+spindb backup mydb --format sql                 # SQL text format
+spindb backup mydb --format dump                # Binary format
 
-Backup formats (vary by engine):
-
-```bash
-spindb backup mydb --format sql     # Plain SQL (.sql) or text commands (.redis)
-spindb backup mydb --format dump    # Binary format (.dump for PG, .sql.gz for MySQL, .rdb for Redis)
-
-# Shorthand
-spindb backup mydb --sql
-spindb backup mydb --dump
-```
-
-Format by engine:
-- PostgreSQL: `.sql` (plain SQL) / `.dump` (pg_dump custom)
-- MariaDB: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
-- MySQL: `.sql` (plain SQL) / `.sql.gz` (compressed SQL)
-- SQLite: `.sql` (plain SQL) / `.sqlite` (binary copy)
-- DuckDB: `.sql` (plain SQL) / `.duckdb` (binary copy)
-- MongoDB: `.bson` (BSON dump) / `.archive` (compressed archive)
-- Redis: `.redis` (text commands) / `.rdb` (RDB snapshot)
-- Valkey: `.valkey` (text commands) / `.rdb` (RDB snapshot)
-
-<details>
-<summary>All options</summary>
-
-| Option | Description |
-|--------|-------------|
-| `--database`, `-d` | Database to backup (defaults to primary) |
-| `--name`, `-n` | Custom backup filename (without extension) |
-| `--output`, `-o` | Output directory (defaults to current directory) |
-| `--format` | Output format: `sql` or `dump` |
-| `--sql` | Shorthand for `--format sql` |
-| `--dump` | Shorthand for `--format dump` |
-| `--json`, `-j` | Output result as JSON |
-
-</details>
-
-#### `backups` - List backup files
-
-```bash
-spindb backups                       # List backups in current directory
-spindb backups ./data                # List backups in specific directory
-spindb backups --all                 # Include ~/.spindb/backups
-spindb backups --limit 50            # Show more results
-spindb backups --json                # JSON output
-```
-
-<details>
-<summary>All options</summary>
-
-| Option | Description |
-|--------|-------------|
-| `--all`, `-a` | Include backups from `~/.spindb/backups` |
-| `--limit`, `-n` | Limit number of results (default: 20) |
-| `--json`, `-j` | Output as JSON |
-
-</details>
-
-#### `restore` - Restore from backup
-
-```bash
+# Restore from backups
 spindb restore mydb backup.dump
-spindb restore mydb backup.sql --database my_app
-spindb restore mydb --from-url "postgresql://user:pass@host/db"
+spindb restore mydb backup.sql --database prod_copy
+
+# Pull from remote database
+spindb restore mydb --from-url "postgresql://user:pass@prod-host/db"
+
+# Clone existing database
+spindb create prod-copy --from ./prod-backup.dump
+spindb create staging --from "postgresql://user:pass@prod:5432/production"
 ```
-
-**Restore production data alongside existing databases:**
-
-```bash
-# Restore into a NEW database without affecting existing data
-spindb restore mydb prod-backup.dump --database prod_copy
-
-# Pull from production into a new local database
-spindb restore mydb --from-url "postgresql://user:pass@prod-host/proddb" --database prod_local
-
-# View all databases in a container
-spindb info mydb
-```
-
-<details>
-<summary>All options</summary>
-
-| Option | Description |
-|--------|-------------|
-| `--database`, `-d` | Target database name (creates new if doesn't exist) |
-| `--from-url` | Pull data from a remote database connection string |
-| `--force`, `-f` | Overwrite existing database without confirmation |
-| `--json`, `-j` | Output result as JSON |
-
-</details>
-
-#### Backup & Restore Format Reference
-
-Each engine has specific backup formats and restore behaviors:
-
-<details>
-<summary>PostgreSQL</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| SQL | `.sql` | pg_dump | Plain text SQL, human-readable |
-| Custom | `.dump` | pg_dump -Fc | Compressed, supports parallel restore |
-
-**Restore behavior:** Creates new database or replaces existing. Uses `pg_restore` for `.dump`, `psql` for `.sql`.
-
-</details>
-
-<details>
-<summary>MariaDB</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| SQL | `.sql` | mariadb-dump | Plain text SQL |
-| Compressed | `.sql.gz` | mariadb-dump + gzip | Gzip compressed SQL |
-
-**Restore behavior:** Creates new database or replaces existing. Pipes to `mariadb` client.
-
-</details>
-
-<details>
-<summary>MySQL</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| SQL | `.sql` | mysqldump | Plain text SQL |
-| Compressed | `.sql.gz` | mysqldump + gzip | Gzip compressed SQL |
-
-**Restore behavior:** Creates new database or replaces existing. Pipes to `mysql` client.
-
-</details>
-
-<details>
-<summary>SQLite</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| SQL | `.sql` | .dump | Plain text SQL |
-| Binary | `.sqlite` | File copy | Exact copy of database file |
-
-**Restore behavior:** Creates new file or replaces existing.
-
-</details>
-
-<details>
-<summary>DuckDB</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| SQL | `.sql` | duckdb -c | Plain text SQL |
-| Binary | `.duckdb` | File copy | Exact copy of database file |
-
-**Restore behavior:** Creates new file or replaces existing.
-
-</details>
-
-<details>
-<summary>MongoDB</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| BSON | `.bson` | mongodump | Binary JSON per collection |
-| Archive | `.archive` | mongodump --archive | Single compressed file |
-
-**Restore behavior:** Creates new database or replaces existing. Uses `mongorestore`.
-
-</details>
-
-<details>
-<summary>Redis</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
-| Text | `.redis` | Custom | Human-readable Redis commands |
-
-**Text format detection:** Files are detected as Redis text commands if they contain valid Redis commands (SET, HSET, DEL, etc.), regardless of file extension. This allows restoring files like `users.txt` or `data` without renaming.
-
-**Restore behavior:**
-- **RDB (`.rdb`):** Requires stopping Redis, copies file to data directory, restart loads data
-- **Text (`.redis`):** Pipes commands to running Redis instance. Prompts for:
-  - **Replace all:** Runs `FLUSHDB` first (clean slate)
-  - **Merge:** Adds/updates keys, keeps existing keys not in backup
-
-**Note:** Redis uses numbered databases (0-15) that always exist. "Create new database" is not applicable.
-
-</details>
-
-<details>
-<summary>Valkey</summary>
-
-| Format | Extension | Tool | Notes |
-|--------|-----------|------|-------|
-| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
-| Text | `.valkey` | Custom | Human-readable Redis-compatible commands |
-
-**Text format detection:** Files are detected as Valkey text commands if they contain valid Redis commands (SET, HSET, DEL, etc.), regardless of file extension.
-
-**Restore behavior:** Same as Redis (Valkey is Redis-compatible).
-- **RDB (`.rdb`):** Requires stopping Valkey, copies file to data directory, restart loads data
-- **Text (`.valkey`):** Pipes commands to running Valkey instance. Prompts for:
-  - **Replace all:** Runs `FLUSHDB` first (clean slate)
-  - **Merge:** Adds/updates keys, keeps existing keys not in backup
-
-**Note:** Valkey uses numbered databases (0-15) that always exist. "Create new database" is not applicable.
-
-</details>
 
 ### Container Management
 
-#### `list` - List all containers
-
 ```bash
+# List all databases
 spindb list
 spindb list --json
-```
 
-#### `info` - Show container details
-
-```bash
-spindb info              # All containers
-spindb info mydb         # Specific container
+# Show container details
+spindb info mydb
 spindb info mydb --json
-```
 
-#### `clone` - Clone a container
-
-```bash
-spindb stop source-db           # Source must be stopped
+# Clone a database
 spindb clone source-db new-db
-spindb start new-db
-```
 
-#### `edit` - Rename, change port, relocate, or edit database config
+# Edit configuration
+spindb edit mydb --name newname                 # Rename
+spindb edit mydb --port 5433                    # Change port
+spindb edit mydb --relocate ~/new/path          # Move SQLite/DuckDB file
 
-```bash
-spindb edit mydb --name newname              # Must be stopped
-spindb edit mydb --port 5433
-spindb edit mydb --relocate ~/new/path       # Move SQLite database file
-spindb edit mydb --set-config max_connections=300   # PostgreSQL config
-spindb edit mydb                             # Interactive mode
-```
-
-#### `logs` - View container logs
-
-```bash
+# View logs
 spindb logs mydb
-spindb logs mydb --follow       # Follow mode (like tail -f)
-spindb logs mydb -n 50          # Last 50 lines
-spindb logs mydb --editor       # Open in $EDITOR
+spindb logs mydb --follow                       # Follow mode (tail -f)
+spindb logs mydb -n 100                         # Last 100 lines
 ```
 
-### Engine & System
-
-#### `engines` - Manage installed engines
+### Engine & System Management
 
 ```bash
-spindb engines                           # List installed engines
-spindb engines list --json               # JSON output
-spindb engines supported                 # List all supported engines
-spindb engines supported --json          # Full engine config as JSON
-spindb engines supported --all           # Include pending/planned engines
-spindb engines delete postgresql 16      # Delete a version (frees ~45MB)
+# Manage installed engines
+spindb engines                                  # List installed engines
+spindb engines supported                        # Show all supported engines
+spindb engines delete postgresql 16             # Remove specific version
+
+# Manage client tools
+spindb deps check                               # Check all dependencies
+spindb deps check --engine postgresql           # Check specific engine
+spindb deps install                             # Install missing tools
+
+# Configuration
+spindb config show                              # Show current config
+spindb config detect                            # Re-detect tool paths
+spindb config update-check on                   # Enable update notifications
+
+# System health
+spindb doctor                                   # Interactive health check
+spindb doctor --json                            # JSON output
+
+# Version management
+spindb version                                  # Show current version
+spindb version --check                          # Check for updates
+spindb self-update                              # Update to latest version
 ```
 
-Example output:
+### Interactive Menu
 
-```
-ENGINE        VERSION     SOURCE            SIZE
-────────────────────────────────────────────────────────
-🐘 postgresql 18.1        darwin-arm64      46.0 MB
-🐘 postgresql 17.7        darwin-arm64      45.2 MB
-🐬 mysql      9.0.1       darwin-arm64      150.0 MB
-🪶 sqlite     3.51.2      darwin-arm64      5.0 MB
-────────────────────────────────────────────────────────
-
-PostgreSQL: 2 version(s), 90.0 MB
-MySQL: 1 version(s), 150.0 MB
-SQLite: 1 version(s), 5.0 MB
-```
-
-`spindb engines supported` output:
-
-```
-🐘 postgresql
-🐬 mysql
-🦭 mariadb
-🪶 sqlite
-🦆 duckdb
-🍃 mongodb
-🔴 redis
-🔷 valkey
-🏠 clickhouse
-```
-
-#### `deps` - Manage client tools
+Don't want to remember commands? Just run:
 
 ```bash
-spindb deps check                      # Check all dependencies
-spindb deps check --engine postgresql  # Check specific engine
-spindb deps install                    # Install missing tools
-spindb deps install --engine mysql     # Install for specific engine
+spindb
 ```
 
-#### `config` - Configuration
+You'll get an interactive menu with arrow-key navigation for all operations. **The menu is just a friendlier interface—everything is also available as a direct CLI command.**
+
+---
+
+## How It Works
+
+### Architecture
+
+SpinDB uses "container" terminology loosely—there's no Docker involved. When you create a container, SpinDB:
+
+1. **Downloads database binaries** from [hostdb](https://github.com/robertjbass/hostdb) or uses system installations
+2. **Creates isolated data directories** at `~/.spindb/containers/{engine}/{name}/`
+3. **Runs databases as native processes** on your machine
+
+Each container contains:
+- `container.json` - Configuration (port, version, status)
+- `data/` - Database files
+- `{engine}.log` - Server logs
+
+### Storage Layout
 
 ```bash
-spindb config show                     # Show current configuration
-spindb config detect                   # Re-detect tool paths
-spindb config update-check on          # Enable update notifications
-spindb config update-check off         # Disable update notifications
+~/.spindb/
+├── bin/                                    # Downloaded binaries
+│   ├── postgresql-18.1.0-darwin-arm64/     # ~45 MB
+│   ├── mysql-9.0.1-darwin-arm64/           # ~200 MB
+│   └── mongodb-8.0-darwin-arm64/           # ~200 MB
+├── containers/                             # Server-based databases
+│   ├── postgresql/
+│   │   └── myapp/
+│   │       ├── container.json
+│   │       ├── data/
+│   │       └── postgres.log
+│   ├── mysql/
+│   └── mongodb/
+├── logs/                                   # SpinDB error logs
+└── config.json                             # Tool paths and settings
+
+# File-based databases (SQLite, DuckDB) store in project directories
+./myproject/
+└── app.sqlite                              # Created with: spindb create app -e sqlite
 ```
 
-#### `version` - Version info
+### Data Persistence
+
+Databases run as **native processes**, and **data persists across restarts**. When you stop a container:
+
+1. SpinDB sends a graceful shutdown signal
+2. The database flushes pending writes to disk
+3. Data remains in the `data/` directory
+
+**Your data is never deleted unless you explicitly run `spindb delete`.**
+
+#### Durability by Engine
+
+| Engine | Persistence Mechanism | Durability |
+|--------|----------------------|------------|
+| PostgreSQL | Write-Ahead Logging (WAL) | Committed transactions survive crashes |
+| MySQL | InnoDB transaction logs | Committed transactions survive crashes |
+| MariaDB | InnoDB transaction logs | Committed transactions survive crashes |
+| SQLite | File-based transactions | Commits written immediately to disk |
+| DuckDB | File-based transactions | Commits written immediately to disk |
+| MongoDB | WiredTiger journaling | Writes journaled before acknowledged |
+| Redis | RDB snapshots (periodic) | May lose ~60 seconds on unexpected crash |
+| Valkey | RDB snapshots (periodic) | May lose ~60 seconds on unexpected crash |
+| ClickHouse | MergeTree storage | Committed transactions survive crashes |
+
+---
+
+## Engine-Specific Details
+
+Each database engine has unique features and behaviors. See full documentation in [ENGINES.md](ENGINES.md).
+
+### PostgreSQL 🐘
 
 ```bash
-spindb version
-spindb version --check    # Check for updates
+# Create PostgreSQL database
+spindb create myapp --engine postgresql --db-version 18
+
+# Multiple versions side-by-side
+spindb create legacy --engine postgresql --db-version 14
+spindb create modern --engine postgresql --db-version 18
+
+# Backup formats
+spindb backup myapp --format sql      # Plain SQL (.sql)
+spindb backup myapp --format dump     # Binary custom format (.dump)
 ```
 
-#### `self-update` - Update SpinDB
+**Versions:** 15, 16, 17, 18
+**Tools:** `psql`, `pg_dump`, `pg_restore` (included)
+**Enhanced client:** `pgcli` (auto-completion, syntax highlighting)
+
+### MySQL 🐬 & MariaDB 🦭
 
 ```bash
-spindb self-update
+# MySQL
+spindb create shop --engine mysql --db-version 9
+spindb connect shop --mycli
+
+# MariaDB (MySQL-compatible)
+spindb create store --engine mariadb --db-version 11.8
 ```
 
-#### `doctor` - System health check
+**MySQL versions:** 8.0, 8.4, 9
+**MariaDB versions:** 10.11, 11.4, 11.8
+**Tools:** `mysql`, `mysqldump`, `mysqladmin` (included)
+
+### MongoDB 🍃
 
 ```bash
-spindb doctor            # Interactive health check
-spindb doctor --json     # JSON output for scripting
+# Create MongoDB database
+spindb create logs --engine mongodb --db-version 8.0
+
+# JavaScript queries (not SQL)
+spindb run logs -c "db.users.insertOne({name: 'Alice'})"
+spindb run logs -c "db.users.find().pretty()"
+spindb run logs seed.js
+
+# Connect with mongosh
+spindb connect logs
 ```
 
-Checks performed:
-- Configuration file validity and binary cache freshness
-- Container status across all engines
-- SQLite registry for orphaned entries (files deleted outside SpinDB)
-- Database tool availability
+**Versions:** 7.0, 8.0, 8.2
+**Query language:** JavaScript (via `mongosh`)
+**Tools:** `mongod`, `mongosh`, `mongodump`, `mongorestore` (included)
 
-Example output:
+### Redis 🔴 & Valkey 🔷
 
+```bash
+# Redis
+spindb create cache --engine redis --db-version 8
+
+# Valkey (Redis fork with BSD-3 license)
+spindb create sessions --engine valkey --db-version 9
+
+# Redis commands
+spindb run cache -c "SET mykey myvalue"
+spindb run cache -c "GET mykey"
+
+# Enhanced shell
+spindb connect cache --iredis
 ```
-SpinDB Health Check
-═══════════════════
 
-✓ Configuration
-  └─ Configuration valid, 12 tools cached
+**Redis versions:** 7, 8
+**Valkey versions:** 8, 9
+**Query language:** Redis commands
+**Databases:** Numbered 0-15 (not named)
+**Tools:** `redis-cli`, `redis-server` / `valkey-cli`, `valkey-server` (included)
 
-✓ Containers
-  └─ 4 container(s)
-     postgresql: 2 running, 0 stopped
-     mysql: 0 running, 1 stopped
-     sqlite: 1 exist, 0 missing
+### SQLite 🪶 & DuckDB 🦆
 
-⚠ SQLite Registry
-  └─ 1 orphaned entry found
-     "old-project" → /path/to/missing.sqlite
+```bash
+# SQLite - embedded relational database
+spindb create app --engine sqlite --path ./data/app.sqlite
+spindb connect app
 
-? What would you like to do?
-❯ Remove orphaned entries from registry
-  Skip (do nothing)
+# DuckDB - embedded analytics database (OLAP)
+spindb create analytics --engine duckdb --path ./data/warehouse.duckdb
+spindb connect analytics
 ```
+
+**No server process** - File-based databases stored in your project directories.
+**No start/stop needed** - Always "running" (embedded).
+**SQLite tools:** `sqlite3`, `sqldiff`, `sqlite3_analyzer` (included)
+**DuckDB tools:** `duckdb` (included)
+
+### ClickHouse 🏠
+
+```bash
+# Create ClickHouse database (columnar OLAP)
+spindb create warehouse --engine clickhouse
+
+# SQL with ClickHouse extensions
+spindb run warehouse -c "CREATE TABLE events (timestamp DateTime, user_id UInt64) ENGINE = MergeTree() ORDER BY timestamp"
+spindb run warehouse -c "SELECT * FROM system.tables"
+```
+
+**Version:** 25.12 (YY.MM versioning)
+**Platforms:** macOS, Linux (no Windows support)
+**Ports:** 9000 (native TCP), 8123 (HTTP)
+**Tools:** `clickhouse-client`, `clickhouse-server` (included)
 
 ---
 
 ## Enhanced CLI Tools
 
-SpinDB supports enhanced database shells that provide features like auto-completion, syntax highlighting, and better output formatting.
+SpinDB supports enhanced database shells with auto-completion, syntax highlighting, and better formatting:
 
-| Engine | Standard | Enhanced | Universal |
-|--------|----------|----------|-----------|
+| Engine | Standard Client | Enhanced Client | Universal Client |
+|--------|----------------|-----------------|------------------|
 | PostgreSQL | `psql` | `pgcli` | `usql` |
-| MariaDB | `mariadb` | `mycli` | `usql` |
 | MySQL | `mysql` | `mycli` | `usql` |
+| MariaDB | `mariadb` | `mycli` | `usql` |
 | SQLite | `sqlite3` | `litecli` | `usql` |
 | DuckDB | `duckdb` | - | `usql` |
-| MongoDB | `mongosh` | - | `usql` |
+| MongoDB | `mongosh` | - | - |
 | Redis | `redis-cli` | `iredis` | - |
-| Valkey | `valkey-cli` | `iredis` | - |
+| Valkey | `valkey-cli` | `iredis` (compatible) | - |
+| ClickHouse | `clickhouse-client` | - | `usql` |
 
-**pgcli / mycli** provide:
-- Intelligent auto-completion (tables, columns, keywords)
-- Syntax highlighting
-- Multi-line editing
-- Query history with search
-
-**usql** is a universal SQL client that works with any database. Great if you work with multiple engines.
-
-Install and connect in one command:
+Install and use in one command:
 
 ```bash
 spindb connect mydb --install-pgcli
 spindb connect mydb --install-mycli
-spindb connect mydb --install-tui      # usql
+spindb connect mydb --install-tui      # usql (universal)
 ```
 
 ---
 
-## Architecture
+## Backup & Restore
 
-### How It Works
+Every engine supports backup and restore with engine-specific formats:
 
-SpinDB uses the term "container" loosely—there's no Docker involved. When you create a container, SpinDB:
+### PostgreSQL
 
-1. Downloads the database server binary (or uses your system's installation)
-2. Creates an isolated data directory at `~/.spindb/containers/{engine}/{name}/`
-3. Runs the database as a native process on your machine
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| SQL | `.sql` | pg_dump | Human-readable, portable |
+| Custom | `.dump` | pg_dump -Fc | Compressed, faster restore |
 
-Each "container" is just:
-- A configuration file (`container.json`)
-- A data directory (`data/`)
-- A log file (`postgres.log`, `mysql.log`, or `mongodb.log`)
-
-Native processes mean instant startup and no virtualization overhead.
-
-### Storage Layout
-
-```
-~/.spindb/
-├── bin/                                    # Downloaded server binaries
-│   └── postgresql-18.1.0-darwin-arm64/     # ~45 MB per version
-├── containers/
-│   ├── postgresql/
-│   │   └── mydb/
-│   │       ├── container.json              # Configuration
-│   │       ├── data/                       # Database files
-│   │       └── postgres.log                # Server logs
-│   └── mysql/
-│       └── mydb/
-│           ├── container.json
-│           ├── data/
-│           └── mysql.log
-├── logs/                                   # Error logs
-└── config.json                             # Tool paths cache
-
-# SQLite databases are stored in project directories, not ~/.spindb/
-./myproject/
-└── mydb.sqlite                             # Created with: spindb create mydb -e sqlite
+```bash
+spindb backup mydb --sql                # Plain SQL
+spindb backup mydb --dump               # Binary custom format
+spindb restore mydb backup.dump
 ```
 
-### Data Persistence
+### MySQL & MariaDB
 
-SpinDB runs databases as **native processes** on your machine. When you start a container:
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| SQL | `.sql` | mysqldump / mariadb-dump | Human-readable |
+| Compressed | `.sql.gz` | mysqldump + gzip | Smaller file size |
 
-1. SpinDB launches the database server binary (`pg_ctl start` or `mysqld`)
-2. The server binds to `127.0.0.1` on your configured port
-3. A PID file tracks the running process
-4. Logs are written to the container's log file
+```bash
+spindb backup mydb --sql                # Plain SQL
+spindb backup mydb --dump               # Compressed SQL
+```
 
-When you stop a container:
+### MongoDB
 
-1. SpinDB sends a graceful shutdown signal
-2. The database flushes pending writes to disk
-3. The PID file is removed
-4. Your data remains in the `data/` directory
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| BSON | `.bson` | mongodump | Binary, preserves all types |
+| Archive | `.archive` | mongodump --archive | Single compressed file |
 
-**Your data is never deleted unless you explicitly delete the container.**
+```bash
+spindb backup mydb                      # BSON directory
+spindb backup mydb --format archive     # Single .archive file
+```
 
-#### Persistence by Engine
+### Redis & Valkey
 
-Each database engine has its own persistence mechanism:
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
+| Text | `.redis` / `.valkey` | Custom | Human-readable commands |
 
-| Engine | Mechanism | Durability |
-|--------|-----------|------------|
-| PostgreSQL | Write-Ahead Logging (WAL) | Every commit is immediately durable |
-| MariaDB | InnoDB transaction logs | Every commit is immediately durable |
-| MySQL | InnoDB transaction logs | Every commit is immediately durable |
-| SQLite | File-based transactions | Every commit is immediately durable |
-| MongoDB | WiredTiger with journaling | Writes journaled before acknowledged |
-| Redis | RDB snapshots | Periodic snapshots (see below) |
+```bash
+spindb backup mydb --dump               # RDB snapshot
+spindb backup mydb --sql                # Text commands
 
-**PostgreSQL, MariaDB, MySQL, MongoDB:** These engines use transaction logs or journaling. Every committed write is guaranteed to survive a crash or unexpected shutdown.
+# Restore with merge or replace strategy
+spindb restore mydb backup.redis        # Prompts: Replace all / Merge
+```
 
-**SQLite:** As a file-based database, SQLite writes directly to disk on each commit. No server process means no risk of losing in-flight data.
+### SQLite & DuckDB
 
-**Redis:** SpinDB configures Redis with RDB (Redis Database) snapshots:
-- Save after 900 seconds if at least 1 key changed
-- Save after 300 seconds if at least 10 keys changed
-- Save after 60 seconds if at least 10,000 keys changed
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| SQL | `.sql` | .dump / duckdb | Human-readable |
+| Binary | `.sqlite` / `.duckdb` | File copy | Exact database copy |
 
-This means Redis may lose up to ~60 seconds of writes on an unexpected crash. For local development, this trade-off (speed over strict durability) is typically acceptable. If you need stronger guarantees, use `spindb backup` before stopping work.
+```bash
+spindb backup mydb --sql                # SQL dump
+spindb backup mydb --dump               # Binary copy
+```
 
-### Binary Sources
+### ClickHouse
 
-**PostgreSQL:** Server binaries are downloaded automatically:
-- **macOS/Linux:** From [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases
-- **Windows:** From [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries)
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| SQL | `.sql` | clickhouse-client | Plain SQL dump |
+| Native | `.clickhouse` | clickhouse-backup | Native format (future) |
 
-**MariaDB, MySQL, MongoDB, Redis, Valkey:** Server binaries are downloaded automatically from [hostdb](https://github.com/robertjbass/hostdb) on GitHub Releases for all platforms.
-
-### Why Precompiled Binaries?
-
-The [hostdb](https://github.com/robertjbass/hostdb) project provides pre-compiled, portable database binaries:
-
-- Cross-platform (macOS Intel/ARM, Linux x64/ARM, Windows x64)
-- Hosted on GitHub Releases (highly reliable CDN)
-- ~45-200 MB per version depending on engine
-- Actively maintained with new database releases
-
-This makes multi-version support trivial: need PostgreSQL 14 for a legacy project and 18 for a new one? Need MongoDB 7.0 and 8.0? Redis 7 and 8? SpinDB downloads them all, and they run side-by-side without conflicts.
+```bash
+spindb backup mydb --sql                # SQL dump
+```
 
 ---
 
-## Limitations
+## Advanced Features
 
-- **Local only** - Databases bind to `127.0.0.1`; remote connections planned for v1.1
-- **Redis remote dump not supported** - Redis doesn't support creating containers from remote connection strings. Use backup/restore for data migration.
+### Clone Databases
+
+Create exact copies of existing databases:
+
+```bash
+# Clone local database (must be stopped)
+spindb stop production
+spindb clone production staging
+spindb start production
+spindb start staging
+```
+
+### Restore from Remote
+
+Pull production data into local databases:
+
+```bash
+# Create new database from remote
+spindb create prod-copy --from "postgresql://user:pass@prod-host:5432/production"
+
+# Or restore into existing database
+spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production"
+```
+
+### Multi-Version Support
+
+Run different versions of the same database simultaneously:
+
+```bash
+# PostgreSQL 14 for legacy app
+spindb create legacy-api --engine postgresql --db-version 14 --port 5432
+
+# PostgreSQL 18 for new app
+spindb create modern-api --engine postgresql --db-version 18 --port 5433
+
+# Both running at the same time
+spindb list
+# NAME         ENGINE       VERSION  PORT   STATUS
+# legacy-api   postgresql   14       5432   running
+# modern-api   postgresql   18       5433   running
+```
+
+### Custom Ports
+
+SpinDB auto-assigns ports, but you can override:
+
+```bash
+spindb create mydb --port 5433
+spindb edit mydb --port 5434          # Change later
+```
+
+### SQLite & DuckDB Registry
+
+File-based databases can be registered for easy access:
+
+```bash
+# Create and register
+spindb create mydb --engine sqlite --path ./data/app.sqlite
+
+# Attach existing database
+spindb attach ./existing/data.sqlite --name legacy-db
+
+# Detach (removes from registry, keeps file)
+spindb detach legacy-db
+```
 
 ---
 
 ## Roadmap
 
-See [TODO.md](TODO.md) for the full roadmap.
+See [TODO.md](TODO.md) for the complete roadmap.
 
 ### v1.1 - Remote Connections & Secrets
-- Connect to remote databases
+- Direct remote database connections (`spindb connect --remote`)
 - Environment variable support in connection strings
-- Secrets management (macOS Keychain)
+- Secrets management with macOS Keychain integration
 
 ### v1.2 - Additional Engines
-- CockroachDB (distributed SQL)
+- **CockroachDB** - Distributed PostgreSQL-compatible database
+- **FerretDB** - MongoDB-compatible database built on PostgreSQL
 
 ### v1.3 - Advanced Features
-- Container templates
-- Scheduled backups
-- Import from Docker
+- Container templates for common configurations
+- Scheduled automated backups
+- Import databases from Docker containers
 
-### Future Infrastructure
-- **hostdb npm package**: Available database versions will be published as an npm package from [hostdb](https://github.com/robertjbass/hostdb) and imported into SpinDB, eliminating the need to manually sync version-maps.ts with releases.json
-- **pnpm 10 upgrade**: Currently pinned to pnpm 9.x (`packageManager` in package.json and Docker). Consider upgrading to pnpm 10.x when stable—requires updating package.json, Dockerfile, regenerating pnpm-lock.yaml, and testing for lockfile format changes
+### Future Engines Under Consideration
 
-### Possible Future Engines
-
-These engines are under consideration but not yet on the roadmap. Community interest and feasibility will determine priority:
+The following engines may be added based on community interest:
 
 | Engine | Type | Notes |
 |--------|------|-------|
-| **libSQL** | Embedded relational | SQLite fork by Turso with replication and edge support |
-| **Meilisearch** | Search engine | Developer-friendly search, good binary distribution |
-| **Elasticsearch/OpenSearch** | Search engine | Full-text search, common in web applications |
-| **Neo4j** | Graph database | Most popular graph database |
-| **InfluxDB** | Time-series | IoT, metrics, and monitoring use cases |
+| **libSQL** | Embedded relational | SQLite fork with replication |
+| **Meilisearch** | Search engine | Developer-friendly full-text search |
+| **OpenSearch** | Search engine | Elasticsearch alternative |
+| **InfluxDB** | Time-series | Metrics and IoT data |
+| **Neo4j** | Graph database | Relationships and network data |
+
+---
+
+## Limitations
+
+- **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
+- **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
+- **Redis/Valkey remote dump** - Cannot create containers directly from remote connection strings. Use backup/restore workflow instead.
 
 ---
 
 ## Troubleshooting
 
-### Port already in use
+### Port Already in Use
 
-SpinDB automatically finds an available port. To specify one:
+SpinDB automatically finds available ports, but you can specify:
 
 ```bash
 spindb create mydb --port 5433
 ```
 
-### Client tool not found
-
-Install client tools or configure manually:
-
-```bash
-spindb deps install
-# or
-spindb config set psql /path/to/psql
-```
-
-### Container won't start
+### Container Won't Start
 
 Check the logs:
 
 ```bash
 spindb logs mydb
-# or read directly
+# or
 cat ~/.spindb/containers/postgresql/mydb/postgres.log
 ```
 
-### Reset everything
+### Client Tool Not Found
+
+Install dependencies:
+
+```bash
+spindb deps install
+spindb deps check
+```
+
+### Binary Download Fails
+
+SpinDB downloads from [hostdb GitHub Releases](https://github.com/robertjbass/hostdb/releases). If downloads fail:
+
+1. Check your internet connection
+2. Verify GitHub isn't blocked by your firewall
+3. Try again (SpinDB has automatic retry logic)
+
+### Reset Everything
 
 ```bash
 rm -rf ~/.spindb
 ```
 
+This deletes all containers, binaries, and configuration. Use with caution.
+
 ---
 
 ## Contributing
 
-Note: This repo currently assumes `pnpm` for running tests. `npm test` will shell out to `pnpm` and fail if `pnpm` isn't installed.
+We welcome contributions! SpinDB is built with:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and distribution info.
+- **Runtime:** Node.js 18+ with TypeScript
+- **Execution:** `tsx` for direct TypeScript execution
+- **Package Manager:** pnpm (strictly enforced)
+- **CLI Framework:** Commander.js
+- **Interactive UI:** Inquirer.js, Chalk, Ora
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture and comprehensive CLI command examples.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and testing guidelines.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture details.
 
 See [CLAUDE.md](CLAUDE.md) for AI-assisted development context.
 
-See [ENGINES.md](ENGINES.md) for detailed engine documentation (backup formats, planned engines, etc.).
+See [FEATURE.md](FEATURE.md) for adding new database engines.
 
 ---
 
 ## Acknowledgments
 
-SpinDB wouldn't be possible without:
+SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries (PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, ClickHouse) that make Docker-free local databases possible. Hosted on GitHub Releases for reliable, fast downloads.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 9 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 
@@ -1204,9 +825,26 @@ SpinDB wouldn't be possible without:
 
 [PolyForm Noncommercial 1.0.0](LICENSE)
 
-SpinDB is free for:
+SpinDB is **free** for:
 - Personal use and hobby projects
-- Educational and research purposes
-- Nonprofit organizations, educational institutions, and government
+- Educational institutions and students
+- Academic and scientific research
+- Nonprofit organizations
+- Government agencies
 
-**SpinDB may not be used for commercial purposes.**
+**Commercial use requires a separate license.** For commercial licensing inquiries, please open an issue or contact the maintainer.
+
+---
+
+## Links
+
+- **GitHub:** [github.com/robertjbass/spindb](https://github.com/robertjbass/spindb)
+- **npm:** [npmjs.com/package/spindb](https://www.npmjs.com/package/spindb)
+- **hostdb:** [github.com/robertjbass/hostdb](https://github.com/robertjbass/hostdb)
+- **Issues:** [github.com/robertjbass/spindb/issues](https://github.com/robertjbass/spindb/issues)
+
+---
+
+**Questions? Found a bug? Have a feature request?**
+
+Open an issue: [github.com/robertjbass/spindb/issues](https://github.com/robertjbass/spindb/issues)

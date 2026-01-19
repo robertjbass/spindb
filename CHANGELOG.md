@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-01-19
+
+### Changed
+- **README rewrite** - Completely rewrote README.md with stronger value proposition positioning SpinDB as a universal database management tool:
+  - New tagline: "One CLI for all your local databases"
+  - Added "What is SpinDB?" section defining three core capabilities: database package manager, unified API, and native client
+  - Prominent platform coverage table showing 9 engines × 5 platforms = 45 combinations
+  - Reframed "Why SpinDB?" to focus on unique strengths rather than defending against Docker
+  - Better structure: Quick Start → Why → Commands → Engines → Advanced
+  - Stronger examples showing multi-engine/multi-version workflows
+  - Emphasizes universality: one consistent API across SQL, NoSQL, key-value, and analytics engines
+  - Comprehensive comparison matrix with Docker, DBngin, Postgres.app, and XAMPP
+  - Improved organization while preserving all technical depth
+
+## [0.19.2] - 2026-01-18
+
 ### Fixed
 - **DuckDB engine inference** - Removed `.db` extension from DuckDB file detection. This extension is commonly used by SQLite, so inferring DuckDB was causing misidentification. Now only `.duckdb` and `.ddb` trigger DuckDB inference.
 - **DuckDB engines display** - Fixed `spindb engines list` showing DuckDB as "system-installed" even when downloaded from hostdb. Now correctly displays platform, architecture, and size like other engines.
