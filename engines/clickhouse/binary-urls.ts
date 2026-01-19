@@ -135,9 +135,19 @@ function normalizeVersion(
 /**
  * Get the full version string for a version
  *
+ * Supports partial version lookups (e.g., '25.12' -> '25.12.3.21')
+ * by delegating to normalizeVersion for consistent behavior.
+ *
  * @param version - Version (e.g., '25.12', '25.12.3.21')
- * @returns Full version string (e.g., '25.12.3.21') or null if not supported
+ * @returns Full version string (e.g., '25.12.3.21') or null if not in version map
  */
 export function getFullVersion(version: string): string | null {
-  return VERSION_MAP[version] || null
+  // Check if it's a known version (exact or partial match via normalizeVersion)
+  const normalized = normalizeVersion(version, VERSION_MAP)
+  // If normalizeVersion returned the input unchanged and it's not in the map,
+  // it means the version is unknown
+  if (normalized === version && !VERSION_MAP[version]) {
+    return null
+  }
+  return normalized
 }

@@ -35,7 +35,7 @@ function isRenameFallbackError(error: unknown): boolean {
 
 export class SQLiteBinaryManager {
   /**
-   * Move a file or directory, falling back to copy if rename fails across filesystems.
+   * Move a file or directory, falling back to copy+remove if rename fails across filesystems.
    */
   private async moveEntry(sourcePath: string, destPath: string): Promise<void> {
     try {
@@ -43,6 +43,7 @@ export class SQLiteBinaryManager {
     } catch (error) {
       if (isRenameFallbackError(error)) {
         await cp(sourcePath, destPath, { recursive: true })
+        await rm(sourcePath, { recursive: true, force: true })
       } else {
         throw error
       }
