@@ -102,9 +102,7 @@ async start(container: ContainerConfig): Promise<{ port, connectionString }> {
   try {
     // Load or allocate backendPort
     let backendPort = container.backendPort
-    if (backendPort && !await portManager.isPortAvailable(backendPort)) {
-      backendPort = await portManager.getAvailablePort(54320)
-    } else if (!backendPort) {
+    if (!backendPort || !await portManager.isPortAvailable(backendPort)) {
       backendPort = await portManager.getAvailablePort(54320)
     }
     // Persist backendPort immediately

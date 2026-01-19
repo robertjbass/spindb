@@ -84,7 +84,7 @@ SpinDB works across **9 database engines** and **5 platform architectures** with
 | 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
 
-**45 combinations. One CLI. Zero configuration.**
+**44 combinations. One CLI. Zero configuration.**
 
 ---
 
