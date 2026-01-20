@@ -22,6 +22,7 @@ import {
   type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
+import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -35,7 +36,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('mariadb')
+    const versions = await getHostdbVersions(Engine.MariaDB)
 
     if (versions && versions.length > 0) {
       // Group versions by major version (e.g., 11.8)
@@ -127,7 +128,7 @@ export async function getHostdbDownloadUrl(
 
   try {
     const releases = await fetchHostdbReleases()
-    const mariadbReleases = getEngineReleases(releases, 'mariadb')
+    const mariadbReleases = getEngineReleases(releases, Engine.MariaDB)
 
     if (!mariadbReleases) {
       throw new Error('MariaDB releases not found in hostdb')
@@ -159,7 +160,7 @@ export async function getHostdbDownloadUrl(
         error: error instanceof Error ? error.message : String(error),
       },
     )
-    return buildDownloadUrl('mariadb', version, platform, arch)
+    return buildDownloadUrl(Engine.MariaDB, { version, platform, arch })
   }
 }
 
@@ -171,7 +172,7 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions('mariadb')
+    const versions = await getHostdbVersions(Engine.MariaDB)
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map

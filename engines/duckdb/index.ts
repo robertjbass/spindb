@@ -35,15 +35,16 @@ import {
   getEngineReleases,
 } from '../../core/hostdb-client'
 import { logDebug } from '../../core/error-handler'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  Engine,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execFileAsync = promisify(execFile)
@@ -611,7 +612,7 @@ export class DuckDBEngine extends BaseEngine {
     // Try to fetch from hostdb first
     try {
       const releases = await fetchHostdbReleases()
-      const duckdbReleases = getEngineReleases(releases, 'duckdb')
+      const duckdbReleases = getEngineReleases(releases, Engine.DuckDB)
 
       if (duckdbReleases && Object.keys(duckdbReleases).length > 0) {
         const result: Record<string, string[]> = {}

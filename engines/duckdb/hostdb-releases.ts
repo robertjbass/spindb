@@ -1,20 +1,18 @@
 /**
- * hostdb Releases Module for ClickHouse
+ * hostdb Releases Module for DuckDB
  *
- * Fetches ClickHouse binary information from the hostdb repository at
+ * Fetches DuckDB binary information from the hostdb repository at
  * https://github.com/robertjbass/hostdb
  *
- * hostdb provides pre-built ClickHouse binaries for multiple platforms.
+ * hostdb provides pre-built DuckDB binaries for multiple platforms.
  */
 
 import {
-  CLICKHOUSE_VERSION_MAP,
+  DUCKDB_VERSION_MAP,
   SUPPORTED_MAJOR_VERSIONS,
-  getMajorVersion,
+  normalizeVersion,
 } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
-import { logDebug } from '../../core/error-handler'
-import { clickhouseBinaryManager } from './binary-manager'
 import {
   fetchHostdbReleases,
   clearCache as clearSharedCache,
@@ -26,6 +24,8 @@ import {
   type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
+import { duckdbBinaryManager } from './binary-manager'
+import { logDebug } from '../../core/error-handler'
 import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
@@ -34,20 +34,22 @@ export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
 // Re-export shared functions
 export const clearCache = clearSharedCache
 
-// Get available ClickHouse versions from hostdb databases.json, grouped by major version
+/**
+ * Get available DuckDB versions from hostdb databases.json, grouped by major version
+ */
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions(Engine.ClickHouse)
+    const versions = await getHostdbVersions(Engine.DuckDB)
 
     if (versions && versions.length > 0) {
-      // Group versions by major version (YY.MM format)
+      // Group versions by major version
       const grouped: Record<string, string[]> = {}
 
       for (const version of versions) {
-        const major = getMajorVersion(version)
+        const major = version.split('.')[0]
         if (!grouped[major]) {
           grouped[major] = []
         }
@@ -62,20 +64,17 @@ export async function fetchAvailableVersions(): Promise<
       return grouped
     }
   } catch (error) {
-    logDebug(
-      'Failed to fetch ClickHouse versions from hostdb, checking local',
-      {
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
+    logDebug('Failed to fetch DuckDB versions from hostdb, checking local', {
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   // Offline fallback: return only locally installed versions
-  const installed = await clickhouseBinaryManager.listInstalled()
+  const installed = await duckdbBinaryManager.listInstalled()
   if (installed.length > 0) {
     const result: Record<string, string[]> = {}
     for (const binary of installed) {
-      const major = getMajorVersion(binary.version)
+      const major = binary.version.split('.')[0]
       if (!result[major]) {
         result[major] = []
       }
@@ -94,41 +93,34 @@ export async function fetchAvailableVersions(): Promise<
   return getHardcodedVersions()
 }
 
-// Get hardcoded versions as last resort fallback
+/**
+ * Get hardcoded versions as last resort fallback
+ */
 function getHardcodedVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {
-    grouped[major] = [CLICKHOUSE_VERSION_MAP[major]]
+    grouped[major] = [DUCKDB_VERSION_MAP[major]]
   }
   return grouped
 }
 
-// Get the latest version for a major version from hostdb
+/**
+ * Get the latest version for a major version from hostdb
+ */
 export async function getLatestVersion(major: string): Promise<string> {
   const versions = await fetchAvailableVersions()
   const majorVersions = versions[major]
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
   }
-
-  // Check version map fallback
-  if (CLICKHOUSE_VERSION_MAP[major]) {
-    return CLICKHOUSE_VERSION_MAP[major]
-  }
-
-  // Normalize to 4-segment ClickHouse version format (YY.MM.patch.build)
-  const parts = major.split('.')
-  while (parts.length < 4) {
-    parts.push('0')
-  }
-  return parts.slice(0, 4).join('.')
+  return DUCKDB_VERSION_MAP[major] || `${major}.0.0`
 }
 
 /**
- * Get the download URL for a ClickHouse version from hostdb
+ * Get the download URL for a DuckDB version from hostdb
  *
- * @param version - Full version (e.g., '25.12.3.21')
- * @param platform - Platform identifier (e.g., 'darwin', 'linux')
+ * @param version - Full version (e.g., '1.4.3')
+ * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
  * @returns Download URL for the binary
  */
@@ -137,28 +129,31 @@ export async function getHostdbDownloadUrl(
   platform: string,
   arch: string,
 ): Promise<string> {
+  // Normalize version first
+  const fullVersion = normalizeVersion(version)
+
   // Validate platform up-front so we fail fast for unsupported platforms
   const hostdbPlatform = validatePlatform(platform, arch)
 
   try {
     const releases = await fetchHostdbReleases()
-    const clickhouseReleases = getEngineReleases(releases, Engine.ClickHouse)
+    const duckdbReleases = getEngineReleases(releases, Engine.DuckDB)
 
-    if (!clickhouseReleases) {
-      throw new Error('ClickHouse releases not found in hostdb')
+    if (!duckdbReleases) {
+      throw new Error('DuckDB releases not found in hostdb')
     }
 
     // Find the version in releases
-    const release = clickhouseReleases[version]
+    const release = duckdbReleases[fullVersion]
     if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
+      throw new Error(`Version ${fullVersion} not found in hostdb releases`)
     }
 
     // Get the platform-specific download URL
     const platformData = release.platforms[hostdbPlatform]
     if (!platformData) {
       throw new Error(
-        `Platform ${hostdbPlatform} not available for ClickHouse ${version}`,
+        `Platform ${hostdbPlatform} not available for DuckDB ${fullVersion}`,
       )
     }
 
@@ -166,38 +161,35 @@ export async function getHostdbDownloadUrl(
   } catch (error) {
     // Fallback to constructing URL manually if fetch fails
     logDebug(
-      'Failed to fetch ClickHouse download URL from hostdb, using fallback',
+      'Failed to fetch DuckDB download URL from hostdb, using fallback',
       {
-        version,
+        version: fullVersion,
         platform,
         arch,
         error: error instanceof Error ? error.message : String(error),
       },
     )
-    return buildDownloadUrl(Engine.ClickHouse, { version, platform, arch })
+    return buildDownloadUrl(Engine.DuckDB, { version: fullVersion, platform, arch })
   }
 }
 
 /**
  * Check if a version is available in hostdb
  *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
+ * @param version - Version to check (e.g., "1" or "1.4.3")
+ * @returns true if the version exists in hostdb databases.json
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions(Engine.ClickHouse)
+    const versions = await getHostdbVersions(Engine.DuckDB)
     return versions ? versions.includes(version) : false
   } catch {
-    // Fallback to checking version map using explicit key/value checks
-    const major = getMajorVersion(version)
-    const mapKeys = Object.keys(CLICKHOUSE_VERSION_MAP)
-    const mapValues = Object.values(CLICKHOUSE_VERSION_MAP)
-
-    return (
-      mapKeys.includes(version) || // version is a major key (e.g., "25.12")
-      mapValues.includes(version) || // version is a full version value
-      CLICKHOUSE_VERSION_MAP[major] === version // version matches the mapped full version for its major
-    )
+    // Fallback to checking version map when network unavailable
+    // Accept either a major version key (e.g., "1") or its mapped full version (e.g., "1.4.3")
+    if (version in DUCKDB_VERSION_MAP) {
+      return true // Input is a major version key
+    }
+    const major = version.split('.')[0]
+    return DUCKDB_VERSION_MAP[major] === version
   }
 }

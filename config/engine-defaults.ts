@@ -3,6 +3,8 @@
  * Extracted for dependency injection pattern - allows each engine to define its own defaults
  */
 
+import type { Engine } from '../types'
+
 export type EngineDefaults = {
   // Default version to use when not specified
   defaultVersion: string
@@ -161,9 +163,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
 
 /**
  * Get engine defaults by name
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
  * @throws Error if engine is not found
  */
-export function getEngineDefaults(engine: string): EngineDefaults {
+export function getEngineDefaults(engine: Engine | string): EngineDefaults {
   const normalized = engine.toLowerCase()
   const defaults = engineDefaults[normalized]
   if (!defaults) {
@@ -176,7 +179,7 @@ export function getEngineDefaults(engine: string): EngineDefaults {
 }
 
 // Check if an engine is supported
-export function isEngineSupported(engine: string): boolean {
+export function isEngineSupported(engine: Engine | string): boolean {
   return engine.toLowerCase() in engineDefaults
 }
 

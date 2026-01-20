@@ -1,10 +1,8 @@
 import { describe, it } from 'node:test'
 import { assert, assertEqual } from '../utils/assertions'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
-import {
-  getBinaryUrl,
-  getHostdbPlatform,
-} from '../../engines/sqlite/binary-urls'
+import { getBinaryUrl } from '../../engines/sqlite/binary-urls'
+import { getHostdbPlatform } from '../../core/hostdb-client'
 import {
   normalizeVersion,
   getFullVersion,

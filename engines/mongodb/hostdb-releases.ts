@@ -22,6 +22,7 @@ import {
   type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
+import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -38,7 +39,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('mongodb')
+    const versions = await getHostdbVersions(Engine.MongoDB)
 
     if (versions && versions.length > 0) {
       const versionMap: Record<string, string> = {}
@@ -123,7 +124,7 @@ export async function getHostdbDownloadUrl(
 
   try {
     const releases = await fetchHostdbReleases()
-    const mongodbReleases = getEngineReleases(releases, 'mongodb')
+    const mongodbReleases = getEngineReleases(releases, Engine.MongoDB)
 
     if (!mongodbReleases) {
       throw new Error('MongoDB releases not found in hostdb')
@@ -152,7 +153,7 @@ export async function getHostdbDownloadUrl(
     )
 
     // Fallback to constructing URL manually if fetch fails
-    return buildDownloadUrl('mongodb', version, platform, arch)
+    return buildDownloadUrl(Engine.MongoDB, { version, platform, arch })
   }
 }
 
@@ -164,7 +165,7 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions('mongodb')
+    const versions = await getHostdbVersions(Engine.MongoDB)
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map

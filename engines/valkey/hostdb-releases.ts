@@ -22,6 +22,7 @@ import {
   type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
+import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -35,7 +36,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('valkey')
+    const versions = await getHostdbVersions(Engine.Valkey)
 
     if (versions && versions.length > 0) {
       // Group versions by major version
@@ -125,7 +126,7 @@ export async function getHostdbDownloadUrl(
 
   try {
     const releases = await fetchHostdbReleases()
-    const valkeyReleases = getEngineReleases(releases, 'valkey')
+    const valkeyReleases = getEngineReleases(releases, Engine.Valkey)
 
     if (!valkeyReleases) {
       throw new Error('Valkey releases not found in hostdb')
@@ -157,7 +158,7 @@ export async function getHostdbDownloadUrl(
         error: error instanceof Error ? error.message : String(error),
       },
     )
-    return buildDownloadUrl('valkey', version, platform, arch)
+    return buildDownloadUrl(Engine.Valkey, { version, platform, arch })
   }
 }
 
@@ -169,7 +170,7 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions('valkey')
+    const versions = await getHostdbVersions(Engine.Valkey)
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map

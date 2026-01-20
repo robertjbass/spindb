@@ -22,6 +22,7 @@ import {
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { mysqlBinaryManager } from './binary-manager'
+import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -35,7 +36,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('mysql')
+    const versions = await getHostdbVersions(Engine.MySQL)
 
     if (versions && versions.length > 0) {
       // Group versions by major version
@@ -141,7 +142,7 @@ export async function getHostdbDownloadUrl(
 
   try {
     const releases = await fetchHostdbReleases()
-    const mysqlReleases = getEngineReleases(releases, 'mysql')
+    const mysqlReleases = getEngineReleases(releases, Engine.MySQL)
 
     if (!mysqlReleases) {
       throw new Error('MySQL releases not found in hostdb')
@@ -170,7 +171,7 @@ export async function getHostdbDownloadUrl(
     )
 
     // Fallback to constructing URL manually if fetch fails
-    return buildDownloadUrl('mysql', version, platform, arch)
+    return buildDownloadUrl(Engine.MySQL, { version, platform, arch })
   }
 }
 
@@ -182,7 +183,7 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions('mysql')
+    const versions = await getHostdbVersions(Engine.MySQL)
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map

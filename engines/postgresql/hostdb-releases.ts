@@ -25,6 +25,7 @@ import {
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { postgresqlBinaryManager } from './binary-manager'
 import { logDebug } from '../../core/error-handler'
+import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -38,7 +39,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('postgresql')
+    const versions = await getHostdbVersions(Engine.PostgreSQL)
 
     if (versions && versions.length > 0) {
       // Group versions by major version
@@ -129,7 +130,7 @@ export async function getHostdbDownloadUrl(
 
   try {
     const releases = await fetchHostdbReleases()
-    const pgReleases = getEngineReleases(releases, 'postgresql')
+    const pgReleases = getEngineReleases(releases, Engine.PostgreSQL)
 
     if (!pgReleases) {
       throw new Error('PostgreSQL releases not found in hostdb')
@@ -161,7 +162,7 @@ export async function getHostdbDownloadUrl(
         error: error instanceof Error ? error.message : String(error),
       },
     )
-    return buildDownloadUrl('postgresql', version, platform, arch)
+    return buildDownloadUrl(Engine.PostgreSQL, { version, platform, arch })
   }
 }
 
@@ -173,7 +174,7 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions('postgresql')
+    const versions = await getHostdbVersions(Engine.PostgreSQL)
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map when network unavailable

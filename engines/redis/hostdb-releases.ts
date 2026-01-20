@@ -22,6 +22,7 @@ import {
   type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
+import { Engine } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -35,7 +36,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('redis')
+    const versions = await getHostdbVersions(Engine.Redis)
 
     if (versions && versions.length > 0) {
       // Group versions by major version
@@ -125,7 +126,7 @@ export async function getHostdbDownloadUrl(
 
   try {
     const releases = await fetchHostdbReleases()
-    const redisReleases = getEngineReleases(releases, 'redis')
+    const redisReleases = getEngineReleases(releases, Engine.Redis)
 
     if (!redisReleases) {
       throw new Error('Redis releases not found in hostdb')
@@ -154,7 +155,7 @@ export async function getHostdbDownloadUrl(
       arch,
       error: error instanceof Error ? error.message : String(error),
     })
-    return buildDownloadUrl('redis', version, platform, arch)
+    return buildDownloadUrl(Engine.Redis, { version, platform, arch })
   }
 }
 
@@ -166,7 +167,7 @@ export async function getHostdbDownloadUrl(
  */
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
-    const versions = await getHostdbVersions('redis')
+    const versions = await getHostdbVersions(Engine.Redis)
     return versions ? versions.includes(version) : false
   } catch {
     // Fallback to checking version map
