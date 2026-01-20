@@ -22,7 +22,6 @@ import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { moveEntry } from './fs-error-utils'
-import { logDebug } from './error-handler'
 import {
   type Engine,
   Platform,

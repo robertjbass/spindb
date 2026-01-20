@@ -276,7 +276,17 @@ export function getBackupFormatInfo(
   const engineFormats = BACKUP_FORMATS[engine]
   const normalized = normalizeFormat(engine, format)
   // Type assertion needed because TypeScript can't narrow the union to the specific engine's format
-  return engineFormats.formats[normalized as keyof typeof engineFormats.formats]
+  const formatInfo =
+    engineFormats.formats[normalized as keyof typeof engineFormats.formats]
+
+  if (!formatInfo) {
+    const validFormats = Object.keys(engineFormats.formats).join(', ')
+    throw new Error(
+      `Invalid backup format "${normalized}" for ${engine}. Valid formats: ${validFormats}`,
+    )
+  }
+
+  return formatInfo
 }
 
 // Get file extension for a backup format

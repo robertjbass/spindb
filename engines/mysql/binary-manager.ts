@@ -31,6 +31,12 @@ class MySQLBinaryManager extends BaseServerBinaryManager {
   protected normalizeVersionFromModule(version: string): string {
     return normalizeVersion(version)
   }
+
+  protected parseVersionFromOutput(stdout: string): string | null {
+    // Extract version from output like "mysqld  Ver 8.0.40"
+    const match = stdout.match(/Ver\s+([\d.]+)/)
+    return match?.[1] ?? null
+  }
 }
 
 export const mysqlBinaryManager = new MySQLBinaryManager()

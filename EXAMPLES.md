@@ -79,6 +79,7 @@ spindb backup [container] [options]
 - SQLite/DuckDB: `sql`, `binary` (default: `binary`)
 - MongoDB: `bson`, `archive` (default: `archive`)
 - Redis/Valkey: `text`, `rdb` (default: `rdb`)
+- ClickHouse: `sql` (only format available)
 
 #### `restore` - Restore backup
 ```bash

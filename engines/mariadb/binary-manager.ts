@@ -34,6 +34,12 @@ class MariaDBBinaryManager extends BaseServerBinaryManager {
   protected normalizeVersionFromModule(version: string): string {
     return normalizeVersion(version)
   }
+
+  protected parseVersionFromOutput(stdout: string): string | null {
+    // Extract version from output like "mariadbd  Ver 11.8.5-MariaDB"
+    const match = stdout.match(/Ver\s+([\d.]+)/)
+    return match?.[1] ?? null
+  }
 }
 
 export const mariadbBinaryManager = new MariaDBBinaryManager()

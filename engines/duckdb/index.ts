@@ -15,7 +15,7 @@
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, statSync, createWriteStream, createReadStream } from 'fs'
-import { copyFile, unlink, mkdir, open, writeFile, readFile } from 'fs/promises'
+import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { BaseEngine } from '../base-engine'
@@ -499,8 +499,10 @@ export class DuckDBEngine extends BaseEngine {
     sqlFilePath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Use 'ignore' for stdout since we don't need output and leaving it
+      // unconsumed could fill the buffer and cause a deadlock
       const proc = spawn(duckdbPath, [dbPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['pipe', 'ignore', 'pipe'],
       })
 
       let stderrData = ''

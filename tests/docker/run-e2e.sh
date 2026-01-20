@@ -460,14 +460,25 @@ restore_backup() {
         run_cmd spindb restore "$container_name" "$backup_file" -d 1 --force
       else
         spindb stop "$container_name" &>/dev/null || true
-        sleep 2
+        # Wait for container to fully stop before restore
+        local max_wait=30
+        local waited=0
+        while spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"' && [ $waited -lt $max_wait ]; do
+          sleep 1
+          waited=$((waited + 1))
+        done
         if ! run_cmd spindb restore "$container_name" "$backup_file" --force; then
           return 1
         fi
         if ! run_cmd spindb start "$container_name"; then
           return 1
         fi
-        sleep 3
+        # Wait for container to be ready after start
+        waited=0
+        while ! spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"' && [ $waited -lt $max_wait ]; do
+          sleep 1
+          waited=$((waited + 1))
+        done
       fi
       ;;
     sqlite|duckdb)

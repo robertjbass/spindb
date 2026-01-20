@@ -48,6 +48,12 @@ class ClickHouseBinaryManager extends BaseServerBinaryManager {
     return normalizeVersion(version)
   }
 
+  protected parseVersionFromOutput(stdout: string): string | null {
+    // Extract version from output like "ClickHouse client version 25.12.3.21"
+    const match = stdout.match(/(\d+\.\d+\.\d+\.\d+)/)
+    return match?.[1] ?? null
+  }
+
   /**
    * ClickHouse does not have Windows binaries on hostdb.
    * Override to throw a clear error.
@@ -155,9 +161,8 @@ class ClickHouseBinaryManager extends BaseServerBinaryManager {
         )
       }
       // Extract version from output like "ClickHouse client version 25.12.3.21 (official build)"
-      const match = stdout.match(/version\s+(\d+\.\d+\.\d+\.\d+)/)
-      const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+\.\d+)/) : null
-      const reportedVersion = match?.[1] ?? altMatch?.[1]
+      const match = stdout.match(/(\d+\.\d+\.\d+\.\d+)/)
+      const reportedVersion = match?.[1]
 
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)

@@ -14,7 +14,7 @@ import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, type Platform, type Arch } from '../../types'
 
-const SQLITE_EXECUTABLES = [
+export const SQLITE_EXECUTABLES = [
   'sqlite3',
   'sqldiff',
   'sqlite3_analyzer',

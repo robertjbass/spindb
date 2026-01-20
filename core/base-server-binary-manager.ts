@@ -67,6 +67,12 @@ export abstract class BaseServerBinaryManager {
   protected abstract normalizeVersionFromModule(version: string): string
 
   /**
+   * Parse version from CLI --version output.
+   * Must be implemented by subclass as output format varies by engine.
+   */
+  protected abstract parseVersionFromOutput(stdout: string): string | null
+
+  /**
    * Get the download URL for a version (public API)
    */
   getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
@@ -391,13 +397,10 @@ export abstract class BaseServerBinaryManager {
 
     try {
       const { stdout } = await spawnAsync(serverPath, ['--version'])
-      // Extract version from output like "mysqld  Ver 8.0.40" or "mariadbd  Ver 11.8.5-MariaDB"
-      const match = stdout.match(/Ver\s+([\d.]+)/)
-      if (!match) {
+      const reportedVersion = this.parseVersionFromOutput(stdout)
+      if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
-
-      const reportedVersion = match[1]
       const expectedNormalized = this.stripTrailingZero(fullVersion)
       const reportedNormalized = this.stripTrailingZero(reportedVersion)
 

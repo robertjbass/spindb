@@ -39,6 +39,12 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
     return normalizeVersion(version)
   }
 
+  protected parseVersionFromOutput(stdout: string): string | null {
+    // Extract version from output like "postgres (PostgreSQL) 18.1"
+    const match = stdout.match(/postgres \(PostgreSQL\) ([\d.]+)/)
+    return match?.[1] ?? null
+  }
+
   /**
    * Verify that PostgreSQL binaries are working
    *
