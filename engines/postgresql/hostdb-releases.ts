@@ -12,16 +12,10 @@ import {
   SUPPORTED_MAJOR_VERSIONS,
 } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { postgresqlBinaryManager } from './binary-manager'
 import { logDebug } from '../../core/error-handler'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 // Get available PostgreSQL versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -102,77 +96,3 @@ export async function getLatestVersion(major: string): Promise<string> {
   return POSTGRESQL_VERSION_MAP[major] || `${major}.0.0`
 }
 
-/**
- * Get the download URL for a PostgreSQL version from hostdb
- *
- * @param version - Full version (e.g., '17.7.0')
- * @param platform - Platform identifier (e.g., Platform.Darwin, Platform.Linux, Platform.Win32)
- * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
- * @returns Download URL for the binary
- */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const pgReleases = getEngineReleases(releases, Engine.PostgreSQL)
-
-    if (!pgReleases) {
-      throw new Error('PostgreSQL releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = pgReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for PostgreSQL ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug(
-      'Failed to fetch PostgreSQL download URL from hostdb, using fallback',
-      {
-        version,
-        platform,
-        arch,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
-    return buildDownloadUrl(Engine.PostgreSQL, { version, platform, arch })
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check (e.g., "17" or "17.7.0")
- * @returns true if the version exists in hostdb databases.json
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.PostgreSQL)
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map when network unavailable
-    // Accept either a major version key (e.g., "17") or its mapped full version (e.g., "17.7.0")
-    if (version in POSTGRESQL_VERSION_MAP) {
-      return true // Input is a major version key
-    }
-    const major = version.split('.')[0]
-    return POSTGRESQL_VERSION_MAP[major] === version
-  }
-}

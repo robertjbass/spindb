@@ -58,7 +58,7 @@ export function normalizeVersion(version: string): string {
     return fullVersion
   }
 
-  // Unknown version - warn and return as-is
+  // Unknown version - log debug and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
   const parts = version.split('.')
 

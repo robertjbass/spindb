@@ -21,14 +21,14 @@ const SUPPORTED_PLATFORMS = new Set([
  *
  * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
- * @returns hostdb platform identifier or undefined if unsupported
+ * @returns hostdb platform identifier or null if unsupported
  */
 export function getHostdbPlatform(
   platform: Platform,
   arch: Arch,
-): string | undefined {
+): string | null {
   const key = `${platform}-${arch}`
-  return SUPPORTED_PLATFORMS.has(key) ? key : undefined
+  return SUPPORTED_PLATFORMS.has(key) ? key : null
 }
 
 /**

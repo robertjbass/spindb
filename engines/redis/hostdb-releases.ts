@@ -11,14 +11,8 @@ import { REDIS_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
 import { logDebug } from '../../core/error-handler'
 import { redisBinaryManager } from './binary-manager'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 // Get available Redis versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -98,71 +92,3 @@ export async function getLatestVersion(major: string): Promise<string> {
   return REDIS_VERSION_MAP[major] || `${major}.0.0`
 }
 
-/**
- * Get the download URL for a Redis version from hostdb
- *
- * @param version - Full version (e.g., '7.4.7')
- * @param platform - Platform identifier (e.g., Platform.Darwin, Platform.Linux)
- * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
- * @returns Download URL for the binary
- */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const redisReleases = getEngineReleases(releases, Engine.Redis)
-
-    if (!redisReleases) {
-      throw new Error('Redis releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = redisReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for Redis ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug('Failed to fetch Redis download URL from hostdb, using fallback', {
-      version,
-      platform,
-      arch,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return buildDownloadUrl(Engine.Redis, { version, platform, arch })
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.Redis)
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map
-    // Handle both major versions ("7") and full versions ("7.4.7")
-    const major = version.split('.')[0]
-    return version in REDIS_VERSION_MAP || REDIS_VERSION_MAP[major] === version
-  }
-}

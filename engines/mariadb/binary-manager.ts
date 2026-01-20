@@ -134,14 +134,14 @@ export class MariaDBBinaryManager {
       try {
         response = await fetch(url, { signal: controller.signal })
       } catch (error) {
-        clearTimeout(timeoutId)
         const err = error as Error
         if (err.name === 'AbortError') {
           throw new Error('Download timed out after 5 minutes')
         }
         throw error
+      } finally {
+        clearTimeout(timeoutId)
       }
-      clearTimeout(timeoutId)
 
       if (!response.ok) {
         if (response.status === 404) {
