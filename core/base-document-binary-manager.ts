@@ -1,15 +1,16 @@
 /**
- * Base Server Binary Manager
+ * Base Document Binary Manager
  *
- * Provides shared implementation for binary managers that handle server-based SQL databases
- * (MySQL, MariaDB). These engines share similar download, extraction, and verification logic
- * but differ in binary names and version parsing.
+ * Provides shared implementation for binary managers that handle document-oriented databases
+ * (MongoDB, FerretDB). These engines share similar download, extraction, and verification logic
+ * but differ in binary names and version parsing specifics.
  *
  * Key features handled by this class:
  * - Archive download with timeout
  * - Unix (tar.gz) and Windows (zip) extraction
+ * - macOS extended attribute file handling during extraction
  * - Nested directory handling in archives
- * - Version verification with trailing zero normalization
+ * - Version verification with major.minor matching
  * - Binary executable path resolution
  *
  * To extend this class, implement the abstract methods that define engine-specific behavior.
@@ -23,6 +24,7 @@ import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
+import { logDebug } from './error-handler'
 import {
   type Engine,
   Platform,
@@ -34,21 +36,21 @@ import {
 } from '../types'
 
 /**
- * Configuration for a server binary manager instance
+ * Configuration for a document binary manager instance
  */
-export type ServerBinaryManagerConfig = {
-  /** Engine enum value (e.g., Engine.MySQL) */
+export type DocumentBinaryManagerConfig = {
+  /** Engine enum value (e.g., Engine.MongoDB) */
   engine: Engine
-  /** Engine name string for paths and URLs (e.g., 'mysql') */
+  /** Engine name string for paths and URLs (e.g., 'mongodb') */
   engineName: string
-  /** Display name for user messages (e.g., 'MySQL') */
+  /** Display name for user messages (e.g., 'MongoDB') */
   displayName: string
-  /** Server binary names to check, in order of preference (e.g., ['mysqld'] or ['mariadbd', 'mysqld']) */
-  serverBinaryNames: string[]
+  /** Server binary name without extension (e.g., 'mongod') */
+  serverBinary: string
 }
 
-export abstract class BaseServerBinaryManager {
-  protected abstract readonly config: ServerBinaryManagerConfig
+export abstract class BaseDocumentBinaryManager {
+  protected abstract readonly config: DocumentBinaryManagerConfig
 
   /**
    * Get the download URL for a version.
@@ -67,6 +69,13 @@ export abstract class BaseServerBinaryManager {
   protected abstract normalizeVersionFromModule(version: string): string
 
   /**
+   * Parse version from server --version output.
+   * Must be implemented by subclass as output format varies by engine.
+   * Should return the version string (e.g., "7.0.28") or null if parsing fails.
+   */
+  protected abstract parseVersionFromOutput(stdout: string): string | null
+
+  /**
    * Get the download URL for a version (public API)
    */
   getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
@@ -75,15 +84,14 @@ export abstract class BaseServerBinaryManager {
   }
 
   /**
-   * Convert version to full version format
+   * Convert version to full version format (e.g., "7.0" -> "7.0.28")
    */
   getFullVersion(version: string): string {
     return this.normalizeVersionFromModule(version)
   }
 
   /**
-   * Check if binaries for a specific version are already installed.
-   * Checks all server binary names in order until one is found.
+   * Check if binaries for a specific version are already installed
    */
   async isInstalled(
     version: string,
@@ -98,15 +106,8 @@ export abstract class BaseServerBinaryManager {
       arch,
     })
     const ext = platform === Platform.Win32 ? '.exe' : ''
-
-    // Check each possible server binary name
-    for (const serverBinary of this.config.serverBinaryNames) {
-      const serverPath = join(binPath, 'bin', `${serverBinary}${ext}`)
-      if (existsSync(serverPath)) {
-        return true
-      }
-    }
-    return false
+    const serverPath = join(binPath, 'bin', `${this.config.serverBinary}${ext}`)
+    return existsSync(serverPath)
   }
 
   /**
@@ -126,7 +127,8 @@ export abstract class BaseServerBinaryManager {
       if (!entry.isDirectory()) continue
       if (!entry.name.startsWith(prefix)) continue
 
-      // Parse from the end to handle versions with dashes (e.g., mysql-8.0.40-rc1-darwin-arm64)
+      // Split from end to handle versions with dashes (e.g., 8.0.0-rc1)
+      // Format: {engine}-{version}-{platform}-{arch}
       const rest = entry.name.slice(prefix.length)
       const parts = rest.split('-')
       if (parts.length < 3) continue
@@ -169,12 +171,9 @@ export abstract class BaseServerBinaryManager {
       paths.bin,
       `temp-${this.config.engineName}-${fullVersion}-${platform}-${arch}`,
     )
-    const archiveFile = join(
-      tempDir,
-      platform === Platform.Win32
-        ? `${this.config.engineName}.zip`
-        : `${this.config.engineName}.tar.gz`,
-    )
+    // Windows uses .zip, Unix uses .tar.gz
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
+    const archiveFile = join(tempDir, `${this.config.engineName}.${ext}`)
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -261,6 +260,53 @@ export abstract class BaseServerBinaryManager {
   }
 
   /**
+   * Extract Unix binaries from tar.gz file.
+   * Includes recovery handling for macOS extended attribute files (._* files)
+   * that may be truncated in some archives.
+   */
+  protected async extractUnixBinaries(
+    tarFile: string,
+    binPath: string,
+    tempDir: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries...',
+    })
+
+    // Extract tar.gz to temp directory first
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+
+    // Extract tar.gz - ignore errors from macOS extended attribute files (._* files)
+    // that may be truncated. The actual binaries extract correctly.
+    try {
+      await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
+    } catch (error) {
+      const err = error as Error
+      // If error is about truncated files (macOS extended attributes), check if extraction worked
+      if (err.message.includes('Truncated') || err.message.includes('._')) {
+        // Verify that at least some files were extracted
+        const entries = await readdir(extractDir)
+        if (entries.length === 0) {
+          throw new Error(`Extraction failed completely: ${err.message}`)
+        }
+        // Files were extracted despite the error, log and continue
+        logDebug(`${this.config.displayName} extraction recovered from tar warning`, {
+          tarFile,
+          entriesExtracted: entries.length,
+          warningType: 'macOS extended attributes',
+        })
+      } else {
+        throw error
+      }
+    }
+
+    await this.moveExtractedEntries(extractDir, binPath)
+  }
+
+  /**
    * Extract Windows binaries from ZIP file
    */
   protected async extractWindowsBinaries(
@@ -278,28 +324,6 @@ export abstract class BaseServerBinaryManager {
     await extractWindowsArchive(zipFile, tempDir)
 
     await this.moveExtractedEntries(tempDir, binPath)
-  }
-
-  /**
-   * Extract Unix binaries from tar.gz file
-   */
-  protected async extractUnixBinaries(
-    tarFile: string,
-    binPath: string,
-    tempDir: string,
-    onProgress?: ProgressCallback,
-  ): Promise<void> {
-    onProgress?.({
-      stage: 'extracting',
-      message: 'Extracting binaries...',
-    })
-
-    // Extract tar.gz to temp directory first
-    const extractDir = join(tempDir, 'extract')
-    await mkdir(extractDir, { recursive: true })
-    await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
-
-    await this.moveExtractedEntries(extractDir, binPath)
   }
 
   /**
@@ -339,27 +363,8 @@ export abstract class BaseServerBinaryManager {
   }
 
   /**
-   * Find the server binary path, checking each possible name in order
-   */
-  protected findServerBinaryPath(binPath: string, ext: string): string | null {
-    for (const serverBinary of this.config.serverBinaryNames) {
-      const serverPath = join(binPath, 'bin', `${serverBinary}${ext}`)
-      if (existsSync(serverPath)) {
-        return serverPath
-      }
-    }
-    return null
-  }
-
-  /**
-   * Strip trailing .0 for version comparison
-   */
-  protected stripTrailingZero(version: string): string {
-    return version.replace(/\.0$/, '')
-  }
-
-  /**
-   * Verify that binaries are working
+   * Verify that binaries are working.
+   * Uses major.minor version matching for document databases.
    */
   async verify(
     version: string,
@@ -373,37 +378,34 @@ export abstract class BaseServerBinaryManager {
       platform,
       arch,
     })
+
     const ext = platform === Platform.Win32 ? '.exe' : ''
+    const serverPath = join(binPath, 'bin', `${this.config.serverBinary}${ext}`)
 
-    const serverPath = this.findServerBinaryPath(binPath, ext)
-
-    if (!serverPath) {
+    if (!existsSync(serverPath)) {
       throw new Error(
         `${this.config.displayName} binary not found at ${binPath}/bin/`,
       )
     }
 
     try {
+      // Use spawnAsync to avoid shell injection (serverPath could contain special chars)
       const { stdout } = await spawnAsync(serverPath, ['--version'])
-      // Extract version from output like "mysqld  Ver 8.0.40" or "mariadbd  Ver 11.8.5-MariaDB"
-      const match = stdout.match(/Ver\s+([\d.]+)/)
-      if (!match) {
+      const reportedVersion = this.parseVersionFromOutput(stdout)
+
+      if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
-      const reportedVersion = match[1]
-      const expectedNormalized = this.stripTrailingZero(fullVersion)
-      const reportedNormalized = this.stripTrailingZero(reportedVersion)
-
-      // Check if versions match
-      if (reportedNormalized === expectedNormalized) {
+      // Check if major.minor versions match
+      const expectedMajorMinor = version.split('.').slice(0, 2).join('.')
+      const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
+      if (expectedMajorMinor === reportedMajorMinor) {
         return true
       }
 
-      // Also accept if major versions match (e.g., expected "8.0", got "8.0.40")
-      const expectedMajor = version.split('.').slice(0, 2).join('.')
-      const reportedMajor = reportedVersion.split('.').slice(0, 2).join('.')
-      if (expectedMajor === reportedMajor) {
+      // Check if full versions match
+      if (reportedVersion === fullVersion) {
         return true
       }
 
@@ -419,7 +421,7 @@ export abstract class BaseServerBinaryManager {
   }
 
   /**
-   * Get the path to a specific binary
+   * Get the path to a specific binary (e.g., mongod, mongosh)
    */
   getBinaryExecutable(
     version: string,

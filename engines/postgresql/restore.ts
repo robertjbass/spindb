@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { configManager } from '../../core/config-manager'
-import { findBinaryPathFresh } from './binary-manager'
+import { findBinary } from '../../core/dependency-manager'
 import { validateRestoreCompatibility } from './version-validator'
 import { SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
@@ -139,18 +139,16 @@ async function getPgRestorePath(): Promise<string> {
     return configPath
   }
 
-  // Fall back to finding it on the system PATH with cache refresh
-  const systemPath = await findBinaryPathFresh('pg_restore')
-  if (!systemPath) {
+  // Fall back to finding it on the system PATH
+  const result = await findBinary('pg_restore')
+  if (!result) {
     throw new Error(
-      'pg_restore not found. Install PostgreSQL client tools:\n' +
-        '  macOS: brew install libpq && brew link --force libpq\n' +
-        '  Ubuntu/Debian: apt install postgresql-client\n' +
-        '  CentOS/RHEL/Fedora: yum install postgresql\n\n' +
+      'pg_restore not found. Download PostgreSQL binaries:\n' +
+        '  spindb engines download postgresql\n\n' +
         'Or configure manually: spindb config set pg_restore /path/to/pg_restore',
     )
   }
-  return systemPath
+  return result.path
 }
 
 // Restore a backup to a PostgreSQL database

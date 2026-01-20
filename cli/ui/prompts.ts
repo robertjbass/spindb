@@ -6,7 +6,6 @@ import { resolve, join } from 'path'
 import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
 import { defaults, getEngineDefaults } from '../../config/defaults'
-import { installPostgresBinaries } from '../../engines/postgresql/binary-manager'
 import { portManager } from '../../core/port-manager'
 import { containerManager } from '../../core/container-manager'
 import {
@@ -1010,23 +1009,17 @@ export async function promptInstallDependencies(
 
   console.log()
 
-  // PostgreSQL has its own install function with extra logic
+  // PostgreSQL client tools are bundled with hostdb binaries
   if (engine === 'postgresql') {
-    const success = await installPostgresBinaries()
-
-    if (success) {
-      console.log()
-      console.log(
-        chalk.green(`  ${engineName} client tools installed successfully!`),
-      )
-      console.log(chalk.gray('  Continuing with your operation...'))
-      console.log()
-    }
-
-    return success
+    console.log(
+      chalk.cyan('  PostgreSQL client tools are bundled with the engine binaries.'),
+    )
+    console.log(chalk.cyan('  Download them with: spindb engines download postgresql'))
+    console.log()
+    return false
   }
 
-  // For other engines (MySQL, etc.), use the generic installer
+  // For other engines, use the generic installer
   console.log(
     chalk.cyan(`  Installing ${engineName} with ${packageManager.name}...`),
   )

@@ -76,15 +76,17 @@ When adding a new engine, choose the appropriate binary manager base class:
 | Base Class | Location | Used By | Use Case |
 |------------|----------|---------|----------|
 | `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey | Key-value stores with `bin/` layout |
-| `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | MySQL, MariaDB | SQL servers needing version verification |
+| `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
+| `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
 | `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
 
 **Decision tree:**
 1. Is it a file-based/embedded database (no server process)? → `BaseEmbeddedBinaryManager`
 2. Is it a SQL server needing `--version` verification? → `BaseServerBinaryManager`
-3. Is it a key-value or document store? → `BaseBinaryManager`
+3. Is it a document-oriented database? → `BaseDocumentBinaryManager`
+4. Is it a key-value store? → `BaseBinaryManager`
 
-**Note:** PostgreSQL, MongoDB, and ClickHouse have custom binary managers due to unique requirements (EDB binaries, mongosh, XML configs).
+**Note:** PostgreSQL uses `BaseServerBinaryManager` with a custom `verify()` override for its version output format. EDB binaries for Windows are uploaded to hostdb, so all platforms use the same download path.
 
 See [FEATURE.md](FEATURE.md) for detailed implementation guidance and code examples.
 

@@ -440,26 +440,24 @@ export class SQLiteEngine extends BaseEngine {
     })
   }
 
-  // Uses spawn to avoid shell injection.
+  // Runs a SQL file against a SQLite database by piping to stdin
   private async runSqlFile(
     sqlite3Path: string,
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
+    const fs = await import('fs/promises')
+    const fileContent = await fs.readFile(sqlFilePath, 'utf-8')
+
     return new Promise((resolve, reject) => {
-      const input = createReadStream(sqlFilePath)
-      const proc = spawn(sqlite3Path, [dbPath])
-
-      input.pipe(proc.stdin)
-
-      proc.stderr.on('data', (data: Buffer) => {
-        // Collect stderr but don't fail immediately - sqlite3 may write warnings
-        console.error(data.toString())
+      const proc = spawn(sqlite3Path, [dbPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
       })
 
-      input.on('error', (err) => {
-        proc.kill()
-        reject(err)
+      let stderrData = ''
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderrData += data.toString()
       })
 
       proc.on('error', (err) => {
@@ -471,10 +469,22 @@ export class SQLiteEngine extends BaseEngine {
           resolve()
         } else {
           reject(
-            new Error(`sqlite3 script execution failed with exit code ${code}`),
+            new Error(
+              `sqlite3 failed with exit code ${code}${stderrData ? `: ${stderrData}` : ''}`,
+            ),
           )
         }
       })
+
+      // Handle stdin errors (EPIPE if process exits early)
+      proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          reject(err)
+        }
+      })
+
+      // Write content and close stdin
+      proc.stdin.end(fileContent, 'utf-8')
     })
   }
 
@@ -539,8 +549,13 @@ export class SQLiteEngine extends BaseEngine {
       // Run SQL file - pipe file to stdin (avoids shell injection)
       await this.runSqlFile(sqlite3, entry.filePath, options.file)
     } else if (options.sql) {
-      // Run inline SQL - pass as argument (avoids shell injection)
-      await execFileAsync(sqlite3, [entry.filePath, options.sql])
+      // Run inline SQL - pass as argument, output to stdout
+      const { stdout, stderr } = await execFileAsync(sqlite3, [
+        entry.filePath,
+        options.sql,
+      ])
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }

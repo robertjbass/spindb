@@ -174,7 +174,7 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 
 ### Docker Tests (2 files) - CRITICAL
 
-**Run `pnpm test:docker` to verify your engine works on Linux.** This catches library dependency issues.
+**Run `pnpm test:docker` to verify your engine works on Linux.** This catches library dependency issues AND verifies backup/restore functionality.
 
 ```bash
 pnpm test:docker              # Run all engine tests
@@ -185,9 +185,17 @@ Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `
 
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
 - [ ] `tests/docker/Dockerfile` - Add any required library dependencies (e.g., `libaio1` for MySQL, `libncurses6` for MariaDB)
-- [ ] `tests/docker/run-e2e.sh` - Add engine case in `run_test()` function
+- [ ] `tests/docker/run-e2e.sh` - Add to `EXPECTED_COUNTS` array (number of records in seed file)
+- [ ] `tests/docker/run-e2e.sh` - Add to `BACKUP_FORMATS` array (primary|secondary formats)
+- [ ] `tests/docker/run-e2e.sh` - Add case in `insert_seed_data()` function
+- [ ] `tests/docker/run-e2e.sh` - Add case in `get_data_count()` function
+- [ ] `tests/docker/run-e2e.sh` - Add case in `create_backup()` function
+- [ ] `tests/docker/run-e2e.sh` - Add case in `create_restore_target()` function
+- [ ] `tests/docker/run-e2e.sh` - Add case in `restore_backup()` function
+- [ ] `tests/docker/run-e2e.sh` - Add case in `verify_restored_data()` function
+- [ ] `tests/docker/run-e2e.sh` - Add connectivity test case in `run_test()` function
 - [ ] `tests/docker/run-e2e.sh` - Add engine test execution at bottom of file
-- [ ] For file-based engines: Update start/stop skip conditions to include your engine
+- [ ] For file-based engines: Update `cleanup_data_lifecycle()` and start/stop skip conditions
 
 ### Documentation (7 files)
 
@@ -845,13 +853,15 @@ if (yourengineEngines.length > 0) {
 
 ### Test Fixtures
 
-Create test fixtures with the appropriate file extension:
+Create test fixtures with the appropriate file extension. **These seed files are used by both integration tests AND Docker E2E tests.**
 
 ```
 tests/fixtures/{engine}/
 └── seeds/
     └── sample-db.{ext}    # Use .sql for SQL, .redis/.valkey for Redis-like, etc.
 ```
+
+**Important:** The seed file must create exactly the number of records specified in `EXPECTED_COUNTS` in `run-e2e.sh`. The standard is **5 records** for SQL databases (in `test_user` table) and **6 keys** for key-value stores (5 user keys + 1 count key).
 
 **For SQL databases** (`sample-db.sql`):
 ```sql
@@ -1234,6 +1244,10 @@ Search for `test-linux-arm64` in `ci.yml` to find this section. Even though it's
 
 **CRITICAL:** Update the Docker E2E test environment to include your engine. Run `pnpm test:docker` to verify.
 
+The Docker E2E tests verify:
+1. **Connectivity** - Basic query/command execution
+2. **Data Lifecycle** - Full backup/restore verification with seed data
+
 ### File-Based vs Server-Based Engines
 
 The Docker E2E tests handle two types of engines differently:
@@ -1274,7 +1288,219 @@ Add your engine to the comment listing downloaded engines:
 
 ### E2E Script (`tests/docker/run-e2e.sh`)
 
-**For file-based engines (like SQLite, DuckDB):** Also update the start/stop skip conditions:
+The E2E script tests connectivity AND a full data lifecycle (insert → backup → restore → verify). You must update several sections:
+
+#### 1. Add Expected Count and Backup Formats
+
+At the top of `run-e2e.sh`, add your engine to the configuration arrays:
+
+```bash
+# Expected data counts per engine (must match seed file)
+declare -A EXPECTED_COUNTS
+EXPECTED_COUNTS[yourengine]=5  # Number of records in your seed file
+
+# Backup formats to test per engine (primary|secondary)
+# IMPORTANT: Use CLI format names (what --format accepts), NOT file extensions!
+declare -A BACKUP_FORMATS
+BACKUP_FORMATS[yourengine]="sql|dump"  # Formats separated by |
+```
+
+**Format naming rules:**
+
+Use the format names that `spindb backup --format` accepts, **not** file extensions:
+
+| Engine | Format Names | Resulting Extensions |
+|--------|--------------|---------------------|
+| PostgreSQL | `sql`, `dump` | `.sql`, `.dump` |
+| MySQL/MariaDB | `sql`, `dump` | `.sql`, `.sql.gz` |
+| MongoDB | `bson`, `archive` | (directory), `.archive` |
+| Redis | `redis`, `rdb` | `.redis`, `.rdb` |
+| Valkey | `valkey`, `rdb` | `.valkey`, `.rdb` |
+| ClickHouse | `sql` | `.sql` |
+| SQLite | `sql`, `sqlite` | `.sql`, `.sqlite` |
+| DuckDB | `sql`, `duckdb` | `.sql`, `.duckdb` |
+
+**Common mistake:** Using `"sql|sql.gz"` instead of `"sql|dump"` for MySQL. The CLI accepts `dump`, not `sql.gz`.
+
+#### 1b. Update `get_backup_extension()` Function
+
+The extension mapping is engine-specific. Add your engine's format-to-extension mapping:
+
+```bash
+get_backup_extension() {
+  local engine=$1 format=$2
+  case $engine in
+    # ... existing engines ...
+    yourengine)
+      case $format in
+        sql) echo ".sql" ;;
+        dump) echo ".yourext" ;;  # Your engine's binary format extension
+      esac
+      ;;
+  esac
+}
+```
+
+#### 2. Update `insert_seed_data()` Function
+
+Add a case for your engine to insert seed data:
+
+```bash
+# For SQL engines (need to create database first):
+yourengine)
+  echo "    Creating testdb database..."
+  spindb run "$container_name" -c "CREATE DATABASE IF NOT EXISTS testdb;" -d postgres 2>/dev/null || true
+  local seed_file="$FIXTURES_DIR/$engine/seeds/sample-db.sql"
+  if [ ! -f "$seed_file" ]; then
+    echo "    ERROR: Seed file not found: $seed_file"
+    return 1
+  fi
+  if ! spindb run "$container_name" "$seed_file" -d testdb 2>&1; then
+    echo "    ERROR: Failed to insert seed data"
+    return 1
+  fi
+  ;;
+
+# For file-based engines (no database creation needed):
+yourengine)
+  local seed_file="$FIXTURES_DIR/$engine/seeds/sample-db.sql"
+  if [ ! -f "$seed_file" ]; then
+    echo "    ERROR: Seed file not found: $seed_file"
+    return 1
+  fi
+  if ! spindb run "$container_name" "$seed_file" 2>&1; then
+    echo "    ERROR: Failed to insert seed data"
+    return 1
+  fi
+  ;;
+```
+
+#### 3. Update `get_data_count()` Function
+
+Add a case for your engine to count records:
+
+```bash
+# For SQL engines:
+yourengine)
+  spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" -d "$database" 2>/dev/null | grep -E '^[0-9]+$' | head -1
+  ;;
+
+# For key-value engines:
+yourengine)
+  spindb run "$container_name" -c "DBSIZE" -d "$database" 2>/dev/null | grep -oE '[0-9]+' | head -1
+  ;;
+```
+
+#### 4. Update `create_backup()` Function
+
+Add a case for your engine's backup command:
+
+```bash
+yourengine)
+  if ! spindb backup "$container_name" -d testdb -f "$format" -o "$output_file" 2>&1; then
+    echo "    ERROR: Backup failed"
+    return 1
+  fi
+  ;;
+```
+
+#### 5. Update `create_restore_target()` Function
+
+Add a case for creating the restore target database/container:
+
+```bash
+# For SQL engines:
+yourengine)
+  if ! spindb run "$container_name" -c "CREATE DATABASE IF NOT EXISTS restored_db;" -d postgres 2>&1; then
+    echo "    ERROR: Failed to create restore target database"
+    return 1
+  fi
+  ;;
+
+# For file-based engines:
+yourengine)
+  local restored_container="restored_${container_name}"
+  local restored_path="$BACKUP_DIR/restored_${engine}.db"
+  if ! spindb create "$restored_container" --engine "$engine" --path "$restored_path" --no-start 2>&1; then
+    echo "    ERROR: Failed to create restore target container"
+    return 1
+  fi
+  ;;
+```
+
+#### 6. Update `restore_backup()` Function
+
+Add a case for your engine's restore command:
+
+```bash
+yourengine)
+  if ! spindb restore "$container_name" "$backup_file" -d restored_db --force 2>&1; then
+    echo "    ERROR: Restore failed"
+    return 1
+  fi
+  ;;
+```
+
+#### 7. Update `verify_restored_data()` Function
+
+Add a case to verify restored data:
+
+```bash
+# For SQL engines:
+yourengine)
+  actual_count=$(get_data_count "$engine" "$container_name" "restored_db")
+  ;;
+
+# For file-based engines:
+yourengine)
+  local restored_container="restored_${container_name}"
+  actual_count=$(get_data_count "$engine" "$restored_container")
+  ;;
+```
+
+#### 8. Update `cleanup_data_lifecycle()` Function (file-based only)
+
+For file-based engines, add cleanup of the restored container:
+
+```bash
+yourengine)
+  local restored_container="restored_${container_name}"
+  spindb delete "$restored_container" --yes 2>/dev/null || true
+  ;;
+```
+
+#### 9. Add Connectivity Test Case
+
+In the `run_test()` function, add your engine to the connectivity test `case` statement:
+
+```bash
+yourengine)
+  if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
+    echo "FAILED: Could not run YourEngine query"
+    # For server-based engines, add: spindb stop "$container_name" 2>/dev/null || true
+    spindb delete "$container_name" --yes 2>/dev/null || true
+    record_result "$engine" "$version" "FAILED" "Query failed"
+    FAILED=$((FAILED+1))
+    return 1
+  fi
+  ;;
+```
+
+#### 10. Add Test Execution
+
+At the bottom of the script with other engines:
+
+```bash
+# YourEngine
+if should_run_test yourengine; then
+  YOURENGINE_VERSION=$(get_default_version yourengine)
+  [ -n "$YOURENGINE_VERSION" ] && run_test yourengine "$YOURENGINE_VERSION" || echo "Skipping YourEngine (no default version)"
+fi
+```
+
+#### 11. Update Start/Stop Skip Conditions (file-based only)
+
+For file-based engines, update the skip conditions:
 
 ```bash
 # Start container (skip for sqlite/duckdb - they're file-based, no server process)
@@ -1284,27 +1510,45 @@ if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ] && [ "$engine" != "you
 if [ "$engine" != "sqlite" ] && [ "$engine" != "duckdb" ] && [ "$engine" != "yourengine" ]; then
 ```
 
-1. **Add connectivity test case** (in the `case $engine in` block):
+### Test Output
 
-```bash
-    yourengine)
-      if ! spindb run "$container_name" -c "SELECT 1 as test;"; then
-        echo "FAILED: Could not run YourEngine query"
-        # For server-based engines, add: spindb stop "$container_name" 2>/dev/null || true
-        spindb delete "$container_name" --yes 2>/dev/null || true
-        record_result "$engine" "$version" "FAILED" "Query failed"
-        FAILED=$((FAILED+1))
-        return 1
-      fi
-      ;;
+When you run `pnpm test:docker`, each engine should show:
+
 ```
+=== Testing yourengine v9.0.1 ===
+Downloading yourengine 9.0.1...
+Download complete
+Creating container: test_yourengine_12345
+Starting container...
+Waiting for container to start (timeout: 60s)...
+Verifying container status...
+Testing database connectivity...
+Connectivity test passed ✓
 
-2. **Add test execution** (at the bottom with other engines):
+--- Data Lifecycle Test ---
+  Inserting seed data...
+    Creating testdb database...
+    ✓ Seed data inserted
+  ✓ Initial data verified: 5 records
 
-```bash
-# YourEngine
-YOURENGINE_VERSION=$(get_default_version yourengine)
-[ -n "$YOURENGINE_VERSION" ] && run_test yourengine "$YOURENGINE_VERSION" || echo "Skipping YourEngine (no default version)"
+  [Testing primary format: sql]
+  Creating backup (format: sql)...
+    ✓ Backup created: /tmp/xxx/backup.sql (2.1K)
+  Creating restore target...
+    ✓ Restore target created
+  Restoring backup (format: sql)...
+    ✓ Backup restored
+  Verifying restored data (expecting 5 records)...
+    ✓ Verified: 5 records (expected 5)
+
+  [Testing secondary format: dump]
+  ...
+
+--- Data Lifecycle Test PASSED ---
+Stopping container...
+Cleaning up...
+
+✓ PASSED: yourengine v9.0.1 (connectivity + backup/restore)
 ```
 
 ---
@@ -1313,12 +1557,13 @@ YOURENGINE_VERSION=$(get_default_version yourengine)
 
 ### Choosing a Binary Manager Base Class
 
-SpinDB provides three base classes for binary managers. Choose the appropriate one based on your engine type:
+SpinDB provides four base classes for binary managers. Choose the appropriate one based on your engine type:
 
 | Base Class | Used By | When to Use |
 |------------|---------|-------------|
-| `BaseBinaryManager` | Redis, Valkey | Server-based engines with `bin/` directory structure in archives |
-| `BaseServerBinaryManager` | MySQL, MariaDB | SQL server engines with `extractWindowsArchive` and X.Y version matching |
+| `BaseBinaryManager` | Redis, Valkey | Key-value stores with `bin/` directory structure in archives |
+| `BaseServerBinaryManager` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL server engines with version verification (override `verify()` for custom formats) |
+| `BaseDocumentBinaryManager` | MongoDB, FerretDB | Document-oriented DBs with macOS tar recovery and major.minor version matching |
 | `BaseEmbeddedBinaryManager` | SQLite, DuckDB | Embedded/file-based engines with flat archives (executables at root) |
 
 **Decision tree:**
@@ -1331,9 +1576,34 @@ SpinDB provides three base classes for binary managers. Choose the appropriate o
    - Yes → Use `BaseServerBinaryManager`
    - No → Continue to step 3
 
-3. **Is it a server with single-digit major versions?** (like Redis 7, Valkey 8)
+3. **Is it a document-oriented database?** (like MongoDB, FerretDB)
+   - Yes → Use `BaseDocumentBinaryManager`
+   - No → Continue to step 4
+
+4. **Is it a key-value store with single-digit major versions?** (like Redis 7, Valkey 8)
    - Yes → Use `BaseBinaryManager`
    - No → Create a custom binary manager (rare)
+
+**Customizing base classes:**
+
+All engines use one of the four base classes. When an engine needs custom behavior:
+- Override specific methods (e.g., `verify()` for custom version output parsing)
+- PostgreSQL overrides `verify()` because its version output format differs from MySQL/MariaDB
+
+**Handling platform limitations:**
+
+If an engine doesn't support all platforms (e.g., no Windows binaries), override `extractWindowsBinaries()` to throw a clear error:
+
+```ts
+protected override async extractWindowsBinaries(): Promise<void> {
+  throw new Error(
+    'YourEngine binaries are not available for Windows. ' +
+      'YourEngine is only supported on macOS and Linux.',
+  )
+}
+```
+
+See `engines/clickhouse/binary-manager.ts` for a complete example.
 
 **Example implementations:**
 
@@ -1352,7 +1622,7 @@ class YourEmbeddedBinaryManager extends BaseEmbeddedBinaryManager {
   // Implement abstract methods...
 }
 
-// For SQL servers (MySQL, MariaDB)
+// For SQL servers (MySQL, MariaDB, ClickHouse)
 import { BaseServerBinaryManager } from '../../core/base-server-binary-manager'
 
 class YourSQLServerBinaryManager extends BaseServerBinaryManager {
@@ -1365,10 +1635,29 @@ class YourSQLServerBinaryManager extends BaseServerBinaryManager {
   // Implement abstract methods...
 }
 
-// For Redis-like servers (Redis, Valkey)
+// For document databases (MongoDB, FerretDB)
+import { BaseDocumentBinaryManager } from '../../core/base-document-binary-manager'
+
+class YourDocumentBinaryManager extends BaseDocumentBinaryManager {
+  protected readonly config = {
+    engine: Engine.YourEngine,
+    engineName: 'yourengine',
+    displayName: 'YourEngine',
+    serverBinary: 'yourengined',
+  }
+
+  protected parseVersionFromOutput(stdout: string): string | null {
+    // Parse version from --version output, e.g., "db version v7.0.28"
+    const match = stdout.match(/db version v(\d+\.\d+\.\d+)/)
+    return match?.[1] ?? null
+  }
+  // Implement other abstract methods...
+}
+
+// For key-value stores (Redis, Valkey)
 import { BaseBinaryManager } from '../../core/base-binary-manager'
 
-class YourServerBinaryManager extends BaseBinaryManager {
+class YourKeyValueBinaryManager extends BaseBinaryManager {
   protected readonly config = {
     engine: Engine.YourEngine,
     engineName: 'yourengine',

@@ -24,6 +24,9 @@ function getMajorVersion(version: string): string {
   return SUPPORTED_MAJOR_VERSIONS.includes(majorXY) ? majorXY : majorX
 }
 
+// When getMajorVersion is provided, groupingStrategy only affects fallback version
+// synthesis in getLatestVersion (e.g., 'xy-format' produces `${major}.0` as fallback).
+// The actual version grouping uses getMajorVersion, not groupingStrategy.
 const hostdbReleases = createHostdbReleases({
   engine: Engine.MySQL,
   displayName: 'MySQL',

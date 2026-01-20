@@ -19,7 +19,8 @@ export function isRenameFallbackError(error: unknown): boolean {
  * Check if an error indicates a port is already in use
  */
 export function isPortInUseError(error: unknown): boolean {
-  const message = (error as Error)?.message?.toLowerCase() || ''
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
   return (
     message.includes('address already in use') ||
     message.includes('eaddrinuse') ||

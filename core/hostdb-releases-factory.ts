@@ -87,6 +87,12 @@ export function createHostdbReleases(
     config.getMajorVersion ??
     ((version: string) => defaultGetMajorVersion(version, groupingStrategy))
 
+  // Cache for fetchAvailableVersions to avoid repeated network requests
+  let cachedVersions: Record<string, string[]> | null = null
+  let cachedAt = 0
+  const cacheTTLMs = 30_000 // 30 seconds
+  let inflightFetchPromise: Promise<Record<string, string[]>> | null = null
+
   /**
    * Get hardcoded versions as last resort fallback
    */
@@ -162,10 +168,45 @@ export function createHostdbReleases(
   }
 
   /**
-   * Get the latest version for a major version from hostdb
+   * Get cached versions if fresh, otherwise fetch and cache.
+   * Uses inflightFetchPromise to dedupe concurrent requests.
+   */
+  async function getCachedVersions(): Promise<Record<string, string[]>> {
+    const now = Date.now()
+
+    // Return cached result if fresh
+    if (cachedVersions && now - cachedAt < cacheTTLMs) {
+      return cachedVersions
+    }
+
+    // If there's an inflight request, await it instead of starting a new one
+    if (inflightFetchPromise) {
+      return inflightFetchPromise
+    }
+
+    // Start new fetch, store promise to dedupe concurrent calls
+    inflightFetchPromise = fetchAvailableVersions()
+      .then((versions) => {
+        cachedVersions = versions
+        cachedAt = Date.now()
+        inflightFetchPromise = null
+        return versions
+      })
+      .catch((error) => {
+        // Clear inflight promise on error so subsequent calls can retry
+        inflightFetchPromise = null
+        throw error
+      })
+
+    return inflightFetchPromise
+  }
+
+  /**
+   * Get the latest version for a major version from hostdb.
+   * Uses cached fetchAvailableVersions result to avoid repeated network requests.
    */
   async function getLatestVersion(major: string): Promise<string> {
-    const versions = await fetchAvailableVersions()
+    const versions = await getCachedVersions()
     const majorVersions = versions[major]
     if (majorVersions && majorVersions.length > 0) {
       return majorVersions[0] // First is latest due to descending sort

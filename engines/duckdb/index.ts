@@ -417,15 +417,15 @@ export class DuckDBEngine extends BaseEngine {
       .filter((t) => t.length > 0)
 
     // Step 2: Build dump script - schema first, then data for each table
-    // Using .mode insert for INSERT statements
     const dumpCommands = [
       '.schema', // Output CREATE TABLE statements
-      '.mode insert', // Switch to INSERT mode for data
     ]
 
     for (const table of tables) {
       // Quote table name and escape embedded double quotes
       const escapedTable = table.replace(/"/g, '""')
+      // Set insert mode with table name for each table
+      dumpCommands.push(`.mode insert ${escapedTable}`)
       dumpCommands.push(`SELECT * FROM "${escapedTable}";`)
     }
 
@@ -463,26 +463,25 @@ export class DuckDBEngine extends BaseEngine {
     })
   }
 
-  // Uses spawn to avoid shell injection.
+  // Runs a SQL file against a DuckDB database by piping to stdin
   private async runSqlFile(
     duckdbPath: string,
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
+    const fileContent = await import('fs/promises').then((fs) =>
+      fs.readFile(sqlFilePath, 'utf-8'),
+    )
+
     return new Promise((resolve, reject) => {
-      const input = createReadStream(sqlFilePath)
-      const proc = spawn(duckdbPath, [dbPath])
-
-      input.pipe(proc.stdin)
-
-      proc.stderr.on('data', (data: Buffer) => {
-        // Collect stderr but don't fail immediately
-        console.error(data.toString())
+      const proc = spawn(duckdbPath, [dbPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
       })
 
-      input.on('error', (err) => {
-        proc.kill()
-        reject(err)
+      let stderrData = ''
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderrData += data.toString()
       })
 
       proc.on('error', (err) => {
@@ -494,10 +493,16 @@ export class DuckDBEngine extends BaseEngine {
           resolve()
         } else {
           reject(
-            new Error(`duckdb script execution failed with exit code ${code}`),
+            new Error(
+              `duckdb failed with exit code ${code}${stderrData ? `: ${stderrData}` : ''}`,
+            ),
           )
         }
       })
+
+      // Write the SQL content and close stdin to signal EOF
+      proc.stdin.write(fileContent)
+      proc.stdin.end()
     })
   }
 
@@ -603,8 +608,14 @@ export class DuckDBEngine extends BaseEngine {
       // Run SQL file - pipe file to stdin (avoids shell injection)
       await this.runSqlFile(duckdb, entry.filePath, options.file)
     } else if (options.sql) {
-      // Run inline SQL - pass as argument (avoids shell injection)
-      await execFileAsync(duckdb, [entry.filePath, '-c', options.sql])
+      // Run inline SQL - pass as argument, output to stdout
+      const { stdout, stderr } = await execFileAsync(duckdb, [
+        entry.filePath,
+        '-c',
+        options.sql,
+      ])
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }

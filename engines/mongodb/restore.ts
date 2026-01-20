@@ -89,6 +89,7 @@ export type RestoreOptions = {
   database: string
   drop?: boolean // Drop existing data before restore
   validateVersion?: boolean
+  sourceDatabase?: string // Original database name in the backup (for namespace remapping)
 }
 
 // Restore a MongoDB backup using mongorestore
@@ -107,20 +108,25 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  const args: string[] = [
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(port),
-    '--db',
-    database,
-  ]
+  const args: string[] = ['--host', '127.0.0.1', '--port', String(port)]
 
   if (drop) {
     args.push('--drop')
   }
 
   // Handle different formats
+  // For directory format, --db works directly
+  // For archive format, we need namespace remapping since --db alone doesn't remap
+  const isArchiveFormat =
+    format.format === 'archive-gzip' ||
+    format.format === 'archive' ||
+    format.format === 'unknown'
+
+  if (!isArchiveFormat) {
+    // Directory and BSON formats: --db works directly
+    args.push('--db', database)
+  }
+
   if (format.format === 'directory') {
     // Directory dump - look for database subdirectory
     // First try the target database name
@@ -162,14 +168,21 @@ export async function restoreBackup(
     }
   } else if (format.format === 'archive-gzip') {
     args.push('--archive=' + backupPath, '--gzip')
+    // For archive format, use namespace remapping to restore to target database
+    // $prefix$ captures db name, $suffix$ captures collection name
+    args.push('--nsFrom=$prefix$.$suffix$', `--nsTo=${database}.$suffix$`)
   } else if (format.format === 'archive') {
     args.push('--archive=' + backupPath)
+    // For archive format, use namespace remapping to restore to target database
+    args.push('--nsFrom=$prefix$.$suffix$', `--nsTo=${database}.$suffix$`)
   } else if (format.format === 'bson') {
     // BSON files are passed directly without --archive flag
     args.push(backupPath)
   } else {
     // Default to archive for unknown formats
     args.push('--archive=' + backupPath, '--gzip')
+    // Use namespace remapping for archive format
+    args.push('--nsFrom=$prefix$.$suffix$', `--nsTo=${database}.$suffix$`)
   }
 
   logDebug(`Running mongorestore with args: ${args.join(' ')}`)

@@ -4,7 +4,7 @@ import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
 import { BaseEngine } from '../base-engine'
-import { binaryManager } from '../../core/binary-manager'
+import { postgresqlBinaryManager } from './binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
 import {
@@ -12,7 +12,6 @@ import {
   isWindows,
   getWindowsSpawnOptions,
 } from '../../core/platform-service'
-import { findBinary } from '../../core/dependency-manager'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { getBinaryUrl } from './binary-urls'
@@ -35,7 +34,6 @@ import {
   assertValidDatabaseName,
   SpinDBError,
   ErrorCodes,
-  logDebug,
 } from '../../core/error-handler'
 import {
   Platform,
@@ -48,7 +46,6 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
-  type BinaryTool,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -138,18 +135,17 @@ export class PostgreSQLEngine extends BaseEngine {
     // Extract version from path
     const parts = binPath.split('-')
     const version = parts[1]
-    return binaryManager.verify(version, p, a)
+    return postgresqlBinaryManager.verify(version, p, a)
   }
 
-  // Also registers client tools (psql, pg_dump, etc.) in config after download.
-  // On macOS/Linux where zonky.io binaries don't include client tools,
-  // installs them via system package manager (Homebrew on macOS, apt on Linux).
+  // Downloads binaries and registers all tools (server and client) in config.
+  // hostdb bundles all PostgreSQL binaries for all platforms.
   async ensureBinaries(
     version: string,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    const binPath = await binaryManager.ensureInstalled(
+    const binPath = await postgresqlBinaryManager.ensureInstalled(
       version,
       p,
       a,
@@ -157,82 +153,34 @@ export class PostgreSQLEngine extends BaseEngine {
     )
 
     // Register all binaries from downloaded package in config
-    // This ensures we can find them without requiring system installation
     const ext = platformService.getExecutableExtension()
 
-    // Server binaries (always present in hostdb downloads)
-    const serverTools = ['postgres', 'pg_ctl', 'initdb'] as const
-    for (const tool of serverTools) {
-      const toolPath = join(binPath, 'bin', `${tool}${ext}`)
-      if (existsSync(toolPath)) {
-        await configManager.setBinaryPath(tool, toolPath, 'bundled')
-      }
-    }
-
-    // Client tools (may or may not be present depending on platform)
-    const clientTools = [
+    // All PostgreSQL tools bundled in hostdb downloads
+    const allTools = [
+      // Server binaries
+      'postgres',
+      'pg_ctl',
+      'initdb',
+      // Client tools
       'psql',
       'pg_dump',
       'pg_restore',
       'pg_basebackup',
     ] as const
 
-    // Try to register from downloaded binaries (works on Windows)
-    // Track which tools were found to only search system for missing ones
-    const foundTools = new Set<string>()
-    for (const tool of clientTools) {
+    for (const tool of allTools) {
       const toolPath = join(binPath, 'bin', `${tool}${ext}`)
       if (existsSync(toolPath)) {
         await configManager.setBinaryPath(tool, toolPath, 'bundled')
-        foundTools.add(tool)
       }
-    }
-
-    // On macOS/Linux, zonky.io binaries don't include client tools
-    // Try to find and register system-installed tools for any that are missing
-    if (
-      foundTools.size < clientTools.length &&
-      (p === Platform.Darwin || p === Platform.Linux)
-    ) {
-      const missingTools = clientTools.filter((t) => !foundTools.has(t))
-      await this.registerSystemClientTools(missingTools)
     }
 
     return binPath
   }
 
-  /**
-   * Register system-installed PostgreSQL client tools if found
-   * Does NOT install missing tools - that happens during 'spindb engines download'
-   * @param toolsToCheck - Optional list of specific tools to check (defaults to all client tools)
-   */
-  private async registerSystemClientTools(
-    toolsToCheck?: readonly BinaryTool[],
-  ): Promise<void> {
-    const allClientTools = [
-      'psql',
-      'pg_dump',
-      'pg_restore',
-      'pg_basebackup',
-    ] as const
-
-    const tools = toolsToCheck ?? allClientTools
-
-    for (const tool of tools) {
-      const result = await findBinary(tool)
-      if (result) {
-        await configManager.setBinaryPath(tool, result.path, 'system')
-      } else {
-        logDebug(
-          `PostgreSQL client tool '${tool}' not found on system, will remain unregistered`,
-        )
-      }
-    }
-  }
-
   async isBinaryInstalled(version: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    return binaryManager.isInstalled(version, p, a)
+    return postgresqlBinaryManager.isInstalled(version, p, a)
   }
 
   async initDataDir(

@@ -8,6 +8,8 @@
  * - Spinner messages
  */
 
+import { Engine } from '../types'
+
 export type BackupFormatInfo = {
   extension: string
   label: string
@@ -25,8 +27,8 @@ export type EngineBackupFormats = {
 }
 
 // Backup format configuration by engine
-export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
-  postgresql: {
+export const BACKUP_FORMATS: Record<Engine, EngineBackupFormats> = {
+  [Engine.PostgreSQL]: {
     sql: {
       extension: '.sql',
       label: '.sql',
@@ -42,7 +44,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'sql',
   },
-  mysql: {
+  [Engine.MySQL]: {
     sql: {
       extension: '.sql',
       label: '.sql',
@@ -58,7 +60,23 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'sql',
   },
-  sqlite: {
+  [Engine.MariaDB]: {
+    sql: {
+      extension: '.sql',
+      label: '.sql',
+      description: 'Plain SQL - human-readable, larger file',
+      spinnerLabel: 'SQL',
+    },
+    dump: {
+      extension: '.sql.gz',
+      label: '.sql.gz',
+      description: 'Compressed SQL - smaller file',
+      spinnerLabel: 'compressed SQL',
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'sql',
+  },
+  [Engine.SQLite]: {
     sql: {
       extension: '.sql',
       label: '.sql',
@@ -74,7 +92,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
-  duckdb: {
+  [Engine.DuckDB]: {
     sql: {
       extension: '.sql',
       label: '.sql',
@@ -90,7 +108,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
-  mongodb: {
+  [Engine.MongoDB]: {
     sql: {
       extension: '', // Directory, no extension
       label: '.bson',
@@ -106,7 +124,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
-  redis: {
+  [Engine.Redis]: {
     sql: {
       extension: '.redis',
       label: '.redis',
@@ -122,7 +140,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
-  valkey: {
+  [Engine.Valkey]: {
     sql: {
       extension: '.valkey',
       label: '.valkey',
@@ -138,7 +156,7 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
     supportsFormatChoice: true,
     defaultFormat: 'dump',
   },
-  clickhouse: {
+  [Engine.ClickHouse]: {
     sql: {
       extension: '.sql',
       label: '.sql',
@@ -161,7 +179,7 @@ export function getBackupFormatInfo(
   engine: string,
   format: 'sql' | 'dump',
 ): BackupFormatInfo {
-  const engineFormats = BACKUP_FORMATS[engine]
+  const engineFormats = BACKUP_FORMATS[engine as Engine]
   if (!engineFormats) {
     throw new Error(
       `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
@@ -188,7 +206,7 @@ export function getBackupSpinnerLabel(
 
 // Check if an engine supports format selection
 export function supportsFormatChoice(engine: string): boolean {
-  const engineFormats = BACKUP_FORMATS[engine]
+  const engineFormats = BACKUP_FORMATS[engine as Engine]
   if (!engineFormats) {
     throw new Error(
       `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
@@ -199,7 +217,7 @@ export function supportsFormatChoice(engine: string): boolean {
 
 // Get default format for an engine
 export function getDefaultFormat(engine: string): 'sql' | 'dump' {
-  const engineFormats = BACKUP_FORMATS[engine]
+  const engineFormats = BACKUP_FORMATS[engine as Engine]
   if (!engineFormats) {
     throw new Error(
       `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,

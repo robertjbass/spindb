@@ -29,13 +29,14 @@ SpinDB follows a **three-tier layered architecture**:
 ┌─────────────────────────▼───────────────────────────────────┐
 │                    Core Layer (core/)                       │
 │    ContainerManager, PortManager, ProcessManager,           │
-│    ConfigManager, BinaryManager, DependencyManager,         │
+│    ConfigManager, BaseBinaryManagers, DependencyManager,    │
 │    TransactionManager, ErrorHandler, PlatformService        │
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
 │                   Engine Layer (engines/)                   │
-│    PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite       │
+│  PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey,        │
+│  ClickHouse, SQLite, DuckDB                                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +75,10 @@ spindb/
 │   ├── port-manager.ts         # Port availability/allocation
 │   ├── process-manager.ts      # Process start/stop
 │   ├── config-manager.ts       # Global config persistence
-│   ├── binary-manager.ts       # Binary downloads (PostgreSQL)
+│   ├── base-binary-manager.ts        # Base class for key-value stores (Redis, Valkey)
+│   ├── base-server-binary-manager.ts # Base class for SQL servers (MySQL, MariaDB, ClickHouse)
+│   ├── base-document-binary-manager.ts # Base class for document DBs (MongoDB, FerretDB)
+│   ├── base-embedded-binary-manager.ts # Base class for embedded DBs (SQLite, DuckDB)
 │   ├── dependency-manager.ts   # Tool detection/installation
 │   ├── transaction-manager.ts  # Rollback support
 │   ├── start-with-retry.ts     # Port conflict retry logic
@@ -194,7 +198,7 @@ The core layer contains business logic independent of CLI concerns.
 | PortManager | Port availability checks, allocation |
 | ProcessManager | Database process start/stop |
 | ConfigManager | Global config (~/.spindb/config.json) |
-| BinaryManager | PostgreSQL binary downloads |
+| BaseBinaryManagers | Engine binary download/extraction (4 base classes) |
 | DependencyManager | Tool detection, installation |
 | TransactionManager | Rollback for multi-step operations |
 | StartWithRetry | Port conflict retry handling |

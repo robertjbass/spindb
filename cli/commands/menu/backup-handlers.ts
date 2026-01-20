@@ -10,8 +10,6 @@ import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
 import { getEngine } from '../../../engines'
 import { defaults } from '../../../config/defaults'
-import { getPostgresHomebrewPackage } from '../../../config/engine-defaults'
-import { updatePostgresClientTools } from '../../../engines/postgresql/binary-manager'
 import {
   getBackupExtension,
   getBackupSpinnerLabel,
@@ -667,90 +665,25 @@ export async function handleRestore(): Promise<void> {
         )
         console.log()
 
-        const { shouldUpgrade } = await inquirer.prompt({
-          type: 'list',
-          name: 'shouldUpgrade',
-          message: `Would you like to upgrade PostgreSQL client tools to support PostgreSQL ${requiredVersion}?`,
-          choices: [
-            { name: 'Yes', value: true },
-            { name: 'No', value: false },
-          ],
-          default: 0,
-        })
-
-        if (shouldUpgrade) {
-          console.log()
-          const upgradeSpinner = createSpinner(
-            'Upgrading PostgreSQL client tools...',
-          )
-          upgradeSpinner.start()
-
-          try {
-            const updateSuccess = await updatePostgresClientTools()
-
-            if (updateSuccess) {
-              upgradeSpinner.succeed('PostgreSQL client tools upgraded')
-              console.log()
-              console.log(
-                uiSuccess(
-                  'Please try the restore again with the updated tools.',
-                ),
-              )
-              await pressEnterToContinue()
-              return
-            } else {
-              upgradeSpinner.fail('Upgrade failed')
-              console.log()
-              console.log(
-                uiError('Automatic upgrade failed. Please upgrade manually:'),
-              )
-              const pgPackage = getPostgresHomebrewPackage()
-              const latestMajor = pgPackage.split('@')[1]
-              console.log(
-                uiWarning(
-                  `  macOS: brew install ${pgPackage} && brew link --force ${pgPackage}`,
-                ),
-              )
-              console.log(
-                chalk.gray(
-                  `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
-                ),
-              )
-              console.log(
-                uiWarning(
-                  `  Ubuntu/Debian: sudo apt update && sudo apt install postgresql-client-${latestMajor}`,
-                ),
-              )
-              console.log(
-                chalk.gray(
-                  `    This installs PostgreSQL ${latestMajor} client tools: pg_restore, pg_dump, psql, and libpq`,
-                ),
-              )
-              await pressEnterToContinue()
-              return
-            }
-          } catch {
-            upgradeSpinner.fail('Upgrade failed')
-            console.log(uiError('Failed to upgrade PostgreSQL client tools'))
-            console.log(
-              chalk.gray(
-                'Manual upgrade may be required for pg_restore, pg_dump, and psql',
-              ),
-            )
-            await pressEnterToContinue()
-            return
-          }
-        } else {
-          console.log()
-          console.log(
-            uiWarning(
-              'Restore cancelled. Please upgrade PostgreSQL client tools manually and try again.',
-            ),
-          )
-          await pressEnterToContinue()
-          return
-        }
+        console.log()
+        console.log(
+          uiWarning(
+            `To restore this backup, download PostgreSQL ${requiredVersion} binaries:`,
+          ),
+        )
+        console.log(
+          chalk.cyan(`  spindb engines download postgresql --version ${requiredVersion}`),
+        )
+        console.log()
+        console.log(
+          chalk.gray(
+            'Then create a new container with that version and try the restore again.',
+          ),
+        )
+        await pressEnterToContinue()
+        return
       } else {
+        // Other restore errors - show warnings
         restoreSpinner.warn('Restore completed with warnings')
         if (result.stderr) {
           console.log()

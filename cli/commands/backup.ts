@@ -14,6 +14,7 @@ import {
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning, formatBytes } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import { isFileBasedEngine } from '../../types'
 
 function generateTimestamp(): string {
   const now = new Date()
@@ -38,12 +39,17 @@ function getExtension(format: 'sql' | 'dump', engine: string): string {
   // Handle 'dump' format (binary/compressed option)
   switch (engine) {
     case 'mysql':
+    case 'mariadb':
       return '.sql.gz'
     case 'sqlite':
       return '.sqlite'
+    case 'duckdb':
+      return '.duckdb'
     case 'mongodb':
       return '.archive'
     case 'redis':
+      return '.rdb'
+    case 'valkey':
       return '.rdb'
     case 'postgresql':
     default:
@@ -130,16 +136,19 @@ export const backupCommand = new Command('backup')
 
         const { engine: engineName } = config
 
-        const running = await processManager.isRunning(containerName, {
-          engine: engineName,
-        })
-        if (!running) {
-          console.error(
-            uiError(
-              `Container "${containerName}" is not running. Start it first.`,
-            ),
-          )
-          process.exit(1)
+        // File-based engines (SQLite, DuckDB) don't need to be "running"
+        if (!isFileBasedEngine(engineName)) {
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          if (!running) {
+            console.error(
+              uiError(
+                `Container "${containerName}" is not running. Start it first.`,
+              ),
+            )
+            process.exit(1)
+          }
         }
 
         const engine = getEngine(engineName)

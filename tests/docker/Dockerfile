@@ -109,10 +109,11 @@ RUN pnpm link --global
 # Set working directory for tests
 WORKDIR /home/spindb
 
-# Run the E2E test script, allowing engine filter to be passed as argument
-# Usage: docker run --rm spindb-e2e [engine]
+# Run the E2E test script, allowing filter to be passed as argument
+# Usage: docker run --rm spindb-e2e [filter]
 # Examples:
-#   docker run --rm spindb-e2e           # Run all tests
-#   docker run --rm spindb-e2e clickhouse # Run only ClickHouse tests
+#   docker run --rm spindb-e2e              # Run all tests (engines + utility tests)
+#   docker run --rm spindb-e2e clickhouse   # Run only ClickHouse engine tests
+#   docker run --rm spindb-e2e self-update  # Run only self-update utility test
 ENTRYPOINT ["bash", "/home/spindb/spindb/tests/docker/run-e2e.sh"]
 CMD []
