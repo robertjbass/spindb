@@ -1,25 +1,23 @@
 import { describe, it } from 'node:test'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
+import {
+  POSTGRESQL_VERSION_MAP,
+  SUPPORTED_MAJOR_VERSIONS,
+} from '../../engines/postgresql/version-maps'
 import { assert, assertEqual } from '../utils/assertions'
 import { Platform, Arch } from '../../types'
 
 describe('PostgreSQL BinaryManager', () => {
   describe('getFullVersion', () => {
     it('should map major versions to full versions', () => {
-      // Keep in sync with engines/postgresql/version-maps.ts
-      const testCases = [
-        { input: '15', expected: '15.15.0' },
-        { input: '16', expected: '16.11.0' },
-        { input: '17', expected: '17.7.0' },
-        { input: '18', expected: '18.1.0' },
-      ]
-
-      for (const { input, expected } of testCases) {
-        const result = postgresqlBinaryManager.getFullVersion(input)
+      // Dynamically derive test cases from the canonical version map
+      for (const majorVersion of SUPPORTED_MAJOR_VERSIONS) {
+        const expected = POSTGRESQL_VERSION_MAP[majorVersion]
+        const result = postgresqlBinaryManager.getFullVersion(majorVersion)
         assertEqual(
           result,
           expected,
-          `Major version ${input} should map to ${expected}`,
+          `Major version ${majorVersion} should map to ${expected}`,
         )
       }
     })
@@ -123,11 +121,11 @@ describe('PostgreSQL BinaryManager', () => {
 
     it('should include full version in URL', () => {
       const url = postgresqlBinaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
+      const expectedVersion = POSTGRESQL_VERSION_MAP['17']
 
-      // Major version 17 maps to 17.7.0
       assert(
-        url.includes('17.7.0'),
-        'URL should include full version (17.7.0), not just major version',
+        url.includes(expectedVersion),
+        `URL should include full version (${expectedVersion}), not just major version`,
       )
     })
   })
@@ -140,12 +138,13 @@ describe('PostgreSQL BinaryManager', () => {
         Arch.ARM64,
         'postgres',
       )
+      const expectedVersion = POSTGRESQL_VERSION_MAP['17']
 
       assert(
         path.includes('bin/postgres') || path.includes('bin\\postgres'),
         'Path should include bin/postgres',
       )
-      assert(path.includes('17.7.0'), 'Path should use full version')
+      assert(path.includes(expectedVersion), `Path should use full version (${expectedVersion})`)
     })
 
     it('should return correct path for pg_ctl binary', () => {
@@ -294,9 +293,10 @@ describe('PostgreSQL BinaryManager', () => {
           Platform.Darwin,
           Arch.ARM64,
         )
+        const expectedVersion = POSTGRESQL_VERSION_MAP['17']
 
         assert(typeof binPath === 'string', 'Should return path string')
-        assert(binPath.includes('17.7.0'), 'Path should include full version')
+        assert(binPath.includes(expectedVersion), `Path should include full version (${expectedVersion})`)
         assert(binPath.includes('darwin-arm64'), 'Path should include platform')
       }
     })

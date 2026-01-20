@@ -232,15 +232,18 @@ export function isEngine(value: string): value is Engine {
 
 /**
  * Normalize a format name, converting legacy aliases to new semantic names
+ *
+ * Note: This function returns a string, not BackupFormatType, because it does
+ * not validate the input. Callers should use isValidFormat() to verify the
+ * result is a valid format before treating it as BackupFormatType.
+ *
  * @param engine - The database engine
  * @param format - The format name (may be legacy or new)
- * @returns The normalized format name as BackupFormatType
+ * @returns The normalized format name (string, not validated)
  */
-export function normalizeFormat(engine: Engine, format: string): BackupFormatType {
+export function normalizeFormat(engine: Engine, format: string): string {
   const aliases = LEGACY_FORMAT_ALIASES[engine]
-  const normalized = aliases[format] ?? format
-  // The normalized value is always a valid BackupFormatType (either from alias lookup or pass-through)
-  return normalized as BackupFormatType
+  return aliases[format] ?? format
 }
 
 /**

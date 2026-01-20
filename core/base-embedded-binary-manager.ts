@@ -15,13 +15,13 @@
  */
 
 import { createWriteStream, existsSync } from 'fs'
-import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
+import { mkdir, readdir, rm, chmod } from 'fs/promises'
 import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
-import { isRenameFallbackError } from './fs-error-utils'
+import { moveEntry } from './fs-error-utils'
 import { logDebug } from './error-handler'
 import {
   type Engine,
@@ -284,38 +284,6 @@ export abstract class BaseEmbeddedBinaryManager {
   }
 
   /**
-   * Move a file or directory, falling back to copy+remove if rename fails across filesystems.
-   */
-  protected async moveEntry(
-    sourcePath: string,
-    destPath: string,
-  ): Promise<void> {
-    try {
-      await rename(sourcePath, destPath)
-    } catch (error) {
-      if (isRenameFallbackError(error)) {
-        await cp(sourcePath, destPath, { recursive: true })
-        // Attempt cleanup of source, but don't fail if it doesn't work
-        // (the destination was successfully created)
-        try {
-          await rm(sourcePath, { recursive: true, force: true })
-        } catch (cleanupError) {
-          logDebug('Failed to clean up source after copy', {
-            sourcePath,
-            destPath,
-            error:
-              cleanupError instanceof Error
-                ? cleanupError.message
-                : String(cleanupError),
-          })
-        }
-      } else {
-        throw error
-      }
-    }
-  }
-
-  /**
    * Move extracted entries from extractDir to binPath.
    * Handles both nested ({engine}/ or {engine}-* /) and flat archive structures.
    * Uses rename with fallback to cp for cross-device or permission errors.
@@ -368,14 +336,14 @@ export abstract class BaseEmbeddedBinaryManager {
           ? join(binDir, entry.name)
           : join(binPath, entry.name)
 
-        await this.moveEntry(sourcePath, destPath)
+        await moveEntry(sourcePath, destPath)
       }
     } else {
       // Has bin/ directory - move everything as-is
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
-        await this.moveEntry(sourcePath, destPath)
+        await moveEntry(sourcePath, destPath)
       }
     }
   }

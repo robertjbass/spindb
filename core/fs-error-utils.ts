@@ -1,8 +1,11 @@
 /**
  * Filesystem Error Utilities
  *
- * Shared error detection functions for filesystem and network operations.
+ * Shared error detection and file operation functions for filesystem operations.
  */
+
+import { rename, cp, rm } from 'fs/promises'
+import { logDebug } from './error-handler'
 
 /**
  * Check if an error is a filesystem error that should trigger cp fallback
@@ -13,6 +16,43 @@ export function isRenameFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const code = (error as NodeJS.ErrnoException).code
   return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
+}
+
+/**
+ * Move a file or directory from source to destination.
+ * Uses rename() for efficiency, with fallback to cp() + rm() for cross-device
+ * moves or permission issues (EXDEV, EPERM).
+ *
+ * @param sourcePath - Source file or directory path
+ * @param destPath - Destination file or directory path
+ */
+export async function moveEntry(
+  sourcePath: string,
+  destPath: string,
+): Promise<void> {
+  try {
+    await rename(sourcePath, destPath)
+  } catch (error) {
+    if (isRenameFallbackError(error)) {
+      await cp(sourcePath, destPath, { recursive: true })
+      // Attempt cleanup of source, but don't fail if it doesn't work
+      // (the destination was successfully created)
+      try {
+        await rm(sourcePath, { recursive: true, force: true })
+      } catch (cleanupError) {
+        logDebug('Failed to clean up source after copy', {
+          sourcePath,
+          destPath,
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
+        })
+      }
+    } else {
+      throw error
+    }
+  }
 }
 
 /**

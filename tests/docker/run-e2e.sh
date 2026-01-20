@@ -619,7 +619,9 @@ test_backup_format() {
 # ============================================================================
 
 run_self_update_test() {
-  local old_version="0.19.4"
+  # Version to install before testing self-update. Override via OLD_VERSION env var.
+  # Bump this default when older versions become incompatible with current tests.
+  local old_version="${OLD_VERSION:-0.19.4}"
   local test_name="self-update"
 
   log_header "Self-Update Test"

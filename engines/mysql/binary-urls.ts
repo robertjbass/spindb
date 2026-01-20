@@ -71,6 +71,7 @@ export function getBinaryUrl(
  * @param version - Version string (e.g., '8.0', '8.0.40', '9')
  * @param versionMap - Optional version map for major version lookup
  * @returns Normalized version (e.g., '8.0.40')
+ * @throws TypeError if version string is malformed
  */
 function normalizeVersion(
   version: string,
@@ -79,6 +80,15 @@ function normalizeVersion(
   // Check if it's a major version in the map
   if (versionMap[version]) {
     return versionMap[version]
+  }
+
+  // Validate version format: must be numeric semver-like (X, X.Y, or X.Y.Z)
+  const versionPattern = /^\d+(\.\d+){0,2}$/
+  if (!versionPattern.test(version)) {
+    throw new TypeError(
+      `Invalid MySQL version format: "${version}". ` +
+        `Expected format: X, X.Y, or X.Y.Z (e.g., "8", "8.0", "8.0.40")`,
+    )
   }
 
   // Normalize to X.Y.Z format

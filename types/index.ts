@@ -190,26 +190,21 @@ export type BackupFormatType =
   | ValkeyFormat
   | ClickHouseFormat
 
+// Mapping from Engine to its corresponding backup format type
+type EngineFormatMap = {
+  [Engine.PostgreSQL]: PostgreSQLFormat
+  [Engine.MySQL]: MySQLFormat
+  [Engine.MariaDB]: MariaDBFormat
+  [Engine.SQLite]: SQLiteFormat
+  [Engine.DuckDB]: DuckDBFormat
+  [Engine.MongoDB]: MongoDBFormat
+  [Engine.Redis]: RedisFormat
+  [Engine.Valkey]: ValkeyFormat
+  [Engine.ClickHouse]: ClickHouseFormat
+}
+
 // Helper type to get format type for a specific engine
-export type FormatForEngine<E extends Engine> = E extends Engine.PostgreSQL
-  ? PostgreSQLFormat
-  : E extends Engine.MySQL
-    ? MySQLFormat
-    : E extends Engine.MariaDB
-      ? MariaDBFormat
-      : E extends Engine.SQLite
-        ? SQLiteFormat
-        : E extends Engine.DuckDB
-          ? DuckDBFormat
-          : E extends Engine.MongoDB
-            ? MongoDBFormat
-            : E extends Engine.Redis
-              ? RedisFormat
-              : E extends Engine.Valkey
-                ? ValkeyFormat
-                : E extends Engine.ClickHouse
-                  ? ClickHouseFormat
-                  : never
+export type FormatForEngine<E extends Engine> = EngineFormatMap[E]
 
 export type BackupOptions = {
   database: string

@@ -11,7 +11,7 @@
  */
 
 import { existsSync } from 'fs'
-import { mkdir, readdir, rename, cp, rm } from 'fs/promises'
+import { mkdir, readdir } from 'fs/promises'
 import { join } from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -19,7 +19,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { logDebug } from '../../core/error-handler'
-import { isRenameFallbackError } from '../../core/fs-error-utils'
+import { moveEntry } from '../../core/fs-error-utils'
 import {
   BaseServerBinaryManager,
   type ServerBinaryManagerConfig,
@@ -99,7 +99,7 @@ class ClickHouseBinaryManager extends BaseServerBinaryManager {
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
-        await this.moveEntry(sourcePath, destPath)
+        await moveEntry(sourcePath, destPath)
       }
     } else {
       // Flat structure: create bin/ and move binaries there
@@ -116,23 +116,7 @@ class ClickHouseBinaryManager extends BaseServerBinaryManager {
         const destPath = isExecutable
           ? join(destBinDir, entry.name)
           : join(binPath, entry.name)
-        await this.moveEntry(sourcePath, destPath)
-      }
-    }
-  }
-
-  /**
-   * Helper to move a single entry with rename/cp fallback
-   */
-  private async moveEntry(sourcePath: string, destPath: string): Promise<void> {
-    try {
-      await rename(sourcePath, destPath)
-    } catch (error) {
-      if (isRenameFallbackError(error)) {
-        await cp(sourcePath, destPath, { recursive: true })
-        await rm(sourcePath, { recursive: true, force: true })
-      } else {
-        throw error
+        await moveEntry(sourcePath, destPath)
       }
     }
   }

@@ -180,7 +180,8 @@ export const backupCommand = new Command('backup')
             process.exit(1)
           }
           // Normalize legacy aliases (sql/dump) to new format names
-          format = normalizeFormat(engineName, options.format)
+          // Safe to cast: isValidFormat above guarantees the normalized result is valid
+          format = normalizeFormat(engineName, options.format) as BackupFormatType
         } else if (!containerArg) {
           const selectedFormat = await promptBackupFormat(engineName)
           if (selectedFormat) {
