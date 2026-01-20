@@ -22,7 +22,7 @@ import {
   type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
-import { Engine } from '../../types'
+import { Engine, type Platform, type Arch } from '../../types'
 
 // Re-export types for backwards compatibility
 export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
@@ -112,14 +112,14 @@ export async function getLatestVersion(major: string): Promise<string> {
  * Get the download URL for a Redis version from hostdb
  *
  * @param version - Full version (e.g., '7.4.7')
- * @param platform - Platform identifier (e.g., 'darwin', 'linux')
- * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
+ * @param platform - Platform identifier (e.g., Platform.Darwin, Platform.Linux)
+ * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
 export async function getHostdbDownloadUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): Promise<string> {
   // Validate platform up-front so we fail fast for unsupported platforms
   const hostdbPlatform = validatePlatform(platform, arch)

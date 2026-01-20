@@ -15,7 +15,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import { Platform, type Arch, type ProgressCallback, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
+import { Engine, Platform, type Arch, type ProgressCallback, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -66,16 +66,25 @@ export class MariaDBBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('mariadb-')) {
-        const parts = entry.name.split('-')
-        if (parts.length >= 4 && isValidPlatform(parts[2]) && isValidArch(parts[3])) {
-          installed.push({
-            engine: 'mariadb' as InstalledBinary['engine'],
-            version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
-          })
-        }
+      if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('mariadb-')) continue
+
+      // Parse from the end to handle versions with dashes (e.g., mariadb-11.8.5-rc1-darwin-arm64)
+      const rest = entry.name.slice('mariadb-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
+        installed.push({
+          engine: Engine.MariaDB,
+          version,
+          platform,
+          arch,
+        })
       }
     }
 

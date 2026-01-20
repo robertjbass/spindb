@@ -42,7 +42,7 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  *
  * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
- * @returns hostdb platform identifier or undefined if unsupported
+ * @returns hostdb platform identifier or null if unsupported
  */
 // Supported platform/arch combinations for PostgreSQL hostdb binaries
 const SUPPORTED_PLATFORM_KEYS = new Set([
@@ -56,9 +56,9 @@ const SUPPORTED_PLATFORM_KEYS = new Set([
 export function getHostdbPlatform(
   platform: Platform,
   arch: Arch,
-): string | undefined {
+): string | null {
   const key = `${platform}-${arch}`
-  return SUPPORTED_PLATFORM_KEYS.has(key) ? key : undefined
+  return SUPPORTED_PLATFORM_KEYS.has(key) ? key : null
 }
 
 /**
@@ -69,7 +69,7 @@ export function getHostdbPlatform(
 export function getZonkyPlatform(
   platform: Platform,
   arch: Arch,
-): string | undefined {
+): string | null {
   return getHostdbPlatform(platform, arch)
 }
 

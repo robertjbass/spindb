@@ -104,7 +104,27 @@ type _AssertAllEngines = typeof ALL_ENGINES extends readonly Engine[]
       : ['Error: ALL_ENGINES is missing some Engine values']
     : never
   : never
-const _exhaustiveCheck: _AssertAllEngines = true
+const _exhaustiveEnginesCheck: _AssertAllEngines = true
+
+// Compile-time validation that ALL_PLATFORMS contains all Platform enum values
+type _AssertAllPlatforms = typeof ALL_PLATFORMS extends Platform[]
+  ? (typeof ALL_PLATFORMS)[number] extends Platform
+    ? Platform extends (typeof ALL_PLATFORMS)[number]
+      ? true
+      : ['Error: ALL_PLATFORMS is missing some Platform values']
+    : never
+  : never
+const _exhaustivePlatformsCheck: _AssertAllPlatforms = true
+
+// Compile-time validation that ALL_ARCHS contains all Arch enum values
+type _AssertAllArchs = typeof ALL_ARCHS extends Arch[]
+  ? (typeof ALL_ARCHS)[number] extends Arch
+    ? Arch extends (typeof ALL_ARCHS)[number]
+      ? true
+      : ['Error: ALL_ARCHS is missing some Arch values']
+    : never
+  : never
+const _exhaustiveArchsCheck: _AssertAllArchs = true
 
 export type ProgressCallback = (progress: {
   stage: string
