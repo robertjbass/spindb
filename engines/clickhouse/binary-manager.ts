@@ -160,10 +160,7 @@ class ClickHouseBinaryManager extends BaseServerBinaryManager {
           `clickhouse client stderr during version check: ${stderr.trim()}`,
         )
       }
-      // Extract version from output like "ClickHouse client version 25.12.3.21 (official build)"
-      const match = stdout.match(/(\d+\.\d+\.\d+\.\d+)/)
-      const reportedVersion = match?.[1]
-
+      const reportedVersion = this.parseVersionFromOutput(stdout)
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }

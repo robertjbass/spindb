@@ -288,28 +288,33 @@ export abstract class BaseDocumentBinaryManager {
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
 
-    // Extract tar.gz - ignore errors from macOS extended attribute files (._* files)
-    // that may be truncated. The actual binaries extract correctly.
+    // Extract tar.gz - some archives may have issues with macOS extended attribute
+    // files (._* files) that cause tar to exit non-zero even when binaries extract correctly.
+    // We verify extraction success by checking if files were actually extracted.
     try {
       await spawnAsync('tar', ['-xzf', tarFile, '-C', extractDir])
     } catch (error) {
-      const err = error as Error
-      // If error is about truncated files (macOS extended attributes), check if extraction worked
-      if (err.message.includes('Truncated') || err.message.includes('._')) {
-        // Verify that at least some files were extracted
-        const entries = await readdir(extractDir)
-        if (entries.length === 0) {
-          throw new Error(`Extraction failed completely: ${err.message}`)
-        }
-        // Files were extracted despite the error, log and continue
-        logDebug(`${this.config.displayName} extraction recovered from tar warning`, {
-          tarFile,
-          entriesExtracted: entries.length,
-          warningType: 'macOS extended attributes',
-        })
-      } else {
-        throw error
+      const err = error as Error & { code?: string | number }
+
+      // Check if extraction actually succeeded despite the error
+      // (common with truncated macOS extended attribute files)
+      const entries = await readdir(extractDir)
+      if (entries.length === 0) {
+        // No files extracted - this is a real failure
+        throw new Error(
+          `Extraction failed: ${err.message}${err.code ? ` (code: ${err.code})` : ''}`,
+        )
       }
+
+      // Files were extracted despite the error - log and continue
+      // This handles tar warnings about truncated ._* files, permission issues on
+      // metadata files, etc. that don't affect the actual binaries
+      logDebug(`${this.config.displayName} extraction recovered from tar error`, {
+        tarFile,
+        entriesExtracted: entries.length,
+        errorMessage: err.message,
+        errorCode: err.code,
+      })
     }
 
     await this.moveExtractedEntries(extractDir, binPath)

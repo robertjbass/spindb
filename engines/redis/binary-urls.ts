@@ -69,6 +69,11 @@ export function getBinaryUrl(
 /**
  * Normalize version string to X.Y.Z format
  *
+ * Note: Redis does not use validateSemverLikeVersion() because:
+ * 1. Redis uses a lenient approach - unknown versions log a warning and pass through
+ * 2. This allows testing new versions before they're added to the version map
+ * 3. Invalid versions will fail at download time with a clear 404 error
+ *
  * @param version - Version string (e.g., '7', '7.4', '7.4.7')
  * @param versionMap - Optional version map for major version lookup
  * @returns Normalized version (e.g., '7.4.7')

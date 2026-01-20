@@ -22,6 +22,7 @@ import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { moveEntry } from './fs-error-utils'
+import { compareVersions } from './version-utils'
 import {
   type Engine,
   Platform,
@@ -452,10 +453,11 @@ export abstract class BaseEmbeddedBinaryManager {
         return true
       }
 
-      // Check if major versions match (relaxed match due to version normalization)
-      const expectedMajor = version.split('.')[0]
+      // Check semantic version compatibility: same major and reported >= expected
+      // This allows for minor version differences in how the binary reports its version
+      const expectedMajor = fullVersion.split('.')[0]
       const reportedMajor = reportedVersion.split('.')[0]
-      if (expectedMajor === reportedMajor) {
+      if (expectedMajor === reportedMajor && compareVersions(reportedVersion, fullVersion) >= 0) {
         return true
       }
 

@@ -1,5 +1,6 @@
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
+import { validateSemverLikeVersion } from '../../core/version-utils'
 import { Engine, Platform, type Arch } from '../../types'
 
 // Supported platform/arch combinations for PostgreSQL hostdb binaries
@@ -80,13 +81,7 @@ function normalizeVersion(
   }
 
   // Validate version format: must be numeric semver-like (X, X.Y, or X.Y.Z)
-  const versionPattern = /^\d+(\.\d+){0,2}$/
-  if (!versionPattern.test(version)) {
-    throw new TypeError(
-      `Invalid PostgreSQL version format: "${version}". ` +
-        `Expected format: X, X.Y, or X.Y.Z (e.g., "17", "17.7", "17.7.0")`,
-    )
-  }
+  validateSemverLikeVersion(version, 'PostgreSQL')
 
   // Normalize to X.Y.Z format
   const parts = version.split('.')

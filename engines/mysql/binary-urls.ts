@@ -1,5 +1,6 @@
 import { FALLBACK_VERSION_MAP } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
+import { validateSemverLikeVersion } from '../../core/version-utils'
 import { Engine, Platform, type Arch } from '../../types'
 
 /**
@@ -83,13 +84,7 @@ function normalizeVersion(
   }
 
   // Validate version format: must be numeric semver-like (X, X.Y, or X.Y.Z)
-  const versionPattern = /^\d+(\.\d+){0,2}$/
-  if (!versionPattern.test(version)) {
-    throw new TypeError(
-      `Invalid MySQL version format: "${version}". ` +
-        `Expected format: X, X.Y, or X.Y.Z (e.g., "8", "8.0", "8.0.40")`,
-    )
-  }
+  validateSemverLikeVersion(version, 'MySQL')
 
   // Normalize to X.Y.Z format
   const parts = version.split('.')

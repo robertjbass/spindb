@@ -86,14 +86,10 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
       )
     }
 
-    // Extract version from output like "postgres (PostgreSQL) 18.1" or
-    // "postgres (PostgreSQL) 18.1 - Percona Server for PostgreSQL 18.1.1"
-    const match = stdout.match(/postgres \(PostgreSQL\) ([\d.]+)/)
-    if (!match) {
+    const reportedVersion = this.parseVersionFromOutput(stdout)
+    if (!reportedVersion) {
       throw new Error(`Could not parse version from: ${stdout.trim()}`)
     }
-
-    const reportedVersion = match[1]
     const expectedNormalized = this.stripTrailingZero(fullVersion)
     const reportedNormalized = this.stripTrailingZero(reportedVersion)
 

@@ -467,6 +467,11 @@ restore_backup() {
           sleep 1
           waited=$((waited + 1))
         done
+        # Abort if stop timed out (container still running)
+        if spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"'; then
+          echo "ERROR: Container $container_name did not stop within ${max_wait}s, cannot restore RDB"
+          return 1
+        fi
         if ! run_cmd spindb restore "$container_name" "$backup_file" --force; then
           return 1
         fi
@@ -479,6 +484,10 @@ restore_backup() {
           sleep 1
           waited=$((waited + 1))
         done
+        # Warn if start timed out but continue (verification will catch failures)
+        if ! spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"'; then
+          echo "WARNING: Container $container_name not running after ${max_wait}s wait"
+        fi
       fi
       ;;
     sqlite|duckdb)
@@ -1088,8 +1097,34 @@ fi
 # Check libraries
 log_step "Check system libraries"
 missing_libs=0
+
+# Function to check if a library exists via file scan
+check_lib_exists() {
+  local lib="$1"
+  local lib_dirs="/lib /lib64 /usr/lib /usr/lib64 /usr/local/lib"
+  # Add architecture-specific directories (glibc and musl variants)
+  for base in /lib /usr/lib; do
+    for variant in "$base"/*-linux-gnu* "$base"/*-linux-musl*; do
+      [ -d "$variant" ] && lib_dirs="$lib_dirs $variant"
+    done
+  done
+  # Search for library files (e.g., libaio.so, libaio.so.1, libaio.a)
+  for dir in $lib_dirs; do
+    if [ -d "$dir" ] && ls "$dir"/${lib}.* "$dir"/${lib}-*.* 2>/dev/null | grep -q .; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 for lib in libaio libnuma libncurses libssl; do
-  ldconfig -p 2>/dev/null | grep -q "$lib" || missing_libs=$((missing_libs+1))
+  if command -v ldconfig >/dev/null 2>&1; then
+    # Use ldconfig if available (faster, more accurate)
+    ldconfig -p 2>/dev/null | grep -q "$lib" || missing_libs=$((missing_libs+1))
+  else
+    # Fallback to file scan for systems without ldconfig (Alpine, minimal containers)
+    check_lib_exists "$lib" || missing_libs=$((missing_libs+1))
+  fi
 done
 if [ $missing_libs -eq 0 ]; then
   log_step_ok

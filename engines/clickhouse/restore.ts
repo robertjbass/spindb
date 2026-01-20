@@ -343,6 +343,20 @@ async function restoreSqlBackup(
     // Stream backup file to clickhouse client stdin
     const fileStream = createReadStream(backupPath, { encoding: 'utf-8' })
 
+    // Handle stdin errors (e.g., EPIPE when client exits early due to SQL error)
+    proc.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      // EPIPE means the client closed its stdin (likely exited due to error)
+      // The actual error message will come from stderr in the 'close' handler
+      if (error.code === 'EPIPE') {
+        streamError = new Error(
+          'ClickHouse client closed connection early (likely SQL syntax error)',
+        )
+      } else {
+        streamError = new Error(`Failed to write to clickhouse client: ${error.message}`)
+      }
+      fileStream.destroy()
+    })
+
     fileStream.on('error', (error) => {
       streamError = new Error(`Failed to read backup file: ${error.message}`)
       fileStream.destroy()

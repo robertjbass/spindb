@@ -364,10 +364,16 @@ export abstract class BaseServerBinaryManager {
   }
 
   /**
-   * Strip trailing .0 for version comparison
+   * Strip trailing .0 only when it's the 4th component of a 4-part version.
+   * This avoids incorrectly altering versions like "8.0" or "10.0.0".
+   * Example: "8.0.40.0" -> "8.0.40", but "8.0" stays "8.0"
    */
   protected stripTrailingZero(version: string): string {
-    return version.replace(/\.0$/, '')
+    const parts = version.split('.')
+    if (parts.length === 4 && parts[3] === '0') {
+      return parts.slice(0, 3).join('.')
+    }
+    return version
   }
 
   /**

@@ -65,6 +65,11 @@ export function getBinaryUrl(
 /**
  * Normalize version string to X.Y.Z format
  *
+ * Note: MariaDB does not use validateSemverLikeVersion() because:
+ * 1. MariaDB versions may have suffixes (e.g., "11.8.5-MariaDB" in --version output)
+ * 2. Version map lookup handles known versions; unknown versions pass through
+ *    and will fail at download time with a clear 404 error
+ *
  * @param version - Version string (e.g., '11.8', '11.8.5')
  * @param versionMap - Optional version map for major version lookup
  * @returns Normalized version (e.g., '11.8.5')
