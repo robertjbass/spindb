@@ -223,7 +223,16 @@ export abstract class BaseDocumentBinaryManager {
       }
 
       const fileStream = createWriteStream(archiveFile)
-      const nodeStream = Readable.fromWeb(response.body!)
+
+      if (!response.body) {
+        fileStream.destroy()
+        throw new Error(
+          `Download failed: response has no body (status ${response.status})`,
+        )
+      }
+
+      // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
+      const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
       if (platform === Platform.Win32) {

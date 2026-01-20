@@ -444,17 +444,21 @@ export const createCommand = new Command('create')
           database = answers.database
         }
 
-        // Redis uses numbered databases (0-15), default to "0"
+        // Redis/Valkey use numbered databases (0-15), default to "0"
         // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
-        if (engine === Engine.Redis) {
+        if (engine === Engine.Redis || engine === Engine.Valkey) {
           database = database ?? '0'
         } else {
           database = database ?? containerName.replace(/-/g, '_')
         }
 
         // Validate database name to prevent SQL injection
-        // Skip for Redis which uses numbered databases (0-15)
-        if (engine !== Engine.Redis && !isValidDatabaseName(database)) {
+        // Skip for Redis/Valkey which use numbered databases (0-15)
+        if (
+          engine !== Engine.Redis &&
+          engine !== Engine.Valkey &&
+          !isValidDatabaseName(database)
+        ) {
           console.error(
             uiError(
               'Database name must start with a letter and contain only letters, numbers, and underscores',

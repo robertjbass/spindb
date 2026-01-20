@@ -269,8 +269,8 @@ psql $(spindb url mydb)
 spindb backup mydb                              # Auto-generated filename
 spindb backup mydb --name production-backup     # Custom name
 spindb backup mydb --output ./backups/          # Custom directory
-spindb backup mydb --format sql                 # SQL text format
-spindb backup mydb --format dump                # Binary format
+spindb backup mydb --format sql                 # SQL text format (PostgreSQL)
+spindb backup mydb --format custom              # Custom binary format (PostgreSQL)
 
 # Restore from backups
 spindb restore mydb backup.dump
@@ -430,7 +430,7 @@ spindb create modern --engine postgresql --db-version 18
 
 # Backup formats
 spindb backup myapp --format sql      # Plain SQL (.sql)
-spindb backup myapp --format dump     # Binary custom format (.dump)
+spindb backup myapp --format custom   # Binary custom format (.dump)
 ```
 
 **Versions:** 15, 16, 17, 18
@@ -563,12 +563,12 @@ Every engine supports backup and restore with engine-specific formats:
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| SQL | `.sql` | pg_dump | Human-readable, portable |
-| Custom | `.dump` | pg_dump -Fc | Compressed, faster restore |
+| sql | `.sql` | pg_dump | Human-readable, portable |
+| custom | `.dump` | pg_dump -Fc | Compressed, faster restore |
 
 ```bash
-spindb backup mydb --sql                # Plain SQL
-spindb backup mydb --dump               # Binary custom format
+spindb backup mydb --format sql         # Plain SQL
+spindb backup mydb --format custom      # Binary custom format
 spindb restore mydb backup.dump
 ```
 
@@ -576,23 +576,23 @@ spindb restore mydb backup.dump
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| SQL | `.sql` | mysqldump / mariadb-dump | Human-readable |
-| Compressed | `.sql.gz` | mysqldump + gzip | Smaller file size |
+| sql | `.sql` | mysqldump / mariadb-dump | Human-readable |
+| compressed | `.sql.gz` | mysqldump + gzip | Smaller file size |
 
 ```bash
-spindb backup mydb --sql                # Plain SQL
-spindb backup mydb --dump               # Compressed SQL
+spindb backup mydb --format sql         # Plain SQL
+spindb backup mydb --format compressed  # Compressed SQL
 ```
 
 ### MongoDB
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| BSON | `.bson` | mongodump | Binary, preserves all types |
-| Archive | `.archive` | mongodump --archive | Single compressed file |
+| bson | _(directory)_ | mongodump | Binary, preserves all types |
+| archive | `.archive` | mongodump --archive | Single compressed file |
 
 ```bash
-spindb backup mydb                      # BSON directory
+spindb backup mydb --format bson        # BSON directory
 spindb backup mydb --format archive     # Single .archive file
 ```
 
@@ -600,12 +600,12 @@ spindb backup mydb --format archive     # Single .archive file
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| RDB | `.rdb` | BGSAVE | Binary snapshot, requires restart |
-| Text | `.redis` / `.valkey` | Custom | Human-readable commands |
+| rdb | `.rdb` | BGSAVE | Binary snapshot, requires stop/start |
+| text | `.redis` / `.valkey` | Custom | Human-readable commands |
 
 ```bash
-spindb backup mydb --dump               # RDB snapshot
-spindb backup mydb --sql                # Text commands
+spindb backup mydb --format rdb         # RDB snapshot (default)
+spindb backup mydb --format text        # Text commands
 
 # Restore with merge or replace strategy
 spindb restore mydb backup.redis        # Prompts: Replace all / Merge
@@ -615,23 +615,22 @@ spindb restore mydb backup.redis        # Prompts: Replace all / Merge
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| SQL | `.sql` | .dump / duckdb | Human-readable |
-| Binary | `.sqlite` / `.duckdb` | File copy | Exact database copy |
+| sql | `.sql` | .dump / duckdb | Human-readable |
+| binary | `.sqlite` / `.duckdb` | File copy | Exact database copy |
 
 ```bash
-spindb backup mydb --sql                # SQL dump
-spindb backup mydb --dump               # Binary copy
+spindb backup mydb --format sql         # SQL dump
+spindb backup mydb --format binary      # Binary copy (default)
 ```
 
 ### ClickHouse
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| SQL | `.sql` | clickhouse-client | Plain SQL dump |
-| Native | `.clickhouse` | clickhouse-backup | Native format (future) |
+| sql | `.sql` | clickhouse-client | Plain SQL dump |
 
 ```bash
-spindb backup mydb --sql                # SQL dump
+spindb backup mydb --format sql         # SQL dump (only format)
 ```
 
 ---

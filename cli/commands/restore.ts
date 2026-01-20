@@ -88,9 +88,15 @@ export const restoreCommand = new Command('restore')
         }
 
         const { engine: engineName } = config
+        const engine = getEngine(engineName)
 
-        // File-based engines (SQLite, DuckDB) don't need to be "running"
-        if (!isFileBasedEngine(engineName)) {
+        // Check if container needs to be running for restore
+        // - File-based engines (SQLite, DuckDB) don't need to be running
+        // - Redis/Valkey RDB restore requires container to be STOPPED
+        // - All other engines require container to be running
+        // We defer the running check until after format detection for Redis/Valkey
+        const isRedisLike = engineName === 'redis' || engineName === 'valkey'
+        if (!isFileBasedEngine(engineName) && !isRedisLike) {
           const running = await processManager.isRunning(containerName, {
             engine: engineName,
           })
@@ -103,8 +109,6 @@ export const restoreCommand = new Command('restore')
             process.exit(1)
           }
         }
-
-        const engine = getEngine(engineName)
 
         const depsSpinner = createSpinner('Checking required tools...')
         depsSpinner.start()
@@ -271,6 +275,34 @@ export const restoreCommand = new Command('restore')
 
         const format = await engine.detectBackupFormat(backupPath)
         detectSpinner.succeed(`Detected: ${format.description}`)
+
+        // For Redis/Valkey, check running state based on format
+        // - Text format (.redis/.valkey) requires container to be RUNNING
+        // - RDB format requires container to be STOPPED
+        if (isRedisLike) {
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          const isRdbFormat = format.format === 'rdb'
+
+          if (isRdbFormat && running) {
+            console.error(
+              uiError(
+                `Container "${containerName}" must be stopped for RDB restore. Run: spindb stop ${containerName}`,
+              ),
+            )
+            process.exit(1)
+          }
+
+          if (!isRdbFormat && !running) {
+            console.error(
+              uiError(
+                `Container "${containerName}" is not running. Start it first for text format restore.`,
+              ),
+            )
+            process.exit(1)
+          }
+        }
 
         // Check if database already exists
         const databaseExists =

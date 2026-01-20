@@ -227,7 +227,7 @@ export function createHostdbReleases(
   }
 
   return {
-    fetchAvailableVersions,
+    fetchAvailableVersions: getCachedVersions,
     getLatestVersion,
   }
 }

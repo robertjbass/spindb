@@ -6,6 +6,8 @@
 
 - [ ] Add examples for each database in `CHEATSHEET.md`
 
+- [ ] **Remove legacy backup format aliases after v1.1** - The `LEGACY_FORMAT_ALIASES` in `config/backup-formats.ts` provides backward compatibility for `--format sql` and `--format dump` flags. After v1.1 release, remove this mapping and require users to use semantic format names (e.g., `custom`, `compressed`, `binary`, `text`, `rdb`, `archive`, `bson`).
+
 ---
 
 ## Roadmap
@@ -254,3 +256,8 @@ The `resolveFullVersion()` method in each engine silently falls back to `${versi
 - [ ] **Define progress stages enum** - Standardize stages: downloading, extracting, verifying, initializing, starting
 - [ ] **Add percentage progress** - For downloads and large file operations
 - [ ] **Stream backup/restore progress** - Currently no feedback during long operations
+
+### Low: MongoDB Restore Format Gaps
+
+- [ ] **Single .bson file restore incomplete** - Detection exists in `engines/mongodb/restore.ts` but restore logic doesn't derive collection name from filename or add `--collection` flag. Low priority unless users request it.
+- [ ] **JSON import not supported** - `mongorestore` doesn't accept JSON files (requires `mongoimport`). Not planned for `spindb restore` since it's a different use case (data import vs backup restore). Users can use `spindb run` with mongoimport if needed.

@@ -158,7 +158,21 @@ Use `assertExhaustive(engine)` in switch statements for compile-time exhaustiven
 
 ### Backup & Restore Formats
 
-Examples: PostgreSQL (`.sql`, `.dump`), Redis/Valkey (`.redis`/`.valkey`, `.rdb`), SQLite/DuckDB (`.sql`, binary copy)
+Each engine has semantic format names defined in `config/backup-formats.ts`:
+
+| Engine | Format 1 | Format 2 | Default |
+|--------|----------|----------|---------|
+| PostgreSQL | `sql` (.sql) | `custom` (.dump) | `sql` |
+| MySQL | `sql` (.sql) | `compressed` (.sql.gz) | `sql` |
+| MariaDB | `sql` (.sql) | `compressed` (.sql.gz) | `sql` |
+| SQLite | `sql` (.sql) | `binary` (.sqlite) | `binary` |
+| DuckDB | `sql` (.sql) | `binary` (.duckdb) | `binary` |
+| MongoDB | `bson` (directory) | `archive` (.archive) | `archive` |
+| Redis | `text` (.redis) | `rdb` (.rdb) | `rdb` |
+| Valkey | `text` (.valkey) | `rdb` (.rdb) | `rdb` |
+| ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
+
+Legacy format names (`sql`/`dump`) are mapped to engine-specific formats via `normalizeFormat()` for backward compatibility. See `LEGACY_FORMAT_ALIASES` in `config/backup-formats.ts`.
 
 See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
 

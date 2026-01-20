@@ -68,40 +68,44 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
       )
     }
 
+    let stdout: string
     try {
-      const { stdout } = await spawnAsync(serverPath, ['--version'])
-      // Extract version from output like "postgres (PostgreSQL) 18.1" or
-      // "postgres (PostgreSQL) 18.1 - Percona Server for PostgreSQL 18.1.1"
-      const match = stdout.match(/postgres \(PostgreSQL\) ([\d.]+)/)
-      if (!match) {
-        throw new Error(`Could not parse version from: ${stdout.trim()}`)
-      }
-
-      const reportedVersion = match[1]
-      const expectedNormalized = this.stripTrailingZero(fullVersion)
-      const reportedNormalized = this.stripTrailingZero(reportedVersion)
-
-      // Check if versions match (e.g., "18.1.0" vs "18.1")
-      if (reportedNormalized === expectedNormalized) {
-        return true
-      }
-
-      // Also accept if major.minor matches (e.g., expected "18.1.0", got "18.1")
-      const expectedMajorMinor = fullVersion.split('.').slice(0, 2).join('.')
-      const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
-      if (expectedMajorMinor === reportedMajorMinor) {
-        return true
-      }
-
-      throw new Error(
-        `Version mismatch: expected ${version}, got ${reportedVersion}`,
-      )
+      const result = await spawnAsync(serverPath, ['--version'])
+      stdout = result.stdout
     } catch (error) {
+      // Only wrap spawn/OS errors, not our validation errors
       const err = error as Error
       throw new Error(
         `Failed to verify ${this.config.displayName} binaries: ${err.message}`,
       )
     }
+
+    // Extract version from output like "postgres (PostgreSQL) 18.1" or
+    // "postgres (PostgreSQL) 18.1 - Percona Server for PostgreSQL 18.1.1"
+    const match = stdout.match(/postgres \(PostgreSQL\) ([\d.]+)/)
+    if (!match) {
+      throw new Error(`Could not parse version from: ${stdout.trim()}`)
+    }
+
+    const reportedVersion = match[1]
+    const expectedNormalized = this.stripTrailingZero(fullVersion)
+    const reportedNormalized = this.stripTrailingZero(reportedVersion)
+
+    // Check if versions match (e.g., "18.1.0" vs "18.1")
+    if (reportedNormalized === expectedNormalized) {
+      return true
+    }
+
+    // Also accept if major.minor matches (e.g., expected "18.1.0", got "18.1")
+    const expectedMajorMinor = fullVersion.split('.').slice(0, 2).join('.')
+    const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
+    if (expectedMajorMinor === reportedMajorMinor) {
+      return true
+    }
+
+    throw new Error(
+      `Version mismatch: expected ${version}, got ${reportedVersion}`,
+    )
   }
 }
 

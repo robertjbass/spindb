@@ -686,9 +686,7 @@ spindb backup pgdb                              # Backup with auto-generated nam
 spindb backup pgdb --name production-backup     # Custom backup name
 spindb backup pgdb --output ./backups/          # Custom output directory
 spindb backup pgdb --format sql                 # Plain SQL format (.sql)
-spindb backup pgdb --format dump                # Compressed format (.dump)
-spindb backup pgdb --sql                        # Shorthand for --format sql
-spindb backup pgdb --dump                       # Shorthand for --format dump
+spindb backup pgdb --format custom              # Custom binary format (.dump)
 spindb backup pgdb --database myapp             # Backup specific database
 spindb restore pgdb backup.dump                 # Restore from backup
 spindb restore pgdb backup.sql --database myapp # Restore to specific database
@@ -748,7 +746,7 @@ spindb run mydb seed.sql --database app         # Target specific database
 spindb backup mydb                              # Backup with mysqldump
 spindb backup mydb --name backup-2024           # Custom backup name
 spindb backup mydb --format sql                 # Plain SQL (.sql)
-spindb backup mydb --format dump                # Compressed (.sql.gz)
+spindb backup mydb --format compressed          # Compressed (.sql.gz)
 spindb backup mydb --database app               # Backup specific database
 spindb restore mydb backup.sql                  # Restore from backup
 spindb restore mydb backup.sql.gz               # Restore from compressed
@@ -894,7 +892,7 @@ spindb start prod-clone
 spindb connect prod-clone
 
 # Backup before risky migration
-spindb backup mydb --name before-migration --dump
+spindb backup mydb --name before-migration --format custom
 spindb run mydb ./migrations/risky-change.sql
 # If something goes wrong:
 spindb restore mydb ./backups/before-migration.dump

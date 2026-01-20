@@ -1,7 +1,7 @@
 import { CLICKHOUSE_VERSION_MAP } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 import { logDebug } from '../../core/error-handler'
-import { Engine, Platform, type Arch } from '../../types'
+import { Engine, type Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.

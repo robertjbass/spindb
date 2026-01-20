@@ -283,10 +283,10 @@ describe('MySQL Integration Tests', () => {
     const { tmpdir } = await import('os')
     const backupPath = join(tmpdir(), `mysql-dump-backup-${Date.now()}.sql.gz`)
 
-    // Backup with 'dump' format produces compressed SQL
+    // Backup with 'compressed' format produces compressed SQL
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'compressed',
     })
 
     assert(result.path === backupPath, 'Backup path should match')
@@ -324,7 +324,7 @@ describe('MySQL Integration Tests', () => {
 
     const backupResult = await engine.backup(sourceConfig!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'compressed',
     })
     console.log(`   Backup created: ${backupResult.size} bytes`)
 

@@ -133,7 +133,7 @@ export async function detectBackupFormat(
   // Check file extension first for .valkey text files
   if (filePath.endsWith('.valkey')) {
     return {
-      format: 'valkey',
+      format: 'text',
       description: 'Valkey text commands',
       restoreCommand:
         'Pipe commands to valkey-cli (spindb restore handles this)',
@@ -178,7 +178,7 @@ export async function detectBackupFormat(
   // This allows files like "users.txt" or "data" to be detected as Valkey text dumps
   if (await looksLikeValkeyCommands(filePath)) {
     return {
-      format: 'valkey',
+      format: 'text',
       description: 'Valkey text commands (detected by content)',
       restoreCommand:
         'Pipe commands to valkey-cli (spindb restore handles this)',
@@ -250,7 +250,7 @@ async function restoreTextBackup(
     proc.on('close', (code) => {
       if (code === 0) {
         resolve({
-          format: 'valkey',
+          format: 'text',
           stdout: stdout || 'Valkey commands executed successfully',
           stderr: stderr || undefined,
           code: 0,
@@ -327,7 +327,7 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  if (format.format === 'valkey') {
+  if (format.format === 'text') {
     // Text format - pipe to valkey-cli (Valkey must be running)
     if (!port) {
       throw new Error(

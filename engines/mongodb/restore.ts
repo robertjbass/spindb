@@ -97,7 +97,7 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database, drop = true } = options
+  const { port, database, drop = true, sourceDatabase } = options
 
   const mongorestore = await getMongorestorePath()
   if (!mongorestore) {
@@ -169,12 +169,14 @@ export async function restoreBackup(
   } else if (format.format === 'archive-gzip') {
     args.push('--archive=' + backupPath, '--gzip')
     // For archive format, use namespace remapping to restore to target database
-    // $prefix$ captures db name, $suffix$ captures collection name
-    args.push('--nsFrom=$prefix$.$suffix$', `--nsTo=${database}.$suffix$`)
+    // If sourceDatabase is provided, use it explicitly; otherwise use $prefix$ wildcard
+    const nsFromDb = sourceDatabase ?? '$prefix$'
+    args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${database}.$suffix$`)
   } else if (format.format === 'archive') {
     args.push('--archive=' + backupPath)
     // For archive format, use namespace remapping to restore to target database
-    args.push('--nsFrom=$prefix$.$suffix$', `--nsTo=${database}.$suffix$`)
+    const nsFromDb = sourceDatabase ?? '$prefix$'
+    args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${database}.$suffix$`)
   } else if (format.format === 'bson') {
     // BSON files are passed directly without --archive flag
     args.push(backupPath)
@@ -182,7 +184,8 @@ export async function restoreBackup(
     // Default to archive for unknown formats
     args.push('--archive=' + backupPath, '--gzip')
     // Use namespace remapping for archive format
-    args.push('--nsFrom=$prefix$.$suffix$', `--nsTo=${database}.$suffix$`)
+    const nsFromDb = sourceDatabase ?? '$prefix$'
+    args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${database}.$suffix$`)
   }
 
   logDebug(`Running mongorestore with args: ${args.join(' ')}`)

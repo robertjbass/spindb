@@ -7,20 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-01-20
+
+### Breaking Changes
+- **Removed `--sql` and `--dump` shorthand flags** - The `spindb backup` command no longer accepts `--sql` or `--dump` flags. Use `--format <format>` with engine-specific format names instead.
+- **Engine-specific backup format names** - Each engine now has semantically meaningful format names instead of universal `sql`/`dump`:
+
+  | Engine | Formats | Default |
+  |--------|---------|---------|
+  | PostgreSQL | `sql`, `custom` | `sql` |
+  | MySQL/MariaDB | `sql`, `compressed` | `sql` |
+  | SQLite/DuckDB | `sql`, `binary` | `binary` |
+  | MongoDB | `bson`, `archive` | `archive` |
+  | Redis/Valkey | `text`, `rdb` | `rdb` |
+  | ClickHouse | `sql` | `sql` |
+
 ### Added
 - **Docker E2E data lifecycle tests** - Extended `pnpm test:docker` to test full backup/restore cycles for all engines. Tests now seed data, create backups in multiple formats, restore to new databases, and verify data integrity.
 - **Self-update E2E test in Docker** - Added `pnpm test:docker -- self-update` to test the update command in a clean Linux environment.
+- **Engine-specific backup format types** - Added `PostgreSQLFormat`, `MySQLFormat`, `MongoDBFormat`, `RedisFormat`, etc. type definitions in `types/index.ts` for type-safe format handling.
+- **Format validation helpers** - Added `isValidFormat()`, `normalizeFormat()`, and `getValidFormats()` functions in `config/backup-formats.ts` for engine-aware format validation.
+- **Legacy format alias support** - Old format names (`sql`/`dump`) are automatically mapped to new names via `normalizeFormat()` for backward compatibility. Scripts using `--format dump` will continue to work.
 
 ### Changed
+- **backup-formats.ts refactored** - Complete restructure with dynamic format keys per engine. Uses `formats: Record<string, BackupFormatInfo>` instead of hardcoded `sql`/`dump` keys.
 - **backup-formats.ts uses Engine enum** - Keys in `BACKUP_FORMATS` now use `[Engine.PostgreSQL]:` bracket notation instead of string literals for better type safety.
+- **CLI format validation** - The backup command now validates format names against the engine's supported formats and provides helpful error messages listing valid options.
 
 ### Fixed
 - **SQLite/DuckDB restore in Docker** - Fixed SQL file restore failing silently in Docker. Changed from `-init` flag approach to explicit `stdin.end(fileContent)` which works reliably across macOS and Linux.
 - **DuckDB SQL dump table names** - Fixed `.mode insert` producing `INSERT INTO "table"` instead of actual table name. Now uses `.mode insert <tablename>` for each table.
 - **SQLite/DuckDB restore prompts** - Fixed restore command prompting for database name on file-based engines. Now uses container name directly since the file IS the database.
 - **SQLite/DuckDB container tracking** - Fixed restore failing with "container.json not found" by skipping `containerManager.addDatabase()` for file-based engines which use registry instead.
+- **SQLite/DuckDB default backup format** - Fixed fallback format defaulting to `'dump'` instead of `'binary'` for file-based engines.
 - **MariaDB backup extension** - Fixed backup command producing `.dump` instead of `.sql.gz` for MariaDB compressed backups. Added missing `mariadb` case in `getExtension()`.
 - **Docker E2E DuckDB count parsing** - Fixed count extraction matching "64" from "int64" column type instead of actual row count.
+- **Redis/Valkey backup format checks** - Fixed format comparisons using `'sql'` instead of `'text'` in backup implementations.
+- **MongoDB backup format checks** - Fixed format comparisons using `'dump'` instead of `'archive'` in backup and clone implementations.
+- **ClickHouse backup portability** - Fixed backup SQL containing hardcoded database names (e.g., `CREATE TABLE testdb.test_user`) which prevented restoring to different target databases. Backups now generate portable SQL without database prefixes.
+- **Redis/Valkey backup and restore format names** - Updated backup and restore modules to return `format: 'text'` instead of `format: 'redis'` or `format: 'valkey'` for consistency with the new semantic format naming.
 
 ## [0.19.7] - 2026-01-20
 

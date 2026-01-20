@@ -281,10 +281,10 @@ describe('PostgreSQL Integration Tests', () => {
     const { tmpdir } = await import('os')
     const backupPath = join(tmpdir(), `pg-dump-backup-${Date.now()}.dump`)
 
-    // Backup with 'dump' format produces custom binary
+    // Backup with 'custom' format produces custom binary
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'custom',
     })
 
     assert(result.path === backupPath, 'Backup path should match')

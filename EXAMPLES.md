@@ -70,10 +70,15 @@ spindb backup [container] [options]
 - `-d, --database <name>` - Database to backup
 - `-n, --name <name>` - Backup filename (without extension)
 - `-o, --output <path>` - Output directory
-- `--format <format>` - Format: `sql` or `dump`
-- `--sql` - Output as plain SQL
-- `--dump` - Output as dump format
+- `--format <format>` - Engine-specific format (see below)
 - `-j, --json` - Output result as JSON
+
+**Format options by engine:**
+- PostgreSQL: `sql`, `custom` (default: `sql`)
+- MySQL/MariaDB: `sql`, `compressed` (default: `sql`)
+- SQLite/DuckDB: `sql`, `binary` (default: `binary`)
+- MongoDB: `bson`, `archive` (default: `archive`)
+- Redis/Valkey: `text`, `rdb` (default: `rdb`)
 
 #### `restore` - Restore backup
 ```bash
@@ -250,11 +255,11 @@ spindb run prod-backup -c "
 "
 
 # Plain SQL backup (human-readable, portable)
-spindb backup prod-backup --sql --name prod-snapshot-sql
+spindb backup prod-backup --format sql --name prod-snapshot-sql
 # Creates: prod-backup-prod-backup-backup-TIMESTAMP.sql
 
 # Custom format dump (faster restore, compressed)
-spindb backup prod-backup --dump --name prod-snapshot-dump
+spindb backup prod-backup --format custom --name prod-snapshot-dump
 # Creates: prod-backup-prod-backup-backup-TIMESTAMP.dump
 
 # Backup specific database with custom output dir
@@ -497,7 +502,7 @@ spindb url feature-auth --copy
 spindb run feature-auth -c "ALTER TABLE users ADD COLUMN last_login TIMESTAMP;"
 
 # 6. Create backup before testing
-spindb backup feature-auth --sql --name pre-merge-backup
+spindb backup feature-auth --format sql --name pre-merge-backup
 
 # 7. Test feature, merge to main
 
@@ -594,10 +599,10 @@ spindb run ecommerce -c "
 "
 
 # SQL backup (human-readable)
-spindb backup ecommerce --sql --name ecommerce-backup
+spindb backup ecommerce --format sql --name ecommerce-backup
 
 # Compressed SQL backup (MySQL default: gzipped)
-spindb backup ecommerce --dump --name ecommerce-compressed
+spindb backup ecommerce --format compressed --name ecommerce-compressed
 # Creates: ecommerce-ecommerce-backup-TIMESTAMP.sql.gz
 ```
 
@@ -782,7 +787,7 @@ spindb run shop -c "
 "
 
 # 4. Create backup before testing
-spindb backup shop --sql --name shop-initial
+spindb backup shop --format sql --name shop-initial
 
 # 5. Get connection string
 spindb url shop --copy
@@ -925,7 +930,7 @@ spindb run notes -c "
 "
 
 # SQL backup (text format)
-spindb backup notes --sql --name notes-backup
+spindb backup notes --format sql --name notes-backup
 # Creates: notes-notes-backup-TIMESTAMP.sql
 
 # Backup is just the database file copy
@@ -1126,7 +1131,7 @@ spindb url taskapp
 cp taskapp.db taskapp-backup-$(date +%Y%m%d).db
 
 # Or use SpinDB backup command
-spindb backup taskapp --sql --name taskapp-backup
+spindb backup taskapp --format sql --name taskapp-backup
 ```
 
 ---
@@ -1304,11 +1309,11 @@ spindb run blogdb ./seeds/blog-data.js
 **Example: Backup MongoDB database**
 ```bash
 # Create compressed archive backup (recommended)
-spindb backup blogdb --dump --name blogdb-backup
+spindb backup blogdb --format archive --name blogdb-backup
 # Creates: blogdb-blogdb-backup-TIMESTAMP.archive
 
 # Create BSON directory backup (for per-collection access)
-spindb backup blogdb --sql --name blogdb-backup-dir
+spindb backup blogdb --format bson --name blogdb-backup-dir
 # Creates: blogdb-blogdb-backup-dir-TIMESTAMP/ directory with BSON files
 ```
 
@@ -1577,7 +1582,7 @@ spindb run social-api -c "
 spindb url social-api --copy
 
 # 6. Create backup
-spindb backup social-api --dump --name social-api-backup
+spindb backup social-api --format archive --name social-api-backup
 ```
 
 ---
@@ -1697,9 +1702,13 @@ spindb run cache ./seeds/redis-data.txt
 
 **Example: Backup Redis database**
 ```bash
-# Create backup using RDB snapshot
-spindb backup cache --dump --name cache-backup
+# Create backup using RDB snapshot (default)
+spindb backup cache --format rdb --name cache-backup
 # Creates: cache-cache-backup-TIMESTAMP.rdb
+
+# Or create text format backup (human-readable Redis commands)
+spindb backup cache --format text --name cache-backup-text
+# Creates: cache-cache-backup-text-TIMESTAMP.redis
 
 # RDB files are Redis's native binary format
 # They can be restored to any Redis instance
@@ -1821,7 +1830,7 @@ spindb run session-store -c "KEYS *"
 spindb url session-store --copy
 
 # 7. Create backup
-spindb backup session-store --dump --name session-store-backup
+spindb backup session-store --format rdb --name session-store-backup
 ```
 
 ---
@@ -2247,7 +2256,7 @@ jobs:
     "db:reset": "npm run db:drop && npm run db:create && npm run db:migrate && npm run db:seed",
     "db:migrate": "spindb run myapp ./migrations/*.sql",
     "db:seed": "spindb run myapp ./seeds/dev-data.sql",
-    "db:backup": "spindb backup myapp --sql --output ./backups",
+    "db:backup": "spindb backup myapp --format sql --output ./backups",
     "test": "node --test test/**/*.test.js",
     "test:integration": "npm run db:create && npm test && npm run db:drop"
   }

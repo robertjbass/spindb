@@ -22,6 +22,7 @@ import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
+import { logDebug } from './error-handler'
 import {
   type Engine,
   Platform,
@@ -289,7 +290,20 @@ export abstract class BaseEmbeddedBinaryManager {
     } catch (error) {
       if (isRenameFallbackError(error)) {
         await cp(sourcePath, destPath, { recursive: true })
-        await rm(sourcePath, { recursive: true, force: true })
+        // Attempt cleanup of source, but don't fail if it doesn't work
+        // (the destination was successfully created)
+        try {
+          await rm(sourcePath, { recursive: true, force: true })
+        } catch (cleanupError) {
+          logDebug('Failed to clean up source after copy', {
+            sourcePath,
+            destPath,
+            error:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError),
+          })
+        }
       } else {
         throw error
       }

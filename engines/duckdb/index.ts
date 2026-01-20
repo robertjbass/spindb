@@ -14,8 +14,8 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync, createReadStream, createWriteStream } from 'fs'
-import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
+import { existsSync, statSync, createWriteStream } from 'fs'
+import { copyFile, unlink, mkdir, open, writeFile, readFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { BaseEngine } from '../base-engine'
@@ -304,14 +304,14 @@ export class DuckDBEngine extends BaseEngine {
       // For SQL format, we'll use a query to dump schema and data
       await this.dumpToFile(duckdb, entry.filePath, outputPath)
     } else {
-      // Binary copy for 'dump' format
+      // Binary copy for 'binary' format
       await copyFile(entry.filePath, outputPath)
     }
 
     const stats = statSync(outputPath)
     return {
       path: outputPath,
-      format: options.format ?? 'dump',
+      format: options.format ?? 'binary',
       size: stats.size,
     }
   }
@@ -435,12 +435,29 @@ export class DuckDBEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const output = createWriteStream(outputPath)
       const proc = spawn(duckdbPath, [dbPath])
+      let rejected = false
 
+      const rejectOnce = (err: Error) => {
+        if (!rejected) {
+          rejected = true
+          output.close()
+          reject(err)
+        }
+      }
+
+      // Pipe stdout to output file and handle errors
       proc.stdout.pipe(output)
+      proc.stdout.on('error', (err) => {
+        rejectOnce(new Error(`stdout error: ${err.message}`))
+      })
+      output.on('error', (err) => {
+        rejectOnce(new Error(`output file error: ${err.message}`))
+      })
 
-      // Write the dump script to stdin
-      proc.stdin.write(dumpScript)
-      proc.stdin.end()
+      // Handle stdin errors (e.g., EPIPE if child exits early)
+      proc.stdin.on('error', (err) => {
+        rejectOnce(new Error(`stdin error: ${err.message}`))
+      })
 
       proc.stderr.on('data', (data: Buffer) => {
         // Log stderr but don't fail (warnings are common)
@@ -448,18 +465,30 @@ export class DuckDBEngine extends BaseEngine {
       })
 
       proc.on('error', (err) => {
-        output.close()
-        reject(err)
+        rejectOnce(err)
       })
 
       proc.on('close', (code) => {
         output.close()
-        if (code === 0) {
-          resolve()
-        } else {
-          reject(new Error(`duckdb dump failed with exit code ${code}`))
+        if (!rejected) {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`duckdb dump failed with exit code ${code}`))
+          }
         }
       })
+
+      // Write the dump script to stdin with backpressure handling
+      const writeOk = proc.stdin.write(dumpScript)
+      if (writeOk) {
+        proc.stdin.end()
+      } else {
+        // Handle backpressure: wait for drain before ending
+        proc.stdin.once('drain', () => {
+          proc.stdin.end()
+        })
+      }
     })
   }
 
@@ -469,9 +498,7 @@ export class DuckDBEngine extends BaseEngine {
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
-    const fileContent = await import('fs/promises').then((fs) =>
-      fs.readFile(sqlFilePath, 'utf-8'),
-    )
+    const fileContent = await readFile(sqlFilePath, 'utf-8')
 
     return new Promise((resolve, reject) => {
       const proc = spawn(duckdbPath, [dbPath], {
@@ -479,30 +506,52 @@ export class DuckDBEngine extends BaseEngine {
       })
 
       let stderrData = ''
+      let rejected = false
+
+      const rejectOnce = (err: Error) => {
+        if (!rejected) {
+          rejected = true
+          reject(err)
+        }
+      }
+
+      // Handle stdin errors (e.g., EPIPE if child exits early)
+      proc.stdin.on('error', (err) => {
+        rejectOnce(new Error(`stdin error: ${err.message}`))
+      })
 
       proc.stderr.on('data', (data: Buffer) => {
         stderrData += data.toString()
       })
 
       proc.on('error', (err) => {
-        reject(err)
+        rejectOnce(err)
       })
 
       proc.on('close', (code) => {
-        if (code === 0) {
-          resolve()
-        } else {
-          reject(
-            new Error(
-              `duckdb failed with exit code ${code}${stderrData ? `: ${stderrData}` : ''}`,
-            ),
-          )
+        if (!rejected) {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(
+              new Error(
+                `duckdb failed with exit code ${code}${stderrData ? `: ${stderrData}` : ''}`,
+              ),
+            )
+          }
         }
       })
 
-      // Write the SQL content and close stdin to signal EOF
-      proc.stdin.write(fileContent)
-      proc.stdin.end()
+      // Write the SQL content with backpressure handling and close stdin to signal EOF
+      const writeOk = proc.stdin.write(fileContent)
+      if (writeOk) {
+        proc.stdin.end()
+      } else {
+        // Handle backpressure: wait for drain before ending
+        proc.stdin.once('drain', () => {
+          proc.stdin.end()
+        })
+      }
     })
   }
 

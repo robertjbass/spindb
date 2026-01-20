@@ -132,7 +132,7 @@ export async function detectBackupFormat(
   // Check file extension first for .redis text files
   if (filePath.endsWith('.redis')) {
     return {
-      format: 'redis',
+      format: 'text',
       description: 'Redis text commands',
       restoreCommand:
         'Pipe commands to redis-cli (spindb restore handles this)',
@@ -176,7 +176,7 @@ export async function detectBackupFormat(
   // This allows files like "users.txt" or "data" to be detected as Redis text dumps
   if (await looksLikeRedisCommands(filePath)) {
     return {
-      format: 'redis',
+      format: 'text',
       description: 'Redis text commands (detected by content)',
       restoreCommand:
         'Pipe commands to redis-cli (spindb restore handles this)',
@@ -247,7 +247,7 @@ async function restoreTextBackup(
     proc.on('close', (code) => {
       if (code === 0) {
         resolve({
-          format: 'redis',
+          format: 'text',
           stdout: stdout || 'Redis commands executed successfully',
           stderr: stderr || undefined,
           code: 0,
@@ -324,7 +324,7 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  if (format.format === 'redis') {
+  if (format.format === 'text') {
     // Text format - pipe to redis-cli (Redis must be running)
     if (!port) {
       throw new Error(

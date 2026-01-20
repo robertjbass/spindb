@@ -167,9 +167,53 @@ export type RestoreResult = {
   code?: number
 }
 
+// Engine-specific backup format types
+export type PostgreSQLFormat = 'sql' | 'custom'
+export type MySQLFormat = 'sql' | 'compressed'
+export type MariaDBFormat = 'sql' | 'compressed'
+export type SQLiteFormat = 'sql' | 'binary'
+export type DuckDBFormat = 'sql' | 'binary'
+export type MongoDBFormat = 'bson' | 'archive'
+export type RedisFormat = 'text' | 'rdb'
+export type ValkeyFormat = 'text' | 'rdb'
+export type ClickHouseFormat = 'sql'
+
+// Union of all backup formats
+export type BackupFormatType =
+  | PostgreSQLFormat
+  | MySQLFormat
+  | MariaDBFormat
+  | SQLiteFormat
+  | DuckDBFormat
+  | MongoDBFormat
+  | RedisFormat
+  | ValkeyFormat
+  | ClickHouseFormat
+
+// Helper type to get format type for a specific engine
+export type FormatForEngine<E extends Engine> = E extends Engine.PostgreSQL
+  ? PostgreSQLFormat
+  : E extends Engine.MySQL
+    ? MySQLFormat
+    : E extends Engine.MariaDB
+      ? MariaDBFormat
+      : E extends Engine.SQLite
+        ? SQLiteFormat
+        : E extends Engine.DuckDB
+          ? DuckDBFormat
+          : E extends Engine.MongoDB
+            ? MongoDBFormat
+            : E extends Engine.Redis
+              ? RedisFormat
+              : E extends Engine.Valkey
+                ? ValkeyFormat
+                : E extends Engine.ClickHouse
+                  ? ClickHouseFormat
+                  : never
+
 export type BackupOptions = {
   database: string
-  format?: 'sql' | 'dump'
+  format?: BackupFormatType
 }
 
 export type BackupResult = {

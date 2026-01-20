@@ -16,8 +16,8 @@ import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
  * Create a backup of a MongoDB database using mongodump
  *
  * Supports two formats:
- * - 'sql' (plain): Directory dump with BSON files
- * - 'dump' (archive): Single compressed archive file
+ * - 'bson': Directory dump with BSON files per collection
+ * - 'archive' (default): Single compressed archive file
  */
 export async function createBackup(
   container: ContainerConfig,
@@ -48,11 +48,11 @@ export async function createBackup(
   ]
 
   // Determine output format
-  if (options.format === 'dump') {
+  if (options.format === 'archive') {
     // Archive format: single compressed file
     args.push('--archive=' + outputPath, '--gzip')
   } else {
-    // Directory format: output to directory
+    // Directory format (bson): output to directory
     args.push('--out', outputPath)
   }
 
@@ -83,7 +83,7 @@ export async function createBackup(
         // Get backup size
         let size = 0
         try {
-          if (options.format === 'dump') {
+          if (options.format === 'archive') {
             // Archive file
             const stats = await stat(outputPath)
             size = stats.size
@@ -101,7 +101,7 @@ export async function createBackup(
 
         resolve({
           path: outputPath,
-          format: options.format === 'dump' ? 'archive' : 'directory',
+          format: options.format === 'archive' ? 'archive' : 'directory',
           size,
         })
       } else {
@@ -121,6 +121,6 @@ export async function createCloneBackup(
 ): Promise<BackupResult> {
   return createBackup(container, outputPath, {
     database: container.database,
-    format: 'dump',
+    format: 'archive',
   })
 }

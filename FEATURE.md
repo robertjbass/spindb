@@ -385,32 +385,50 @@ Add your engine to the JSON registry:
 
 ### 4. Backup Formats (`config/backup-formats.ts`)
 
-Add your engine's backup format configuration:
+Add your engine's backup format configuration. **Important:** Format names are engine-specific and semantically meaningful.
+
+**Format names by engine type:**
+
+| Engine | Format 1 | Format 2 | Default |
+|--------|----------|----------|---------|
+| PostgreSQL | `sql` | `custom` | `sql` |
+| MySQL | `sql` | `compressed` | `sql` |
+| MariaDB | `sql` | `compressed` | `sql` |
+| SQLite | `sql` | `binary` | `binary` |
+| DuckDB | `sql` | `binary` | `binary` |
+| MongoDB | `bson` | `archive` | `archive` |
+| Redis | `text` | `rdb` | `rdb` |
+| Valkey | `text` | `rdb` | `rdb` |
+| ClickHouse | `sql` | _(none)_ | `sql` |
 
 ```ts
 export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
   // ... existing engines
 
   yourengine: {
-    sql: {
-      extension: '.yourengine',      // Text format extension
-      label: '.yourengine',
-      description: 'Text commands - human-readable, editable',
-      spinnerLabel: 'text',
-    },
-    dump: {
-      extension: '.rdb',             // Binary format extension
-      label: '.rdb',
-      description: 'RDB snapshot - binary format, faster restore',
-      spinnerLabel: 'RDB',
+    formats: {
+      text: {   // Use semantic format name, not 'sql' or 'dump'
+        extension: '.yourengine',
+        label: '.yourengine',
+        description: 'Text commands - human-readable, editable',
+        spinnerLabel: 'text',
+      },
+      rdb: {    // Binary format with semantic name
+        extension: '.rdb',
+        label: '.rdb',
+        description: 'RDB snapshot - binary format, faster restore',
+        spinnerLabel: 'RDB',
+      },
     },
     supportsFormatChoice: true,      // Whether user can choose format
-    defaultFormat: 'dump',           // Default when not specified
+    defaultFormat: 'rdb',            // Default when not specified
   },
 }
 ```
 
-**Note:** All helper functions (`getBackupFormatInfo`, `supportsFormatChoice`, `getDefaultFormat`) will throw an error if your engine is not configured here. This ensures configuration errors are caught early rather than silently falling back to defaults.
+**Legacy format aliases:** For backward compatibility, `normalizeFormat()` maps old `sql`/`dump` names to new semantic names. This allows existing scripts using `--format sql` or `--format dump` to continue working.
+
+**Note:** All helper functions (`getBackupFormatInfo`, `supportsFormatChoice`, `getDefaultFormat`, `isValidFormat`) will throw an error if your engine is not configured here. This ensures configuration errors are caught early.
 
 ### 5. OS Dependencies (`config/os-dependencies.ts`)
 
@@ -1300,27 +1318,27 @@ declare -A EXPECTED_COUNTS
 EXPECTED_COUNTS[yourengine]=5  # Number of records in your seed file
 
 # Backup formats to test per engine (primary|secondary)
-# IMPORTANT: Use CLI format names (what --format accepts), NOT file extensions!
+# IMPORTANT: Use engine-specific CLI format names (what --format accepts)
 declare -A BACKUP_FORMATS
-BACKUP_FORMATS[yourengine]="sql|dump"  # Formats separated by |
+BACKUP_FORMATS[yourengine]="text|rdb"  # Formats separated by |
 ```
 
 **Format naming rules:**
 
-Use the format names that `spindb backup --format` accepts, **not** file extensions:
+Use the engine-specific format names that `spindb backup --format` accepts:
 
 | Engine | Format Names | Resulting Extensions |
 |--------|--------------|---------------------|
-| PostgreSQL | `sql`, `dump` | `.sql`, `.dump` |
-| MySQL/MariaDB | `sql`, `dump` | `.sql`, `.sql.gz` |
+| PostgreSQL | `sql`, `custom` | `.sql`, `.dump` |
+| MySQL/MariaDB | `sql`, `compressed` | `.sql`, `.sql.gz` |
 | MongoDB | `bson`, `archive` | (directory), `.archive` |
-| Redis | `redis`, `rdb` | `.redis`, `.rdb` |
-| Valkey | `valkey`, `rdb` | `.valkey`, `.rdb` |
+| Redis | `text`, `rdb` | `.redis`, `.rdb` |
+| Valkey | `text`, `rdb` | `.valkey`, `.rdb` |
 | ClickHouse | `sql` | `.sql` |
-| SQLite | `sql`, `sqlite` | `.sql`, `.sqlite` |
-| DuckDB | `sql`, `duckdb` | `.sql`, `.duckdb` |
+| SQLite | `sql`, `binary` | `.sql`, `.sqlite` |
+| DuckDB | `sql`, `binary` | `.sql`, `.duckdb` |
 
-**Common mistake:** Using `"sql|sql.gz"` instead of `"sql|dump"` for MySQL. The CLI accepts `dump`, not `sql.gz`.
+**Common mistake:** Using legacy format names like `dump` instead of engine-specific names like `custom` (PostgreSQL) or `compressed` (MySQL). Use the exact format names from the table above.
 
 #### 1b. Update `get_backup_extension()` Function
 

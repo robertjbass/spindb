@@ -15,6 +15,15 @@ import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning, formatBytes } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { isFileBasedEngine } from '../../types'
+import {
+  getBackupExtension,
+  getBackupSpinnerLabel,
+  getDefaultFormat,
+  isValidFormat,
+  getValidFormats,
+  normalizeFormat,
+} from '../../config/backup-formats'
+import type { BackupFormatType } from '../../types'
 
 function generateTimestamp(): string {
   const now = new Date()
@@ -29,47 +38,6 @@ function generateDefaultFilename(
   return `${containerName}-${database}-backup-${timestamp}`
 }
 
-function getExtension(format: 'sql' | 'dump', engine: string): string {
-  // Handle 'sql' format (human-readable option)
-  if (format === 'sql') {
-    // MongoDB uses BSON directory format for 'sql' choice
-    return engine === 'mongodb' ? '' : '.sql'
-  }
-
-  // Handle 'dump' format (binary/compressed option)
-  switch (engine) {
-    case 'mysql':
-    case 'mariadb':
-      return '.sql.gz'
-    case 'sqlite':
-      return '.sqlite'
-    case 'duckdb':
-      return '.duckdb'
-    case 'mongodb':
-      return '.archive'
-    case 'redis':
-      return '.rdb'
-    case 'valkey':
-      return '.rdb'
-    case 'postgresql':
-    default:
-      return '.dump'
-  }
-}
-
-function getFormatDescription(format: 'sql' | 'dump', engine: string): string {
-  if (engine === 'redis') {
-    return 'RDB snapshot'
-  }
-  if (engine === 'mongodb') {
-    return format === 'sql' ? 'BSON directory' : 'archive'
-  }
-  if (engine === 'sqlite') {
-    return format === 'sql' ? 'SQL' : 'binary'
-  }
-  return format === 'sql' ? 'SQL' : 'dump'
-}
-
 export const backupCommand = new Command('backup')
   .description('Create a backup of a database')
   .argument('[container]', 'Container name')
@@ -79,9 +47,7 @@ export const backupCommand = new Command('backup')
     '-o, --output <path>',
     'Output directory (defaults to current directory)',
   )
-  .option('--format <format>', 'Output format: sql or dump')
-  .option('--sql', 'Output as plain SQL (shorthand for --format sql)')
-  .option('--dump', 'Output as dump format (shorthand for --format dump)')
+  .option('--format <format>', 'Backup format (engine-specific, e.g., sql, custom, rdb, binary)')
   .option('-j, --json', 'Output result as JSON')
   .action(
     async (
@@ -91,8 +57,6 @@ export const backupCommand = new Command('backup')
         name?: string
         output?: string
         format?: string
-        sql?: boolean
-        dump?: boolean
         json?: boolean
       },
     ) => {
@@ -202,20 +166,26 @@ export const backupCommand = new Command('backup')
           }
         }
 
-        let format: 'sql' | 'dump' = 'sql'
+        let format: BackupFormatType = getDefaultFormat(engineName)
 
-        if (options.sql) {
-          format = 'sql'
-        } else if (options.dump) {
-          format = 'dump'
-        } else if (options.format) {
-          if (options.format !== 'sql' && options.format !== 'dump') {
-            console.error(uiError('Format must be "sql" or "dump"'))
+        if (options.format) {
+          if (!isValidFormat(engineName, options.format)) {
+            const validFormats = getValidFormats(engineName)
+            console.error(
+              uiError(
+                `Invalid format "${options.format}" for ${engineName}. ` +
+                  `Valid formats: ${validFormats.join(', ')}`,
+              ),
+            )
             process.exit(1)
           }
-          format = options.format as 'sql' | 'dump'
+          // Normalize legacy aliases (sql/dump) to new format names
+          format = normalizeFormat(engineName, options.format) as BackupFormatType
         } else if (!containerArg) {
-          format = await promptBackupFormat(engineName)
+          const selectedFormat = await promptBackupFormat(engineName)
+          if (selectedFormat) {
+            format = selectedFormat
+          }
         }
 
         const defaultFilename = generateDefaultFilename(
@@ -228,13 +198,13 @@ export const backupCommand = new Command('backup')
           filename = await promptBackupFilename(defaultFilename)
         }
 
-        const extension = getExtension(format, engineName)
+        const extension = getBackupExtension(engineName, format)
         const outputDir = options.output || process.cwd()
         const outputPath = join(outputDir, `${filename}${extension}`)
 
-        const formatDesc = getFormatDescription(format, engineName)
+        const spinnerLabel = getBackupSpinnerLabel(engineName, format)
         const backupSpinner = createSpinner(
-          `Creating ${formatDesc} backup of "${databaseName}"...`,
+          `Creating ${spinnerLabel} backup of "${databaseName}"...`,
         )
         backupSpinner.start()
 

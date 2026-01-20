@@ -80,15 +80,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 
 # Expected counts and backup formats
-# Format names must match what the CLI accepts (--format <name>)
+# Format names are engine-specific semantic names (no longer sql|dump for all)
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
   [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5
 )
 declare -A BACKUP_FORMATS=(
-  [postgresql]="sql|dump" [mysql]="sql|dump" [mariadb]="sql|dump"
-  [mongodb]="sql|dump" [redis]="sql|dump" [valkey]="sql|dump"
-  [clickhouse]="sql" [sqlite]="sql|dump" [duckdb]="sql|dump"
+  [postgresql]="sql|custom"
+  [mysql]="sql|compressed"
+  [mariadb]="sql|compressed"
+  [mongodb]="bson|archive"
+  [redis]="text|rdb"
+  [valkey]="text|rdb"
+  [clickhouse]="sql"
+  [sqlite]="sql|binary"
+  [duckdb]="sql|binary"
 )
 
 # Results tracking
@@ -304,8 +310,19 @@ get_data_count() {
       # DuckDB outputs a table with box drawing chars, extract number from data row
       # Skip "int64" in header by looking for standalone numbers
       output=$(spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" 2>/dev/null)
-      # Get lines with only whitespace and digits (the data row)
-      echo "$output" | grep -E '^\│[[:space:]]+[0-9]+[[:space:]]+\│$' | grep -oE '[0-9]+' | head -1
+      local count=""
+      # Try Unicode box-drawing character first (│)
+      count=$(echo "$output" | grep -E '^\│[[:space:]]+[0-9]+[[:space:]]+\│$' | grep -oE '[0-9]+' | head -1)
+      # Fallback: try ASCII pipe character (|)
+      if [ -z "$count" ]; then
+        count=$(echo "$output" | grep -E '^\|[[:space:]]+[0-9]+[[:space:]]+\|$' | grep -oE '[0-9]+' | head -1)
+      fi
+      # If both attempts fail, log output for debugging and return empty
+      if [ -z "$count" ]; then
+        echo "DEBUG: DuckDB output parsing failed. Raw output:" >&2
+        echo "$output" >&2
+      fi
+      echo "$count"
       ;;
     mongodb)
       output=$(spindb run "$container_name" -c "db.test_user.countDocuments()" -d "$database" 2>/dev/null)
@@ -319,50 +336,50 @@ get_data_count() {
 }
 
 # Map format name to file extension (engine-specific)
-# Based on config/backup-formats.ts
+# Based on config/backup-formats.ts with semantic format names
 get_backup_extension() {
   local engine=$1 format=$2
   case $engine in
     postgresql)
       case $format in
         sql) echo ".sql" ;;
-        dump) echo ".dump" ;;
+        custom) echo ".dump" ;;
       esac
       ;;
     mysql|mariadb)
       case $format in
         sql) echo ".sql" ;;
-        dump) echo ".sql.gz" ;;
+        compressed) echo ".sql.gz" ;;
       esac
       ;;
     sqlite)
       case $format in
         sql) echo ".sql" ;;
-        dump) echo ".sqlite" ;;
+        binary) echo ".sqlite" ;;
       esac
       ;;
     duckdb)
       case $format in
         sql) echo ".sql" ;;
-        dump) echo ".duckdb" ;;
+        binary) echo ".duckdb" ;;
       esac
       ;;
     mongodb)
       case $format in
-        sql) echo "" ;;  # directory (BSON)
-        dump) echo ".archive" ;;
+        bson) echo "" ;;  # directory (BSON)
+        archive) echo ".archive" ;;
       esac
       ;;
     redis)
       case $format in
-        sql) echo ".redis" ;;
-        dump) echo ".rdb" ;;
+        text) echo ".redis" ;;
+        rdb) echo ".rdb" ;;
       esac
       ;;
     valkey)
       case $format in
-        sql) echo ".valkey" ;;
-        dump) echo ".rdb" ;;
+        text) echo ".valkey" ;;
+        rdb) echo ".rdb" ;;
       esac
       ;;
     clickhouse)
@@ -388,11 +405,8 @@ create_backup() {
       run_cmd spindb backup "$container_name" -d testdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
     redis|valkey)
-      if [ "$format" = "sql" ]; then
-        run_cmd spindb backup "$container_name" -d 0 --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
-      else
-        run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
-      fi
+      # Redis/Valkey: sql format = text commands (.redis/.valkey), dump format = RDB snapshot (.rdb)
+      run_cmd spindb backup "$container_name" -d 0 --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
     sqlite|duckdb)
       run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
@@ -433,7 +447,8 @@ restore_backup() {
       run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
       ;;
     redis|valkey)
-      if [ "$format" = "sql" ]; then
+      # text format can be restored while running, rdb format requires stop/start
+      if [ "$format" = "text" ]; then
         run_cmd spindb restore "$container_name" "$backup_file" -d 1 --force
       else
         spindb stop "$container_name" &>/dev/null || true
@@ -464,7 +479,8 @@ verify_restored_data() {
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
     redis|valkey)
-      if [ "$format" = "sql" ]; then
+      # text format restores to database 1, rdb format restores to database 0
+      if [ "$format" = "text" ]; then
         actual=$(get_data_count "$engine" "$container_name" "1")
       else
         actual=$(get_data_count "$engine" "$container_name" "0")
@@ -490,7 +506,8 @@ verify_restored_data_with_count() {
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
     redis|valkey)
-      if [ "$format" = "sql" ]; then
+      # text format restores to database 1, rdb format restores to database 0
+      if [ "$format" = "text" ]; then
         actual=$(get_data_count "$engine" "$container_name" "1")
       else
         actual=$(get_data_count "$engine" "$container_name" "0")
@@ -877,6 +894,7 @@ run_test() {
   local primary_format="${formats%%|*}"
   local secondary_format="${formats#*|}"
 
+  # Format names are now semantic - no display name mapping needed
   log_section "Backup/Restore: $primary_format format"
   if ! test_backup_format "$engine" "$container_name" "$primary_format"; then
     cleanup_data_lifecycle "$engine" "$container_name"

@@ -294,7 +294,7 @@ describe('MariaDB Integration Tests', () => {
 
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'compressed',
     })
 
     assert(result.path === backupPath, 'Backup path should match')
@@ -332,7 +332,7 @@ describe('MariaDB Integration Tests', () => {
 
     const backupResult = await engine.backup(sourceConfig!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'compressed',
     })
     console.log(`   Backup created: ${backupResult.size} bytes`)
 

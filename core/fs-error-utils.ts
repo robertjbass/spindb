@@ -20,6 +20,14 @@ export function isRenameFallbackError(error: unknown): boolean {
  */
 export function isPortInUseError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
+
+  // Check error code first (more reliable than message parsing)
+  const code = (error as NodeJS.ErrnoException).code
+  if (code === 'EADDRINUSE') {
+    return true
+  }
+
+  // Fall back to message-based detection
   const message = error.message.toLowerCase()
   return (
     message.includes('address already in use') ||

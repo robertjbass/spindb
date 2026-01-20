@@ -271,10 +271,10 @@ describe('MongoDB Integration Tests', () => {
       `mongodb-archive-backup-${Date.now()}.archive`,
     )
 
-    // Backup with 'dump' format produces compressed archive
+    // Backup with 'archive' format produces compressed archive
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'archive',
     })
 
     assert(result.path === backupPath, 'Backup path should match')

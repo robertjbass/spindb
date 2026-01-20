@@ -94,6 +94,7 @@ async function getTables(
 
 /**
  * Get CREATE TABLE statement for a table
+ * Returns portable SQL without database prefix for cross-database restore
  */
 async function getCreateTableStatement(
   clickhousePath: string,
@@ -114,7 +115,18 @@ async function getCreateTableStatement(
     database,
     `SHOW CREATE TABLE ${escapedDb}.${escapedTable} FORMAT TSVRaw`,
   )
-  return result.trim()
+
+  // Strip database prefix from CREATE TABLE statement to make it portable
+  // e.g., "CREATE TABLE testdb.test_user" → "CREATE TABLE test_user"
+  // e.g., "CREATE TABLE `testdb`.`test_user`" → "CREATE TABLE `test_user`"
+  // This allows the backup to be restored to any target database
+  const createStmt = result.trim()
+  // Match both quoted and unquoted database names: db.table or `db`.table or `db`.`table`
+  const dbPrefixPattern = new RegExp(
+    `(CREATE TABLE\\s+)\`?${database}\`?\\.`,
+    'i',
+  )
+  return createStmt.replace(dbPrefixPattern, '$1')
 }
 
 /**

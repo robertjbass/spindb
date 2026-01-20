@@ -13,11 +13,10 @@ import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
-import { exec } from 'child_process'
-import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
+import { logDebug } from './error-handler'
 import {
   type Engine,
   Platform,
@@ -27,8 +26,6 @@ import {
   isValidPlatform,
   isValidArch,
 } from '../types'
-
-const execAsync = promisify(exec)
 
 /**
  * Configuration for a binary manager instance
@@ -422,10 +419,10 @@ export abstract class BaseBinaryManager {
     }
 
     try {
-      const { stdout, stderr } = await execAsync(`"${serverPath}" --version`)
+      const { stdout, stderr } = await spawnAsync(serverPath, ['--version'])
       // Log stderr if present (may contain warnings)
       if (stderr && stderr.trim()) {
-        console.warn(`${this.config.serverBinary} stderr: ${stderr.trim()}`)
+        logDebug(`${this.config.serverBinary} stderr`, { stderr: stderr.trim() })
       }
 
       const reportedVersion = this.parseVersionFromOutput(stdout)

@@ -15,7 +15,7 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync, createReadStream, createWriteStream } from 'fs'
+import { existsSync, statSync, createWriteStream } from 'fs'
 import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
@@ -322,14 +322,14 @@ export class SQLiteEngine extends BaseEngine {
       // Pipe .dump output to file (avoids shell injection)
       await this.dumpToFile(sqlite3, entry.filePath, outputPath)
     } else {
-      // Binary copy for 'dump' format
+      // Binary copy for 'binary' format
       await copyFile(entry.filePath, outputPath)
     }
 
     const stats = statSync(outputPath)
     return {
       path: outputPath,
-      format: options.format ?? 'dump',
+      format: options.format ?? 'binary',
       size: stats.size,
     }
   }

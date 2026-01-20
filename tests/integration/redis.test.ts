@@ -170,7 +170,7 @@ describe('Redis Integration Tests', () => {
 
     await engine.backup(sourceConfig!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'rdb',
     })
 
     // Stop source for restore (restore needs container stopped)
@@ -263,14 +263,14 @@ describe('Redis Integration Tests', () => {
     const { tmpdir } = await import('os')
     const backupPath = join(tmpdir(), `redis-text-backup-${Date.now()}.redis`)
 
-    // Backup with 'sql' format which produces .redis text file
+    // Backup with 'text' format which produces .redis text file
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'sql',
+      format: 'text',
     })
 
     assert(result.path === backupPath, 'Backup path should match')
-    assert(result.format === 'redis', 'Format should be redis')
+    assert(result.format === 'text', 'Format should be text')
     assert(result.size > 0, 'Backup should have content')
 
     // Verify file contains Redis commands
@@ -309,7 +309,7 @@ describe('Redis Integration Tests', () => {
 
     await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'sql',
+      format: 'text',
     })
 
     // Modify a key to verify it gets restored
@@ -360,7 +360,7 @@ describe('Redis Integration Tests', () => {
 
     await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'sql',
+      format: 'text',
     })
 
     // Add a key that's NOT in the backup
@@ -418,11 +418,11 @@ describe('Redis Integration Tests', () => {
       'utf-8',
     )
 
-    // Detect format - should recognize as Redis commands
+    // Detect format - should recognize as Redis text commands
     const format = await engine.detectBackupFormat(testFile)
     assertEqual(
       format.format,
-      'redis',
+      'text',
       'Should detect Redis commands by content',
     )
     assert(

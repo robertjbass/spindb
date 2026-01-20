@@ -35,17 +35,17 @@ import {
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
-import {
+import type {
   Platform,
-  type Arch,
-  type ContainerConfig,
-  type ProgressCallback,
-  type BackupFormat,
-  type BackupOptions,
-  type BackupResult,
-  type RestoreResult,
-  type DumpResult,
-  type StatusResult,
+  Arch,
+  ContainerConfig,
+  ProgressCallback,
+  BackupFormat,
+  BackupOptions,
+  BackupResult,
+  RestoreResult,
+  DumpResult,
+  StatusResult,
 } from '../../types'
 
 const execAsync = promisify(exec)

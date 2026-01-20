@@ -68,6 +68,7 @@ export function getBinaryUrl(
  * @param version - Version string (e.g., '17', '17.7', '17.7.0')
  * @param versionMap - Optional version map for major version lookup
  * @returns Normalized version (e.g., '17.7.0')
+ * @throws TypeError if version string is malformed
  */
 function normalizeVersion(
   version: string,
@@ -76,6 +77,15 @@ function normalizeVersion(
   // Check if it's a major version in the map
   if (versionMap[version]) {
     return versionMap[version]
+  }
+
+  // Validate version format: must be numeric semver-like (X, X.Y, or X.Y.Z)
+  const versionPattern = /^\d+(\.\d+){0,2}$/
+  if (!versionPattern.test(version)) {
+    throw new TypeError(
+      `Invalid PostgreSQL version format: "${version}". ` +
+        `Expected format: X, X.Y, or X.Y.Z (e.g., "17", "17.7", "17.7.0")`,
+    )
   }
 
   // Normalize to X.Y.Z format
