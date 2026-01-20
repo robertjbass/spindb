@@ -18,6 +18,7 @@ import {
   getEngineReleases,
   validatePlatform,
   buildDownloadUrl,
+  type HostdbReleasesData,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { sqliteBinaryManager } from './binary-manager'
@@ -135,29 +136,9 @@ export async function getHostdbDownloadUrl(
   // Validate platform up-front so we fail fast for unsupported platforms
   const hostdbPlatform = validatePlatform(platform, arch)
 
+  let releases: HostdbReleasesData
   try {
-    const releases = await fetchHostdbReleases()
-    const sqliteReleases = getEngineReleases(releases, Engine.SQLite)
-
-    if (!sqliteReleases) {
-      throw new Error('SQLite releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = sqliteReleases[fullVersion]
-    if (!release) {
-      throw new Error(`Version ${fullVersion} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for SQLite ${fullVersion}`,
-      )
-    }
-
-    return platformData.url
+    releases = await fetchHostdbReleases()
   } catch (error) {
     // Fallback to constructing URL manually if fetch fails
     logDebug(
@@ -171,6 +152,28 @@ export async function getHostdbDownloadUrl(
     )
     return buildDownloadUrl(Engine.SQLite, { version: fullVersion, platform, arch })
   }
+
+  const sqliteReleases = getEngineReleases(releases, Engine.SQLite)
+
+  if (!sqliteReleases) {
+    throw new Error('SQLite releases not found in hostdb')
+  }
+
+  // Find the version in releases
+  const release = sqliteReleases[fullVersion]
+  if (!release) {
+    throw new Error(`Version ${fullVersion} not found in hostdb releases`)
+  }
+
+  // Get the platform-specific download URL
+  const platformData = release.platforms[hostdbPlatform]
+  if (!platformData) {
+    throw new Error(
+      `Platform ${hostdbPlatform} not available for SQLite ${fullVersion}`,
+    )
+  }
+
+  return platformData.url
 }
 
 /**
