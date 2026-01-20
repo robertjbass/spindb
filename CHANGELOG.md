@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.4] - 2026-01-19
+
+### Fixed
+- **Self-update now uses correct package manager** - The `spindb update` command now detects which package manager (npm, pnpm, yarn, or bun) was used to install spindb and uses the same one for updates. Previously it always used npm, which failed when spindb was installed with a different package manager.
+
+### Added
+- **Self-update E2E test in CI** - New GitHub Actions job that installs spindb@0.19.4 via pnpm and verifies `spindb update -y` works correctly. Runs on PRs to main and via manual workflow dispatch.
+
 ## [0.19.3] - 2026-01-19
 
 ### Changed
