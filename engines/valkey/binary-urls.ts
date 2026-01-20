@@ -119,6 +119,3 @@ function normalizeVersion(
  * @param majorVersion - Major version (e.g., '8', '9')
  * @returns Full version string (e.g., '8.0.6') or null if not supported
  */
-export function getFullVersion(majorVersion: string): string | null {
-  return VALKEY_VERSION_MAP[majorVersion] || null
-}

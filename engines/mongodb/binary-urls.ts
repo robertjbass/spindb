@@ -15,10 +15,6 @@ const HOSTDB_BASE_URL =
 export const SUPPORTED_PLATFORMS = ['darwin', 'linux', 'win32'] as const
 export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 
-// Supported architectures
-export const SUPPORTED_ARCHS = ['arm64', 'x64'] as const
-export type SupportedArch = (typeof SUPPORTED_ARCHS)[number]
-
 // Supported platform/arch combinations for MongoDB hostdb binaries
 const SUPPORTED_PLATFORM_KEYS = new Set([
   'darwin-arm64',
@@ -65,7 +61,3 @@ export function getBinaryUrl(
 }
 
 // Check if a platform/arch combination is supported
-export function isPlatformSupported(platform: Platform, arch: Arch): boolean {
-  return getHostdbPlatform(platform, arch) !== null
-}
-

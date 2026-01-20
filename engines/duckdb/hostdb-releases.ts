@@ -10,19 +10,12 @@
 import {
   DUCKDB_VERSION_MAP,
   SUPPORTED_MAJOR_VERSIONS,
-  normalizeVersion,
 } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { duckdbBinaryManager } from './binary-manager'
 import { logDebug } from '../../core/error-handler'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 /**
  * Get available DuckDB versions from hostdb databases.json, grouped by major version
@@ -111,11 +104,12 @@ export async function getLatestVersion(major: string): Promise<string> {
     return mappedVersion
   }
 
-  // Neither hostdb nor version map has this version - throw error
-  throw new Error(
-    `DuckDB major version '${major}' not found in hostdb or version map. ` +
-      `Available major versions: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
-  )
+  // Neither hostdb nor version map has this version - fall back to major.0.0
+  logDebug('DuckDB major version not found in hostdb or version map', {
+    major,
+    supportedMajors: SUPPORTED_MAJOR_VERSIONS.join(', '),
+  })
+  return major.includes('.') ? `${major}.0` : `${major}.0.0`
 }
 
 /**
@@ -126,72 +120,3 @@ export async function getLatestVersion(major: string): Promise<string> {
  * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Normalize version first
-  const fullVersion = normalizeVersion(version)
-
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const duckdbReleases = getEngineReleases(releases, Engine.DuckDB)
-
-    if (!duckdbReleases) {
-      throw new Error('DuckDB releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = duckdbReleases[fullVersion]
-    if (!release) {
-      throw new Error(`Version ${fullVersion} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for DuckDB ${fullVersion}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug(
-      'Failed to fetch DuckDB download URL from hostdb, using fallback',
-      {
-        version: fullVersion,
-        platform,
-        arch,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
-    return buildDownloadUrl(Engine.DuckDB, { version: fullVersion, platform, arch })
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check (e.g., "1" or "1.4.3")
- * @returns true if the version exists in hostdb databases.json
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.DuckDB)
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map when network unavailable
-    // Accept either a major version key (e.g., "1") or its mapped full version (e.g., "1.4.3")
-    if (version in DUCKDB_VERSION_MAP) {
-      return true // Input is a major version key
-    }
-    const major = version.split('.')[0]
-    return DUCKDB_VERSION_MAP[major] === version
-  }
-}

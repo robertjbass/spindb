@@ -98,6 +98,7 @@ export class MariaDBBinaryManager {
     arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
+    let success = false
     const fullVersion = this.getFullVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
@@ -191,10 +192,15 @@ export class MariaDBBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!success) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 

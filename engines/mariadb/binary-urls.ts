@@ -2,12 +2,6 @@ import { MARIADB_VERSION_MAP } from './version-maps'
 import { Platform, type Arch } from '../../types'
 
 /**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- */
-export const FALLBACK_MARIADB_VERSION_MAP: Record<string, string> = MARIADB_VERSION_MAP
-
-/**
  * Get the hostdb platform identifier
  *
  * hostdb uses standard platform naming (e.g., 'darwin-arm64', 'linux-x64')
@@ -97,6 +91,3 @@ function normalizeVersion(
  * @param majorVersion - Major version (e.g., '11.8')
  * @returns Full version string (e.g., '11.8.5') or null if not supported
  */
-export function getFullVersion(majorVersion: string): string | null {
-  return MARIADB_VERSION_MAP[majorVersion] || null
-}

@@ -63,17 +63,6 @@ const HOSTDB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 /**
- * Clear the releases cache (for testing).
- *
- * NOTE: This only clears the cache in the current thread/process.
- * If using worker threads, each worker has its own cache instance.
- */
-export function clearCache(): void {
-  cachedReleases = null
-  cacheTimestamp = 0
-}
-
-/**
  * Fetch releases.json from hostdb repository with caching.
  *
  * @returns The full releases data from hostdb

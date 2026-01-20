@@ -6,14 +6,8 @@
  */
 
 import { buildDownloadUrl } from '../../core/hostdb-client'
-import { SQLITE_VERSION_MAP, normalizeVersion } from './version-maps'
+import { normalizeVersion } from './version-maps'
 import { Engine, type Platform, type Arch } from '../../types'
-
-/**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- */
-export const FALLBACK_VERSION_MAP: Record<string, string> = SQLITE_VERSION_MAP
 
 /**
  * Build the download URL for SQLite binaries from hostdb
@@ -32,14 +26,4 @@ export function getBinaryUrl(
 ): string {
   const fullVersion = normalizeVersion(version)
   return buildDownloadUrl(Engine.SQLite, { version: fullVersion, platform, arch })
-}
-
-/**
- * Get the full version string for a major version
- *
- * @param majorVersion - Major version (e.g., '3')
- * @returns Full version string (e.g., '3.51.2') or null if not supported
- */
-export function getFullVersion(majorVersion: string): string | null {
-  return FALLBACK_VERSION_MAP[majorVersion] || null
 }

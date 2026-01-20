@@ -1,14 +1,14 @@
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
 import { type Platform, type Arch } from '../../types'
 
-/**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- *
- * @deprecated Use POSTGRESQL_VERSION_MAP from version-maps.ts instead
- */
-export const FALLBACK_POSTGRESQL_VERSION_MAP: Record<string, string> =
-  POSTGRESQL_VERSION_MAP
+// Supported platform/arch combinations for PostgreSQL hostdb binaries
+const SUPPORTED_PLATFORM_KEYS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
 
 /**
  * Get the hostdb platform identifier
@@ -20,14 +20,6 @@ export const FALLBACK_POSTGRESQL_VERSION_MAP: Record<string, string> =
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
  * @returns hostdb platform identifier or null if unsupported
  */
-// Supported platform/arch combinations for PostgreSQL hostdb binaries
-const SUPPORTED_PLATFORM_KEYS = new Set([
-  'darwin-arm64',
-  'darwin-x64',
-  'linux-arm64',
-  'linux-x64',
-  'win32-x64',
-])
 
 export function getHostdbPlatform(
   platform: Platform,
@@ -97,6 +89,3 @@ function normalizeVersion(
  * @param majorVersion - Major version (e.g., '17')
  * @returns Full version string (e.g., '17.7.0') or null if not supported
  */
-export function getFullVersion(majorVersion: string): string | null {
-  return POSTGRESQL_VERSION_MAP[majorVersion] || null
-}

@@ -10,15 +10,9 @@
 import { MYSQL_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { logDebug } from '../../core/error-handler'
 import { compareVersions } from '../../core/version-utils'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { mysqlBinaryManager } from './binary-manager'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 // Get available MySQL versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -122,69 +116,3 @@ export async function getLatestVersion(major: string): Promise<string> {
  * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const mysqlReleases = getEngineReleases(releases, Engine.MySQL)
-
-    if (!mysqlReleases) {
-      throw new Error('MySQL releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = mysqlReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for MySQL ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Log the error before falling back to manual URL construction
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logDebug(
-      `Failed to fetch MySQL ${version} URL from hostdb for ${platform}-${arch}: ${errorMessage}. Using fallback URL.`,
-    )
-
-    // Fallback to constructing URL manually if fetch fails
-    return buildDownloadUrl(Engine.MySQL, { version, platform, arch })
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.MySQL)
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map
-    // Handle both major versions ("8.0") and full versions ("8.0.40")
-    const majorParts = version.split('.')
-    let major: string
-    if (majorParts.length === 1) {
-      major = version
-    } else {
-      major = `${majorParts[0]}.${majorParts[1]}`
-    }
-    return version in MYSQL_VERSION_MAP || MYSQL_VERSION_MAP[major] === version
-  }
-}

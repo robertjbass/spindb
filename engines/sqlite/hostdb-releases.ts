@@ -10,20 +10,12 @@
 import {
   SQLITE_VERSION_MAP,
   SUPPORTED_MAJOR_VERSIONS,
-  normalizeVersion,
 } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-  type HostdbReleasesData,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { sqliteBinaryManager } from './binary-manager'
 import { logDebug } from '../../core/error-handler'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 /**
  * Get available SQLite versions from hostdb databases.json, grouped by major version
@@ -110,11 +102,12 @@ export async function getLatestVersion(major: string): Promise<string> {
     return mappedVersion
   }
 
-  // Neither hostdb nor version map has this version - throw error
-  throw new Error(
-    `SQLite major version '${major}' not found in hostdb or version map. ` +
-      `Available major versions: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
-  )
+  // Neither hostdb nor version map has this version - fall back to major.0.0
+  logDebug('SQLite major version not found in hostdb or version map', {
+    major,
+    supportedMajors: SUPPORTED_MAJOR_VERSIONS.join(', '),
+  })
+  return `${major}.0.0`
 }
 
 /**
@@ -125,87 +118,3 @@ export async function getLatestVersion(major: string): Promise<string> {
  * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Normalize version first
-  const fullVersion = normalizeVersion(version)
-
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  let releases: HostdbReleasesData
-  try {
-    releases = await fetchHostdbReleases()
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug(
-      'Failed to fetch SQLite download URL from hostdb, using fallback',
-      {
-        version: fullVersion,
-        platform,
-        arch,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
-    return buildDownloadUrl(Engine.SQLite, { version: fullVersion, platform, arch })
-  }
-
-  const sqliteReleases = getEngineReleases(releases, Engine.SQLite)
-
-  if (!sqliteReleases) {
-    throw new Error('SQLite releases not found in hostdb')
-  }
-
-  // Find the version in releases
-  const release = sqliteReleases[fullVersion]
-  if (!release) {
-    throw new Error(`Version ${fullVersion} not found in hostdb releases`)
-  }
-
-  // Get the platform-specific download URL
-  const platformData = release.platforms[hostdbPlatform]
-  if (!platformData) {
-    throw new Error(
-      `Platform ${hostdbPlatform} not available for SQLite ${fullVersion}`,
-    )
-  }
-
-  return platformData.url
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check (e.g., "3" or "3.51.2")
- * @returns true if the version exists in hostdb databases.json
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.SQLite)
-    if (!versions) return false
-
-    // Check for exact full-version match
-    if (versions.includes(version)) {
-      return true
-    }
-
-    // Check if major-only input (e.g., "3") matches any available version
-    const major = version.split('.')[0]
-    if (version === major && versions.some((v) => v.startsWith(major + '.'))) {
-      return true
-    }
-
-    return false
-  } catch {
-    // Fallback to checking version map when network unavailable
-    // Accept either a major version key (e.g., "3") or its mapped full version (e.g., "3.51.2")
-    if (version in SQLITE_VERSION_MAP) {
-      return true // Input is a major version key
-    }
-    const major = version.split('.')[0]
-    return SQLITE_VERSION_MAP[major] === version
-  }
-}

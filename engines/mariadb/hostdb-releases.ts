@@ -11,14 +11,8 @@ import { MARIADB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
 import { logDebug } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 // Get available MariaDB versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -108,70 +102,3 @@ export async function getLatestVersion(major: string): Promise<string> {
  * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const mariadbReleases = getEngineReleases(releases, Engine.MariaDB)
-
-    if (!mariadbReleases) {
-      throw new Error('MariaDB releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = mariadbReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for MariaDB ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug(
-      'Failed to fetch MariaDB download URL from hostdb, using fallback',
-      {
-        version,
-        platform,
-        arch,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
-    return buildDownloadUrl(Engine.MariaDB, { version, platform, arch })
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.MariaDB)
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map
-    // Handle both major versions ("11.8") and full versions ("11.8.5")
-    const majorParts = version.split('.')
-    const major =
-      majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
-    return (
-      version in MARIADB_VERSION_MAP || MARIADB_VERSION_MAP[major] === version
-    )
-  }
-}

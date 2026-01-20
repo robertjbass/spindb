@@ -121,13 +121,3 @@ function normalizeVersion(
  * @param version - Version (e.g., '25.12', '25.12.3.21')
  * @returns Full version string (e.g., '25.12.3.21') or null if not in version map
  */
-export function getFullVersion(version: string): string | null {
-  // Check if it's a known version (exact or partial match via normalizeVersion)
-  const normalized = normalizeVersion(version, CLICKHOUSE_VERSION_MAP)
-  // If normalizeVersion returned the input unchanged and it's not in the map,
-  // it means the version is unknown
-  if (normalized === version && !CLICKHOUSE_VERSION_MAP[version]) {
-    return null
-  }
-  return normalized
-}

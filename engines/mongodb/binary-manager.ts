@@ -124,7 +124,7 @@ export class MongoDBBinaryManager {
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
-    let downloadSucceeded = false
+    let success = false
     try {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
@@ -196,13 +196,13 @@ export class MongoDBBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
-      downloadSucceeded = true
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
       // Clean up binPath on failure to avoid leaving partial installations
-      if (!downloadSucceeded && existsSync(binPath)) {
+      if (!success) {
         await rm(binPath, { recursive: true, force: true })
       }
     }

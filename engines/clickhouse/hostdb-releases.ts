@@ -15,14 +15,8 @@ import {
 import { compareVersions } from '../../core/version-utils'
 import { logDebug } from '../../core/error-handler'
 import { clickhouseBinaryManager } from './binary-manager'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
-import { Engine, type Platform, type Arch } from '../../types'
+import { Engine } from '../../types'
 
 // Get available ClickHouse versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -122,72 +116,3 @@ export async function getLatestVersion(major: string): Promise<string> {
  * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: Platform,
-  arch: Arch,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const clickhouseReleases = getEngineReleases(releases, Engine.ClickHouse)
-
-    if (!clickhouseReleases) {
-      throw new Error('ClickHouse releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = clickhouseReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for ClickHouse ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug(
-      'Failed to fetch ClickHouse download URL from hostdb, using fallback',
-      {
-        version,
-        platform,
-        arch,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
-    return buildDownloadUrl(Engine.ClickHouse, { version, platform, arch })
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions(Engine.ClickHouse)
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map using explicit key/value checks
-    const major = getMajorVersion(version)
-    const mapKeys = Object.keys(CLICKHOUSE_VERSION_MAP)
-    const mapValues = Object.values(CLICKHOUSE_VERSION_MAP)
-
-    return (
-      mapKeys.includes(version) || // version is a major key (e.g., "25.12")
-      mapValues.includes(version) || // version is a full version value
-      CLICKHOUSE_VERSION_MAP[major] === version // version matches the mapped full version for its major
-    )
-  }
-}
