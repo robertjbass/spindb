@@ -909,6 +909,46 @@ jobs:
         run: npm uninstall -g spindb
 
   # ============================================
+  # Self-Update Test - Tests that spindb update works with pnpm
+  # Installs a specific version and tries to update it
+  # ============================================
+  test-self-update:
+    name: Self-Update Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install spindb@0.19.4 globally via pnpm
+        run: pnpm add -g spindb@0.19.4
+
+      - name: Verify installed version
+        run: spindb version
+
+      - name: Run self-update
+        run: spindb update -y
+
+      - name: Verify update succeeded
+        run: spindb version
+
+      - name: Cleanup
+        run: pnpm remove -g spindb
+
+  # ============================================
   # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
   # Verifies hostdb binaries work on clean Ubuntu systems
   # ============================================
@@ -1079,6 +1119,7 @@ jobs:
         test-cli-e2e,
         test-fresh-install,
         test-upgrade,
+        test-self-update,
         test-docker-linux,
         lint,
         hostdb-sync,
@@ -1137,6 +1178,10 @@ jobs:
           fi
           if [ "${{ needs.test-upgrade.result }}" != "success" ]; then
             echo "Upgrade tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-self-update.result }}" != "success" ]; then
+            echo "Self-update tests failed"
             exit 1
           fi
           if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then

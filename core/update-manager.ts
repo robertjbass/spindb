@@ -9,6 +9,8 @@ const require = createRequire(import.meta.url)
 const NPM_REGISTRY_URL = 'https://registry.npmjs.org/spindb'
 const CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
+type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
+
 export type UpdateCheckResult = {
   currentVersion: string
   latestVersion: string
@@ -24,21 +26,16 @@ export type UpdateResult = {
 }
 
 export class UpdateManager {
-  // Get currently installed version from package.json
   getCurrentVersion(): string {
     const pkg = require('../package.json') as { version: string }
     return pkg.version
   }
 
-  /**
-   * Check npm registry for latest version
-   * Throttled to once per 24 hours unless force=true
-   */
+  // Throttled to once per 24 hours unless force=true
   async checkForUpdate(force = false): Promise<UpdateCheckResult | null> {
     const config = await configManager.load()
     const lastCheck = config.update?.lastCheck
 
-    // Return cached result if within throttle period
     if (!force && lastCheck) {
       const elapsed = Date.now() - new Date(lastCheck).getTime()
       if (elapsed < CHECK_THROTTLE_MS && config.update?.latestVersion) {
@@ -58,7 +55,6 @@ export class UpdateManager {
       const latestVersion = await this.fetchLatestVersion()
       const currentVersion = this.getCurrentVersion()
 
-      // Update cache
       config.update = {
         ...config.update,
         lastCheck: new Date().toISOString(),
@@ -79,21 +75,119 @@ export class UpdateManager {
     }
   }
 
-  // Perform self-update via npm
-  async performUpdate(): Promise<UpdateResult> {
-    const previousVersion = this.getCurrentVersion()
+  // Checks pnpm, yarn, bun first since npm is the fallback
+  async detectPackageManager(): Promise<PackageManager> {
+    try {
+      const { stdout } = await execAsync('pnpm list -g spindb --json', {
+        timeout: 5000,
+      })
+      const data = JSON.parse(stdout) as Array<{ dependencies?: { spindb?: unknown } }>
+      if (data[0]?.dependencies?.spindb) {
+        return 'pnpm'
+      }
+    } catch {
+      // pnpm not installed or spindb not found
+    }
 
     try {
-      // Execute npm install globally
-      await execAsync('npm install -g spindb@latest', { timeout: 60000 })
-
-      // Verify new version by checking what npm reports
-      const { stdout } = await execAsync('npm list -g spindb --json')
-      const npmData = JSON.parse(stdout) as {
-        dependencies?: { spindb?: { version?: string } }
+      const { stdout } = await execAsync('yarn global list --json', {
+        timeout: 5000,
+      })
+      // yarn outputs newline-delimited JSON, look for spindb in any line
+      if (stdout.includes('"spindb@')) {
+        return 'yarn'
       }
-      const newVersion =
-        npmData.dependencies?.spindb?.version || previousVersion
+    } catch {
+      // yarn not installed or spindb not found
+    }
+
+    try {
+      const { stdout } = await execAsync('bun pm ls -g', {
+        timeout: 5000,
+      })
+      if (stdout.includes('spindb@')) {
+        return 'bun'
+      }
+    } catch {
+      // bun not installed or spindb not found
+    }
+
+    return 'npm'
+  }
+
+  getInstallCommand(pm: PackageManager): string {
+    switch (pm) {
+      case 'pnpm':
+        return 'pnpm add -g spindb@latest'
+      case 'yarn':
+        return 'yarn global add spindb@latest'
+      case 'bun':
+        return 'bun add -g spindb@latest'
+      case 'npm':
+        return 'npm install -g spindb@latest'
+    }
+  }
+
+  private getListCommand(pm: PackageManager): string {
+    switch (pm) {
+      case 'pnpm':
+        return 'pnpm list -g spindb --json'
+      case 'yarn':
+        return 'yarn global list --json'
+      case 'bun':
+        return 'bun pm ls -g'
+      case 'npm':
+        return 'npm list -g spindb --json'
+    }
+  }
+
+  private parseVersionFromListOutput(
+    pm: PackageManager,
+    stdout: string,
+    fallback: string,
+  ): string {
+    try {
+      switch (pm) {
+        case 'pnpm': {
+          const data = JSON.parse(stdout) as Array<{
+            dependencies?: { spindb?: { version?: string } }
+          }>
+          return data[0]?.dependencies?.spindb?.version || fallback
+        }
+        case 'npm': {
+          const data = JSON.parse(stdout) as {
+            dependencies?: { spindb?: { version?: string } }
+          }
+          return data.dependencies?.spindb?.version || fallback
+        }
+        case 'yarn':
+        case 'bun': {
+          // Extract version from "spindb@x.y.z" pattern
+          const match = stdout.match(/spindb@(\d+\.\d+\.\d+)/)
+          return match?.[1] || fallback
+        }
+      }
+    } catch {
+      return fallback
+    }
+  }
+
+  async performUpdate(): Promise<UpdateResult> {
+    const previousVersion = this.getCurrentVersion()
+    const pm = await this.detectPackageManager()
+    const installCmd = this.getInstallCommand(pm)
+
+    try {
+      await execAsync(installCmd, { timeout: 60000 })
+
+      const { stdout } = await execAsync(this.getListCommand(pm), {
+        timeout: 10000,
+      })
+      const newVersion = this.parseVersionFromListOutput(
+        pm,
+        stdout,
+        previousVersion,
+      )
 
       return {
         success: true,
@@ -103,13 +197,13 @@ export class UpdateManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
 
-      // Detect permission issues
       if (message.includes('EACCES') || message.includes('permission')) {
+        const sudoCmd = pm === 'npm' ? `sudo ${installCmd}` : installCmd
         return {
           success: false,
           previousVersion,
           newVersion: previousVersion,
-          error: 'Permission denied. Try: sudo npm install -g spindb@latest',
+          error: `Permission denied. Try: ${sudoCmd}`,
         }
       }
 
@@ -117,12 +211,11 @@ export class UpdateManager {
         success: false,
         previousVersion,
         newVersion: previousVersion,
-        error: message,
+        error: `${message}\nManual update: ${installCmd}`,
       }
     }
   }
 
-  // Get cached update info (for showing notification without network call)
   async getCachedUpdateInfo(): Promise<{
     latestVersion?: string
     autoCheckEnabled: boolean
@@ -134,7 +227,6 @@ export class UpdateManager {
     }
   }
 
-  // Set whether auto-update checks are enabled
   async setAutoCheckEnabled(enabled: boolean): Promise<void> {
     const config = await configManager.load()
     config.update = {
@@ -144,7 +236,6 @@ export class UpdateManager {
     await configManager.save()
   }
 
-  // Fetch latest version from npm registry
   private async fetchLatestVersion(): Promise<string> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 10000)
@@ -165,10 +256,6 @@ export class UpdateManager {
     }
   }
 
-  /**
-   * Compare semver versions
-   * Returns >0 if a > b, <0 if a < b, 0 if equal
-   */
   compareVersions(a: string, b: string): number {
     const partsA = a.split('.').map((n) => parseInt(n, 10) || 0)
     const partsB = b.split('.').map((n) => parseInt(n, 10) || 0)

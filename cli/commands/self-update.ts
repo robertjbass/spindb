@@ -25,7 +25,9 @@ export const selfUpdateCommand = new Command('self-update')
         checkSpinner.fail('Could not reach npm registry')
         console.log()
         console.log(uiInfo('Check your internet connection and try again.'))
-        console.log(chalk.gray('  Manual update: npm install -g spindb@latest'))
+        const pm = await updateManager.detectPackageManager()
+        const manualCmd = updateManager.getInstallCommand(pm)
+        console.log(chalk.gray(`  Manual update: ${manualCmd}`))
         process.exit(1)
       }
 
@@ -101,8 +103,6 @@ export const selfUpdateCommand = new Command('self-update')
         updateSpinner.fail('Update failed')
         console.log()
         console.log(uiError(updateResult.error || 'Unknown error'))
-        console.log()
-        console.log(uiInfo('Manual update: npm install -g spindb@latest'))
         process.exit(1)
       }
     },
