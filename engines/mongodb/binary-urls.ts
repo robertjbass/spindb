@@ -6,6 +6,7 @@
  */
 
 import { normalizeVersion } from './version-maps'
+import { Platform } from '../../types'
 
 const HOSTDB_BASE_URL =
   'https://github.com/robertjbass/hostdb/releases/download'
@@ -58,7 +59,7 @@ export function getBinaryUrl(
   }
 
   // Windows uses .zip, Unix uses .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   return `${HOSTDB_BASE_URL}/mongodb-${fullVersion}/mongodb-${fullVersion}-${platformKey}.${ext}`
 }
 

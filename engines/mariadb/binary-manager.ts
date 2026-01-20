@@ -15,7 +15,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import type { ProgressCallback, InstalledBinary } from '../../types'
+import { Platform, type ProgressCallback, type InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -28,7 +28,7 @@ export class MariaDBBinaryManager {
   getDownloadUrl(version: string, platform: string, arch: string): string {
     const platformKey = `${platform}-${arch}`
 
-    if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
+    if (platform !== Platform.Darwin && platform !== Platform.Linux && platform !== Platform.Win32) {
       throw new Error(`Unsupported platform: ${platformKey}`)
     }
 
@@ -54,7 +54,7 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     // MariaDB uses mariadbd or mysqld depending on the build
     const mariadbPath = join(binPath, 'bin', `mariadbd${ext}`)
     const mysqldPath = join(binPath, 'bin', `mysqld${ext}`)
@@ -109,7 +109,7 @@ export class MariaDBBinaryManager {
     )
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'mariadb.zip' : 'mariadb.tar.gz',
+      platform === Platform.Win32 ? 'mariadb.zip' : 'mariadb.tar.gz',
     )
 
     // Ensure directories exist
@@ -142,7 +142,7 @@ export class MariaDBBinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -159,7 +159,7 @@ export class MariaDBBinaryManager {
       }
 
       // Make binaries executable (on Unix-like systems)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -267,7 +267,7 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
 
     // Try mariadbd first, then mysqld (hostdb uses mariadbd)
     let serverPath = join(binPath, 'bin', `mariadbd${ext}`)
@@ -328,7 +328,7 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

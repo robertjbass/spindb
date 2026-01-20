@@ -8,7 +8,6 @@
  * When updating versions:
  * 1. Check hostdb releases.json for available versions
  * 2. Update SQLITE_VERSION_MAP to match
- * 3. Update config/engine-defaults.ts supportedVersions array
  */
 
 import { logDebug } from '../../core/error-handler'

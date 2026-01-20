@@ -30,15 +30,16 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  Platform,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -323,7 +324,7 @@ export class MongoDBEngine extends BaseEngine {
 
     // Note: --fork is not supported on macOS (Sonoma+), so we use detached spawn
     // for both macOS and Windows. Only Linux still supports --fork.
-    const isMac = process.platform === 'darwin'
+    const isMac = process.platform === Platform.Darwin
     const useDetachedSpawn = isWindows() || isMac
 
     if (!useDetachedSpawn) {

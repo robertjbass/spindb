@@ -15,6 +15,7 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -50,7 +51,7 @@ export class MongoDBBinaryManager {
       arch,
     })
     // MongoDB server binary (with .exe on Windows)
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const mongodPath = join(binPath, 'bin', `mongod${ext}`)
     return existsSync(mongodPath)
   }
@@ -112,7 +113,7 @@ export class MongoDBBinaryManager {
       `temp-mongodb-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `mongodb.${ext}`)
 
     // Ensure directories exist
@@ -161,7 +162,7 @@ export class MongoDBBinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -178,7 +179,7 @@ export class MongoDBBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -330,7 +331,7 @@ export class MongoDBBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const mongodPath = join(binPath, 'bin', `mongod${ext}`)
 
     if (!existsSync(mongodPath)) {
@@ -387,7 +388,7 @@ export class MongoDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

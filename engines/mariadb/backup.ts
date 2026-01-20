@@ -16,14 +16,19 @@ import {
   platformService,
 } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import {
+  Platform,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 const engineDef = getEngineDefaults('mariadb')
 
 // Get the path to mariadb-dump or mysqldump from the container's binary path
 async function getDumpPath(container: ContainerConfig): Promise<string> {
   const { platform, arch } = platformService.getPlatformInfo()
-  const ext = platform === 'win32' ? '.exe' : ''
+  const ext = platform === Platform.Win32 ? '.exe' : ''
 
   // Import dynamically to avoid circular dependency
   const { paths } = await import('../../config/paths')

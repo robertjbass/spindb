@@ -21,6 +21,7 @@ import {
   getLatestVersion,
   FALLBACK_VERSION_MAP,
 } from './binary-urls'
+import { SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
 import { createBackup } from './backup'
 import {
@@ -82,7 +83,7 @@ export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
   defaultPort = 5432
-  supportedVersions = engineDef.supportedVersions
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()

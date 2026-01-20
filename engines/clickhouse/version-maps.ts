@@ -8,11 +8,12 @@
  * When updating versions:
  * 1. Check hostdb releases.json for available versions
  * 2. Update CLICKHOUSE_VERSION_MAP to match
- * 3. Update config/engine-defaults.ts supportedVersions array
  *
  * ClickHouse uses YY.MM.X.build versioning (e.g., 25.12.3.21)
  * We use the YY.MM format as the major version identifier.
  */
+
+import { logDebug } from '../../core/error-handler'
 
 /**
  * Map of ClickHouse versions to their latest stable patch versions.
@@ -66,11 +67,11 @@ export function normalizeVersion(version: string): string {
     parts.every((p) => /^\d+$/.test(p))
 
   if (!isValidFormat) {
-    console.warn(
+    logDebug(
       `ClickHouse version '${version}' has invalid format, may not be available in hostdb`,
     )
   } else {
-    console.warn(
+    logDebug(
       `ClickHouse version '${version}' not in version map, may not be available in hostdb`,
     )
   }

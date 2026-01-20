@@ -29,6 +29,23 @@ export enum Engine {
 }
 
 /**
+ * Supported operating systems (matches Node.js process.platform)
+ */
+export enum Platform {
+  Darwin = 'darwin',
+  Linux = 'linux',
+  Win32 = 'win32',
+}
+
+/**
+ * Supported CPU architectures (matches Node.js process.arch)
+ */
+export enum Arch {
+  ARM64 = 'arm64',
+  X64 = 'x64',
+}
+
+/**
  * Array of all supported engine values (type-safe, exhaustive)
  * When adding a new Engine enum value, TypeScript will error here until you add it
  */

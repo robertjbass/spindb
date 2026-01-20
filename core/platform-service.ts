@@ -14,17 +14,20 @@ import { homedir, platform as osPlatform, arch as osArch } from 'os'
 import { execSync, execFileSync, exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
+import { Platform, Arch } from '../types'
 
 const execAsync = promisify(exec)
 
-export type Platform = 'darwin' | 'linux' | 'win32'
-export type Architecture = 'arm64' | 'x64'
+export { Platform, Arch }
+
+// Legacy type alias for backwards compatibility
+export type Architecture = Arch
 
 // Options for resolving home directory under sudo
 export type ResolveHomeDirOptions = {
   sudoUser: string | null
   getentResult: string | null
-  platform: 'darwin' | 'linux'
+  platform: Platform.Darwin | Platform.Linux | string
   defaultHome: string
 }
 
@@ -53,7 +56,7 @@ export function resolveHomeDir(options: ResolveHomeDirOptions): string {
   }
 
   // Fallback to platform-specific default
-  return platform === 'darwin' ? `/Users/${sudoUser}` : `/home/${sudoUser}`
+  return platform === Platform.Darwin ? `/Users/${sudoUser}` : `/home/${sudoUser}`
 }
 
 export type PlatformInfo = {
@@ -225,7 +228,7 @@ class DarwinPlatformService extends BasePlatformService {
     })
 
     this.cachedPlatformInfo = {
-      platform: 'darwin',
+      platform: Platform.Darwin,
       arch: osArch() as Architecture,
       homeDir,
       isWSL: false,
@@ -233,7 +236,7 @@ class DarwinPlatformService extends BasePlatformService {
       sudoUser,
     }
 
-    return this.cachedPlatformInfo
+    return this.cachedPlatformInfo!
   }
 
   getClipboardConfig(): ClipboardConfig {
@@ -406,7 +409,7 @@ class LinuxPlatformService extends BasePlatformService {
     }
 
     this.cachedPlatformInfo = {
-      platform: 'linux',
+      platform: Platform.Linux,
       arch: osArch() as Architecture,
       homeDir,
       isWSL,
@@ -414,7 +417,7 @@ class LinuxPlatformService extends BasePlatformService {
       sudoUser,
     }
 
-    return this.cachedPlatformInfo
+    return this.cachedPlatformInfo!
   }
 
   getClipboardConfig(): ClipboardConfig {
@@ -591,7 +594,7 @@ class Win32PlatformService extends BasePlatformService {
     if (this.cachedPlatformInfo) return this.cachedPlatformInfo
 
     this.cachedPlatformInfo = {
-      platform: 'win32',
+      platform: Platform.Win32,
       arch: osArch() as Architecture,
       homeDir: homedir(),
       isWSL: false,
@@ -599,7 +602,7 @@ class Win32PlatformService extends BasePlatformService {
       sudoUser: null,
     }
 
-    return this.cachedPlatformInfo
+    return this.cachedPlatformInfo!
   }
 
   getClipboardConfig(): ClipboardConfig {
@@ -794,7 +797,7 @@ export const platformService = createPlatformService()
 
 // Check if running on Windows
 export function isWindows(): boolean {
-  return process.platform === 'win32'
+  return process.platform === Platform.Win32
 }
 
 /**

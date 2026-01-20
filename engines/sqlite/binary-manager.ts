@@ -18,6 +18,7 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -78,7 +79,7 @@ export class SQLiteBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
     return existsSync(sqlite3Path)
   }
@@ -131,7 +132,7 @@ export class SQLiteBinaryManager {
       `temp-sqlite-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `sqlite.${ext}`)
 
     // Ensure directories exist
@@ -189,7 +190,7 @@ export class SQLiteBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -208,7 +209,7 @@ export class SQLiteBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -274,7 +275,7 @@ export class SQLiteBinaryManager {
       const binDir = join(binPath, 'bin')
       await mkdir(binDir, { recursive: true })
 
-      const ext = platform === 'win32' ? '.exe' : ''
+      const ext = platform === Platform.Win32 ? '.exe' : ''
       // SQLite tools that should go in bin/
       const executableNames = [
         `sqlite3${ext}`,
@@ -376,7 +377,7 @@ export class SQLiteBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const sqlite3Path = join(binPath, 'bin', `sqlite3${ext}`)
 
     if (!existsSync(sqlite3Path)) {
@@ -431,7 +432,7 @@ export class SQLiteBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

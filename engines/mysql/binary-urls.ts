@@ -3,6 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { FALLBACK_VERSION_MAP } from './version-maps'
+import { Platform } from '../../types'
 
 // Re-export for convenience
 export { FALLBACK_VERSION_MAP }
@@ -79,7 +80,7 @@ export function getBinaryUrl(
 
   const tag = `mysql-${fullVersion}`
   // Windows uses .zip, others use .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   const filename = `mysql-${fullVersion}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`

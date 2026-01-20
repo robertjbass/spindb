@@ -18,6 +18,7 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -64,7 +65,7 @@ export class ValkeyBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const valkeyServerPath = join(binPath, 'bin', `valkey-server${ext}`)
     return existsSync(valkeyServerPath)
   }
@@ -126,7 +127,7 @@ export class ValkeyBinaryManager {
       `temp-valkey-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `valkey.${ext}`)
 
     // Ensure directories exist
@@ -184,7 +185,7 @@ export class ValkeyBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -201,7 +202,7 @@ export class ValkeyBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -363,7 +364,7 @@ export class ValkeyBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const serverPath = join(binPath, 'bin', `valkey-server${ext}`)
 
     if (!existsSync(serverPath)) {
@@ -425,7 +426,7 @@ export class ValkeyBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

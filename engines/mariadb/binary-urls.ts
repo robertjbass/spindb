@@ -3,6 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { MARIADB_VERSION_MAP } from './version-maps'
+import { Platform } from '../../types'
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -77,7 +78,7 @@ export function getBinaryUrl(
 
   const tag = `mariadb-${fullVersion}`
   // Windows uses .zip, others use .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   const filename = `mariadb-${fullVersion}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`

@@ -16,7 +16,7 @@ import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import { logDebug } from '../../core/error-handler'
 import { isWindows, platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
-import type { InstalledBinary } from '../../types'
+import { Platform, type InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -279,7 +279,7 @@ export async function getBinaryInfo(
   let packageManager: string | undefined
   const { platform } = platformService.getPlatformInfo()
   try {
-    if (platform === 'darwin') {
+    if (platform === Platform.Darwin) {
       // On macOS, check if it's from Homebrew
       const { stdout } = await execAsync(
         'brew list postgresql@* 2>/dev/null || brew list libpq 2>/dev/null || true',
@@ -287,7 +287,7 @@ export async function getBinaryInfo(
       if (stdout.includes('postgresql') || stdout.includes('libpq')) {
         packageManager = 'brew'
       }
-    } else if (platform === 'linux') {
+    } else if (platform === Platform.Linux) {
       // On Linux, check common package managers
       try {
         await execAsync('dpkg -S $(which pg_restore) 2>/dev/null')

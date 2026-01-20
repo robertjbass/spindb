@@ -10,6 +10,7 @@ import { getBinaryUrl } from '../engines/postgresql/binary-urls'
 import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
 import { normalizeVersion } from '../engines/postgresql/version-maps'
 import {
+  Platform,
   type Engine,
   type ProgressCallback,
   type InstalledBinary,
@@ -93,12 +94,12 @@ export class BinaryManager {
   getDownloadUrl(version: string, platform: string, arch: string): string {
     const platformKey = `${platform}-${arch}`
 
-    if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
+    if (platform !== Platform.Darwin && platform !== Platform.Linux && platform !== Platform.Win32) {
       throw new Error(`Unsupported platform: ${platformKey}`)
     }
 
     // Windows uses EDB binaries
-    if (platform === 'win32') {
+    if (platform === Platform.Win32) {
       const fullVersion = this.getFullVersion(version)
       return getEDBBinaryUrl(fullVersion)
     }
@@ -134,7 +135,7 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const postgresPath = join(binPath, 'bin', `postgres${ext}`)
     return existsSync(postgresPath)
   }
@@ -189,7 +190,7 @@ export class BinaryManager {
     const tempDir = join(paths.bin, `temp-${fullVersion}-${platform}-${arch}`)
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'postgres.zip' : 'postgres.tar.gz',
+      platform === Platform.Win32 ? 'postgres.zip' : 'postgres.tar.gz',
     )
 
     // Ensure directories exist
@@ -238,7 +239,7 @@ export class BinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         // Windows: EDB ZIP extracts directly to PostgreSQL structure
         await this.extractWindowsBinaries(
           archiveFile,
@@ -268,7 +269,7 @@ export class BinaryManager {
       }
 
       // Fix hardcoded library paths on macOS (hostdb binaries have paths from build environment)
-      if (platform === 'darwin') {
+      if (platform === Platform.Darwin) {
         await this.fixMacOSLibraryPaths(binPath, onProgress)
       }
 
@@ -487,7 +488,7 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const postgresPath = join(binPath, 'bin', `postgres${ext}`)
 
     if (!existsSync(postgresPath)) {
@@ -543,7 +544,7 @@ export class BinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
@@ -574,7 +575,7 @@ export class BinaryManager {
 
     // On Linux, hostdb binaries may not include client tools (psql, pg_dump)
     // Download them separately from the PostgreSQL apt repository if missing
-    if (platform === 'linux') {
+    if (platform === Platform.Linux) {
       await this.ensureClientTools(binPath, version, onProgress)
     }
 

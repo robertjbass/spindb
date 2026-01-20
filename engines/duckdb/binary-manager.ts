@@ -18,6 +18,7 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -62,7 +63,7 @@ export class DuckDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
     return existsSync(duckdbPath)
   }
@@ -115,7 +116,7 @@ export class DuckDBBinaryManager {
       `temp-duckdb-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `duckdb.${ext}`)
 
     // Ensure directories exist
@@ -173,7 +174,7 @@ export class DuckDBBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -192,7 +193,7 @@ export class DuckDBBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -258,7 +259,7 @@ export class DuckDBBinaryManager {
       const binDir = join(binPath, 'bin')
       await mkdir(binDir, { recursive: true })
 
-      const ext = platform === 'win32' ? '.exe' : ''
+      const ext = platform === Platform.Win32 ? '.exe' : ''
       const executableNames = [`duckdb${ext}`]
 
       for (const entry of sourceEntries) {
@@ -370,7 +371,7 @@ export class DuckDBBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
 
     if (!existsSync(duckdbPath)) {
@@ -425,7 +426,7 @@ export class DuckDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

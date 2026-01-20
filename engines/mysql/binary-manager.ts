@@ -13,7 +13,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import type { ProgressCallback, InstalledBinary } from '../../types'
+import { Platform, type ProgressCallback, type InstalledBinary } from '../../types'
 
 export class MySQLBinaryManager {
   /**
@@ -24,7 +24,7 @@ export class MySQLBinaryManager {
   getDownloadUrl(version: string, platform: string, arch: string): string {
     const platformKey = `${platform}-${arch}`
 
-    if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
+    if (platform !== Platform.Darwin && platform !== Platform.Linux && platform !== Platform.Win32) {
       throw new Error(`Unsupported platform: ${platformKey}`)
     }
 
@@ -50,7 +50,7 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const mysqldPath = join(binPath, 'bin', `mysqld${ext}`)
     return existsSync(mysqldPath)
   }
@@ -104,7 +104,7 @@ export class MySQLBinaryManager {
     )
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'mysql.zip' : 'mysql.tar.gz',
+      platform === Platform.Win32 ? 'mysql.zip' : 'mysql.tar.gz',
     )
 
     // Ensure directories exist
@@ -161,7 +161,7 @@ export class MySQLBinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -178,7 +178,7 @@ export class MySQLBinaryManager {
       }
 
       // Make binaries executable (on Unix-like systems)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -290,7 +290,7 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
 
     const serverPath = join(binPath, 'bin', `mysqld${ext}`)
 
@@ -347,7 +347,7 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 

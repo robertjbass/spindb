@@ -3,6 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { VALKEY_VERSION_MAP } from './version-maps'
+import { Platform } from '../../types'
 
 /**
  * Version map for Valkey - used as fallback when hostdb repository is unreachable
@@ -81,7 +82,7 @@ export function getBinaryUrl(
 
   const tag = `valkey-${fullVersion}`
   // Windows uses .zip, Unix uses .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   const filename = `valkey-${fullVersion}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`

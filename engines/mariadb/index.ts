@@ -31,21 +31,23 @@ import {
   getLatestVersion,
   FALLBACK_VERSION_MAP,
 } from './binary-urls'
+import { SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
   parseConnectionString,
 } from './restore'
 import { createBackup } from './backup'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  Platform,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -100,7 +102,7 @@ export class MariaDBEngine extends BaseEngine {
   name = ENGINE
   displayName = 'MariaDB'
   defaultPort = engineDef.defaultPort
-  supportedVersions = engineDef.supportedVersions
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
@@ -369,7 +371,7 @@ export class MariaDBEngine extends BaseEngine {
       `--max-connections=${engineDef.maxConnections}`,
     ]
 
-    if (platform !== 'win32') {
+    if (platform !== Platform.Win32) {
       const socketFile = join(
         paths.getContainerPath(name, { engine: ENGINE }),
         'mysql.sock',
@@ -618,7 +620,7 @@ export class MariaDBEngine extends BaseEngine {
     }
 
     const { platform } = platformService.getPlatformInfo()
-    const killCmd = platform === 'win32' ? 'taskkill /F' : 'kill -9'
+    const killCmd = platform === Platform.Win32 ? 'taskkill /F' : 'kill -9'
     logWarning(`Escalating to force kill for process ${pid}`)
     try {
       await platformService.terminateProcess(pid, true)

@@ -13,6 +13,7 @@ import {
   getCurrentPlatform,
   type DependencyStatus,
 } from '../../core/dependency-manager'
+import { Platform } from '../../types'
 import {
   engineDependencies,
   getEngineDependencies,
@@ -134,7 +135,7 @@ depsCommand
       console.log()
 
       const platform = getCurrentPlatform()
-      if (platform === 'darwin') {
+      if (platform === Platform.Darwin) {
         console.log(chalk.gray('  macOS: Install Homebrew first:'))
         console.log(
           chalk.cyan(

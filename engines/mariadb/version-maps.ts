@@ -8,8 +8,9 @@
  * When updating versions:
  * 1. Check hostdb releases.json for available versions
  * 2. Update MARIADB_VERSION_MAP to match
- * 3. Update config/engine-defaults.ts supportedVersions array
  */
+
+import { logDebug } from '../../core/error-handler'
 
 /**
  * Map of major MariaDB versions to their latest stable patch versions.
@@ -62,9 +63,9 @@ export function normalizeVersion(version: string): string {
     return fullVersion
   }
 
-  // Unknown version - warn and return as-is
+  // Unknown version - log debug and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
-  console.warn(
+  logDebug(
     `MariaDB version '${version}' not in version map, may not be available in hostdb`,
   )
   return version

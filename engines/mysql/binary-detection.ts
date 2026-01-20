@@ -7,6 +7,7 @@ import { exec } from 'child_process'
 import { existsSync, realpathSync } from 'fs'
 import { promisify } from 'util'
 import { platformService } from '../../core/platform-service'
+import { Platform } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -114,7 +115,7 @@ export async function detectInstalledVersions(): Promise<
   }
 
   // Check versioned Homebrew installations (macOS only)
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     const homebrewPaths = [
       '/opt/homebrew/opt/mysql@5.7/bin/mysqld',
       '/opt/homebrew/opt/mysql@8.0/bin/mysqld',
@@ -169,7 +170,7 @@ export async function getMysqldPathForVersion(
   const { platform } = platformService.getPlatformInfo()
 
   // On macOS, check version-specific Homebrew paths
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     const paths = HOMEBREW_MYSQL_VERSION_PATHS[majorVersion] || []
     for (const dir of paths) {
       const mysqldPath = `${dir}/mysqld`
@@ -205,7 +206,7 @@ export async function getMysqldPathForVersion(
 export function getInstallInstructions(): string {
   const { platform } = platformService.getPlatformInfo()
 
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     return (
       'MySQL server not found. Install MySQL:\n' +
       '  brew install mysql\n' +
@@ -214,7 +215,7 @@ export function getInstallInstructions(): string {
     )
   }
 
-  if (platform === 'linux') {
+  if (platform === Platform.Linux) {
     return (
       'MySQL server not found. Install MySQL:\n' +
       '  Ubuntu/Debian: sudo apt install mysql-server\n' +
@@ -261,7 +262,7 @@ export async function getMysqlInstallInfo(
   }
 
   // macOS: Check if path is in Homebrew directories
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     if (
       mysqldPath.includes('/opt/homebrew/') ||
       mysqldPath.includes('/usr/local/Cellar/') ||
@@ -303,7 +304,7 @@ export async function getMysqlInstallInfo(
   }
 
   // Linux: Detect package manager using memoized helper
-  if (platform === 'linux') {
+  if (platform === Platform.Linux) {
     const pm = await getLinuxPackageManager()
     if (pm) {
       const packageName = mariadb ? pm.mariadbPackage : pm.mysqlPackage
