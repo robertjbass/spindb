@@ -19,6 +19,7 @@ import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -103,8 +104,8 @@ export class SQLiteBinaryManager {
         installed.push({
           engine: Engine.SQLite,
           version: match[1],
-          platform: match[2],
-          arch: match[3],
+          platform: match[2] as Platform,
+          arch: match[3] as Arch,
         })
       }
     }

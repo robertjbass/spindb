@@ -19,6 +19,8 @@ import { spawnAsync } from '../../core/spawn-utils'
 import { logDebug } from '../../core/error-handler'
 import {
   Engine,
+  Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -99,8 +101,8 @@ export class ClickHouseBinaryManager {
         installed.push({
           engine: Engine.ClickHouse,
           version,
-          platform,
-          arch,
+          platform: platform as Platform,
+          arch: arch as Arch,
         })
       }
     }

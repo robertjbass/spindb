@@ -113,7 +113,18 @@ export async function getLatestVersion(major: string): Promise<string> {
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
   }
-  return SQLITE_VERSION_MAP[major] || `${major}.0.0`
+
+  const mappedVersion = SQLITE_VERSION_MAP[major]
+  if (mappedVersion) {
+    return mappedVersion
+  }
+
+  // Neither hostdb nor version map has this version - log warning
+  const fallback = `${major}.0.0`
+  logDebug(
+    `SQLite major version '${major}' not found in hostdb or version map, using fallback '${fallback}'`,
+  )
+  return fallback
 }
 
 /**

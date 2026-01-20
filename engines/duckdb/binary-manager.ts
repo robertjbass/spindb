@@ -19,6 +19,7 @@ import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -87,8 +88,8 @@ export class DuckDBBinaryManager {
         installed.push({
           engine: Engine.DuckDB,
           version: match[1],
-          platform: match[2],
-          arch: match[3],
+          platform: match[2] as Platform,
+          arch: match[3] as Arch,
         })
       }
     }

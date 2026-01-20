@@ -11,6 +11,7 @@ import { getEDBBinaryUrl } from '../engines/postgresql/edb-binary-urls'
 import { normalizeVersion } from '../engines/postgresql/version-maps'
 import {
   Platform,
+  type Arch,
   type Engine,
   type ProgressCallback,
   type InstalledBinary,
@@ -157,8 +158,8 @@ export class BinaryManager {
           installed.push({
             engine: parts[0] as Engine,
             version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
+            platform: parts[2] as Platform,
+            arch: parts[3] as Arch,
           })
         }
       }

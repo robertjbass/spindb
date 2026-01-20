@@ -108,8 +108,8 @@ export type ProgressCallback = (progress: {
 export type InstalledBinary = {
   engine: Engine
   version: string
-  platform: string
-  arch: string
+  platform: Platform
+  arch: Arch
 }
 
 export type PortResult = {

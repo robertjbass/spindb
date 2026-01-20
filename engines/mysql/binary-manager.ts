@@ -13,7 +13,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import { Platform, type ProgressCallback, type InstalledBinary } from '../../types'
+import { Platform, type Arch, type ProgressCallback, type InstalledBinary } from '../../types'
 
 export class MySQLBinaryManager {
   /**
@@ -73,8 +73,8 @@ export class MySQLBinaryManager {
           installed.push({
             engine: 'mysql' as InstalledBinary['engine'],
             version: match[1],
-            platform: match[2],
-            arch: match[3],
+            platform: match[2] as Platform,
+            arch: match[3] as Arch,
           })
         }
       }

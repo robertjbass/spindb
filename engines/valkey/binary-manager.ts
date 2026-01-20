@@ -19,6 +19,7 @@ import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -98,8 +99,8 @@ export class ValkeyBinaryManager {
         installed.push({
           engine: Engine.Valkey,
           version,
-          platform,
-          arch,
+          platform: platform as Platform,
+          arch: arch as Arch,
         })
       }
     }

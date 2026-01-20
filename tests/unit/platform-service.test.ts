@@ -16,7 +16,7 @@ describe('PlatformService', () => {
 
       // Platform should be one of the supported values
       assert(
-        ['darwin', 'linux', 'win32'].includes(info.platform),
+        [Platform.Darwin, Platform.Linux, Platform.Win32].includes(info.platform),
         `Platform should be darwin, linux, or win32, got: ${info.platform}`,
       )
 

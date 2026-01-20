@@ -15,7 +15,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import { Platform, type ProgressCallback, type InstalledBinary } from '../../types'
+import { Platform, type Arch, type ProgressCallback, type InstalledBinary } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -78,8 +78,8 @@ export class MariaDBBinaryManager {
           installed.push({
             engine: 'mariadb' as InstalledBinary['engine'],
             version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
+            platform: parts[2] as Platform,
+            arch: parts[3] as Arch,
           })
         }
       }

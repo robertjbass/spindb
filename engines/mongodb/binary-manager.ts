@@ -16,6 +16,7 @@ import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
 } from '../../types'
@@ -84,8 +85,8 @@ export class MongoDBBinaryManager {
         installed.push({
           engine: Engine.MongoDB,
           version,
-          platform,
-          arch,
+          platform: platform as Platform,
+          arch: arch as Arch,
         })
       }
     }
