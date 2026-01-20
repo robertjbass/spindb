@@ -27,7 +27,7 @@ export type Architecture = Arch
 export type ResolveHomeDirOptions = {
   sudoUser: string | null
   getentResult: string | null
-  platform: Platform.Darwin | Platform.Linux | string
+  platform: Platform.Darwin | Platform.Linux
   defaultHome: string
 }
 
@@ -223,7 +223,7 @@ class DarwinPlatformService extends BasePlatformService {
     const homeDir = resolveHomeDir({
       sudoUser,
       getentResult,
-      platform: 'darwin',
+      platform: Platform.Darwin,
       defaultHome: homedir(),
     })
 
@@ -236,7 +236,7 @@ class DarwinPlatformService extends BasePlatformService {
       sudoUser,
     }
 
-    return this.cachedPlatformInfo!
+    return this.cachedPlatformInfo
   }
 
   getClipboardConfig(): ClipboardConfig {
@@ -395,7 +395,7 @@ class LinuxPlatformService extends BasePlatformService {
     const homeDir = resolveHomeDir({
       sudoUser,
       getentResult,
-      platform: 'linux',
+      platform: Platform.Linux,
       defaultHome: homedir(),
     })
 
@@ -417,7 +417,7 @@ class LinuxPlatformService extends BasePlatformService {
       sudoUser,
     }
 
-    return this.cachedPlatformInfo!
+    return this.cachedPlatformInfo
   }
 
   getClipboardConfig(): ClipboardConfig {
@@ -602,7 +602,7 @@ class Win32PlatformService extends BasePlatformService {
       sudoUser: null,
     }
 
-    return this.cachedPlatformInfo!
+    return this.cachedPlatformInfo
   }
 
   getClipboardConfig(): ClipboardConfig {

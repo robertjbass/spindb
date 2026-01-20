@@ -324,8 +324,8 @@ export class MongoDBEngine extends BaseEngine {
 
     // Note: --fork is not supported on macOS (Sonoma+), so we use detached spawn
     // for both macOS and Windows. Only Linux still supports --fork.
-    const isMac = process.platform === Platform.Darwin
-    const useDetachedSpawn = isWindows() || isMac
+    const { platform } = platformService.getPlatformInfo()
+    const useDetachedSpawn = platform === Platform.Win32 || platform === Platform.Darwin
 
     if (!useDetachedSpawn) {
       // Linux: can use --fork for native daemonization

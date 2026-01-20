@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import {
   platformService,
   resolveHomeDir,
+  Platform,
   type PlatformInfo,
   type ClipboardConfig,
   type PackageManagerInfo,
@@ -270,7 +271,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: null,
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/Users/bob',
       })
 
@@ -281,7 +282,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: null,
         getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -299,7 +300,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20:Bob Bass:/Users/bob:/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -310,7 +311,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -321,7 +322,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'deploy',
         getentResult: 'deploy:x:1000:1000:Deploy User:/home/deploy:/bin/bash',
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -333,7 +334,7 @@ describe('resolveHomeDir', () => {
         sudoUser: 'service',
         getentResult:
           'service:x:999:999:Service Account:/var/lib/service:/bin/false',
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -344,7 +345,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh\n',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -357,7 +358,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -368,7 +369,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: null,
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -379,7 +380,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -390,7 +391,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20:::/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -401,7 +402,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: '',
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -414,7 +415,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob-bass',
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -429,7 +430,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob_bass',
         getentResult: null,
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -446,7 +447,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/var/root', // macOS root home
       })
 

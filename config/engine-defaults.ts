@@ -151,25 +151,31 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
 }
 
 /**
+ * Type guard to check if a string is a valid Engine
+ */
+function isValidEngine(value: string): value is Engine {
+  return value in engineDefaults
+}
+
+/**
  * Get engine defaults by name
  * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
  * @throws Error if engine is not found
  */
 export function getEngineDefaults(engine: Engine | string): EngineDefaults {
-  const normalized = engine.toLowerCase() as Engine
-  const defaults = engineDefaults[normalized]
-  if (!defaults) {
+  const normalized = engine.toLowerCase()
+  if (!isValidEngine(normalized)) {
     const available = Object.keys(engineDefaults).join(', ')
     throw new Error(
       `Unknown engine "${engine}". Available engines: ${available}`,
     )
   }
-  return defaults
+  return engineDefaults[normalized]
 }
 
 // Check if an engine is supported
 export function isEngineSupported(engine: Engine | string): boolean {
-  return (engine.toLowerCase() as Engine) in engineDefaults
+  return isValidEngine(engine.toLowerCase())
 }
 
 // Get list of all supported engine names
