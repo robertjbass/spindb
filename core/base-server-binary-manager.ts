@@ -182,12 +182,12 @@ export abstract class BaseServerBinaryManager {
         : `${this.config.engineName}.tar.gz`,
     )
 
-    // Ensure directories exist
+    // Ensure temp directory exists (binPath created after successful download)
     await mkdir(paths.bin, { recursive: true })
     await mkdir(tempDir, { recursive: true })
-    await mkdir(binPath, { recursive: true })
 
     let success = false
+    let binPathCreated = false
     const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
     try {
@@ -239,6 +239,10 @@ export abstract class BaseServerBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
+      // Create binPath only after successful download (avoid empty dirs on early failure)
+      await mkdir(binPath, { recursive: true })
+      binPathCreated = true
+
       if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
       } else {
@@ -266,7 +270,7 @@ export abstract class BaseServerBinaryManager {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
       // Clean up binPath on failure to avoid leaving partial installations
-      if (!success) {
+      if (!success && binPathCreated) {
         await rm(binPath, { recursive: true, force: true })
       }
     }

@@ -314,9 +314,13 @@ async function restoreSqlBackup(
     })
 
     proc.on('close', (code) => {
-      // If there was a stream error, report it
+      // If there was a stream error, report it (include stderr for context)
       if (streamError) {
-        reject(streamError)
+        const errorParts = [streamError.message]
+        if (stderr && stderr.trim()) {
+          errorParts.push(`ClickHouse stderr: ${stderr.trim()}`)
+        }
+        reject(new Error(errorParts.join('. ')))
         return
       }
 

@@ -6,8 +6,6 @@
 
 - [ ] Add examples for each database in `CHEATSHEET.md`
 
-- [ ] **Remove legacy backup format aliases after v1.1** - The `LEGACY_FORMAT_ALIASES` in `config/backup-formats.ts` provides backward compatibility for `--format sql` and `--format dump` flags. After v1.1 release, remove this mapping and require users to use semantic format names (e.g., `custom`, `compressed`, `binary`, `text`, `rdb`, `archive`, `bson`).
-
 ---
 
 ## Roadmap

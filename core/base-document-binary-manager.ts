@@ -193,47 +193,51 @@ export abstract class BaseDocumentBinaryManager {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
 
+      const timeoutErrorMessage =
+        `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
+        `Check your network connection and try again.`
+
       let response: Response
+      let fileStream: ReturnType<typeof createWriteStream> | null = null
       try {
         response = await fetch(url, { signal: controller.signal })
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error(
+              `${this.config.displayName} ${fullVersion} binaries not found (404). ` +
+                `This version may have been removed from hostdb. ` +
+                `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+            )
+          }
+          throw new Error(
+            `Failed to download ${this.config.displayName} binaries: ${response.status} ${response.statusText}`,
+          )
+        }
+
+        if (!response.body) {
+          throw new Error(
+            `Download failed: response has no body (status ${response.status})`,
+          )
+        }
+
+        fileStream = createWriteStream(archiveFile)
+        // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
+        const nodeStream = Readable.fromWeb(response.body)
+        await pipeline(nodeStream, fileStream)
       } catch (error) {
         const err = error as Error
         if (err.name === 'AbortError') {
-          throw new Error(
-            `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
-              `Check your network connection and try again.`,
-          )
+          throw new Error(timeoutErrorMessage)
         }
         throw error
       } finally {
         clearTimeout(timeoutId)
-      }
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error(
-            `${this.config.displayName} ${fullVersion} binaries not found (404). ` +
-              `This version may have been removed from hostdb. ` +
-              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
-          )
+        // Ensure fileStream is destroyed on error
+        if (fileStream && !fileStream.writableEnded) {
+          fileStream.destroy()
         }
-        throw new Error(
-          `Failed to download ${this.config.displayName} binaries: ${response.status} ${response.statusText}`,
-        )
       }
-
-      const fileStream = createWriteStream(archiveFile)
-
-      if (!response.body) {
-        fileStream.destroy()
-        throw new Error(
-          `Download failed: response has no body (status ${response.status})`,
-        )
-      }
-
-      // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
-      const nodeStream = Readable.fromWeb(response.body)
-      await pipeline(nodeStream, fileStream)
 
       if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)

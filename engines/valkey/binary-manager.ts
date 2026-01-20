@@ -13,7 +13,7 @@ import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, type Platform, type Arch } from '../../types'
 
-export class ValkeyBinaryManager extends BaseBinaryManager {
+class ValkeyBinaryManager extends BaseBinaryManager {
   protected readonly config: BinaryManagerConfig = {
     engine: Engine.Valkey,
     engineName: 'valkey',

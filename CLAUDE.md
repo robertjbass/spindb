@@ -172,8 +172,6 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | Valkey | `text` (.valkey) | `rdb` (.rdb) | `rdb` |
 | ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
 
-Legacy format names (`sql`/`dump`) are mapped to engine-specific formats via `normalizeFormat()` for backward compatibility. See `LEGACY_FORMAT_ALIASES` in `config/backup-formats.ts`.
-
 See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
 
 ### File Structure

@@ -315,17 +315,13 @@ get_data_count() {
       echo "$output" | grep -oE '[0-9]+' | head -1
       ;;
     duckdb)
-      # DuckDB outputs a table with box drawing chars, extract number from data row
-      # Skip "int64" in header by looking for standalone numbers
+      # DuckDB outputs a table with box drawing chars, extract the count from data row
+      # Find lines that contain a standalone integer (not "int64" header)
       output=$(spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" 2>/dev/null)
       local count=""
-      # Try Unicode box-drawing character first (│)
-      count=$(echo "$output" | grep -E '^\│[[:space:]]+[0-9]+[[:space:]]+\│$' | grep -oE '[0-9]+' | head -1)
-      # Fallback: try ASCII pipe character (|)
-      if [ -z "$count" ]; then
-        count=$(echo "$output" | grep -E '^\|[[:space:]]+[0-9]+[[:space:]]+\|$' | grep -oE '[0-9]+' | head -1)
-      fi
-      # If both attempts fail, log output for debugging (only when VERBOSE) and return empty
+      # Match lines with optional borders/whitespace around a number, excluding header
+      count=$(echo "$output" | grep -v 'int64' | grep -oE '(^|[^0-9])[0-9]+([^0-9]|$)' | grep -oE '[0-9]+' | head -1)
+      # If parsing fails, log output for debugging (only when VERBOSE) and return empty
       if [ -z "$count" ] && [ "$VERBOSE" = "true" ]; then
         echo "DEBUG: DuckDB output parsing failed. Raw output:" >&2
         echo "$output" >&2

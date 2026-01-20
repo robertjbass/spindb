@@ -21,7 +21,6 @@ import {
   getDefaultFormat,
   isValidFormat,
   getValidFormats,
-  normalizeFormat,
 } from '../../config/backup-formats'
 import type { BackupFormatType } from '../../types'
 
@@ -179,9 +178,8 @@ export const backupCommand = new Command('backup')
             )
             process.exit(1)
           }
-          // Normalize legacy aliases (sql/dump) to new format names
-          // Safe to cast: isValidFormat above guarantees the normalized result is valid
-          format = normalizeFormat(engineName, options.format) as BackupFormatType
+          // Safe to cast: isValidFormat above guarantees the format is valid
+          format = options.format as BackupFormatType
         } else if (!containerArg) {
           const selectedFormat = await promptBackupFormat(engineName)
           if (selectedFormat) {

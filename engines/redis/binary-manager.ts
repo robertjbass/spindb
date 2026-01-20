@@ -13,7 +13,7 @@ import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, type Platform, type Arch } from '../../types'
 
-export class RedisBinaryManager extends BaseBinaryManager {
+class RedisBinaryManager extends BaseBinaryManager {
   protected readonly config: BinaryManagerConfig = {
     engine: Engine.Redis,
     engineName: 'redis',

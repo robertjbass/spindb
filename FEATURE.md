@@ -427,8 +427,6 @@ export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
 }
 ```
 
-**Legacy format aliases:** For backward compatibility, `normalizeFormat()` maps old `sql`/`dump` names to new semantic names. This allows existing scripts using `--format sql` or `--format dump` to continue working.
-
 **Note:** All helper functions (`getBackupFormatInfo`, `supportsFormatChoice`, `getDefaultFormat`, `isValidFormat`) will throw an error if your engine is not configured here. This ensures configuration errors are caught early.
 
 ### 5. OS Dependencies (`config/os-dependencies.ts`)
@@ -1339,7 +1337,7 @@ Use the engine-specific format names that `spindb backup --format` accepts:
 | SQLite | `sql`, `binary` | `.sql`, `.sqlite` |
 | DuckDB | `sql`, `binary` | `.sql`, `.duckdb` |
 
-**Common mistake:** Using legacy format names like `dump` instead of engine-specific names like `custom` (PostgreSQL) or `compressed` (MySQL). Use the exact format names from the table above.
+**Important:** Use the exact format names from the table above. Generic names like `dump` are not supported - use engine-specific names like `custom` (PostgreSQL) or `compressed` (MySQL).
 
 #### 1b. Update `get_backup_extension()` Function
 

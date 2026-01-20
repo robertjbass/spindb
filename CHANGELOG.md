@@ -26,8 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docker E2E data lifecycle tests** - Extended `pnpm test:docker` to test full backup/restore cycles for all engines. Tests now seed data, create backups in multiple formats, restore to new databases, and verify data integrity.
 - **Self-update E2E test in Docker** - Added `pnpm test:docker -- self-update` to test the update command in a clean Linux environment.
 - **Engine-specific backup format types** - Added `PostgreSQLFormat`, `MySQLFormat`, `MongoDBFormat`, `RedisFormat`, etc. type definitions in `types/index.ts` for type-safe format handling.
-- **Format validation helpers** - Added `isValidFormat()`, `normalizeFormat()`, and `getValidFormats()` functions in `config/backup-formats.ts` for engine-aware format validation.
-- **Legacy format alias support** - Old format names (`sql`/`dump`) are automatically mapped to new names via `normalizeFormat()` for backward compatibility. Scripts using `--format dump` will continue to work.
+- **Format validation helpers** - Added `isValidFormat()` and `getValidFormats()` functions in `config/backup-formats.ts` for engine-aware format validation.
 
 ### Changed
 - **backup-formats.ts refactored** - Complete restructure with dynamic format keys per engine. Uses `formats: Record<string, BackupFormatInfo>` instead of hardcoded `sql`/`dump` keys.

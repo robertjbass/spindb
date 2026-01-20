@@ -207,23 +207,6 @@ export const BACKUP_FORMATS: {
 }
 
 /**
- * Legacy format aliases for backward compatibility
- * Maps old format names (sql/dump) to new semantic format names
- * TODO: Remove after v1.1 release once legacy code has been updated
- */
-const LEGACY_FORMAT_ALIASES: Record<Engine, Record<string, string>> = {
-  [Engine.PostgreSQL]: { dump: 'custom' },
-  [Engine.MySQL]: { dump: 'compressed' },
-  [Engine.MariaDB]: { dump: 'compressed' },
-  [Engine.SQLite]: { dump: 'binary' },
-  [Engine.DuckDB]: { dump: 'binary' },
-  [Engine.MongoDB]: { sql: 'bson', dump: 'archive' },
-  [Engine.Redis]: { sql: 'text', dump: 'rdb' },
-  [Engine.Valkey]: { sql: 'text', dump: 'rdb' },
-  [Engine.ClickHouse]: {}, // No aliases needed
-}
-
-/**
  * Type guard to validate if a string is a valid Engine
  */
 export function isEngine(value: string): value is Engine {
@@ -231,32 +214,14 @@ export function isEngine(value: string): value is Engine {
 }
 
 /**
- * Normalize a format name, converting legacy aliases to new semantic names
- *
- * Note: This function returns a string, not BackupFormatType, because it does
- * not validate the input. Callers should use isValidFormat() to verify the
- * result is a valid format before treating it as BackupFormatType.
- *
- * @param engine - The database engine
- * @param format - The format name (may be legacy or new)
- * @returns The normalized format name (string, not validated)
- */
-export function normalizeFormat(engine: Engine, format: string): string {
-  const aliases = LEGACY_FORMAT_ALIASES[engine]
-  return aliases[format] ?? format
-}
-
-/**
  * Check if a format is valid for a given engine
- * Handles both legacy (sql/dump) and new semantic format names
  * @param engine - The database engine
  * @param format - The format name to validate
  * @returns true if the format is valid for this engine
  */
 export function isValidFormat(engine: Engine, format: string): boolean {
-  const normalized = normalizeFormat(engine, format)
   const engineFormats = BACKUP_FORMATS[engine]
-  return normalized in engineFormats.formats
+  return format in engineFormats.formats
 }
 
 /**
@@ -274,15 +239,14 @@ export function getBackupFormatInfo(
   format: BackupFormatType,
 ): BackupFormatInfo {
   const engineFormats = BACKUP_FORMATS[engine]
-  const normalized = normalizeFormat(engine, format)
   // Type assertion needed because TypeScript can't narrow the union to the specific engine's format
   const formatInfo =
-    engineFormats.formats[normalized as keyof typeof engineFormats.formats]
+    engineFormats.formats[format as keyof typeof engineFormats.formats]
 
   if (!formatInfo) {
     const validFormats = Object.keys(engineFormats.formats).join(', ')
     throw new Error(
-      `Invalid backup format "${normalized}" for ${engine}. Valid formats: ${validFormats}`,
+      `Invalid backup format "${format}" for ${engine}. Valid formats: ${validFormats}`,
     )
   }
 
