@@ -672,7 +672,7 @@ export async function handleRestore(): Promise<void> {
           ),
         )
         console.log(
-          chalk.cyan(`  spindb engines download postgresql --version ${requiredVersion}`),
+          chalk.cyan(`  spindb engines download postgresql ${requiredVersion}`),
         )
         console.log()
         console.log(

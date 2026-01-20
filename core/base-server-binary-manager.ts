@@ -223,8 +223,14 @@ export abstract class BaseServerBinaryManager {
         )
       }
 
+      if (!response.body) {
+        throw new Error(
+          `Failed to download ${this.config.displayName} binaries: response body is empty`,
+        )
+      }
+
       const fileStream = createWriteStream(archiveFile)
-      const nodeStream = Readable.fromWeb(response.body!)
+      const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
       if (platform === Platform.Win32) {
@@ -411,9 +417,13 @@ export abstract class BaseServerBinaryManager {
         `Version mismatch: expected ${version}, got ${reportedVersion}`,
       )
     } catch (error) {
-      const err = error as Error
+      const err = error as Error & { stderr?: string; code?: number }
+      // Include stderr and exit code in error message for better debugging
+      const details = [err.message]
+      if (err.stderr) details.push(`stderr: ${err.stderr.trim()}`)
+      if (err.code !== undefined) details.push(`exit code: ${err.code}`)
       throw new Error(
-        `Failed to verify ${this.config.displayName} binaries: ${err.message}`,
+        `Failed to verify ${this.config.displayName} binaries: ${details.join(', ')}`,
       )
     }
   }

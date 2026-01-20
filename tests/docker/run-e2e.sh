@@ -46,6 +46,9 @@ BACKUP_DIR=$(mktemp -d)
 # Track current container for cleanup on interrupt
 CURRENT_CONTAINER=""
 
+# Track if we created a temp SPINDB_HOME (for cleanup)
+CREATED_TEMP_SPINDB_HOME=""
+
 # Cleanup function for graceful exit
 cleanup() {
   local exit_code=$?
@@ -60,6 +63,11 @@ cleanup() {
 
   # Clean up backup directory
   rm -rf "$BACKUP_DIR" 2>/dev/null || true
+
+  # Clean up temp SPINDB_HOME if we created one (non-CI mode)
+  if [ -n "$CREATED_TEMP_SPINDB_HOME" ]; then
+    rm -rf "$CREATED_TEMP_SPINDB_HOME" 2>/dev/null || true
+  fi
 
   exit $exit_code
 }
@@ -317,8 +325,8 @@ get_data_count() {
       if [ -z "$count" ]; then
         count=$(echo "$output" | grep -E '^\|[[:space:]]+[0-9]+[[:space:]]+\|$' | grep -oE '[0-9]+' | head -1)
       fi
-      # If both attempts fail, log output for debugging and return empty
-      if [ -z "$count" ]; then
+      # If both attempts fail, log output for debugging (only when VERBOSE) and return empty
+      if [ -z "$count" ] && [ "$VERBOSE" = "true" ]; then
         echo "DEBUG: DuckDB output parsing failed. Raw output:" >&2
         echo "$output" >&2
       fi
@@ -1034,11 +1042,35 @@ echo "  ${BOLD}Node:${RESET}      $(node --version 2>/dev/null || echo 'not foun
 echo "  ${BOLD}Platform:${RESET}  $(uname -s) $(uname -m)"
 echo "  ${BOLD}SpinDB:${RESET}    $(spindb version 2>/dev/null || echo 'not installed')"
 
+# Check required tools
+log_section "Checking Required Tools"
+REQUIRED_TOOLS="jq node pnpm spindb"
+for tool in $REQUIRED_TOOLS; do
+  log_step "Check $tool"
+  if command -v "$tool" &>/dev/null; then
+    log_step_ok
+  else
+    log_step_fail
+    log_error "$tool is required but not installed"
+    exit 1
+  fi
+done
+
 # Clean state
 log_section "Preparing Test Environment"
-log_step "Clear ~/.spindb"
-rm -rf ~/.spindb 2>/dev/null || true
-log_step_ok
+if [ -n "$CI" ]; then
+  # In CI, safe to delete real home data
+  log_step "Clear ~/.spindb (CI mode)"
+  rm -rf ~/.spindb 2>/dev/null || true
+  log_step_ok
+else
+  # Outside CI, use a temporary directory to avoid deleting real user data
+  log_step "Create isolated SPINDB_HOME"
+  CREATED_TEMP_SPINDB_HOME=$(mktemp -d)
+  export SPINDB_HOME="$CREATED_TEMP_SPINDB_HOME"
+  log_step_result "ok" "$SPINDB_HOME"
+  log_warning "Running outside CI - using temp directory instead of ~/.spindb"
+fi
 
 # Check libraries
 log_step "Check system libraries"

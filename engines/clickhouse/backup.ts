@@ -121,9 +121,11 @@ async function getCreateTableStatement(
   // e.g., "CREATE TABLE `testdb`.`test_user`" → "CREATE TABLE `test_user`"
   // This allows the backup to be restored to any target database
   const createStmt = result.trim()
+  // Escape regex metacharacters in database name for safe interpolation
+  const escapedDatabase = database.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // Match both quoted and unquoted database names: db.table or `db`.table or `db`.`table`
   const dbPrefixPattern = new RegExp(
-    `(CREATE TABLE\\s+)\`?${database}\`?\\.`,
+    `(CREATE TABLE\\s+)\`?${escapedDatabase}\`?\\.`,
     'i',
   )
   return createStmt.replace(dbPrefixPattern, '$1')

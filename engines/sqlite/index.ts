@@ -16,7 +16,7 @@
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, statSync, createWriteStream } from 'fs'
-import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
+import { copyFile, unlink, mkdir, open, writeFile, readFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { BaseEngine } from '../base-engine'
@@ -446,8 +446,7 @@ export class SQLiteEngine extends BaseEngine {
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
-    const fs = await import('fs/promises')
-    const fileContent = await fs.readFile(sqlFilePath, 'utf-8')
+    const fileContent = await readFile(sqlFilePath, 'utf-8')
 
     return new Promise((resolve, reject) => {
       const proc = spawn(sqlite3Path, [dbPath], {

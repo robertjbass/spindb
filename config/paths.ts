@@ -3,10 +3,14 @@ import { getEngineDefaults } from './engine-defaults'
 import { platformService } from '../core/platform-service'
 
 /**
- * Get the SpinDB home directory using the platform service.
- * This handles sudo detection and platform-specific home directories.
+ * Get the SpinDB home directory.
+ * Checks SPINDB_HOME env var first (useful for testing), then falls back
+ * to platform-specific home directory detection.
  */
 function getSpinDBHome(): string {
+  if (process.env.SPINDB_HOME) {
+    return process.env.SPINDB_HOME
+  }
   const platformInfo = platformService.getPlatformInfo()
   return join(platformInfo.homeDir, '.spindb')
 }

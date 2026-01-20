@@ -234,11 +234,13 @@ export function isEngine(value: string): value is Engine {
  * Normalize a format name, converting legacy aliases to new semantic names
  * @param engine - The database engine
  * @param format - The format name (may be legacy or new)
- * @returns The normalized format name
+ * @returns The normalized format name as BackupFormatType
  */
-export function normalizeFormat(engine: Engine, format: string): string {
+export function normalizeFormat(engine: Engine, format: string): BackupFormatType {
   const aliases = LEGACY_FORMAT_ALIASES[engine]
-  return aliases[format] ?? format
+  const normalized = aliases[format] ?? format
+  // The normalized value is always a valid BackupFormatType (either from alias lookup or pass-through)
+  return normalized as BackupFormatType
 }
 
 /**
@@ -269,8 +271,9 @@ export function getBackupFormatInfo(
   format: BackupFormatType,
 ): BackupFormatInfo {
   const engineFormats = BACKUP_FORMATS[engine]
-  const normalized = normalizeFormat(engine, format) as keyof typeof engineFormats.formats
-  return engineFormats.formats[normalized]
+  const normalized = normalizeFormat(engine, format)
+  // Type assertion needed because TypeScript can't narrow the union to the specific engine's format
+  return engineFormats.formats[normalized as keyof typeof engineFormats.formats]
 }
 
 // Get file extension for a backup format

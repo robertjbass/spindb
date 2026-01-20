@@ -184,15 +184,17 @@ export abstract class BaseEmbeddedBinaryManager {
     await mkdir(binPath, { recursive: true })
 
     let success = false
+    const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
     try {
-      // Download the archive with timeout (5 minutes)
+      // Download the archive with timeout
       onProgress?.({
         stage: 'downloading',
         message: `Downloading ${this.config.displayName} binaries...`,
       })
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
 
       let response: Response
       try {
@@ -200,7 +202,10 @@ export abstract class BaseEmbeddedBinaryManager {
       } catch (error) {
         const err = error as Error
         if (err.name === 'AbortError') {
-          throw new Error('Download timed out after 5 minutes')
+          throw new Error(
+            `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
+              `Check your network connection and try again.`,
+          )
         }
         throw error
       } finally {

@@ -360,6 +360,19 @@ export abstract class BaseBinaryManager {
         } catch (error) {
           if (isRenameFallbackError(error)) {
             await cp(sourcePath, destPath, { recursive: true })
+            // Clean up source after successful copy
+            try {
+              await rm(sourcePath, { recursive: true, force: true })
+            } catch (cleanupError) {
+              logDebug('Failed to clean up source after copy', {
+                sourcePath,
+                destPath,
+                error:
+                  cleanupError instanceof Error
+                    ? cleanupError.message
+                    : String(cleanupError),
+              })
+            }
           } else {
             throw error
           }
@@ -385,6 +398,19 @@ export abstract class BaseBinaryManager {
         } catch (error) {
           if (isRenameFallbackError(error)) {
             await cp(sourcePath, destPath, { recursive: true })
+            // Clean up source after successful copy
+            try {
+              await rm(sourcePath, { recursive: true, force: true })
+            } catch (cleanupError) {
+              logDebug('Failed to clean up source after copy', {
+                sourcePath,
+                destPath,
+                error:
+                  cleanupError instanceof Error
+                    ? cleanupError.message
+                    : String(cleanupError),
+              })
+            }
           } else {
             throw error
           }

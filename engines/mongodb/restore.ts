@@ -92,6 +92,22 @@ export type RestoreOptions = {
   sourceDatabase?: string // Original database name in the backup (for namespace remapping)
 }
 
+/**
+ * Add namespace remapping args for archive format restores.
+ * Uses sourceDatabase if provided, otherwise uses wildcard pattern.
+ */
+function addNamespaceRemapArgs(
+  args: string[],
+  sourceDatabase: string | undefined,
+  targetDatabase: string,
+): void {
+  if (sourceDatabase) {
+    args.push(`--nsFrom=${sourceDatabase}.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
+  } else {
+    args.push(`--nsFrom=*.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
+  }
+}
+
 // Restore a MongoDB backup using mongorestore
 export async function restoreBackup(
   backupPath: string,
@@ -168,24 +184,17 @@ export async function restoreBackup(
     }
   } else if (format.format === 'archive-gzip') {
     args.push('--archive=' + backupPath, '--gzip')
-    // For archive format, use namespace remapping to restore to target database
-    // If sourceDatabase is provided, use it explicitly; otherwise use $prefix$ wildcard
-    const nsFromDb = sourceDatabase ?? '$prefix$'
-    args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${database}.$suffix$`)
+    addNamespaceRemapArgs(args, sourceDatabase, database)
   } else if (format.format === 'archive') {
     args.push('--archive=' + backupPath)
-    // For archive format, use namespace remapping to restore to target database
-    const nsFromDb = sourceDatabase ?? '$prefix$'
-    args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${database}.$suffix$`)
+    addNamespaceRemapArgs(args, sourceDatabase, database)
   } else if (format.format === 'bson') {
     // BSON files are passed directly without --archive flag
     args.push(backupPath)
   } else {
     // Default to archive for unknown formats
     args.push('--archive=' + backupPath, '--gzip')
-    // Use namespace remapping for archive format
-    const nsFromDb = sourceDatabase ?? '$prefix$'
-    args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${database}.$suffix$`)
+    addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 
   logDebug(`Running mongorestore with args: ${args.join(' ')}`)
