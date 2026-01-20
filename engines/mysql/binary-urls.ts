@@ -1,5 +1,6 @@
 import { FALLBACK_VERSION_MAP } from './version-maps'
-import { Platform, type Arch } from '../../types'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { Engine, Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -55,13 +56,13 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
   const fullVersion = normalizeVersion(version, FALLBACK_VERSION_MAP)
-
-  const tag = `mysql-${fullVersion}`
-  // Windows uses .zip, others use .tar.gz
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  const filename = `mysql-${fullVersion}-${hostdbPlatform}.${ext}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.MySQL, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**

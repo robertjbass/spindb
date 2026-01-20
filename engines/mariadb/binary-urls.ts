@@ -1,5 +1,6 @@
 import { MARIADB_VERSION_MAP } from './version-maps'
-import { Platform, type Arch } from '../../types'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { Engine, Platform, type Arch } from '../../types'
 
 /**
  * Get the hostdb platform identifier
@@ -52,13 +53,13 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
   const fullVersion = normalizeVersion(version, MARIADB_VERSION_MAP)
-
-  const tag = `mariadb-${fullVersion}`
-  // Windows uses .zip, others use .tar.gz
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  const filename = `mariadb-${fullVersion}-${hostdbPlatform}.${ext}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.MariaDB, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**

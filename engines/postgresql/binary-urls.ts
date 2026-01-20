@@ -1,5 +1,6 @@
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
-import { type Platform, type Arch } from '../../types'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { Engine, Platform, type Arch } from '../../types'
 
 // Supported platform/arch combinations for PostgreSQL hostdb binaries
 const SUPPORTED_PLATFORM_KEYS = new Set([
@@ -52,11 +53,13 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.0 conversion)
   const fullVersion = normalizeVersion(version, POSTGRESQL_VERSION_MAP)
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
-  const tag = `postgresql-${fullVersion}`
-  const filename = `postgresql-${fullVersion}-${hostdbPlatform}.tar.gz`
-
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.PostgreSQL, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**

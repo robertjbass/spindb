@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Logging cleanup** - Changed `console.warn` to `logDebug` in all engine version-maps.ts files to avoid polluting stdout/stderr.
 - **Type safety improvements** - Added `isValidEngine()` type guard for safer engine validation. Removed unsafe `as Engine` casts.
 
+### Fixed
+- **SQLite/DuckDB version fallback** - `getLatestVersion()` now falls back to a sensible major-based version when hostdb or version maps lack an entry, instead of throwing.
+- **Partial install cleanup** - MariaDB and MongoDB binary downloads now remove `binPath` on failure to avoid leaving partially extracted installs.
+
 ### Removed
 - **Dead code** - Removed unused `getPostgresHomebrewBinPath()` function from `engine-defaults.ts`.
 

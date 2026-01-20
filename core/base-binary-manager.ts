@@ -1,8 +1,11 @@
 /**
- * ClickHouse Binary Manager
+ * Base Binary Manager
  *
- * Handles downloading, extracting, and managing ClickHouse binaries from hostdb.
- * ClickHouse uses a single unified binary that handles server, client, and local modes.
+ * Provides shared implementation for binary managers that download from hostdb.
+ * Currently used by Redis and Valkey which have nearly identical download/extraction logic.
+ *
+ * To extend this class, implement the abstract methods and properties that define
+ * engine-specific behavior (engine name, binary names, version parsing, etc.).
  */
 
 import { createWriteStream, existsSync } from 'fs'
@@ -12,42 +15,78 @@ import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { paths } from '../../config/paths'
-import { getBinaryUrl } from './binary-urls'
-import { normalizeVersion } from './version-maps'
-import { spawnAsync } from '../../core/spawn-utils'
-import { logDebug } from '../../core/error-handler'
-import { isRenameFallbackError } from '../../core/fs-error-utils'
+import { paths } from '../config/paths'
+import { spawnAsync } from './spawn-utils'
+import { isRenameFallbackError } from './fs-error-utils'
 import {
-  Engine,
-  type Platform,
+  type Engine,
+  Platform,
   type Arch,
   type ProgressCallback,
   type InstalledBinary,
   isValidPlatform,
   isValidArch,
-} from '../../types'
+} from '../types'
 
 const execAsync = promisify(exec)
 
-export class ClickHouseBinaryManager {
+/**
+ * Configuration for a binary manager instance
+ */
+export type BinaryManagerConfig = {
+  /** Engine enum value (e.g., Engine.Redis) */
+  engine: Engine
+  /** Engine name string for paths and URLs (e.g., 'redis') */
+  engineName: string
+  /** Display name for user messages (e.g., 'Redis') */
+  displayName: string
+  /** Server binary name without extension (e.g., 'redis-server') */
+  serverBinary: string
+}
+
+export abstract class BaseBinaryManager {
+  protected abstract readonly config: BinaryManagerConfig
+
   /**
-   * Get the download URL for a ClickHouse version
-   *
-   * Uses hostdb GitHub releases for all platforms (macOS, Linux).
-   * Note: Windows is not supported by ClickHouse on hostdb.
+   * Get the download URL for a version.
+   * Must be implemented by subclass to use engine-specific binary-urls module.
+   */
+  protected abstract getBinaryUrlFromModule(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+  ): string
+
+  /**
+   * Normalize version string to full version format.
+   * Must be implemented by subclass to use engine-specific version-maps module.
+   */
+  protected abstract normalizeVersionFromModule(version: string): string
+
+  /**
+   * Parse version from server --version output.
+   * Must be implemented by subclass as output format varies by engine.
+   */
+  protected abstract parseVersionFromOutput(stdout: string): string | null
+
+  /**
+   * Get the download URL for a version (public API)
    */
   getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
-    return getBinaryUrl(fullVersion, platform, arch)
+    return this.getBinaryUrlFromModule(fullVersion, platform, arch)
   }
 
-  // Convert version to full version format (e.g., "25.12" -> "25.12.3.21")
+  /**
+   * Convert version to full version format (e.g., "7" -> "7.4.7")
+   */
   getFullVersion(version: string): string {
-    return normalizeVersion(version)
+    return this.normalizeVersionFromModule(version)
   }
 
-  // Check if binaries for a specific version are already installed
+  /**
+   * Check if binaries for a specific version are already installed
+   */
   async isInstalled(
     version: string,
     platform: Platform,
@@ -55,17 +94,19 @@ export class ClickHouseBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: this.config.engineName,
       version: fullVersion,
       platform,
       arch,
     })
-    // ClickHouse uses a single binary named 'clickhouse'
-    const clickhousePath = join(binPath, 'bin', 'clickhouse')
-    return existsSync(clickhousePath)
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    const serverPath = join(binPath, 'bin', `${this.config.serverBinary}${ext}`)
+    return existsSync(serverPath)
   }
 
-  // List all installed ClickHouse versions
+  /**
+   * List all installed versions for this engine
+   */
   async listInstalled(): Promise<InstalledBinary[]> {
     const binDir = paths.bin
     if (!existsSync(binDir)) {
@@ -74,14 +115,15 @@ export class ClickHouseBinaryManager {
 
     const entries = await readdir(binDir, { withFileTypes: true })
     const installed: InstalledBinary[] = []
+    const prefix = `${this.config.engineName}-`
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
-      if (!entry.name.startsWith('clickhouse-')) continue
+      if (!entry.name.startsWith(prefix)) continue
 
-      // Split from end to handle versions with dashes
-      // Format: clickhouse-{version}-{platform}-{arch}
-      const rest = entry.name.slice('clickhouse-'.length)
+      // Split from end to handle versions with dashes (e.g., 7.4.0-rc1)
+      // Format: {engine}-{version}-{platform}-{arch}
+      const rest = entry.name.slice(prefix.length)
       const parts = rest.split('-')
       if (parts.length < 3) continue
 
@@ -91,7 +133,7 @@ export class ClickHouseBinaryManager {
 
       if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
-          engine: Engine.ClickHouse,
+          engine: this.config.engine,
           version,
           platform,
           arch,
@@ -102,7 +144,9 @@ export class ClickHouseBinaryManager {
     return installed
   }
 
-  // Download and extract ClickHouse binaries
+  /**
+   * Download and extract binaries
+   */
   async download(
     version: string,
     platform: Platform,
@@ -112,16 +156,18 @@ export class ClickHouseBinaryManager {
     const fullVersion = this.getFullVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: this.config.engineName,
       version: fullVersion,
       platform,
       arch,
     })
     const tempDir = join(
       paths.bin,
-      `temp-clickhouse-${fullVersion}-${platform}-${arch}`,
+      `temp-${this.config.engineName}-${fullVersion}-${platform}-${arch}`,
     )
-    const archiveFile = join(tempDir, 'clickhouse.tar.gz')
+    // Windows uses .zip, Unix uses .tar.gz
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
+    const archiveFile = join(tempDir, `${this.config.engineName}.${ext}`)
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -133,7 +179,7 @@ export class ClickHouseBinaryManager {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
         stage: 'downloading',
-        message: 'Downloading ClickHouse binaries...',
+        message: `Downloading ${this.config.displayName} binaries...`,
       })
 
       const controller = new AbortController()
@@ -155,13 +201,13 @@ export class ClickHouseBinaryManager {
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
-            `ClickHouse ${fullVersion} binaries not found (404). ` +
+            `${this.config.displayName} ${fullVersion} binaries not found (404). ` +
               `This version may have been removed from hostdb. ` +
               `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
           )
         }
         throw new Error(
-          `Failed to download ClickHouse binaries: ${response.status} ${response.statusText}`,
+          `Failed to download ${this.config.displayName} binaries: ${response.status} ${response.statusText}`,
         )
       }
 
@@ -178,14 +224,30 @@ export class ClickHouseBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+      if (platform === Platform.Win32) {
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
+      } else {
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
+      }
 
-      // Make binaries executable
-      const binDir = join(binPath, 'bin')
-      if (existsSync(binDir)) {
-        const binaries = await readdir(binDir)
-        for (const binary of binaries) {
-          await chmod(join(binDir, binary), 0o755)
+      // Make binaries executable (Unix only)
+      if (platform !== Platform.Win32) {
+        const binDir = join(binPath, 'bin')
+        if (existsSync(binDir)) {
+          const binaries = await readdir(binDir)
+          for (const binary of binaries) {
+            await chmod(join(binDir, binary), 0o755)
+          }
         }
       }
 
@@ -205,8 +267,10 @@ export class ClickHouseBinaryManager {
     }
   }
 
-  // Extract Unix binaries from tar.gz file
-  private async extractUnixBinaries(
+  /**
+   * Extract Unix binaries from tar.gz file
+   */
+  protected async extractUnixBinaries(
     tarFile: string,
     binPath: string,
     tempDir: string,
@@ -225,34 +289,72 @@ export class ClickHouseBinaryManager {
     await this.moveExtractedEntries(extractDir, binPath)
   }
 
-  // Move extracted entries from extractDir to binPath
-  private async moveExtractedEntries(
+  /**
+   * Extract Windows binaries from zip file
+   */
+  protected async extractWindowsBinaries(
+    zipFile: string,
+    binPath: string,
+    tempDir: string,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries...',
+    })
+
+    // Extract zip to temp directory first using PowerShell
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+
+    // Escape single quotes for PowerShell (double them)
+    const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
+
+    // Build the PowerShell command
+    const command = `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`
+
+    // Use -EncodedCommand to avoid shell parsing issues with special characters
+    // (e.g., $ in usernames like C:\Users\John$Doe would be interpreted as variables)
+    const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
+
+    await spawnAsync('powershell', [
+      '-NoProfile',
+      '-EncodedCommand',
+      encodedCommand,
+    ])
+
+    await this.moveExtractedEntries(extractDir, binPath)
+  }
+
+  /**
+   * Move extracted entries from extractDir to binPath, handling nested engine directories.
+   * Unix archives have {engine}/bin/ structure, Windows archives may have binaries directly in {engine}/.
+   * This method normalizes both to binPath/bin/ structure.
+   */
+  protected async moveExtractedEntries(
     extractDir: string,
     binPath: string,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
-
-    // Check for a clickhouse subdirectory
-    const clickhouseDir = entries.find(
+    const engineDir = entries.find(
       (e) =>
         e.isDirectory() &&
-        (e.name === 'clickhouse' || e.name.startsWith('clickhouse-')),
+        (e.name === this.config.engineName ||
+          e.name.startsWith(`${this.config.engineName}-`)),
     )
 
-    const sourceDir = clickhouseDir
-      ? join(extractDir, clickhouseDir.name)
-      : extractDir
-    const sourceEntries = clickhouseDir
+    const sourceDir = engineDir ? join(extractDir, engineDir.name) : extractDir
+    const sourceEntries = engineDir
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    // Check if source has a bin/ subdirectory
+    // Check if source has a bin/ subdirectory (Unix structure)
     const hasBinDir = sourceEntries.some(
       (e) => e.isDirectory() && e.name === 'bin',
     )
 
     if (hasBinDir) {
-      // Standard structure: move all entries as-is (preserves bin/ subdirectory)
+      // Unix structure: move all entries as-is (preserves bin/ subdirectory)
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
@@ -267,20 +369,20 @@ export class ClickHouseBinaryManager {
         }
       }
     } else {
-      // Flat structure: create bin/ and move binaries there
+      // Windows structure: binaries are directly in engine/, need to create bin/ subdirectory
+      // Move .exe files to bin/, move other files (configs, DLLs) to root
       const destBinDir = join(binPath, 'bin')
       await mkdir(destBinDir, { recursive: true })
 
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
-        // Check if it's an executable (no extension on Unix)
-        const isExecutable =
-          entry.isFile() &&
-          !entry.name.includes('.') &&
-          entry.name.startsWith('clickhouse')
-        const destPath = isExecutable
-          ? join(destBinDir, entry.name)
-          : join(binPath, entry.name)
+        // Put executables and DLLs in bin/, configs and other files in root
+        const isExecutable = entry.name.endsWith('.exe')
+        const isDll = entry.name.endsWith('.dll')
+        const destPath =
+          isExecutable || isDll
+            ? join(destBinDir, entry.name)
+            : join(binPath, entry.name)
         try {
           await rename(sourcePath, destPath)
         } catch (error) {
@@ -294,7 +396,9 @@ export class ClickHouseBinaryManager {
     }
   }
 
-  // Verify that ClickHouse binaries are working
+  /**
+   * Verify that binaries are working
+   */
   async verify(
     version: string,
     platform: Platform,
@@ -302,38 +406,37 @@ export class ClickHouseBinaryManager {
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: this.config.engineName,
       version: fullVersion,
       platform,
       arch,
     })
 
-    const clickhousePath = join(binPath, 'bin', 'clickhouse')
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    const serverPath = join(binPath, 'bin', `${this.config.serverBinary}${ext}`)
 
-    if (!existsSync(clickhousePath)) {
-      throw new Error(`ClickHouse binary not found at ${binPath}/bin/`)
+    if (!existsSync(serverPath)) {
+      throw new Error(
+        `${this.config.displayName} binary not found at ${binPath}/bin/`,
+      )
     }
 
     try {
-      const { stdout, stderr } = await execAsync(
-        `"${clickhousePath}" client --version`,
-      )
-      // Log stderr if present (may contain benign warnings about config, etc.)
+      const { stdout, stderr } = await execAsync(`"${serverPath}" --version`)
+      // Log stderr if present (may contain warnings)
       if (stderr && stderr.trim()) {
-        logDebug(`clickhouse client stderr during version check: ${stderr.trim()}`)
+        console.warn(`${this.config.serverBinary} stderr: ${stderr.trim()}`)
       }
-      // Extract version from output like "ClickHouse client version 25.12.3.21 (official build)"
-      const match = stdout.match(/version\s+(\d+\.\d+\.\d+\.\d+)/)
-      const altMatch = !match ? stdout.match(/(\d+\.\d+\.\d+\.\d+)/) : null
-      const reportedVersion = match?.[1] ?? altMatch?.[1]
+
+      const reportedVersion = this.parseVersionFromOutput(stdout)
 
       if (!reportedVersion) {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
-      // Check if major versions match (YY.MM format)
-      const expectedMajor = version.split('.').slice(0, 2).join('.')
-      const reportedMajor = reportedVersion.split('.').slice(0, 2).join('.')
+      // Check if major versions match
+      const expectedMajor = version.split('.')[0]
+      const reportedMajor = reportedVersion.split('.')[0]
       if (expectedMajor === reportedMajor) {
         return true
       }
@@ -353,12 +456,14 @@ export class ClickHouseBinaryManager {
       if (err.stderr) details.push(`stderr: ${err.stderr.trim()}`)
       if (err.code !== undefined) details.push(`exit code: ${err.code}`)
       throw new Error(
-        `Failed to verify ClickHouse binaries: ${details.join(', ')}`,
+        `Failed to verify ${this.config.displayName} binaries: ${details.join(', ')}`,
       )
     }
   }
 
-  // Get the path to a specific binary
+  /**
+   * Get the path to a specific binary (e.g., redis-server, redis-cli)
+   */
   getBinaryExecutable(
     version: string,
     platform: Platform,
@@ -367,15 +472,18 @@ export class ClickHouseBinaryManager {
   ): string {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: this.config.engineName,
       version: fullVersion,
       platform,
       arch,
     })
-    return join(binPath, 'bin', binary)
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    return join(binPath, 'bin', `${binary}${ext}`)
   }
 
-  // Ensure binaries are available, downloading if necessary
+  /**
+   * Ensure binaries are available, downloading if necessary
+   */
   async ensureInstalled(
     version: string,
     platform: Platform,
@@ -387,10 +495,10 @@ export class ClickHouseBinaryManager {
     if (await this.isInstalled(version, platform, arch)) {
       onProgress?.({
         stage: 'cached',
-        message: 'Using cached ClickHouse binaries',
+        message: `Using cached ${this.config.displayName} binaries`,
       })
       return paths.getBinaryPath({
-        engine: 'clickhouse',
+        engine: this.config.engineName,
         version: fullVersion,
         platform,
         arch,
@@ -400,11 +508,13 @@ export class ClickHouseBinaryManager {
     return await this.download(version, platform, arch, onProgress)
   }
 
-  // Delete installed binaries for a specific version
+  /**
+   * Delete installed binaries for a specific version
+   */
   async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
-      engine: 'clickhouse',
+      engine: this.config.engineName,
       version: fullVersion,
       platform,
       arch,
@@ -415,5 +525,3 @@ export class ClickHouseBinaryManager {
     }
   }
 }
-
-export const clickhouseBinaryManager = new ClickHouseBinaryManager()

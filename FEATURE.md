@@ -1311,6 +1311,74 @@ YOURENGINE_VERSION=$(get_default_version yourengine)
 
 ## Binary Management
 
+### Choosing a Binary Manager Base Class
+
+SpinDB provides three base classes for binary managers. Choose the appropriate one based on your engine type:
+
+| Base Class | Used By | When to Use |
+|------------|---------|-------------|
+| `BaseBinaryManager` | Redis, Valkey | Server-based engines with `bin/` directory structure in archives |
+| `BaseServerBinaryManager` | MySQL, MariaDB | SQL server engines with `extractWindowsArchive` and X.Y version matching |
+| `BaseEmbeddedBinaryManager` | SQLite, DuckDB | Embedded/file-based engines with flat archives (executables at root) |
+
+**Decision tree:**
+
+1. **Is it a file-based/embedded database?** (no server process)
+   - Yes → Use `BaseEmbeddedBinaryManager`
+   - No → Continue to step 2
+
+2. **Is it a SQL database with X.Y major versioning?** (like MySQL 8.0, MariaDB 11.8)
+   - Yes → Use `BaseServerBinaryManager`
+   - No → Continue to step 3
+
+3. **Is it a server with single-digit major versions?** (like Redis 7, Valkey 8)
+   - Yes → Use `BaseBinaryManager`
+   - No → Create a custom binary manager (rare)
+
+**Example implementations:**
+
+```ts
+// For embedded databases (SQLite, DuckDB)
+import { BaseEmbeddedBinaryManager } from '../../core/base-embedded-binary-manager'
+
+class YourEmbeddedBinaryManager extends BaseEmbeddedBinaryManager {
+  protected readonly config = {
+    engine: Engine.YourEngine,
+    engineName: 'yourengine',
+    displayName: 'YourEngine',
+    primaryBinary: 'yourengine',           // Main executable to check
+    executableNames: ['yourengine'],        // All executables in flat archive
+  }
+  // Implement abstract methods...
+}
+
+// For SQL servers (MySQL, MariaDB)
+import { BaseServerBinaryManager } from '../../core/base-server-binary-manager'
+
+class YourSQLServerBinaryManager extends BaseServerBinaryManager {
+  protected readonly config = {
+    engine: Engine.YourEngine,
+    engineName: 'yourengine',
+    displayName: 'YourEngine',
+    serverBinaryNames: ['yourengined', 'yourengine-server'],  // Checked in order
+  }
+  // Implement abstract methods...
+}
+
+// For Redis-like servers (Redis, Valkey)
+import { BaseBinaryManager } from '../../core/base-binary-manager'
+
+class YourServerBinaryManager extends BaseBinaryManager {
+  protected readonly config = {
+    engine: Engine.YourEngine,
+    engineName: 'yourengine',
+    displayName: 'YourEngine',
+    serverBinary: 'yourengine-server',
+  }
+  // Implement abstract methods...
+}
+```
+
 ### hostdb Binary Files
 
 For engines using [hostdb](https://github.com/robertjbass/hostdb), create these files:

@@ -6,10 +6,8 @@
  */
 
 import { normalizeVersion } from './version-maps'
-import { Platform, type Arch } from '../../types'
-
-const HOSTDB_BASE_URL =
-  'https://github.com/robertjbass/hostdb/releases/download'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { Engine, Platform, type Arch } from '../../types'
 
 // Supported platforms for MongoDB hostdb binaries
 export const SUPPORTED_PLATFORMS = ['darwin', 'linux', 'win32'] as const
@@ -47,17 +45,19 @@ export function getBinaryUrl(
   arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
-  const platformKey = getHostdbPlatform(platform, arch)
+  const hostdbPlatform = getHostdbPlatform(platform, arch)
 
-  if (!platformKey) {
+  if (!hostdbPlatform) {
     throw new Error(
       `Unsupported platform: ${platform}-${arch}. MongoDB hostdb binaries are available for: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64`,
     )
   }
 
-  // Windows uses .zip, Unix uses .tar.gz
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  return `${HOSTDB_BASE_URL}/mongodb-${fullVersion}/mongodb-${fullVersion}-${platformKey}.${ext}`
-}
 
-// Check if a platform/arch combination is supported
+  return buildHostdbUrl(Engine.MongoDB, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
+}

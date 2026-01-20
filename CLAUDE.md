@@ -69,6 +69,25 @@ Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for ful
 - Registry in `~/.spindb/config.json` tracks files by name
 - Use `spindb attach <path>` / `spindb detach <name>` to manage registry
 
+### Binary Manager Base Classes
+
+When adding a new engine, choose the appropriate binary manager base class:
+
+| Base Class | Location | Used By | Use Case |
+|------------|----------|---------|----------|
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey | Key-value stores with `bin/` layout |
+| `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | MySQL, MariaDB | SQL servers needing version verification |
+| `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
+
+**Decision tree:**
+1. Is it a file-based/embedded database (no server process)? → `BaseEmbeddedBinaryManager`
+2. Is it a SQL server needing `--version` verification? → `BaseServerBinaryManager`
+3. Is it a key-value or document store? → `BaseBinaryManager`
+
+**Note:** PostgreSQL, MongoDB, and ClickHouse have custom binary managers due to unique requirements (EDB binaries, mongosh, XML configs).
+
+See [FEATURE.md](FEATURE.md) for detailed implementation guidance and code examples.
+
 ### Engine Aliases
 
 Engines can be referenced by aliases in CLI commands:

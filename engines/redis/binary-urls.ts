@@ -1,6 +1,7 @@
 import { REDIS_VERSION_MAP } from './version-maps'
+import { buildHostdbUrl } from '../../core/hostdb-client'
 import { logDebug } from '../../core/error-handler'
-import { Platform, type Arch } from '../../types'
+import { Engine, Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -56,13 +57,13 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
   const fullVersion = normalizeVersion(version, REDIS_VERSION_MAP)
-
-  const tag = `redis-${fullVersion}`
-  // Windows uses .zip, Unix uses .tar.gz
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  const filename = `redis-${fullVersion}-${hostdbPlatform}.${ext}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.Redis, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**

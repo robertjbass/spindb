@@ -20,6 +20,23 @@ const execAsync = promisify(exec)
 
 export { Platform, Arch }
 
+/**
+ * Validates and normalizes the system architecture to a supported Arch enum value.
+ * Throws an error for unsupported architectures rather than casting unsafely.
+ */
+function validateArch(arch: string): Arch {
+  switch (arch) {
+    case 'arm64':
+      return Arch.ARM64
+    case 'x64':
+      return Arch.X64
+    default:
+      throw new Error(
+        `Unsupported architecture: ${arch}. SpinDB only supports arm64 and x64 architectures.`,
+      )
+  }
+}
+
 // Options for resolving home directory under sudo
 export type ResolveHomeDirOptions = {
   sudoUser: string | null
@@ -226,7 +243,7 @@ class DarwinPlatformService extends BasePlatformService {
 
     this.cachedPlatformInfo = {
       platform: Platform.Darwin,
-      arch: osArch() as Arch,
+      arch: validateArch(osArch()),
       homeDir,
       isWSL: false,
       isSudo: !!sudoUser,
@@ -407,7 +424,7 @@ class LinuxPlatformService extends BasePlatformService {
 
     this.cachedPlatformInfo = {
       platform: Platform.Linux,
-      arch: osArch() as Arch,
+      arch: validateArch(osArch()),
       homeDir,
       isWSL,
       isSudo: !!sudoUser,
@@ -592,7 +609,7 @@ class Win32PlatformService extends BasePlatformService {
 
     this.cachedPlatformInfo = {
       platform: Platform.Win32,
-      arch: osArch() as Arch,
+      arch: validateArch(osArch()),
       homeDir: homedir(),
       isWSL: false,
       isSudo: false,

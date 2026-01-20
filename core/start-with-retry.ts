@@ -8,6 +8,7 @@
 import { portManager } from './port-manager'
 import { containerManager } from './container-manager'
 import { logWarning, logDebug } from './error-handler'
+import { isPortInUseError } from './fs-error-utils'
 import type { BaseEngine } from '../engines/base-engine'
 import { getEngineDefaults } from '../config/defaults'
 import type { ContainerConfig } from '../types'
@@ -24,17 +25,6 @@ export type StartWithRetryResult = {
   finalPort: number
   retriesUsed: number
   error?: Error
-}
-
-function isPortInUseError(error: unknown): boolean {
-  const message = (error as Error)?.message?.toLowerCase() || ''
-  return (
-    message.includes('address already in use') ||
-    message.includes('eaddrinuse') ||
-    (message.includes('port') && message.includes('in use')) ||
-    message.includes('could not bind') ||
-    message.includes('socket already in use')
-  )
 }
 
 /**
