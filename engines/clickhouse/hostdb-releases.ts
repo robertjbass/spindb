@@ -17,23 +17,12 @@ import { logDebug } from '../../core/error-handler'
 import { clickhouseBinaryManager } from './binary-manager'
 import {
   fetchHostdbReleases,
-  clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
   buildDownloadUrl,
-  type HostdbRelease,
-  type HostdbReleasesData,
-  type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { Engine, type Platform, type Arch } from '../../types'
-
-// TODO - remove all places where vars are re-exported for backwards compatibility - search below comment
-// Re-export types for backwards compatibility
-export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
-
-// Re-export shared functions
-export const clearCache = clearSharedCache
 
 // Get available ClickHouse versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<

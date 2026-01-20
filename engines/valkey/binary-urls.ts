@@ -1,26 +1,6 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { VALKEY_VERSION_MAP } from './version-maps'
+import { logDebug } from '../../core/error-handler'
 import { Platform, type Arch } from '../../types'
-
-/**
- * Version map for Valkey - used as fallback when hostdb repository is unreachable
- */
-export const VERSION_MAP: Record<string, string> = VALKEY_VERSION_MAP
-
-// Fetch available versions from hostdb repository
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -78,7 +58,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, VALKEY_VERSION_MAP)
 
   const tag = `valkey-${fullVersion}`
   // Windows uses .zip, Unix uses .tar.gz
@@ -97,7 +77,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = VALKEY_VERSION_MAP,
 ): string {
   // Check if it's an exact key in the map (handles "8", "9", "8.0", etc.)
   if (versionMap[version]) {
@@ -125,9 +105,9 @@ function normalizeVersion(
     }
   }
 
-  // Unknown version format - warn and return as-is
+  // Unknown version format - log and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
-  console.warn(
+  logDebug(
     `Valkey version '${version}' not in version map, may not be available in hostdb`,
   )
   return version
@@ -140,5 +120,5 @@ function normalizeVersion(
  * @returns Full version string (e.g., '8.0.6') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
+  return VALKEY_VERSION_MAP[majorVersion] || null
 }

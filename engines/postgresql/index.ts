@@ -15,13 +15,15 @@ import {
 import { findBinary } from '../../core/dependency-manager'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
+import { getBinaryUrl } from './binary-urls'
 import {
-  getBinaryUrl,
   fetchAvailableVersions,
   getLatestVersion,
-  FALLBACK_VERSION_MAP,
-} from './binary-urls'
-import { SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+} from './hostdb-releases'
+import {
+  SUPPORTED_MAJOR_VERSIONS,
+  POSTGRESQL_VERSION_MAP,
+} from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
 import { createBackup } from './backup'
 import {
@@ -104,7 +106,7 @@ export class PostgreSQLEngine extends BaseEngine {
       return version
     }
     // It's a major version, resolve using fallback map (sync, no network)
-    return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
+    return POSTGRESQL_VERSION_MAP[version] || `${version}.0.0`
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {

@@ -20,9 +20,6 @@ const execAsync = promisify(exec)
 
 export { Platform, Arch }
 
-// Legacy type alias for backwards compatibility
-export type Architecture = Arch
-
 // Options for resolving home directory under sudo
 export type ResolveHomeDirOptions = {
   sudoUser: string | null
@@ -61,7 +58,7 @@ export function resolveHomeDir(options: ResolveHomeDirOptions): string {
 
 export type PlatformInfo = {
   platform: Platform
-  arch: Architecture
+  arch: Arch
   homeDir: string
   isWSL: boolean
   isSudo: boolean
@@ -229,7 +226,7 @@ class DarwinPlatformService extends BasePlatformService {
 
     this.cachedPlatformInfo = {
       platform: Platform.Darwin,
-      arch: osArch() as Architecture,
+      arch: osArch() as Arch,
       homeDir,
       isWSL: false,
       isSudo: !!sudoUser,
@@ -410,7 +407,7 @@ class LinuxPlatformService extends BasePlatformService {
 
     this.cachedPlatformInfo = {
       platform: Platform.Linux,
-      arch: osArch() as Architecture,
+      arch: osArch() as Arch,
       homeDir,
       isWSL,
       isSudo: !!sudoUser,
@@ -595,7 +592,7 @@ class Win32PlatformService extends BasePlatformService {
 
     this.cachedPlatformInfo = {
       platform: Platform.Win32,
-      arch: osArch() as Architecture,
+      arch: osArch() as Arch,
       homeDir: homedir(),
       isWSL: false,
       isSudo: false,

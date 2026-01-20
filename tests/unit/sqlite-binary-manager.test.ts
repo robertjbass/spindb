@@ -121,7 +121,8 @@ describe('SQLite binary-urls', () => {
     })
 
     it('should return undefined for unsupported platform', () => {
-      const result = getHostdbPlatform('freebsd', 'x64')
+      // Cast to Platform to test runtime validation of invalid input
+      const result = getHostdbPlatform('freebsd' as Platform, 'x64' as Arch)
       assertEqual(result, undefined, 'Should return undefined for unsupported')
     })
   })

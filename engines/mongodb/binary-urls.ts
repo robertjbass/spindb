@@ -69,5 +69,3 @@ export function isPlatformSupported(platform: Platform, arch: Arch): boolean {
   return getHostdbPlatform(platform, arch) !== null
 }
 
-// Re-export for convenience
-export { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'

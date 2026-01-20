@@ -9,7 +9,7 @@
  * repeated network requests.
  */
 
-import { Platform, Arch, type Engine } from '../types'
+import { Platform, type Arch, type Engine } from '../types'
 
 // Platform definition in hostdb releases.json
 export type HostdbPlatform = {
@@ -46,15 +46,6 @@ export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 
 // Type alias for engines available in hostdb (uses the Engine enum from types)
 export type HostdbEngine = Engine
-
-// Node.js platform identifiers that hostdb supports (re-export enum as type for convenience)
-export type NodePlatform = Platform
-
-// Node.js architecture identifiers that hostdb supports (re-export enum as type for convenience)
-export type NodeArch = Arch
-
-// Re-export enums for backwards compatibility
-export { Platform, Arch }
 
 /**
  * In-memory cache for fetched releases.
@@ -134,13 +125,13 @@ export function getEngineReleases(
 /**
  * Map Node.js platform identifiers to hostdb platform identifiers.
  *
- * @param platform - Node.js platform (e.g., Platform.Darwin or 'darwin')
- * @param arch - Node.js architecture (e.g., Arch.ARM64 or 'arm64')
+ * @param platform - Node.js platform (e.g., Platform.Darwin)
+ * @param arch - Node.js architecture (e.g., Arch.ARM64)
  * @returns The hostdb platform identifier, or undefined if not supported
  */
 export function getHostdbPlatform(
-  platform: Platform | string,
-  arch: Arch | string,
+  platform: Platform,
+  arch: Arch,
 ): SupportedPlatform | undefined {
   const key = `${platform}-${arch}`
   return SUPPORTED_PLATFORMS.includes(key as SupportedPlatform)
@@ -151,14 +142,14 @@ export function getHostdbPlatform(
 /**
  * Validate that a platform is supported by hostdb.
  *
- * @param platform - Node.js platform (e.g., Platform.Darwin or 'darwin')
- * @param arch - Node.js architecture (e.g., Arch.ARM64 or 'arm64')
+ * @param platform - Node.js platform (e.g., Platform.Darwin)
+ * @param arch - Node.js architecture (e.g., Arch.ARM64)
  * @returns The validated hostdb platform identifier
  * @throws Error if the platform is not supported
  */
 export function validatePlatform(
-  platform: Platform | string,
-  arch: Arch | string,
+  platform: Platform,
+  arch: Arch,
 ): SupportedPlatform {
   const hostdbPlatform = getHostdbPlatform(platform, arch)
   if (!hostdbPlatform) {
@@ -173,8 +164,8 @@ export function validatePlatform(
 
 export type BuildDownloadUrlOptions = {
   version: string
-  platform: Platform | string
-  arch: Arch | string
+  platform: Platform
+  arch: Arch
 }
 
 /**

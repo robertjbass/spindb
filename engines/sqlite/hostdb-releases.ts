@@ -15,24 +15,14 @@ import {
 import { compareVersions } from '../../core/version-utils'
 import {
   fetchHostdbReleases,
-  clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
   buildDownloadUrl,
-  type HostdbRelease,
-  type HostdbReleasesData,
-  type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { sqliteBinaryManager } from './binary-manager'
 import { logDebug } from '../../core/error-handler'
 import { Engine, type Platform, type Arch } from '../../types'
-
-// Re-export types for backwards compatibility
-export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
-
-// Re-export shared functions
-export const clearCache = clearSharedCache
 
 /**
  * Get available SQLite versions from hostdb databases.json, grouped by major version

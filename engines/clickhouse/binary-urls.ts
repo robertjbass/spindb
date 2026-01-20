@@ -1,27 +1,6 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { CLICKHOUSE_VERSION_MAP } from './version-maps'
-import { logWarning } from '../../core/error-handler'
+import { logDebug } from '../../core/error-handler'
 import { type Platform, type Arch } from '../../types'
-
-/**
- * Version map for ClickHouse - used as fallback when hostdb repository is unreachable
- */
-export const VERSION_MAP: Record<string, string> = CLICKHOUSE_VERSION_MAP
-
-// Fetch available versions from hostdb repository
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -77,7 +56,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, CLICKHOUSE_VERSION_MAP)
 
   const tag = `clickhouse-${fullVersion}`
   // ClickHouse on hostdb uses tar.gz for all platforms (no Windows support)
@@ -95,7 +74,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = CLICKHOUSE_VERSION_MAP,
 ): string {
   // Check if it's an exact key in the map
   if (versionMap[version]) {
@@ -126,8 +105,8 @@ function normalizeVersion(
     }
   }
 
-  // Unknown version format - warn and return as-is
-  logWarning(
+  // Unknown version format - log and return as-is
+  logDebug(
     `ClickHouse version '${version}' not in version map, may not be available in hostdb`,
   )
   return version
@@ -144,10 +123,10 @@ function normalizeVersion(
  */
 export function getFullVersion(version: string): string | null {
   // Check if it's a known version (exact or partial match via normalizeVersion)
-  const normalized = normalizeVersion(version, VERSION_MAP)
+  const normalized = normalizeVersion(version, CLICKHOUSE_VERSION_MAP)
   // If normalizeVersion returned the input unchanged and it's not in the map,
   // it means the version is unknown
-  if (normalized === version && !VERSION_MAP[version]) {
+  if (normalized === version && !CLICKHOUSE_VERSION_MAP[version]) {
     return null
   }
   return normalized

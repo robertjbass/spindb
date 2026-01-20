@@ -1,27 +1,5 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { FALLBACK_VERSION_MAP } from './version-maps'
 import { Platform, type Arch } from '../../types'
-
-// Re-export for convenience
-export { FALLBACK_VERSION_MAP }
-
-// Fetch available versions from hostdb repository
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
-
-// Legacy export for backward compatibility
-export { FALLBACK_VERSION_MAP as VERSION_MAP }
 
 /**
  * Supported platform identifiers for hostdb downloads.

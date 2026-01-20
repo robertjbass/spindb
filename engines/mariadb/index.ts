@@ -25,13 +25,12 @@ import {
   assertValidDatabaseName,
 } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
+import { getBinaryUrl } from './binary-urls'
 import {
-  getBinaryUrl,
   fetchAvailableVersions,
   getLatestVersion,
-  FALLBACK_VERSION_MAP,
-} from './binary-urls'
-import { SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+} from './hostdb-releases'
+import { SUPPORTED_MAJOR_VERSIONS, MARIADB_VERSION_MAP } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
@@ -123,7 +122,7 @@ export class MariaDBEngine extends BaseEngine {
       return version
     }
     // It's a major version, resolve using fallback map
-    return FALLBACK_VERSION_MAP[version] || `${version}.0`
+    return MARIADB_VERSION_MAP[version] || `${version}.0`
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {

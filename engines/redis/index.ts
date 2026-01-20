@@ -11,8 +11,12 @@ import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { redisBinaryManager } from './binary-manager'
-import { getBinaryUrl, VERSION_MAP } from './binary-urls'
-import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { getBinaryUrl } from './binary-urls'
+import {
+  normalizeVersion,
+  SUPPORTED_MAJOR_VERSIONS,
+  REDIS_VERSION_MAP,
+} from './version-maps'
 import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -160,7 +164,7 @@ export class RedisEngine extends BaseEngine {
       return version
     }
     // It's a major version, resolve using version map
-    return VERSION_MAP[version] || `${version}.0.0`
+    return REDIS_VERSION_MAP[version] || `${version}.0.0`
   }
 
   // Get the path where binaries for a version would be installed

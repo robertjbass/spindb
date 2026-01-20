@@ -77,9 +77,6 @@ export const EDB_FILE_IDS: Record<string, string> = {
   '14': '1259900', // Alias for latest 14.x
 }
 
-// Re-export for backwards compatibility
-export { SUPPORTED_MAJOR_VERSIONS as WINDOWS_SUPPORTED_VERSIONS }
-
 /**
  * Get the EDB download URL for a PostgreSQL version on Windows
  *

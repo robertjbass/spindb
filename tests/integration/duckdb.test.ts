@@ -12,12 +12,8 @@ import { existsSync, renameSync } from 'fs'
 import { rm, mkdir } from 'fs/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-import {
-  generateTestName,
-  cleanupTestContainers,
-  assert,
-  assertEqual,
-} from './helpers'
+import { generateTestName, cleanupTestContainers } from './helpers'
+import { assert, assertEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { duckdbRegistry } from '../../engines/duckdb/registry'

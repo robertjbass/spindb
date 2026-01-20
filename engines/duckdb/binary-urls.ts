@@ -15,9 +15,6 @@ import { Engine, type Platform, type Arch } from '../../types'
  */
 export const FALLBACK_VERSION_MAP: Record<string, string> = DUCKDB_VERSION_MAP
 
-// Legacy export for backward compatibility
-export const VERSION_MAP = FALLBACK_VERSION_MAP
-
 /**
  * Build the download URL for DuckDB binaries from hostdb
  *
@@ -44,5 +41,5 @@ export function getBinaryUrl(
  * @returns Full version string (e.g., '1.4.3') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
+  return FALLBACK_VERSION_MAP[majorVersion] || null
 }

@@ -18,10 +18,9 @@ import {
   cleanupTestContainers,
   findConsecutiveFreePorts,
   TEST_PORTS,
-  assert,
-  assertEqual,
   waitForReady,
 } from './helpers'
+import { assert, assertEqual } from '../utils/assertions'
 import { Engine } from '../../types'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

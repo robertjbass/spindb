@@ -8,27 +8,17 @@
  */
 
 import { logDebug } from '../../core/error-handler'
-import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
+import { FALLBACK_VERSION_MAP } from './version-maps'
 import { isNewerVersion } from '../../core/version-utils'
 import { mongodbBinaryManager } from './binary-manager'
 import {
   fetchHostdbReleases,
-  clearCache as clearSharedCache,
   getEngineReleases,
   validatePlatform,
   buildDownloadUrl,
-  type HostdbRelease,
-  type HostdbReleasesData,
-  type HostdbPlatform,
 } from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
 import { Engine, type Platform, type Arch } from '../../types'
-
-// Re-export types for backwards compatibility
-export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
-
-// Re-export shared functions
-export const clearCache = clearSharedCache
 
 /**
  * Fetch available MongoDB versions from hostdb databases.json
@@ -178,6 +168,3 @@ export async function isVersionAvailable(version: string): Promise<boolean> {
     )
   }
 }
-
-// Re-export for convenience
-export { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP }

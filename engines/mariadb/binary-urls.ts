@@ -1,7 +1,3 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { MARIADB_VERSION_MAP } from './version-maps'
 import { Platform, type Arch } from '../../types'
 
@@ -9,22 +5,7 @@ import { Platform, type Arch } from '../../types'
  * Fallback map of major versions to stable patch versions
  * Used when hostdb repository is unreachable
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> = MARIADB_VERSION_MAP
-
-// Fetch available versions from hostdb repository
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
-
-// Legacy export for backward compatibility
-export const VERSION_MAP = FALLBACK_VERSION_MAP
+export const FALLBACK_MARIADB_VERSION_MAP: Record<string, string> = MARIADB_VERSION_MAP
 
 /**
  * Get the hostdb platform identifier
@@ -76,7 +57,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, MARIADB_VERSION_MAP)
 
   const tag = `mariadb-${fullVersion}`
   // Windows uses .zip, others use .tar.gz
@@ -95,7 +76,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = MARIADB_VERSION_MAP,
 ): string {
   // Check if it's a major version in the map
   if (versionMap[version]) {
@@ -117,5 +98,5 @@ function normalizeVersion(
  * @returns Full version string (e.g., '11.8.5') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
+  return MARIADB_VERSION_MAP[majorVersion] || null
 }

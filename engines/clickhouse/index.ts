@@ -10,8 +10,12 @@ import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { clickhouseBinaryManager } from './binary-manager'
-import { getBinaryUrl, VERSION_MAP } from './binary-urls'
-import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { getBinaryUrl } from './binary-urls'
+import {
+  normalizeVersion,
+  SUPPORTED_MAJOR_VERSIONS,
+  CLICKHOUSE_VERSION_MAP,
+} from './version-maps'
 import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -151,7 +155,7 @@ export class ClickHouseEngine extends BaseEngine {
     if (/^\d+\.\d+\.\d+\.\d+$/.test(version)) {
       return version
     }
-    return VERSION_MAP[version] || version
+    return CLICKHOUSE_VERSION_MAP[version] || version
   }
 
   // Get the path where binaries for a version would be installed

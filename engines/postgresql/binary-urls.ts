@@ -1,7 +1,3 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
 import { type Platform, type Arch } from '../../types'
 
@@ -11,28 +7,8 @@ import { type Platform, type Arch } from '../../types'
  *
  * @deprecated Use POSTGRESQL_VERSION_MAP from version-maps.ts instead
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> =
+export const FALLBACK_POSTGRESQL_VERSION_MAP: Record<string, string> =
   POSTGRESQL_VERSION_MAP
-
-/**
- * Fetch available versions from hostdb repository
- *
- * This replaces the previous Maven Central (zonky.io) source with the new
- * hostdb repository at https://github.com/robertjbass/hostdb
- */
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
-
-// Legacy export for backward compatibility
-export const VERSION_MAP = FALLBACK_VERSION_MAP
 
 /**
  * Get the hostdb platform identifier
@@ -62,18 +38,6 @@ export function getHostdbPlatform(
 }
 
 /**
- * Get the hostdb platform identifier
- *
- * @deprecated Use getHostdbPlatform instead. This function exists for backward compatibility.
- */
-export function getZonkyPlatform(
-  platform: Platform,
-  arch: Arch,
-): string | null {
-  return getHostdbPlatform(platform, arch)
-}
-
-/**
  * Build the download URL for PostgreSQL binaries from hostdb
  *
  * Format: https://github.com/robertjbass/hostdb/releases/download/postgresql-{version}/postgresql-{version}-{platform}-{arch}.tar.gz
@@ -95,7 +59,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.0 conversion)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, POSTGRESQL_VERSION_MAP)
 
   const tag = `postgresql-${fullVersion}`
   const filename = `postgresql-${fullVersion}-${hostdbPlatform}.tar.gz`
@@ -112,7 +76,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = POSTGRESQL_VERSION_MAP,
 ): string {
   // Check if it's a major version in the map
   if (versionMap[version]) {
@@ -134,5 +98,5 @@ function normalizeVersion(
  * @returns Full version string (e.g., '17.7.0') or null if not supported
  */
 export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
+  return POSTGRESQL_VERSION_MAP[majorVersion] || null
 }
