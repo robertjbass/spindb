@@ -37,6 +37,8 @@ import {
 import { logDebug } from '../../core/error-handler'
 import {
   Engine,
+  type Platform,
+  type Arch,
   type ContainerConfig,
   type ProgressCallback,
   type BackupFormat,
@@ -56,7 +58,7 @@ export class DuckDBEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get the download URL for DuckDB binaries from hostdb
-  getBinaryUrl(version: string, platform: string, arch: string): string {
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
     return getBinaryUrl(version, platform, arch)
   }
 

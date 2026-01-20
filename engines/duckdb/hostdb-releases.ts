@@ -113,7 +113,12 @@ export async function getLatestVersion(major: string): Promise<string> {
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
   }
-  return DUCKDB_VERSION_MAP[major] || `${major}.0.0`
+
+  // Neither hostdb nor version map has this version - throw error
+  throw new Error(
+    `DuckDB major version '${major}' not found in hostdb or version map. ` +
+      `Available major versions: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
+  )
 }
 
 /**

@@ -36,7 +36,7 @@ import {
   logDebug,
 } from '../../core/error-handler'
 import {
-  type Platform,
+  Platform,
   type Arch,
   type ContainerConfig,
   type ProgressCallback,
@@ -190,7 +190,7 @@ export class PostgreSQLEngine extends BaseEngine {
     // Try to find and register system-installed tools for any that are missing
     if (
       foundTools.size < clientTools.length &&
-      (p === 'darwin' || p === 'linux')
+      (p === Platform.Darwin || p === Platform.Linux)
     ) {
       const missingTools = clientTools.filter((t) => !foundTools.has(t))
       await this.registerSystemClientTools(missingTools)

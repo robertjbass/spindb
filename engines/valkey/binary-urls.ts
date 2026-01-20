@@ -3,7 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { VALKEY_VERSION_MAP } from './version-maps'
-import { Platform } from '../../types'
+import { Platform, type Arch } from '../../types'
 
 /**
  * Version map for Valkey - used as fallback when hostdb repository is unreachable
@@ -46,8 +46,8 @@ const SUPPORTED_PLATFORMS = new Set([
  * @returns hostdb platform identifier or undefined if unsupported
  */
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string | undefined {
   const key = `${platform}-${arch}`
   return SUPPORTED_PLATFORMS.has(key) ? key : undefined
@@ -65,8 +65,8 @@ export function getHostdbPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)
