@@ -18,8 +18,12 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../../types'
 
 /**
@@ -39,7 +43,7 @@ export class DuckDBBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -52,8 +56,8 @@ export class DuckDBBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -62,7 +66,7 @@ export class DuckDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
     return existsSync(duckdbPath)
   }
@@ -79,15 +83,24 @@ export class DuckDBBinaryManager {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('duckdb-')) continue
 
-      // Match duckdb-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^duckdb-([\d.]+)-(\w+)-(\w+)$/)
-      if (match) {
+      // Split from end to handle versions with non-digit suffixes (e.g., 1.2.3-beta)
+      // Format: duckdb-{version}-{platform}-{arch}
+      const rest = entry.name.slice('duckdb-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
           engine: Engine.DuckDB,
-          version: match[1],
-          platform: match[2],
-          arch: match[3],
+          version,
+          platform,
+          arch,
         })
       }
     }
@@ -98,8 +111,8 @@ export class DuckDBBinaryManager {
   // Download and extract DuckDB binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -115,7 +128,7 @@ export class DuckDBBinaryManager {
       `temp-duckdb-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `duckdb.${ext}`)
 
     // Ensure directories exist
@@ -173,7 +186,7 @@ export class DuckDBBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -192,7 +205,7 @@ export class DuckDBBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -230,7 +243,7 @@ export class DuckDBBinaryManager {
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
-    platform: string,
+    platform: Platform,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
@@ -258,7 +271,7 @@ export class DuckDBBinaryManager {
       const binDir = join(binPath, 'bin')
       await mkdir(binDir, { recursive: true })
 
-      const ext = platform === 'win32' ? '.exe' : ''
+      const ext = platform === Platform.Win32 ? '.exe' : ''
       const executableNames = [`duckdb${ext}`]
 
       for (const entry of sourceEntries) {
@@ -302,7 +315,7 @@ export class DuckDBBinaryManager {
     tarFile: string,
     binPath: string,
     tempDir: string,
-    platform: string,
+    platform: Platform,
     onProgress?: ProgressCallback,
   ): Promise<void> {
     onProgress?.({
@@ -324,7 +337,7 @@ export class DuckDBBinaryManager {
     zipFile: string,
     binPath: string,
     tempDir: string,
-    platform: string,
+    platform: Platform,
     onProgress?: ProgressCallback,
   ): Promise<void> {
     onProgress?.({
@@ -359,8 +372,8 @@ export class DuckDBBinaryManager {
   // Verify that DuckDB binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -370,7 +383,7 @@ export class DuckDBBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const duckdbPath = join(binPath, 'bin', `duckdb${ext}`)
 
     if (!existsSync(duckdbPath)) {
@@ -414,8 +427,8 @@ export class DuckDBBinaryManager {
   // Get the path to a specific binary (duckdb)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -425,15 +438,15 @@ export class DuckDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -455,7 +468,7 @@ export class DuckDBBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'duckdb',

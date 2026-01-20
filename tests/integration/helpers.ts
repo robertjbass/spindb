@@ -551,9 +551,6 @@ export function getConnectionString(
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }
 
-// Re-export shared assertion utilities for backward compatibility
-export { assert, assertEqual } from '../utils/assertions'
-
 /**
  * Get the highest available version for an engine.
  * Fetches available versions from hostdb or the fallback version map.

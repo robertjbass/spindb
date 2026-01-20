@@ -15,12 +15,15 @@ import {
 import { findBinary } from '../../core/dependency-manager'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
+import { getBinaryUrl } from './binary-urls'
 import {
-  getBinaryUrl,
   fetchAvailableVersions,
   getLatestVersion,
-  FALLBACK_VERSION_MAP,
-} from './binary-urls'
+} from './hostdb-releases'
+import {
+  SUPPORTED_MAJOR_VERSIONS,
+  POSTGRESQL_VERSION_MAP,
+} from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
 import { createBackup } from './backup'
 import {
@@ -34,16 +37,18 @@ import {
   ErrorCodes,
   logDebug,
 } from '../../core/error-handler'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
-  BinaryTool,
+import {
+  Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
+  type BinaryTool,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -76,19 +81,17 @@ export function buildWindowsPsqlCommand(
   return cmd
 }
 
-const engineDef = getEngineDefaults('postgresql')
-
 export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
-  defaultPort = 5432
-  supportedVersions = engineDef.supportedVersions
+  defaultPort = getEngineDefaults('postgresql').defaultPort
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
   }
 
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     const info = platformService.getPlatformInfo()
     return {
       platform: info.platform,
@@ -103,7 +106,7 @@ export class PostgreSQLEngine extends BaseEngine {
       return version
     }
     // It's a major version, resolve using fallback map (sync, no network)
-    return FALLBACK_VERSION_MAP[version] || `${version}.0.0`
+    return POSTGRESQL_VERSION_MAP[version] || `${version}.0.0`
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {
@@ -126,7 +129,7 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
-  getBinaryUrl(version: string, plat: string, arc: string): string {
+  getBinaryUrl(version: string, plat: Platform, arc: Arch): string {
     return getBinaryUrl(version, plat, arc)
   }
 
@@ -189,7 +192,7 @@ export class PostgreSQLEngine extends BaseEngine {
     // Try to find and register system-installed tools for any that are missing
     if (
       foundTools.size < clientTools.length &&
-      (p === 'darwin' || p === 'linux')
+      (p === Platform.Darwin || p === Platform.Linux)
     ) {
       const missingTools = clientTools.filter((t) => !foundTools.has(t))
       await this.registerSystemClientTools(missingTools)

@@ -15,12 +15,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 import {
   generateTestName,
   cleanupTestContainers,
-  assert,
-  assertEqual,
   runScriptFile,
   runScriptSQL,
   sqliteFileExists,
 } from './helpers'
+import { assert, assertEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { sqliteRegistry } from '../../engines/sqlite/registry'

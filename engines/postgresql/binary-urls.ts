@@ -1,37 +1,14 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
+import { type Platform, type Arch } from '../../types'
 
-/**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- *
- * @deprecated Use POSTGRESQL_VERSION_MAP from version-maps.ts instead
- */
-export const FALLBACK_VERSION_MAP: Record<string, string> =
-  POSTGRESQL_VERSION_MAP
-
-/**
- * Fetch available versions from hostdb repository
- *
- * This replaces the previous Maven Central (zonky.io) source with the new
- * hostdb repository at https://github.com/robertjbass/hostdb
- */
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
-
-// Legacy export for backward compatibility
-export const VERSION_MAP = FALLBACK_VERSION_MAP
+// Supported platform/arch combinations for PostgreSQL hostdb binaries
+const SUPPORTED_PLATFORM_KEYS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
 
 /**
  * Get the hostdb platform identifier
@@ -41,33 +18,15 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  *
  * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
- * @returns hostdb platform identifier or undefined if unsupported
+ * @returns hostdb platform identifier or null if unsupported
  */
-export function getHostdbPlatform(
-  platform: string,
-  arch: string,
-): string | undefined {
-  const key = `${platform}-${arch}`
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-  return mapping[key]
-}
 
-/**
- * Get the hostdb platform identifier
- *
- * @deprecated Use getHostdbPlatform instead. This function exists for backward compatibility.
- */
-export function getZonkyPlatform(
-  platform: string,
-  arch: string,
-): string | undefined {
-  return getHostdbPlatform(platform, arch)
+export function getHostdbPlatform(
+  platform: Platform,
+  arch: Arch,
+): string | null {
+  const key = `${platform}-${arch}`
+  return SUPPORTED_PLATFORM_KEYS.has(key) ? key : null
 }
 
 /**
@@ -82,8 +41,8 @@ export function getZonkyPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)
@@ -92,7 +51,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.0 conversion)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, POSTGRESQL_VERSION_MAP)
 
   const tag = `postgresql-${fullVersion}`
   const filename = `postgresql-${fullVersion}-${hostdbPlatform}.tar.gz`
@@ -109,7 +68,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = POSTGRESQL_VERSION_MAP,
 ): string {
   // Check if it's a major version in the map
   if (versionMap[version]) {
@@ -130,6 +89,3 @@ function normalizeVersion(
  * @param majorVersion - Major version (e.g., '17')
  * @returns Full version string (e.g., '17.7.0') or null if not supported
  */
-export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
-}

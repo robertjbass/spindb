@@ -1,30 +1,34 @@
 /**
- * hostdb Releases Module for Redis
+ * hostdb Releases Module for SQLite
  *
- * Fetches Redis binary information from the hostdb repository at
+ * Fetches SQLite binary information from the hostdb repository at
  * https://github.com/robertjbass/hostdb
  *
- * hostdb provides pre-built Redis binaries for multiple platforms.
+ * hostdb provides pre-built SQLite binaries for multiple platforms.
  */
 
-import { REDIS_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import {
+  SQLITE_VERSION_MAP,
+  SUPPORTED_MAJOR_VERSIONS,
+} from './version-maps'
 import { compareVersions } from '../../core/version-utils'
-import { logDebug } from '../../core/error-handler'
-import { redisBinaryManager } from './binary-manager'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
+import { sqliteBinaryManager } from './binary-manager'
+import { logDebug } from '../../core/error-handler'
 import { Engine } from '../../types'
 
-// Get available Redis versions from hostdb databases.json, grouped by major version
+/**
+ * Get available SQLite versions from hostdb databases.json, grouped by major version
+ */
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions(Engine.Redis)
+    const versions = await getHostdbVersions(Engine.SQLite)
 
     if (versions && versions.length > 0) {
       // Group versions by major version
-      // Redis uses single digit major versions (e.g., 7.4.7 matches 7)
       const grouped: Record<string, string[]> = {}
 
       for (const version of versions) {
@@ -43,17 +47,16 @@ export async function fetchAvailableVersions(): Promise<
       return grouped
     }
   } catch (error) {
-    logDebug('Failed to fetch Redis versions from hostdb, checking local', {
+    logDebug('Failed to fetch SQLite versions from hostdb, checking local', {
       error: error instanceof Error ? error.message : String(error),
     })
   }
 
   // Offline fallback: return only locally installed versions
-  const installed = await redisBinaryManager.listInstalled()
+  const installed = await sqliteBinaryManager.listInstalled()
   if (installed.length > 0) {
     const result: Record<string, string[]> = {}
     for (const binary of installed) {
-      // Redis uses single digit major versions
       const major = binary.version.split('.')[0]
       if (!result[major]) {
         result[major] = []
@@ -73,22 +76,45 @@ export async function fetchAvailableVersions(): Promise<
   return getHardcodedVersions()
 }
 
-// Get hardcoded versions as last resort fallback
+/**
+ * Get hardcoded versions as last resort fallback
+ */
 function getHardcodedVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {
-    grouped[major] = [REDIS_VERSION_MAP[major]]
+    grouped[major] = [SQLITE_VERSION_MAP[major]]
   }
   return grouped
 }
 
-// Get the latest version for a major version from hostdb
+/**
+ * Get the latest version for a major version from hostdb
+ */
 export async function getLatestVersion(major: string): Promise<string> {
   const versions = await fetchAvailableVersions()
   const majorVersions = versions[major]
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
   }
-  return REDIS_VERSION_MAP[major] || `${major}.0.0`
+
+  const mappedVersion = SQLITE_VERSION_MAP[major]
+  if (mappedVersion) {
+    return mappedVersion
+  }
+
+  // Neither hostdb nor version map has this version - fall back to major.0.0
+  logDebug('SQLite major version not found in hostdb or version map', {
+    major,
+    supportedMajors: SUPPORTED_MAJOR_VERSIONS.join(', '),
+  })
+  return `${major}.0.0`
 }
 
+/**
+ * Get the download URL for a SQLite version from hostdb
+ *
+ * @param version - Full version (e.g., '3.51.2')
+ * @param platform - Platform identifier (e.g., Platform.Darwin, Platform.Linux, Platform.Win32)
+ * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
+ * @returns Download URL for the binary
+ */

@@ -25,27 +25,32 @@ import {
   assertValidDatabaseName,
 } from '../../core/error-handler'
 import { mysqlBinaryManager } from './binary-manager'
+import { getBinaryUrl } from './binary-urls'
 import {
-  getBinaryUrl,
   fetchAvailableVersions,
   getLatestVersion,
+} from './hostdb-releases'
+import {
+  SUPPORTED_MAJOR_VERSIONS,
   FALLBACK_VERSION_MAP,
-} from './binary-urls'
+} from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
   parseConnectionString,
 } from './restore'
 import { createBackup } from './backup'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -112,13 +117,13 @@ export class MySQLEngine extends BaseEngine {
   name = ENGINE
   displayName = 'MySQL'
   defaultPort = engineDef.defaultPort
-  supportedVersions = engineDef.supportedVersions
+  supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
   }
 
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     const info = platformService.getPlatformInfo()
     return {
       platform: info.platform,
@@ -162,7 +167,7 @@ export class MySQLEngine extends BaseEngine {
     })
   }
 
-  getBinaryUrl(version: string, plat: string, arc: string): string {
+  getBinaryUrl(version: string, plat: Platform, arc: Arch): string {
     return getBinaryUrl(version, plat, arc)
   }
 
@@ -445,7 +450,7 @@ export class MySQLEngine extends BaseEngine {
       `--max-connections=${engineDef.maxConnections}`,
     ]
 
-    if (platform !== 'win32') {
+    if (platform !== Platform.Win32) {
       const socketFile = join(
         paths.getContainerPath(name, { engine: ENGINE }),
         'mysql.sock',
@@ -701,7 +706,7 @@ export class MySQLEngine extends BaseEngine {
     }
 
     const { platform } = platformService.getPlatformInfo()
-    const killCmd = platform === 'win32' ? 'taskkill /F' : 'kill -9'
+    const killCmd = platform === Platform.Win32 ? 'taskkill /F' : 'kill -9'
     logWarning(`Escalating to force kill for process ${pid}`)
     try {
       await platformService.terminateProcess(pid, true)

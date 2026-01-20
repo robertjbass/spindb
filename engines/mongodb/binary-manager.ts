@@ -15,8 +15,12 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../../types'
 import { logDebug } from '../../core/error-handler'
 
@@ -26,7 +30,7 @@ export class MongoDBBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -39,8 +43,8 @@ export class MongoDBBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -50,7 +54,7 @@ export class MongoDBBinaryManager {
       arch,
     })
     // MongoDB server binary (with .exe on Windows)
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const mongodPath = join(binPath, 'bin', `mongod${ext}`)
     return existsSync(mongodPath)
   }
@@ -79,7 +83,7 @@ export class MongoDBBinaryManager {
       const platform = parts.pop()!
       const version = parts.join('-')
 
-      if (version && platform && arch) {
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
           engine: Engine.MongoDB,
           version,
@@ -95,8 +99,8 @@ export class MongoDBBinaryManager {
   // Download and extract MongoDB binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -112,7 +116,7 @@ export class MongoDBBinaryManager {
       `temp-mongodb-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `mongodb.${ext}`)
 
     // Ensure directories exist
@@ -120,7 +124,7 @@ export class MongoDBBinaryManager {
     await mkdir(tempDir, { recursive: true })
     await mkdir(binPath, { recursive: true })
 
-    let downloadSucceeded = false
+    let success = false
     try {
       // Download the archive with timeout (5 minutes)
       onProgress?.({
@@ -161,7 +165,7 @@ export class MongoDBBinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -178,7 +182,7 @@ export class MongoDBBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -192,13 +196,13 @@ export class MongoDBBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
-      downloadSucceeded = true
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
       // Clean up binPath on failure to avoid leaving partial installations
-      if (!downloadSucceeded && existsSync(binPath)) {
+      if (!success) {
         await rm(binPath, { recursive: true, force: true })
       }
     }
@@ -319,8 +323,8 @@ export class MongoDBBinaryManager {
   // Verify that MongoDB binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -330,7 +334,7 @@ export class MongoDBBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const mongodPath = join(binPath, 'bin', `mongod${ext}`)
 
     if (!existsSync(mongodPath)) {
@@ -376,8 +380,8 @@ export class MongoDBBinaryManager {
   // Get the path to a specific binary (mongod, mongosh, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -387,15 +391,15 @@ export class MongoDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -417,7 +421,7 @@ export class MongoDBBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mongodb',

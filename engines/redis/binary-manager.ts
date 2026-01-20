@@ -18,8 +18,12 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -41,7 +45,7 @@ export class RedisBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -54,8 +58,8 @@ export class RedisBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -64,7 +68,7 @@ export class RedisBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const redisServerPath = join(binPath, 'bin', `redis-server${ext}`)
     return existsSync(redisServerPath)
   }
@@ -93,7 +97,7 @@ export class RedisBinaryManager {
       const platform = parts.pop()!
       const version = parts.join('-')
 
-      if (version && platform && arch) {
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
           engine: Engine.Redis,
           version,
@@ -109,8 +113,8 @@ export class RedisBinaryManager {
   // Download and extract Redis binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -126,7 +130,7 @@ export class RedisBinaryManager {
       `temp-redis-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `redis.${ext}`)
 
     // Ensure directories exist
@@ -184,7 +188,7 @@ export class RedisBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -201,7 +205,7 @@ export class RedisBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -351,8 +355,8 @@ export class RedisBinaryManager {
   // Verify that Redis binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -362,7 +366,7 @@ export class RedisBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const serverPath = join(binPath, 'bin', `redis-server${ext}`)
 
     if (!existsSync(serverPath)) {
@@ -412,8 +416,8 @@ export class RedisBinaryManager {
   // Get the path to a specific binary (redis-server, redis-cli, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -423,15 +427,15 @@ export class RedisBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -453,7 +457,7 @@ export class RedisBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'redis',

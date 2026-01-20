@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MySQL 9.1 support** - Added MySQL 9.1.0 to version maps and supported versions.
+
+### Changed
+- **Platform/Arch enums** - Introduced `Platform` and `Arch` enums in `types/index.ts` for type-safe platform and architecture checks. Refactored all string literal comparisons (`'darwin'`, `'linux'`, `'win32'`, `'arm64'`, `'x64'`) to use enum values across the codebase.
+- **Engine enum keys** - `engineDefaults` now uses `Engine` enum values as keys (`[Engine.PostgreSQL]`) instead of string literals for better type safety.
+- **Version source consolidation** - Removed duplicated `supportedVersions` from `engineDefaults`. Engines now use `SUPPORTED_MAJOR_VERSIONS` from their respective `version-maps.ts` files as the single source of truth.
+- **Logging cleanup** - Changed `console.warn` to `logDebug` in all engine version-maps.ts files to avoid polluting stdout/stderr.
+- **Type safety improvements** - Added `isValidEngine()` type guard for safer engine validation. Removed unsafe `as Engine` casts.
+
+### Removed
+- **Dead code** - Removed unused `getPostgresHomebrewBinPath()` function from `engine-defaults.ts`.
+
 ## [0.19.4] - 2026-01-19
 
 ### Fixed

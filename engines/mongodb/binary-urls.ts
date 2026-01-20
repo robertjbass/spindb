@@ -6,6 +6,7 @@
  */
 
 import { normalizeVersion } from './version-maps'
+import { Platform, type Arch } from '../../types'
 
 const HOSTDB_BASE_URL =
   'https://github.com/robertjbass/hostdb/releases/download'
@@ -14,25 +15,22 @@ const HOSTDB_BASE_URL =
 export const SUPPORTED_PLATFORMS = ['darwin', 'linux', 'win32'] as const
 export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 
-// Supported architectures
-export const SUPPORTED_ARCHS = ['arm64', 'x64'] as const
-export type SupportedArch = (typeof SUPPORTED_ARCHS)[number]
+// Supported platform/arch combinations for MongoDB hostdb binaries
+const SUPPORTED_PLATFORM_KEYS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
 
 // Map Node.js platform/arch to hostdb platform key
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string | null {
   const key = `${platform}-${arch}`
-
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-  return mapping[key] || null
+  return SUPPORTED_PLATFORM_KEYS.has(key) ? key : null
 }
 
 /**
@@ -45,8 +43,8 @@ export function getHostdbPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
   const platformKey = getHostdbPlatform(platform, arch)
@@ -58,14 +56,8 @@ export function getBinaryUrl(
   }
 
   // Windows uses .zip, Unix uses .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   return `${HOSTDB_BASE_URL}/mongodb-${fullVersion}/mongodb-${fullVersion}-${platformKey}.${ext}`
 }
 
 // Check if a platform/arch combination is supported
-export function isPlatformSupported(platform: string, arch: string): boolean {
-  return getHostdbPlatform(platform, arch) !== null
-}
-
-// Re-export for convenience
-export { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'

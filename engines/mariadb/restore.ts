@@ -13,7 +13,7 @@ import { validateRestoreCompatibility } from './version-validator'
 import { getEngineDefaults } from '../../config/defaults'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
 import { platformService } from '../../core/platform-service'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Platform, type BackupFormat, type RestoreResult } from '../../types'
 
 const engineDef = getEngineDefaults('mariadb')
 
@@ -152,7 +152,7 @@ export type RestoreOptions = {
 // Get the path to mariadb or mysql client from the binary path
 function getMysqlClientPath(binPath: string): string {
   const { platform } = platformService.getPlatformInfo()
-  const ext = platform === 'win32' ? '.exe' : ''
+  const ext = platform === Platform.Win32 ? '.exe' : ''
 
   // Try mariadb first, then mysql
   const mariadb = join(binPath, 'bin', `mariadb${ext}`)

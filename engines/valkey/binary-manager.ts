@@ -18,8 +18,12 @@ import { normalizeVersion } from './version-maps'
 import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
+  Platform,
+  type Arch,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -41,7 +45,7 @@ export class ValkeyBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -54,8 +58,8 @@ export class ValkeyBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -64,7 +68,7 @@ export class ValkeyBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const valkeyServerPath = join(binPath, 'bin', `valkey-server${ext}`)
     return existsSync(valkeyServerPath)
   }
@@ -93,7 +97,7 @@ export class ValkeyBinaryManager {
       const platform = parts.pop()!
       const version = parts.join('-')
 
-      if (version && platform && arch) {
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
           engine: Engine.Valkey,
           version,
@@ -109,8 +113,8 @@ export class ValkeyBinaryManager {
   // Download and extract Valkey binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -126,7 +130,7 @@ export class ValkeyBinaryManager {
       `temp-valkey-${fullVersion}-${platform}-${arch}`,
     )
     // Windows uses .zip, Unix uses .tar.gz
-    const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `valkey.${ext}`)
 
     // Ensure directories exist
@@ -184,7 +188,7 @@ export class ValkeyBinaryManager {
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -201,7 +205,7 @@ export class ValkeyBinaryManager {
       }
 
       // Make binaries executable (Unix only)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -352,8 +356,8 @@ export class ValkeyBinaryManager {
   // Verify that Valkey binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -363,7 +367,7 @@ export class ValkeyBinaryManager {
       arch,
     })
 
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const serverPath = join(binPath, 'bin', `valkey-server${ext}`)
 
     if (!existsSync(serverPath)) {
@@ -414,8 +418,8 @@ export class ValkeyBinaryManager {
   // Get the path to a specific binary (valkey-server, valkey-cli, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -425,15 +429,15 @@ export class ValkeyBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -455,7 +459,7 @@ export class ValkeyBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'valkey',

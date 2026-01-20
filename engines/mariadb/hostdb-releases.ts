@@ -11,23 +11,8 @@ import { MARIADB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { compareVersions } from '../../core/version-utils'
 import { logDebug } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
-import {
-  fetchHostdbReleases,
-  clearCache as clearSharedCache,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-  type HostdbRelease,
-  type HostdbReleasesData,
-  type HostdbPlatform,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
-
-// Re-export types for backwards compatibility
-export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
-
-// Re-export shared functions
-export const clearCache = clearSharedCache
+import { Engine } from '../../types'
 
 // Get available MariaDB versions from hostdb databases.json, grouped by major version
 export async function fetchAvailableVersions(): Promise<
@@ -35,7 +20,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('mariadb')
+    const versions = await getHostdbVersions(Engine.MariaDB)
 
     if (versions && versions.length > 0) {
       // Group versions by major version (e.g., 11.8)
@@ -113,74 +98,7 @@ export async function getLatestVersion(major: string): Promise<string> {
  * Get the download URL for a MariaDB version from hostdb
  *
  * @param version - Full version (e.g., '11.8.5')
- * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')
- * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
+ * @param platform - Platform identifier (e.g., Platform.Darwin, Platform.Linux, Platform.Win32)
+ * @param arch - Architecture identifier (e.g., Arch.ARM64, Arch.X64)
  * @returns Download URL for the binary
  */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: string,
-  arch: string,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const mariadbReleases = getEngineReleases(releases, 'mariadb')
-
-    if (!mariadbReleases) {
-      throw new Error('MariaDB releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = mariadbReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for MariaDB ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Fallback to constructing URL manually if fetch fails
-    logDebug(
-      'Failed to fetch MariaDB download URL from hostdb, using fallback',
-      {
-        version,
-        platform,
-        arch,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    )
-    return buildDownloadUrl('mariadb', version, platform, arch)
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions('mariadb')
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map
-    // Handle both major versions ("11.8") and full versions ("11.8.5")
-    const majorParts = version.split('.')
-    const major =
-      majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
-    return (
-      version in MARIADB_VERSION_MAP || MARIADB_VERSION_MAP[major] === version
-    )
-  }
-}

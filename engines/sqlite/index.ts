@@ -36,15 +36,18 @@ import {
   getEngineReleases,
 } from '../../core/hostdb-client'
 import { logDebug } from '../../core/error-handler'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  Engine,
+  type Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execFileAsync = promisify(execFile)
@@ -56,7 +59,7 @@ export class SQLiteEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get the download URL for SQLite binaries from hostdb
-  getBinaryUrl(version: string, platform: string, arch: string): string {
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
     return getBinaryUrl(version, platform, arch)
   }
 
@@ -547,7 +550,7 @@ export class SQLiteEngine extends BaseEngine {
     // Try to fetch from hostdb first
     try {
       const releases = await fetchHostdbReleases()
-      const sqliteReleases = getEngineReleases(releases, 'sqlite')
+      const sqliteReleases = getEngineReleases(releases, Engine.SQLite)
 
       if (sqliteReleases && Object.keys(sqliteReleases).length > 0) {
         const result: Record<string, string[]> = {}

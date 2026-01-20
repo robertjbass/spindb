@@ -15,7 +15,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import type { ProgressCallback, InstalledBinary } from '../../types'
+import { Engine, Platform, type Arch, type ProgressCallback, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -25,13 +25,7 @@ export class MariaDBBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms.
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
-    const platformKey = `${platform}-${arch}`
-
-    if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
-      throw new Error(`Unsupported platform: ${platformKey}`)
-    }
-
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -44,8 +38,8 @@ export class MariaDBBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -54,7 +48,7 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     // MariaDB uses mariadbd or mysqld depending on the build
     const mariadbPath = join(binPath, 'bin', `mariadbd${ext}`)
     const mysqldPath = join(binPath, 'bin', `mysqld${ext}`)
@@ -72,16 +66,25 @@ export class MariaDBBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('mariadb-')) {
-        const parts = entry.name.split('-')
-        if (parts.length >= 4) {
-          installed.push({
-            engine: 'mariadb' as InstalledBinary['engine'],
-            version: parts[1],
-            platform: parts[2],
-            arch: parts[3],
-          })
-        }
+      if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('mariadb-')) continue
+
+      // Parse from the end to handle versions with dashes (e.g., mariadb-11.8.5-rc1-darwin-arm64)
+      const rest = entry.name.slice('mariadb-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
+        installed.push({
+          engine: Engine.MariaDB,
+          version,
+          platform,
+          arch,
+        })
       }
     }
 
@@ -91,10 +94,11 @@ export class MariaDBBinaryManager {
   // Download and extract MariaDB binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
+    let success = false
     const fullVersion = this.getFullVersion(version)
     const url = this.getDownloadUrl(version, platform, arch)
     const binPath = paths.getBinaryPath({
@@ -109,7 +113,7 @@ export class MariaDBBinaryManager {
     )
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'mariadb.zip' : 'mariadb.tar.gz',
+      platform === Platform.Win32 ? 'mariadb.zip' : 'mariadb.tar.gz',
     )
 
     // Ensure directories exist
@@ -124,7 +128,22 @@ export class MariaDBBinaryManager {
         message: 'Downloading MariaDB binaries...',
       })
 
-      const response = await fetch(url)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+      let response: Response
+      try {
+        response = await fetch(url, { signal: controller.signal })
+      } catch (error) {
+        const err = error as Error
+        if (err.name === 'AbortError') {
+          throw new Error('Download timed out after 5 minutes')
+        }
+        throw error
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
@@ -142,7 +161,7 @@ export class MariaDBBinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -159,7 +178,7 @@ export class MariaDBBinaryManager {
       }
 
       // Make binaries executable (on Unix-like systems)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -173,10 +192,15 @@ export class MariaDBBinaryManager {
       onProgress?.({ stage: 'verifying', message: 'Verifying installation...' })
       await this.verify(version, platform, arch)
 
+      success = true
       return binPath
     } finally {
       // Clean up temp directory
       await rm(tempDir, { recursive: true, force: true })
+      // Clean up binPath on failure to avoid leaving partial installations
+      if (!success) {
+        await rm(binPath, { recursive: true, force: true })
+      }
     }
   }
 
@@ -257,8 +281,8 @@ export class MariaDBBinaryManager {
   // Verify that MariaDB binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -267,7 +291,7 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
 
     // Try mariadbd first, then mysqld (hostdb uses mariadbd)
     let serverPath = join(binPath, 'bin', `mariadbd${ext}`)
@@ -317,8 +341,8 @@ export class MariaDBBinaryManager {
   // Get the path to a specific binary (mariadbd, mysql, mysqldump, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -328,15 +352,15 @@ export class MariaDBBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -358,7 +382,7 @@ export class MariaDBBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mariadb',

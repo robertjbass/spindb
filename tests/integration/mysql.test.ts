@@ -18,11 +18,10 @@ import {
   waitForReady,
   containerDataExists,
   getConnectionString,
-  assert,
-  assertEqual,
   runScriptFile,
   runScriptSQL,
 } from './helpers'
+import { assert, assertEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'

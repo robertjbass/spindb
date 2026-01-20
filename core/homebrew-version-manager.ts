@@ -19,6 +19,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { platformService } from './platform-service'
+import { Platform, Arch } from '../types'
 import { logDebug } from './error-handler'
 
 const execAsync = promisify(exec)
@@ -47,7 +48,7 @@ export type VersionSwitchResult = {
 // Check if Homebrew is available on this system
 export async function isHomebrewAvailable(): Promise<boolean> {
   const { platform } = platformService.getPlatformInfo()
-  if (platform !== 'darwin') return false
+  if (platform !== Platform.Darwin) return false
 
   try {
     await execAsync('brew --version')
@@ -60,7 +61,7 @@ export async function isHomebrewAvailable(): Promise<boolean> {
 // Get the Homebrew prefix based on architecture
 function getHomebrewPrefix(): string {
   const { arch } = platformService.getPlatformInfo()
-  return arch === 'arm64' ? '/opt/homebrew' : '/usr/local'
+  return arch === Arch.ARM64 ? '/opt/homebrew' : '/usr/local'
 }
 
 // Get Linux PostgreSQL bin paths (Debian/Ubuntu style)
@@ -99,7 +100,7 @@ export async function detectInstalledPostgres(): Promise<
   // Get currently linked version (for macOS)
   const linkedVersion = await getCurrentLinkedVersion()
 
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     // macOS: Check Homebrew installations
     const prefix = getHomebrewPrefix()
 
@@ -127,7 +128,7 @@ export async function detectInstalledPostgres(): Promise<
         }
       }
     }
-  } else if (platform === 'linux') {
+  } else if (platform === Platform.Linux) {
     // Linux: Check /usr/lib/postgresql/*/bin (Debian/Ubuntu style)
     for (const major of SUPPORTED_PG_VERSIONS) {
       const binPath = getLinuxPostgresPath(major)
@@ -172,12 +173,12 @@ export async function getDirectBinaryPath(
 ): Promise<string | null> {
   const { platform } = platformService.getPlatformInfo()
 
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     // macOS: Homebrew path
     const prefix = getHomebrewPrefix()
     const path = `${prefix}/opt/postgresql@${majorVersion}/bin/${tool}`
     if (existsSync(path)) return path
-  } else if (platform === 'linux') {
+  } else if (platform === Platform.Linux) {
     // Linux: Debian/Ubuntu path
     const path = `${getLinuxPostgresPath(majorVersion)}/${tool}`
     if (existsSync(path)) return path
@@ -230,9 +231,9 @@ export async function switchHomebrewVersion(
 ): Promise<VersionSwitchResult> {
   const { platform } = platformService.getPlatformInfo()
 
-  if (platform === 'darwin') {
+  if (platform === Platform.Darwin) {
     return switchHomebrewVersionMacOS(targetMajor)
-  } else if (platform === 'linux') {
+  } else if (platform === Platform.Linux) {
     return switchVersionLinux(targetMajor)
   }
 

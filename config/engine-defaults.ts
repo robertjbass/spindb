@@ -3,6 +3,8 @@
  * Extracted for dependency injection pattern - allows each engine to define its own defaults
  */
 
+import { Engine, ALL_ENGINES } from '../types'
+
 export type EngineDefaults = {
   // Default version to use when not specified
   defaultVersion: string
@@ -10,8 +12,6 @@ export type EngineDefaults = {
   defaultPort: number
   // Port range to scan if default is busy
   portRange: { start: number; end: number }
-  // Supported major versions
-  supportedVersions: string[]
   // Latest major version (used for Homebrew package names like postgresql@17)
   latestVersion: string
   // Default superuser name
@@ -30,12 +30,11 @@ export type EngineDefaults = {
   maxConnections: number
 }
 
-export const engineDefaults: Record<string, EngineDefaults> = {
-  postgresql: {
+export const engineDefaults: Record<Engine, EngineDefaults> = {
+  [Engine.PostgreSQL]: {
     defaultVersion: '18',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
-    supportedVersions: ['15', '16', '17', '18'], // keep in sync with engines/postgresql/version-maps.ts
     latestVersion: '18',
     superuser: 'postgres',
     connectionScheme: 'postgresql',
@@ -45,11 +44,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['psql', 'pg_dump', 'pg_restore', 'pg_basebackup'],
     maxConnections: 200, // Higher than default 100 for parallel builds (Next.js, etc.)
   },
-  mysql: {
+  [Engine.MySQL]: {
     defaultVersion: '8.4',
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
-    supportedVersions: ['8.0', '8.4', '9'], // Keep in sync with engines/mysql/version-maps.ts
     latestVersion: '9',
     superuser: 'root',
     connectionScheme: 'mysql',
@@ -59,11 +57,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mysql', 'mysqldump', 'mysqladmin'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
-  mariadb: {
+  [Engine.MariaDB]: {
     defaultVersion: '11.8',
     defaultPort: 3307, // Different from MySQL to allow side-by-side
     portRange: { start: 3307, end: 3400 },
-    supportedVersions: ['10.11', '11.4', '11.8'], // Keep in sync with engines/mariadb/version-maps.ts
     latestVersion: '11.8',
     superuser: 'root',
     connectionScheme: 'mysql', // MariaDB uses MySQL protocol
@@ -73,11 +70,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mysql', 'mysqldump', 'mysqladmin'],
     maxConnections: 200, // Higher than default 151 for parallel builds
   },
-  sqlite: {
+  [Engine.SQLite]: {
     defaultVersion: '3',
     defaultPort: 0, // File-based, no port
     portRange: { start: 0, end: 0 }, // N/A
-    supportedVersions: ['3'],
     latestVersion: '3',
     superuser: '', // No authentication
     connectionScheme: 'sqlite',
@@ -87,11 +83,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['sqlite3'],
     maxConnections: 0, // N/A - file-based
   },
-  duckdb: {
+  [Engine.DuckDB]: {
     defaultVersion: '1',
     defaultPort: 0, // File-based, no port
     portRange: { start: 0, end: 0 }, // N/A
-    supportedVersions: ['1'], // Keep in sync with engines/duckdb/version-maps.ts
     latestVersion: '1',
     superuser: '', // No authentication
     connectionScheme: 'duckdb',
@@ -101,11 +96,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['duckdb'],
     maxConnections: 0, // N/A - file-based
   },
-  mongodb: {
+  [Engine.MongoDB]: {
     defaultVersion: '8.0',
     defaultPort: 27017,
     portRange: { start: 27017, end: 27100 },
-    supportedVersions: ['7.0', '8.0', '8.2'], // Keep in sync with engines/mongodb/version-maps.ts
     latestVersion: '8.2',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'mongodb',
@@ -115,11 +109,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['mongosh', 'mongodump', 'mongorestore'],
     maxConnections: 0, // Not applicable for MongoDB
   },
-  redis: {
+  [Engine.Redis]: {
     defaultVersion: '8',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6400 },
-    supportedVersions: ['7', '8'], // Keep in sync with engines/redis/version-maps.ts
     latestVersion: '8',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis',
@@ -129,11 +122,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['redis-cli'],
     maxConnections: 0, // Not applicable for Redis
   },
-  valkey: {
+  [Engine.Valkey]: {
     defaultVersion: '9',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6479 },
-    supportedVersions: ['8', '9'], // Keep in sync with engines/valkey/version-maps.ts
     latestVersion: '9',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis', // Use redis:// scheme for client compatibility
@@ -143,11 +135,10 @@ export const engineDefaults: Record<string, EngineDefaults> = {
     clientTools: ['valkey-cli'],
     maxConnections: 0, // Not applicable for Valkey
   },
-  clickhouse: {
+  [Engine.ClickHouse]: {
     defaultVersion: '25.12',
     defaultPort: 9000, // Native TCP port (HTTP is 8123)
     portRange: { start: 9000, end: 9100 },
-    supportedVersions: ['25.12'], // Keep in sync with engines/clickhouse/version-maps.ts
     latestVersion: '25.12',
     superuser: 'default', // Default user in ClickHouse
     connectionScheme: 'clickhouse',
@@ -160,46 +151,43 @@ export const engineDefaults: Record<string, EngineDefaults> = {
 }
 
 /**
+ * Type guard to check if a string is a valid Engine
+ */
+function isValidEngine(value: string): value is Engine {
+  return value in engineDefaults
+}
+
+/**
  * Get engine defaults by name
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
  * @throws Error if engine is not found
  */
-export function getEngineDefaults(engine: string): EngineDefaults {
+export function getEngineDefaults(engine: Engine | string): EngineDefaults {
   const normalized = engine.toLowerCase()
-  const defaults = engineDefaults[normalized]
-  if (!defaults) {
+  if (!isValidEngine(normalized)) {
     const available = Object.keys(engineDefaults).join(', ')
     throw new Error(
       `Unknown engine "${engine}". Available engines: ${available}`,
     )
   }
-  return defaults
+  return engineDefaults[normalized]
 }
 
 // Check if an engine is supported
-export function isEngineSupported(engine: string): boolean {
-  return engine.toLowerCase() in engineDefaults
+export function isEngineSupported(engine: Engine | string): boolean {
+  return isValidEngine(engine.toLowerCase())
 }
 
 // Get list of all supported engine names
-export function getSupportedEngines(): string[] {
-  return Object.keys(engineDefaults)
+export function getSupportedEngines(): Engine[] {
+  return [...ALL_ENGINES]
 }
 
 /**
  * Get Homebrew package name for PostgreSQL client tools
- * Returns 'postgresql@17' format for versioned installs
+ * Returns 'postgresql@18' format for versioned installs
  */
 export function getPostgresHomebrewPackage(): string {
-  const version = engineDefaults.postgresql.latestVersion
+  const version = engineDefaults[Engine.PostgreSQL].latestVersion
   return `postgresql@${version}`
-}
-
-/**
- * Get the PostgreSQL Homebrew bin path for a given architecture
- * @param arch - 'arm64' or 'x64'
- */
-export function getPostgresHomebrewBinPath(arch: 'arm64' | 'x64'): string {
-  const pkg = getPostgresHomebrewPackage()
-  const prefix = arch === 'arm64' ? '/opt/homebrew' : '/usr/local'
-  return `${prefix}/opt/${pkg}/bin`
 }

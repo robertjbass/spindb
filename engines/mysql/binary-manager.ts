@@ -13,7 +13,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import type { ProgressCallback, InstalledBinary } from '../../types'
+import { Engine, Platform, type Arch, type ProgressCallback, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
 
 export class MySQLBinaryManager {
   /**
@@ -21,13 +21,7 @@ export class MySQLBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms.
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
-    const platformKey = `${platform}-${arch}`
-
-    if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
-      throw new Error(`Unsupported platform: ${platformKey}`)
-    }
-
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -40,8 +34,8 @@ export class MySQLBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -50,7 +44,7 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     const mysqldPath = join(binPath, 'bin', `mysqld${ext}`)
     return existsSync(mysqldPath)
   }
@@ -66,17 +60,26 @@ export class MySQLBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory()) {
-        // Use regex for robust parsing (consistent with cli/helpers.ts)
-        const match = entry.name.match(/^mysql-([\d.]+)-(\w+)-(\w+)$/)
-        if (match) {
-          installed.push({
-            engine: 'mysql' as InstalledBinary['engine'],
-            version: match[1],
-            platform: match[2],
-            arch: match[3],
-          })
-        }
+      if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('mysql-')) continue
+
+      // Split from end to handle versions with non-digit suffixes (e.g., 8.0.40-rc1)
+      // Format: mysql-{version}-{platform}-{arch}
+      const rest = entry.name.slice('mysql-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
+        installed.push({
+          engine: Engine.MySQL,
+          version,
+          platform,
+          arch,
+        })
       }
     }
 
@@ -86,8 +89,8 @@ export class MySQLBinaryManager {
   // Download and extract MySQL binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -104,7 +107,7 @@ export class MySQLBinaryManager {
     )
     const archiveFile = join(
       tempDir,
-      platform === 'win32' ? 'mysql.zip' : 'mysql.tar.gz',
+      platform === Platform.Win32 ? 'mysql.zip' : 'mysql.tar.gz',
     )
 
     // Ensure directories exist
@@ -161,7 +164,7 @@ export class MySQLBinaryManager {
       // @ts-expect-error - response.body is ReadableStream
       await pipeline(response.body, fileStream)
 
-      if (platform === 'win32') {
+      if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
           archiveFile,
           binPath,
@@ -178,7 +181,7 @@ export class MySQLBinaryManager {
       }
 
       // Make binaries executable (on Unix-like systems)
-      if (platform !== 'win32') {
+      if (platform !== Platform.Win32) {
         const binDir = join(binPath, 'bin')
         if (existsSync(binDir)) {
           const binaries = await readdir(binDir)
@@ -266,9 +269,9 @@ export class MySQLBinaryManager {
       try {
         await rename(sourcePath, destPath)
       } catch (error) {
-        // Only fallback to cp for cross-device rename errors
+        // Fallback to cp for cross-device (EXDEV) or permission (EPERM) errors
         const err = error as NodeJS.ErrnoException
-        if (err.code === 'EXDEV') {
+        if (err.code === 'EXDEV' || err.code === 'EPERM') {
           await cp(sourcePath, destPath, { recursive: true })
         } else {
           throw error
@@ -280,8 +283,8 @@ export class MySQLBinaryManager {
   // Verify that MySQL binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -290,7 +293,7 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
 
     const serverPath = join(binPath, 'bin', `mysqld${ext}`)
 
@@ -336,8 +339,8 @@ export class MySQLBinaryManager {
   // Get the path to a specific binary (mysqld, mysql, mysqldump, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -347,15 +350,15 @@ export class MySQLBinaryManager {
       platform,
       arch,
     })
-    const ext = platform === 'win32' ? '.exe' : ''
+    const ext = platform === Platform.Win32 ? '.exe' : ''
     return join(binPath, 'bin', `${binary}${ext}`)
   }
 
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -377,7 +380,7 @@ export class MySQLBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'mysql',

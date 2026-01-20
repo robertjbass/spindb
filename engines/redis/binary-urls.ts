@@ -1,25 +1,6 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { REDIS_VERSION_MAP } from './version-maps'
-
-/**
- * Version map for Redis - used as fallback when hostdb repository is unreachable
- */
-export const VERSION_MAP: Record<string, string> = REDIS_VERSION_MAP
-
-// Fetch available versions from hostdb repository
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
+import { logDebug } from '../../core/error-handler'
+import { Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -42,14 +23,14 @@ const SUPPORTED_PLATFORMS = new Set([
  *
  * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
- * @returns hostdb platform identifier or undefined if unsupported
+ * @returns hostdb platform identifier or null if unsupported
  */
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
-): string | undefined {
+  platform: Platform,
+  arch: Arch,
+): string | null {
   const key = `${platform}-${arch}`
-  return SUPPORTED_PLATFORMS.has(key) ? key : undefined
+  return SUPPORTED_PLATFORMS.has(key) ? key : null
 }
 
 /**
@@ -64,8 +45,8 @@ export function getHostdbPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)
@@ -74,11 +55,11 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
-  const fullVersion = normalizeVersion(version, VERSION_MAP)
+  const fullVersion = normalizeVersion(version, REDIS_VERSION_MAP)
 
   const tag = `redis-${fullVersion}`
   // Windows uses .zip, Unix uses .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   const filename = `redis-${fullVersion}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
@@ -93,7 +74,7 @@ export function getBinaryUrl(
  */
 function normalizeVersion(
   version: string,
-  versionMap: Record<string, string> = VERSION_MAP,
+  versionMap: Record<string, string> = REDIS_VERSION_MAP,
 ): string {
   // Check if it's an exact key in the map (handles "7", "8", "7.4", etc.)
   if (versionMap[version]) {
@@ -121,9 +102,9 @@ function normalizeVersion(
     }
   }
 
-  // Unknown version format - warn and return as-is
+  // Unknown version format - log and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
-  console.warn(
+  logDebug(
     `Redis version '${version}' not in version map, may not be available in hostdb`,
   )
   return version
@@ -135,6 +116,3 @@ function normalizeVersion(
  * @param majorVersion - Major version (e.g., '7', '8')
  * @returns Full version string (e.g., '7.4.7') or null if not supported
  */
-export function getFullVersion(majorVersion: string): string | null {
-  return VERSION_MAP[majorVersion] || null
-}

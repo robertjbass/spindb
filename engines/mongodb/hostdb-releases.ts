@@ -8,26 +8,11 @@
  */
 
 import { logDebug } from '../../core/error-handler'
-import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
+import { FALLBACK_VERSION_MAP } from './version-maps'
 import { isNewerVersion } from '../../core/version-utils'
 import { mongodbBinaryManager } from './binary-manager'
-import {
-  fetchHostdbReleases,
-  clearCache as clearSharedCache,
-  getEngineReleases,
-  validatePlatform,
-  buildDownloadUrl,
-  type HostdbRelease,
-  type HostdbReleasesData,
-  type HostdbPlatform,
-} from '../../core/hostdb-client'
 import { getAvailableVersions as getHostdbVersions } from '../../core/hostdb-metadata'
-
-// Re-export types for backwards compatibility
-export type { HostdbRelease, HostdbReleasesData, HostdbPlatform }
-
-// Re-export shared functions
-export const clearCache = clearSharedCache
+import { Engine } from '../../types'
 
 /**
  * Fetch available MongoDB versions from hostdb databases.json
@@ -38,7 +23,7 @@ export async function fetchAvailableVersions(): Promise<
 > {
   // Try to fetch from hostdb databases.json (authoritative source)
   try {
-    const versions = await getHostdbVersions('mongodb')
+    const versions = await getHostdbVersions(Engine.MongoDB)
 
     if (versions && versions.length > 0) {
       const versionMap: Record<string, string> = {}
@@ -105,78 +90,3 @@ export async function getLatestVersion(
   return versions[majorMinor] || null
 }
 
-/**
- * Get the download URL for a MongoDB version from hostdb
- *
- * @param version - Full version (e.g., '7.0.28')
- * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')
- * @param arch - Architecture identifier (e.g., 'arm64', 'x64')
- * @returns Download URL for the binary
- */
-export async function getHostdbDownloadUrl(
-  version: string,
-  platform: string,
-  arch: string,
-): Promise<string> {
-  // Validate platform up-front so we fail fast for unsupported platforms
-  const hostdbPlatform = validatePlatform(platform, arch)
-
-  try {
-    const releases = await fetchHostdbReleases()
-    const mongodbReleases = getEngineReleases(releases, 'mongodb')
-
-    if (!mongodbReleases) {
-      throw new Error('MongoDB releases not found in hostdb')
-    }
-
-    // Find the version in releases
-    const release = mongodbReleases[version]
-    if (!release) {
-      throw new Error(`Version ${version} not found in hostdb releases`)
-    }
-
-    // Get the platform-specific download URL
-    const platformData = release.platforms[hostdbPlatform]
-    if (!platformData) {
-      throw new Error(
-        `Platform ${hostdbPlatform} not available for MongoDB ${version}`,
-      )
-    }
-
-    return platformData.url
-  } catch (error) {
-    // Log the error before falling back to manual URL construction
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logDebug(
-      `Failed to fetch MongoDB ${version} URL from hostdb for ${platform}-${arch}: ${errorMessage}. Using fallback URL.`,
-    )
-
-    // Fallback to constructing URL manually if fetch fails
-    return buildDownloadUrl('mongodb', version, platform, arch)
-  }
-}
-
-/**
- * Check if a version is available in hostdb
- *
- * @param version - Version to check
- * @returns true if the version exists in hostdb releases
- */
-export async function isVersionAvailable(version: string): Promise<boolean> {
-  try {
-    const versions = await getHostdbVersions('mongodb')
-    return versions ? versions.includes(version) : false
-  } catch {
-    // Fallback to checking version map
-    // Handle both major versions ("8.0") and full versions ("8.0.17")
-    const majorParts = version.split('.')
-    const major =
-      majorParts.length >= 2 ? `${majorParts[0]}.${majorParts[1]}` : version
-    return (
-      version in FALLBACK_VERSION_MAP || FALLBACK_VERSION_MAP[major] === version
-    )
-  }
-}
-
-// Re-export for convenience
-export { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP }

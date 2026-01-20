@@ -10,8 +10,12 @@ import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { clickhouseBinaryManager } from './binary-manager'
-import { getBinaryUrl, VERSION_MAP } from './binary-urls'
-import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { getBinaryUrl } from './binary-urls'
+import {
+  normalizeVersion,
+  SUPPORTED_MAJOR_VERSIONS,
+  CLICKHOUSE_VERSION_MAP,
+} from './version-maps'
 import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -22,15 +26,17 @@ import {
   validateClickHouseIdentifier,
   escapeClickHouseIdentifier,
 } from './cli-utils'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  type Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const ENGINE = 'clickhouse'
@@ -130,7 +136,7 @@ export class ClickHouseEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get platform info for binary operations
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     return platformService.getPlatformInfo()
   }
 
@@ -140,7 +146,7 @@ export class ClickHouseEngine extends BaseEngine {
   }
 
   // Get binary download URL from hostdb
-  getBinaryUrl(version: string, platform: string, arch: string): string {
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
     return getBinaryUrl(version, platform, arch)
   }
 
@@ -149,7 +155,7 @@ export class ClickHouseEngine extends BaseEngine {
     if (/^\d+\.\d+\.\d+\.\d+$/.test(version)) {
       return version
     }
-    return VERSION_MAP[version] || version
+    return CLICKHOUSE_VERSION_MAP[version] || version
   }
 
   // Get the path where binaries for a version would be installed

@@ -8,6 +8,7 @@
  */
 
 import { logDebug } from './error-handler'
+import type { Engine } from '../types'
 
 const HOSTDB_RAW_BASE =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main'
@@ -127,10 +128,10 @@ export async function fetchDownloadsJson(): Promise<DownloadsJson> {
 
 /**
  * Get the CLI tools definition for a database engine
- * @param engine Engine name as used in hostdb (e.g., 'postgresql', 'mysql', 'mariadb')
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
  */
 export async function getDatabaseTools(
-  engine: string,
+  engine: Engine | string,
 ): Promise<CliTools | null> {
   try {
     const data = await fetchDatabasesJson()
@@ -152,7 +153,7 @@ export async function getDatabaseTools(
  * Returns an array of tool names (client + utilities)
  */
 export async function getRequiredClientTools(
-  engine: string,
+  engine: Engine | string,
 ): Promise<string[]> {
   const cliTools = await getDatabaseTools(engine)
   if (!cliTools) return []
@@ -277,11 +278,11 @@ export async function getPackagesForTools(
 /**
  * Get available versions for a database engine from databases.json
  * This is the authoritative source for what versions are actually available in hostdb.
- * @param engine Engine name (e.g., 'postgresql', 'mysql', 'mariadb')
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
  * @returns Array of available version strings, or null if fetch fails
  */
 export async function getAvailableVersions(
-  engine: string,
+  engine: Engine | string,
 ): Promise<string[] | null> {
   try {
     const data = await fetchDatabasesJson()
@@ -304,11 +305,11 @@ export async function getAvailableVersions(
 
 /**
  * Get the latest LTS version for a database engine
- * @param engine Engine name (e.g., 'postgresql', 'mysql')
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
  * @returns Latest LTS version string, or null if not found
  */
 export async function getLatestLtsVersion(
-  engine: string,
+  engine: Engine | string,
 ): Promise<string | null> {
   try {
     const data = await fetchDatabasesJson()

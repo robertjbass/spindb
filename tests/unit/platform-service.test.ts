@@ -2,6 +2,8 @@ import { describe, it } from 'node:test'
 import {
   platformService,
   resolveHomeDir,
+  Platform,
+  Arch,
   type PlatformInfo,
   type ClipboardConfig,
   type PackageManagerInfo,
@@ -15,14 +17,14 @@ describe('PlatformService', () => {
 
       // Platform should be one of the supported values
       assert(
-        ['darwin', 'linux', 'win32'].includes(info.platform),
+        [Platform.Darwin, Platform.Linux, Platform.Win32].includes(info.platform),
         `Platform should be darwin, linux, or win32, got: ${info.platform}`,
       )
 
       // Architecture should be one of the supported values
       assert(
-        ['arm64', 'x64'].includes(info.arch),
-        `Architecture should be arm64 or x64, got: ${info.arch}`,
+        [Arch.ARM64, Arch.X64].includes(info.arch),
+        `Architecture should be ${Arch.ARM64} or ${Arch.X64}, got: ${info.arch}`,
       )
 
       // Home directory should be a non-empty string
@@ -84,13 +86,13 @@ describe('PlatformService', () => {
       const config = platformService.getClipboardConfig()
       const info = platformService.getPlatformInfo()
 
-      if (info.platform === 'darwin') {
+      if (info.platform === Platform.Darwin) {
         assert(
           config.copyCommand.includes('pbcopy') ||
             config.copyCommand === 'pbcopy',
           'macOS should use pbcopy',
         )
-      } else if (info.platform === 'linux') {
+      } else if (info.platform === Platform.Linux) {
         assert(
           config.copyCommand.includes('xclip') ||
             config.copyCommand.includes('xsel') ||
@@ -116,7 +118,7 @@ describe('PlatformService', () => {
       const config = platformService.getWhichCommand()
       const info = platformService.getPlatformInfo()
 
-      if (info.platform === 'win32') {
+      if (info.platform === Platform.Win32) {
         assert(config.command === 'where', 'Windows should use "where" command')
       } else {
         assert(config.command === 'which', 'Unix should use "which" command')
@@ -150,12 +152,12 @@ describe('PlatformService', () => {
       const paths = platformService.getSearchPaths('mysqld')
       const info = platformService.getPlatformInfo()
 
-      if (info.platform === 'darwin') {
+      if (info.platform === Platform.Darwin) {
         const hasHomebrew = paths.some(
           (p) => p.includes('/opt/homebrew') || p.includes('/usr/local'),
         )
         assert(hasHomebrew, 'macOS should include Homebrew paths')
-      } else if (info.platform === 'linux') {
+      } else if (info.platform === Platform.Linux) {
         const hasStandardPaths = paths.some(
           (p) => p.includes('/usr/bin') || p.includes('/usr/local/bin'),
         )
@@ -192,9 +194,9 @@ describe('PlatformService', () => {
       const info = platformService.getPlatformInfo()
 
       if (result !== null) {
-        if (info.platform === 'darwin') {
+        if (info.platform === Platform.Darwin) {
           assertEqual(result.id, 'brew', 'macOS should detect Homebrew')
-        } else if (info.platform === 'linux') {
+        } else if (info.platform === Platform.Linux) {
           assert(
             ['apt', 'yum', 'dnf', 'pacman'].includes(result.id),
             `Linux should detect apt, yum, dnf, or pacman, got: ${result.id}`,
@@ -208,7 +210,7 @@ describe('PlatformService', () => {
     it('should find common tools', async () => {
       // Try to find a tool that should exist on any system
       const info = platformService.getPlatformInfo()
-      const toolToFind = info.platform === 'win32' ? 'cmd' : 'ls'
+      const toolToFind = info.platform === Platform.Win32 ? 'cmd' : 'ls'
 
       const path = await platformService.findToolPath(toolToFind)
 
@@ -234,7 +236,7 @@ describe('PlatformService', () => {
     it('should return version string or null', async () => {
       // Try to get version of a tool we know exists
       const info = platformService.getPlatformInfo()
-      const toolPath = info.platform === 'win32' ? 'cmd' : '/bin/ls'
+      const toolPath = info.platform === Platform.Win32 ? 'cmd' : '/bin/ls'
 
       const version = await platformService.getToolVersion(toolPath)
 
@@ -270,7 +272,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: null,
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/Users/bob',
       })
 
@@ -281,7 +283,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: null,
         getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -299,7 +301,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20:Bob Bass:/Users/bob:/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -310,7 +312,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -321,7 +323,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'deploy',
         getentResult: 'deploy:x:1000:1000:Deploy User:/home/deploy:/bin/bash',
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -333,7 +335,7 @@ describe('resolveHomeDir', () => {
         sudoUser: 'service',
         getentResult:
           'service:x:999:999:Service Account:/var/lib/service:/bin/false',
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -344,7 +346,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20::/Users/bob:/bin/zsh\n',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -357,7 +359,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -368,7 +370,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: null,
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -379,7 +381,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -390,7 +392,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: 'bob:x:501:20:::/bin/zsh',
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -401,7 +403,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: '',
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -414,7 +416,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob-bass',
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/root',
       })
 
@@ -429,7 +431,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob_bass',
         getentResult: null,
-        platform: 'linux',
+        platform: Platform.Linux,
         defaultHome: '/root',
       })
 
@@ -446,7 +448,7 @@ describe('resolveHomeDir', () => {
       const result = resolveHomeDir({
         sudoUser: 'bob',
         getentResult: null,
-        platform: 'darwin',
+        platform: Platform.Darwin,
         defaultHome: '/var/root', // macOS root home
       })
 

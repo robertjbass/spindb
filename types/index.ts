@@ -28,6 +28,19 @@ export enum Engine {
   ClickHouse = 'clickhouse',
 }
 
+// Supported operating systems (matches Node.js process.platform)
+export enum Platform {
+  Darwin = 'darwin',
+  Linux = 'linux',
+  Win32 = 'win32',
+}
+
+// Supported CPU architectures (matches Node.js process.arch)
+export enum Arch {
+  ARM64 = 'arm64',
+  X64 = 'x64',
+}
+
 /**
  * Array of all supported engine values (type-safe, exhaustive)
  * When adding a new Engine enum value, TypeScript will error here until you add it
@@ -44,9 +57,7 @@ export const ALL_ENGINES = [
   Engine.ClickHouse,
 ] as const
 
-/**
- * File-based engines (no server process, data stored in user project directories)
- */
+// File-based engines (no server process, data stored in user project directories)
 export const FILE_BASED_ENGINES = new Set([Engine.SQLite, Engine.DuckDB])
 
 /**
@@ -73,6 +84,18 @@ export function assertExhaustive(x: never, message?: string): never {
   throw new Error(message ?? `Unhandled case: ${x}`)
 }
 
+export const ALL_PLATFORMS = Object.values(Platform) as Platform[]
+
+export const ALL_ARCHS = Object.values(Arch) as Arch[]
+
+export function isValidPlatform(value: string): value is Platform {
+  return ALL_PLATFORMS.includes(value as Platform)
+}
+
+export function isValidArch(value: string): value is Arch {
+  return ALL_ARCHS.includes(value as Arch)
+}
+
 // Compile-time validation that ALL_ENGINES contains all Engine enum values
 type _AssertAllEngines = typeof ALL_ENGINES extends readonly Engine[]
   ? (typeof ALL_ENGINES)[number] extends Engine
@@ -81,7 +104,27 @@ type _AssertAllEngines = typeof ALL_ENGINES extends readonly Engine[]
       : ['Error: ALL_ENGINES is missing some Engine values']
     : never
   : never
-const _exhaustiveCheck: _AssertAllEngines = true
+const _exhaustiveEnginesCheck: _AssertAllEngines = true
+
+// Compile-time validation that ALL_PLATFORMS contains all Platform enum values
+type _AssertAllPlatforms = typeof ALL_PLATFORMS extends Platform[]
+  ? (typeof ALL_PLATFORMS)[number] extends Platform
+    ? Platform extends (typeof ALL_PLATFORMS)[number]
+      ? true
+      : ['Error: ALL_PLATFORMS is missing some Platform values']
+    : never
+  : never
+const _exhaustivePlatformsCheck: _AssertAllPlatforms = true
+
+// Compile-time validation that ALL_ARCHS contains all Arch enum values
+type _AssertAllArchs = typeof ALL_ARCHS extends Arch[]
+  ? (typeof ALL_ARCHS)[number] extends Arch
+    ? Arch extends (typeof ALL_ARCHS)[number]
+      ? true
+      : ['Error: ALL_ARCHS is missing some Arch values']
+    : never
+  : never
+const _exhaustiveArchsCheck: _AssertAllArchs = true
 
 export type ProgressCallback = (progress: {
   stage: string
@@ -91,8 +134,8 @@ export type ProgressCallback = (progress: {
 export type InstalledBinary = {
   engine: Engine
   version: string
-  platform: string
-  arch: string
+  platform: Platform
+  arch: Arch
 }
 
 export type PortResult = {
@@ -358,4 +401,3 @@ export type EngineRegistries = {
   sqlite?: SQLiteEngineRegistry
   duckdb?: DuckDBEngineRegistry
 }
-

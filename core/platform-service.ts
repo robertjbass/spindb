@@ -14,17 +14,17 @@ import { homedir, platform as osPlatform, arch as osArch } from 'os'
 import { execSync, execFileSync, exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
+import { Platform, Arch } from '../types'
 
 const execAsync = promisify(exec)
 
-export type Platform = 'darwin' | 'linux' | 'win32'
-export type Architecture = 'arm64' | 'x64'
+export { Platform, Arch }
 
 // Options for resolving home directory under sudo
 export type ResolveHomeDirOptions = {
   sudoUser: string | null
   getentResult: string | null
-  platform: 'darwin' | 'linux'
+  platform: Platform.Darwin | Platform.Linux
   defaultHome: string
 }
 
@@ -53,12 +53,12 @@ export function resolveHomeDir(options: ResolveHomeDirOptions): string {
   }
 
   // Fallback to platform-specific default
-  return platform === 'darwin' ? `/Users/${sudoUser}` : `/home/${sudoUser}`
+  return platform === Platform.Darwin ? `/Users/${sudoUser}` : `/home/${sudoUser}`
 }
 
 export type PlatformInfo = {
   platform: Platform
-  arch: Architecture
+  arch: Arch
   homeDir: string
   isWSL: boolean
   isSudo: boolean
@@ -220,13 +220,13 @@ class DarwinPlatformService extends BasePlatformService {
     const homeDir = resolveHomeDir({
       sudoUser,
       getentResult,
-      platform: 'darwin',
+      platform: Platform.Darwin,
       defaultHome: homedir(),
     })
 
     this.cachedPlatformInfo = {
-      platform: 'darwin',
-      arch: osArch() as Architecture,
+      platform: Platform.Darwin,
+      arch: osArch() as Arch,
       homeDir,
       isWSL: false,
       isSudo: !!sudoUser,
@@ -392,7 +392,7 @@ class LinuxPlatformService extends BasePlatformService {
     const homeDir = resolveHomeDir({
       sudoUser,
       getentResult,
-      platform: 'linux',
+      platform: Platform.Linux,
       defaultHome: homedir(),
     })
 
@@ -406,8 +406,8 @@ class LinuxPlatformService extends BasePlatformService {
     }
 
     this.cachedPlatformInfo = {
-      platform: 'linux',
-      arch: osArch() as Architecture,
+      platform: Platform.Linux,
+      arch: osArch() as Arch,
       homeDir,
       isWSL,
       isSudo: !!sudoUser,
@@ -591,8 +591,8 @@ class Win32PlatformService extends BasePlatformService {
     if (this.cachedPlatformInfo) return this.cachedPlatformInfo
 
     this.cachedPlatformInfo = {
-      platform: 'win32',
-      arch: osArch() as Architecture,
+      platform: Platform.Win32,
+      arch: osArch() as Arch,
       homeDir: homedir(),
       isWSL: false,
       isSudo: false,
@@ -794,7 +794,7 @@ export const platformService = createPlatformService()
 
 // Check if running on Windows
 export function isWindows(): boolean {
-  return process.platform === 'win32'
+  return process.platform === Platform.Win32
 }
 
 /**

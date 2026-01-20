@@ -8,10 +8,9 @@
  * When updating versions:
  * 1. Check hostdb releases.json for available versions
  * 2. Update DUCKDB_VERSION_MAP to match
- * 3. Update config/engine-defaults.ts supportedVersions array
  */
 
-import { logWarning } from '../../core/error-handler'
+import { logDebug } from '../../core/error-handler'
 
 /**
  * Map of major DuckDB versions to their latest stable patch versions.
@@ -56,10 +55,24 @@ export function normalizeVersion(version: string): string {
     return fullVersion
   }
 
-  // Unknown version - warn and return as-is
+  // Unknown version - validate format and log at debug level
   // This may cause download failures if the version doesn't exist in hostdb
-  logWarning(
-    `DuckDB version '${version}' not in version map, may not be available in hostdb`,
-  )
+  const parts = version.split('.')
+
+  // Validate format: must be 1-3 numeric segments (e.g., "1", "1.4", "1.4.3")
+  const isValidFormat =
+    parts.length >= 1 &&
+    parts.length <= 3 &&
+    parts.every((p) => /^\d+$/.test(p))
+
+  if (!isValidFormat) {
+    logDebug(
+      `DuckDB version '${version}' has invalid format, may not be available in hostdb`,
+    )
+  } else {
+    logDebug(
+      `DuckDB version '${version}' not in version map, may not be available in hostdb`,
+    )
+  }
   return version
 }

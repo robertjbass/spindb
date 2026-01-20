@@ -30,15 +30,17 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -95,7 +97,7 @@ export class MongoDBEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get the current platform and architecture
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     return platformService.getPlatformInfo()
   }
 
@@ -117,7 +119,7 @@ export class MongoDBEngine extends BaseEngine {
   }
 
   // Get binary download URL from hostdb
-  getBinaryUrl(version: string, platform: string, arch: string): string {
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
     return getBinaryUrl(version, platform, arch)
   }
 
@@ -323,8 +325,8 @@ export class MongoDBEngine extends BaseEngine {
 
     // Note: --fork is not supported on macOS (Sonoma+), so we use detached spawn
     // for both macOS and Windows. Only Linux still supports --fork.
-    const isMac = process.platform === 'darwin'
-    const useDetachedSpawn = isWindows() || isMac
+    const { platform } = platformService.getPlatformInfo()
+    const useDetachedSpawn = platform === Platform.Win32 || platform === Platform.Darwin
 
     if (!useDetachedSpawn) {
       // Linux: can use --fork for native daemonization

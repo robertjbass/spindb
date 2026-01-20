@@ -41,7 +41,7 @@ import {
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
 } from '../helpers'
-import { Engine } from '../../types'
+import { Engine, Platform } from '../../types'
 import {
   loadEnginesJson,
   type EngineConfig,
@@ -1290,7 +1290,7 @@ enginesCommand
       if (['clickhouse', 'ch'].includes(normalizedEngine)) {
         // Check platform support
         const { platform } = platformService.getPlatformInfo()
-        if (platform === 'win32') {
+        if (platform === Platform.Win32) {
           console.error(
             uiError('ClickHouse is not supported on Windows via hostdb'),
           )

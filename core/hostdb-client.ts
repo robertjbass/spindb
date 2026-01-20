@@ -9,6 +9,8 @@
  * repeated network requests.
  */
 
+import { Platform, type Arch, type Engine } from '../types'
+
 // Platform definition in hostdb releases.json
 export type HostdbPlatform = {
   url: string
@@ -42,6 +44,9 @@ export const SUPPORTED_PLATFORMS = [
 
 export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 
+// Type alias for engines available in hostdb (uses the Engine enum from types)
+export type HostdbEngine = Engine
+
 /**
  * In-memory cache for fetched releases.
  *
@@ -56,17 +61,6 @@ const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
 const HOSTDB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
-
-/**
- * Clear the releases cache (for testing).
- *
- * NOTE: This only clears the cache in the current thread/process.
- * If using worker threads, each worker has its own cache instance.
- */
-export function clearCache(): void {
-  cachedReleases = null
-  cacheTimestamp = 0
-}
 
 /**
  * Fetch releases.json from hostdb repository with caching.
@@ -107,12 +101,12 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
  * Get the releases for a specific engine from the hostdb data.
  *
  * @param data - The full hostdb releases data
- * @param engine - The engine name (e.g., 'postgresql', 'mysql', 'mariadb')
+ * @param engine - The engine (e.g., Engine.PostgreSQL or 'postgresql')
  * @returns The releases for that engine, or undefined if not found
  */
 export function getEngineReleases(
   data: HostdbReleasesData,
-  engine: string,
+  engine: Engine | string,
 ): Record<string, HostdbRelease> | undefined {
   return data.databases[engine]
 }
@@ -120,53 +114,65 @@ export function getEngineReleases(
 /**
  * Map Node.js platform identifiers to hostdb platform identifiers.
  *
- * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
- * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
+ * @param platform - Node.js platform (e.g., Platform.Darwin)
+ * @param arch - Node.js architecture (e.g., Arch.ARM64)
  * @returns The hostdb platform identifier, or undefined if not supported
  */
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
-): string | undefined {
+  platform: Platform,
+  arch: Arch,
+): SupportedPlatform | undefined {
   const key = `${platform}-${arch}`
   return SUPPORTED_PLATFORMS.includes(key as SupportedPlatform)
-    ? key
+    ? (key as SupportedPlatform)
     : undefined
 }
 
 /**
  * Validate that a platform is supported by hostdb.
  *
- * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
- * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
+ * @param platform - Node.js platform (e.g., Platform.Darwin)
+ * @param arch - Node.js architecture (e.g., Arch.ARM64)
+ * @returns The validated hostdb platform identifier
  * @throws Error if the platform is not supported
  */
-export function validatePlatform(platform: string, arch: string): string {
+export function validatePlatform(
+  platform: Platform,
+  arch: Arch,
+): SupportedPlatform {
   const hostdbPlatform = getHostdbPlatform(platform, arch)
   if (!hostdbPlatform) {
-    throw new Error(`Unsupported platform: ${platform}-${arch}`)
+    const supported = SUPPORTED_PLATFORMS.join(', ')
+    throw new Error(
+      `Unsupported platform: ${platform}-${arch}. ` +
+        `hostdb provides binaries for: ${supported}`,
+    )
   }
   return hostdbPlatform
+}
+
+export type BuildDownloadUrlOptions = {
+  version: string
+  platform: Platform
+  arch: Arch
 }
 
 /**
  * Build a download URL for a hostdb release.
  *
  * @param engine - The engine name (e.g., 'postgresql', 'mysql')
- * @param version - The full version (e.g., '17.7.0', '8.0.40')
- * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
- * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
+ * @param options - Version and platform configuration
  * @returns The download URL
+ * @throws Error if the platform is not supported by hostdb
  */
 export function buildDownloadUrl(
-  engine: string,
-  version: string,
-  platform: string,
-  arch: string,
+  engine: Engine | string,
+  options: BuildDownloadUrlOptions,
 ): string {
+  const { version, platform, arch } = options
   const hostdbPlatform = validatePlatform(platform, arch)
   const tag = `${engine}-${version}`
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   const filename = `${engine}-${version}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`

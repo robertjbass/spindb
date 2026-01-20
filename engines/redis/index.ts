@@ -11,23 +11,29 @@ import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { redisBinaryManager } from './binary-manager'
-import { getBinaryUrl, VERSION_MAP } from './binary-urls'
-import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import { getBinaryUrl } from './binary-urls'
+import {
+  normalizeVersion,
+  SUPPORTED_MAJOR_VERSIONS,
+  REDIS_VERSION_MAP,
+} from './version-maps'
 import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  type Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -137,7 +143,7 @@ export class RedisEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get platform info for binary operations
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     return platformService.getPlatformInfo()
   }
 
@@ -147,7 +153,7 @@ export class RedisEngine extends BaseEngine {
   }
 
   // Get binary download URL from hostdb
-  getBinaryUrl(version: string, platform: string, arch: string): string {
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
     return getBinaryUrl(version, platform, arch)
   }
 
@@ -158,7 +164,7 @@ export class RedisEngine extends BaseEngine {
       return version
     }
     // It's a major version, resolve using version map
-    return VERSION_MAP[version] || `${version}.0.0`
+    return REDIS_VERSION_MAP[version] || `${version}.0.0`
   }
 
   // Get the path where binaries for a version would be installed

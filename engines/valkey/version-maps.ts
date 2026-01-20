@@ -8,8 +8,9 @@
  * When updating versions:
  * 1. Check hostdb releases.json for available versions
  * 2. Update VALKEY_VERSION_MAP to match
- * 3. Update config/engine-defaults.ts supportedVersions array
  */
+
+import { logDebug } from '../../core/error-handler'
 
 /**
  * Map of major Valkey versions to their latest stable patch versions.
@@ -68,11 +69,11 @@ export function normalizeVersion(version: string): string {
     parts.every((p) => /^\d+$/.test(p))
 
   if (!isValidFormat) {
-    console.warn(
+    logDebug(
       `Valkey version '${version}' has invalid format, may not be available in hostdb`,
     )
   } else {
-    console.warn(
+    logDebug(
       `Valkey version '${version}' not in version map, may not be available in hostdb`,
     )
   }

@@ -8,6 +8,8 @@
  * To update: Check releases.json, find databases.mongodb, copy all version strings.
  */
 
+import { logDebug } from '../../core/error-handler'
+
 /**
  * Map major versions to full versions
  * Keys are major.minor versions (e.g., "7.0", "8.0", "8.2")
@@ -80,9 +82,9 @@ export function normalizeVersion(version: string): string {
     return fullVersion
   }
 
-  // Unknown version format - warn and return as-is
+  // Unknown version format - log debug and return as-is
   // This may cause download failures if the version doesn't exist in hostdb
-  console.warn(
+  logDebug(
     `MongoDB version '${version}' not in version map, may not be available in hostdb`,
   )
   return version

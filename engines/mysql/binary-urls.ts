@@ -1,26 +1,5 @@
-import {
-  fetchAvailableVersions as fetchHostdbVersions,
-  getLatestVersion as getHostdbLatestVersion,
-} from './hostdb-releases'
 import { FALLBACK_VERSION_MAP } from './version-maps'
-
-// Re-export for convenience
-export { FALLBACK_VERSION_MAP }
-
-// Fetch available versions from hostdb repository
-export async function fetchAvailableVersions(): Promise<
-  Record<string, string[]>
-> {
-  return await fetchHostdbVersions()
-}
-
-// Get the latest version for a major version from hostdb
-export async function getLatestVersion(major: string): Promise<string> {
-  return await getHostdbLatestVersion(major)
-}
-
-// Legacy export for backward compatibility
-export { FALLBACK_VERSION_MAP as VERSION_MAP }
+import { Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -42,14 +21,14 @@ const SUPPORTED_PLATFORMS = new Set([
  *
  * @param platform - Node.js platform (e.g., 'darwin', 'linux', 'win32')
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
- * @returns hostdb platform identifier or undefined if unsupported
+ * @returns hostdb platform identifier or null if unsupported
  */
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
-): string | undefined {
+  platform: Platform,
+  arch: Arch,
+): string | null {
   const key = `${platform}-${arch}`
-  return SUPPORTED_PLATFORMS.has(key) ? key : undefined
+  return SUPPORTED_PLATFORMS.has(key) ? key : null
 }
 
 /**
@@ -65,8 +44,8 @@ export function getHostdbPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)
@@ -79,7 +58,7 @@ export function getBinaryUrl(
 
   const tag = `mysql-${fullVersion}`
   // Windows uses .zip, others use .tar.gz
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
   const filename = `mysql-${fullVersion}-${hostdbPlatform}.${ext}`
 
   return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
@@ -117,6 +96,3 @@ function normalizeVersion(
  * @param majorVersion - Major version (e.g., '8.0', '9')
  * @returns Full version string (e.g., '8.0.40') or null if not supported
  */
-export function getFullVersion(majorVersion: string): string | null {
-  return FALLBACK_VERSION_MAP[majorVersion] || null
-}
