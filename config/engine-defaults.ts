@@ -3,7 +3,7 @@
  * Extracted for dependency injection pattern - allows each engine to define its own defaults
  */
 
-import { Engine } from '../types'
+import { Engine, ALL_ENGINES } from '../types'
 
 export type EngineDefaults = {
   // Default version to use when not specified
@@ -180,7 +180,7 @@ export function isEngineSupported(engine: Engine | string): boolean {
 
 // Get list of all supported engine names
 export function getSupportedEngines(): Engine[] {
-  return Object.keys(engineDefaults) as Engine[]
+  return [...ALL_ENGINES]
 }
 
 /**

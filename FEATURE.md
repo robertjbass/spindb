@@ -238,7 +238,7 @@ export class YourEngine extends BaseEngine {
   supportedVersions = ['8', '9']
 
   // Binary management
-  getBinaryUrl(version: string, platform: string, arch: string): string
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string
   async verifyBinary(binPath: string): Promise<boolean>
   async isBinaryInstalled(version: string): Promise<boolean>
   async ensureBinaries(version: string, onProgress?: ProgressCallback): Promise<string>
@@ -559,8 +559,8 @@ Add installed engine type and detection function:
 export type InstalledYourEngineEngine = {
   engine: 'yourengine'
   version: string
-  platform: string
-  arch: string
+  platform: Platform
+  arch: Arch
   path: string
   sizeBytes: number
   source: 'downloaded'
@@ -1333,13 +1333,15 @@ export const FALLBACK_VERSION_MAP = YOURENGINE_VERSION_MAP
 **`engines/{engine}/binary-urls.ts`:**
 ```ts
 import { FALLBACK_VERSION_MAP } from './version-maps'
+import { Platform, type Arch } from '../../types'
 
 const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
 
-export function getBinaryUrl(version: string, platform: string, arch: string): string {
+export function getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
   const fullVersion = FALLBACK_VERSION_MAP[version] || version
   const platformKey = `${platform}-${arch}`
-  return `${HOSTDB_BASE_URL}/yourengine-${fullVersion}/yourengine-${fullVersion}-${platformKey}.tar.gz`
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
+  return `${HOSTDB_BASE_URL}/yourengine-${fullVersion}/yourengine-${fullVersion}-${platformKey}.${ext}`
 }
 ```
 

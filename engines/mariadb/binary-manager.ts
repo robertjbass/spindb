@@ -118,7 +118,22 @@ export class MariaDBBinaryManager {
         message: 'Downloading MariaDB binaries...',
       })
 
-      const response = await fetch(url)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+      let response: Response
+      try {
+        response = await fetch(url, { signal: controller.signal })
+      } catch (error) {
+        clearTimeout(timeoutId)
+        const err = error as Error
+        if (err.name === 'AbortError') {
+          throw new Error('Download timed out after 5 minutes')
+        }
+        throw error
+      }
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(

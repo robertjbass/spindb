@@ -186,7 +186,8 @@ describe('SQLite binary-urls', () => {
 
     it('should throw error for unsupported platform', () => {
       try {
-        getBinaryUrl('3', 'freebsd', 'x64')
+        // Use type assertion to test runtime validation of invalid platform
+        getBinaryUrl('3', 'freebsd' as Platform, 'x64' as Arch)
         assert(false, 'Should have thrown an error')
       } catch (error) {
         assert(error instanceof Error, 'Should throw Error')

@@ -28,18 +28,14 @@ export enum Engine {
   ClickHouse = 'clickhouse',
 }
 
-/**
- * Supported operating systems (matches Node.js process.platform)
- */
+// Supported operating systems (matches Node.js process.platform)
 export enum Platform {
   Darwin = 'darwin',
   Linux = 'linux',
   Win32 = 'win32',
 }
 
-/**
- * Supported CPU architectures (matches Node.js process.arch)
- */
+// Supported CPU architectures (matches Node.js process.arch)
 export enum Arch {
   ARM64 = 'arm64',
   X64 = 'x64',
@@ -61,9 +57,7 @@ export const ALL_ENGINES = [
   Engine.ClickHouse,
 ] as const
 
-/**
- * File-based engines (no server process, data stored in user project directories)
- */
+// File-based engines (no server process, data stored in user project directories)
 export const FILE_BASED_ENGINES = new Set([Engine.SQLite, Engine.DuckDB])
 
 /**
@@ -90,26 +84,14 @@ export function assertExhaustive(x: never, message?: string): never {
   throw new Error(message ?? `Unhandled case: ${x}`)
 }
 
-/**
- * All valid Platform enum values as an array for runtime validation
- */
 export const ALL_PLATFORMS = Object.values(Platform) as Platform[]
 
-/**
- * All valid Arch enum values as an array for runtime validation
- */
 export const ALL_ARCHS = Object.values(Arch) as Arch[]
 
-/**
- * Type guard to check if a string is a valid Platform value
- */
 export function isValidPlatform(value: string): value is Platform {
   return ALL_PLATFORMS.includes(value as Platform)
 }
 
-/**
- * Type guard to check if a string is a valid Arch value
- */
 export function isValidArch(value: string): value is Arch {
   return ALL_ARCHS.includes(value as Arch)
 }
@@ -399,4 +381,3 @@ export type EngineRegistries = {
   sqlite?: SQLiteEngineRegistry
   duckdb?: DuckDBEngineRegistry
 }
-

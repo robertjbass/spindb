@@ -142,7 +142,7 @@ export class ClickHouseEngine extends BaseEngine {
   }
 
   // Get binary download URL from hostdb
-  getBinaryUrl(version: string, platform: string, arch: string): string {
+  getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
     return getBinaryUrl(version, platform, arch)
   }
 

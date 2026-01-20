@@ -13,7 +13,7 @@ import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
-import { Platform, type Arch, type ProgressCallback, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
+import { Engine, Platform, type Arch, type ProgressCallback, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
 
 export class MySQLBinaryManager {
   /**
@@ -60,17 +60,26 @@ export class MySQLBinaryManager {
     const installed: InstalledBinary[] = []
 
     for (const entry of entries) {
-      if (entry.isDirectory()) {
-        // Use regex for robust parsing (consistent with cli/helpers.ts)
-        const match = entry.name.match(/^mysql-([\d.]+)-(\w+)-(\w+)$/)
-        if (match && isValidPlatform(match[2]) && isValidArch(match[3])) {
-          installed.push({
-            engine: 'mysql' as InstalledBinary['engine'],
-            version: match[1],
-            platform: match[2],
-            arch: match[3],
-          })
-        }
+      if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('mysql-')) continue
+
+      // Split from end to handle versions with non-digit suffixes (e.g., 8.0.40-rc1)
+      // Format: mysql-{version}-{platform}-{arch}
+      const rest = entry.name.slice('mysql-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
+        installed.push({
+          engine: Engine.MySQL,
+          version,
+          platform,
+          arch,
+        })
       }
     }
 

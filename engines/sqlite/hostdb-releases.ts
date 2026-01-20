@@ -192,7 +192,20 @@ export async function getHostdbDownloadUrl(
 export async function isVersionAvailable(version: string): Promise<boolean> {
   try {
     const versions = await getHostdbVersions(Engine.SQLite)
-    return versions ? versions.includes(version) : false
+    if (!versions) return false
+
+    // Check for exact full-version match
+    if (versions.includes(version)) {
+      return true
+    }
+
+    // Check if major-only input (e.g., "3") matches any available version
+    const major = version.split('.')[0]
+    if (version === major && versions.some((v) => v.startsWith(major + '.'))) {
+      return true
+    }
+
+    return false
   } catch {
     // Fallback to checking version map when network unavailable
     // Accept either a major version key (e.g., "3") or its mapped full version (e.g., "3.51.2")

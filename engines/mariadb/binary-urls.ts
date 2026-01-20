@@ -3,7 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { MARIADB_VERSION_MAP } from './version-maps'
-import { Platform } from '../../types'
+import { Platform, type Arch } from '../../types'
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -37,8 +37,8 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  * @returns hostdb platform identifier or undefined if unsupported
  */
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string | undefined {
   const key = `${platform}-${arch}`
   const mapping: Record<string, string> = {
@@ -64,8 +64,8 @@ export function getHostdbPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)

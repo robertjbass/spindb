@@ -7,7 +7,7 @@
 
 import { buildDownloadUrl } from '../../core/hostdb-client'
 import { SQLITE_VERSION_MAP, normalizeVersion } from './version-maps'
-import { Engine } from '../../types'
+import { Engine, type Platform, type Arch } from '../../types'
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -30,8 +30,8 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
   return buildDownloadUrl(Engine.SQLite, { version: fullVersion, platform, arch })

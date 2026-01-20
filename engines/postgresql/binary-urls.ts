@@ -3,6 +3,7 @@ import {
   getLatestVersion as getHostdbLatestVersion,
 } from './hostdb-releases'
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
+import { type Platform, type Arch } from '../../types'
 
 /**
  * Fallback map of major versions to stable patch versions
@@ -44,8 +45,8 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  * @returns hostdb platform identifier or undefined if unsupported
  */
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string | undefined {
   const key = `${platform}-${arch}`
   const mapping: Record<string, string> = {
@@ -64,8 +65,8 @@ export function getHostdbPlatform(
  * @deprecated Use getHostdbPlatform instead. This function exists for backward compatibility.
  */
 export function getZonkyPlatform(
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string | undefined {
   return getHostdbPlatform(platform, arch)
 }
@@ -82,8 +83,8 @@ export function getZonkyPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const platformKey = `${platform}-${arch}`
   const hostdbPlatform = getHostdbPlatform(platform, arch)

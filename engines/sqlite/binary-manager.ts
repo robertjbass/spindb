@@ -99,15 +99,24 @@ export class SQLiteBinaryManager {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
+      if (!entry.name.startsWith('sqlite-')) continue
 
-      // Match sqlite-{version}-{platform}-{arch} directories
-      const match = entry.name.match(/^sqlite-([\d.]+)-(\w+)-(\w+)$/)
-      if (match && isValidPlatform(match[2]) && isValidArch(match[3])) {
+      // Split from end to handle versions with non-digit suffixes
+      // Format: sqlite-{version}-{platform}-{arch}
+      const rest = entry.name.slice('sqlite-'.length)
+      const parts = rest.split('-')
+      if (parts.length < 3) continue
+
+      const arch = parts.pop()!
+      const platform = parts.pop()!
+      const version = parts.join('-')
+
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
           engine: Engine.SQLite,
-          version: match[1],
-          platform: match[2],
-          arch: match[3],
+          version,
+          platform,
+          arch,
         })
       }
     }

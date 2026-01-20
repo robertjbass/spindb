@@ -99,7 +99,8 @@ export async function fetchAvailableVersions(): Promise<
 function getHardcodedVersions(): Record<string, string[]> {
   const grouped: Record<string, string[]> = {}
   for (const major of SUPPORTED_MAJOR_VERSIONS) {
-    grouped[major] = [DUCKDB_VERSION_MAP[major]]
+    const version = DUCKDB_VERSION_MAP[major]
+    grouped[major] = version ? [version] : []
   }
   return grouped
 }
@@ -112,6 +113,12 @@ export async function getLatestVersion(major: string): Promise<string> {
   const majorVersions = versions[major]
   if (majorVersions && majorVersions.length > 0) {
     return majorVersions[0] // First is latest due to descending sort
+  }
+
+  // Fallback to version map if hostdb doesn't have this major
+  const mappedVersion = DUCKDB_VERSION_MAP[major]
+  if (mappedVersion) {
+    return mappedVersion
   }
 
   // Neither hostdb nor version map has this version - throw error

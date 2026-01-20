@@ -6,7 +6,7 @@
  */
 
 import { normalizeVersion } from './version-maps'
-import { Platform } from '../../types'
+import { Platform, type Arch } from '../../types'
 
 const HOSTDB_BASE_URL =
   'https://github.com/robertjbass/hostdb/releases/download'
@@ -21,8 +21,8 @@ export type SupportedArch = (typeof SUPPORTED_ARCHS)[number]
 
 // Map Node.js platform/arch to hostdb platform key
 export function getHostdbPlatform(
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string | null {
   const key = `${platform}-${arch}`
 
@@ -46,8 +46,8 @@ export function getHostdbPlatform(
  */
 export function getBinaryUrl(
   version: string,
-  platform: string,
-  arch: string,
+  platform: Platform,
+  arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
   const platformKey = getHostdbPlatform(platform, arch)
@@ -64,7 +64,7 @@ export function getBinaryUrl(
 }
 
 // Check if a platform/arch combination is supported
-export function isPlatformSupported(platform: string, arch: string): boolean {
+export function isPlatformSupported(platform: Platform, arch: Arch): boolean {
   return getHostdbPlatform(platform, arch) !== null
 }
 

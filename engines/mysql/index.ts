@@ -165,7 +165,7 @@ export class MySQLEngine extends BaseEngine {
     })
   }
 
-  getBinaryUrl(version: string, plat: string, arc: string): string {
+  getBinaryUrl(version: string, plat: Platform, arc: Arch): string {
     return getBinaryUrl(version, plat, arc)
   }
 
