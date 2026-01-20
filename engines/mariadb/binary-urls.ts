@@ -36,19 +36,21 @@ export const VERSION_MAP = FALLBACK_VERSION_MAP
  * @param arch - Node.js architecture (e.g., 'arm64', 'x64')
  * @returns hostdb platform identifier or undefined if unsupported
  */
+// Supported platform/arch combinations for MariaDB hostdb binaries
+const SUPPORTED_PLATFORM_KEYS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
+
 export function getHostdbPlatform(
   platform: Platform,
   arch: Arch,
 ): string | undefined {
   const key = `${platform}-${arch}`
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-  return mapping[key]
+  return SUPPORTED_PLATFORM_KEYS.has(key) ? key : undefined
 }
 
 /**

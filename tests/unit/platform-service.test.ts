@@ -3,6 +3,7 @@ import {
   platformService,
   resolveHomeDir,
   Platform,
+  Arch,
   type PlatformInfo,
   type ClipboardConfig,
   type PackageManagerInfo,
@@ -22,8 +23,8 @@ describe('PlatformService', () => {
 
       // Architecture should be one of the supported values
       assert(
-        ['arm64', 'x64'].includes(info.arch),
-        `Architecture should be arm64 or x64, got: ${info.arch}`,
+        [Arch.ARM64, Arch.X64].includes(info.arch),
+        `Architecture should be ${Arch.ARM64} or ${Arch.X64}, got: ${info.arch}`,
       )
 
       // Home directory should be a non-empty string

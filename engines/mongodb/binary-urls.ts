@@ -19,21 +19,22 @@ export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 export const SUPPORTED_ARCHS = ['arm64', 'x64'] as const
 export type SupportedArch = (typeof SUPPORTED_ARCHS)[number]
 
+// Supported platform/arch combinations for MongoDB hostdb binaries
+const SUPPORTED_PLATFORM_KEYS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+  'win32-x64',
+])
+
 // Map Node.js platform/arch to hostdb platform key
 export function getHostdbPlatform(
   platform: Platform,
   arch: Arch,
 ): string | null {
   const key = `${platform}-${arch}`
-
-  const mapping: Record<string, string> = {
-    'darwin-arm64': 'darwin-arm64',
-    'darwin-x64': 'darwin-x64',
-    'linux-arm64': 'linux-arm64',
-    'linux-x64': 'linux-x64',
-    'win32-x64': 'win32-x64',
-  }
-  return mapping[key] || null
+  return SUPPORTED_PLATFORM_KEYS.has(key) ? key : null
 }
 
 /**
