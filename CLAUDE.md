@@ -295,7 +295,6 @@ Menu navigation patterns:
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries)
 3. **Redis/Valkey** - No `dumpFromConnectionString()` support
-4. **Large backups** - Redis text restore reads entire file into memory
 
 ## Publishing
 

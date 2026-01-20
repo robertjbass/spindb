@@ -14,11 +14,12 @@ This document provides the complete specification for adding a new database engi
 8. [GitHub Actions / CI](#github-actions--ci)
 9. [Docker Tests](#docker-tests)
 10. [Binary Management](#binary-management)
-11. [OS Dependencies](#os-dependencies)
-12. [Windows Considerations](#windows-considerations)
-13. [Documentation Updates](#documentation-updates)
-14. [Pass/Fail Criteria](#passfail-criteria)
-15. [Reference Implementations](#reference-implementations)
+11. [Restore Implementation](#restore-implementation)
+12. [OS Dependencies](#os-dependencies)
+13. [Windows Considerations](#windows-considerations)
+14. [Documentation Updates](#documentation-updates)
+15. [Pass/Fail Criteria](#passfail-criteria)
+16. [Reference Implementations](#reference-implementations)
 
 ---
 
@@ -1735,6 +1736,106 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
 // Handle download, extraction, verification
 // Register binary paths with configManager after installation
 ```
+
+---
+
+## Restore Implementation
+
+The `restore.ts` file handles backup format detection and restore operations. Follow these patterns for memory efficiency.
+
+### Format Detection
+
+**CRITICAL:** Format detection must only read the bytes needed for detection, never the entire file. Backup files can be gigabytes in size.
+
+```ts
+import { open } from 'fs/promises'
+
+async function detectBackupFormat(filePath: string): Promise<BackupFormat> {
+  // Read only the bytes needed for format detection
+  // - Binary magic bytes: typically first 5-16 bytes
+  // - Text/SQL detection: first 4-8KB is enough for several lines
+  const HEADER_SIZE = 4096  // Adjust based on what you need to detect
+  const buffer = Buffer.alloc(HEADER_SIZE)
+
+  const fd = await open(filePath, 'r')
+  let bytesRead: number
+  try {
+    const result = await fd.read(buffer, 0, HEADER_SIZE, 0)
+    bytesRead = result.bytesRead
+  } finally {
+    await fd.close()
+  }
+
+  // For binary format detection (magic bytes)
+  const header = buffer.toString('ascii', 0, 5)
+  if (header === 'PGDMP') {
+    return { format: 'custom', ... }
+  }
+
+  // For text format detection (checking first few lines)
+  const content = buffer.toString('utf-8', 0, bytesRead)
+  const lines = content.split(/\r?\n/)
+  // Check lines for keywords...
+}
+```
+
+**Buffer sizes by detection type:**
+- Binary magic bytes only: 263 bytes (PostgreSQL uses this for PGDMP + tar magic)
+- Text/command detection: 4KB (Redis, Valkey - checking first 10 lines)
+- SQL statement detection: 8KB (ClickHouse - SQL statements can be longer)
+
+### Streaming Restores
+
+**CRITICAL:** When piping file content to CLI tools, use streams instead of `readFile()`. This prevents out-of-memory errors on large backups.
+
+```ts
+import { createReadStream } from 'fs'
+import { spawn } from 'child_process'
+
+async function restoreBackup(backupPath: string, ...): Promise<RestoreResult> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cliPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],  // stdin must be 'pipe' for streaming
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let streamError: Error | null = null
+
+    proc.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
+    proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+
+    proc.on('close', (code) => {
+      if (streamError) {
+        reject(streamError)
+        return
+      }
+      if (code === 0) {
+        resolve({ format: 'sql', stdout, stderr, code: 0 })
+      } else {
+        reject(new Error(`CLI exited with code ${code}: ${stderr}`))
+      }
+    })
+
+    proc.on('error', reject)
+
+    // Stream file to CLI stdin instead of readFile()
+    const fileStream = createReadStream(backupPath, { encoding: 'utf-8' })
+
+    fileStream.on('error', (error) => {
+      streamError = new Error(`Failed to read backup file: ${error.message}`)
+      fileStream.destroy()  // Clean up the stream
+      proc.stdin.end()
+    })
+
+    fileStream.pipe(proc.stdin)
+  })
+}
+```
+
+**When streaming applies:**
+- Engines that pipe SQL/commands to a CLI tool (SQLite, DuckDB, Redis, Valkey, ClickHouse)
+- Engines where the CLI reads files directly (PostgreSQL `pg_restore`, MySQL `mysql`) don't need this pattern
 
 ---
 

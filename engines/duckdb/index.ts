@@ -14,7 +14,7 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync, createWriteStream } from 'fs'
+import { existsSync, statSync, createWriteStream, createReadStream } from 'fs'
 import { copyFile, unlink, mkdir, open, writeFile, readFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
@@ -492,14 +492,12 @@ export class DuckDBEngine extends BaseEngine {
     })
   }
 
-  // Runs a SQL file against a DuckDB database by piping to stdin
+  // Streams a SQL file to a DuckDB database via stdin
   private async runSqlFile(
     duckdbPath: string,
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
-    const fileContent = await readFile(sqlFilePath, 'utf-8')
-
     return new Promise((resolve, reject) => {
       const proc = spawn(duckdbPath, [dbPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -542,16 +540,16 @@ export class DuckDBEngine extends BaseEngine {
         }
       })
 
-      // Write the SQL content with backpressure handling and close stdin to signal EOF
-      const writeOk = proc.stdin.write(fileContent)
-      if (writeOk) {
+      // Stream SQL file to duckdb stdin
+      const fileStream = createReadStream(sqlFilePath, { encoding: 'utf-8' })
+
+      fileStream.on('error', (error) => {
+        rejectOnce(new Error(`Failed to read SQL file: ${error.message}`))
+        fileStream.destroy()
         proc.stdin.end()
-      } else {
-        // Handle backpressure: wait for drain before ending
-        proc.stdin.once('drain', () => {
-          proc.stdin.end()
-        })
-      }
+      })
+
+      fileStream.pipe(proc.stdin)
     })
   }
 

@@ -15,7 +15,7 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync, createWriteStream } from 'fs'
+import { existsSync, statSync, createWriteStream, createReadStream } from 'fs'
 import { copyFile, unlink, mkdir, open, writeFile, readFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
@@ -440,20 +440,19 @@ export class SQLiteEngine extends BaseEngine {
     })
   }
 
-  // Runs a SQL file against a SQLite database by piping to stdin
+  // Streams a SQL file to a SQLite database via stdin
   private async runSqlFile(
     sqlite3Path: string,
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
-    const fileContent = await readFile(sqlFilePath, 'utf-8')
-
     return new Promise((resolve, reject) => {
       const proc = spawn(sqlite3Path, [dbPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 
       let stderrData = ''
+      let streamError: Error | null = null
 
       proc.stderr.on('data', (data: Buffer) => {
         stderrData += data.toString()
@@ -464,6 +463,12 @@ export class SQLiteEngine extends BaseEngine {
       })
 
       proc.on('close', (code) => {
+        // If there was a stream error, report it
+        if (streamError) {
+          reject(streamError)
+          return
+        }
+
         if (code === 0) {
           resolve()
         } else {
@@ -482,8 +487,16 @@ export class SQLiteEngine extends BaseEngine {
         }
       })
 
-      // Write content and close stdin
-      proc.stdin.end(fileContent, 'utf-8')
+      // Stream SQL file to sqlite3 stdin
+      const fileStream = createReadStream(sqlFilePath, { encoding: 'utf-8' })
+
+      fileStream.on('error', (error) => {
+        streamError = new Error(`Failed to read SQL file: ${error.message}`)
+        fileStream.destroy()
+        proc.stdin.end()
+      })
+
+      fileStream.pipe(proc.stdin)
     })
   }
 
