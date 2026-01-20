@@ -40,6 +40,7 @@ import {
 import { createBackup } from './backup'
 import {
   Platform,
+  type Arch,
   type ContainerConfig,
   type ProgressCallback,
   type BackupFormat,
@@ -108,7 +109,7 @@ export class MariaDBEngine extends BaseEngine {
     return fetchAvailableVersions()
   }
 
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     const info = platformService.getPlatformInfo()
     return {
       platform: info.platform,

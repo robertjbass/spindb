@@ -22,6 +22,8 @@ import {
   type Arch,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../../types'
 
 /**
@@ -57,7 +59,7 @@ export class SQLiteBinaryManager {
    *
    * Uses hostdb GitHub releases for all platforms (macOS, Linux, Windows).
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -70,8 +72,8 @@ export class SQLiteBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -100,12 +102,12 @@ export class SQLiteBinaryManager {
 
       // Match sqlite-{version}-{platform}-{arch} directories
       const match = entry.name.match(/^sqlite-([\d.]+)-(\w+)-(\w+)$/)
-      if (match) {
+      if (match && isValidPlatform(match[2]) && isValidArch(match[3])) {
         installed.push({
           engine: Engine.SQLite,
           version: match[1],
-          platform: match[2] as Platform,
-          arch: match[3] as Arch,
+          platform: match[2],
+          arch: match[3],
         })
       }
     }
@@ -116,8 +118,8 @@ export class SQLiteBinaryManager {
   // Download and extract SQLite binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -248,7 +250,7 @@ export class SQLiteBinaryManager {
   private async moveExtractedEntries(
     extractDir: string,
     binPath: string,
-    platform: string,
+    platform: Platform,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
@@ -310,7 +312,7 @@ export class SQLiteBinaryManager {
     tarFile: string,
     binPath: string,
     tempDir: string,
-    platform: string,
+    platform: Platform,
     onProgress?: ProgressCallback,
   ): Promise<void> {
     onProgress?.({
@@ -332,7 +334,7 @@ export class SQLiteBinaryManager {
     zipFile: string,
     binPath: string,
     tempDir: string,
-    platform: string,
+    platform: Platform,
     onProgress?: ProgressCallback,
   ): Promise<void> {
     onProgress?.({
@@ -367,8 +369,8 @@ export class SQLiteBinaryManager {
   // Verify that SQLite binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -422,8 +424,8 @@ export class SQLiteBinaryManager {
   // Get the path to a specific binary (sqlite3, sqldiff, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -440,8 +442,8 @@ export class SQLiteBinaryManager {
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -463,7 +465,7 @@ export class SQLiteBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'sqlite',

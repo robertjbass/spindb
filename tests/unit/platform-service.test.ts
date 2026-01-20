@@ -85,13 +85,13 @@ describe('PlatformService', () => {
       const config = platformService.getClipboardConfig()
       const info = platformService.getPlatformInfo()
 
-      if (info.platform === 'darwin') {
+      if (info.platform === Platform.Darwin) {
         assert(
           config.copyCommand.includes('pbcopy') ||
             config.copyCommand === 'pbcopy',
           'macOS should use pbcopy',
         )
-      } else if (info.platform === 'linux') {
+      } else if (info.platform === Platform.Linux) {
         assert(
           config.copyCommand.includes('xclip') ||
             config.copyCommand.includes('xsel') ||
@@ -117,7 +117,7 @@ describe('PlatformService', () => {
       const config = platformService.getWhichCommand()
       const info = platformService.getPlatformInfo()
 
-      if (info.platform === 'win32') {
+      if (info.platform === Platform.Win32) {
         assert(config.command === 'where', 'Windows should use "where" command')
       } else {
         assert(config.command === 'which', 'Unix should use "which" command')
@@ -151,12 +151,12 @@ describe('PlatformService', () => {
       const paths = platformService.getSearchPaths('mysqld')
       const info = platformService.getPlatformInfo()
 
-      if (info.platform === 'darwin') {
+      if (info.platform === Platform.Darwin) {
         const hasHomebrew = paths.some(
           (p) => p.includes('/opt/homebrew') || p.includes('/usr/local'),
         )
         assert(hasHomebrew, 'macOS should include Homebrew paths')
-      } else if (info.platform === 'linux') {
+      } else if (info.platform === Platform.Linux) {
         const hasStandardPaths = paths.some(
           (p) => p.includes('/usr/bin') || p.includes('/usr/local/bin'),
         )
@@ -193,9 +193,9 @@ describe('PlatformService', () => {
       const info = platformService.getPlatformInfo()
 
       if (result !== null) {
-        if (info.platform === 'darwin') {
+        if (info.platform === Platform.Darwin) {
           assertEqual(result.id, 'brew', 'macOS should detect Homebrew')
-        } else if (info.platform === 'linux') {
+        } else if (info.platform === Platform.Linux) {
           assert(
             ['apt', 'yum', 'dnf', 'pacman'].includes(result.id),
             `Linux should detect apt, yum, dnf, or pacman, got: ${result.id}`,
@@ -209,7 +209,7 @@ describe('PlatformService', () => {
     it('should find common tools', async () => {
       // Try to find a tool that should exist on any system
       const info = platformService.getPlatformInfo()
-      const toolToFind = info.platform === 'win32' ? 'cmd' : 'ls'
+      const toolToFind = info.platform === Platform.Win32 ? 'cmd' : 'ls'
 
       const path = await platformService.findToolPath(toolToFind)
 
@@ -235,7 +235,7 @@ describe('PlatformService', () => {
     it('should return version string or null', async () => {
       // Try to get version of a tool we know exists
       const info = platformService.getPlatformInfo()
-      const toolPath = info.platform === 'win32' ? 'cmd' : '/bin/ls'
+      const toolPath = info.platform === Platform.Win32 ? 'cmd' : '/bin/ls'
 
       const version = await platformService.getToolVersion(toolPath)
 

@@ -32,6 +32,7 @@ import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
 import {
   Platform,
+  type Arch,
   type ContainerConfig,
   type ProgressCallback,
   type BackupFormat,
@@ -96,7 +97,7 @@ export class MongoDBEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get the current platform and architecture
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     return platformService.getPlatformInfo()
   }
 

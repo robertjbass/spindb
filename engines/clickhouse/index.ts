@@ -22,15 +22,17 @@ import {
   validateClickHouseIdentifier,
   escapeClickHouseIdentifier,
 } from './cli-utils'
-import type {
-  ContainerConfig,
-  ProgressCallback,
-  BackupFormat,
-  BackupOptions,
-  BackupResult,
-  RestoreResult,
-  DumpResult,
-  StatusResult,
+import {
+  type Platform,
+  type Arch,
+  type ContainerConfig,
+  type ProgressCallback,
+  type BackupFormat,
+  type BackupOptions,
+  type BackupResult,
+  type RestoreResult,
+  type DumpResult,
+  type StatusResult,
 } from '../../types'
 
 const ENGINE = 'clickhouse'
@@ -130,7 +132,7 @@ export class ClickHouseEngine extends BaseEngine {
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
   // Get platform info for binary operations
-  getPlatformInfo(): { platform: string; arch: string } {
+  getPlatformInfo(): { platform: Platform; arch: Arch } {
     return platformService.getPlatformInfo()
   }
 

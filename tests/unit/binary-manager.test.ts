@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import { BinaryManager } from '../../core/binary-manager'
 import { assert, assertEqual } from '../utils/assertions'
+import { Platform, Arch } from '../../types'
 
 describe('BinaryManager', () => {
   describe('getFullVersion', () => {
@@ -61,7 +62,7 @@ describe('BinaryManager', () => {
   describe('getDownloadUrl', () => {
     it('should generate valid hostdb GitHub releases URL for darwin-arm64', () => {
       const binaryManager = new BinaryManager()
-      const url = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
+      const url = binaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
 
       assert(
         url.includes('github.com/robertjbass/hostdb'),
@@ -80,7 +81,7 @@ describe('BinaryManager', () => {
 
     it('should generate valid URL for darwin-x64', () => {
       const binaryManager = new BinaryManager()
-      const url = binaryManager.getDownloadUrl('16', 'darwin', 'x64')
+      const url = binaryManager.getDownloadUrl('16', Platform.Darwin, Arch.X64)
 
       assert(
         url.includes('darwin-x64'),
@@ -90,7 +91,7 @@ describe('BinaryManager', () => {
 
     it('should generate valid URL for linux-x64', () => {
       const binaryManager = new BinaryManager()
-      const url = binaryManager.getDownloadUrl('16', 'linux', 'x64')
+      const url = binaryManager.getDownloadUrl('16', Platform.Linux, Arch.X64)
 
       assert(
         url.includes('linux-x64'),
@@ -100,7 +101,7 @@ describe('BinaryManager', () => {
 
     it('should return EDB URL for Windows platform', () => {
       const binaryManager = new BinaryManager()
-      const url = binaryManager.getDownloadUrl('17', 'win32', 'x64')
+      const url = binaryManager.getDownloadUrl('17', Platform.Win32, Arch.X64)
 
       assert(
         url.includes('sbp.enterprisedb.com'),
@@ -113,7 +114,7 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
 
       try {
-        binaryManager.getDownloadUrl('17', 'freebsd', 'x64')
+        binaryManager.getDownloadUrl('17', 'freebsd' as Platform, 'x64' as Arch)
         assert(false, 'Should have thrown an error')
       } catch (error) {
         assert(error instanceof Error, 'Should throw Error')
@@ -130,7 +131,7 @@ describe('BinaryManager', () => {
 
     it('should include full version in URL', () => {
       const binaryManager = new BinaryManager()
-      const url = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
+      const url = binaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
 
       // Major version 17 maps to 17.7.0
       assert(
@@ -145,8 +146,8 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
       const path = binaryManager.getBinaryExecutable(
         '17',
-        'darwin',
-        'arm64',
+        Platform.Darwin,
+        Arch.ARM64,
         'postgres',
       )
 
@@ -161,8 +162,8 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
       const path = binaryManager.getBinaryExecutable(
         '16',
-        'darwin',
-        'arm64',
+        Platform.Darwin,
+        Arch.ARM64,
         'pg_ctl',
       )
 
@@ -176,8 +177,8 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
       const path = binaryManager.getBinaryExecutable(
         '16',
-        'darwin',
-        'arm64',
+        Platform.Darwin,
+        Arch.ARM64,
         'initdb',
       )
 
@@ -207,7 +208,7 @@ describe('BinaryManager', () => {
   describe('isInstalled', () => {
     it('should return boolean', async () => {
       const binaryManager = new BinaryManager()
-      const result = await binaryManager.isInstalled('99', 'darwin', 'arm64')
+      const result = await binaryManager.isInstalled('99', Platform.Darwin, Arch.ARM64)
 
       assert(typeof result === 'boolean', 'Should return boolean')
       // Version 99 shouldn't exist
@@ -217,7 +218,7 @@ describe('BinaryManager', () => {
     it('should use full version for path checking', async () => {
       const binaryManager = new BinaryManager()
       // This tests that isInstalled internally calls getFullVersion
-      const result = await binaryManager.isInstalled('17', 'darwin', 'arm64')
+      const result = await binaryManager.isInstalled('17', Platform.Darwin, Arch.ARM64)
 
       assert(typeof result === 'boolean', 'Should handle major version input')
     })
@@ -228,7 +229,7 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
 
       try {
-        await binaryManager.verify('99', 'darwin', 'arm64')
+        await binaryManager.verify('99', Platform.Darwin, Arch.ARM64)
         assert(false, 'Should have thrown an error')
       } catch (error) {
         assert(error instanceof Error, 'Should throw Error')
@@ -259,8 +260,8 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
       const isInstalled = await binaryManager.isInstalled(
         '17',
-        'darwin',
-        'arm64',
+        Platform.Darwin,
+        Arch.ARM64,
       )
 
       if (isInstalled) {
@@ -269,8 +270,8 @@ describe('BinaryManager', () => {
         // Actually call ensureInstalled and verify the callback
         await binaryManager.ensureInstalled(
           '17',
-          'darwin',
-          'arm64',
+          Platform.Darwin,
+          Arch.ARM64,
           (progress) => {
             progressCalls.push(progress)
           },
@@ -293,15 +294,15 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
       const isInstalled = await binaryManager.isInstalled(
         '17',
-        'darwin',
-        'arm64',
+        Platform.Darwin,
+        Arch.ARM64,
       )
 
       if (isInstalled) {
         const binPath = await binaryManager.ensureInstalled(
           '17',
-          'darwin',
-          'arm64',
+          Platform.Darwin,
+          Arch.ARM64,
         )
 
         assert(typeof binPath === 'string', 'Should return path string')
@@ -316,15 +317,15 @@ describe('BinaryManager', () => {
       const binaryManager = new BinaryManager()
 
       // Test darwin-arm64 uses standard naming
-      const armUrl = binaryManager.getDownloadUrl('17', 'darwin', 'arm64')
+      const armUrl = binaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
       assert(armUrl.includes('darwin-arm64'), 'ARM Mac should use darwin-arm64')
 
       // Test darwin-x64 uses standard naming
-      const intelUrl = binaryManager.getDownloadUrl('17', 'darwin', 'x64')
+      const intelUrl = binaryManager.getDownloadUrl('17', Platform.Darwin, Arch.X64)
       assert(intelUrl.includes('darwin-x64'), 'Intel Mac should use darwin-x64')
 
       // Test linux-x64 uses standard naming
-      const linuxUrl = binaryManager.getDownloadUrl('17', 'linux', 'x64')
+      const linuxUrl = binaryManager.getDownloadUrl('17', Platform.Linux, Arch.X64)
       assert(linuxUrl.includes('linux-x64'), 'Linux x64 should use linux-x64')
     })
   })

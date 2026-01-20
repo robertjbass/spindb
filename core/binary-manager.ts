@@ -15,6 +15,8 @@ import {
   type Engine,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../types'
 
 const execAsync = promisify(exec)
@@ -92,13 +94,7 @@ export class BinaryManager {
    * - macOS/Linux: Uses hostdb GitHub releases (tar.gz format)
    * - Windows: Uses EDB (EnterpriseDB) official binaries (ZIP format)
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
-    const platformKey = `${platform}-${arch}`
-
-    if (platform !== Platform.Darwin && platform !== Platform.Linux && platform !== Platform.Win32) {
-      throw new Error(`Unsupported platform: ${platformKey}`)
-    }
-
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     // Windows uses EDB binaries
     if (platform === Platform.Win32) {
       const fullVersion = this.getFullVersion(version)
@@ -126,8 +122,8 @@ export class BinaryManager {
    */
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -155,12 +151,16 @@ export class BinaryManager {
       if (entry.isDirectory() && entry.name.startsWith('postgresql-')) {
         const parts = entry.name.split('-')
         if (parts.length >= 4) {
-          installed.push({
-            engine: parts[0] as Engine,
-            version: parts[1],
-            platform: parts[2] as Platform,
-            arch: parts[3] as Arch,
-          })
+          const platform = parts[2]
+          const arch = parts[3]
+          if (isValidPlatform(platform) && isValidArch(arch)) {
+            installed.push({
+              engine: parts[0] as Engine,
+              version: parts[1],
+              platform,
+              arch,
+            })
+          }
         }
       }
     }
@@ -176,8 +176,8 @@ export class BinaryManager {
    */
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -479,8 +479,8 @@ export class BinaryManager {
   // Verify that PostgreSQL binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -534,8 +534,8 @@ export class BinaryManager {
   // Get the path to a specific binary (postgres, pg_ctl, psql, etc.)
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -552,8 +552,8 @@ export class BinaryManager {
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)

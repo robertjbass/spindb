@@ -119,12 +119,11 @@ export async function getLatestVersion(major: string): Promise<string> {
     return mappedVersion
   }
 
-  // Neither hostdb nor version map has this version - log warning
-  const fallback = `${major}.0.0`
-  logDebug(
-    `SQLite major version '${major}' not found in hostdb or version map, using fallback '${fallback}'`,
+  // Neither hostdb nor version map has this version - throw error
+  throw new Error(
+    `SQLite major version '${major}' not found in hostdb or version map. ` +
+      `Available major versions: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
   )
-  return fallback
 }
 
 /**

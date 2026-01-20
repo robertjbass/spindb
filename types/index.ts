@@ -90,6 +90,30 @@ export function assertExhaustive(x: never, message?: string): never {
   throw new Error(message ?? `Unhandled case: ${x}`)
 }
 
+/**
+ * All valid Platform enum values as an array for runtime validation
+ */
+export const ALL_PLATFORMS = Object.values(Platform) as Platform[]
+
+/**
+ * All valid Arch enum values as an array for runtime validation
+ */
+export const ALL_ARCHS = Object.values(Arch) as Arch[]
+
+/**
+ * Type guard to check if a string is a valid Platform value
+ */
+export function isValidPlatform(value: string): value is Platform {
+  return ALL_PLATFORMS.includes(value as Platform)
+}
+
+/**
+ * Type guard to check if a string is a valid Arch value
+ */
+export function isValidArch(value: string): value is Arch {
+  return ALL_ARCHS.includes(value as Arch)
+}
+
 // Compile-time validation that ALL_ENGINES contains all Engine enum values
 type _AssertAllEngines = typeof ALL_ENGINES extends readonly Engine[]
   ? (typeof ALL_ENGINES)[number] extends Engine

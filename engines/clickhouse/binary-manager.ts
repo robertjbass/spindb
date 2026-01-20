@@ -19,10 +19,12 @@ import { spawnAsync } from '../../core/spawn-utils'
 import { logDebug } from '../../core/error-handler'
 import {
   Engine,
-  Platform,
+  type Platform,
   type Arch,
   type ProgressCallback,
   type InstalledBinary,
+  isValidPlatform,
+  isValidArch,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -45,7 +47,7 @@ export class ClickHouseBinaryManager {
    * Uses hostdb GitHub releases for all platforms (macOS, Linux).
    * Note: Windows is not supported by ClickHouse on hostdb.
    */
-  getDownloadUrl(version: string, platform: string, arch: string): string {
+  getDownloadUrl(version: string, platform: Platform, arch: Arch): string {
     const fullVersion = this.getFullVersion(version)
     return getBinaryUrl(fullVersion, platform, arch)
   }
@@ -58,8 +60,8 @@ export class ClickHouseBinaryManager {
   // Check if binaries for a specific version are already installed
   async isInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -97,12 +99,12 @@ export class ClickHouseBinaryManager {
       const platform = parts.pop()!
       const version = parts.join('-')
 
-      if (version && platform && arch) {
+      if (version && isValidPlatform(platform) && isValidArch(arch)) {
         installed.push({
           engine: Engine.ClickHouse,
           version,
-          platform: platform as Platform,
-          arch: arch as Arch,
+          platform,
+          arch,
         })
       }
     }
@@ -113,8 +115,8 @@ export class ClickHouseBinaryManager {
   // Download and extract ClickHouse binaries
   async download(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -305,8 +307,8 @@ export class ClickHouseBinaryManager {
   // Verify that ClickHouse binaries are working
   async verify(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
@@ -369,8 +371,8 @@ export class ClickHouseBinaryManager {
   // Get the path to a specific binary
   getBinaryExecutable(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     binary: string,
   ): string {
     const fullVersion = this.getFullVersion(version)
@@ -386,8 +388,8 @@ export class ClickHouseBinaryManager {
   // Ensure binaries are available, downloading if necessary
   async ensureInstalled(
     version: string,
-    platform: string,
-    arch: string,
+    platform: Platform,
+    arch: Arch,
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
@@ -409,7 +411,7 @@ export class ClickHouseBinaryManager {
   }
 
   // Delete installed binaries for a specific version
-  async delete(version: string, platform: string, arch: string): Promise<void> {
+  async delete(version: string, platform: Platform, arch: Arch): Promise<void> {
     const fullVersion = this.getFullVersion(version)
     const binPath = paths.getBinaryPath({
       engine: 'clickhouse',

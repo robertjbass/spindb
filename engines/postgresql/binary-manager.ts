@@ -16,7 +16,7 @@ import { getPostgresHomebrewPackage } from '../../config/engine-defaults'
 import { logDebug } from '../../core/error-handler'
 import { isWindows, platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
-import { Platform, type Arch, type InstalledBinary } from '../../types'
+import { Platform, type InstalledBinary, isValidPlatform, isValidArch } from '../../types'
 
 const execAsync = promisify(exec)
 
@@ -582,12 +582,12 @@ export class PostgreSQLBinaryManager {
       if (entry.isDirectory()) {
         // Match postgresql-{version}-{platform}-{arch} pattern
         const match = entry.name.match(/^postgresql-([\d.]+)-(\w+)-(\w+)$/)
-        if (match) {
+        if (match && isValidPlatform(match[2]) && isValidArch(match[3])) {
           installed.push({
             engine: 'postgresql' as InstalledBinary['engine'],
             version: match[1],
-            platform: match[2] as Platform,
-            arch: match[3] as Arch,
+            platform: match[2],
+            arch: match[3],
           })
         }
       }
