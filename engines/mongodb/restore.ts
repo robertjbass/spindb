@@ -94,18 +94,24 @@ export type RestoreOptions = {
 
 /**
  * Add namespace remapping args for archive format restores.
- * Uses sourceDatabase if provided, otherwise uses wildcard pattern.
+ * Uses sourceDatabase if provided, otherwise uses $prefix$ placeholder.
+ *
+ * IMPORTANT: mongorestore uses $prefix$ and $suffix$ as special capture groups:
+ * - $prefix$ captures the database name from the source namespace
+ * - $suffix$ captures the collection name from the source namespace
+ *
+ * Do NOT use `*` instead of `$prefix$` - while `*` is a wildcard in some contexts,
+ * mongorestore requires matching capture groups on both sides of the remap.
+ * Using `*.*` on the left with `db.$suffix$` on the right fails with:
+ * "Different number of asterisks in from and to"
  */
 function addNamespaceRemapArgs(
   args: string[],
   sourceDatabase: string | undefined,
   targetDatabase: string,
 ): void {
-  if (sourceDatabase) {
-    args.push(`--nsFrom=${sourceDatabase}.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
-  } else {
-    args.push(`--nsFrom=*.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
-  }
+  const nsFromDb = sourceDatabase ?? '$prefix$'
+  args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
 }
 
 // Restore a MongoDB backup using mongorestore
