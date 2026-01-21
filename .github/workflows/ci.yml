@@ -754,7 +754,7 @@ jobs:
         id: pg-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-pg-18-v2-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install PostgreSQL via SpinDB
         run: pnpm start engines download postgresql 18
@@ -775,6 +775,14 @@ jobs:
           pnpm start run rename-test -c "CREATE TABLE test_data (id SERIAL PRIMARY KEY, name TEXT);"
           pnpm start run rename-test -c "INSERT INTO test_data (name) VALUES ('test1'), ('test2'), ('test3');"
 
+      - name: Verify data before rename
+        shell: bash
+        run: |
+          echo "Container info:"
+          pnpm start info rename-test --json
+          echo "Querying data:"
+          pnpm start run rename-test -c "SELECT COUNT(*) FROM test_data;"
+
       - name: Stop container for rename
         run: pnpm start stop rename-test
 
@@ -787,7 +795,12 @@ jobs:
       - name: Verify data persists after rename
         shell: bash
         run: |
-          COUNT=$(pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+          echo "Container info after rename:"
+          pnpm start info renamed-test --json
+          echo "Querying data (with full output):"
+          pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" || echo "Query failed with exit code $?"
+          echo "---"
+          COUNT=$(pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | grep -oE '[0-9]+' | head -1)
           if [ "$COUNT" != "3" ]; then
             echo "Data verification failed: expected 3 rows, got $COUNT"
             exit 1
