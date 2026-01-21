@@ -28,6 +28,7 @@ import {
   cleanupTestContainers,
   getRowCount,
   waitForReady,
+  waitForStopped,
   containerDataExists,
   runScriptFile,
   runScriptSQL,
@@ -314,6 +315,11 @@ describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binari
 
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(clonedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped before delete')
+
     await containerManager.delete(clonedContainerName, { force: true })
 
     // Verify filesystem is cleaned up
@@ -363,6 +369,11 @@ describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binari
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
     await containerManager.updateConfig(containerName, { status: 'stopped' })
+
+    // Wait for the container to be fully stopped (PID file removed)
+    // This is important because rename() checks isRunning() before proceeding
+    const stopped = await waitForStopped(containerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
     await containerManager.rename(containerName, renamedContainerName)
@@ -490,6 +501,10 @@ describe('ClickHouse Integration Tests', { skip: IS_WINDOWS ? 'ClickHouse binari
     await containerManager.updateConfig(renamedContainerName, {
       status: 'stopped',
     })
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(renamedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped')
 
     // Now it's stopped, verify
     const running = await processManager.isRunning(renamedContainerName, {

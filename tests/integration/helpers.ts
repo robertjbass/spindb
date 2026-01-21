@@ -508,6 +508,29 @@ export async function waitForReady(
 }
 
 /**
+ * Wait for a container to be fully stopped (process terminated, PID file removed).
+ * This is important for operations like rename that require the container to be stopped.
+ */
+export async function waitForStopped(
+  containerName: string,
+  engine: Engine,
+  timeoutMs = 30000,
+): Promise<boolean> {
+  const startTime = Date.now()
+  const checkInterval = 200
+
+  while (Date.now() - startTime < timeoutMs) {
+    const running = await processManager.isRunning(containerName, { engine })
+    if (!running) {
+      return true
+    }
+    await new Promise((resolve) => setTimeout(resolve, checkInterval))
+  }
+
+  return false
+}
+
+/**
  * Check if a container's data directory exists on the filesystem
  * For SQLite, checks the registry instead
  */
