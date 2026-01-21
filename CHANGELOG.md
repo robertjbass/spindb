@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-01-20
+
+### Added
+- **Docker E2E rename and clone tests** - Extended `pnpm test:docker` to test container rename and clone operations for all server-based engines. Tests verify data persists after rename/clone.
+- **Docker E2E idempotency tests** - Added tests for double-start and double-stop operations to verify they warn but don't error.
+- **GH Actions rename/clone tests** - Added `test-rename-clone` job testing PostgreSQL rename and clone on Ubuntu, macOS, and Windows.
+- **GH Actions ClickHouse rename test** - Added `test-clickhouse-rename` job specifically testing ClickHouse config.xml path regeneration on Ubuntu and macOS.
+- **CLI E2E URL command tests** - Added tests for `spindb url` command including `--json` output.
+- **CLI E2E connection string tests** - Added tests for `spindb create --from <connection-string>` engine inference.
+- **MariaDB version validator tests** - Added unit tests for `parseVersion`, `extractDumpVersion`, and `validateRestoreCompatibility`.
+- **MongoDB version validator tests** - Added unit tests for `parseVersion`, `compareVersions`, `isVersionCompatible`, and `getMajorMinorVersion`.
+- **ClickHouse version validator tests** - Added unit tests for `parseVersion`, `compareVersions`, `getMajorVersion`, `isVersionSupported`, and `isVersionCompatible`.
+
+### Fixed
+- **ClickHouse data loss after rename/clone** - Fixed ClickHouse containers appearing to lose data after rename or clone. The `config.xml` file contained hardcoded absolute paths that weren't updated when the container directory moved. Added `regenerateConfig()` method that rewrites `config.xml` with correct paths after rename/clone operations.
+
 ## [0.20.0] - 2026-01-20
 
 ### Breaking Changes
