@@ -838,7 +838,8 @@ jobs:
       - name: Verify clonedFrom metadata
         shell: bash
         run: |
-          CLONED_FROM=$(pnpm start info cloned-test --json 2>/dev/null | jq -r '.clonedFrom' 2>/dev/null || echo "")
+          # Filter out pnpm header lines (starting with >) before passing to jq
+          CLONED_FROM=$(pnpm start info cloned-test --json 2>/dev/null | grep -v '^>' | jq -r '.clonedFrom' 2>/dev/null || echo "")
           if [ "$CLONED_FROM" != "renamed-test" ]; then
             echo "clonedFrom metadata incorrect: expected 'renamed-test', got '$CLONED_FROM'"
             exit 1
