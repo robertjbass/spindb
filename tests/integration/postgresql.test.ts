@@ -105,6 +105,29 @@ describe('PostgreSQL Integration Tests', () => {
     }
   })
 
+  // DIAGNOSTIC TEST - this should always pass and shows environment info
+  it('[DIAGNOSTIC] environment check', async () => {
+    process.stdout.write('\n--- DIAGNOSTIC TEST START ---\n')
+    process.stdout.write(`HOME: ${process.env.HOME || process.env.USERPROFILE}\n`)
+    process.stdout.write(`CWD: ${process.cwd()}\n`)
+    process.stdout.write(`testPorts: ${JSON.stringify(testPorts)}\n`)
+    process.stdout.write(`containerName: ${containerName}\n`)
+    process.stdout.write(`renamedContainerName: ${renamedContainerName}\n`)
+
+    // Check if PostgreSQL binaries exist
+    const engine = getEngine(ENGINE)
+    const binaryPath = await engine.getBinaryPath?.('18')
+    process.stdout.write(`PostgreSQL binary path: ${binaryPath || 'NOT FOUND'}\n`)
+
+    // Check containers at start
+    const containers = await containerManager.list()
+    process.stdout.write(`Existing containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+    process.stdout.write('--- DIAGNOSTIC TEST END ---\n\n')
+
+    // Always pass to show we got here
+    assert(true, 'Diagnostic test passed')
+  })
+
   it('should create container without starting (--no-start)', async () => {
     console.log(
       `\n📦 Creating container "${containerName}" without starting...`,

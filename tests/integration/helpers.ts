@@ -88,8 +88,10 @@ export async function findConsecutiveFreePorts(
  */
 export async function cleanupTestContainers(): Promise<string[]> {
   const containers = await containerManager.list()
-  // Match test naming pattern: prefix_uuid (e.g., clipg_12345678, test_abcd1234)
-  const testPattern = /^(cli|test)[a-z]*_[a-f0-9]+$/i
+  // Match test naming pattern: containers containing "-test" followed by _uuid
+  // Examples: pg-test_12345678, mysql-test-clone_abcd1234, redis-test-renamed_12345678
+  // Also matches legacy patterns: clipg_12345678, test_abcd1234
+  const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
   const testContainers = containers.filter((c) => testPattern.test(c.name))
 
   const deleted: string[] = []
