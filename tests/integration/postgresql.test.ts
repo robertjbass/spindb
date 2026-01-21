@@ -357,17 +357,24 @@ describe('PostgreSQL Integration Tests', () => {
   it('should stop and delete the restored container', async () => {
     console.log(`\n🗑️  Deleting restored container "${clonedContainerName}"...`)
 
+    console.log(`   [DEBUG] Getting config for "${clonedContainerName}"...`)
     const config = await containerManager.getConfig(clonedContainerName)
+    console.log(`   [DEBUG] Config: ${config ? 'found' : 'NOT FOUND'}`)
     assert(config !== null, 'Container config should exist')
 
+    console.log(`   [DEBUG] Stopping container...`)
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
+    console.log(`   [DEBUG] Stop command completed`)
 
     // Wait for the container to be fully stopped
     const stopped = await waitForStopped(clonedContainerName, ENGINE)
+    console.log(`   [DEBUG] waitForStopped returned: ${stopped}`)
     assert(stopped, 'Container should be fully stopped before delete')
 
+    console.log(`   [DEBUG] Deleting container...`)
     await containerManager.delete(clonedContainerName, { force: true })
+    console.log(`   [DEBUG] Delete completed`)
 
     // Verify filesystem is cleaned up
     const exists = containerDataExists(clonedContainerName, ENGINE)
@@ -410,21 +417,31 @@ describe('PostgreSQL Integration Tests', () => {
   it('should stop, rename container, and change port', async () => {
     console.log(`\n📝 Renaming container and changing port...`)
 
+    console.log(`   [DEBUG] Getting config for "${containerName}"...`)
     const config = await containerManager.getConfig(containerName)
+    console.log(`   [DEBUG] Config: ${config ? 'found' : 'NOT FOUND'}`)
     assert(config !== null, 'Container config should exist')
 
     // Stop the container
+    console.log(`   [DEBUG] Stopping container...`)
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
+    console.log(`   [DEBUG] Stop command completed`)
     await containerManager.updateConfig(containerName, { status: 'stopped' })
+    console.log(`   [DEBUG] Config status updated to stopped`)
 
     // Wait for the container to be fully stopped (PID file removed)
     // This is important because rename() checks isRunning() before proceeding
     const stopped = await waitForStopped(containerName, ENGINE)
+    console.log(`   [DEBUG] waitForStopped returned: ${stopped}`)
     assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
+    console.log(
+      `   [DEBUG] Renaming "${containerName}" to "${renamedContainerName}"...`,
+    )
     await containerManager.rename(containerName, renamedContainerName)
+    console.log(`   [DEBUG] Rename completed successfully`)
     await containerManager.updateConfig(renamedContainerName, {
       port: testPorts[2],
     })
