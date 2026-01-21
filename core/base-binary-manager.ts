@@ -332,7 +332,7 @@ export abstract class BaseBinaryManager {
 
   /**
    * Move extracted entries from extractDir to binPath, handling nested engine directories.
-   * Unix archives have {engine}/bin/ structure, Windows archives may have binaries directly in {engine}/.
+   * Archives may have {engine}/bin/ structure or flat {engine}/ structure.
    * This method normalizes both to binPath/bin/ structure.
    */
   protected async moveExtractedEntries(
@@ -352,33 +352,44 @@ export abstract class BaseBinaryManager {
       ? await readdir(sourceDir, { withFileTypes: true })
       : entries
 
-    // Check if source has a bin/ subdirectory (Unix structure)
+    // Check if source has a bin/ subdirectory
     const hasBinDir = sourceEntries.some(
       (e) => e.isDirectory() && e.name === 'bin',
     )
 
     if (hasBinDir) {
-      // Unix structure: move all entries as-is (preserves bin/ subdirectory)
+      // Standard structure: move all entries as-is (preserves bin/ subdirectory)
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         const destPath = join(binPath, entry.name)
         await moveEntry(sourcePath, destPath)
       }
     } else {
-      // Windows structure: binaries are directly in engine/, need to create bin/ subdirectory
-      // Move .exe files to bin/, move other files (configs, DLLs) to root
+      // Flat structure: binaries are directly in engine/, need to create bin/ subdirectory
       const destBinDir = join(binPath, 'bin')
       await mkdir(destBinDir, { recursive: true })
 
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
-        // Put executables and DLLs in bin/, configs and other files in root
-        const isExecutable = entry.name.endsWith('.exe')
-        const isDll = entry.name.endsWith('.dll')
-        const destPath =
-          isExecutable || isDll
-            ? join(destBinDir, entry.name)
-            : join(binPath, entry.name)
+        // Identify executables: .exe/.dll on Windows, or files without config extensions on Unix
+        const isWindowsExecutable =
+          entry.name.endsWith('.exe') || entry.name.endsWith('.dll')
+        const isConfigOrMetadata =
+          entry.name.startsWith('.') ||
+          entry.name.endsWith('.json') ||
+          entry.name.endsWith('.conf') ||
+          entry.name.endsWith('.yaml') ||
+          entry.name.endsWith('.yml') ||
+          entry.name.endsWith('.xml') ||
+          entry.name.endsWith('.txt') ||
+          entry.name.endsWith('.md')
+        const isUnixExecutable =
+          entry.isFile() && !isConfigOrMetadata && !entry.name.includes('.')
+
+        const isBinary = isWindowsExecutable || isUnixExecutable
+        const destPath = isBinary
+          ? join(destBinDir, entry.name)
+          : join(binPath, entry.name)
         await moveEntry(sourcePath, destPath)
       }
     }

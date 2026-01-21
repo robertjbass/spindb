@@ -1,6 +1,8 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { spawn } from 'child_process'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
   isUsqlInstalled,
@@ -26,6 +28,29 @@ import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
+
+/**
+ * Open a URL in the system's default browser
+ */
+function openInBrowser(url: string): void {
+  const platform = process.platform
+  let cmd: string
+  let args: string[]
+
+  if (platform === 'darwin') {
+    cmd = 'open'
+    args = [url]
+  } else if (platform === 'win32') {
+    cmd = 'cmd'
+    args = ['/c', 'start', '', url]
+  } else {
+    // Linux and others
+    cmd = 'xdg-open'
+    args = [url]
+  }
+
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()
+}
 
 export async function handleCopyConnectionString(
   containerName: string,
@@ -93,6 +118,8 @@ export async function handleOpenShell(containerName: string): Promise<void> {
 
   type ShellChoice =
     | 'default'
+    | 'browser'
+    | 'install-webui'
     | 'usql'
     | 'install-usql'
     | 'pgcli'
@@ -156,6 +183,20 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = iredisInstalled
     engineSpecificValue = 'iredis'
     engineSpecificInstallValue = 'install-iredis'
+  } else if (config.engine === 'clickhouse') {
+    defaultShellName = 'clickhouse client'
+    // ClickHouse client is bundled, no separate enhanced CLI
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
+  } else if (config.engine === 'qdrant') {
+    // Qdrant uses REST API, open dashboard in browser
+    defaultShellName = 'Web Dashboard'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -164,14 +205,54 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstallValue = 'install-pgcli'
   }
 
+  // Check if Qdrant Web UI is installed
+  let qdrantWebUiInstalled = false
+  if (config.engine === 'qdrant') {
+    const containerDir = await import('../../../config/paths').then(m =>
+      m.paths.getContainerPath(config.name, { engine: 'qdrant' })
+    )
+    const staticDir = join(containerDir, 'static')
+    qdrantWebUiInstalled = existsSync(staticDir)
+  }
+
   const choices: Array<
     { name: string; value: ShellChoice } | inquirer.Separator
-  > = [
-    {
+  > = []
+
+  // For Qdrant: show either "Open Web UI" or "Download Web UI" based on installation status
+  if (config.engine === 'qdrant') {
+    if (qdrantWebUiInstalled) {
+      choices.push({
+        name: `🌐 Open Web UI in browser`,
+        value: 'default',
+      })
+    } else {
+      choices.push({
+        name: `↓ Download Web UI (enables dashboard)`,
+        value: 'install-webui',
+      })
+    }
+    // Always show API info option for Qdrant
+    choices.push({
+      name: `📋 Show API info`,
+      value: 'browser', // Reuse 'browser' to show API info without opening browser
+    })
+  } else {
+    // Non-Qdrant engines: show default shell option
+    choices.push({
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
-    },
-  ]
+    })
+  }
+
+  // Add browser option for ClickHouse (Play UI on HTTP port = native port + 1)
+  if (config.engine === 'clickhouse') {
+    const httpPort = config.port + 1
+    choices.push({
+      name: `🌐 Open Play UI in browser (port ${httpPort})`,
+      value: 'browser',
+    })
+  }
 
   // Only show engine-specific CLI option if one exists (MongoDB's mongosh IS the default)
   if (engineSpecificCli !== null) {
@@ -188,11 +269,12 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, and MongoDB
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, and Qdrant
   const isNonSqlEngine =
     config.engine === 'redis' ||
     config.engine === 'valkey' ||
-    config.engine === 'mongodb'
+    config.engine === 'mongodb' ||
+    config.engine === 'qdrant'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -224,6 +306,34 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   ])
 
   if (shellChoice === 'back') {
+    return
+  }
+
+  // Handle browser option for ClickHouse Play UI or Qdrant API info
+  if (shellChoice === 'browser') {
+    if (config.engine === 'clickhouse') {
+      // ClickHouse HTTP port is native port + 1 (e.g., 9000 -> 9001)
+      const httpPort = config.port + 1
+      const playUrl = `http://127.0.0.1:${httpPort}/play`
+      console.log()
+      console.log(uiInfo(`Opening ClickHouse Play UI in browser...`))
+      console.log(chalk.gray(`  ${playUrl}`))
+      console.log()
+      openInBrowser(playUrl)
+      await pressEnterToContinue()
+    } else if (config.engine === 'qdrant') {
+      // Show Qdrant API info (without opening browser)
+      console.log()
+      console.log(chalk.cyan('Qdrant REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
+      console.log()
+      await pressEnterToContinue()
+    }
     return
   }
 
@@ -396,7 +506,114 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
+  // Handle install-webui option for Qdrant
+  if (shellChoice === 'install-webui') {
+    if (config.engine === 'qdrant') {
+      await downloadQdrantWebUI(config.name)
+    }
+    return
+  }
+
   await launchShell(containerName, config, connectionString, shellChoice)
+}
+
+/**
+ * Download and install Qdrant Web UI from GitHub releases
+ */
+async function downloadQdrantWebUI(containerName: string): Promise<void> {
+  const { paths } = await import('../../../config/paths')
+  const { mkdir, writeFile, rm } = await import('fs/promises')
+
+  console.log()
+  const spinner = createSpinner('Downloading Qdrant Web UI...')
+  spinner.start()
+
+  try {
+    // Get latest release info from GitHub
+    const releaseUrl = 'https://api.github.com/repos/qdrant/qdrant-web-ui/releases/latest'
+    const releaseResponse = await fetch(releaseUrl, {
+      headers: { 'User-Agent': 'spindb' },
+    })
+
+    if (!releaseResponse.ok) {
+      throw new Error(`Failed to fetch release info: ${releaseResponse.status}`)
+    }
+
+    const releaseData = await releaseResponse.json() as {
+      assets: Array<{ name: string; browser_download_url: string }>
+      tag_name: string
+    }
+
+    // Find dist-qdrant.zip asset
+    const zipAsset = releaseData.assets.find(a => a.name === 'dist-qdrant.zip')
+    if (!zipAsset) {
+      throw new Error('Could not find dist-qdrant.zip in latest release')
+    }
+
+    spinner.text = `Downloading Qdrant Web UI ${releaseData.tag_name}...`
+
+    // Download the zip file
+    const downloadResponse = await fetch(zipAsset.browser_download_url)
+    if (!downloadResponse.ok || !downloadResponse.body) {
+      throw new Error(`Failed to download: ${downloadResponse.status}`)
+    }
+
+    // Get container directory and create static folder
+    const containerDir = paths.getContainerPath(containerName, { engine: 'qdrant' })
+    const staticDir = join(containerDir, 'static')
+
+    // Remove existing static dir if present
+    await rm(staticDir, { recursive: true, force: true })
+    await mkdir(staticDir, { recursive: true })
+
+    spinner.text = 'Extracting Web UI...'
+
+    // Save and extract zip
+    const tempZip = join(containerDir, 'webui-temp.zip')
+    const buffer = Buffer.from(await downloadResponse.arrayBuffer())
+    await writeFile(tempZip, buffer)
+
+    // Extract zip - the zip contains a 'dist' folder, we need its contents
+    const unzipper = await import('unzipper')
+    const directory = await unzipper.Open.file(tempZip)
+
+    for (const entry of directory.files) {
+      // Skip directories and files not in dist/
+      if (entry.type === 'Directory') continue
+      if (!entry.path.startsWith('dist/')) continue
+
+      // Remove 'dist/' prefix to get relative path
+      const relativePath = entry.path.replace(/^dist\//, '')
+      if (!relativePath) continue
+
+      const targetPath = join(staticDir, relativePath)
+      const targetDir = join(targetPath, '..')
+
+      await mkdir(targetDir, { recursive: true })
+      const content = await entry.buffer()
+      await writeFile(targetPath, content)
+    }
+
+    // Clean up temp zip
+    await rm(tempZip, { force: true })
+
+    spinner.succeed(`Qdrant Web UI ${releaseData.tag_name} installed`)
+    console.log()
+    console.log(uiWarning('Restart Qdrant for the Web UI to take effect:'))
+    console.log(chalk.gray(`  spindb stop ${containerName} && spindb start ${containerName}`))
+    console.log()
+  } catch (error) {
+    spinner.fail('Failed to download Qdrant Web UI')
+    console.error(uiError((error as Error).message))
+    console.log()
+    console.log(chalk.gray('You can manually download from:'))
+    console.log(chalk.cyan('  https://github.com/qdrant/qdrant-web-ui/releases'))
+    console.log(chalk.gray(`\nExtract dist-qdrant.zip contents to:`))
+    console.log(chalk.cyan(`  ${paths.getContainerPath(containerName, { engine: 'qdrant' })}/static/`))
+    console.log()
+  }
+
+  await pressEnterToContinue()
 }
 
 async function launchShell(
@@ -534,6 +751,15 @@ async function launchShell(
       config.database,
     ]
     installHint = 'spindb engines download clickhouse'
+  } else if (config.engine === 'qdrant') {
+    // Qdrant: Open Web UI in browser (only shown when Web UI is installed)
+    const dashboardUrl = `http://127.0.0.1:${config.port}/dashboard`
+    console.log(uiInfo(`Opening Qdrant Dashboard in browser...`))
+    console.log(chalk.gray(`  ${dashboardUrl}`))
+    console.log()
+    openInBrowser(dashboardUrl)
+    await pressEnterToContinue()
+    return
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]

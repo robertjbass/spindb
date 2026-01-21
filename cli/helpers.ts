@@ -154,6 +154,16 @@ export type InstalledClickHouseEngine = {
   source: 'downloaded'
 }
 
+export type InstalledQdrantEngine = {
+  engine: 'qdrant'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -164,6 +174,7 @@ export type InstalledEngine =
   | InstalledRedisEngine
   | InstalledValkeyEngine
   | InstalledClickHouseEngine
+  | InstalledQdrantEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -668,6 +679,62 @@ async function getInstalledClickHouseEngines(): Promise<InstalledClickHouseEngin
   return engines
 }
 
+// Get Qdrant version from binary path
+async function getQdrantVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const qdrantPath = join(binPath, 'bin', `qdrant${ext}`)
+  if (!existsSync(qdrantPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(qdrantPath, ['--version'])
+    // Parse output like "qdrant 1.16.3" or "v1.16.3"
+    const match = stdout.match(/(?:qdrant\s+)?v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed Qdrant engines from downloaded binaries
+async function getInstalledQdrantEngines(): Promise<InstalledQdrantEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledQdrantEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('qdrant-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'qdrant-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getQdrantVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'qdrant',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -692,6 +759,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     redisEngines,
     valkeyEngines,
     clickhouseEngines,
+    qdrantEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -702,6 +770,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledRedisEngines(),
     getInstalledValkeyEngines(),
     getInstalledClickHouseEngines(),
+    getInstalledQdrantEngines(),
   ])
 
   return [
@@ -714,6 +783,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...redisEngines,
     ...valkeyEngines,
     ...clickhouseEngines,
+    ...qdrantEngines,
   ]
 }
 
@@ -726,4 +796,5 @@ export {
   getInstalledRedisEngines,
   getInstalledValkeyEngines,
   getInstalledClickHouseEngines,
+  getInstalledQdrantEngines,
 }

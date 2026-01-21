@@ -6,6 +6,10 @@
  *
  * Note: ClickHouse binaries from hostdb are only available for macOS and Linux.
  * Windows is not supported - these tests will be skipped on Windows.
+ *
+ * TODO: Add integration tests for dumpFromConnectionString once we have a
+ * test environment with remote ClickHouse instances (e.g., via Docker Compose in CI).
+ * Currently, connection string parsing is tested in unit/clickhouse-restore.test.ts.
  */
 
 import { describe, it, before, after } from 'node:test'

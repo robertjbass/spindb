@@ -26,6 +26,7 @@ export enum Engine {
   Redis = 'redis',
   Valkey = 'valkey',
   ClickHouse = 'clickhouse',
+  Qdrant = 'qdrant',
 }
 
 // Supported operating systems (matches Node.js process.platform)
@@ -55,6 +56,7 @@ export const ALL_ENGINES = [
   Engine.Redis,
   Engine.Valkey,
   Engine.ClickHouse,
+  Engine.Qdrant,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -177,6 +179,7 @@ export type MongoDBFormat = 'bson' | 'archive'
 export type RedisFormat = 'text' | 'rdb'
 export type ValkeyFormat = 'text' | 'rdb'
 export type ClickHouseFormat = 'sql'
+export type QdrantFormat = 'snapshot'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -189,6 +192,7 @@ export type BackupFormatType =
   | RedisFormat
   | ValkeyFormat
   | ClickHouseFormat
+  | QdrantFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -201,6 +205,7 @@ type EngineFormatMap = {
   [Engine.Redis]: RedisFormat
   [Engine.Valkey]: ValkeyFormat
   [Engine.ClickHouse]: ClickHouseFormat
+  [Engine.Qdrant]: QdrantFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -298,6 +303,8 @@ export type BinaryTool =
   | 'valkey-cli'
   // ClickHouse tools
   | 'clickhouse'
+  // Qdrant tools
+  | 'qdrant'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -365,6 +372,8 @@ export type SpinDBConfig = {
     'valkey-cli'?: BinaryConfig
     // ClickHouse tools
     clickhouse?: BinaryConfig
+    // Qdrant tools
+    qdrant?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

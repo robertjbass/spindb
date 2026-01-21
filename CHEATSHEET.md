@@ -65,7 +65,14 @@ spindb backups ./data --limit 50        # List backups in specific directory
 
 spindb restore mydb ./backup.sql        # Restore from file
 spindb restore mydb ./backup.dump -f    # Force overwrite
-spindb restore mydb --from-url "postgresql://user:pass@host/db"
+
+# Restore from remote database (all engines supported)
+spindb restore mydb --from-url "postgresql://user:pass@host:5432/db"
+spindb restore mydb --from-url "mysql://root:pass@host:3306/db"
+spindb restore mydb --from-url "mongodb://user:pass@host:27017/db"
+spindb restore mydb --from-url "redis://:password@host:6379/0"
+spindb restore mydb --from-url "clickhouse://default:pass@host:8123/db"
+spindb restore mydb --from-url "http://host:6333?api_key=KEY"  # Qdrant
 ```
 
 ## Clone

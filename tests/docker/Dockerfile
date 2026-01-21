@@ -31,6 +31,7 @@
 # - ClickHouse: clickhouse (unified binary with subcommands)
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
 # - DuckDB: duckdb
+# - Qdrant: qdrant (REST API engine - tests use curl instead of CLI)
 
 FROM ubuntu:22.04
 

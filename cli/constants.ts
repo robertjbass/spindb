@@ -10,6 +10,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   redis: '🔴',
   valkey: '🔷',
   clickhouse: '🏠',
+  qdrant: '🧭',
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

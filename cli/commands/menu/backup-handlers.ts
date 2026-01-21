@@ -13,6 +13,7 @@ import { defaults } from '../../../config/defaults'
 import {
   getBackupExtension,
   getBackupSpinnerLabel,
+  getDefaultFormat,
 } from '../../../config/backup-formats'
 import {
   generateBackupTimestamp,
@@ -48,6 +49,24 @@ import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
 // Strip surrounding quotes from paths (handles drag-and-drop paths)
 function stripQuotes(path: string): string {
   return path.replace(/^['"]|['"]$/g, '').trim()
+}
+
+/**
+ * Mask the password portion of a connection string for display.
+ * Example: postgresql://user:secretpass@host:5432/db → postgresql://user:****@host:5432/db
+ */
+function maskConnectionStringPassword(connectionString: string): string {
+  if (!connectionString) return connectionString
+  try {
+    // Match pattern: scheme://[user[:password]@]host
+    // This regex captures: scheme://user: then password, then @host...
+    return connectionString.replace(
+      /^([a-z+]+:\/\/[^:]*:)([^@]+)(@.*)$/i,
+      (_, prefix, _password, suffix) => `${prefix}****${suffix}`,
+    )
+  } catch {
+    return connectionString
+  }
 }
 
 export async function handleCreateForRestore(): Promise<{
@@ -241,6 +260,27 @@ export async function handleRestore(): Promise<void> {
       depsSpinner.succeed('Required tools available')
     }
 
+    // All engines now support dumpFromConnectionString
+    const restoreChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
+      {
+        name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+        value: 'file',
+      },
+    ]
+
+    restoreChoices.push({
+      name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+      value: 'connection',
+    })
+
+    restoreChoices.push(
+      new inquirer.Separator(),
+      {
+        name: `${chalk.blue('←')} Back`,
+        value: '__back__',
+      },
+    )
+
     const { restoreSource } = await inquirer.prompt<{
       restoreSource: 'file' | 'connection' | '__back__'
     }>([
@@ -248,21 +288,7 @@ export async function handleRestore(): Promise<void> {
         type: 'list',
         name: 'restoreSource',
         message: 'Restore from:',
-        choices: [
-          {
-            name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
-            value: 'file',
-          },
-          {
-            name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
-            value: 'connection',
-          },
-          new inquirer.Separator(),
-          {
-            name: `${chalk.blue('←')} Back`,
-            value: '__back__',
-          },
-        ],
+        choices: restoreChoices,
       },
     ])
 
@@ -284,20 +310,46 @@ export async function handleRestore(): Promise<void> {
           type: 'input',
           name: 'connectionString',
           message: 'Connection string:',
+          transformer: (input: string) => maskConnectionStringPassword(input),
           validate: (input: string) => {
             if (!input) return true
-            if (config.engine === 'mysql') {
-              if (!input.startsWith('mysql://')) {
-                return 'Connection string must start with mysql://'
-              }
-            } else {
-              // PostgreSQL
-              if (
-                !input.startsWith('postgresql://') &&
-                !input.startsWith('postgres://')
-              ) {
-                return 'Connection string must start with postgresql:// or postgres://'
-              }
+            switch (config.engine) {
+              case 'mysql':
+                if (!input.startsWith('mysql://')) {
+                  return 'Connection string must start with mysql://'
+                }
+                break
+              case 'mariadb':
+                if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
+                  return 'Connection string must start with mysql:// or mariadb://'
+                }
+                break
+              case 'mongodb':
+                if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
+                  return 'Connection string must start with mongodb:// or mongodb+srv://'
+                }
+                break
+              case 'redis':
+              case 'valkey':
+                if (!input.startsWith('redis://')) {
+                  return 'Connection string must start with redis://'
+                }
+                break
+              case 'clickhouse':
+                if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+                  return 'Connection string must start with clickhouse://, http://, or https://'
+                }
+                break
+              case 'qdrant':
+                if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+                  return 'Connection string must start with qdrant://, http://, or https://'
+                }
+                break
+              default:
+                // PostgreSQL and others
+                if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
+                  return 'Connection string must start with postgresql:// or postgres://'
+                }
             }
             return true
           },
@@ -311,7 +363,9 @@ export async function handleRestore(): Promise<void> {
       const engine = getEngine(config.engine)
 
       const timestamp = Date.now()
-      const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+      const defaultFormat = getDefaultFormat(config.engine as Engine)
+      const dumpExtension = getBackupExtension(config.engine as Engine, defaultFormat)
+      const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}${dumpExtension}`)
 
       let dumpSuccess = false
       let attempts = 0
@@ -933,7 +987,27 @@ export async function handleRestoreForContainer(
     depsSpinner.succeed('Required tools available')
   }
 
-  // Restore source selection (file or URL)
+  // Restore source selection (file or connection string)
+  // All engines now support dumpFromConnectionString
+  const restoreChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
+    {
+      name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+      value: 'file',
+    },
+    {
+      name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+      value: 'connection',
+    },
+  ]
+
+  restoreChoices.push(
+    new inquirer.Separator(),
+    {
+      name: `${chalk.blue('←')} Back`,
+      value: '__back__',
+    },
+  )
+
   const { restoreSource } = await inquirer.prompt<{
     restoreSource: 'file' | 'connection' | '__back__'
   }>([
@@ -941,21 +1015,7 @@ export async function handleRestoreForContainer(
       type: 'list',
       name: 'restoreSource',
       message: 'Restore from:',
-      choices: [
-        {
-          name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
-          value: 'file',
-        },
-        {
-          name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
-          value: 'connection',
-        },
-        new inquirer.Separator(),
-        {
-          name: `${chalk.blue('←')} Back`,
-          value: '__back__',
-        },
-      ],
+      choices: restoreChoices,
     },
   ])
 
@@ -978,27 +1038,46 @@ export async function handleRestoreForContainer(
         type: 'input',
         name: 'connectionString',
         message: 'Connection string:',
+        transformer: (input: string) => maskConnectionStringPassword(input),
         validate: (input: string) => {
           if (!input) return true
-          if (config.engine === 'mysql') {
-            if (!input.startsWith('mysql://')) {
-              return 'Connection string must start with mysql://'
-            }
-          } else if (config.engine === 'mongodb') {
-            if (
-              !input.startsWith('mongodb://') &&
-              !input.startsWith('mongodb+srv://')
-            ) {
-              return 'Connection string must start with mongodb:// or mongodb+srv://'
-            }
-          } else {
-            // PostgreSQL
-            if (
-              !input.startsWith('postgresql://') &&
-              !input.startsWith('postgres://')
-            ) {
-              return 'Connection string must start with postgresql:// or postgres://'
-            }
+          switch (config.engine) {
+            case 'mysql':
+              if (!input.startsWith('mysql://')) {
+                return 'Connection string must start with mysql://'
+              }
+              break
+            case 'mariadb':
+              if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
+                return 'Connection string must start with mysql:// or mariadb://'
+              }
+              break
+            case 'mongodb':
+              if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
+                return 'Connection string must start with mongodb:// or mongodb+srv://'
+              }
+              break
+            case 'redis':
+            case 'valkey':
+              if (!input.startsWith('redis://')) {
+                return 'Connection string must start with redis://'
+              }
+              break
+            case 'clickhouse':
+              if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+                return 'Connection string must start with clickhouse://, http://, or https://'
+              }
+              break
+            case 'qdrant':
+              if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+                return 'Connection string must start with qdrant://, http://, or https://'
+              }
+              break
+            default:
+              // PostgreSQL and others
+              if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
+                return 'Connection string must start with postgresql:// or postgres://'
+              }
           }
           return true
         },
@@ -1010,7 +1089,9 @@ export async function handleRestoreForContainer(
     }
 
     const timestamp = Date.now()
-    const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+    const defaultFormat = getDefaultFormat(config.engine as Engine)
+    const dumpExtension = getBackupExtension(config.engine as Engine, defaultFormat)
+    const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}${dumpExtension}`)
 
     const dumpSpinner = createSpinner('Creating dump from remote database...')
     dumpSpinner.start()

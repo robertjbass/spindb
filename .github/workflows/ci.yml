@@ -664,6 +664,88 @@ jobs:
           find ~/.spindb/containers/clickhouse -name "*.xml" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No config files found"
 
   # ============================================
+  # Qdrant Integration Tests
+  # Uses SpinDB to download and manage Qdrant binaries from hostdb
+  # NOTE: Qdrant is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # ============================================
+  test-qdrant:
+    name: Qdrant (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - macos-15 # Intel
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Qdrant binaries - these are downloaded from hostdb
+      - name: Cache Qdrant binaries
+        uses: actions/cache@v4
+        id: qdrant-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-qdrant-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Qdrant binaries
+      - name: Install Qdrant via SpinDB
+        run: pnpm start engines download qdrant 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Qdrant integration tests
+        run: pnpm test:qdrant
+        timeout-minutes: 15
+
+      - name: Show Qdrant logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== Qdrant container directories ==="
+          ls -la ~/.spindb/containers/qdrant/ 2>/dev/null || echo "No Qdrant containers directory"
+          echo ""
+          echo "=== Qdrant binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i qdrant || echo "No Qdrant binaries found"
+          echo ""
+          echo "=== Qdrant log files ==="
+          find ~/.spindb/containers/qdrant -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show Qdrant logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Qdrant container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\qdrant" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Qdrant binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "qdrant*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Qdrant log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\qdrant" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -1378,6 +1460,7 @@ jobs:
         test-redis,
         test-valkey,
         test-clickhouse,
+        test-qdrant,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -1430,6 +1513,10 @@ jobs:
           fi
           if [ "${{ needs.test-clickhouse.result }}" != "success" ]; then
             echo "ClickHouse tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-qdrant.result }}" != "success" ]; then
+            echo "Qdrant tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

@@ -40,6 +40,7 @@ import {
   type InstalledMongodbEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
+  type InstalledQdrantEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -54,6 +55,7 @@ import { valkeyBinaryManager } from '../../engines/valkey/binary-manager'
 import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
 import { duckdbBinaryManager } from '../../engines/duckdb/binary-manager'
 import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager'
+import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -438,6 +440,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const valkeyEngines = engines.filter(
     (e): e is InstalledValkeyEngine => e.engine === 'valkey',
   )
+  const qdrantEngines = engines.filter(
+    (e): e is InstalledQdrantEngine => e.engine === 'qdrant',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -557,6 +562,21 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // Qdrant rows
+  for (const engine of qdrantEngines) {
+    const icon = ENGINE_ICONS.qdrant
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} qdrant`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -616,6 +636,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  Valkey: ${valkeyEngines.length} version(s), ${formatBytes(totalValkeySize)}`,
+      ),
+    )
+  }
+  if (qdrantEngines.length > 0) {
+    const totalQdrantSize = qdrantEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  Qdrant: ${qdrantEngines.length} version(s), ${formatBytes(totalQdrantSize)}`,
       ),
     )
   }
@@ -1347,9 +1378,53 @@ enginesCommand
         return
       }
 
+      if (['qdrant', 'qd'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('Qdrant requires a version (e.g., 1)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.Qdrant)
+
+        const spinner = createSpinner(`Checking Qdrant ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `Qdrant ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`Qdrant ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`Qdrant ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: qdrantPlatform, arch: qdrantArch } =
+          platformService.getPlatformInfo()
+        const qdrantFullVersion = qdrantBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'qdrant',
+          version: qdrantFullVersion,
+          platform: qdrantPlatform,
+          arch: qdrantArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Check for bundled client tools and install missing ones
+        await checkAndInstallClientTools('qdrant', binPath)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant`,
         ),
       )
       process.exit(1)

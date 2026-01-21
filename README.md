@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 9 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 10 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -48,7 +48,7 @@ One consistent interface across SQL databases, document stores, key-value stores
 
 ```bash
 # Same commands work for ANY database
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|redis|valkey|clickhouse|sqlite|duckdb]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|redis|valkey|clickhouse|sqlite|duckdb|qdrant]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -70,7 +70,7 @@ spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
 
 ## Platform Coverage
 
-SpinDB works across **9 database engines** and **5 platform architectures** with a **single, consistent API**.
+SpinDB works across **10 database engines** and **5 platform architectures** with a **single, consistent API**.
 
 | Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
 |----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
@@ -83,8 +83,9 @@ SpinDB works across **9 database engines** and **5 platform architectures** with
 | 🔴 **Redis** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**44 combinations. One CLI. Zero configuration.**
+**50 combinations. One CLI. Zero configuration.**
 
 ---
 
@@ -163,7 +164,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 | Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
 |---------|--------|--------|--------|--------------|-------|
 | No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Multiple DB engines | ✅ 9 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
+| Multiple DB engines | ✅ 10 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
 | CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
 | Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
@@ -177,7 +178,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 ## Supported Databases
 
-SpinDB supports **9 database engines** with **multiple versions** for each:
+SpinDB supports **10 database engines** with **multiple versions** for each:
 
 | Engine | Type | Versions | Default Port | Query Language |
 |--------|------|----------|--------------|----------------|
@@ -190,10 +191,11 @@ SpinDB supports **9 database engines** with **multiple versions** for each:
 | 🔴 **Redis** | Key-Value Store | 7, 8 | 6379 | Redis commands |
 | 🔷 **Valkey** | Key-Value Store | 8, 9 | 6379 | Redis commands |
 | 🏠 **ClickHouse** | Columnar OLAP | 25.12 | 9000 (TCP), 8123 (HTTP) | SQL (ClickHouse dialect) |
+| 🧭 **Qdrant** | Vector Search | 1 | 6333 (HTTP), 6334 (gRPC) | REST API |
 
 ### Engine Categories
 
-**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse):
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant):
 - Start/stop server processes
 - Bind to localhost ports
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
@@ -527,6 +529,23 @@ spindb run warehouse -c "SELECT * FROM system.tables"
 **Ports:** 9000 (native TCP), 8123 (HTTP)
 **Tools:** `clickhouse-client`, `clickhouse-server` (included)
 
+### Qdrant 🧭
+
+```bash
+# Create Qdrant database (vector similarity search)
+spindb create vectors --engine qdrant
+spindb start vectors
+
+# Access via REST API
+curl http://127.0.0.1:6333/collections
+```
+
+**Version:** 1 (1.16.3)
+**Platforms:** macOS, Linux, Windows (all platforms)
+**Ports:** 6333 (REST/HTTP), 6334 (gRPC)
+**Query interface:** REST API (no CLI shell - use curl or API clients)
+**Tools:** `qdrant` (included)
+
 ---
 
 ## Enhanced CLI Tools
@@ -544,6 +563,7 @@ SpinDB supports enhanced database shells with auto-completion, syntax highlighti
 | Redis | `redis-cli` | `iredis` | - |
 | Valkey | `valkey-cli` | `iredis` (compatible) | - |
 | ClickHouse | `clickhouse-client` | - | `usql` |
+| Qdrant | REST API | - | - |
 
 Install and use in one command:
 
@@ -633,6 +653,16 @@ spindb backup mydb --format binary      # Binary copy (default)
 spindb backup mydb --format sql         # SQL dump (only format)
 ```
 
+### Qdrant
+
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| snapshot | `.snapshot` | REST API | Full database snapshot |
+
+```bash
+spindb backup mydb --format snapshot    # Snapshot (only format)
+```
+
 ---
 
 ## Advanced Features
@@ -651,7 +681,7 @@ spindb start staging
 
 ### Restore from Remote
 
-Pull production data into local databases:
+Pull production data into local databases. **All engines support remote restore via connection strings:**
 
 ```bash
 # Create new database from remote
@@ -660,6 +690,19 @@ spindb create prod-copy --from "postgresql://user:pass@prod-host:5432/production
 # Or restore into existing database
 spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production"
 ```
+
+**Supported connection string formats:**
+
+| Engine | Format | Example |
+|--------|--------|---------|
+| PostgreSQL | `postgresql://` or `postgres://` | `postgresql://user:pass@host:5432/db` |
+| MySQL | `mysql://` | `mysql://root:pass@host:3306/db` |
+| MariaDB | `mysql://` or `mariadb://` | `mariadb://root:pass@host:3307/db` |
+| MongoDB | `mongodb://` or `mongodb+srv://` | `mongodb://user:pass@host:27017/db` |
+| Redis | `redis://` | `redis://:password@host:6379/0` |
+| Valkey | `redis://` | `redis://:password@host:6379/0` |
+| ClickHouse | `clickhouse://` or `http://` | `clickhouse://default:pass@host:8123/db` |
+| Qdrant | `qdrant://` or `http://` | `http://host:6333?api_key=KEY` |
 
 ### Multi-Version Support
 
@@ -741,7 +784,7 @@ The following engines may be added based on community interest:
 
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
-- **Redis/Valkey remote dump** - Cannot create containers directly from remote connection strings. Use backup/restore workflow instead.
+- **Qdrant** - Uses REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---
 
@@ -816,7 +859,7 @@ See [FEATURE.md](FEATURE.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 9 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 10 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 
