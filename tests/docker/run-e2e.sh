@@ -78,8 +78,18 @@ handle_interrupt() {
   trap - INT TERM
   echo ""
   echo "Interrupted by user"
-  # Kill any child processes
-  pkill -P $$ 2>/dev/null || true
+  # Kill any child processes - try pkill first, fall back to process group kill
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -P $$ 2>/dev/null || true
+  else
+    # Fall back to killing the process group (works on minimal systems without pkill)
+    # Get our process group ID and kill all processes in it except ourselves
+    local pgid
+    pgid=$(ps -o pgid= $$ 2>/dev/null | tr -d ' ')
+    if [ -n "$pgid" ] && [ "$pgid" != "$$" ]; then
+      kill -TERM -"$pgid" 2>/dev/null || true
+    fi
+  fi
   exit 130
 }
 trap handle_interrupt INT TERM

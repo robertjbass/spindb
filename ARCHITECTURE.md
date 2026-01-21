@@ -434,7 +434,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'redis' | 'sqlite'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb'
   version: string
   port: number
   database: string        // Primary database

@@ -291,6 +291,12 @@ async function restoreTextBackup(
       proc.stdin.end()
     })
 
+    proc.stdin.on('error', (error) => {
+      // Handle stdin errors (e.g., process closed unexpectedly)
+      streamError = new Error(`Failed to write to redis-cli stdin: ${error.message}`)
+      fileStream.destroy()
+    })
+
     fileStream.pipe(proc.stdin)
   })
 }

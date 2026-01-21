@@ -166,10 +166,9 @@ export abstract class BaseBinaryManager {
     const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `${this.config.engineName}.${ext}`)
 
-    // Ensure directories exist
+    // Ensure directories exist (binPath created after successful download)
     await mkdir(paths.bin, { recursive: true })
     await mkdir(tempDir, { recursive: true })
-    await mkdir(binPath, { recursive: true })
 
     let success = false
     try {
@@ -208,18 +207,26 @@ export abstract class BaseBinaryManager {
         )
       }
 
-      const fileStream = createWriteStream(archiveFile)
-
       if (!response.body) {
-        fileStream.destroy()
         throw new Error(
           `Download failed: response has no body (status ${response.status})`,
         )
       }
 
-      // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
-      const nodeStream = Readable.fromWeb(response.body)
-      await pipeline(nodeStream, fileStream)
+      // Create file stream only after confirming response.body is present
+      const fileStream = createWriteStream(archiveFile)
+      try {
+        // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
+        const nodeStream = Readable.fromWeb(response.body)
+        await pipeline(nodeStream, fileStream)
+      } catch (pipelineError) {
+        // Ensure fileStream is destroyed on pipeline errors
+        fileStream.destroy()
+        throw pipelineError
+      }
+
+      // Create binPath only after download succeeds (avoids leaving empty dirs on failure)
+      await mkdir(binPath, { recursive: true })
 
       if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(

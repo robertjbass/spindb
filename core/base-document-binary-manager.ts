@@ -415,10 +415,10 @@ export abstract class BaseDocumentBinaryManager {
         throw new Error(`Could not parse version from: ${stdout.trim()}`)
       }
 
-      // Check if major.minor versions match
-      const expectedMajorMinor = version.split('.').slice(0, 2).join('.')
-      const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
-      if (expectedMajorMinor === reportedMajorMinor) {
+      // Check if major versions match (handles both "8" and "8.0" inputs)
+      const expectedMajor = fullVersion.split('.')[0]
+      const reportedMajor = reportedVersion.split('.')[0]
+      if (expectedMajor === reportedMajor) {
         return true
       }
 

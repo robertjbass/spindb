@@ -887,10 +887,15 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
 
 /**
  * Prompt user to install missing database client tools
- * Returns true if installation was successful or user declined, false if installation failed
  *
  * @param missingTool - The name of the missing tool (e.g., 'psql', 'pg_dump', 'mysql')
  * @param engine - The database engine (defaults to 'postgresql')
+ * @returns true if installation was successful, false otherwise.
+ *
+ * Note: For PostgreSQL, this function always returns false because PostgreSQL
+ * client tools (psql, pg_dump, etc.) are bundled with the engine binaries from
+ * hostdb. Callers should treat this as "use bundled tools via spindb engines
+ * download postgresql" rather than an installation failure.
  */
 export async function promptInstallDependencies(
   missingTool: string,

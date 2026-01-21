@@ -63,20 +63,20 @@ describe('MariaDB extractDumpVersion', () => {
     const dumpPath = path.join(fixturesDir, 'mariadb-10.11-plain.sql')
     const result = await extractDumpVersion(dumpPath)
 
-    assert.notEqual(result, null)
-    assert.equal(result?.isMariaDB, true)
+    assert.ok(result, 'Expected result to be defined')
+    assert.equal(result.isMariaDB, true)
     // Version string should contain 10.11
-    assert.ok(result?.version.startsWith('10.11'))
+    assert.ok(result.version.startsWith('10.11'))
   })
 
   it('should extract version from MariaDB 11.4 dump', async () => {
     const dumpPath = path.join(fixturesDir, 'mariadb-11.4-plain.sql')
     const result = await extractDumpVersion(dumpPath)
 
-    assert.notEqual(result, null)
-    assert.equal(result?.isMariaDB, true)
+    assert.ok(result, 'Expected result to be defined')
+    assert.equal(result.isMariaDB, true)
     // Version string should contain 11.4
-    assert.ok(result?.version.startsWith('11.4'))
+    assert.ok(result.version.startsWith('11.4'))
   })
 
   it('should return null for non-existent file', async () => {

@@ -106,7 +106,7 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
     }
 
     throw new Error(
-      `Version mismatch: expected ${version}, got ${reportedVersion}`,
+      `Version mismatch: expected ${fullVersion}, got ${reportedVersion}`,
     )
   }
 }
