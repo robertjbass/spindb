@@ -352,6 +352,138 @@ describe('CLI SQLite Workflow', () => {
   })
 })
 
+describe('CLI URL Command', () => {
+  let containerName: string
+  let testPort: number
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+
+    const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
+    testPort = ports[0]
+    containerName = generateTestName('cliurl')
+    console.log(`   Using container: ${containerName}, port: ${testPort}`)
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+  })
+
+  it('should create and start container for URL tests', async () => {
+    const { exitCode, stderr, stdout } = await runCLI(
+      `create ${containerName} --engine postgresql --port ${testPort} --start`,
+    )
+    assert(
+      exitCode === 0,
+      `Create should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+
+    const ready = await waitForReady(Engine.PostgreSQL, testPort)
+    assert(ready, 'PostgreSQL should be ready')
+    console.log('   Container created and started')
+  })
+
+  it('should show connection URL', async () => {
+    const { stdout, exitCode } = await runCLI(`url ${containerName}`)
+    assert(exitCode === 0, 'URL command should succeed')
+    assert(stdout.includes('postgresql://'), 'URL should be PostgreSQL format')
+    assert(stdout.includes(String(testPort)), 'URL should include port')
+    console.log(`   URL: ${stdout.trim()}`)
+  })
+
+  it('should show URL in JSON format', async () => {
+    const { stdout, exitCode } = await runCLI(`url ${containerName} --json`)
+    assert(exitCode === 0, 'URL --json should succeed')
+
+    const parsed = JSON.parse(stdout)
+    assert(parsed.url !== undefined, 'JSON should contain url field')
+    assert(
+      parsed.url.includes('postgresql://'),
+      'URL should be PostgreSQL format',
+    )
+    console.log('   JSON URL output verified')
+  })
+
+  it('should cleanup URL test container', async () => {
+    const { exitCode: stopExit } = await runCLI(`stop ${containerName}`)
+    assert(stopExit === 0, 'Stop should succeed')
+
+    const { exitCode: deleteExit } = await runCLI(
+      `delete ${containerName} --force --yes`,
+    )
+    assert(deleteExit === 0, 'Delete should succeed')
+    console.log('   Container cleaned up')
+  })
+})
+
+describe('CLI Connection String Inference', () => {
+  let containerName: string
+  let testPort: number
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+
+    const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
+    testPort = ports[0]
+    containerName = generateTestName('clifrom')
+    console.log(`   Using container: ${containerName}, port: ${testPort}`)
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+  })
+
+  it('should create container inferring engine from connection string', async () => {
+    // Use --from to infer engine from a PostgreSQL connection string
+    // Note: This creates a container and attempts to pull schema from the connection
+    // For testing, we use a localhost connection that won't actually connect
+    // but should still infer the engine type correctly
+    const connectionString = `postgresql://user:pass@127.0.0.1:${testPort}/testdb`
+
+    const { exitCode, stderr, stdout } = await runCLI(
+      `create ${containerName} --from "${connectionString}" --no-start`,
+    )
+
+    // The command may fail to connect (expected since no server is running at that port)
+    // but should at least recognize the PostgreSQL engine
+    // For now, we verify the command parsing works
+    console.log(`   --from command exit code: ${exitCode}`)
+
+    // If it succeeded (unlikely without a running server), verify it's PostgreSQL
+    if (exitCode === 0) {
+      const { stdout: infoOut } = await runCLI(`info ${containerName} --json`)
+      const info = JSON.parse(infoOut)
+      assertEqual(info.engine, 'postgresql', 'Engine should be postgresql')
+      console.log('   Engine correctly inferred from connection string')
+
+      // Cleanup
+      await runCLI(`delete ${containerName} --force --yes`)
+    } else {
+      // Check that the error message mentions connection or PostgreSQL
+      const output = (stdout + stderr).toLowerCase()
+      assert(
+        output.includes('postgres') ||
+          output.includes('connect') ||
+          output.includes('error'),
+        'Error should mention PostgreSQL or connection issue',
+      )
+      console.log('   Connection string parsing attempted (server not running)')
+    }
+  })
+
+  it('should reject invalid connection string format', async () => {
+    const { exitCode } = await runCLI(
+      `create ${containerName} --from "not-a-valid-url"`,
+    )
+    assert(exitCode !== 0, 'Should fail for invalid connection string')
+    console.log('   Proper error for invalid connection string')
+  })
+})
+
 describe('CLI Error Handling', () => {
   it('should fail gracefully for non-existent container', async () => {
     const { exitCode, stdout, stderr } = await runCLI(

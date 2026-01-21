@@ -474,15 +474,18 @@ restore_backup() {
         if ! run_cmd spindb start "$container_name"; then
           return 1
         fi
+        # Give the container a moment to register as running
+        sleep 2
         # Wait for container to be ready after start
         waited=0
         while ! spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"' && [ $waited -lt $max_wait ]; do
           sleep 1
           waited=$((waited + 1))
         done
-        # Warn if start timed out but continue (verification will catch failures)
-        if ! spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"'; then
-          echo "WARNING: Container $container_name not running after ${max_wait}s wait"
+        # The container should be running by now - if not, just log for debugging
+        # but don't fail since the data verification will catch actual issues
+        if ! spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"' && [ "$VERBOSE" = "true" ]; then
+          log_verbose "Container $container_name status not 'running' after ${max_wait}s (may be false negative)"
         fi
       fi
       ;;
@@ -950,8 +953,253 @@ run_test() {
   fi
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Phase 6: Cleanup
+  # Phase 6: Idempotency Tests (Server Engines Only)
   # ─────────────────────────────────────────────────────────────────────────
+  if [ "$is_file_based" = "false" ]; then
+    log_section "Idempotency Tests"
+
+    log_step "Double-start (should warn, not error)"
+    # Container is already running - starting again should not fail
+    if spindb start "$container_name" &>/dev/null; then
+      log_step_ok
+    else
+      log_step_result "fail" "double-start errored"
+      failure_reason="Double-start caused error instead of warning"
+      cleanup_data_lifecycle "$engine" "$container_name"
+      spindb stop "$container_name" &>/dev/null || true
+      spindb delete "$container_name" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+
+    log_step "Stop container for double-stop test"
+    spindb stop "$container_name" &>/dev/null || true
+    # Wait for stop to complete
+    local wait_count=0
+    while spindb info "$container_name" --json 2>/dev/null | grep -q '"status":"running"' && [ $wait_count -lt 30 ]; do
+      sleep 1
+      wait_count=$((wait_count + 1))
+    done
+    log_step_ok
+
+    log_step "Double-stop (should warn, not error)"
+    # Container is already stopped - stopping again should not fail
+    if spindb stop "$container_name" &>/dev/null; then
+      log_step_ok
+    else
+      log_step_result "fail" "double-stop errored"
+      failure_reason="Double-stop caused error instead of warning"
+      cleanup_data_lifecycle "$engine" "$container_name"
+      spindb delete "$container_name" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+  fi
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Phase 7: Rename Tests (Server Engines Only)
+  # ─────────────────────────────────────────────────────────────────────────
+  if [ "$is_file_based" = "false" ]; then
+    log_section "Rename Tests"
+
+    local renamed_container="${container_name}_renamed"
+
+    log_step "Rename stopped container"
+    if ! run_cmd spindb edit "$container_name" --name "$renamed_container"; then
+      log_step_fail
+      show_error_details
+      failure_reason="Rename failed"
+      cleanup_data_lifecycle "$engine" "$container_name"
+      spindb delete "$container_name" --yes &>/dev/null || true
+      spindb delete "$renamed_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_ok
+
+    log_step "Start renamed container"
+    if ! spindb start "$renamed_container" &>/dev/null; then
+      log_step_fail
+      failure_reason="Start after rename failed"
+      spindb delete "$renamed_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    # Wait for container to be ready (especially important for ClickHouse)
+    local wait_count=0
+    while ! spindb info "$renamed_container" --json 2>/dev/null | grep -q '"status":"running"' && [ $wait_count -lt "$STARTUP_TIMEOUT" ]; do
+      sleep 1
+      wait_count=$((wait_count + 1))
+    done
+    # Extra wait for ClickHouse to fully initialize after showing as "running"
+    if [ "$engine" = "clickhouse" ]; then
+      sleep 3
+    fi
+    log_step_ok
+
+    log_step "Verify data persists after rename"
+    local renamed_count
+    case $engine in
+      redis|valkey)
+        renamed_count=$(get_data_count "$engine" "$renamed_container" "0")
+        ;;
+      *)
+        renamed_count=$(get_data_count "$engine" "$renamed_container" "testdb")
+        ;;
+    esac
+    # Debug output for empty counts
+    if [ -z "$renamed_count" ] && [ "$VERBOSE" = "true" ]; then
+      log_verbose "Empty count returned, debugging query..."
+      spindb run "$renamed_container" -c "SELECT COUNT(*) FROM test_user;" -d "testdb" 2>&1 || true
+    fi
+    renamed_count=$(echo "$renamed_count" | tr -d '[:space:]')
+    if [ "$renamed_count" != "${EXPECTED_COUNTS[$engine]}" ]; then
+      log_step_result "fail" "got $renamed_count, expected ${EXPECTED_COUNTS[$engine]}"
+      failure_reason="Data lost after rename"
+      spindb stop "$renamed_container" &>/dev/null || true
+      spindb delete "$renamed_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_result "ok" "$renamed_count records"
+
+    log_step "Verify old name doesn't exist"
+    if spindb info "$container_name" --json &>/dev/null; then
+      log_step_fail
+      failure_reason="Old container name still exists after rename"
+      spindb stop "$renamed_container" &>/dev/null || true
+      spindb delete "$renamed_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_ok
+
+    log_step "Stop renamed container"
+    spindb stop "$renamed_container" &>/dev/null || true
+    log_step_ok
+
+    # Rename back for clone test
+    log_step "Rename back for clone test"
+    if ! run_cmd spindb edit "$renamed_container" --name "$container_name"; then
+      log_step_fail
+      show_error_details
+      # Continue anyway - we'll use renamed_container for clone
+      container_name="$renamed_container"
+    else
+      log_step_ok
+    fi
+    test_details="$test_details, rename"
+  fi
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Phase 8: Clone Tests (Server Engines Only)
+  # ─────────────────────────────────────────────────────────────────────────
+  if [ "$is_file_based" = "false" ]; then
+    log_section "Clone Tests"
+
+    local cloned_container="${container_name}_clone"
+
+    log_step "Clone stopped container"
+    if ! run_cmd spindb clone "$container_name" "$cloned_container"; then
+      log_step_fail
+      show_error_details
+      failure_reason="Clone failed"
+      spindb delete "$container_name" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_ok
+
+    log_step "Start cloned container"
+    if ! spindb start "$cloned_container" &>/dev/null; then
+      log_step_fail
+      failure_reason="Start cloned container failed"
+      spindb delete "$container_name" --yes &>/dev/null || true
+      spindb delete "$cloned_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    # Wait for container to be ready (especially important for ClickHouse)
+    local wait_count=0
+    while ! spindb info "$cloned_container" --json 2>/dev/null | grep -q '"status":"running"' && [ $wait_count -lt "$STARTUP_TIMEOUT" ]; do
+      sleep 1
+      wait_count=$((wait_count + 1))
+    done
+    # Extra wait for ClickHouse to fully initialize after showing as "running"
+    if [ "$engine" = "clickhouse" ]; then
+      sleep 3
+    fi
+    log_step_ok
+
+    log_step "Verify cloned data matches source"
+    local cloned_count
+    case $engine in
+      redis|valkey)
+        cloned_count=$(get_data_count "$engine" "$cloned_container" "0")
+        ;;
+      *)
+        cloned_count=$(get_data_count "$engine" "$cloned_container" "testdb")
+        ;;
+    esac
+    cloned_count=$(echo "$cloned_count" | tr -d '[:space:]')
+    if [ "$cloned_count" != "${EXPECTED_COUNTS[$engine]}" ]; then
+      log_step_result "fail" "got $cloned_count, expected ${EXPECTED_COUNTS[$engine]}"
+      failure_reason="Cloned data doesn't match source"
+      spindb stop "$cloned_container" &>/dev/null || true
+      spindb delete "$container_name" --yes &>/dev/null || true
+      spindb delete "$cloned_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_result "ok" "$cloned_count records"
+
+    log_step "Verify clonedFrom metadata"
+    local cloned_from
+    cloned_from=$(spindb info "$cloned_container" --json 2>/dev/null | jq -r '.clonedFrom' 2>/dev/null)
+    if [ "$cloned_from" != "$container_name" ]; then
+      log_step_result "fail" "clonedFrom='$cloned_from', expected '$container_name'"
+      failure_reason="clonedFrom metadata incorrect"
+      spindb stop "$cloned_container" &>/dev/null || true
+      spindb delete "$container_name" --yes &>/dev/null || true
+      spindb delete "$cloned_container" --yes &>/dev/null || true
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_ok
+
+    log_step "Stop and delete cloned container"
+    spindb stop "$cloned_container" &>/dev/null || true
+    spindb delete "$cloned_container" --yes &>/dev/null || true
+    log_step_ok
+    test_details="$test_details, clone"
+  fi
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Phase 9: Cleanup
+  # ─────────────────────────────────────────────────────────────────────────
+  # NOTE: Redis/Valkey merge vs replace mode tests are skipped here because
+  # the --flush flag is only available in the interactive menu, not via CLI.
+  # The GH Actions test-redis-modes job tests this via direct engine calls.
   log_section "Cleanup"
 
   cleanup_data_lifecycle "$engine" "$container_name"
@@ -964,6 +1212,9 @@ run_test() {
 
   log_step "Delete container"
   spindb delete "$container_name" --yes &>/dev/null || true
+  # Also cleanup any renamed/cloned containers that might be left over
+  spindb delete "${container_name}_renamed" --yes &>/dev/null || true
+  spindb delete "${container_name}_clone" --yes &>/dev/null || true
   log_step_ok
 
   # ─────────────────────────────────────────────────────────────────────────

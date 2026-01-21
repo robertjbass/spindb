@@ -259,6 +259,38 @@ export class ClickHouseEngine extends BaseEngine {
     return dataDir
   }
 
+  /**
+   * Regenerate config.xml with updated paths after container rename
+   * Called by container-manager after moving the directory
+   */
+  async regenerateConfig(
+    containerName: string,
+    port: number,
+  ): Promise<void> {
+    const dataDir = paths.getContainerDataPath(containerName, {
+      engine: ENGINE,
+    })
+    const containerDir = paths.getContainerPath(containerName, {
+      engine: ENGINE,
+    })
+    const logDir = containerDir
+    const tmpDir = join(dataDir, 'tmp')
+    const httpPort = port + 1
+
+    const configPath = join(containerDir, 'config.xml')
+    const pidFile = join(containerDir, engineDef.pidFileName)
+    const configContent = generateClickHouseConfig({
+      port,
+      httpPort,
+      dataDir,
+      logDir,
+      tmpDir,
+      pidFile,
+    })
+    await writeFile(configPath, configContent)
+    logDebug(`Regenerated ClickHouse config after rename: ${configPath}`)
+  }
+
   // Get the path to clickhouse binary for a version
   async getClickHousePath(version: string): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()
