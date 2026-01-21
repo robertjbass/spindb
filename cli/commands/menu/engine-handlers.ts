@@ -50,176 +50,58 @@ export async function handleEngines(): Promise<void> {
     return
   }
 
-  const [
-    pgEngines,
-    mariadbEngines,
-    mysqlEngines,
-    sqliteEngines,
-    duckdbEngines,
-    mongodbEngines,
-    redisEngines,
-    valkeyEngines,
-    clickhouseEngines,
-    qdrantEngines,
-  ] = [
-    engines.filter(
+  // Group engines by type and sort
+  const allEnginesSorted = [
+    ...engines.filter(
       (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
     ),
-    engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
-    engines.filter((e): e is InstalledMysqlEngine => e.engine === 'mysql'),
-    engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
-    engines.filter((e): e is InstalledDuckDBEngine => e.engine === 'duckdb'),
-    engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
-    engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
-    engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
-    engines.filter(
+    ...engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
+    ...engines.filter((e): e is InstalledMysqlEngine => e.engine === 'mysql'),
+    ...engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
+    ...engines.filter((e): e is InstalledDuckDBEngine => e.engine === 'duckdb'),
+    ...engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
+    ...engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
+    ...engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
+    ...engines.filter(
       (e): e is InstalledClickHouseEngine => e.engine === 'clickhouse',
     ),
-    engines.filter((e): e is InstalledQdrantEngine => e.engine === 'qdrant'),
+    ...engines.filter((e): e is InstalledQdrantEngine => e.engine === 'qdrant'),
   ]
 
-  const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalMariadbSize = mariadbEngines.reduce(
-    (acc, e) => acc + e.sizeBytes,
-    0,
-  )
-  const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalSqliteSize = sqliteEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalDuckdbSize = duckdbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalMongodbSize = mongodbEngines.reduce(
-    (acc, e) => acc + e.sizeBytes,
-    0,
-  )
-  const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalValkeySize = valkeyEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-  const totalClickhouseSize = clickhouseEngines.reduce(
-    (acc, e) => acc + e.sizeBytes,
-    0,
-  )
-  const totalQdrantSize = qdrantEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+  // Calculate total size
+  const totalSize = allEnginesSorted.reduce((acc, e) => acc + e.sizeBytes, 0)
 
-  const COL_ENGINE = 14
+  // Column widths for formatting
+  const COL_ENGINE = 13
   const COL_VERSION = 12
-  const COL_SOURCE = 18
+  const COL_PLATFORM = 14
+  const COL_SIZE = 10
 
-  console.log()
-  console.log(
-    chalk.gray('  ') +
-      chalk.bold.white('ENGINE'.padEnd(COL_ENGINE)) +
-      chalk.bold.white('VERSION'.padEnd(COL_VERSION)) +
-      chalk.bold.white('SOURCE'.padEnd(COL_SOURCE)) +
-      chalk.bold.white('SIZE'),
+  // Build selectable choices with formatted display
+  const choices: MenuChoice[] = allEnginesSorted.map((e) => {
+    const icon = getEngineIcon(e.engine)
+    const engineDisplay = padToWidth(`${icon} ${e.engine}`, COL_ENGINE)
+    const versionDisplay = e.version.padEnd(COL_VERSION)
+    const platformDisplay = `${e.platform}-${e.arch}`.padEnd(COL_PLATFORM)
+    const sizeDisplay = formatBytes(e.sizeBytes).padStart(COL_SIZE)
+
+    return {
+      name:
+        chalk.cyan(engineDisplay) +
+        chalk.yellow(versionDisplay) +
+        chalk.gray(platformDisplay) +
+        chalk.white(sizeDisplay),
+      value: `select:${e.path}:${e.engine}:${e.version}:${e.sizeBytes}`,
+      short: `${e.engine} ${e.version}`,
+    }
+  })
+
+  choices.push(new inquirer.Separator(chalk.gray('─'.repeat(52))))
+  choices.push(
+    new inquirer.Separator(
+      chalk.gray(`Total: ${engines.length} engine(s), ${formatBytes(totalSize)}`),
+    ),
   )
-  console.log(chalk.gray('  ' + '─'.repeat(55)))
-
-  // Render all engines grouped by type
-  const allEnginesSorted = [
-    ...pgEngines,
-    ...mariadbEngines,
-    ...mysqlEngines,
-    ...sqliteEngines,
-    ...duckdbEngines,
-    ...mongodbEngines,
-    ...redisEngines,
-    ...valkeyEngines,
-    ...clickhouseEngines,
-    ...qdrantEngines,
-  ]
-
-  for (const engine of allEnginesSorted) {
-    const icon = getEngineIcon(engine.engine)
-    const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
-
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(padToWidth(engineDisplay, COL_ENGINE)) +
-        chalk.yellow(engine.version.padEnd(COL_VERSION)) +
-        chalk.gray(platformInfo.padEnd(COL_SOURCE)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  console.log(chalk.gray('  ' + '─'.repeat(55)))
-
-  console.log()
-  if (pgEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  PostgreSQL: ${pgEngines.length} version(s), ${formatBytes(totalPgSize)}`,
-      ),
-    )
-  }
-  if (mariadbEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  MariaDB: ${mariadbEngines.length} version(s), ${formatBytes(totalMariadbSize)}`,
-      ),
-    )
-  }
-  if (mysqlEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  MySQL: ${mysqlEngines.length} version(s), ${formatBytes(totalMysqlSize)}`,
-      ),
-    )
-  }
-  if (sqliteEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  SQLite: ${sqliteEngines.length} version(s), ${formatBytes(totalSqliteSize)}`,
-      ),
-    )
-  }
-  if (duckdbEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  DuckDB: ${duckdbEngines.length} version(s), ${formatBytes(totalDuckdbSize)}`,
-      ),
-    )
-  }
-  if (mongodbEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  MongoDB: ${mongodbEngines.length} version(s), ${formatBytes(totalMongodbSize)}`,
-      ),
-    )
-  }
-  if (redisEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  Redis: ${redisEngines.length} version(s), ${formatBytes(totalRedisSize)}`,
-      ),
-    )
-  }
-  if (valkeyEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  Valkey: ${valkeyEngines.length} version(s), ${formatBytes(totalValkeySize)}`,
-      ),
-    )
-  }
-  if (clickhouseEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  ClickHouse: ${clickhouseEngines.length} version(s), ${formatBytes(totalClickhouseSize)}`,
-      ),
-    )
-  }
-  if (qdrantEngines.length > 0) {
-    console.log(
-      chalk.gray(
-        `  Qdrant: ${qdrantEngines.length} version(s), ${formatBytes(totalQdrantSize)}`,
-      ),
-    )
-  }
-  console.log()
-
-  const choices: MenuChoice[] = allEnginesSorted.map((e) => ({
-    name: `${chalk.red('✕')} Delete ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
-    value: `delete:${e.path}:${e.engine}:${e.version}`,
-  }))
-
   choices.push(new inquirer.Separator())
   choices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })
 
@@ -227,9 +109,9 @@ export async function handleEngines(): Promise<void> {
     {
       type: 'list',
       name: 'action',
-      message: 'Manage engines:',
+      message: 'Select an engine:',
       choices,
-      pageSize: 15,
+      pageSize: 18,
     },
   ])
 
@@ -237,17 +119,76 @@ export async function handleEngines(): Promise<void> {
     return
   }
 
-  if (action.startsWith('delete:')) {
+  if (action.startsWith('select:')) {
     // Parse from the end to preserve colons in path
-    // Format: delete:path:engineName:engineVersion
-    const withoutPrefix = action.slice('delete:'.length)
+    // Format: select:path:engineName:engineVersion:sizeBytes
+    const withoutPrefix = action.slice('select:'.length)
     const lastColon = withoutPrefix.lastIndexOf(':')
-    const secondLastColon = withoutPrefix.lastIndexOf(':', lastColon - 1)
-    const enginePath = withoutPrefix.slice(0, secondLastColon)
-    const engineName = withoutPrefix.slice(secondLastColon + 1, lastColon)
-    const engineVersion = withoutPrefix.slice(lastColon + 1)
-    await handleDeleteEngine(enginePath, engineName, engineVersion)
+    const sizeBytes = parseInt(withoutPrefix.slice(lastColon + 1), 10)
+    const rest = withoutPrefix.slice(0, lastColon)
+    const secondLastColon = rest.lastIndexOf(':')
+    const engineVersion = rest.slice(secondLastColon + 1)
+    const rest2 = rest.slice(0, secondLastColon)
+    const thirdLastColon = rest2.lastIndexOf(':')
+    const engineName = rest2.slice(thirdLastColon + 1)
+    const enginePath = rest2.slice(0, thirdLastColon)
+
+    const result = await showEngineSubmenu(
+      enginePath,
+      engineName,
+      engineVersion,
+      sizeBytes,
+    )
+    if (result === 'main') {
+      return
+    }
     await handleEngines()
+  }
+}
+
+async function showEngineSubmenu(
+  enginePath: string,
+  engineName: string,
+  engineVersion: string,
+  sizeBytes: number,
+): Promise<'back' | 'main' | void> {
+  console.log()
+  console.log(
+    chalk.cyan(
+      `  ${getEngineIcon(engineName)} ${engineName} ${engineVersion} ${chalk.gray(`(${formatBytes(sizeBytes)})`)}`,
+    ),
+  )
+  console.log()
+
+  const choices: MenuChoice[] = [
+    {
+      name: `${chalk.red('✕')} Delete`,
+      value: 'delete',
+    },
+    new inquirer.Separator(),
+    { name: `${chalk.blue('←')} Back`, value: 'back' },
+    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
+  ]
+
+  const { action } = await inquirer.prompt<{ action: string }>([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'What would you like to do?',
+      choices,
+    },
+  ])
+
+  if (action === 'back') {
+    return 'back'
+  }
+
+  if (action === 'main') {
+    return 'main'
+  }
+
+  if (action === 'delete') {
+    await handleDeleteEngine(enginePath, engineName, engineVersion)
   }
 }
 

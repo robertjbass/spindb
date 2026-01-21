@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "tsx cli/bin.ts",
-    "dev": "tsx watch cli/bin.ts",
+    "dev": "tsx cli/bin.ts",
     "test": "run-s test:all",
     "test:pg": "node --import tsx --test --experimental-test-isolation=none tests/integration/postgresql.test.ts",
     "test:mysql": "node --import tsx --test --experimental-test-isolation=none tests/integration/mysql.test.ts",
