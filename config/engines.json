@@ -136,6 +136,22 @@
       "clientTools": ["clickhouse"],
       "licensing": "Apache-2.0",
       "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123."
+    },
+    "qdrant": {
+      "displayName": "Qdrant",
+      "icon": "🧭",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["1.16.3"],
+      "defaultVersion": "1.16.3",
+      "defaultPort": 6333,
+      "runtime": "server",
+      "queryLanguage": "rest",
+      "connectionScheme": "http",
+      "superuser": null,
+      "clientTools": ["qdrant"],
+      "licensing": "Apache-2.0",
+      "notes": "Vector similarity search engine. REST API on port 6333, gRPC on 6334. Uses collections instead of databases."
     }
   }
 }

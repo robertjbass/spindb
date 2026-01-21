@@ -99,9 +99,12 @@ export async function handleCreate(): Promise<'main' | void> {
 
   // Step 4: Database name (defaults to container name, sanitized)
   // Redis and Valkey use numbered databases 0-15, so skip prompt and default to "0"
+  // Qdrant uses collections (not databases), so default to "default"
   let database: string
   if (engine === 'redis' || engine === 'valkey') {
     database = '0'
+  } else if (engine === 'qdrant') {
+    database = 'default'
   } else {
     database = await promptDatabaseName(name, engine)
   }
@@ -634,13 +637,15 @@ export async function showContainerSubmenu(
 
   // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
   const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
-  // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, others use SQL
+  // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, Qdrant uses REST API, others use SQL
   const runScriptLabel =
     config.engine === 'redis' || config.engine === 'valkey'
       ? 'Run command file'
       : config.engine === 'mongodb'
         ? 'Run script file'
-        : 'Run SQL file'
+        : config.engine === 'qdrant'
+          ? 'Run script file'
+          : 'Run SQL file'
   actionChoices.push({
     name: canRunSql
       ? `${chalk.yellow('▷')} ${runScriptLabel}`

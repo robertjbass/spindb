@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-01-21
+
+### Added
+- **Qdrant engine support** - Full container lifecycle for Qdrant, the vector similarity search engine
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Version 1 supported (1.16.3 from hostdb)
+  - Default port 6333 (REST/HTTP), gRPC port 6334
+  - Uses `http://` connection scheme for REST API
+  - Backup format: `.snapshot` (Qdrant native snapshot)
+  - Collections-based data model (no traditional databases)
+  - Full integration tests across all platforms in CI
+  - Docker E2E tests included
+  - Apache-2.0 licensed
+- **Qdrant in Manage Engines menu** - Can now download, list, and delete Qdrant engine versions
+
+### Notes
+- Qdrant uses REST API for all operations (no CLI shell like psql/mysql)
+- Connect shows API endpoint information instead of launching a shell
+- Backup/restore uses Qdrant's snapshot API
+
 ## [0.20.1] - 2026-01-20
 
 ### Added

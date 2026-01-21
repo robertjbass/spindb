@@ -67,6 +67,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'valkey-cli',
   // ClickHouse
   'clickhouse',
+  // Qdrant
+  'qdrant',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

@@ -19,6 +19,7 @@ import {
   type RedisFormat,
   type ValkeyFormat,
   type ClickHouseFormat,
+  type QdrantFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -47,6 +48,7 @@ export const BACKUP_FORMATS: {
   [Engine.Redis]: EngineBackupFormats<RedisFormat>
   [Engine.Valkey]: EngineBackupFormats<ValkeyFormat>
   [Engine.ClickHouse]: EngineBackupFormats<ClickHouseFormat>
+  [Engine.Qdrant]: EngineBackupFormats<QdrantFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -203,6 +205,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only SQL format supported
     defaultFormat: 'sql',
+  },
+  [Engine.Qdrant]: {
+    formats: {
+      snapshot: {
+        extension: '.snapshot',
+        label: '.snapshot',
+        description: 'Qdrant snapshot - full database backup',
+        spinnerLabel: 'snapshot',
+      },
+    },
+    supportsFormatChoice: false, // Only snapshot format supported
+    defaultFormat: 'snapshot',
   },
 }
 

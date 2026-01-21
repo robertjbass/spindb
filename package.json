@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.20.1",
+  "version": "0.21.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -19,10 +19,11 @@
     "test:valkey": "node --import tsx --test --experimental-test-isolation=none tests/integration/valkey.test.ts",
     "test:clickhouse": "node --import tsx --test --experimental-test-isolation=none tests/integration/clickhouse.test.ts",
     "test:duckdb": "node --import tsx --test --experimental-test-isolation=none tests/integration/duckdb.test.ts",
+    "test:qdrant": "node --import tsx --test --experimental-test-isolation=none tests/integration/qdrant.test.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
     "test:hostdb-sync": "node --import tsx --test --experimental-test-isolation=none tests/integration/hostdb-sync.test.ts",
-    "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:duckdb test:mongodb test:redis test:valkey test:clickhouse",
+    "test:integration": "run-s test:pg test:mysql test:mariadb test:sqlite test:duckdb test:mongodb test:redis test:valkey test:clickhouse test:qdrant",
     "test:all": "run-s test:unit test:integration",
     "test:local": "./scripts/test-local.sh",
     "test:local:quick": "./scripts/test-local.sh --quick",
@@ -46,6 +47,7 @@
     "redis",
     "valkey",
     "clickhouse",
+    "qdrant",
     "ferretdb",
     "sqlite",
     "duckdb",

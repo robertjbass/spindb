@@ -12,6 +12,7 @@
 | 🔴 **Redis** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 7, 8 |
 | 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
+| 🧭 **Qdrant** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (vector similarity search) |
 
 ## Planned
 
@@ -109,6 +110,25 @@
   - YY.MM versioning format (e.g., 25.12)
   - Apache-2.0 license
 
+### 🧭 Qdrant
+
+- **Status:** ✅ Complete
+- **Versions:** 1
+- **Data location:** `~/.spindb/containers/qdrant/{name}/`
+- **Process:** Server process (`qdrant`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** REST API (no traditional shell, use curl or API clients)
+- **Backup format:** `.snapshot` (Qdrant native snapshot)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `qdrant` binary
+- **Implementation notes:**
+  - Vector similarity search engine
+  - Uses REST API (port 6333) and gRPC (port 6334)
+  - Collections instead of traditional databases
+  - YAML configuration (config.yaml)
+  - No shell connection - displays API endpoint info
+  - Apache-2.0 license
+
 ---
 
 ## Backup Format Summary
@@ -122,6 +142,7 @@
 | Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
 | ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL for portability |
+| Qdrant | N/A | `.snapshot` (native) | Snapshot for backups |
 
 ---
 
@@ -136,6 +157,7 @@
 | Valkey | `valkey-cli` | `iredis` | Protocol-compatible with iredis |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
+| Qdrant | REST API | - | Use curl or HTTP clients |
 
 ---
 
@@ -161,6 +183,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🔷 | Valkey |
 | 🪶 | SQLite |
 | 🏠 | ClickHouse |
+| 🧭 | Qdrant |
 
 ---
 

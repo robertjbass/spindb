@@ -18,6 +18,7 @@ import {
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledClickHouseEngine,
+  type InstalledQdrantEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -59,6 +60,7 @@ export async function handleEngines(): Promise<void> {
     redisEngines,
     valkeyEngines,
     clickhouseEngines,
+    qdrantEngines,
   ] = [
     engines.filter(
       (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
@@ -73,6 +75,7 @@ export async function handleEngines(): Promise<void> {
     engines.filter(
       (e): e is InstalledClickHouseEngine => e.engine === 'clickhouse',
     ),
+    engines.filter((e): e is InstalledQdrantEngine => e.engine === 'qdrant'),
   ]
 
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -93,6 +96,7 @@ export async function handleEngines(): Promise<void> {
     (acc, e) => acc + e.sizeBytes,
     0,
   )
+  const totalQdrantSize = qdrantEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   const COL_ENGINE = 14
   const COL_VERSION = 12
@@ -119,6 +123,7 @@ export async function handleEngines(): Promise<void> {
     ...redisEngines,
     ...valkeyEngines,
     ...clickhouseEngines,
+    ...qdrantEngines,
   ]
 
   for (const engine of allEnginesSorted) {
@@ -198,6 +203,13 @@ export async function handleEngines(): Promise<void> {
     console.log(
       chalk.gray(
         `  ClickHouse: ${clickhouseEngines.length} version(s), ${formatBytes(totalClickhouseSize)}`,
+      ),
+    )
+  }
+  if (qdrantEngines.length > 0) {
+    console.log(
+      chalk.gray(
+        `  Qdrant: ${qdrantEngines.length} version(s), ${formatBytes(totalQdrantSize)}`,
       ),
     )
   }

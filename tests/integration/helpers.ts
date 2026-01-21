@@ -25,6 +25,7 @@ export const TEST_PORTS = {
   redis: { base: 6399, clone: 6401, renamed: 6400 },
   valkey: { base: 6410, clone: 6412, renamed: 6411 },
   clickhouse: { base: 9050, clone: 9052, renamed: 9051 },
+  qdrant: { base: 6350, clone: 6352, renamed: 6351 },
 }
 
 /**
@@ -494,6 +495,12 @@ export async function waitForReady(
           `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --query "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.Qdrant) {
+        // Use fetch to ping Qdrant REST API
+        const response = await fetch(`http://127.0.0.1:${port}/healthz`)
+        if (response.ok) {
+          return true
+        }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -593,7 +600,106 @@ export function getConnectionString(
   if (engine === Engine.ClickHouse) {
     return `clickhouse://default@127.0.0.1:${port}/${database}`
   }
+  if (engine === Engine.Qdrant) {
+    return `http://127.0.0.1:${port}`
+  }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
+}
+
+// Qdrant helper functions
+
+/**
+ * Get the number of collections in Qdrant
+ */
+export async function getQdrantCollectionCount(port: number): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections`)
+    const data = await response.json() as { result?: { collections?: unknown[] } }
+    return data.result?.collections?.length || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Create a collection in Qdrant
+ */
+export async function createQdrantCollection(
+  port: number,
+  name: string,
+  vectorSize = 128,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vectors: {
+          size: vectorSize,
+          distance: 'Cosine',
+        },
+      }),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Delete a collection in Qdrant
+ */
+export async function deleteQdrantCollection(
+  port: number,
+  name: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${name}`, {
+      method: 'DELETE',
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the point count in a Qdrant collection
+ */
+export async function getQdrantPointCount(
+  port: number,
+  collection: string,
+): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${collection}`)
+    const data = await response.json() as { result?: { points_count?: number } }
+    return data.result?.points_count || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Insert points into a Qdrant collection
+ */
+export async function insertQdrantPoints(
+  port: number,
+  collection: string,
+  points: Array<{ id: number; vector: number[]; payload?: Record<string, unknown> }>,
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/collections/${collection}/points`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points }),
+      },
+    )
+    return response.ok
+  } catch {
+    return false
+  }
 }
 
 /**

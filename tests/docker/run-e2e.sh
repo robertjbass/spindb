@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -112,7 +112,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Format names are engine-specific semantic names (no longer sql|dump for all)
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -124,6 +124,7 @@ declare -A BACKUP_FORMATS=(
   [clickhouse]="sql"
   [sqlite]="sql|binary"
   [duckdb]="sql|binary"
+  [qdrant]="snapshot"
 )
 
 # Results tracking
@@ -1428,7 +1429,7 @@ else
 fi
 
 # Run engine tests
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

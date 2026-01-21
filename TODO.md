@@ -34,6 +34,7 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 - [x] MongoDB (document database)
 - [x] MariaDB as standalone engine (using hostdb binaries)
 - [x] ClickHouse (column-oriented OLAP database)
+- [x] Qdrant (vector similarity search engine)
 
 ### Engine Binary Migration (hostdb)
 

@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, and ClickHouse.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, ClickHouse, and Qdrant.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -58,7 +58,7 @@ tests/
 
 Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for full method list.
 
-**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse):
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant):
 - Data in `~/.spindb/containers/{engine}/{name}/`
 - Port management, start/stop lifecycle
 
@@ -75,7 +75,7 @@ When adding a new engine, choose the appropriate binary manager base class:
 
 | Base Class | Location | Used By | Use Case |
 |------------|----------|---------|----------|
-| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey | Key-value stores with `bin/` layout |
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant | Key-value/vector stores with `bin/` layout |
 | `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
 | `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
 | `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
@@ -84,7 +84,7 @@ When adding a new engine, choose the appropriate binary manager base class:
 1. Is it a file-based/embedded database (no server process)? → `BaseEmbeddedBinaryManager`
 2. Is it a SQL server needing `--version` verification? → `BaseServerBinaryManager`
 3. Is it a document-oriented database? → `BaseDocumentBinaryManager`
-4. Is it a key-value store? → `BaseBinaryManager`
+4. Is it a key-value store or vector database? → `BaseBinaryManager`
 
 **Note:** PostgreSQL uses `BaseServerBinaryManager` with a custom `verify()` override for its version output format. EDB binaries for Windows are uploaded to hostdb, so all platforms use the same download path.
 
@@ -96,6 +96,7 @@ Engines can be referenced by aliases in CLI commands:
 - `postgresql`, `postgres`, `pg` → PostgreSQL
 - `mongodb`, `mongo` → MongoDB
 - `sqlite`, `lite` → SQLite
+- `qdrant`, `qd` → Qdrant
 
 ### Supported Versions & Query Languages
 
@@ -110,6 +111,7 @@ Engines can be referenced by aliases in CLI commands:
 | ClickHouse 🏠 | 25.12 | SQL | XML configs, HTTP port 8123 |
 | SQLite 🗄️ | 3 | SQL | File-based |
 | DuckDB 🦆 | 1.4.3 | SQL | File-based, OLAP |
+| Qdrant 🧭 | 1 | REST API | Vector search, HTTP port 6333 |
 
 ### Binary Sources
 
@@ -171,6 +173,7 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | Redis | `text` (.redis) | `rdb` (.rdb) | `rdb` |
 | Valkey | `text` (.valkey) | `rdb` (.rdb) | `rdb` |
 | ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
+| Qdrant | `snapshot` (.snapshot) | _(none)_ | `snapshot` |
 
 See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
 
@@ -188,7 +191,7 @@ See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant'
   version: string
   port: number              // 0 for file-based engines
   database: string          // Primary database name
@@ -261,7 +264,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 ## Implementation Details
 
 ### Port Management
-PostgreSQL: 5432 | MySQL: 3306 | MongoDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333
 
 Auto-increments on conflict (e.g., 5432 → 5433).
 
@@ -293,6 +296,7 @@ Menu navigation patterns:
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries)
 3. **Redis/Valkey** - No `dumpFromConnectionString()` support
+4. **Qdrant** - No CLI shell (uses REST API), no `dumpFromConnectionString()` support
 
 ## Publishing
 

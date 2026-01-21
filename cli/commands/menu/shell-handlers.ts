@@ -156,6 +156,20 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = iredisInstalled
     engineSpecificValue = 'iredis'
     engineSpecificInstallValue = 'install-iredis'
+  } else if (config.engine === 'clickhouse') {
+    defaultShellName = 'clickhouse client'
+    // ClickHouse client is bundled, no separate enhanced CLI
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
+  } else if (config.engine === 'qdrant') {
+    // Qdrant uses REST API, no CLI shell
+    defaultShellName = 'curl'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -188,11 +202,12 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, and MongoDB
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, and Qdrant
   const isNonSqlEngine =
     config.engine === 'redis' ||
     config.engine === 'valkey' ||
-    config.engine === 'mongodb'
+    config.engine === 'mongodb' ||
+    config.engine === 'qdrant'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -534,6 +549,18 @@ async function launchShell(
       config.database,
     ]
     installHint = 'spindb engines download clickhouse'
+  } else if (config.engine === 'qdrant') {
+    // Qdrant uses REST API, not a traditional CLI shell
+    // Display API information instead of launching a shell
+    console.log(chalk.cyan(`\nQdrant REST API available at:`))
+    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+    console.log(chalk.white(`  gRPC: http://127.0.0.1:${config.port + 1}`))
+    console.log(chalk.gray('\nExample commands:'))
+    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
+    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
+    console.log(chalk.gray('\nDashboard (if enabled):'))
+    console.log(chalk.gray(`  http://127.0.0.1:${config.port}/dashboard`))
+    return
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]
