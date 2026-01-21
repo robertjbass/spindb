@@ -33,6 +33,11 @@ const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/postgresql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
 
+// Debug: confirm test file is being loaded
+console.log('[DEBUG] postgresql.test.ts loaded - starting test suite')
+console.log(`[DEBUG] Current working directory: ${process.cwd()}`)
+console.log(`[DEBUG] __dirname: ${__dirname}`)
+
 describe('PostgreSQL Integration Tests', () => {
   let testPorts: number[]
   let containerName: string
@@ -41,20 +46,39 @@ describe('PostgreSQL Integration Tests', () => {
   let portConflictContainerName: string
 
   before(async () => {
+    console.log('\n[DEBUG] before() hook starting...')
     console.log('\n🧹 Cleaning up any existing test containers...')
-    const deleted = await cleanupTestContainers()
-    if (deleted.length > 0) {
-      console.log(`   Deleted: ${deleted.join(', ')}`)
+    try {
+      const deleted = await cleanupTestContainers()
+      if (deleted.length > 0) {
+        console.log(`   Deleted: ${deleted.join(', ')}`)
+      }
+      console.log('   [DEBUG] cleanup completed')
+    } catch (error) {
+      console.log(`   [DEBUG] cleanup FAILED: ${error}`)
+      throw error
     }
 
     console.log('\n🔍 Finding available test ports...')
-    testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.postgresql.base)
-    console.log(`   Using ports: ${testPorts.join(', ')}`)
+    try {
+      testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.postgresql.base)
+      console.log(`   Using ports: ${testPorts.join(', ')}`)
+      console.log(`   [DEBUG] testPorts assigned: ${JSON.stringify(testPorts)}`)
+    } catch (error) {
+      console.log(`   [DEBUG] findConsecutiveFreePorts FAILED: ${error}`)
+      throw error
+    }
 
     containerName = generateTestName('pg-test')
     clonedContainerName = generateTestName('pg-test-clone')
     renamedContainerName = generateTestName('pg-test-renamed')
     portConflictContainerName = generateTestName('pg-test-conflict')
+    console.log(`   [DEBUG] Container names generated:`)
+    console.log(`      containerName: ${containerName}`)
+    console.log(`      clonedContainerName: ${clonedContainerName}`)
+    console.log(`      renamedContainerName: ${renamedContainerName}`)
+    console.log(`      portConflictContainerName: ${portConflictContainerName}`)
+    console.log('[DEBUG] before() hook completed')
   })
 
   after(async () => {
@@ -69,24 +93,47 @@ describe('PostgreSQL Integration Tests', () => {
     console.log(
       `\n📦 Creating container "${containerName}" without starting...`,
     )
+    console.log(`   [DEBUG] testPorts: ${JSON.stringify(testPorts)}`)
+    console.log(`   [DEBUG] containerName: ${containerName}`)
 
     // Ensure PostgreSQL binaries are downloaded first
     // NOTE: Version must match CI workflow download (spindb-pg-18 cache key)
     const engine = getEngine(ENGINE)
+    console.log('   [DEBUG] Got engine, ensuring binaries...')
     console.log('   Ensuring PostgreSQL binaries are available...')
-    await engine.ensureBinaries('18', ({ message }) => {
-      console.log(`   ${message}`)
-    })
+    try {
+      await engine.ensureBinaries('18', ({ message }) => {
+        console.log(`   ${message}`)
+      })
+      console.log('   [DEBUG] ensureBinaries completed successfully')
+    } catch (error) {
+      console.log(`   [DEBUG] ensureBinaries FAILED: ${error}`)
+      throw error
+    }
 
-    await containerManager.create(containerName, {
-      engine: ENGINE,
-      version: '18',
-      port: testPorts[0],
-      database: DATABASE,
-    })
+    console.log('   [DEBUG] Creating container...')
+    try {
+      await containerManager.create(containerName, {
+        engine: ENGINE,
+        version: '18',
+        port: testPorts[0],
+        database: DATABASE,
+      })
+      console.log('   [DEBUG] containerManager.create completed')
+    } catch (error) {
+      console.log(`   [DEBUG] containerManager.create FAILED: ${error}`)
+      throw error
+    }
 
     // Initialize the database cluster
-    await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
+    console.log('   [DEBUG] Initializing data directory with initdb...')
+    try {
+      await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
+      console.log('   [DEBUG] initDataDir completed successfully')
+    } catch (error) {
+      console.log(`   [DEBUG] initDataDir FAILED: ${error}`)
+      throw error
+    }
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)

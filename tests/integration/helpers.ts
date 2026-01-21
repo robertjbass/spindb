@@ -83,11 +83,14 @@ export async function findConsecutiveFreePorts(
 }
 
 /**
- * Clean up all test containers (matching *-test* pattern)
+ * Clean up all test containers
+ * Matches containers with test prefixes (cli*, test*) followed by underscore and UUID
  */
 export async function cleanupTestContainers(): Promise<string[]> {
   const containers = await containerManager.list()
-  const testContainers = containers.filter((c) => c.name.includes('-test'))
+  // Match test naming pattern: prefix_uuid (e.g., clipg_12345678, test_abcd1234)
+  const testPattern = /^(cli|test)[a-z]*_[a-f0-9]+$/i
+  const testContainers = containers.filter((c) => testPattern.test(c.name))
 
   const deleted: string[] = []
   for (const container of testContainers) {
@@ -118,7 +121,7 @@ export async function cleanupTestContainers(): Promise<string[]> {
   if (existsSync(sqliteContainersDir)) {
     const dirs = readdirSync(sqliteContainersDir, { withFileTypes: true })
     for (const dir of dirs) {
-      if (dir.isDirectory() && dir.name.includes('-test')) {
+      if (dir.isDirectory() && testPattern.test(dir.name)) {
         try {
           const dirPath = `${sqliteContainersDir}/${dir.name}`
           await rm(dirPath, { recursive: true, force: true })
