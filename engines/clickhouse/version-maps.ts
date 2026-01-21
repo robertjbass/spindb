@@ -20,6 +20,8 @@ import { logDebug } from '../../core/error-handler'
  * Must match versions available in hostdb releases.json.
  */
 export const CLICKHOUSE_VERSION_MAP: Record<string, string> = {
+  // 1-part: year -> latest release for that year
+  '25': '25.12.3.21',
   // 2-part: year.month -> latest
   '25.12': '25.12.3.21',
   // 3-part: year.month.patch -> latest build

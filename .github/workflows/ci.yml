@@ -878,15 +878,15 @@ jobs:
         id: ch-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-clickhouse-25-v2-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install ClickHouse via SpinDB
-        run: pnpm start engines download clickhouse 25
+        run: pnpm start engines download clickhouse 25.12
 
       - name: Create container with seed data
         shell: bash
         run: |
-          pnpm start create ch-rename-test --engine clickhouse --db-version 25 --no-start
+          pnpm start create ch-rename-test --engine clickhouse --db-version 25.12 --no-start
           pnpm start start ch-rename-test
           # Wait for ready (ClickHouse takes longer to start)
           for i in {1..60}; do

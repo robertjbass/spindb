@@ -734,10 +734,16 @@ describe('CLI Clone Workflow', () => {
   })
 
   it('should show cloned container in list', async () => {
-    const { stdout, exitCode } = await runCLI('list --json')
-    assert(exitCode === 0, 'List should succeed')
+    const { stdout, stderr, exitCode } = await runCLI('list --json')
+    assert(
+      exitCode === 0,
+      `List should succeed. stdout: ${stdout}, stderr: ${stderr}`,
+    )
 
     const containers = JSON.parse(stdout)
+    const containerNames = containers.map((c: { name: string }) => c.name)
+    console.log(`   All containers: ${containerNames.join(', ') || '(none)'}`)
+
     const source = containers.find(
       (c: { name: string }) => c.name === sourceContainer,
     )
@@ -745,8 +751,14 @@ describe('CLI Clone Workflow', () => {
       (c: { name: string }) => c.name === cloneContainer,
     )
 
-    assert(source, 'Source container should exist')
-    assert(clone, 'Cloned container should exist')
+    assert(
+      source,
+      `Source container should exist. Looking for: ${sourceContainer}, found: ${containerNames.join(', ')}`,
+    )
+    assert(
+      clone,
+      `Cloned container should exist. Looking for: ${cloneContainer}, found: ${containerNames.join(', ')}`,
+    )
     assertEqual(
       clone.engine,
       'postgresql',
@@ -756,8 +768,13 @@ describe('CLI Clone Workflow', () => {
   })
 
   it('should show clone info with clonedFrom', async () => {
-    const { stdout, exitCode } = await runCLI(`info ${cloneContainer} --json`)
-    assert(exitCode === 0, 'Info should succeed')
+    const { stdout, stderr, exitCode } = await runCLI(
+      `info ${cloneContainer} --json`,
+    )
+    assert(
+      exitCode === 0,
+      `Info should succeed. stdout: ${stdout}, stderr: ${stderr}`,
+    )
 
     const info = JSON.parse(stdout)
     assertEqual(
@@ -769,15 +786,19 @@ describe('CLI Clone Workflow', () => {
   })
 
   it('should delete source and clone containers', async () => {
-    const { exitCode: deleteSource } = await runCLI(
-      `delete ${sourceContainer} --force --yes`,
+    const { exitCode: deleteSource, stderr: srcErr, stdout: srcOut } =
+      await runCLI(`delete ${sourceContainer} --force --yes`)
+    assert(
+      deleteSource === 0,
+      `Delete source should succeed. stdout: ${srcOut}, stderr: ${srcErr}`,
     )
-    assert(deleteSource === 0, 'Delete source should succeed')
 
-    const { exitCode: deleteClone } = await runCLI(
-      `delete ${cloneContainer} --force --yes`,
+    const { exitCode: deleteClone, stderr: cloneErr, stdout: cloneOut } =
+      await runCLI(`delete ${cloneContainer} --force --yes`)
+    assert(
+      deleteClone === 0,
+      `Delete clone should succeed. stdout: ${cloneOut}, stderr: ${cloneErr}`,
     )
-    assert(deleteClone === 0, 'Delete clone should succeed')
     console.log('   Containers deleted')
   })
 })

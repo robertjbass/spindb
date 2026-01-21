@@ -85,18 +85,39 @@ describe('PostgreSQL Integration Tests', () => {
   })
 
   after(async () => {
-    // Print diagnostic info that shows regardless of test failures
-    process.stdout.write('\n========================================\n')
-    process.stdout.write('[DEBUG] after() hook - diagnostics\n')
+    // Print diagnostic info to STDERR so it definitely appears
+    process.stderr.write('\n')
+    process.stderr.write('╔══════════════════════════════════════════════════════════════╗\n')
+    process.stderr.write('║              TEST SUITE SUMMARY (after hook)                 ║\n')
+    process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+
+    // Show test container names that were supposed to be used
+    process.stderr.write(`║ containerName: ${containerName || 'UNDEFINED'}\n`)
+    process.stderr.write(`║ renamedContainerName: ${renamedContainerName || 'UNDEFINED'}\n`)
+    process.stderr.write(`║ clonedContainerName: ${clonedContainerName || 'UNDEFINED'}\n`)
+    process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+
     try {
       const containers = await containerManager.list()
-      process.stdout.write(`[DEBUG] All containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
       const testContainers = containers.filter((c) => c.name.includes('-test'))
-      process.stdout.write(`[DEBUG] Test containers remaining: ${JSON.stringify(testContainers.map(c => c.name))}\n`)
+      process.stderr.write(`║ All containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+      process.stderr.write(`║ Test containers remaining: ${testContainers.length}\n`)
+      for (const tc of testContainers) {
+        process.stderr.write(`║   - ${tc.name} (${tc.engine}, status: ${tc.status})\n`)
+      }
+
+      // Check which expected containers exist
+      const hasOriginal = containers.some(c => c.name === containerName)
+      const hasRenamed = containers.some(c => c.name === renamedContainerName)
+      const hasClone = containers.some(c => c.name === clonedContainerName)
+      process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+      process.stderr.write(`║ Original (${containerName}): ${hasOriginal ? 'EXISTS' : 'missing'}\n`)
+      process.stderr.write(`║ Renamed (${renamedContainerName}): ${hasRenamed ? 'EXISTS' : 'missing'}\n`)
+      process.stderr.write(`║ Clone (${clonedContainerName}): ${hasClone ? 'EXISTS (should be deleted)' : 'deleted OK'}\n`)
     } catch (error) {
-      process.stdout.write(`[DEBUG] Error listing containers: ${error}\n`)
+      process.stderr.write(`║ Error listing containers: ${error}\n`)
     }
-    process.stdout.write('========================================\n')
+    process.stderr.write('╚══════════════════════════════════════════════════════════════╝\n')
 
     console.log('\n🧹 Final cleanup...')
     const deleted = await cleanupTestContainers()
@@ -187,7 +208,9 @@ describe('PostgreSQL Integration Tests', () => {
     }
 
     // Verify container exists but is not running
+    console.log('   [DEBUG] Verifying container config...')
     const config = await containerManager.getConfig(containerName)
+    console.log(`   [DEBUG] Config found: ${config !== null}, status: ${config?.status}`)
     assert(config !== null, 'Container config should exist')
     assertEqual(
       config?.status,
@@ -195,9 +218,11 @@ describe('PostgreSQL Integration Tests', () => {
       'Container status should be "created"',
     )
 
+    console.log('   [DEBUG] Checking if container is running...')
     const running = await processManager.isRunning(containerName, {
       engine: ENGINE,
     })
+    console.log(`   [DEBUG] isRunning: ${running}`)
     assert(!running, 'Container should not be running')
 
     console.log('   ✓ Container created and not running')
@@ -538,8 +563,21 @@ describe('PostgreSQL Integration Tests', () => {
     console.log(
       `   [DEBUG] Renaming "${containerName}" to "${renamedContainerName}"...`,
     )
-    await containerManager.rename(containerName, renamedContainerName)
-    console.log(`   [DEBUG] Rename completed successfully`)
+    try {
+      await containerManager.rename(containerName, renamedContainerName)
+      console.log(`   [DEBUG] Rename completed successfully`)
+    } catch (error) {
+      process.stderr.write('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+      process.stderr.write(`[CRITICAL] RENAME FAILED\n`)
+      process.stderr.write(`[CRITICAL] From: ${containerName}\n`)
+      process.stderr.write(`[CRITICAL] To: ${renamedContainerName}\n`)
+      process.stderr.write(`[CRITICAL] Error: ${error}\n`)
+      if (error instanceof Error) {
+        process.stderr.write(`[CRITICAL] Stack: ${error.stack}\n`)
+      }
+      process.stderr.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n')
+      throw error
+    }
     await containerManager.updateConfig(renamedContainerName, {
       port: testPorts[2],
     })
