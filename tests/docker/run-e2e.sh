@@ -2,15 +2,23 @@
 # SpinDB Docker Linux E2E Test Script
 #
 # PURPOSE: Verify hostdb binaries work on minimal Linux systems.
-# Tests: binary download, container lifecycle, connectivity, backup/restore.
+# Catches library dependency issues that wouldn't appear on well-provisioned systems.
 #
-# Also runs utility tests (non-engine tests):
-# - self-update: Tests that `spindb update` works correctly
+# MODES:
+#   SMOKE TEST (default, SMOKE_TEST=true): ~5-7 minutes
+#     - Downloads binaries, starts containers, runs basic query, cleans up
+#     - Validates library dependencies work (the primary purpose of this test)
+#     - Skips: backup/restore, rename, clone, self-update (covered by other CI jobs)
+#
+#   FULL TEST (SMOKE_TEST=false): ~26 minutes
+#     - All phases: download, lifecycle, backup/restore, rename, clone, self-update
+#     - Useful for comprehensive local testing
 #
 # Usage:
-#   ./run-e2e.sh                    # Run all tests (engines + utility tests)
-#   ./run-e2e.sh postgresql         # Run only PostgreSQL engine tests
-#   ./run-e2e.sh self-update        # Run only self-update utility test
+#   ./run-e2e.sh                         # Smoke test all engines
+#   ./run-e2e.sh postgresql              # Smoke test PostgreSQL only
+#   SMOKE_TEST=false ./run-e2e.sh        # Full test all engines
+#   SMOKE_TEST=false ./run-e2e.sh postgresql  # Full test PostgreSQL only
 
 set -e
 
@@ -21,6 +29,9 @@ set -e
 # Parse command line arguments
 ENGINE_FILTER="${1:-}"
 VERBOSE="${VERBOSE:-false}"
+# Smoke test mode: only download + start + query + cleanup (skip backup/restore/rename/clone)
+# Set SMOKE_TEST=false for full test with all phases
+SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
 VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb"
@@ -770,6 +781,11 @@ run_test() {
   local failure_reason=""
   local is_file_based=false
 
+  # Set default test_details based on mode
+  if [ "$SMOKE_TEST" = "true" ]; then
+    test_details="smoke test"
+  fi
+
   # Track for cleanup on interrupt
   CURRENT_CONTAINER="$container_name"
 
@@ -880,7 +896,9 @@ run_test() {
 
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 4: Data Lifecycle (Seed → Backup → Restore → Verify)
+  # Skipped in smoke test mode
   # ─────────────────────────────────────────────────────────────────────────
+  if [ "$SMOKE_TEST" != "true" ]; then
   log_section "Data Lifecycle"
 
   log_step "Insert seed data"
@@ -962,10 +980,13 @@ run_test() {
     test_details="$primary_format, $secondary_format"
   fi
 
+  fi # End SMOKE_TEST != true block (Data Lifecycle + Backup/Restore)
+
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 6: Idempotency Tests (Server Engines Only)
+  # Skipped in smoke test mode
   # ─────────────────────────────────────────────────────────────────────────
-  if [ "$is_file_based" = "false" ]; then
+  if [ "$SMOKE_TEST" != "true" ] && [ "$is_file_based" = "false" ]; then
     log_section "Idempotency Tests"
 
     log_step "Double-start (should warn, not error)"
@@ -1012,8 +1033,9 @@ run_test() {
 
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 7: Rename Tests (Server Engines Only)
+  # Skipped in smoke test mode
   # ─────────────────────────────────────────────────────────────────────────
-  if [ "$is_file_based" = "false" ]; then
+  if [ "$SMOKE_TEST" != "true" ] && [ "$is_file_based" = "false" ]; then
     log_section "Rename Tests"
 
     local renamed_container="${container_name}_renamed"
@@ -1032,6 +1054,7 @@ run_test() {
       return 1
     fi
     log_step_ok
+    CURRENT_CONTAINER="$renamed_container"  # Update for cleanup on interrupt
 
     log_step "Start renamed container"
     if ! spindb start "$renamed_container" &>/dev/null; then
@@ -1107,16 +1130,19 @@ run_test() {
       show_error_details
       # Continue anyway - we'll use renamed_container for clone
       container_name="$renamed_container"
+      # CURRENT_CONTAINER is already $renamed_container, so no update needed
     else
       log_step_ok
+      CURRENT_CONTAINER="$container_name"  # Update for cleanup on interrupt
     fi
     test_details="$test_details, rename"
   fi
 
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 8: Clone Tests (Server Engines Only)
+  # Skipped in smoke test mode
   # ─────────────────────────────────────────────────────────────────────────
-  if [ "$is_file_based" = "false" ]; then
+  if [ "$SMOKE_TEST" != "true" ] && [ "$is_file_based" = "false" ]; then
     log_section "Clone Tests"
 
     local cloned_container="${container_name}_clone"
@@ -1212,7 +1238,10 @@ run_test() {
   # The GH Actions test-redis-modes job tests this via direct engine calls.
   log_section "Cleanup"
 
-  cleanup_data_lifecycle "$engine" "$container_name"
+  # Only cleanup data lifecycle artifacts if we ran those tests
+  if [ "$SMOKE_TEST" != "true" ]; then
+    cleanup_data_lifecycle "$engine" "$container_name"
+  fi
 
   if [ "$is_file_based" = "false" ]; then
     log_step "Stop container"
@@ -1231,7 +1260,11 @@ run_test() {
   # Success!
   # ─────────────────────────────────────────────────────────────────────────
   CURRENT_CONTAINER=""  # Clear tracking - container deleted
-  record_result "$engine" "$version" "PASSED" "" "formats: $test_details"
+  local result_details="$test_details"
+  if [ "$SMOKE_TEST" != "true" ]; then
+    result_details="formats: $test_details"
+  fi
+  record_result "$engine" "$version" "PASSED" "" "$result_details"
   print_engine_result "$engine" "$version" "PASSED"
   PASSED=$((PASSED+1))
   return 0
@@ -1316,6 +1349,11 @@ echo "${BOLD}${CYAN}════════════════════
 echo ""
 if [ -n "$ENGINE_FILTER" ]; then
   echo "  ${BOLD}Filter:${RESET}    $ENGINE_FILTER"
+fi
+if [ "$SMOKE_TEST" = "true" ]; then
+  echo "  ${BOLD}Mode:${RESET}      ${YELLOW}smoke test${RESET} (download + start + query only)"
+else
+  echo "  ${BOLD}Mode:${RESET}      full test (all phases)"
 fi
 echo "  ${BOLD}Node:${RESET}      $(node --version 2>/dev/null || echo 'not found')"
 echo "  ${BOLD}Platform:${RESET}  $(uname -s) $(uname -m)"
@@ -1403,7 +1441,8 @@ for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse du
 done
 
 # Run utility tests (non-engine tests)
-if should_run_test "self-update"; then
+# Self-update test is skipped in smoke test mode
+if [ "$SMOKE_TEST" != "true" ] && should_run_test "self-update"; then
   run_self_update_test
 fi
 

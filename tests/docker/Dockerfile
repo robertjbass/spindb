@@ -111,9 +111,16 @@ WORKDIR /home/spindb
 
 # Run the E2E test script, allowing filter to be passed as argument
 # Usage: docker run --rm spindb-e2e [filter]
+#
+# By default, runs in SMOKE TEST mode (fast ~5-7 min):
+#   - Downloads binaries, starts containers, runs basic query, cleans up
+#   - Validates library dependencies work on minimal Linux
+#   - Skips backup/restore, rename, clone, self-update tests
+#
 # Examples:
-#   docker run --rm spindb-e2e              # Run all tests (engines + utility tests)
-#   docker run --rm spindb-e2e clickhouse   # Run only ClickHouse engine tests
-#   docker run --rm spindb-e2e self-update  # Run only self-update utility test
+#   docker run --rm spindb-e2e                           # Smoke test all engines (~5-7 min)
+#   docker run --rm spindb-e2e clickhouse                # Smoke test ClickHouse only
+#   docker run --rm -e SMOKE_TEST=false spindb-e2e      # Full test all engines (~26 min)
+#   docker run --rm -e SMOKE_TEST=false spindb-e2e postgresql  # Full test PostgreSQL only
 ENTRYPOINT ["bash", "/home/spindb/spindb/tests/docker/run-e2e.sh"]
 CMD []

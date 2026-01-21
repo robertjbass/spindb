@@ -47,8 +47,9 @@ export async function createBackup(
     db,
   ]
 
-  // Determine output format
-  if (options.format === 'archive') {
+  // Determine output format (default to 'archive' as per backup-formats.ts)
+  const format = options.format ?? 'archive'
+  if (format === 'archive') {
     // Archive format: single compressed file
     args.push('--archive=' + outputPath, '--gzip')
   } else {

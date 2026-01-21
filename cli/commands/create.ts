@@ -448,9 +448,18 @@ export const createCommand = new Command('create')
         // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
         if (engine === Engine.Redis || engine === Engine.Valkey) {
           database = database ?? '0'
-          // Validate Redis/Valkey database is a number 0-15
+          // Validate Redis/Valkey database is a pure integer string 0-15
+          // Reject decimals ("1.5"), scientific notation ("1e2"), and trailing garbage ("5abc")
+          if (!/^[0-9]+$/.test(database)) {
+            console.error(
+              uiError(
+                'Redis/Valkey database must be an integer between 0 and 15',
+              ),
+            )
+            process.exit(1)
+          }
           const dbIndex = parseInt(database, 10)
-          if (!Number.isFinite(dbIndex) || dbIndex < 0 || dbIndex > 15) {
+          if (dbIndex < 0 || dbIndex > 15) {
             console.error(
               uiError(
                 'Redis/Valkey database must be an integer between 0 and 15',

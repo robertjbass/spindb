@@ -146,8 +146,13 @@ describe('PostgreSQL Integration Tests', () => {
     process.stdout.write(`PostgreSQL psql path: ${psqlPath || 'NOT FOUND'}\n`)
 
     // Check containers at start
-    const containers = await containerManager.list()
-    process.stdout.write(`Existing containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+    let containers: Awaited<ReturnType<typeof containerManager.list>> = []
+    try {
+      containers = await containerManager.list()
+      process.stdout.write(`Existing containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+    } catch (error) {
+      process.stdout.write(`Existing containers: ERROR - ${error instanceof Error ? error.message : error}\n`)
+    }
     process.stdout.write('--- DIAGNOSTIC TEST END ---\n\n')
 
     // Always pass to show we got here
