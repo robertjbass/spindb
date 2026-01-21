@@ -54,8 +54,8 @@ spindb url mydb --json                  # JSON with host/port/user details
 
 ```bash
 spindb backup mydb                      # Backup (default format)
-spindb backup mydb --sql                # Plain SQL backup
-spindb backup mydb --dump               # Binary dump format
+spindb backup mydb --format sql         # Plain SQL backup
+spindb backup mydb --format custom      # PostgreSQL custom format
 spindb backup mydb -o ~/backups         # Custom output directory
 spindb backup mydb -d analytics         # Backup specific database
 
@@ -154,7 +154,7 @@ spindb create dev-db --start && spindb run dev-db ./schema.sql
 spindb stop prod && spindb clone prod test && spindb start test
 
 # Quick backup before changes
-spindb backup mydb --sql -o ~/backups
+spindb backup mydb --format sql -o ~/backups
 
 # Reset database
 spindb delete mydb -f -y && spindb create mydb --start

@@ -718,6 +718,268 @@ jobs:
         timeout-minutes: 15
 
   # ============================================
+  # Rename and Clone Tests
+  # Tests container rename and clone operations across platforms
+  # Uses PostgreSQL as representative engine
+  # ============================================
+  test-rename-clone:
+    name: Rename & Clone (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-v2-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      - name: Create container with seed data
+        shell: bash
+        run: |
+          pnpm start create rename-test --engine postgresql --db-version 18 --no-start
+          pnpm start start rename-test
+          # Wait for ready
+          for i in {1..30}; do
+            if pnpm start info rename-test --json 2>/dev/null | grep -q '"status":"running"'; then
+              break
+            fi
+            sleep 1
+          done
+          # Add test data
+          pnpm start run rename-test -c "CREATE TABLE test_data (id SERIAL PRIMARY KEY, name TEXT);"
+          pnpm start run rename-test -c "INSERT INTO test_data (name) VALUES ('test1'), ('test2'), ('test3');"
+
+      - name: Verify data before rename
+        shell: bash
+        run: |
+          echo "Container info:"
+          pnpm start info rename-test --json
+          echo "Querying data:"
+          pnpm start run rename-test -c "SELECT COUNT(*) FROM test_data;"
+
+      - name: Stop container for rename
+        run: pnpm start stop rename-test
+
+      - name: Rename container
+        run: pnpm start edit rename-test --name renamed-test
+
+      - name: Start renamed container
+        run: pnpm start start renamed-test
+
+      - name: Verify data persists after rename
+        shell: bash
+        run: |
+          echo "Container info after rename:"
+          pnpm start info renamed-test --json
+          echo "Querying data (with full output):"
+          pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" || echo "Query failed with exit code $?"
+          echo "---"
+          COUNT=$(pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Data verification failed: expected 3 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Data verification passed: $COUNT rows"
+
+      - name: Verify old name doesn't exist
+        shell: bash
+        run: |
+          if pnpm start info rename-test --json 2>/dev/null; then
+            echo "Old container name still exists after rename"
+            exit 1
+          fi
+          echo "Old container correctly removed"
+
+      - name: Stop renamed container for clone test
+        run: pnpm start stop renamed-test
+
+      - name: Clone container
+        run: pnpm start clone renamed-test cloned-test
+
+      - name: Start cloned container
+        run: pnpm start start cloned-test
+
+      - name: Verify cloned data matches source
+        shell: bash
+        run: |
+          COUNT=$(pnpm start run cloned-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Clone data verification failed: expected 3 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Clone data verification passed: $COUNT rows"
+
+      - name: Verify clonedFrom metadata
+        shell: bash
+        run: |
+          # Filter out pnpm header lines (starting with >) before passing to jq
+          CLONED_FROM=$(pnpm start info cloned-test --json 2>/dev/null | grep -v '^>' | jq -r '.clonedFrom' 2>/dev/null || echo "")
+          if [ "$CLONED_FROM" != "renamed-test" ]; then
+            echo "clonedFrom metadata incorrect: expected 'renamed-test', got '$CLONED_FROM'"
+            exit 1
+          fi
+          echo "clonedFrom metadata verified: $CLONED_FROM"
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          pnpm start stop renamed-test 2>/dev/null || true
+          pnpm start stop cloned-test 2>/dev/null || true
+          pnpm start delete rename-test --yes 2>/dev/null || true
+          pnpm start delete renamed-test --yes 2>/dev/null || true
+          pnpm start delete cloned-test --yes 2>/dev/null || true
+
+  # ============================================
+  # ClickHouse Rename Test
+  # Tests that config.xml paths are regenerated after rename
+  # ClickHouse is not available on Windows
+  # ============================================
+  test-clickhouse-rename:
+    name: ClickHouse Rename (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14 # ARM64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache ClickHouse binaries
+      - name: Cache ClickHouse binaries
+        uses: actions/cache@v4
+        id: ch-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install ClickHouse via SpinDB
+        run: pnpm start engines download clickhouse 25.12
+
+      - name: Create container with seed data
+        shell: bash
+        run: |
+          pnpm start create ch-rename-test --engine clickhouse --db-version 25.12 --no-start
+          pnpm start start ch-rename-test
+          # Wait for ready (ClickHouse takes longer to start)
+          for i in {1..60}; do
+            if pnpm start info ch-rename-test --json 2>/dev/null | grep -q '"status":"running"'; then
+              break
+            fi
+            sleep 1
+          done
+          # Extra wait for ClickHouse to fully initialize
+          sleep 3
+          # Create database and add test data
+          pnpm start run ch-rename-test -c "CREATE DATABASE IF NOT EXISTS testdb;"
+          pnpm start run ch-rename-test -c "CREATE TABLE testdb.test_data (id UInt32, name String) ENGINE = MergeTree() ORDER BY id;" -d testdb
+          pnpm start run ch-rename-test -c "INSERT INTO testdb.test_data VALUES (1, 'one'), (2, 'two'), (3, 'three');" -d testdb
+
+      - name: Verify initial data
+        shell: bash
+        run: |
+          echo "Full query output:"
+          pnpm start run ch-rename-test -c "SELECT count() FROM testdb.test_data;" -d testdb || echo "Query failed with exit code $?"
+          echo "---"
+          # ClickHouse output is minimal - just the number, so grep the whole output
+          COUNT=$(pnpm start run ch-rename-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>&1 | grep -v '^>' | grep -oE '[0-9]+' | tail -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Initial data verification failed: expected 3 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Initial data verified: $COUNT rows"
+
+      - name: Stop container for rename
+        run: pnpm start stop ch-rename-test
+
+      - name: Rename container
+        run: pnpm start edit ch-rename-test --name ch-renamed-test
+
+      - name: Start renamed container
+        shell: bash
+        run: |
+          pnpm start start ch-renamed-test
+          # Wait for ready
+          for i in {1..60}; do
+            if pnpm start info ch-renamed-test --json 2>/dev/null | grep -q '"status":"running"'; then
+              break
+            fi
+            sleep 1
+          done
+          # Extra wait for ClickHouse
+          sleep 3
+
+      - name: Verify data persists after rename
+        shell: bash
+        run: |
+          COUNT=$(pnpm start run ch-renamed-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>&1 | grep -v '^>' | grep -oE '[0-9]+' | tail -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Data verification failed after rename: expected 3 rows, got $COUNT"
+            echo "This likely means config.xml paths were not regenerated correctly"
+            exit 1
+          fi
+          echo "Data persists after rename: $COUNT rows"
+
+      - name: Verify old name doesn't exist
+        shell: bash
+        run: |
+          if pnpm start info ch-rename-test --json 2>/dev/null; then
+            echo "Old container name still exists after rename"
+            exit 1
+          fi
+          echo "Old container correctly removed"
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          pnpm start stop ch-rename-test 2>/dev/null || true
+          pnpm start stop ch-renamed-test 2>/dev/null || true
+          pnpm start delete ch-rename-test --yes 2>/dev/null || true
+          pnpm start delete ch-renamed-test --yes 2>/dev/null || true
+
+  # ============================================
   # Fresh Install Test - Tests npm global install like real users
   # Simulates a user installing SpinDB for the first time
   # ============================================
@@ -1117,6 +1379,8 @@ jobs:
         test-valkey,
         test-clickhouse,
         test-cli-e2e,
+        test-rename-clone,
+        test-clickhouse-rename,
         test-fresh-install,
         test-upgrade,
         test-self-update,
@@ -1170,6 +1434,14 @@ jobs:
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
             echo "CLI E2E tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-rename-clone.result }}" != "success" ]; then
+            echo "Rename & Clone tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-clickhouse-rename.result }}" != "success" ]; then
+            echo "ClickHouse Rename tests failed"
             exit 1
           fi
           if [ "${{ needs.test-fresh-install.result }}" != "success" ]; then

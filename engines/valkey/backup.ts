@@ -239,7 +239,7 @@ async function createTextBackup(
 
   return {
     path: outputPath,
-    format: 'valkey',
+    format: 'text',
     size: stats.size,
   }
 }
@@ -361,16 +361,16 @@ async function createRdbBackup(
 /**
  * Create a backup
  * Supports two formats:
- * - 'sql' (actually .valkey): Text-based Valkey commands
- * - 'dump' (default): Binary RDB snapshot
+ * - 'text': Human-readable Valkey commands (.valkey file)
+ * - 'rdb' (default): Binary RDB snapshot
  */
 export async function createBackup(
   container: ContainerConfig,
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  // 'sql' format means text-based commands for Valkey
-  if (options.format === 'sql') {
+  // 'text' format means text-based commands for Valkey
+  if (options.format === 'text') {
     return createTextBackup(container, outputPath)
   }
   // Default to RDB format

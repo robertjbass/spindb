@@ -8,6 +8,20 @@
  * - Spinner messages
  */
 
+import {
+  Engine,
+  type PostgreSQLFormat,
+  type MySQLFormat,
+  type MariaDBFormat,
+  type SQLiteFormat,
+  type DuckDBFormat,
+  type MongoDBFormat,
+  type RedisFormat,
+  type ValkeyFormat,
+  type ClickHouseFormat,
+  type BackupFormatType,
+} from '../types'
+
 export type BackupFormatInfo = {
   extension: string
   label: string
@@ -15,197 +29,254 @@ export type BackupFormatInfo = {
   spinnerLabel: string
 }
 
-export type EngineBackupFormats = {
-  sql: BackupFormatInfo
-  dump: BackupFormatInfo
-  // Whether this engine supports format selection (false = only one format)
+// Generic type for engine backup formats
+export type EngineBackupFormats<F extends string = string> = {
+  formats: Record<F, BackupFormatInfo>
   supportsFormatChoice: boolean
-  // Default format when not specified
-  defaultFormat: 'sql' | 'dump'
+  defaultFormat: F
 }
 
-// Backup format configuration by engine
-export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
-  postgresql: {
-    sql: {
-      extension: '.sql',
-      label: '.sql',
-      description: 'Plain SQL - human-readable, larger file',
-      spinnerLabel: 'SQL',
-    },
-    dump: {
-      extension: '.dump',
-      label: '.dump',
-      description: 'Custom format - smaller file, faster restore',
-      spinnerLabel: 'dump',
-    },
-    supportsFormatChoice: true,
-    defaultFormat: 'sql',
-  },
-  mysql: {
-    sql: {
-      extension: '.sql',
-      label: '.sql',
-      description: 'Plain SQL - human-readable, larger file',
-      spinnerLabel: 'SQL',
-    },
-    dump: {
-      extension: '.sql.gz',
-      label: '.sql.gz',
-      description: 'Compressed SQL - smaller file',
-      spinnerLabel: 'compressed SQL',
+// Backup format configuration by engine with semantic format names
+export const BACKUP_FORMATS: {
+  [Engine.PostgreSQL]: EngineBackupFormats<PostgreSQLFormat>
+  [Engine.MySQL]: EngineBackupFormats<MySQLFormat>
+  [Engine.MariaDB]: EngineBackupFormats<MariaDBFormat>
+  [Engine.SQLite]: EngineBackupFormats<SQLiteFormat>
+  [Engine.DuckDB]: EngineBackupFormats<DuckDBFormat>
+  [Engine.MongoDB]: EngineBackupFormats<MongoDBFormat>
+  [Engine.Redis]: EngineBackupFormats<RedisFormat>
+  [Engine.Valkey]: EngineBackupFormats<ValkeyFormat>
+  [Engine.ClickHouse]: EngineBackupFormats<ClickHouseFormat>
+} = {
+  [Engine.PostgreSQL]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'Plain SQL - human-readable, larger file',
+        spinnerLabel: 'SQL',
+      },
+      custom: {
+        extension: '.dump',
+        label: '.dump',
+        description: 'Custom format - smaller file, faster restore',
+        spinnerLabel: 'custom',
+      },
     },
     supportsFormatChoice: true,
     defaultFormat: 'sql',
   },
-  sqlite: {
-    sql: {
-      extension: '.sql',
-      label: '.sql',
-      description: 'SQL dump - human-readable, portable',
-      spinnerLabel: 'SQL',
-    },
-    dump: {
-      extension: '.sqlite',
-      label: '.sqlite',
-      description: 'Binary copy - exact replica, faster',
-      spinnerLabel: 'binary',
-    },
-    supportsFormatChoice: true,
-    defaultFormat: 'dump',
-  },
-  duckdb: {
-    sql: {
-      extension: '.sql',
-      label: '.sql',
-      description: 'SQL dump - human-readable, portable',
-      spinnerLabel: 'SQL',
-    },
-    dump: {
-      extension: '.duckdb',
-      label: '.duckdb',
-      description: 'Binary copy - exact replica, faster',
-      spinnerLabel: 'binary',
+  [Engine.MySQL]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'Plain SQL - human-readable, larger file',
+        spinnerLabel: 'SQL',
+      },
+      compressed: {
+        extension: '.sql.gz',
+        label: '.sql.gz',
+        description: 'Compressed SQL - smaller file',
+        spinnerLabel: 'compressed SQL',
+      },
     },
     supportsFormatChoice: true,
-    defaultFormat: 'dump',
+    defaultFormat: 'sql',
   },
-  mongodb: {
-    sql: {
-      extension: '', // Directory, no extension
-      label: '.bson',
-      description: 'Directory dump - BSON files per collection',
-      spinnerLabel: 'BSON directory',
-    },
-    dump: {
-      extension: '.archive',
-      label: '.archive',
-      description: 'Compressed archive - single file, smaller',
-      spinnerLabel: 'archive',
+  [Engine.MariaDB]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'Plain SQL - human-readable, larger file',
+        spinnerLabel: 'SQL',
+      },
+      compressed: {
+        extension: '.sql.gz',
+        label: '.sql.gz',
+        description: 'Compressed SQL - smaller file',
+        spinnerLabel: 'compressed SQL',
+      },
     },
     supportsFormatChoice: true,
-    defaultFormat: 'dump',
+    defaultFormat: 'sql',
   },
-  redis: {
-    sql: {
-      extension: '.redis',
-      label: '.redis',
-      description: 'Text commands - human-readable, editable',
-      spinnerLabel: 'text',
-    },
-    dump: {
-      extension: '.rdb',
-      label: '.rdb',
-      description: 'RDB snapshot - binary format, faster restore',
-      spinnerLabel: 'RDB',
+  [Engine.SQLite]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - human-readable, portable',
+        spinnerLabel: 'SQL',
+      },
+      binary: {
+        extension: '.sqlite',
+        label: '.sqlite',
+        description: 'Binary copy - exact replica, faster',
+        spinnerLabel: 'binary',
+      },
     },
     supportsFormatChoice: true,
-    defaultFormat: 'dump',
+    defaultFormat: 'binary',
   },
-  valkey: {
-    sql: {
-      extension: '.valkey',
-      label: '.valkey',
-      description: 'Text commands - human-readable, editable',
-      spinnerLabel: 'text',
-    },
-    dump: {
-      extension: '.rdb',
-      label: '.rdb',
-      description: 'RDB snapshot - binary format, faster restore',
-      spinnerLabel: 'RDB',
+  [Engine.DuckDB]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - human-readable, portable',
+        spinnerLabel: 'SQL',
+      },
+      binary: {
+        extension: '.duckdb',
+        label: '.duckdb',
+        description: 'Binary copy - exact replica, faster',
+        spinnerLabel: 'binary',
+      },
     },
     supportsFormatChoice: true,
-    defaultFormat: 'dump',
+    defaultFormat: 'binary',
   },
-  clickhouse: {
-    sql: {
-      extension: '.sql',
-      label: '.sql',
-      description: 'SQL dump - DDL + INSERT statements',
-      spinnerLabel: 'SQL',
+  [Engine.MongoDB]: {
+    formats: {
+      bson: {
+        extension: '', // Directory, no extension
+        label: '.bson',
+        description: 'Directory dump - BSON files per collection',
+        spinnerLabel: 'BSON directory',
+      },
+      archive: {
+        extension: '.archive',
+        label: '.archive',
+        description: 'Compressed archive - single file, smaller',
+        spinnerLabel: 'archive',
+      },
     },
-    dump: {
-      extension: '.sql',
-      label: '.sql',
-      description: 'SQL dump - DDL + INSERT statements',
-      spinnerLabel: 'SQL',
+    supportsFormatChoice: true,
+    defaultFormat: 'archive',
+  },
+  [Engine.Redis]: {
+    formats: {
+      text: {
+        extension: '.redis',
+        label: '.redis',
+        description: 'Text commands - human-readable, editable',
+        spinnerLabel: 'text',
+      },
+      rdb: {
+        extension: '.rdb',
+        label: '.rdb',
+        description: 'RDB snapshot - binary format, faster restore',
+        spinnerLabel: 'RDB',
+      },
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'rdb',
+  },
+  [Engine.Valkey]: {
+    formats: {
+      text: {
+        extension: '.valkey',
+        label: '.valkey',
+        description: 'Text commands - human-readable, editable',
+        spinnerLabel: 'text',
+      },
+      rdb: {
+        extension: '.rdb',
+        label: '.rdb',
+        description: 'RDB snapshot - binary format, faster restore',
+        spinnerLabel: 'RDB',
+      },
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'rdb',
+  },
+  [Engine.ClickHouse]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - DDL + INSERT statements',
+        spinnerLabel: 'SQL',
+      },
     },
     supportsFormatChoice: false, // Only SQL format supported
     defaultFormat: 'sql',
   },
 }
 
+/**
+ * Type guard to validate if a string is a valid Engine
+ */
+export function isEngine(value: string): value is Engine {
+  return Object.values(Engine).includes(value as Engine)
+}
+
+/**
+ * Check if a format is valid for a given engine
+ * @param engine - The database engine
+ * @param format - The format name to validate
+ * @returns true if the format is valid for this engine
+ */
+export function isValidFormat(engine: Engine, format: string): boolean {
+  const engineFormats = BACKUP_FORMATS[engine]
+  return format in engineFormats.formats
+}
+
+/**
+ * Get valid format names for an engine
+ * @param engine - The database engine
+ * @returns Array of valid format names
+ */
+export function getValidFormats(engine: Engine): string[] {
+  return Object.keys(BACKUP_FORMATS[engine].formats)
+}
+
 // Get backup format info for an engine
 export function getBackupFormatInfo(
-  engine: string,
-  format: 'sql' | 'dump',
+  engine: Engine,
+  format: BackupFormatType,
 ): BackupFormatInfo {
   const engineFormats = BACKUP_FORMATS[engine]
-  if (!engineFormats) {
+  // Type assertion needed because TypeScript can't narrow the union to the specific engine's format
+  const formatInfo =
+    engineFormats.formats[format as keyof typeof engineFormats.formats]
+
+  if (!formatInfo) {
+    const validFormats = Object.keys(engineFormats.formats).join(', ')
     throw new Error(
-      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
+      `Invalid backup format "${format}" for ${engine}. Valid formats: ${validFormats}`,
     )
   }
-  return engineFormats[format]
+
+  return formatInfo
 }
 
 // Get file extension for a backup format
 export function getBackupExtension(
-  engine: string,
-  format: 'sql' | 'dump',
+  engine: Engine,
+  format: BackupFormatType,
 ): string {
   return getBackupFormatInfo(engine, format).extension
 }
 
 // Get spinner label for a backup format
 export function getBackupSpinnerLabel(
-  engine: string,
-  format: 'sql' | 'dump',
+  engine: Engine,
+  format: BackupFormatType,
 ): string {
   return getBackupFormatInfo(engine, format).spinnerLabel
 }
 
 // Check if an engine supports format selection
-export function supportsFormatChoice(engine: string): boolean {
-  const engineFormats = BACKUP_FORMATS[engine]
-  if (!engineFormats) {
-    throw new Error(
-      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
-    )
-  }
-  return engineFormats.supportsFormatChoice
+export function supportsFormatChoice(engine: Engine): boolean {
+  return BACKUP_FORMATS[engine].supportsFormatChoice
 }
 
 // Get default format for an engine
-export function getDefaultFormat(engine: string): 'sql' | 'dump' {
-  const engineFormats = BACKUP_FORMATS[engine]
-  if (!engineFormats) {
-    throw new Error(
-      `Unknown engine "${engine}" for backup format. Supported engines: ${Object.keys(BACKUP_FORMATS).join(', ')}`,
-    )
-  }
-  return engineFormats.defaultFormat
+export function getDefaultFormat(engine: Engine): BackupFormatType {
+  return BACKUP_FORMATS[engine].defaultFormat
 }
 
 // Large backup threshold (100MB) - warn user before restoring

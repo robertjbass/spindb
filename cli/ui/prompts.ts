@@ -6,7 +6,6 @@ import { resolve, join } from 'path'
 import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
 import { defaults, getEngineDefaults } from '../../config/defaults'
-import { installPostgresBinaries } from '../../engines/postgresql/binary-manager'
 import { portManager } from '../../core/port-manager'
 import { containerManager } from '../../core/container-manager'
 import {
@@ -17,7 +16,7 @@ import {
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
 import { getEngineIcon } from '../constants'
-import type { ContainerConfig } from '../../types'
+import { type ContainerConfig, type Engine, type BackupFormatType } from '../../types'
 
 // Navigation sentinel values for menu navigation
 export const BACK_VALUE = '__back__'
@@ -589,45 +588,43 @@ export async function promptDatabaseSelect(
 /**
  * Prompt for backup format selection
  * Uses centralized format configuration from config/backup-formats.ts
+ * Dynamically builds choices from engine-specific format definitions
  * @param options.includeBack - Include a back option (returns null when selected)
  */
 export function promptBackupFormat(
-  engine: string,
+  engine: Engine,
   options?: { includeBack?: false },
-): Promise<'sql' | 'dump'>
+): Promise<BackupFormatType>
 export function promptBackupFormat(
-  engine: string,
+  engine: Engine,
   options: { includeBack: true },
-): Promise<'sql' | 'dump' | null>
+): Promise<BackupFormatType | null>
 export async function promptBackupFormat(
-  engine: string,
+  engine: Engine,
   options?: { includeBack?: boolean },
-): Promise<'sql' | 'dump' | null> {
+): Promise<BackupFormatType | null> {
   // Import here to avoid circular dependencies
   const { BACKUP_FORMATS, supportsFormatChoice, getDefaultFormat } =
     await import('../../config/backup-formats')
 
-  // If engine doesn't support format choice (e.g., Redis), return default
+  // If engine doesn't support format choice (e.g., ClickHouse), return default
   if (!supportsFormatChoice(engine)) {
     return getDefaultFormat(engine)
   }
 
-  const formats = BACKUP_FORMATS[engine] || BACKUP_FORMATS.postgresql
+  const engineFormats = BACKUP_FORMATS[engine]
 
   type Choice =
     | { name: string; value: string; short?: string }
     | inquirer.Separator
 
-  const choices: Choice[] = [
-    {
-      name: `${formats.sql.label} ${chalk.gray(`- ${formats.sql.description}`)}`,
-      value: 'sql',
-    },
-    {
-      name: `${formats.dump.label} ${chalk.gray(`- ${formats.dump.description}`)}`,
-      value: 'dump',
-    },
-  ]
+  // Build choices dynamically from the engine's format definitions
+  const choices: Choice[] = Object.entries(engineFormats.formats).map(
+    ([key, info]) => ({
+      name: `${info.label} ${chalk.gray(`- ${info.description}`)}`,
+      value: key,
+    }),
+  )
 
   if (options?.includeBack) {
     choices.push(new inquirer.Separator())
@@ -640,12 +637,12 @@ export async function promptBackupFormat(
       name: 'format',
       message: 'Select backup format:',
       choices,
-      default: formats.defaultFormat,
+      default: engineFormats.defaultFormat,
     },
   ])
 
   if (format === BACK_VALUE) return null
-  return format as 'sql' | 'dump'
+  return format as BackupFormatType
 }
 
 /**
@@ -890,10 +887,15 @@ export async function promptCreateOptions(): Promise<CreateOptions> {
 
 /**
  * Prompt user to install missing database client tools
- * Returns true if installation was successful or user declined, false if installation failed
  *
  * @param missingTool - The name of the missing tool (e.g., 'psql', 'pg_dump', 'mysql')
  * @param engine - The database engine (defaults to 'postgresql')
+ * @returns true if installation was successful, false otherwise.
+ *
+ * Note: For PostgreSQL, this function always returns false because PostgreSQL
+ * client tools (psql, pg_dump, etc.) are bundled with the engine binaries from
+ * hostdb. Callers should treat this as "use bundled tools via spindb engines
+ * download postgresql" rather than an installation failure.
  */
 export async function promptInstallDependencies(
   missingTool: string,
@@ -1010,23 +1012,17 @@ export async function promptInstallDependencies(
 
   console.log()
 
-  // PostgreSQL has its own install function with extra logic
+  // PostgreSQL client tools are bundled with hostdb binaries
   if (engine === 'postgresql') {
-    const success = await installPostgresBinaries()
-
-    if (success) {
-      console.log()
-      console.log(
-        chalk.green(`  ${engineName} client tools installed successfully!`),
-      )
-      console.log(chalk.gray('  Continuing with your operation...'))
-      console.log()
-    }
-
-    return success
+    console.log(
+      chalk.cyan('  PostgreSQL client tools are bundled with the engine binaries.'),
+    )
+    console.log(chalk.cyan('  Download them with: spindb engines download postgresql'))
+    console.log()
+    return false
   }
 
-  // For other engines (MySQL, etc.), use the generic installer
+  // For other engines, use the generic installer
   console.log(
     chalk.cyan(`  Installing ${engineName} with ${packageManager.name}...`),
   )

@@ -14,7 +14,7 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync, createReadStream, createWriteStream } from 'fs'
+import { existsSync, statSync, createWriteStream, createReadStream } from 'fs'
 import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
@@ -304,14 +304,14 @@ export class DuckDBEngine extends BaseEngine {
       // For SQL format, we'll use a query to dump schema and data
       await this.dumpToFile(duckdb, entry.filePath, outputPath)
     } else {
-      // Binary copy for 'dump' format
+      // Binary copy for 'binary' format
       await copyFile(entry.filePath, outputPath)
     }
 
     const stats = statSync(outputPath)
     return {
       path: outputPath,
-      format: options.format ?? 'dump',
+      format: options.format ?? 'binary',
       size: stats.size,
     }
   }
@@ -417,15 +417,15 @@ export class DuckDBEngine extends BaseEngine {
       .filter((t) => t.length > 0)
 
     // Step 2: Build dump script - schema first, then data for each table
-    // Using .mode insert for INSERT statements
     const dumpCommands = [
       '.schema', // Output CREATE TABLE statements
-      '.mode insert', // Switch to INSERT mode for data
     ]
 
     for (const table of tables) {
       // Quote table name and escape embedded double quotes
       const escapedTable = table.replace(/"/g, '""')
+      // Set insert mode with table name for each table
+      dumpCommands.push(`.mode insert ${escapedTable}`)
       dumpCommands.push(`SELECT * FROM "${escapedTable}";`)
     }
 
@@ -435,12 +435,29 @@ export class DuckDBEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const output = createWriteStream(outputPath)
       const proc = spawn(duckdbPath, [dbPath])
+      let rejected = false
 
+      const rejectOnce = (err: Error) => {
+        if (!rejected) {
+          rejected = true
+          output.close()
+          reject(err)
+        }
+      }
+
+      // Pipe stdout to output file and handle errors
       proc.stdout.pipe(output)
+      proc.stdout.on('error', (err) => {
+        rejectOnce(new Error(`stdout error: ${err.message}`))
+      })
+      output.on('error', (err) => {
+        rejectOnce(new Error(`output file error: ${err.message}`))
+      })
 
-      // Write the dump script to stdin
-      proc.stdin.write(dumpScript)
-      proc.stdin.end()
+      // Handle stdin errors (e.g., EPIPE if child exits early)
+      proc.stdin.on('error', (err) => {
+        rejectOnce(new Error(`stdin error: ${err.message}`))
+      })
 
       proc.stderr.on('data', (data: Buffer) => {
         // Log stderr but don't fail (warnings are common)
@@ -448,56 +465,93 @@ export class DuckDBEngine extends BaseEngine {
       })
 
       proc.on('error', (err) => {
-        output.close()
-        reject(err)
+        rejectOnce(err)
       })
 
       proc.on('close', (code) => {
         output.close()
-        if (code === 0) {
-          resolve()
-        } else {
-          reject(new Error(`duckdb dump failed with exit code ${code}`))
+        if (!rejected) {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`duckdb dump failed with exit code ${code}`))
+          }
         }
       })
+
+      // Write the dump script to stdin with backpressure handling
+      const writeOk = proc.stdin.write(dumpScript)
+      if (writeOk) {
+        proc.stdin.end()
+      } else {
+        // Handle backpressure: wait for drain before ending
+        proc.stdin.once('drain', () => {
+          proc.stdin.end()
+        })
+      }
     })
   }
 
-  // Uses spawn to avoid shell injection.
+  // Streams a SQL file to a DuckDB database via stdin
   private async runSqlFile(
     duckdbPath: string,
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const input = createReadStream(sqlFilePath)
-      const proc = spawn(duckdbPath, [dbPath])
-
-      input.pipe(proc.stdin)
-
-      proc.stderr.on('data', (data: Buffer) => {
-        // Collect stderr but don't fail immediately
-        console.error(data.toString())
+      // Use 'ignore' for stdout since we don't need output and leaving it
+      // unconsumed could fill the buffer and cause a deadlock
+      const proc = spawn(duckdbPath, [dbPath], {
+        stdio: ['pipe', 'ignore', 'pipe'],
       })
 
-      input.on('error', (err) => {
-        proc.kill()
-        reject(err)
+      let stderrData = ''
+      let rejected = false
+
+      const rejectOnce = (err: Error) => {
+        if (!rejected) {
+          rejected = true
+          reject(err)
+        }
+      }
+
+      // Handle stdin errors (e.g., EPIPE if child exits early)
+      proc.stdin.on('error', (err) => {
+        rejectOnce(new Error(`stdin error: ${err.message}`))
+      })
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderrData += data.toString()
       })
 
       proc.on('error', (err) => {
-        reject(err)
+        rejectOnce(err)
       })
 
       proc.on('close', (code) => {
-        if (code === 0) {
-          resolve()
-        } else {
-          reject(
-            new Error(`duckdb script execution failed with exit code ${code}`),
-          )
+        if (!rejected) {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(
+              new Error(
+                `duckdb failed with exit code ${code}${stderrData ? `: ${stderrData}` : ''}`,
+              ),
+            )
+          }
         }
       })
+
+      // Stream SQL file to duckdb stdin
+      const fileStream = createReadStream(sqlFilePath, { encoding: 'utf-8' })
+
+      fileStream.on('error', (error) => {
+        rejectOnce(new Error(`Failed to read SQL file: ${error.message}`))
+        fileStream.destroy()
+        proc.stdin.end()
+      })
+
+      fileStream.pipe(proc.stdin)
     })
   }
 
@@ -603,8 +657,14 @@ export class DuckDBEngine extends BaseEngine {
       // Run SQL file - pipe file to stdin (avoids shell injection)
       await this.runSqlFile(duckdb, entry.filePath, options.file)
     } else if (options.sql) {
-      // Run inline SQL - pass as argument (avoids shell injection)
-      await execFileAsync(duckdb, [entry.filePath, '-c', options.sql])
+      // Run inline SQL - pass as argument, output to stdout
+      const { stdout, stderr } = await execFileAsync(duckdb, [
+        entry.filePath,
+        '-c',
+        options.sql,
+      ])
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }

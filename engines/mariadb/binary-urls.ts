@@ -1,5 +1,6 @@
 import { MARIADB_VERSION_MAP } from './version-maps'
-import { Platform, type Arch } from '../../types'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { Engine, Platform, type Arch } from '../../types'
 
 /**
  * Get the hostdb platform identifier
@@ -52,17 +53,22 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
   const fullVersion = normalizeVersion(version, MARIADB_VERSION_MAP)
-
-  const tag = `mariadb-${fullVersion}`
-  // Windows uses .zip, others use .tar.gz
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  const filename = `mariadb-${fullVersion}-${hostdbPlatform}.${ext}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.MariaDB, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**
  * Normalize version string to X.Y.Z format
+ *
+ * Note: MariaDB does not use validateSemverLikeVersion() because:
+ * 1. MariaDB versions may have suffixes (e.g., "11.8.5-MariaDB" in --version output)
+ * 2. Version map lookup handles known versions; unknown versions pass through
+ *    and will fail at download time with a clear 404 error
  *
  * @param version - Version string (e.g., '11.8', '11.8.5')
  * @param versionMap - Optional version map for major version lookup

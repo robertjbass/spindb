@@ -1,5 +1,7 @@
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
-import { type Platform, type Arch } from '../../types'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { validateSemverLikeVersion } from '../../core/version-utils'
+import { Engine, Platform, type Arch } from '../../types'
 
 // Supported platform/arch combinations for PostgreSQL hostdb binaries
 const SUPPORTED_PLATFORM_KEYS = new Set([
@@ -52,11 +54,13 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.0 conversion)
   const fullVersion = normalizeVersion(version, POSTGRESQL_VERSION_MAP)
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
-  const tag = `postgresql-${fullVersion}`
-  const filename = `postgresql-${fullVersion}-${hostdbPlatform}.tar.gz`
-
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.PostgreSQL, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**
@@ -65,6 +69,7 @@ export function getBinaryUrl(
  * @param version - Version string (e.g., '17', '17.7', '17.7.0')
  * @param versionMap - Optional version map for major version lookup
  * @returns Normalized version (e.g., '17.7.0')
+ * @throws TypeError if version string is malformed
  */
 function normalizeVersion(
   version: string,
@@ -74,6 +79,9 @@ function normalizeVersion(
   if (versionMap[version]) {
     return versionMap[version]
   }
+
+  // Validate version format: must be numeric semver-like (X, X.Y, or X.Y.Z)
+  validateSemverLikeVersion(version, 'PostgreSQL')
 
   // Normalize to X.Y.Z format
   const parts = version.split('.')

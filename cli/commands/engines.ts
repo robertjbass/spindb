@@ -10,7 +10,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
 import { getEngine } from '../../engines'
-import { binaryManager } from '../../core/binary-manager'
+import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import { paths } from '../../config/paths'
 import { platformService } from '../../core/platform-service'
 import {
@@ -969,7 +969,7 @@ enginesCommand
 
         // Show the path for reference
         const { platform, arch } = platformService.getPlatformInfo()
-        const fullVersion = binaryManager.getFullVersion(version)
+        const fullVersion = postgresqlBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'postgresql',
           version: fullVersion,

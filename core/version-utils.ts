@@ -75,3 +75,30 @@ export function compareVersions(a: string, b: string): number {
 export function isNewerVersion(versionA: string, versionB: string): boolean {
   return compareVersions(versionA, versionB) > 0
 }
+
+/**
+ * Regex pattern for validating semver-like version strings.
+ * Matches: X, X.Y, or X.Y.Z where each component is numeric.
+ * Examples: "8", "8.0", "8.0.40", "17", "17.7.0"
+ */
+export const SEMVER_LIKE_PATTERN = /^\d+(\.\d+){0,2}$/
+
+/**
+ * Validate that a version string matches semver-like format (X, X.Y, or X.Y.Z).
+ * Used by engines that require strict version format validation (MySQL, PostgreSQL).
+ *
+ * @param version - Version string to validate
+ * @param engineName - Engine name for error message (e.g., 'MySQL', 'PostgreSQL')
+ * @throws TypeError if version format is invalid
+ */
+export function validateSemverLikeVersion(
+  version: string,
+  engineName: string,
+): void {
+  if (!SEMVER_LIKE_PATTERN.test(version)) {
+    throw new TypeError(
+      `Invalid ${engineName} version format: "${version}". ` +
+        `Expected format: X, X.Y, or X.Y.Z (e.g., "8", "8.0", "8.0.40")`,
+    )
+  }
+}

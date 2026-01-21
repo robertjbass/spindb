@@ -17,6 +17,7 @@ import {
   getKeyCount,
   getRedisValue,
   waitForReady,
+  waitForStopped,
   containerDataExists,
   runScriptFile,
   runScriptSQL,
@@ -170,12 +171,16 @@ describe('Redis Integration Tests', () => {
 
     await engine.backup(sourceConfig!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'rdb',
     })
 
     // Stop source for restore (restore needs container stopped)
     await engine.stop(sourceConfig!)
     await containerManager.updateConfig(containerName, { status: 'stopped' })
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(containerName, ENGINE)
+    assert(stopped, 'Source container should be fully stopped before restore')
 
     // Restore to cloned container
     const clonedConfig = await containerManager.getConfig(clonedContainerName)
@@ -235,6 +240,11 @@ describe('Redis Integration Tests', () => {
 
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(clonedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped before delete')
+
     await containerManager.delete(clonedContainerName, { force: true })
 
     // Verify filesystem is cleaned up
@@ -263,14 +273,14 @@ describe('Redis Integration Tests', () => {
     const { tmpdir } = await import('os')
     const backupPath = join(tmpdir(), `redis-text-backup-${Date.now()}.redis`)
 
-    // Backup with 'sql' format which produces .redis text file
+    // Backup with 'text' format which produces .redis text file
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'sql',
+      format: 'text',
     })
 
     assert(result.path === backupPath, 'Backup path should match')
-    assert(result.format === 'redis', 'Format should be redis')
+    assert(result.format === 'text', 'Format should be text')
     assert(result.size > 0, 'Backup should have content')
 
     // Verify file contains Redis commands
@@ -309,7 +319,7 @@ describe('Redis Integration Tests', () => {
 
     await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'sql',
+      format: 'text',
     })
 
     // Modify a key to verify it gets restored
@@ -360,7 +370,7 @@ describe('Redis Integration Tests', () => {
 
     await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'sql',
+      format: 'text',
     })
 
     // Add a key that's NOT in the backup
@@ -418,11 +428,11 @@ describe('Redis Integration Tests', () => {
       'utf-8',
     )
 
-    // Detect format - should recognize as Redis commands
+    // Detect format - should recognize as Redis text commands
     const format = await engine.detectBackupFormat(testFile)
     assertEqual(
       format.format,
-      'redis',
+      'text',
       'Should detect Redis commands by content',
     )
     assert(
@@ -466,6 +476,11 @@ describe('Redis Integration Tests', () => {
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
     await containerManager.updateConfig(containerName, { status: 'stopped' })
+
+    // Wait for the container to be fully stopped (PID file removed)
+    // This is important because rename() checks isRunning() before proceeding
+    const stopped = await waitForStopped(containerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
     await containerManager.rename(containerName, renamedContainerName)
@@ -590,6 +605,10 @@ describe('Redis Integration Tests', () => {
     await containerManager.updateConfig(renamedContainerName, {
       status: 'stopped',
     })
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(renamedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped')
 
     // Now it's stopped, verify
     const running = await processManager.isRunning(renamedContainerName, {

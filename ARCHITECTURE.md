@@ -29,13 +29,14 @@ SpinDB follows a **three-tier layered architecture**:
 ┌─────────────────────────▼───────────────────────────────────┐
 │                    Core Layer (core/)                       │
 │    ContainerManager, PortManager, ProcessManager,           │
-│    ConfigManager, BinaryManager, DependencyManager,         │
+│    ConfigManager, BaseBinaryManagers, DependencyManager,    │
 │    TransactionManager, ErrorHandler, PlatformService        │
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
 │                   Engine Layer (engines/)                   │
-│    PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite       │
+│  PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey,        │
+│  ClickHouse, SQLite, DuckDB                                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +75,10 @@ spindb/
 │   ├── port-manager.ts         # Port availability/allocation
 │   ├── process-manager.ts      # Process start/stop
 │   ├── config-manager.ts       # Global config persistence
-│   ├── binary-manager.ts       # Binary downloads (PostgreSQL)
+│   ├── base-binary-manager.ts        # Base class for key-value stores (Redis, Valkey)
+│   ├── base-server-binary-manager.ts # Base class for SQL servers (MySQL, MariaDB, ClickHouse)
+│   ├── base-document-binary-manager.ts # Base class for document DBs (MongoDB, FerretDB)
+│   ├── base-embedded-binary-manager.ts # Base class for embedded DBs (SQLite, DuckDB)
 │   ├── dependency-manager.ts   # Tool detection/installation
 │   ├── transaction-manager.ts  # Rollback support
 │   ├── start-with-retry.ts     # Port conflict retry logic
@@ -194,7 +198,7 @@ The core layer contains business logic independent of CLI concerns.
 | PortManager | Port availability checks, allocation |
 | ProcessManager | Database process start/stop |
 | ConfigManager | Global config (~/.spindb/config.json) |
-| BinaryManager | PostgreSQL binary downloads |
+| BaseBinaryManagers | Engine binary download/extraction (4 base classes) |
 | DependencyManager | Tool detection, installation |
 | TransactionManager | Rollback for multi-step operations |
 | StartWithRetry | Port conflict retry handling |
@@ -430,7 +434,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'redis' | 'sqlite'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb'
   version: string
   port: number
   database: string        // Primary database
@@ -682,9 +686,7 @@ spindb backup pgdb                              # Backup with auto-generated nam
 spindb backup pgdb --name production-backup     # Custom backup name
 spindb backup pgdb --output ./backups/          # Custom output directory
 spindb backup pgdb --format sql                 # Plain SQL format (.sql)
-spindb backup pgdb --format dump                # Compressed format (.dump)
-spindb backup pgdb --sql                        # Shorthand for --format sql
-spindb backup pgdb --dump                       # Shorthand for --format dump
+spindb backup pgdb --format custom              # Custom binary format (.dump)
 spindb backup pgdb --database myapp             # Backup specific database
 spindb restore pgdb backup.dump                 # Restore from backup
 spindb restore pgdb backup.sql --database myapp # Restore to specific database
@@ -744,7 +746,7 @@ spindb run mydb seed.sql --database app         # Target specific database
 spindb backup mydb                              # Backup with mysqldump
 spindb backup mydb --name backup-2024           # Custom backup name
 spindb backup mydb --format sql                 # Plain SQL (.sql)
-spindb backup mydb --format dump                # Compressed (.sql.gz)
+spindb backup mydb --format compressed          # Compressed (.sql.gz)
 spindb backup mydb --database app               # Backup specific database
 spindb restore mydb backup.sql                  # Restore from backup
 spindb restore mydb backup.sql.gz               # Restore from compressed
@@ -890,7 +892,7 @@ spindb start prod-clone
 spindb connect prod-clone
 
 # Backup before risky migration
-spindb backup mydb --name before-migration --dump
+spindb backup mydb --name before-migration --format custom
 spindb run mydb ./migrations/risky-change.sql
 # If something goes wrong:
 spindb restore mydb ./backups/before-migration.dump

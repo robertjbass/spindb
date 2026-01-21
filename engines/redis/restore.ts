@@ -6,8 +6,8 @@
  */
 
 import { spawn } from 'child_process'
-import { copyFile, readFile, open } from 'fs/promises'
-import { existsSync, statSync } from 'fs'
+import { copyFile, open } from 'fs/promises'
+import { existsSync, statSync, createReadStream } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import { logDebug } from '../../core/error-handler'
@@ -65,10 +65,24 @@ const REDIS_COMMANDS = [
 /**
  * Check if file content looks like Redis commands
  * Returns true if the first non-comment, non-empty lines start with valid Redis commands
+ * Only reads first 4KB to avoid loading large files into memory
  */
 async function looksLikeRedisCommands(filePath: string): Promise<boolean> {
   try {
-    const content = await readFile(filePath, 'utf-8')
+    // Read only first 4KB - enough for several lines of Redis commands
+    const HEADER_SIZE = 4096
+    const buffer = Buffer.alloc(HEADER_SIZE)
+
+    const fd = await open(filePath, 'r')
+    let bytesRead: number
+    try {
+      const result = await fd.read(buffer, 0, HEADER_SIZE, 0)
+      bytesRead = result.bytesRead
+    } finally {
+      await fd.close()
+    }
+
+    const content = buffer.toString('utf-8', 0, bytesRead)
     // Use /\r?\n/ to handle both Unix (\n) and Windows (\r\n) line endings
     const lines = content.split(/\r?\n/)
 
@@ -132,7 +146,7 @@ export async function detectBackupFormat(
   // Check file extension first for .redis text files
   if (filePath.endsWith('.redis')) {
     return {
-      format: 'redis',
+      format: 'text',
       description: 'Redis text commands',
       restoreCommand:
         'Pipe commands to redis-cli (spindb restore handles this)',
@@ -176,7 +190,7 @@ export async function detectBackupFormat(
   // This allows files like "users.txt" or "data" to be detected as Redis text dumps
   if (await looksLikeRedisCommands(filePath)) {
     return {
-      format: 'redis',
+      format: 'text',
       description: 'Redis text commands (detected by content)',
       restoreCommand:
         'Pipe commands to redis-cli (spindb restore handles this)',
@@ -204,7 +218,7 @@ export type RestoreOptions = {
 
 /**
  * Restore from text backup (.redis file)
- * Pipes commands to redis-cli on the running Redis instance
+ * Streams commands to redis-cli on the running Redis instance
  */
 async function restoreTextBackup(
   backupPath: string,
@@ -217,16 +231,6 @@ async function restoreTextBackup(
     throw new Error(REDIS_CLI_NOT_FOUND_ERROR)
   }
 
-  // Read the backup file
-  let content = await readFile(backupPath, 'utf-8')
-
-  // Prepend FLUSHDB if requested (clear database before restore)
-  if (flush) {
-    content = 'FLUSHDB\n' + content
-    logDebug('Prepending FLUSHDB to clear database before restore')
-  }
-
-  // Pipe to redis-cli
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-p', String(port), '-n', database]
     const proc = spawn(redisCli, args, {
@@ -235,6 +239,7 @@ async function restoreTextBackup(
 
     let stdout = ''
     let stderr = ''
+    let streamError: Error | null = null
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString()
@@ -245,9 +250,15 @@ async function restoreTextBackup(
     })
 
     proc.on('close', (code) => {
+      // If there was a stream error, report it
+      if (streamError) {
+        reject(streamError)
+        return
+      }
+
       if (code === 0) {
         resolve({
-          format: 'redis',
+          format: 'text',
           stdout: stdout || 'Redis commands executed successfully',
           stderr: stderr || undefined,
           code: 0,
@@ -265,9 +276,28 @@ async function restoreTextBackup(
       reject(new Error(`Failed to spawn redis-cli: ${error.message}`))
     })
 
-    // Write backup content to stdin
-    proc.stdin.write(content)
-    proc.stdin.end()
+    // Prepend FLUSHDB if requested (clear database before restore)
+    if (flush) {
+      logDebug('Prepending FLUSHDB to clear database before restore')
+      proc.stdin.write('FLUSHDB\n')
+    }
+
+    // Stream backup file to redis-cli stdin
+    const fileStream = createReadStream(backupPath, { encoding: 'utf-8' })
+
+    fileStream.on('error', (error) => {
+      streamError = new Error(`Failed to read backup file: ${error.message}`)
+      fileStream.destroy()
+      proc.stdin.end()
+    })
+
+    proc.stdin.on('error', (error) => {
+      // Handle stdin errors (e.g., process closed unexpectedly)
+      streamError = new Error(`Failed to write to redis-cli stdin: ${error.message}`)
+      fileStream.destroy()
+    })
+
+    fileStream.pipe(proc.stdin)
   })
 }
 
@@ -324,7 +354,7 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  if (format.format === 'redis') {
+  if (format.format === 'text') {
     // Text format - pipe to redis-cli (Redis must be running)
     if (!port) {
       throw new Error(

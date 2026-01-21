@@ -24,7 +24,7 @@ import {
   LARGE_BACKUP_THRESHOLD,
   VERY_LARGE_BACKUP_THRESHOLD,
 } from '../config/backup-formats'
-import type { ContainerConfig } from '../types'
+import type { ContainerConfig, BackupFormatType } from '../types'
 
 // Generate a timestamp string for backup filenames
 export function generateBackupTimestamp(): string {
@@ -67,7 +67,7 @@ export async function estimateBackupSize(
 export type BackupOptions = {
   containerName: string
   databaseName: string
-  format: 'sql' | 'dump'
+  format: BackupFormatType
   outputDir: string
   filename: string
   // Show spinner and console output

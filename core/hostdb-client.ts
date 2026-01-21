@@ -151,6 +151,33 @@ export function validatePlatform(
   return hostdbPlatform
 }
 
+export type BuildHostdbUrlOptions = {
+  version: string
+  hostdbPlatform: string
+  extension?: 'tar.gz' | 'zip'
+}
+
+/**
+ * Build a download URL for a hostdb release (low-level, no validation).
+ *
+ * This is the core URL builder that all engines should use after validating
+ * the platform against their own supported platform set.
+ *
+ * @param engine - The engine name (e.g., 'postgresql', 'mysql')
+ * @param options - Version, pre-validated platform string, and optional extension
+ * @returns The download URL
+ */
+export function buildHostdbUrl(
+  engine: Engine | string,
+  options: BuildHostdbUrlOptions,
+): string {
+  const { version, hostdbPlatform, extension = 'tar.gz' } = options
+  const tag = `${engine}-${version}`
+  const filename = `${engine}-${version}-${hostdbPlatform}.${extension}`
+
+  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+}
+
 export type BuildDownloadUrlOptions = {
   version: string
   platform: Platform
@@ -158,7 +185,12 @@ export type BuildDownloadUrlOptions = {
 }
 
 /**
- * Build a download URL for a hostdb release.
+ * Build a download URL for a hostdb release with platform validation.
+ *
+ * This is a convenience wrapper around buildHostdbUrl that validates
+ * the platform against the global SUPPORTED_PLATFORMS list. For engines
+ * with different platform support (e.g., ClickHouse doesn't support Windows),
+ * use buildHostdbUrl directly after validating against engine-specific platforms.
  *
  * @param engine - The engine name (e.g., 'postgresql', 'mysql')
  * @param options - Version and platform configuration
@@ -171,9 +203,7 @@ export function buildDownloadUrl(
 ): string {
   const { version, platform, arch } = options
   const hostdbPlatform = validatePlatform(platform, arch)
-  const tag = `${engine}-${version}`
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  const filename = `${engine}-${version}-${hostdbPlatform}.${ext}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(engine, { version, hostdbPlatform, extension: ext })
 }

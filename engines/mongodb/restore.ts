@@ -89,6 +89,29 @@ export type RestoreOptions = {
   database: string
   drop?: boolean // Drop existing data before restore
   validateVersion?: boolean
+  sourceDatabase?: string // Original database name in the backup (for namespace remapping)
+}
+
+/**
+ * Add namespace remapping args for archive format restores.
+ * Uses sourceDatabase if provided, otherwise uses $prefix$ placeholder.
+ *
+ * IMPORTANT: mongorestore uses $prefix$ and $suffix$ as special capture groups:
+ * - $prefix$ captures the database name from the source namespace
+ * - $suffix$ captures the collection name from the source namespace
+ *
+ * Do NOT use `*` instead of `$prefix$` - while `*` is a wildcard in some contexts,
+ * mongorestore requires matching capture groups on both sides of the remap.
+ * Using `*.*` on the left with `db.$suffix$` on the right fails with:
+ * "Different number of asterisks in from and to"
+ */
+function addNamespaceRemapArgs(
+  args: string[],
+  sourceDatabase: string | undefined,
+  targetDatabase: string,
+): void {
+  const nsFromDb = sourceDatabase ?? '$prefix$'
+  args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
 }
 
 // Restore a MongoDB backup using mongorestore
@@ -96,7 +119,7 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database, drop = true } = options
+  const { port, database, drop = true, sourceDatabase } = options
 
   const mongorestore = await getMongorestorePath()
   if (!mongorestore) {
@@ -107,20 +130,25 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  const args: string[] = [
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(port),
-    '--db',
-    database,
-  ]
+  const args: string[] = ['--host', '127.0.0.1', '--port', String(port)]
 
   if (drop) {
     args.push('--drop')
   }
 
   // Handle different formats
+  // For directory format, --db works directly
+  // For archive format, we need namespace remapping since --db alone doesn't remap
+  const isArchiveFormat =
+    format.format === 'archive-gzip' ||
+    format.format === 'archive' ||
+    format.format === 'unknown'
+
+  if (!isArchiveFormat) {
+    // Directory and BSON formats: --db works directly
+    args.push('--db', database)
+  }
+
   if (format.format === 'directory') {
     // Directory dump - look for database subdirectory
     // First try the target database name
@@ -162,14 +190,17 @@ export async function restoreBackup(
     }
   } else if (format.format === 'archive-gzip') {
     args.push('--archive=' + backupPath, '--gzip')
+    addNamespaceRemapArgs(args, sourceDatabase, database)
   } else if (format.format === 'archive') {
     args.push('--archive=' + backupPath)
+    addNamespaceRemapArgs(args, sourceDatabase, database)
   } else if (format.format === 'bson') {
     // BSON files are passed directly without --archive flag
     args.push(backupPath)
   } else {
     // Default to archive for unknown formats
     args.push('--archive=' + backupPath, '--gzip')
+    addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 
   logDebug(`Running mongorestore with args: ${args.join(' ')}`)

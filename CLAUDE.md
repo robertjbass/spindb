@@ -69,6 +69,27 @@ Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for ful
 - Registry in `~/.spindb/config.json` tracks files by name
 - Use `spindb attach <path>` / `spindb detach <name>` to manage registry
 
+### Binary Manager Base Classes
+
+When adding a new engine, choose the appropriate binary manager base class:
+
+| Base Class | Location | Used By | Use Case |
+|------------|----------|---------|----------|
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey | Key-value stores with `bin/` layout |
+| `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
+| `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
+| `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
+
+**Decision tree:**
+1. Is it a file-based/embedded database (no server process)? → `BaseEmbeddedBinaryManager`
+2. Is it a SQL server needing `--version` verification? → `BaseServerBinaryManager`
+3. Is it a document-oriented database? → `BaseDocumentBinaryManager`
+4. Is it a key-value store? → `BaseBinaryManager`
+
+**Note:** PostgreSQL uses `BaseServerBinaryManager` with a custom `verify()` override for its version output format. EDB binaries for Windows are uploaded to hostdb, so all platforms use the same download path.
+
+See [FEATURE.md](FEATURE.md) for detailed implementation guidance and code examples.
+
 ### Engine Aliases
 
 Engines can be referenced by aliases in CLI commands:
@@ -137,7 +158,19 @@ Use `assertExhaustive(engine)` in switch statements for compile-time exhaustiven
 
 ### Backup & Restore Formats
 
-Examples: PostgreSQL (`.sql`, `.dump`), Redis/Valkey (`.redis`/`.valkey`, `.rdb`), SQLite/DuckDB (`.sql`, binary copy)
+Each engine has semantic format names defined in `config/backup-formats.ts`:
+
+| Engine | Format 1 | Format 2 | Default |
+|--------|----------|----------|---------|
+| PostgreSQL | `sql` (.sql) | `custom` (.dump) | `sql` |
+| MySQL | `sql` (.sql) | `compressed` (.sql.gz) | `sql` |
+| MariaDB | `sql` (.sql) | `compressed` (.sql.gz) | `sql` |
+| SQLite | `sql` (.sql) | `binary` (.sqlite) | `binary` |
+| DuckDB | `sql` (.sql) | `binary` (.duckdb) | `binary` |
+| MongoDB | `bson` (directory) | `archive` (.archive) | `archive` |
+| Redis | `text` (.redis) | `rdb` (.rdb) | `rdb` |
+| Valkey | `text` (.valkey) | `rdb` (.rdb) | `rdb` |
+| ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
 
 See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
 
@@ -260,7 +293,6 @@ Menu navigation patterns:
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries)
 3. **Redis/Valkey** - No `dumpFromConnectionString()` support
-4. **Large backups** - Redis text restore reads entire file into memory
 
 ## Publishing
 

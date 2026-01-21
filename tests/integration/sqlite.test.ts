@@ -235,7 +235,7 @@ describe('SQLite Integration Tests', () => {
 
     // Create binary backup
     const result = await engine.backup(config!, backupPath, {
-      format: 'dump',
+      format: 'binary',
       database: config!.database,
     })
     assert(existsSync(result.path), 'Backup file should exist')

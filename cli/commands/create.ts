@@ -444,23 +444,40 @@ export const createCommand = new Command('create')
           database = answers.database
         }
 
-        // Redis uses numbered databases (0-15), default to "0"
+        // Redis/Valkey use numbered databases (0-15), default to "0"
         // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
-        if (engine === Engine.Redis) {
+        if (engine === Engine.Redis || engine === Engine.Valkey) {
           database = database ?? '0'
+          // Validate Redis/Valkey database is a pure integer string 0-15
+          // Reject decimals ("1.5"), scientific notation ("1e2"), and trailing garbage ("5abc")
+          if (!/^[0-9]+$/.test(database)) {
+            console.error(
+              uiError(
+                'Redis/Valkey database must be an integer between 0 and 15',
+              ),
+            )
+            process.exit(1)
+          }
+          const dbIndex = parseInt(database, 10)
+          if (dbIndex < 0 || dbIndex > 15) {
+            console.error(
+              uiError(
+                'Redis/Valkey database must be an integer between 0 and 15',
+              ),
+            )
+            process.exit(1)
+          }
         } else {
           database = database ?? containerName.replace(/-/g, '_')
-        }
-
-        // Validate database name to prevent SQL injection
-        // Skip for Redis which uses numbered databases (0-15)
-        if (engine !== Engine.Redis && !isValidDatabaseName(database)) {
-          console.error(
-            uiError(
-              'Database name must start with a letter and contain only letters, numbers, and underscores',
-            ),
-          )
-          process.exit(1)
+          // Validate database name to prevent SQL injection
+          if (!isValidDatabaseName(database)) {
+            console.error(
+              uiError(
+                'Database name must start with a letter and contain only letters, numbers, and underscores',
+              ),
+            )
+            process.exit(1)
+          }
         }
 
         console.log(header('Creating Database Container'))

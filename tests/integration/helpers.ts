@@ -83,11 +83,16 @@ export async function findConsecutiveFreePorts(
 }
 
 /**
- * Clean up all test containers (matching *-test* pattern)
+ * Clean up all test containers
+ * Matches containers with test prefixes (cli*, test*) followed by underscore and UUID
  */
 export async function cleanupTestContainers(): Promise<string[]> {
   const containers = await containerManager.list()
-  const testContainers = containers.filter((c) => c.name.includes('-test'))
+  // Match test naming pattern: containers containing "-test" followed by _uuid
+  // Examples: pg-test_12345678, mysql-test-clone_abcd1234, redis-test-renamed_12345678
+  // Also matches legacy patterns: clipg_12345678, test_abcd1234
+  const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
+  const testContainers = containers.filter((c) => testPattern.test(c.name))
 
   const deleted: string[] = []
   for (const container of testContainers) {
@@ -118,7 +123,7 @@ export async function cleanupTestContainers(): Promise<string[]> {
   if (existsSync(sqliteContainersDir)) {
     const dirs = readdirSync(sqliteContainersDir, { withFileTypes: true })
     for (const dir of dirs) {
-      if (dir.isDirectory() && dir.name.includes('-test')) {
+      if (dir.isDirectory() && testPattern.test(dir.name)) {
         try {
           const dirPath = `${sqliteContainersDir}/${dir.name}`
           await rm(dirPath, { recursive: true, force: true })
@@ -504,6 +509,46 @@ export async function waitForReady(
     }
   }
 
+  return false
+}
+
+/**
+ * Wait for a container to be fully stopped (process terminated, PID file removed).
+ * This is important for operations like rename that require the container to be stopped.
+ */
+export async function waitForStopped(
+  containerName: string,
+  engine: Engine,
+  timeoutMs = 30000,
+): Promise<boolean> {
+  const startTime = Date.now()
+  const checkInterval = 200
+
+  console.log(
+    `   [DEBUG] waitForStopped: checking if "${containerName}" is stopped...`,
+  )
+
+  let iterations = 0
+  while (Date.now() - startTime < timeoutMs) {
+    iterations++
+    const running = await processManager.isRunning(containerName, { engine })
+    if (!running) {
+      console.log(
+        `   [DEBUG] waitForStopped: "${containerName}" is stopped after ${iterations} checks (${Date.now() - startTime}ms)`,
+      )
+      return true
+    }
+    if (iterations <= 3 || iterations % 10 === 0) {
+      console.log(
+        `   [DEBUG] waitForStopped: "${containerName}" still running (check ${iterations})`,
+      )
+    }
+    await new Promise((resolve) => setTimeout(resolve, checkInterval))
+  }
+
+  console.log(
+    `   [DEBUG] waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
+  )
   return false
 }
 

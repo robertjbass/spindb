@@ -1,6 +1,7 @@
 import { REDIS_VERSION_MAP } from './version-maps'
+import { buildHostdbUrl } from '../../core/hostdb-client'
 import { logDebug } from '../../core/error-handler'
-import { Platform, type Arch } from '../../types'
+import { Engine, Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -56,17 +57,22 @@ export function getBinaryUrl(
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
   const fullVersion = normalizeVersion(version, REDIS_VERSION_MAP)
-
-  const tag = `redis-${fullVersion}`
-  // Windows uses .zip, Unix uses .tar.gz
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-  const filename = `redis-${fullVersion}-${hostdbPlatform}.${ext}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.Redis, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
 }
 
 /**
  * Normalize version string to X.Y.Z format
+ *
+ * Note: Redis does not use validateSemverLikeVersion() because:
+ * 1. Redis uses a lenient approach - unknown versions log a warning and pass through
+ * 2. This allows testing new versions before they're added to the version map
+ * 3. Invalid versions will fail at download time with a clear 404 error
  *
  * @param version - Version string (e.g., '7', '7.4', '7.4.7')
  * @param versionMap - Optional version map for major version lookup

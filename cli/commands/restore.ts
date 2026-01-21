@@ -18,6 +18,7 @@ import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { TransactionManager } from '../../core/transaction-manager'
+import { isFileBasedEngine } from '../../types'
 import { logDebug } from '../../core/error-handler'
 
 export const restoreCommand = new Command('restore')
@@ -87,20 +88,27 @@ export const restoreCommand = new Command('restore')
         }
 
         const { engine: engineName } = config
-
-        const running = await processManager.isRunning(containerName, {
-          engine: engineName,
-        })
-        if (!running) {
-          console.error(
-            uiError(
-              `Container "${containerName}" is not running. Start it first.`,
-            ),
-          )
-          process.exit(1)
-        }
-
         const engine = getEngine(engineName)
+
+        // Check if container needs to be running for restore
+        // - File-based engines (SQLite, DuckDB) don't need to be running
+        // - Redis/Valkey RDB restore requires container to be STOPPED
+        // - All other engines require container to be running
+        // We defer the running check until after format detection for Redis/Valkey
+        const isRedisLike = engineName === 'redis' || engineName === 'valkey'
+        if (!isFileBasedEngine(engineName) && !isRedisLike) {
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          if (!running) {
+            console.error(
+              uiError(
+                `Container "${containerName}" is not running. Start it first.`,
+              ),
+            )
+            process.exit(1)
+          }
+        }
 
         const depsSpinner = createSpinner('Checking required tools...')
         depsSpinner.start()
@@ -248,7 +256,13 @@ export const restoreCommand = new Command('restore')
 
         let databaseName = options.database
         if (!databaseName) {
-          databaseName = await promptDatabaseName(containerName, engineName)
+          // File-based engines (SQLite, DuckDB) don't have separate databases
+          // The file IS the database, so use the container name
+          if (isFileBasedEngine(engineName)) {
+            databaseName = containerName
+          } else {
+            databaseName = await promptDatabaseName(containerName, engineName)
+          }
         }
 
         if (!backupPath) {
@@ -261,6 +275,34 @@ export const restoreCommand = new Command('restore')
 
         const format = await engine.detectBackupFormat(backupPath)
         detectSpinner.succeed(`Detected: ${format.description}`)
+
+        // For Redis/Valkey, check running state based on format
+        // - Text format (.redis/.valkey) requires container to be RUNNING
+        // - RDB format requires container to be STOPPED
+        if (isRedisLike) {
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          const isRdbFormat = format.format === 'rdb'
+
+          if (isRdbFormat && running) {
+            console.error(
+              uiError(
+                `Container "${containerName}" must be stopped for RDB restore. Run: spindb stop ${containerName}`,
+              ),
+            )
+            process.exit(1)
+          }
+
+          if (!isRdbFormat && !running) {
+            console.error(
+              uiError(
+                `Container "${containerName}" is not running. Start it first for text format restore.`,
+              ),
+            )
+            process.exit(1)
+          }
+        }
 
         // Check if database already exists
         const databaseExists =
@@ -334,42 +376,46 @@ export const restoreCommand = new Command('restore')
           databaseCreated = true
           dbSpinner.succeed(`Database "${databaseName}" ready`)
 
-          // Register rollback to drop database if restore fails
-          tx.addRollback({
-            description: `Drop database "${databaseName}"`,
-            execute: async () => {
-              try {
-                await engine.dropDatabase(config, databaseName)
-                logDebug(`Rolled back: dropped database "${databaseName}"`)
-              } catch (dropErr) {
-                logDebug(
-                  `Failed to drop database during rollback: ${dropErr instanceof Error ? dropErr.message : String(dropErr)}`,
-                )
-              }
-            },
-          })
+          // File-based engines (SQLite, DuckDB) don't need database tracking
+          // They use a registry and the file IS the database
+          if (!isFileBasedEngine(engineName)) {
+            // Register rollback to drop database if restore fails
+            tx.addRollback({
+              description: `Drop database "${databaseName}"`,
+              execute: async () => {
+                try {
+                  await engine.dropDatabase(config, databaseName)
+                  logDebug(`Rolled back: dropped database "${databaseName}"`)
+                } catch (dropErr) {
+                  logDebug(
+                    `Failed to drop database during rollback: ${dropErr instanceof Error ? dropErr.message : String(dropErr)}`,
+                  )
+                }
+              },
+            })
 
-          await containerManager.addDatabase(containerName, databaseName)
+            await containerManager.addDatabase(containerName, databaseName)
 
-          // Register rollback to remove database from container tracking
-          tx.addRollback({
-            description: `Remove "${databaseName}" from container tracking`,
-            execute: async () => {
-              try {
-                await containerManager.removeDatabase(
-                  containerName,
-                  databaseName,
-                )
-                logDebug(
-                  `Rolled back: removed "${databaseName}" from container tracking`,
-                )
-              } catch (removeErr) {
-                logDebug(
-                  `Failed to remove database from tracking during rollback: ${removeErr instanceof Error ? removeErr.message : String(removeErr)}`,
-                )
-              }
-            },
-          })
+            // Register rollback to remove database from container tracking
+            tx.addRollback({
+              description: `Remove "${databaseName}" from container tracking`,
+              execute: async () => {
+                try {
+                  await containerManager.removeDatabase(
+                    containerName,
+                    databaseName,
+                  )
+                  logDebug(
+                    `Rolled back: removed "${databaseName}" from container tracking`,
+                  )
+                } catch (removeErr) {
+                  logDebug(
+                    `Failed to remove database from tracking during rollback: ${removeErr instanceof Error ? removeErr.message : String(removeErr)}`,
+                  )
+                }
+              },
+            })
+          }
 
           const restoreSpinner = createSpinner('Restoring backup...')
           restoreSpinner.start()

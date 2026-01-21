@@ -1,8 +1,8 @@
-import { readFile } from 'fs/promises'
+import { open } from 'fs/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { configManager } from '../../core/config-manager'
-import { findBinaryPathFresh } from './binary-manager'
+import { findBinary } from '../../core/dependency-manager'
 import { validateRestoreCompatibility } from './version-validator'
 import { SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
@@ -13,17 +13,25 @@ const execAsync = promisify(exec)
  * Detect the format of a PostgreSQL backup file
  *
  * Also detects MySQL/MariaDB dumps to provide helpful error messages.
+ * Only reads the first 263 bytes needed for format detection.
  */
 export async function detectBackupFormat(
   filePath: string,
 ): Promise<BackupFormat> {
-  // Read the first 128 bytes to detect format
-  const file = await readFile(filePath)
-  const buffer = Buffer.alloc(128)
+  // Read only the bytes needed for format detection (up to offset 262 for tar magic)
+  const HEADER_SIZE = 263
+  const buffer = Buffer.alloc(HEADER_SIZE)
 
-  // Copy first bytes
-  file.copy(buffer, 0, 0, Math.min(128, file.length))
-  const header = buffer.toString('utf8')
+  const fd = await open(filePath, 'r')
+  let bytesRead: number
+  try {
+    const result = await fd.read(buffer, 0, HEADER_SIZE, 0)
+    bytesRead = result.bytesRead
+  } finally {
+    await fd.close()
+  }
+
+  const header = buffer.toString('utf8', 0, Math.min(128, bytesRead))
 
   // Check for MySQL/MariaDB dump markers (before PostgreSQL checks)
   if (header.includes('-- MySQL dump') || header.includes('-- MariaDB dump')) {
@@ -46,8 +54,8 @@ export async function detectBackupFormat(
 
   // Check for tar format (directory dumps are usually tar)
   // Tar files have "ustar" at offset 257
-  if (file.length > 262) {
-    const tarMagic = file.toString('ascii', 257, 262)
+  if (bytesRead > 262) {
+    const tarMagic = buffer.toString('ascii', 257, 262)
     if (tarMagic === 'ustar') {
       return {
         format: 'tar',
@@ -139,18 +147,16 @@ async function getPgRestorePath(): Promise<string> {
     return configPath
   }
 
-  // Fall back to finding it on the system PATH with cache refresh
-  const systemPath = await findBinaryPathFresh('pg_restore')
-  if (!systemPath) {
+  // Fall back to finding it on the system PATH
+  const result = await findBinary('pg_restore')
+  if (!result) {
     throw new Error(
-      'pg_restore not found. Install PostgreSQL client tools:\n' +
-        '  macOS: brew install libpq && brew link --force libpq\n' +
-        '  Ubuntu/Debian: apt install postgresql-client\n' +
-        '  CentOS/RHEL/Fedora: yum install postgresql\n\n' +
+      'pg_restore not found. Download PostgreSQL binaries:\n' +
+        '  spindb engines download postgresql\n\n' +
         'Or configure manually: spindb config set pg_restore /path/to/pg_restore',
     )
   }
-  return systemPath
+  return result.path
 }
 
 // Restore a backup to a PostgreSQL database

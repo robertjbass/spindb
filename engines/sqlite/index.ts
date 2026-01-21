@@ -15,7 +15,7 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync, statSync, createReadStream, createWriteStream } from 'fs'
+import { existsSync, statSync, createWriteStream, createReadStream } from 'fs'
 import { copyFile, unlink, mkdir, open, writeFile } from 'fs/promises'
 import { resolve, dirname, join } from 'path'
 import { tmpdir } from 'os'
@@ -322,14 +322,14 @@ export class SQLiteEngine extends BaseEngine {
       // Pipe .dump output to file (avoids shell injection)
       await this.dumpToFile(sqlite3, entry.filePath, outputPath)
     } else {
-      // Binary copy for 'dump' format
+      // Binary copy for 'binary' format
       await copyFile(entry.filePath, outputPath)
     }
 
     const stats = statSync(outputPath)
     return {
       path: outputPath,
-      format: options.format ?? 'dump',
+      format: options.format ?? 'binary',
       size: stats.size,
     }
   }
@@ -440,26 +440,24 @@ export class SQLiteEngine extends BaseEngine {
     })
   }
 
-  // Uses spawn to avoid shell injection.
+  // Streams a SQL file to a SQLite database via stdin
   private async runSqlFile(
     sqlite3Path: string,
     dbPath: string,
     sqlFilePath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const input = createReadStream(sqlFilePath)
-      const proc = spawn(sqlite3Path, [dbPath])
-
-      input.pipe(proc.stdin)
-
-      proc.stderr.on('data', (data: Buffer) => {
-        // Collect stderr but don't fail immediately - sqlite3 may write warnings
-        console.error(data.toString())
+      // Use 'ignore' for stdout since we don't need output and leaving it
+      // unconsumed could fill the buffer and cause a deadlock
+      const proc = spawn(sqlite3Path, [dbPath], {
+        stdio: ['pipe', 'ignore', 'pipe'],
       })
 
-      input.on('error', (err) => {
-        proc.kill()
-        reject(err)
+      let stderrData = ''
+      let streamError: Error | null = null
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderrData += data.toString()
       })
 
       proc.on('error', (err) => {
@@ -467,14 +465,40 @@ export class SQLiteEngine extends BaseEngine {
       })
 
       proc.on('close', (code) => {
+        // If there was a stream error, report it
+        if (streamError) {
+          reject(streamError)
+          return
+        }
+
         if (code === 0) {
           resolve()
         } else {
           reject(
-            new Error(`sqlite3 script execution failed with exit code ${code}`),
+            new Error(
+              `sqlite3 failed with exit code ${code}${stderrData ? `: ${stderrData}` : ''}`,
+            ),
           )
         }
       })
+
+      // Handle stdin errors (EPIPE if process exits early)
+      proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          reject(err)
+        }
+      })
+
+      // Stream SQL file to sqlite3 stdin
+      const fileStream = createReadStream(sqlFilePath, { encoding: 'utf-8' })
+
+      fileStream.on('error', (error) => {
+        streamError = new Error(`Failed to read SQL file: ${error.message}`)
+        fileStream.destroy()
+        proc.stdin.end()
+      })
+
+      fileStream.pipe(proc.stdin)
     })
   }
 
@@ -539,8 +563,13 @@ export class SQLiteEngine extends BaseEngine {
       // Run SQL file - pipe file to stdin (avoids shell injection)
       await this.runSqlFile(sqlite3, entry.filePath, options.file)
     } else if (options.sql) {
-      // Run inline SQL - pass as argument (avoids shell injection)
-      await execFileAsync(sqlite3, [entry.filePath, options.sql])
+      // Run inline SQL - pass as argument, output to stdout
+      const { stdout, stderr } = await execFileAsync(sqlite3, [
+        entry.filePath,
+        options.sql,
+      ])
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }

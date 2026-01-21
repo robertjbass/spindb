@@ -7,18 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-01-20
+
+### Added
+- **Docker E2E rename and clone tests** - Extended `pnpm test:docker` to test container rename and clone operations for all server-based engines. Tests verify data persists after rename/clone.
+- **Docker E2E idempotency tests** - Added tests for double-start and double-stop operations to verify they warn but don't error.
+- **GH Actions rename/clone tests** - Added `test-rename-clone` job testing PostgreSQL rename and clone on Ubuntu, macOS, and Windows.
+- **GH Actions ClickHouse rename test** - Added `test-clickhouse-rename` job specifically testing ClickHouse config.xml path regeneration on Ubuntu and macOS.
+- **CLI E2E URL command tests** - Added tests for `spindb url` command including `--json` output.
+- **CLI E2E connection string tests** - Added tests for `spindb create --from <connection-string>` engine inference.
+- **MariaDB version validator tests** - Added unit tests for `parseVersion`, `extractDumpVersion`, and `validateRestoreCompatibility`.
+- **MongoDB version validator tests** - Added unit tests for `parseVersion`, `compareVersions`, `isVersionCompatible`, and `getMajorMinorVersion`.
+- **ClickHouse version validator tests** - Added unit tests for `parseVersion`, `compareVersions`, `getMajorVersion`, `isVersionSupported`, and `isVersionCompatible`.
+
+### Fixed
+- **ClickHouse data loss after rename/clone** - Fixed ClickHouse containers appearing to lose data after rename or clone. The `config.xml` file contained hardcoded absolute paths that weren't updated when the container directory moved. Added `regenerateConfig()` method that rewrites `config.xml` with correct paths after rename/clone operations.
+
+## [0.20.0] - 2026-01-20
+
+### Breaking Changes
+- **Removed `--sql` and `--dump` shorthand flags** - The `spindb backup` command no longer accepts `--sql` or `--dump` flags. Use `--format <format>` with engine-specific format names instead.
+- **Engine-specific backup format names** - Each engine now has semantically meaningful format names instead of universal `sql`/`dump`:
+
+  | Engine | Formats | Default |
+  |--------|---------|---------|
+  | PostgreSQL | `sql`, `custom` | `sql` |
+  | MySQL/MariaDB | `sql`, `compressed` | `sql` |
+  | SQLite/DuckDB | `sql`, `binary` | `binary` |
+  | MongoDB | `bson`, `archive` | `archive` |
+  | Redis/Valkey | `text`, `rdb` | `rdb` |
+  | ClickHouse | `sql` | `sql` |
+
+### Added
+- **Docker E2E data lifecycle tests** - Extended `pnpm test:docker` to test full backup/restore cycles for all engines. Tests now seed data, create backups in multiple formats, restore to new databases, and verify data integrity.
+- **Self-update E2E test in Docker** - Added `pnpm test:docker -- self-update` to test the update command in a clean Linux environment.
+- **Engine-specific backup format types** - Added `PostgreSQLFormat`, `MySQLFormat`, `MongoDBFormat`, `RedisFormat`, etc. type definitions in `types/index.ts` for type-safe format handling.
+- **Format validation helpers** - Added `isValidFormat()` and `getValidFormats()` functions in `config/backup-formats.ts` for engine-aware format validation.
+
+### Changed
+- **backup-formats.ts refactored** - Complete restructure with dynamic format keys per engine. Uses `formats: Record<string, BackupFormatInfo>` instead of hardcoded `sql`/`dump` keys.
+- **backup-formats.ts uses Engine enum** - Keys in `BACKUP_FORMATS` now use `[Engine.PostgreSQL]:` bracket notation instead of string literals for better type safety.
+- **CLI format validation** - The backup command now validates format names against the engine's supported formats and provides helpful error messages listing valid options.
+
+### Fixed
+- **SQLite/DuckDB restore in Docker** - Fixed SQL file restore failing silently in Docker. Changed from `-init` flag approach to explicit `stdin.end(fileContent)` which works reliably across macOS and Linux.
+- **DuckDB SQL dump table names** - Fixed `.mode insert` producing `INSERT INTO "table"` instead of actual table name. Now uses `.mode insert <tablename>` for each table.
+- **SQLite/DuckDB restore prompts** - Fixed restore command prompting for database name on file-based engines. Now uses container name directly since the file IS the database.
+- **SQLite/DuckDB container tracking** - Fixed restore failing with "container.json not found" by skipping `containerManager.addDatabase()` for file-based engines which use registry instead.
+- **SQLite/DuckDB default backup format** - Fixed fallback format defaulting to `'dump'` instead of `'binary'` for file-based engines.
+- **MariaDB backup extension** - Fixed backup command producing `.dump` instead of `.sql.gz` for MariaDB compressed backups. Added missing `mariadb` case in `getExtension()`.
+- **Docker E2E DuckDB count parsing** - Fixed count extraction matching "64" from "int64" column type instead of actual row count.
+- **Redis/Valkey backup format checks** - Fixed format comparisons using `'sql'` instead of `'text'` in backup implementations.
+- **MongoDB backup format checks** - Fixed format comparisons using `'dump'` instead of `'archive'` in backup and clone implementations.
+- **ClickHouse backup portability** - Fixed backup SQL containing hardcoded database names (e.g., `CREATE TABLE testdb.test_user`) which prevented restoring to different target databases. Backups now generate portable SQL without database prefixes.
+- **Redis/Valkey backup and restore format names** - Updated backup and restore modules to return `format: 'text'` instead of `format: 'redis'` or `format: 'valkey'` for consistency with the new semantic format naming.
+
+## [0.19.7] - 2026-01-20
+
 ### Added
 - **MySQL 9.1 support** - Added MySQL 9.1.0 to version maps and supported versions.
 
 ### Changed
+- **PostgreSQL now uses BaseServerBinaryManager** - Refactored PostgreSQL binary management to use the same base class as MySQL, MariaDB, Redis, Valkey, and ClickHouse. This consolidates ~600 lines of PostgreSQL-specific code into a ~40-line subclass.
+- **PostgreSQL Windows binaries from hostdb** - Windows PostgreSQL binaries now download from hostdb instead of EnterpriseDB (EDB). All platforms now use a unified download source.
+- **PostgreSQL client tools bundled** - Client tools (psql, pg_dump, pg_restore) are now bundled in hostdb downloads for all platforms, removing the need for system package manager fallbacks.
 - **Platform/Arch enums** - Introduced `Platform` and `Arch` enums in `types/index.ts` for type-safe platform and architecture checks. Refactored all string literal comparisons (`'darwin'`, `'linux'`, `'win32'`, `'arm64'`, `'x64'`) to use enum values across the codebase.
 - **Engine enum keys** - `engineDefaults` now uses `Engine` enum values as keys (`[Engine.PostgreSQL]`) instead of string literals for better type safety.
 - **Version source consolidation** - Removed duplicated `supportedVersions` from `engineDefaults`. Engines now use `SUPPORTED_MAJOR_VERSIONS` from their respective `version-maps.ts` files as the single source of truth.
 - **Logging cleanup** - Changed `console.warn` to `logDebug` in all engine version-maps.ts files to avoid polluting stdout/stderr.
 - **Type safety improvements** - Added `isValidEngine()` type guard for safer engine validation. Removed unsafe `as Engine` casts.
 
+### Fixed
+- **PostgreSQL version verification** - Fixed version parsing for hostdb PostgreSQL binaries which output `postgres (PostgreSQL) X.Y - Percona Server for PostgreSQL X.Y.Z`. The base class regex expected MySQL/MariaDB format; PostgreSQL now overrides `verify()` with its own format-specific parser.
+- **SQLite/DuckDB version fallback** - `getLatestVersion()` now falls back to a sensible major-based version when hostdb or version maps lack an entry, instead of throwing.
+- **Partial install cleanup** - MariaDB and MongoDB binary downloads now remove `binPath` on failure to avoid leaving partially extracted installs.
+
 ### Removed
 - **Dead code** - Removed unused `getPostgresHomebrewBinPath()` function from `engine-defaults.ts`.
+- **Obsolete PostgreSQL files** - Removed `core/binary-manager.ts` (PostgreSQL-specific, replaced by base class) and `engines/postgresql/edb-binary-urls.ts` (no longer needed since hostdb hosts Windows binaries).
+- **Zonky.io fallback code** - Removed legacy fallback code in PostgreSQL engine that installed client tools via system package managers.
 
 ## [0.19.4] - 2026-01-19
 

@@ -1,6 +1,7 @@
 import { CLICKHOUSE_VERSION_MAP } from './version-maps'
+import { buildHostdbUrl } from '../../core/hostdb-client'
 import { logDebug } from '../../core/error-handler'
-import { type Platform, type Arch } from '../../types'
+import { Engine, type Platform, type Arch } from '../../types'
 
 /**
  * Supported platform identifiers for hostdb downloads.
@@ -58,11 +59,12 @@ export function getBinaryUrl(
   // Normalize version (handles major version lookup)
   const fullVersion = normalizeVersion(version, CLICKHOUSE_VERSION_MAP)
 
-  const tag = `clickhouse-${fullVersion}`
   // ClickHouse on hostdb uses tar.gz for all platforms (no Windows support)
-  const filename = `clickhouse-${fullVersion}-${hostdbPlatform}.tar.gz`
-
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return buildHostdbUrl(Engine.ClickHouse, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: 'tar.gz',
+  })
 }
 
 /**

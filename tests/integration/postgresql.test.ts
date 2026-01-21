@@ -16,6 +16,7 @@ import {
   cleanupTestContainers,
   getRowCount,
   waitForReady,
+  waitForStopped,
   containerDataExists,
   getConnectionString,
   runScriptFile,
@@ -32,6 +33,14 @@ const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/postgresql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
 
+// Debug: confirm test file is being loaded (use process.stdout.write to ensure immediate flush)
+process.stdout.write('\n========================================\n')
+process.stdout.write('[DEBUG] postgresql.test.ts loaded\n')
+process.stdout.write(`[DEBUG] CWD: ${process.cwd()}\n`)
+process.stdout.write(`[DEBUG] __dirname: ${__dirname}\n`)
+process.stdout.write(`[DEBUG] HOME: ${process.env.HOME || process.env.USERPROFILE}\n`)
+process.stdout.write('========================================\n\n')
+
 describe('PostgreSQL Integration Tests', () => {
   let testPorts: number[]
   let containerName: string
@@ -40,23 +49,76 @@ describe('PostgreSQL Integration Tests', () => {
   let portConflictContainerName: string
 
   before(async () => {
+    console.log('\n[DEBUG] before() hook starting...')
     console.log('\n🧹 Cleaning up any existing test containers...')
-    const deleted = await cleanupTestContainers()
-    if (deleted.length > 0) {
-      console.log(`   Deleted: ${deleted.join(', ')}`)
+    try {
+      const deleted = await cleanupTestContainers()
+      if (deleted.length > 0) {
+        console.log(`   Deleted: ${deleted.join(', ')}`)
+      }
+      console.log('   [DEBUG] cleanup completed')
+    } catch (error) {
+      console.log(`   [DEBUG] cleanup FAILED: ${error}`)
+      throw error
     }
 
     console.log('\n🔍 Finding available test ports...')
-    testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.postgresql.base)
-    console.log(`   Using ports: ${testPorts.join(', ')}`)
+    try {
+      testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.postgresql.base)
+      console.log(`   Using ports: ${testPorts.join(', ')}`)
+      console.log(`   [DEBUG] testPorts assigned: ${JSON.stringify(testPorts)}`)
+    } catch (error) {
+      console.log(`   [DEBUG] findConsecutiveFreePorts FAILED: ${error}`)
+      throw error
+    }
 
     containerName = generateTestName('pg-test')
     clonedContainerName = generateTestName('pg-test-clone')
     renamedContainerName = generateTestName('pg-test-renamed')
     portConflictContainerName = generateTestName('pg-test-conflict')
+    console.log(`   [DEBUG] Container names generated:`)
+    console.log(`      containerName: ${containerName}`)
+    console.log(`      clonedContainerName: ${clonedContainerName}`)
+    console.log(`      renamedContainerName: ${renamedContainerName}`)
+    console.log(`      portConflictContainerName: ${portConflictContainerName}`)
+    console.log('[DEBUG] before() hook completed')
   })
 
   after(async () => {
+    // Print diagnostic info to STDERR so it definitely appears
+    process.stderr.write('\n')
+    process.stderr.write('╔══════════════════════════════════════════════════════════════╗\n')
+    process.stderr.write('║              TEST SUITE SUMMARY (after hook)                 ║\n')
+    process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+
+    // Show test container names that were supposed to be used
+    process.stderr.write(`║ containerName: ${containerName || 'UNDEFINED'}\n`)
+    process.stderr.write(`║ renamedContainerName: ${renamedContainerName || 'UNDEFINED'}\n`)
+    process.stderr.write(`║ clonedContainerName: ${clonedContainerName || 'UNDEFINED'}\n`)
+    process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+
+    try {
+      const containers = await containerManager.list()
+      const testContainers = containers.filter((c) => c.name.includes('-test'))
+      process.stderr.write(`║ All containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+      process.stderr.write(`║ Test containers remaining: ${testContainers.length}\n`)
+      for (const tc of testContainers) {
+        process.stderr.write(`║   - ${tc.name} (${tc.engine}, status: ${tc.status})\n`)
+      }
+
+      // Check which expected containers exist
+      const hasOriginal = containers.some(c => c.name === containerName)
+      const hasRenamed = containers.some(c => c.name === renamedContainerName)
+      const hasClone = containers.some(c => c.name === clonedContainerName)
+      process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+      process.stderr.write(`║ Original (${containerName}): ${hasOriginal ? 'EXISTS' : 'missing'}\n`)
+      process.stderr.write(`║ Renamed (${renamedContainerName}): ${hasRenamed ? 'EXISTS' : 'missing'}\n`)
+      process.stderr.write(`║ Clone (${clonedContainerName}): ${hasClone ? 'EXISTS (should be deleted)' : 'deleted OK'}\n`)
+    } catch (error) {
+      process.stderr.write(`║ Error listing containers: ${error}\n`)
+    }
+    process.stderr.write('╚══════════════════════════════════════════════════════════════╝\n')
+
     console.log('\n🧹 Final cleanup...')
     const deleted = await cleanupTestContainers()
     if (deleted.length > 0) {
@@ -64,31 +126,96 @@ describe('PostgreSQL Integration Tests', () => {
     }
   })
 
+  // DIAGNOSTIC TEST - this should always pass and shows environment info
+  it('[DIAGNOSTIC] environment check', async () => {
+    process.stdout.write('\n--- DIAGNOSTIC TEST START ---\n')
+    process.stdout.write(`HOME: ${process.env.HOME || process.env.USERPROFILE}\n`)
+    process.stdout.write(`CWD: ${process.cwd()}\n`)
+    process.stdout.write(`testPorts: ${JSON.stringify(testPorts)}\n`)
+    process.stdout.write(`containerName: ${containerName}\n`)
+    process.stdout.write(`renamedContainerName: ${renamedContainerName}\n`)
+
+    // Check if PostgreSQL binaries exist
+    const engine = getEngine(ENGINE)
+    let psqlPath: string | null = null
+    try {
+      psqlPath = await engine.getPsqlPath()
+    } catch {
+      psqlPath = null
+    }
+    process.stdout.write(`PostgreSQL psql path: ${psqlPath || 'NOT FOUND'}\n`)
+
+    // Check containers at start
+    let containers: Awaited<ReturnType<typeof containerManager.list>> = []
+    try {
+      containers = await containerManager.list()
+      process.stdout.write(`Existing containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+    } catch (error) {
+      process.stdout.write(`Existing containers: ERROR - ${error instanceof Error ? error.message : error}\n`)
+    }
+    process.stdout.write('--- DIAGNOSTIC TEST END ---\n\n')
+
+    // Always pass to show we got here
+    assert(true, 'Diagnostic test passed')
+  })
+
   it('should create container without starting (--no-start)', async () => {
     console.log(
       `\n📦 Creating container "${containerName}" without starting...`,
     )
+    console.log(`   [DEBUG] testPorts: ${JSON.stringify(testPorts)}`)
+    console.log(`   [DEBUG] containerName: ${containerName}`)
 
     // Ensure PostgreSQL binaries are downloaded first
     // NOTE: Version must match CI workflow download (spindb-pg-18 cache key)
     const engine = getEngine(ENGINE)
+    console.log('   [DEBUG] Got engine, ensuring binaries...')
     console.log('   Ensuring PostgreSQL binaries are available...')
-    await engine.ensureBinaries('18', ({ message }) => {
-      console.log(`   ${message}`)
-    })
+    try {
+      await engine.ensureBinaries('18', ({ message }) => {
+        console.log(`   ${message}`)
+      })
+      console.log('   [DEBUG] ensureBinaries completed successfully')
+    } catch (error) {
+      console.log(`   [DEBUG] ensureBinaries FAILED: ${error}`)
+      throw error
+    }
 
-    await containerManager.create(containerName, {
-      engine: ENGINE,
-      version: '18',
-      port: testPorts[0],
-      database: DATABASE,
-    })
+    console.log('   [DEBUG] Creating container...')
+    try {
+      await containerManager.create(containerName, {
+        engine: ENGINE,
+        version: '18',
+        port: testPorts[0],
+        database: DATABASE,
+      })
+      console.log('   [DEBUG] containerManager.create completed')
+    } catch (error) {
+      console.log(`   [DEBUG] containerManager.create FAILED: ${error}`)
+      throw error
+    }
 
     // Initialize the database cluster
-    await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
+    console.log('   [DEBUG] Initializing data directory with initdb...')
+    try {
+      await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
+      console.log('   [DEBUG] initDataDir completed successfully')
+    } catch (error) {
+      // Use stderr for critical errors to ensure they're not buffered
+      process.stderr.write('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+      process.stderr.write(`[CRITICAL] initDataDir FAILED\n`)
+      process.stderr.write(`[CRITICAL] Error: ${error}\n`)
+      if (error instanceof Error) {
+        process.stderr.write(`[CRITICAL] Stack: ${error.stack}\n`)
+      }
+      process.stderr.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n')
+      throw error
+    }
 
     // Verify container exists but is not running
+    console.log('   [DEBUG] Verifying container config...')
     const config = await containerManager.getConfig(containerName)
+    console.log(`   [DEBUG] Config found: ${config !== null}, status: ${config?.status}`)
     assert(config !== null, 'Container config should exist')
     assertEqual(
       config?.status,
@@ -96,9 +223,11 @@ describe('PostgreSQL Integration Tests', () => {
       'Container status should be "created"',
     )
 
+    console.log('   [DEBUG] Checking if container is running...')
     const running = await processManager.isRunning(containerName, {
       engine: ENGINE,
     })
+    console.log(`   [DEBUG] isRunning: ${running}`)
     assert(!running, 'Container should not be running')
 
     console.log('   ✓ Container created and not running')
@@ -281,10 +410,10 @@ describe('PostgreSQL Integration Tests', () => {
     const { tmpdir } = await import('os')
     const backupPath = join(tmpdir(), `pg-dump-backup-${Date.now()}.dump`)
 
-    // Backup with 'dump' format produces custom binary
+    // Backup with 'custom' format produces custom binary
     const result = await engine.backup(config!, backupPath, {
       database: DATABASE,
-      format: 'dump',
+      format: 'custom',
     })
 
     assert(result.path === backupPath, 'Backup path should match')
@@ -356,12 +485,24 @@ describe('PostgreSQL Integration Tests', () => {
   it('should stop and delete the restored container', async () => {
     console.log(`\n🗑️  Deleting restored container "${clonedContainerName}"...`)
 
+    console.log(`   [DEBUG] Getting config for "${clonedContainerName}"...`)
     const config = await containerManager.getConfig(clonedContainerName)
+    console.log(`   [DEBUG] Config: ${config ? 'found' : 'NOT FOUND'}`)
     assert(config !== null, 'Container config should exist')
 
+    console.log(`   [DEBUG] Stopping container...`)
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
+    console.log(`   [DEBUG] Stop command completed`)
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(clonedContainerName, ENGINE)
+    console.log(`   [DEBUG] waitForStopped returned: ${stopped}`)
+    assert(stopped, 'Container should be fully stopped before delete')
+
+    console.log(`   [DEBUG] Deleting container...`)
     await containerManager.delete(clonedContainerName, { force: true })
+    console.log(`   [DEBUG] Delete completed`)
 
     // Verify filesystem is cleaned up
     const exists = containerDataExists(clonedContainerName, ENGINE)
@@ -404,16 +545,44 @@ describe('PostgreSQL Integration Tests', () => {
   it('should stop, rename container, and change port', async () => {
     console.log(`\n📝 Renaming container and changing port...`)
 
+    console.log(`   [DEBUG] Getting config for "${containerName}"...`)
     const config = await containerManager.getConfig(containerName)
+    console.log(`   [DEBUG] Config: ${config ? 'found' : 'NOT FOUND'}`)
     assert(config !== null, 'Container config should exist')
 
     // Stop the container
+    console.log(`   [DEBUG] Stopping container...`)
     const engine = getEngine(ENGINE)
     await engine.stop(config!)
+    console.log(`   [DEBUG] Stop command completed`)
     await containerManager.updateConfig(containerName, { status: 'stopped' })
+    console.log(`   [DEBUG] Config status updated to stopped`)
+
+    // Wait for the container to be fully stopped (PID file removed)
+    // This is important because rename() checks isRunning() before proceeding
+    const stopped = await waitForStopped(containerName, ENGINE)
+    console.log(`   [DEBUG] waitForStopped returned: ${stopped}`)
+    assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
-    await containerManager.rename(containerName, renamedContainerName)
+    console.log(
+      `   [DEBUG] Renaming "${containerName}" to "${renamedContainerName}"...`,
+    )
+    try {
+      await containerManager.rename(containerName, renamedContainerName)
+      console.log(`   [DEBUG] Rename completed successfully`)
+    } catch (error) {
+      process.stderr.write('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+      process.stderr.write(`[CRITICAL] RENAME FAILED\n`)
+      process.stderr.write(`[CRITICAL] From: ${containerName}\n`)
+      process.stderr.write(`[CRITICAL] To: ${renamedContainerName}\n`)
+      process.stderr.write(`[CRITICAL] Error: ${error}\n`)
+      if (error instanceof Error) {
+        process.stderr.write(`[CRITICAL] Stack: ${error.stack}\n`)
+      }
+      process.stderr.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n')
+      throw error
+    }
     await containerManager.updateConfig(renamedContainerName, {
       port: testPorts[2],
     })
@@ -543,6 +712,10 @@ describe('PostgreSQL Integration Tests', () => {
       status: 'stopped',
     })
 
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(renamedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped')
+
     // Now it's stopped, verify
     const running = await processManager.isRunning(renamedContainerName, {
       engine: ENGINE,
@@ -577,7 +750,21 @@ describe('PostgreSQL Integration Tests', () => {
     const containers = await containerManager.list()
     const testContainers = containers.filter((c) => c.name.includes('-test'))
 
-    assertEqual(testContainers.length, 0, 'No test containers should remain')
+    // Build detailed error message that appears in TAP output
+    if (testContainers.length > 0) {
+      const hasOriginal = containers.some(c => c.name === containerName)
+      const hasRenamed = containers.some(c => c.name === renamedContainerName)
+      const hasClone = containers.some(c => c.name === clonedContainerName)
+
+      const details = [
+        `REMAINING CONTAINERS: ${testContainers.map(c => c.name).join(', ')}`,
+        `Expected containerName: ${containerName} - ${hasOriginal ? 'EXISTS (should be renamed)' : 'missing'}`,
+        `Expected renamedContainerName: ${renamedContainerName} - ${hasRenamed ? 'EXISTS' : 'MISSING (rename failed!)'}`,
+        `Expected clonedContainerName: ${clonedContainerName} - ${hasClone ? 'EXISTS (delete failed!)' : 'deleted OK'}`,
+      ].join(' | ')
+
+      throw new Error(`No test containers should remain (found ${testContainers.length}). ${details}`)
+    }
 
     console.log('   ✓ All test containers cleaned up')
   })

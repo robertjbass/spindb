@@ -4,8 +4,8 @@
  */
 
 import { spawn } from 'child_process'
-import { readFile } from 'fs/promises'
-import { existsSync, statSync } from 'fs'
+import { open } from 'fs/promises'
+import { existsSync, statSync, createReadStream } from 'fs'
 import { logDebug, logWarning } from '../../core/error-handler'
 import {
   requireClickHousePath,
@@ -30,10 +30,25 @@ const CLICKHOUSE_SQL_KEYWORDS = [
 
 /**
  * Check if file content looks like ClickHouse SQL
+ * Only reads first 8KB to avoid loading large files into memory
  */
 async function looksLikeClickHouseSql(filePath: string): Promise<boolean> {
   try {
-    const content = await readFile(filePath, 'utf-8')
+    // Read only first 8KB - enough for several lines of SQL statements
+    // Using 8KB (vs 4KB for Redis/Valkey) since SQL statements can be longer
+    const HEADER_SIZE = 8192
+    const buffer = Buffer.alloc(HEADER_SIZE)
+
+    const fd = await open(filePath, 'r')
+    let bytesRead: number
+    try {
+      const result = await fd.read(buffer, 0, HEADER_SIZE, 0)
+      bytesRead = result.bytesRead
+    } finally {
+      await fd.close()
+    }
+
+    const content = buffer.toString('utf-8', 0, bytesRead)
     const lines = content.split(/\r?\n/)
 
     let sqlStatementsFound = 0
@@ -253,7 +268,7 @@ async function dropAllTables(
 
 /**
  * Restore from SQL backup
- * Executes SQL statements via clickhouse client
+ * Streams SQL statements to clickhouse client
  */
 async function restoreSqlBackup(
   backupPath: string,
@@ -264,16 +279,12 @@ async function restoreSqlBackup(
 ): Promise<RestoreResult> {
   const clickhousePath = await requireClickHousePath(version)
 
-  // Read the backup file
-  const content = await readFile(backupPath, 'utf-8')
-
   // If clean mode, drop existing tables first
   if (clean) {
     logDebug('Clean mode: dropping existing tables before restore')
     await dropAllTables(clickhousePath, port, database)
   }
 
-  // Pipe SQL to clickhouse client
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = [
       'client',
@@ -292,6 +303,7 @@ async function restoreSqlBackup(
 
     let stdout = ''
     let stderr = ''
+    let streamError: Error | null = null
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -302,6 +314,16 @@ async function restoreSqlBackup(
     })
 
     proc.on('close', (code) => {
+      // If there was a stream error, report it (include stderr for context)
+      if (streamError) {
+        const errorParts = [streamError.message]
+        if (stderr && stderr.trim()) {
+          errorParts.push(`ClickHouse stderr: ${stderr.trim()}`)
+        }
+        reject(new Error(errorParts.join('. ')))
+        return
+      }
+
       if (code === 0) {
         resolve({
           format: 'sql',
@@ -322,9 +344,30 @@ async function restoreSqlBackup(
       reject(new Error(`Failed to spawn clickhouse client: ${error.message}`))
     })
 
-    // Write backup content to stdin
-    proc.stdin.write(content)
-    proc.stdin.end()
+    // Stream backup file to clickhouse client stdin
+    const fileStream = createReadStream(backupPath, { encoding: 'utf-8' })
+
+    // Handle stdin errors (e.g., EPIPE when client exits early due to SQL error)
+    proc.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      // EPIPE means the client closed its stdin (likely exited due to error)
+      // The actual error message will come from stderr in the 'close' handler
+      if (error.code === 'EPIPE') {
+        streamError = new Error(
+          'ClickHouse client closed connection early (likely SQL syntax error)',
+        )
+      } else {
+        streamError = new Error(`Failed to write to clickhouse client: ${error.message}`)
+      }
+      fileStream.destroy()
+    })
+
+    fileStream.on('error', (error) => {
+      streamError = new Error(`Failed to read backup file: ${error.message}`)
+      fileStream.destroy()
+      proc.stdin.end()
+    })
+
+    fileStream.pipe(proc.stdin)
   })
 }
 

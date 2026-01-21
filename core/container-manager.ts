@@ -449,6 +449,16 @@ export class ContainerManager {
 
       await this.saveConfig(targetName, { engine }, config)
 
+      // ClickHouse stores absolute paths in config.xml - regenerate with new paths
+      if (engine === Engine.ClickHouse) {
+        const clickhouseEngine = getEngine(Engine.ClickHouse)
+        if ('regenerateConfig' in clickhouseEngine) {
+          await (
+            clickhouseEngine as { regenerateConfig: (name: string, port: number) => Promise<void> }
+          ).regenerateConfig(targetName, config.port)
+        }
+      }
+
       return config
     } catch (error) {
       // Clean up the copied directory on failure
@@ -562,6 +572,16 @@ export class ContainerManager {
 
     config.name = newName
     await this.saveConfig(newName, { engine }, config)
+
+    // ClickHouse stores absolute paths in config.xml - regenerate with new paths
+    if (engine === Engine.ClickHouse) {
+      const clickhouseEngine = getEngine(Engine.ClickHouse)
+      if ('regenerateConfig' in clickhouseEngine) {
+        await (
+          clickhouseEngine as { regenerateConfig: (name: string, port: number) => Promise<void> }
+        ).regenerateConfig(newName, config.port)
+      }
+    }
 
     return config
   }
