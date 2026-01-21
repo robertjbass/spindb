@@ -800,7 +800,7 @@ jobs:
           echo "Querying data (with full output):"
           pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" || echo "Query failed with exit code $?"
           echo "---"
-          COUNT=$(pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | grep -oE '[0-9]+' | head -1)
+          COUNT=$(pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
           if [ "$COUNT" != "3" ]; then
             echo "Data verification failed: expected 3 rows, got $COUNT"
             exit 1
@@ -828,7 +828,7 @@ jobs:
       - name: Verify cloned data matches source
         shell: bash
         run: |
-          COUNT=$(pnpm start run cloned-test -c "SELECT COUNT(*) FROM test_data;" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+          COUNT=$(pnpm start run cloned-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
           if [ "$COUNT" != "3" ]; then
             echo "Clone data verification failed: expected 3 rows, got $COUNT"
             exit 1
@@ -918,7 +918,7 @@ jobs:
       - name: Verify initial data
         shell: bash
         run: |
-          COUNT=$(pnpm start run ch-rename-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>/dev/null | grep -oE '[0-9]+' | head -1)
+          COUNT=$(pnpm start run ch-rename-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
           if [ "$COUNT" != "3" ]; then
             echo "Initial data verification failed: expected 3 rows, got $COUNT"
             exit 1
@@ -948,7 +948,7 @@ jobs:
       - name: Verify data persists after rename
         shell: bash
         run: |
-          COUNT=$(pnpm start run ch-renamed-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>/dev/null | grep -oE '[0-9]+' | head -1)
+          COUNT=$(pnpm start run ch-renamed-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
           if [ "$COUNT" != "3" ]; then
             echo "Data verification failed after rename: expected 3 rows, got $COUNT"
             echo "This likely means config.xml paths were not regenerated correctly"
