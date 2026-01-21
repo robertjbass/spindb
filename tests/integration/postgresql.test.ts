@@ -116,8 +116,13 @@ describe('PostgreSQL Integration Tests', () => {
 
     // Check if PostgreSQL binaries exist
     const engine = getEngine(ENGINE)
-    const binaryPath = await engine.getBinaryPath?.('18')
-    process.stdout.write(`PostgreSQL binary path: ${binaryPath || 'NOT FOUND'}\n`)
+    let psqlPath: string | null = null
+    try {
+      psqlPath = await engine.getPsqlPath()
+    } catch {
+      psqlPath = null
+    }
+    process.stdout.write(`PostgreSQL psql path: ${psqlPath || 'NOT FOUND'}\n`)
 
     // Check containers at start
     const containers = await containerManager.list()
