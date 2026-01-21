@@ -394,14 +394,22 @@ describe('CLI URL Command', () => {
   })
 
   it('should show URL in JSON format', async () => {
-    const { stdout, exitCode } = await runCLI(`url ${containerName} --json`)
-    assert(exitCode === 0, 'URL --json should succeed')
+    const { stdout, stderr, exitCode } = await runCLI(
+      `url ${containerName} --json`,
+    )
+    assert(
+      exitCode === 0,
+      `URL --json should succeed. stdout: ${stdout}, stderr: ${stderr}`,
+    )
 
     const parsed = JSON.parse(stdout)
-    assert(parsed.url !== undefined, 'JSON should contain url field')
     assert(
-      parsed.url.includes('postgresql://'),
-      'URL should be PostgreSQL format',
+      parsed.connectionString !== undefined,
+      `JSON should contain connectionString field. Actual keys: ${Object.keys(parsed).join(', ')}`,
+    )
+    assert(
+      parsed.connectionString.includes('postgresql://'),
+      `Connection string should be PostgreSQL format. Got: ${parsed.connectionString}`,
     )
     console.log('   JSON URL output verified')
   })

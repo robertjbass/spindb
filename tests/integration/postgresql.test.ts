@@ -33,10 +33,13 @@ const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/postgresql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
 
-// Debug: confirm test file is being loaded
-console.log('[DEBUG] postgresql.test.ts loaded - starting test suite')
-console.log(`[DEBUG] Current working directory: ${process.cwd()}`)
-console.log(`[DEBUG] __dirname: ${__dirname}`)
+// Debug: confirm test file is being loaded (use process.stdout.write to ensure immediate flush)
+process.stdout.write('\n========================================\n')
+process.stdout.write('[DEBUG] postgresql.test.ts loaded\n')
+process.stdout.write(`[DEBUG] CWD: ${process.cwd()}\n`)
+process.stdout.write(`[DEBUG] __dirname: ${__dirname}\n`)
+process.stdout.write(`[DEBUG] HOME: ${process.env.HOME || process.env.USERPROFILE}\n`)
+process.stdout.write('========================================\n\n')
 
 describe('PostgreSQL Integration Tests', () => {
   let testPorts: number[]
@@ -82,6 +85,19 @@ describe('PostgreSQL Integration Tests', () => {
   })
 
   after(async () => {
+    // Print diagnostic info that shows regardless of test failures
+    process.stdout.write('\n========================================\n')
+    process.stdout.write('[DEBUG] after() hook - diagnostics\n')
+    try {
+      const containers = await containerManager.list()
+      process.stdout.write(`[DEBUG] All containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+      const testContainers = containers.filter((c) => c.name.includes('-test'))
+      process.stdout.write(`[DEBUG] Test containers remaining: ${JSON.stringify(testContainers.map(c => c.name))}\n`)
+    } catch (error) {
+      process.stdout.write(`[DEBUG] Error listing containers: ${error}\n`)
+    }
+    process.stdout.write('========================================\n')
+
     console.log('\n🧹 Final cleanup...')
     const deleted = await cleanupTestContainers()
     if (deleted.length > 0) {
@@ -131,7 +147,14 @@ describe('PostgreSQL Integration Tests', () => {
       await engine.initDataDir(containerName, '18', { superuser: 'postgres' })
       console.log('   [DEBUG] initDataDir completed successfully')
     } catch (error) {
-      console.log(`   [DEBUG] initDataDir FAILED: ${error}`)
+      // Use stderr for critical errors to ensure they're not buffered
+      process.stderr.write('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+      process.stderr.write(`[CRITICAL] initDataDir FAILED\n`)
+      process.stderr.write(`[CRITICAL] Error: ${error}\n`)
+      if (error instanceof Error) {
+        process.stderr.write(`[CRITICAL] Stack: ${error.stack}\n`)
+      }
+      process.stderr.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n')
       throw error
     }
 
