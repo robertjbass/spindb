@@ -745,7 +745,21 @@ describe('PostgreSQL Integration Tests', () => {
     const containers = await containerManager.list()
     const testContainers = containers.filter((c) => c.name.includes('-test'))
 
-    assertEqual(testContainers.length, 0, 'No test containers should remain')
+    // Build detailed error message that appears in TAP output
+    if (testContainers.length > 0) {
+      const hasOriginal = containers.some(c => c.name === containerName)
+      const hasRenamed = containers.some(c => c.name === renamedContainerName)
+      const hasClone = containers.some(c => c.name === clonedContainerName)
+
+      const details = [
+        `REMAINING CONTAINERS: ${testContainers.map(c => c.name).join(', ')}`,
+        `Expected containerName: ${containerName} - ${hasOriginal ? 'EXISTS (should be renamed)' : 'missing'}`,
+        `Expected renamedContainerName: ${renamedContainerName} - ${hasRenamed ? 'EXISTS' : 'MISSING (rename failed!)'}`,
+        `Expected clonedContainerName: ${clonedContainerName} - ${hasClone ? 'EXISTS (delete failed!)' : 'deleted OK'}`,
+      ].join(' | ')
+
+      throw new Error(`No test containers should remain (found ${testContainers.length}). ${details}`)
+    }
 
     console.log('   ✓ All test containers cleaned up')
   })
