@@ -681,7 +681,7 @@ spindb start staging
 
 ### Restore from Remote
 
-Pull production data into local databases:
+Pull production data into local databases. **All engines support remote restore via connection strings:**
 
 ```bash
 # Create new database from remote
@@ -690,6 +690,19 @@ spindb create prod-copy --from "postgresql://user:pass@prod-host:5432/production
 # Or restore into existing database
 spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production"
 ```
+
+**Supported connection string formats:**
+
+| Engine | Format | Example |
+|--------|--------|---------|
+| PostgreSQL | `postgresql://` or `postgres://` | `postgresql://user:pass@host:5432/db` |
+| MySQL | `mysql://` | `mysql://root:pass@host:3306/db` |
+| MariaDB | `mysql://` or `mariadb://` | `mariadb://root:pass@host:3307/db` |
+| MongoDB | `mongodb://` or `mongodb+srv://` | `mongodb://user:pass@host:27017/db` |
+| Redis | `redis://` | `redis://:password@host:6379/0` |
+| Valkey | `redis://` | `redis://:password@host:6379/0` |
+| ClickHouse | `clickhouse://` or `http://` | `clickhouse://default:pass@host:8123/db` |
+| Qdrant | `qdrant://` or `http://` | `http://host:6333?api_key=KEY` |
 
 ### Multi-Version Support
 
@@ -771,7 +784,6 @@ The following engines may be added based on community interest:
 
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
-- **Redis/Valkey remote dump** - Cannot create containers directly from remote connection strings. Use backup/restore workflow instead.
 - **Qdrant** - Uses REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---

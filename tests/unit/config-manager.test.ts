@@ -91,6 +91,7 @@ describe('ConfigManager', () => {
         MONGODB_TOOLS,
         REDIS_TOOLS,
         VALKEY_TOOLS,
+        QDRANT_TOOLS,
         SQLITE_TOOLS,
         DUCKDB_TOOLS,
         ENHANCED_SHELLS,
@@ -103,6 +104,7 @@ describe('ConfigManager', () => {
         MONGODB_TOOLS.length +
         REDIS_TOOLS.length +
         VALKEY_TOOLS.length +
+        QDRANT_TOOLS.length +
         SQLITE_TOOLS.length +
         DUCKDB_TOOLS.length +
         ENHANCED_SHELLS.length

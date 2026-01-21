@@ -72,7 +72,7 @@
         },
         "queryLanguage": {
           "type": "string",
-          "enum": ["sql", "javascript", "redis"],
+          "enum": ["sql", "javascript", "redis", "rest"],
           "description": "Query language used by the engine"
         },
         "connectionScheme": {

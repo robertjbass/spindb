@@ -189,4 +189,4 @@ Both engines support multi-version side-by-side installations. Client tools are 
 
 ## Packaging
 
-- [ ] Consider Bun support for binaries to create smaller, faster distribution packages for faster startup and smaller downloads
+See [TODO.md](TODO.md) for packaging and distribution roadmap items.

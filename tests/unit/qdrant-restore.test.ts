@@ -2,7 +2,7 @@
  * Qdrant restore module unit tests
  */
 
-import { describe, it } from 'node:test'
+import { describe, it, after } from 'node:test'
 import { join } from 'path'
 import { writeFile, rm, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -10,8 +10,17 @@ import { assert, assertEqual } from '../utils/assertions'
 import { detectBackupFormat, parseConnectionString } from '../../engines/qdrant/restore'
 
 describe('Qdrant Restore Module', () => {
+  const testDir = join(tmpdir(), 'qdrant-test-' + Date.now())
+
+  after(async () => {
+    try {
+      await rm(testDir, { recursive: true, force: true })
+    } catch {
+      // Ignore errors (e.g., ENOENT if already cleaned up)
+    }
+  })
+
   describe('detectBackupFormat', () => {
-    const testDir = join(tmpdir(), 'qdrant-test-' + Date.now())
 
     it('should detect .snapshot file by extension', async () => {
       await mkdir(testDir, { recursive: true })

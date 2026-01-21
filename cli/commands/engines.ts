@@ -1438,7 +1438,7 @@ enginesCommand
 // List subcommand (explicit alias for default action)
 enginesCommand
   .command('list')
-  .description('Manage installed database engines')
+  .description('List installed database engines')
   .option('--json', 'Output as JSON')
   .action(async (options: { json?: boolean }) => {
     try {

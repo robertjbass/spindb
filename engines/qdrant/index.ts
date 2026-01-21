@@ -70,14 +70,119 @@ async function qdrantApiRequest(
   method: string,
   path: string,
   body?: Record<string, unknown>,
+  timeoutMs = 30000,
 ): Promise<{ status: number; data: unknown }> {
   const url = `http://127.0.0.1:${port}${path}`
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   const options: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: controller.signal,
+  }
+
+  if (body) {
+    options.body = JSON.stringify(body)
+  }
+
+  try {
+    const response = await fetch(url, options)
+
+    // Try to parse as JSON, fall back to text for endpoints like /healthz
+    let data: unknown
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      data = await response.json()
+    } else {
+      data = await response.text()
+    }
+
+    return { status: response.status, data }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(
+        `Qdrant API request timed out after ${timeoutMs / 1000}s: ${method} ${path}`,
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+/**
+ * Parse a Qdrant connection string
+ * Supported formats:
+ * - http://host:port
+ * - https://host:port
+ * - qdrant://host:port (converted to http)
+ * - http://host:port?api_key=KEY (for API key auth)
+ */
+function parseQdrantConnectionString(connectionString: string): {
+  baseUrl: string
+  headers: Record<string, string>
+} {
+  let url: URL
+  let scheme = 'http'
+
+  // Handle qdrant:// scheme by converting to http://
+  let normalized = connectionString.trim()
+  if (normalized.startsWith('qdrant://')) {
+    normalized = normalized.replace('qdrant://', 'http://')
+  }
+
+  // Ensure scheme is present
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`
+  }
+
+  try {
+    url = new URL(normalized)
+    scheme = url.protocol.replace(':', '')
+  } catch {
+    throw new Error(
+      `Invalid Qdrant connection string: ${connectionString}\n` +
+        'Expected format: http://host:port or qdrant://host:port',
+    )
+  }
+
+  // Extract API key if provided
+  const apiKey = url.searchParams.get('api_key')
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (apiKey) {
+    headers['api-key'] = apiKey
+  }
+
+  // Construct base URL without query params
+  const port = url.port || (scheme === 'https' ? '443' : '6333')
+  const baseUrl = `${scheme}://${url.hostname}:${port}`
+
+  return { baseUrl, headers }
+}
+
+/**
+ * Make an HTTP request to a remote Qdrant server
+ */
+async function remoteQdrantRequest(
+  baseUrl: string,
+  method: string,
+  path: string,
+  headers: Record<string, string>,
+  body?: Record<string, unknown>,
+): Promise<{ status: number; data: unknown }> {
+  const url = `${baseUrl}${path}`
+
+  const options: RequestInit = {
+    method,
+    headers,
   }
 
   if (body) {
@@ -85,7 +190,15 @@ async function qdrantApiRequest(
   }
 
   const response = await fetch(url, options)
-  const data = await response.json()
+
+  // Try to parse as JSON, fall back to text
+  let data: unknown
+  const contentType = response.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    data = await response.json()
+  } else {
+    data = await response.text()
+  }
 
   return { status: response.status, data }
 }
@@ -357,8 +470,10 @@ export class QdrantEngine extends BaseEngine {
     }
 
     // Qdrant runs in foreground, so we need to spawn detached
+    // Set cwd to container directory so any files Qdrant creates stay there
     return new Promise((resolve, reject) => {
       const spawnOpts: SpawnOptions = {
+        cwd: containerDir,
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
         windowsHide: isWindows(),
@@ -454,11 +569,12 @@ export class QdrantEngine extends BaseEngine {
           return true
         }
       } catch {
-        await new Promise((resolve) => setTimeout(resolve, checkInterval))
+        // Connection failed, wait and retry
       }
+      await new Promise((resolve) => setTimeout(resolve, checkInterval))
     }
 
-    logWarning(`Qdrant did not become ready within ${timeoutMs}ms`)
+    logDebug(`Qdrant did not become ready within ${timeoutMs}ms`)
     return false
   }
 
@@ -654,10 +770,8 @@ export class QdrantEngine extends BaseEngine {
     const { port } = container
 
     try {
-      const response = await qdrantApiRequest(port, 'GET', '/telemetry')
-      const data = response.data as {
-        result?: { app?: { collections_count?: number } }
-      }
+      // Make API call to verify connectivity, but Qdrant doesn't expose storage size
+      await qdrantApiRequest(port, 'GET', '/telemetry')
       // Qdrant doesn't expose direct storage size in telemetry
       // Return null as we can't determine exact size
       return null
@@ -668,19 +782,100 @@ export class QdrantEngine extends BaseEngine {
 
   /**
    * Dump from a remote Qdrant connection
-   * Qdrant doesn't support remote dump like pg_dump
+   * Uses Qdrant's REST API to create and download a full snapshot
+   *
+   * Connection string format: http://host:port or qdrant://host:port
+   * For API key auth: http://host:port?api_key=YOUR_KEY
    */
   async dumpFromConnectionString(
-    _connectionString: string,
-    _outputPath: string,
+    connectionString: string,
+    outputPath: string,
   ): Promise<DumpResult> {
-    throw new Error(
-      'Qdrant does not support creating containers from remote connection strings.\n' +
-        'To migrate data from a remote Qdrant instance:\n' +
-        '  1. Create a snapshot on the remote server via REST API\n' +
-        '  2. Download the snapshot file\n' +
-        '  3. spindb restore <container> snapshot.snapshot',
+    // Parse connection string
+    const { baseUrl, headers } = parseQdrantConnectionString(connectionString)
+
+    logDebug(`Connecting to remote Qdrant at ${baseUrl}`)
+
+    // Check connectivity and get collection count
+    const collectionsResponse = await remoteQdrantRequest(
+      baseUrl,
+      'GET',
+      '/collections',
+      headers,
     )
+    if (collectionsResponse.status !== 200) {
+      throw new Error(
+        `Failed to connect to Qdrant at ${baseUrl}: ${JSON.stringify(collectionsResponse.data)}`,
+      )
+    }
+
+    const collectionsData = collectionsResponse.data as {
+      result?: { collections?: Array<{ name: string }> }
+    }
+    const collectionCount =
+      collectionsData.result?.collections?.length ?? 0
+
+    logDebug(`Found ${collectionCount} collections on remote server`)
+
+    // Create a full snapshot on the remote server
+    logDebug('Creating snapshot on remote server...')
+    const snapshotResponse = await remoteQdrantRequest(
+      baseUrl,
+      'POST',
+      '/snapshots',
+      headers,
+    )
+
+    if (snapshotResponse.status !== 200) {
+      throw new Error(
+        `Failed to create snapshot on remote Qdrant: ${JSON.stringify(snapshotResponse.data)}`,
+      )
+    }
+
+    const snapshotData = snapshotResponse.data as { result?: { name?: string } }
+    const snapshotName = snapshotData.result?.name
+
+    if (!snapshotName) {
+      throw new Error(
+        'Qdrant snapshot creation failed: no snapshot name returned',
+      )
+    }
+
+    logDebug(`Remote snapshot created: ${snapshotName}`)
+
+    // Download the snapshot
+    const snapshotUrl = `${baseUrl}/snapshots/${snapshotName}`
+    logDebug(`Downloading snapshot from ${snapshotUrl}...`)
+
+    const downloadResponse = await fetch(snapshotUrl, { headers })
+    if (!downloadResponse.ok) {
+      // Clean up the snapshot we created
+      await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch(
+        () => {},
+      )
+      throw new Error(
+        `Failed to download snapshot: ${downloadResponse.status} ${downloadResponse.statusText}`,
+      )
+    }
+
+    // Save to output path
+    const buffer = await downloadResponse.arrayBuffer()
+    await writeFile(outputPath, Buffer.from(buffer))
+
+    logDebug(`Snapshot downloaded to ${outputPath}`)
+
+    // Clean up snapshot on remote server (courtesy cleanup)
+    await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch((err) => {
+      logDebug(`Could not delete remote snapshot (non-fatal): ${err}`)
+    })
+
+    return {
+      filePath: outputPath,
+      warnings:
+        collectionCount === 0
+          ? ['Remote Qdrant instance has no collections']
+          : undefined,
+    }
   }
 
   // Create a backup

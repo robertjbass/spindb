@@ -5,7 +5,7 @@
 
 import { copyFile, open, mkdir, rm } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
-import { join, dirname, basename } from 'path'
+import { join, basename } from 'path'
 import { paths } from '../../config/paths'
 import { logDebug } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'

@@ -18,24 +18,48 @@ async function qdrantApiRequest(
   method: string,
   path: string,
   body?: Record<string, unknown>,
+  timeoutMs = 600000, // 10 minutes for potentially large snapshot operations
 ): Promise<{ status: number; data: unknown }> {
   const url = `http://127.0.0.1:${port}${path}`
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   const options: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: controller.signal,
   }
 
   if (body) {
     options.body = JSON.stringify(body)
   }
 
-  const response = await fetch(url, options)
-  const data = await response.json()
+  try {
+    const response = await fetch(url, options)
 
-  return { status: response.status, data }
+    // Try to parse as JSON, fall back to text for non-JSON responses
+    let data: unknown
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      data = await response.json()
+    } else {
+      data = await response.text()
+    }
+
+    return { status: response.status, data }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(
+        `Qdrant API request timed out after ${timeoutMs / 1000}s: ${method} ${path}`,
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 /**

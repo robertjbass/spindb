@@ -3,6 +3,10 @@
  *
  * Tests the full container lifecycle with real Qdrant processes.
  * Qdrant is a vector similarity search engine.
+ *
+ * TODO: Add integration tests for dumpFromConnectionString once we have a
+ * test environment with remote Qdrant instances (e.g., via Docker Compose in CI).
+ * Currently, connection string parsing is tested in unit/qdrant-restore.test.ts.
  */
 
 import { describe, it, before, after } from 'node:test'

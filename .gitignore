@@ -154,5 +154,8 @@ _dumps
 *.duckdb
 *.duckdb.wal
 
+# Qdrant snapshots (too large for git - use generate:qdrant-snapshot to create on demand)
+tests/fixtures/qdrant/snapshots/*.snapshot
+
 # Private docs
 MONETIZATION.md

@@ -135,7 +135,7 @@
       "superuser": "default",
       "clientTools": ["clickhouse"],
       "licensing": "Apache-2.0",
-      "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123."
+      "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123. WSL only on Windows."
     },
     "qdrant": {
       "displayName": "Qdrant",

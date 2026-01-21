@@ -23,6 +23,7 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
+import { getValkeyCliPath, VALKEY_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import {
   type Platform,
   type Arch,
@@ -85,6 +86,62 @@ function toCygwinPath(windowsPath: string): string {
   const driveLetter = driveMatch[1].toLowerCase()
   const restOfPath = windowsPath.slice(3).replace(/\\/g, '/')
   return `/cygdrive/${driveLetter}/${restOfPath}`
+}
+
+/**
+ * Parse a Valkey connection string
+ * Format: redis://[user:password@]host[:port][/database]
+ * Note: Uses redis:// scheme for compatibility (Valkey is Redis-compatible)
+ *
+ * Examples:
+ * - redis://localhost:6379
+ * - redis://:password@localhost:6379/0
+ * - redis://user:password@remote.host:6380/5
+ */
+function parseValkeyConnectionString(connectionString: string): {
+  host: string
+  port: number
+  password: string | undefined
+  database: number
+} {
+  let url: URL
+
+  // Ensure the connection string starts with redis:// (Valkey uses Redis protocol)
+  const normalized = connectionString.trim()
+  if (!normalized.startsWith('redis://')) {
+    throw new Error(
+      `Invalid Valkey connection string: ${connectionString}\n` +
+        'Expected format: redis://[user:password@]host:port[/database]\n' +
+        'Note: Valkey uses redis:// scheme for Redis protocol compatibility',
+    )
+  }
+
+  try {
+    url = new URL(normalized)
+  } catch {
+    throw new Error(
+      `Invalid Valkey connection string: ${connectionString}\n` +
+        'Expected format: redis://[user:password@]host:port[/database]',
+    )
+  }
+
+  const host = url.hostname || 'localhost'
+  const port = parseInt(url.port, 10) || 6379
+
+  // Password can be in URL.password or as part of username (redis://:password@...)
+  // Valkey (like Redis) doesn't use usernames traditionally
+  const password = url.password || undefined
+
+  // Database is in the path (e.g., /5 means database 5)
+  let database = 0
+  if (url.pathname && url.pathname !== '/') {
+    const dbNum = parseInt(url.pathname.replace('/', ''), 10)
+    if (!isNaN(dbNum) && dbNum >= 0 && dbNum <= 15) {
+      database = dbNum
+    }
+  }
+
+  return { host, port, password, database }
 }
 
 // Build a valkey-cli command for inline command execution
@@ -925,20 +982,220 @@ export class ValkeyEngine extends BaseEngine {
 
   /**
    * Dump from a remote Valkey connection
-   * Valkey doesn't support remote dump like pg_dump/mongodump
-   * Throw an error with guidance
+   * Creates a text-format backup by scanning all keys from the remote server
+   *
+   * Connection string format: redis://[user:password@]host:port[/db]
+   * Note: Uses redis:// scheme for compatibility (Valkey is Redis-compatible)
    */
   async dumpFromConnectionString(
-    _connectionString: string,
-    _outputPath: string,
+    connectionString: string,
+    outputPath: string,
   ): Promise<DumpResult> {
-    throw new Error(
-      'Valkey does not support creating containers from remote connection strings.\n' +
-        'To migrate data from a remote Valkey instance:\n' +
-        '  1. On remote server: valkey-cli --rdb dump.rdb\n' +
-        '  2. Copy dump.rdb to local machine\n' +
-        '  3. spindb restore <container> dump.rdb',
+    const valkeyCli = await getValkeyCliPath()
+    if (!valkeyCli) {
+      throw new Error(VALKEY_CLI_NOT_FOUND_ERROR)
+    }
+
+    // Parse connection string (uses redis:// for compatibility)
+    const { host, port, password, database } =
+      parseValkeyConnectionString(connectionString)
+
+    logDebug(
+      `Connecting to remote Valkey at ${host}:${port} (db: ${database})`,
     )
+
+    // Build CLI args for remote connection
+    const buildArgs = (): string[] => {
+      const args = ['-h', host, '-p', String(port)]
+      if (password) {
+        args.push('-a', password)
+      }
+      args.push('-n', String(database))
+      return args
+    }
+
+    // Execute a Valkey command on the remote server
+    const execRemote = async (command: string): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const args = buildArgs()
+        const proc = spawn(valkeyCli, args, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        proc.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        proc.on('error', reject)
+
+        proc.on('close', (code) => {
+          // Ignore auth-related warnings in stderr (password provided via -a)
+          if (code === 0 || code === null) {
+            resolve(stdout)
+          } else {
+            reject(new Error(stderr || `valkey-cli exited with code ${code}`))
+          }
+        })
+
+        proc.stdin.write(command + '\n')
+        proc.stdin.end()
+      })
+    }
+
+    // Test connectivity
+    try {
+      const pingResult = await execRemote('PING')
+      if (!pingResult.trim().includes('PONG')) {
+        throw new Error(`Unexpected PING response: ${pingResult.trim()}`)
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to connect to Valkey at ${host}:${port}: ${(error as Error).message}`,
+      )
+    }
+
+    // Build text backup from remote keys
+    const commands: string[] = []
+    commands.push('# Valkey backup generated by SpinDB')
+    commands.push(`# Source: ${host}:${port}`)
+    commands.push(`# Date: ${new Date().toISOString()}`)
+    commands.push('')
+
+    // Get all keys (KEYS * works for small datasets)
+    const keysOutput = await execRemote('KEYS *')
+    const keys = keysOutput
+      .trim()
+      .split(/\r?\n/)
+      .map((k) => k.trim())
+      .filter((k) => k)
+
+    logDebug(`Found ${keys.length} keys on remote Valkey`)
+
+    for (const key of keys) {
+      // Get key type
+      const typeOutput = await execRemote(
+        `TYPE "${key.replace(/"/g, '\\"')}"`,
+      )
+      const keyType = typeOutput.trim()
+
+      // Get TTL
+      const ttlOutput = await execRemote(`TTL "${key.replace(/"/g, '\\"')}"`)
+      const ttl = parseInt(ttlOutput.trim(), 10)
+
+      // Quote the key for output commands if it contains special chars
+      const quotedKey =
+        key.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(key)
+          ? `"${key.replace(/"/g, '\\"')}"`
+          : key
+
+      const escapeValue = (value: string): string => {
+        return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+      }
+
+      switch (keyType) {
+        case 'string': {
+          const value = await execRemote(`GET "${key.replace(/"/g, '\\"')}"`)
+          commands.push(`SET ${quotedKey} ${escapeValue(value.trim())}`)
+          break
+        }
+        case 'hash': {
+          const hashData = await execRemote(
+            `HGETALL "${key.replace(/"/g, '\\"')}"`,
+          )
+          const lines = hashData
+            .trim()
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l)
+          if (lines.length >= 2) {
+            const pairs: string[] = []
+            for (let i = 0; i < lines.length; i += 2) {
+              const field = lines[i].trim()
+              const value = lines[i + 1]?.trim() || ''
+              const quotedField =
+                field.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(field)
+                  ? `"${field.replace(/"/g, '\\"')}"`
+                  : field
+              pairs.push(`${quotedField} ${escapeValue(value)}`)
+            }
+            commands.push(`HSET ${quotedKey} ${pairs.join(' ')}`)
+          }
+          break
+        }
+        case 'list': {
+          const listData = await execRemote(
+            `LRANGE "${key.replace(/"/g, '\\"')}" 0 -1`,
+          )
+          const items = listData
+            .trim()
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l)
+          if (items.length > 0) {
+            const escapedItems = items.map((item) => escapeValue(item.trim()))
+            commands.push(`RPUSH ${quotedKey} ${escapedItems.join(' ')}`)
+          }
+          break
+        }
+        case 'set': {
+          const setData = await execRemote(
+            `SMEMBERS "${key.replace(/"/g, '\\"')}"`,
+          )
+          const members = setData
+            .trim()
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l)
+          if (members.length > 0) {
+            const escapedMembers = members.map((m) => escapeValue(m.trim()))
+            commands.push(`SADD ${quotedKey} ${escapedMembers.join(' ')}`)
+          }
+          break
+        }
+        case 'zset': {
+          const zsetData = await execRemote(
+            `ZRANGE "${key.replace(/"/g, '\\"')}" 0 -1 WITHSCORES`,
+          )
+          const lines = zsetData
+            .trim()
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l)
+          if (lines.length >= 2) {
+            const pairs: string[] = []
+            for (let i = 0; i < lines.length; i += 2) {
+              const member = lines[i].trim()
+              const score = lines[i + 1]?.trim() || '0'
+              pairs.push(`${score} ${escapeValue(member)}`)
+            }
+            commands.push(`ZADD ${quotedKey} ${pairs.join(' ')}`)
+          }
+          break
+        }
+        default:
+          logWarning(`Skipping key ${key} with unsupported type: ${keyType}`)
+      }
+
+      // Add EXPIRE if key has TTL
+      if (ttl > 0) {
+        commands.push(`EXPIRE ${quotedKey} ${ttl}`)
+      }
+    }
+
+    // Write commands to file
+    const content = commands.join('\n') + '\n'
+    await writeFile(outputPath, content, 'utf-8')
+
+    return {
+      filePath: outputPath,
+      warnings: keys.length === 0 ? ['Remote Valkey database is empty'] : undefined,
+    }
   }
 
   // Create a backup

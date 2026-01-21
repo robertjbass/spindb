@@ -39,6 +39,7 @@ export const QDRANT_NOT_FOUND_ERROR =
   'qdrant not found. Download Qdrant binaries:\n' +
   '  spindb engines download qdrant\n' +
   '\n' +
-  'Or install system-wide:\n' +
-  '  macOS: brew install qdrant/tap/qdrant\n' +
-  '  Docker: docker run -p 6333:6333 qdrant/qdrant'
+  'Or run via Docker:\n' +
+  '  docker run -p 6333:6333 qdrant/qdrant\n' +
+  '\n' +
+  'See: https://qdrant.tech/documentation/guides/installation/'

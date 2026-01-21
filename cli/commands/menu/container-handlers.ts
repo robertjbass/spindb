@@ -636,27 +636,28 @@ export async function showContainerSubmenu(
   })
 
   // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
-  const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
-  // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, Qdrant uses REST API, others use SQL
-  const runScriptLabel =
-    config.engine === 'redis' || config.engine === 'valkey'
-      ? 'Run command file'
-      : config.engine === 'mongodb'
-        ? 'Run script file'
-        : config.engine === 'qdrant'
+  // Qdrant uses REST API and doesn't support script files - hide the option entirely
+  if (config.engine !== 'qdrant') {
+    const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
+    // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, others use SQL
+    const runScriptLabel =
+      config.engine === 'redis' || config.engine === 'valkey'
+        ? 'Run command file'
+        : config.engine === 'mongodb'
           ? 'Run script file'
           : 'Run SQL file'
-  actionChoices.push({
-    name: canRunSql
-      ? `${chalk.yellow('▷')} ${runScriptLabel}`
-      : chalk.gray(`▷ ${runScriptLabel}`),
-    value: 'run-sql',
-    disabled: canRunSql
-      ? false
-      : isFileBasedDB
-        ? 'Database file missing'
-        : 'Start container first',
-  })
+    actionChoices.push({
+      name: canRunSql
+        ? `${chalk.yellow('▷')} ${runScriptLabel}`
+        : chalk.gray(`▷ ${runScriptLabel}`),
+      value: 'run-sql',
+      disabled: canRunSql
+        ? false
+        : isFileBasedDB
+          ? 'Database file missing'
+          : 'Start container first',
+    })
+  }
 
   // Edit container - file-based DBs can always edit (no running state), server databases must be stopped
   const canEdit = isFileBasedDB ? true : !isRunning

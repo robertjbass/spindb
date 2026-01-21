@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-01-21
+
+### Added
+- **Universal remote dump support** - All engines now support `dumpFromConnectionString()` for `spindb restore --from-url`:
+  - **Redis/Valkey** - Scans all keys from remote server, exports data types (strings, hashes, lists, sets, sorted sets) with TTL preservation
+  - **ClickHouse** - Uses HTTP API to fetch schema and export data as SQL INSERT statements
+  - **Qdrant** - Creates snapshot on remote server, downloads it, then cleans up
+- **FEATURE.md improvements** - Comprehensive documentation for adding REST API engines:
+  - REST API engine sub-type documentation
+  - Connection string validation guidance for backup-handlers.ts
+  - Flat archive handling for server-based engines
+  - Docker E2E test patterns for curl-based testing
+
+### Changed
+- **Engine management menu UX** - Replaced grouped engine list with flat selectable list showing all installed engines. Added interactive submenu for individual engine management (delete, back navigation).
+- **Binary manager flat archive handling** - `BaseBinaryManager.moveExtractedEntries()` now correctly handles flat archives (executables at root) for both Unix and Windows, creating `bin/` subdirectory structure as needed
+- **engines.schema.json** - Added "rest" to `queryLanguage` enum for REST API engines
+
+### Fixed
+- **Qdrant API response parsing** - Fixed JSON parsing errors for non-JSON endpoints like `/healthz`
+- **Qdrant "Run SQL file" menu option** - Hidden for Qdrant since it uses REST API, not CLI
+- **Connection string validation** - Added validation for all engines (Qdrant, ClickHouse, Redis, Valkey, MariaDB) in restore menu handlers
+
+### Notes
+- Integration tests for `dumpFromConnectionString()` are pending remote database test infrastructure
+- Docker E2E backup/restore tests skipped for Qdrant (covered by integration tests)
+
 ## [0.21.0] - 2026-01-21
 
 ### Added

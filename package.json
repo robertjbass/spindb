@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -29,6 +29,7 @@
     "test:local:quick": "./scripts/test-local.sh --quick",
     "test:local:fresh": "./scripts/test-local.sh --fresh",
     "test:docker": "bash tests/docker/run-docker-test.sh",
+    "generate:qdrant-snapshot": "tsx scripts/generate-qdrant-snapshot.ts",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
     "prepare": "husky"

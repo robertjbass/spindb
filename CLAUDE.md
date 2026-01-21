@@ -69,6 +69,19 @@ Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for ful
 - Registry in `~/.spindb/config.json` tracks files by name
 - Use `spindb attach <path>` / `spindb detach <name>` to manage registry
 
+**REST API engines** (Qdrant):
+- Server-based but interact via HTTP REST API instead of CLI tools
+- `spindb run` is not applicable (no CLI shell)
+- `spindb connect` opens the web dashboard in browser
+- Backup/restore uses snapshot endpoints via REST API
+- Docker E2E tests use `curl` for connectivity and data operations
+
+**Engines with built-in web UIs**:
+- **Qdrant**: Dashboard at `http://localhost:{port}/dashboard`
+- **ClickHouse**: Play UI at `http://localhost:8123/play`
+
+For these engines, the "Connect/Shell" menu option opens the web UI in the system's default browser using `openInBrowser()` in `cli/commands/menu/shell-handlers.ts`. Use platform-specific commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
@@ -238,9 +251,16 @@ pnpm test:unit      # Unit only
 pnpm test:pg        # PostgreSQL integration
 pnpm test:mysql     # MySQL integration
 pnpm test:duckdb    # DuckDB integration
+pnpm test:qdrant    # Qdrant integration
 pnpm test:docker    # Docker Linux E2E (all engines)
 pnpm test:docker -- clickhouse  # Single engine
+pnpm test:docker -- qdrant      # Qdrant (uses curl for REST API tests)
 ```
+
+**Docker E2E Notes:**
+- REST API engines (Qdrant) use `curl` instead of `spindb run` for connectivity/data tests
+- Qdrant backup/restore tests are skipped in Docker E2E (covered by integration tests)
+- See `tests/docker/run-e2e.sh` for engine-specific handling
 
 **Test Port Allocation**: Integration tests use reserved ports to avoid conflicts:
 - PostgreSQL: 5454-5456 (not 5432)
@@ -256,6 +276,28 @@ See [FEATURE.md](FEATURE.md) for complete guide. Quick checklist:
 2. Add to `Engine` enum, `ALL_ENGINES`, and `config/engines.json`
 3. Add tools to `KNOWN_BINARY_TOOLS` in dependency-manager.ts
 4. Add CI cache step in `.github/workflows/ci.yml`
+5. **Create fixtures** in `tests/fixtures/{engine}/seeds/` (REQUIRED for all engines)
+   - SQL engines: `sample-db.sql` with 5 test_user records
+   - Key-value engines: `sample-db.{ext}` with 6 keys
+   - REST API engines: `README.md` documenting the API-based approach
+6. Add Docker E2E test support in `tests/docker/run-e2e.sh`
+
+### Before Completing Any Task
+
+Always run these verification steps before considering a task complete:
+
+```bash
+pnpm lint          # TypeScript compilation + ESLint
+pnpm test:unit     # Unit tests (711+ tests)
+```
+
+If modifying a specific engine, also run its integration tests:
+```bash
+pnpm test:pg       # PostgreSQL
+pnpm test:mysql    # MySQL
+pnpm test:qdrant   # Qdrant
+# etc.
+```
 
 ### After Adding Any Feature
 
@@ -294,9 +336,8 @@ Menu navigation patterns:
 ## Known Limitations
 
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
-2. **ClickHouse Windows** - Not supported (no hostdb binaries)
-3. **Redis/Valkey** - No `dumpFromConnectionString()` support
-4. **Qdrant** - No CLI shell (uses REST API), no `dumpFromConnectionString()` support
+2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
+3. **Qdrant** - Uses REST API instead of CLI shell; `spindb run` is not applicable
 
 ## Publishing
 

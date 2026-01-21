@@ -77,15 +77,31 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
 
 ## Backlog
 
-### Redis Enhancements
+### Remote Dump/Restore Enhancements
 
-- [ ] **Redis remote dump/restore** - Support creating containers from remote Redis connection strings
-  - Unlike PostgreSQL/MySQL/MongoDB, Redis doesn't have a native remote dump tool
-  - Options to explore:
-    - Use `DUMP`/`RESTORE` commands to serialize individual keys
-    - Implement incremental key migration using `SCAN` + `DUMP`
-    - Add `--migrate` flag that copies keys from remote to local
-  - Current behavior: throws helpful error with manual migration instructions
+- [x] **Redis/Valkey remote dump** - Implemented using `redis-cli`/`valkey-cli` with SCAN to iterate keys
+  - Supports all data types: strings, hashes, lists, sets, sorted sets
+  - Preserves TTLs for keys with expiration
+  - Exports as text format commands for restore
+
+- [x] **ClickHouse remote dump** - Implemented using HTTP API
+  - Fetches schema with `SHOW CREATE TABLE`
+  - Exports data as SQL INSERT statements
+
+- [x] **Qdrant remote dump** - Implemented using REST API snapshots
+  - Creates snapshot on remote server
+  - Downloads and cleans up snapshot file
+
+- [ ] **Integration tests for dumpFromConnectionString** - Requires remote database instances
+  - Currently unit tests cover connection string parsing
+  - Integration tests for actual remote dumps need a test environment with running remote databases
+  - Consider using Docker Compose for CI remote database testing
+
+- [ ] **Browser/Web UI tests for Qdrant and ClickHouse**
+  - Test Qdrant Web UI download functionality (`downloadQdrantWebUI`)
+  - Test ClickHouse Play UI browser opening
+  - Verify `openInBrowser()` works cross-platform (macOS, Windows, Linux)
+  - Test Qdrant dashboard availability check before opening
 
 - [x] **Redis CI/CD tests** - Redis integration tests added to CI matrix
   - All platforms: macOS (Intel/ARM), Linux (Ubuntu 22.04/24.04), Windows
@@ -149,6 +165,7 @@ Combine common multi-step workflows into single commands. These should remain in
 - [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
   - Platforms: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64
+- [ ] **Bun-based packaging** - Consider Bun for creating smaller, faster distribution packages (faster startup and smaller downloads)
 - [x] **Fix package-manager mismatch for tests** - ~~`npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed~~ Fixed: now using `npm-run-all` so scripts work with any package manager
 - [ ] **Self-host compiled engine binaries** - Compile and host database engine binaries instead of relying on external sources (zonky.io for PostgreSQL). This would:
   - Reduce dependency on third-party binary hosts
