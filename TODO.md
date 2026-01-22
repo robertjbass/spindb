@@ -177,6 +177,40 @@ Combine common multi-step workflows into single commands. These should remain in
 
 ## Known Issues & Technical Debt
 
+### Design Review: Database Tracking (`databases` array)
+
+**Context:** Container configs store a `databases` array to track which databases exist within each container. This was added to show users what databases they have without querying the server. However, it creates a sync problem when databases are created/dropped/renamed outside of SpinDB (via SQL, scripts, etc.).
+
+**Current solution:** Added `spindb databases` CLI command to manually sync tracking after external changes.
+
+**Problems with current approach:**
+- [ ] **Cache invalidation** - The `databases` array is essentially a cache that can get stale
+- [ ] **Manual sync required** - Users must remember to run `spindb databases sync` after SQL renames
+- [ ] **Complexity** - Added a whole CLI command just to maintain a cache
+- [ ] **Duplication** - Information already exists in the database server
+
+**What CAN be determined from filesystem (no server needed):**
+| Engine | Method | Notes |
+|--------|--------|-------|
+| MySQL/MariaDB | `ls data/` | Each database is a directory |
+| ClickHouse | `ls data/` | Each database is a directory |
+| SQLite/DuckDB | N/A | File IS the database |
+| Redis/Valkey | N/A | Numbered 0-15, nothing to track |
+
+**What CANNOT be determined from filesystem:**
+| Engine | Why | Alternative |
+|--------|-----|-------------|
+| PostgreSQL | Data stored by OID, not name | Query `pg_database` (requires running server) |
+| MongoDB | WiredTiger doesn't expose DB names cleanly | Query `show dbs` (requires running server) |
+
+**Alternative approaches to evaluate:**
+- [ ] **Query on demand** - When running, query server. When stopped, show "start to list databases"
+- [ ] **Filesystem inference** - For MySQL/MariaDB/ClickHouse, read directories. For PG/Mongo, require server
+- [ ] **Keep only `database` (singular)** - Track just the primary database (user intent), not full list
+- [ ] **Hybrid** - Auto-populate from server when running, cache on stop, clear cache on start
+
+**Decision:** Evaluate whether the maintenance burden of `databases` array is worth the benefit. The `database` (singular) field for primary/default database is still useful for user intent.
+
 ### Critical: Version Containerization Uses Wrong Binary
 
 **Bug:** When multiple versions of an engine are installed on the system, containers may use the wrong binary version. A container created for Redis 6 was found to be running with the Redis 7 binary.
@@ -247,11 +281,13 @@ Multiple CLI instances can corrupt `container.json` or SQLite registry.
 For potential Electron/web frontend integration:
 
 - [ ] **Wire up progress callbacks** - `ProgressCallback` exists but CLI uses spinners instead
-- [ ] **Standardize JSON output** - Only 10/24 commands have `--json`, inconsistent error formats
-- [ ] **Add `--json` to all commands** - backup, clone, connect, create, delete, logs, restore, run, start, stop
-- [ ] **Structured error format** - Standard `{ code, message, suggestion, context }` for all JSON errors
+- [x] **Standardize JSON error output** - Core commands (info, create, list, start, stop, delete, backup, restore) now output `{ error: "..." }` for errors in JSON mode
+- [ ] **Add `--json` to remaining commands** - clone, connect, logs, run, edit, attach, detach
+- [ ] **Structured error format** - Standard `{ success, error, code, suggestion }` for all JSON errors (currently just `{ error }`)
 - [ ] **Add timestamps to JSON output** - For audit trails and debugging
 - [ ] **Add event streaming mode** - WebSocket or SSE for real-time progress updates
+- [x] **Block interactive prompts in JSON mode** - Commands now error with `{ error: "Container name is required" }` JSON when required args are missing instead of prompting
+- [x] **Suppress spinners in JSON mode** - Commands using `--json` now skip spinners using `options.json ? null : createSpinner(...)`
 
 ### Medium: Version Validation at Wrong Layer
 

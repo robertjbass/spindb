@@ -53,6 +53,12 @@ export const restoreCommand = new Command('restore')
         let backupPath = backup
 
         if (!containerName) {
+          // JSON mode requires container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
 
@@ -83,7 +89,11 @@ export const restoreCommand = new Command('restore')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(uiError(`Container "${containerName}" not found`))
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+          } else {
+            console.error(uiError(`Container "${containerName}" not found`))
+          }
           process.exit(1)
         }
 
@@ -101,11 +111,12 @@ export const restoreCommand = new Command('restore')
             engine: engineName,
           })
           if (!running) {
-            console.error(
-              uiError(
-                `Container "${containerName}" is not running. Start it first.`,
-              ),
-            )
+            const errorMsg = `Container "${containerName}" is not running. Start it first.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         }
@@ -516,6 +527,10 @@ export const restoreCommand = new Command('restore')
         )
 
         if (matchingPattern) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: e.message }))
+            process.exit(1)
+          }
           const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
@@ -526,7 +541,11 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       } finally {
         if (tempDumpPath) {

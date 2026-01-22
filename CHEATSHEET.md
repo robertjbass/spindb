@@ -83,6 +83,23 @@ spindb clone mydb mydb-copy             # Clone container
 spindb start mydb-copy                  # Start on new port
 ```
 
+## Database Tracking
+
+SpinDB tracks which databases exist within each container. Use these commands to keep tracking in sync after external changes (e.g., SQL renames, scripts that create/drop databases).
+
+```bash
+spindb databases list mydb              # List tracked databases
+spindb databases add mydb analytics     # Add database to tracking
+spindb databases remove mydb old_backup # Remove from tracking
+spindb databases sync mydb old new      # Sync after rename (remove old, add new)
+
+# JSON output for scripting
+spindb databases list mydb --json
+spindb databases add mydb newdb --json
+```
+
+> **Note:** These commands only update SpinDB's tracking. They do NOT create or drop actual databases. Use `spindb run` for that.
+
 ## Edit & Configure
 
 ```bash

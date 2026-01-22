@@ -4,6 +4,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { startWithRetry } from '../../core/start-with-retry'
 import { getEngine } from '../../engines'
+import { postgresqlEngine } from '../../engines/postgresql'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
@@ -19,6 +20,12 @@ export const startCommand = new Command('start')
       let containerName = name
 
       if (!containerName) {
+        // JSON mode requires container name argument
+        if (options.json) {
+          console.log(JSON.stringify({ error: 'Container name is required' }))
+          process.exit(1)
+        }
+
         const containers = await containerManager.list()
         const stopped = containers.filter((c) => c.status !== 'running')
 
@@ -43,7 +50,11 @@ export const startCommand = new Command('start')
 
       const config = await containerManager.getConfig(containerName)
       if (!config) {
-        console.error(uiError(`Container "${containerName}" not found`))
+        if (options.json) {
+          console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+        } else {
+          console.error(uiError(`Container "${containerName}" not found`))
+        }
         process.exit(1)
       }
 
@@ -53,6 +64,10 @@ export const startCommand = new Command('start')
         engine: engineName,
       })
       if (running) {
+        if (options.json) {
+          console.log(JSON.stringify({ error: `Container "${containerName}" is already running` }))
+          process.exit(1)
+        }
         console.log(
           uiWarning(`Container "${containerName}" is already running`),
         )
@@ -62,48 +77,51 @@ export const startCommand = new Command('start')
       const engineDefaults = getEngineDefaults(engineName)
       const engine = getEngine(engineName)
 
-      // For PostgreSQL, check if the engine binary is installed
+      // For PostgreSQL, check if compatible binaries are available
+      // Self-healing logic in engine.start() will handle version resolution
       if (engineName === Engine.PostgreSQL) {
-        const isInstalled = await engine.isBinaryInstalled(config.version)
-        if (!isInstalled) {
+        const hasCompatible = postgresqlEngine.hasCompatibleBinaries(config.version)
+        if (!hasCompatible) {
+          // No compatible binaries found - get the current supported version for this major
+          const majorVersion = config.version.split('.')[0]
           console.log(
             uiWarning(
-              `PostgreSQL ${config.version} engine is not installed (required by "${containerName}")`,
+              `No PostgreSQL ${majorVersion}.x binaries found (required by "${containerName}")`,
             ),
           )
           const confirmed = await promptConfirm(
-            `Download PostgreSQL ${config.version} now?`,
+            `Download PostgreSQL ${majorVersion} now?`,
             true,
           )
           if (!confirmed) {
             console.log(
               chalk.gray(
-                `  Run "spindb engines download postgresql ${config.version}" to download manually.`,
+                `  Run "spindb engines download postgresql ${majorVersion}" to download manually.`,
               ),
             )
             return
           }
 
           const downloadSpinner = createSpinner(
-            `Downloading PostgreSQL ${config.version}...`,
+            `Downloading PostgreSQL ${majorVersion}...`,
           )
           downloadSpinner.start()
 
           try {
             await engine.ensureBinaries(
-              config.version,
+              majorVersion,
               ({ stage, message }) => {
                 if (stage === 'cached') {
-                  downloadSpinner.text = `PostgreSQL ${config.version} ready`
+                  downloadSpinner.text = `PostgreSQL ${majorVersion} ready`
                 } else {
                   downloadSpinner.text = message
                 }
               },
             )
-            downloadSpinner.succeed(`PostgreSQL ${config.version} downloaded`)
+            downloadSpinner.succeed(`PostgreSQL ${majorVersion} downloaded`)
           } catch (downloadError) {
             downloadSpinner.fail(
-              `Failed to download PostgreSQL ${config.version} for "${containerName}"`,
+              `Failed to download PostgreSQL ${majorVersion} for "${containerName}"`,
             )
             throw downloadError
           }
@@ -178,7 +196,11 @@ export const startCommand = new Command('start')
       }
     } catch (error) {
       const e = error as Error
-      console.error(uiError(e.message))
+      if (options.json) {
+        console.log(JSON.stringify({ error: e.message }))
+      } else {
+        console.error(uiError(e.message))
+      }
       process.exit(1)
     }
   })

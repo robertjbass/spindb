@@ -26,6 +26,7 @@ import { doctorCommand } from './commands/doctor'
 import { attachCommand } from './commands/attach'
 import { detachCommand } from './commands/detach'
 import { sqliteCommand } from './commands/sqlite'
+import { databasesCommand } from './commands/databases'
 import { updateManager } from '../core/update-manager'
 
 const require = createRequire(import.meta.url)
@@ -51,35 +52,20 @@ async function showUpdateNotificationIfAvailable(): Promise<void> {
 
     // Show notification banner
     console.log()
-    console.log(chalk.cyan('┌' + '─'.repeat(52) + '┐'))
+    console.log(chalk.cyan('─'.repeat(50)))
     console.log(
-      chalk.cyan('│') +
-        chalk.yellow(' Update available! ') +
+      chalk.yellow('  Update available! ') +
         chalk.gray(`${currentVersion} -> `) +
-        chalk.green(latestVersion) +
-        ' '.repeat(
-          Math.max(
-            0,
-            52 - 21 - currentVersion.length - 4 - latestVersion.length,
-          ),
-        ) +
-        chalk.cyan('│'),
+        chalk.green(latestVersion),
     )
     console.log(
-      chalk.cyan('│') +
-        chalk.gray(' Run: ') +
-        chalk.cyan('spindb self-update') +
-        ' '.repeat(28) +
-        chalk.cyan('│'),
+      chalk.gray('  Run: ') + chalk.cyan('spindb self-update'),
     )
     console.log(
-      chalk.cyan('│') +
-        chalk.gray(' To disable: ') +
-        chalk.gray('spindb config update-check off') +
-        ' '.repeat(8) +
-        chalk.cyan('│'),
+      chalk.gray('  To disable: ') +
+        chalk.gray('spindb config update-check off'),
     )
-    console.log(chalk.cyan('└' + '─'.repeat(52) + '┘'))
+    console.log(chalk.cyan('─'.repeat(50)))
     console.log()
   } catch {
     // Silently ignore errors - update notification is not critical
@@ -99,9 +85,6 @@ function triggerBackgroundUpdateCheck(): void {
 export async function run(): Promise<void> {
   // Trigger background update check (non-blocking, updates cache for next run)
   triggerBackgroundUpdateCheck()
-
-  // Show update notification if an update is available (from cached data)
-  await showUpdateNotificationIfAvailable()
 
   program
     .name('spindb')
@@ -133,8 +116,11 @@ export async function run(): Promise<void> {
   program.addCommand(attachCommand)
   program.addCommand(detachCommand)
   program.addCommand(sqliteCommand)
+  program.addCommand(databasesCommand)
 
   if (process.argv.length <= 2) {
+    // Only show update notification in interactive menu mode (once at startup)
+    await showUpdateNotificationIfAvailable()
     await menuCommand.parseAsync([])
     return
   }

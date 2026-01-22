@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`spindb databases` command** - New CLI command for managing database tracking within containers:
+  - `spindb databases list <container>` - List tracked databases
+  - `spindb databases add <container> <database>` - Add database to tracking
+  - `spindb databases remove <container> <database>` - Remove database from tracking
+  - `spindb databases sync <container> <old> <new>` - Sync tracking after SQL rename operations
+  - All subcommands support `--json` flag for scripting
+  - Useful for keeping SpinDB's registry in sync after external changes (SQL renames, scripts that create/drop databases)
+
+- **PostgreSQL self-healing binary resolution** - Containers now automatically recover from missing binaries:
+  - If exact version binaries are missing, SpinDB finds compatible binaries with the same major version
+  - If no compatible binaries exist, prompts to download the current supported version for that major
+  - Container config is automatically updated to reflect the actual version used
+  - Prevents ENOENT errors when binaries are deleted or moved
+
+### Changed
+- **Start command binary check** - Now checks for any compatible PostgreSQL binaries (same major version) instead of requiring exact version match. Self-healing handles version resolution automatically.
+
+## [0.21.2] - 2026-01-21
+
+### Fixed
+- **JSON output pollution** - Update notification banner no longer appears before JSON output when using `--json` flag. The banner now only displays once when entering the interactive menu.
+- **JSON error handling** - Commands with `--json` flag now output proper JSON for error cases instead of human-readable messages:
+  - `info` - Empty containers returns `[]`, not found returns `{ "error": "..." }`
+  - `create` - Validation errors (invalid format, missing tools, etc.) return JSON
+  - `list` - Errors return JSON
+  - `start` - No containers, not found, already running errors return JSON
+  - `stop` - No running containers, not found, not running errors return JSON
+  - `delete` - No containers, not found, running errors return JSON; skips confirmation prompt in JSON mode
+  - `backup` - No containers, not running, invalid format errors return JSON
+  - `restore` - No containers, not running errors return JSON
+
+### Changed
+- **Update notification style** - Simplified from bordered box to clean header lines for better terminal compatibility
+
 ## [0.21.1] - 2026-01-21
 
 ### Added

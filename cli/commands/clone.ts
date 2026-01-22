@@ -23,6 +23,12 @@ export const cloneCommand = new Command('clone')
         let targetName = target
 
         if (!sourceName) {
+          // JSON mode requires source container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Source container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
           const stopped = containers.filter((c) => c.status !== 'running')
 
@@ -57,7 +63,11 @@ export const cloneCommand = new Command('clone')
 
         const sourceConfig = await containerManager.getConfig(sourceName)
         if (!sourceConfig) {
-          console.error(uiError(`Container "${sourceName}" not found`))
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${sourceName}" not found` }))
+          } else {
+            console.error(uiError(`Container "${sourceName}" not found`))
+          }
           process.exit(1)
         }
 
@@ -65,15 +75,21 @@ export const cloneCommand = new Command('clone')
           engine: sourceConfig.engine,
         })
         if (running) {
-          console.error(
-            uiError(
-              `Container "${sourceName}" is running. Stop it first to clone.`,
-            ),
-          )
+          const errorMsg = `Container "${sourceName}" is running. Stop it first to clone.`
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
+          }
           process.exit(1)
         }
 
         if (!targetName) {
+          // JSON mode requires target container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Target container name is required' }))
+            process.exit(1)
+          }
           targetName = await promptContainerName(`${sourceName}-copy`)
         }
 
@@ -83,7 +99,12 @@ export const cloneCommand = new Command('clone')
             engine: sourceConfig.engine,
           })
         ) {
-          console.error(uiError(`Container "${targetName}" already exists`))
+          const errorMsg = `Container "${targetName}" already exists`
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
+          }
           process.exit(1)
         }
 
@@ -121,7 +142,11 @@ export const cloneCommand = new Command('clone')
         }
       } catch (error) {
         const e = error as Error
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       }
     },

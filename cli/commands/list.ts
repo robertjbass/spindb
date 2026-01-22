@@ -259,7 +259,11 @@ export const listCommand = new Command('list')
       console.log()
     } catch (error) {
       const e = error as Error
-      console.error(uiError(e.message))
+      if (options.json) {
+        console.log(JSON.stringify({ error: e.message }))
+      } else {
+        console.error(uiError(e.message))
+      }
       process.exit(1)
     }
   })

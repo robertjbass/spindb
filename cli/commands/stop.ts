@@ -24,6 +24,10 @@ export const stopCommand = new Command('stop')
           const running = containers.filter((c) => c.status === 'running')
 
           if (running.length === 0) {
+            if (options.json) {
+              console.log(JSON.stringify({ error: 'No running containers found' }))
+              process.exit(1)
+            }
             console.log(uiWarning('No running containers found'))
             return
           }
@@ -107,6 +111,12 @@ export const stopCommand = new Command('stop')
         let containerName = name
 
         if (!containerName) {
+          // JSON mode requires container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
 
@@ -125,7 +135,11 @@ export const stopCommand = new Command('stop')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(uiError(`Container "${containerName}" not found`))
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+          } else {
+            console.error(uiError(`Container "${containerName}" not found`))
+          }
           process.exit(1)
         }
 
@@ -133,6 +147,10 @@ export const stopCommand = new Command('stop')
           engine: config.engine,
         })
         if (!running) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${containerName}" is not running` }))
+            process.exit(1)
+          }
           console.log(uiWarning(`Container "${containerName}" is not running`))
           return
         }
@@ -195,7 +213,11 @@ export const stopCommand = new Command('stop')
         }
       } catch (error) {
         const e = error as Error
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       }
     },

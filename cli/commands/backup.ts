@@ -63,6 +63,12 @@ export const backupCommand = new Command('backup')
         let containerName = containerArg
 
         if (!containerName) {
+          // JSON mode requires container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
 
@@ -93,7 +99,11 @@ export const backupCommand = new Command('backup')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(uiError(`Container "${containerName}" not found`))
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+          } else {
+            console.error(uiError(`Container "${containerName}" not found`))
+          }
           process.exit(1)
         }
 
@@ -105,11 +115,12 @@ export const backupCommand = new Command('backup')
             engine: engineName,
           })
           if (!running) {
-            console.error(
-              uiError(
-                `Container "${containerName}" is not running. Start it first.`,
-              ),
-            )
+            const errorMsg = `Container "${containerName}" is not running. Start it first.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         }
@@ -170,12 +181,12 @@ export const backupCommand = new Command('backup')
         if (options.format) {
           if (!isValidFormat(engineName, options.format)) {
             const validFormats = getValidFormats(engineName)
-            console.error(
-              uiError(
-                `Invalid format "${options.format}" for ${engineName}. ` +
-                  `Valid formats: ${validFormats.join(', ')}`,
-              ),
-            )
+            const errorMsg = `Invalid format "${options.format}" for ${engineName}. Valid formats: ${validFormats.join(', ')}`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
           // Safe to cast: isValidFormat above guarantees the format is valid
@@ -247,6 +258,10 @@ export const backupCommand = new Command('backup')
         )
 
         if (matchingPattern) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: e.message }))
+            process.exit(1)
+          }
           const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
@@ -257,7 +272,11 @@ export const backupCommand = new Command('backup')
           process.exit(1)
         }
 
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       }
     },

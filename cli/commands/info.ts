@@ -255,15 +255,23 @@ export const infoCommand = new Command('info')
       const containers = await containerManager.list()
 
       if (containers.length === 0) {
-        console.log(
-          uiInfo('No containers found. Create one with: spindb create'),
-        )
+        if (options.json) {
+          console.log(JSON.stringify([], null, 2))
+        } else {
+          console.log(
+            uiInfo('No containers found. Create one with: spindb create'),
+          )
+        }
         return
       }
 
       if (name) {
         const config = await containerManager.getConfig(name)
         if (!config) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${name}" not found` }))
+            process.exit(1)
+          }
           console.error(uiError(`Container "${name}" not found`))
           process.exit(1)
         }
@@ -303,7 +311,11 @@ export const infoCommand = new Command('info')
       await displayAllContainersInfo(containers, options)
     } catch (error) {
       const e = error as Error
-      console.error(uiError(e.message))
+      if (options.json) {
+        console.log(JSON.stringify({ error: e.message }))
+      } else {
+        console.error(uiError(e.message))
+      }
       process.exit(1)
     }
   })

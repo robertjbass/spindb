@@ -309,6 +309,12 @@ spindb edit mydb --relocate ~/new/path          # Move SQLite/DuckDB file
 spindb logs mydb
 spindb logs mydb --follow                       # Follow mode (tail -f)
 spindb logs mydb -n 100                         # Last 100 lines
+
+# Manage database tracking (for external scripts)
+spindb databases list mydb                      # List tracked databases
+spindb databases add mydb analytics             # Add to tracking
+spindb databases remove mydb old_backup         # Remove from tracking
+spindb databases sync mydb oldname newname      # Sync after rename
 ```
 
 ### Engine & System Management

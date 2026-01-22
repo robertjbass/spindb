@@ -242,6 +242,12 @@ spindb doctor                 # System health check
 spindb url <container>        # Connection string (--copy, --json flags)
 spindb config show            # Display configuration
 spindb config detect          # Re-detect tool paths
+
+# Database tracking (sync after external changes like SQL renames)
+spindb databases list <container>              # List tracked databases
+spindb databases add <container> <database>    # Add to tracking
+spindb databases remove <container> <database> # Remove from tracking
+spindb databases sync <container> <old> <new>  # Sync after rename
 ```
 
 ### Running Tests
@@ -352,3 +358,25 @@ ESM imports, `async/await`, Ora spinners, conventional commits (`feat:`, `fix:`,
 - **User-facing output**: Use Ora spinners and Chalk for CLI feedback
 - **Internal warnings/debug**: Use `logDebug()` from `core/error-handler.ts`, never `console.warn` or `console.log`
 - **Rationale**: `console.warn` pollutes stdout/stderr and breaks JSON output modes. `logDebug()` respects the `--debug` flag and writes to the debug log file only.
+
+### JSON Output Mode (`--json` flag)
+
+Commands supporting `--json` must output **pure JSON** with no extraneous text:
+
+- **Guard all human-readable output** with `if (!options.json)` checks
+- **Errors must output JSON**: `console.log(JSON.stringify({ error: "message" }))` then `process.exit(1)`
+- **Skip interactive prompts** in JSON mode - either require arguments or error with JSON
+- **Suppress spinners** in JSON mode or use `options.json ? null : createSpinner(...)`
+- **No banners or notifications** before JSON output
+
+Example error handling pattern:
+```ts
+if (!config) {
+  if (options.json) {
+    console.log(JSON.stringify({ error: `Container "${name}" not found` }))
+  } else {
+    console.error(uiError(`Container "${name}" not found`))
+  }
+  process.exit(1)
+}
+```
