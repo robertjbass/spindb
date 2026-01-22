@@ -700,6 +700,22 @@ export class QdrantEngine extends BaseEngine {
       }
     }
 
+    // Also kill any processes still listening on the ports
+    // This handles cases where the PID file is stale or child processes exist
+    const portPids = await platformService.findProcessByPort(port)
+    const grpcPids = await platformService.findProcessByPort(grpcPort)
+    const allPids = [...new Set([...portPids, ...grpcPids])]
+    for (const portPid of allPids) {
+      if (portPid !== pid && platformService.isProcessRunning(portPid)) {
+        logDebug(`Killing orphaned process ${portPid} on port ${port}/${grpcPort}`)
+        try {
+          await platformService.terminateProcess(portPid, true)
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
     // Cleanup PID file
     if (existsSync(pidFile)) {
       try {
@@ -711,11 +727,12 @@ export class QdrantEngine extends BaseEngine {
 
     // On Windows, wait for ports to be released
     // Windows holds onto ports longer after process termination (TIME_WAIT state)
+    // Can take 30+ seconds in some cases
     if (isWindows()) {
       logDebug(`Waiting for ports ${port} and ${grpcPort} to be released...`)
       const portWaitStart = Date.now()
-      const portWaitTimeout = 5000 // 5 seconds max
-      const checkInterval = 200
+      const portWaitTimeout = 30000 // 30 seconds max
+      const checkInterval = 500
 
       while (Date.now() - portWaitStart < portWaitTimeout) {
         const httpAvailable = await portManager.isPortAvailable(port)

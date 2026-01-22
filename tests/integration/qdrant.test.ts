@@ -193,7 +193,8 @@ describe('Qdrant Integration Tests', () => {
     await containerManager.updateConfig(containerName, { status: 'stopped' })
 
     // Wait for the container to be fully stopped
-    const stopped = await waitForStopped(containerName, ENGINE)
+    // Use longer timeout on Windows for port/file release
+    const stopped = await waitForStopped(containerName, ENGINE, 90000)
     assert(stopped, 'Source container should be fully stopped before restore')
 
     // Restore to cloned container
@@ -241,7 +242,8 @@ describe('Qdrant Integration Tests', () => {
     await containerManager.updateConfig(containerName, { status: 'stopped' })
 
     // Wait for the container to be fully stopped
-    const stopped = await waitForStopped(containerName, ENGINE)
+    // Use longer timeout on Windows for port/file release
+    const stopped = await waitForStopped(containerName, ENGINE, 90000)
     assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
@@ -270,7 +272,8 @@ describe('Qdrant Integration Tests', () => {
     if (config) {
       const engine = getEngine(ENGINE)
       await engine.stop(config)
-      await waitForStopped(clonedContainerName, ENGINE)
+      // Use longer timeout on Windows for port/file release
+      await waitForStopped(clonedContainerName, ENGINE, 90000)
     }
 
     await containerManager.delete(clonedContainerName, { force: true })

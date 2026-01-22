@@ -107,12 +107,30 @@ export async function cleanupTestContainers(): Promise<string[]> {
         const config = await containerManager.getConfig(container.name)
         if (config) {
           await engine.stop(config)
+          // Wait for the container to fully stop on Windows
+          // Windows is slower to release ports and file handles
+          if (isWindows()) {
+            await new Promise((resolve) => setTimeout(resolve, 5000))
+          }
         }
       }
 
-      // Delete container
-      await containerManager.delete(container.name, { force: true })
-      deleted.push(container.name)
+      // Delete container with retry on Windows
+      // Windows may hold file handles longer after process termination
+      let deleteAttempts = isWindows() ? 3 : 1
+      while (deleteAttempts > 0) {
+        try {
+          await containerManager.delete(container.name, { force: true })
+          deleted.push(container.name)
+          break
+        } catch {
+          deleteAttempts--
+          if (deleteAttempts > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+          }
+          // If all attempts fail, silently continue (it's cleanup)
+        }
+      }
     } catch {
       // Ignore errors during cleanup
     }
@@ -562,7 +580,8 @@ export async function waitForStopped(
   }
 
   // For Qdrant on Windows, also wait for ports to be released
-  // Windows is slower to release ports after process termination
+  // Windows is slower to release ports after process termination (TIME_WAIT state)
+  // Can take 30+ seconds for TCP ports to be fully released
   if (engine === Engine.Qdrant && isWindows()) {
     const config = await containerManager.getConfig(containerName)
     if (config) {
@@ -570,7 +589,8 @@ export async function waitForStopped(
       const grpcPort = config.port + 1
 
       // Wait for both HTTP and gRPC ports to be available
-      const portTimeoutMs = Math.min(10000, timeoutMs - (Date.now() - startTime))
+      // Use 60 seconds to match the engine's port wait timeout
+      const portTimeoutMs = Math.min(60000, timeoutMs - (Date.now() - startTime))
       const portStartTime = Date.now()
 
       while (Date.now() - portStartTime < portTimeoutMs) {
@@ -582,13 +602,24 @@ export async function waitForStopped(
         }
         await new Promise((resolve) => setTimeout(resolve, checkInterval))
       }
+
+      // Verify ports are actually available after waiting
+      const finalHttpAvailable = await portManager.isPortAvailable(httpPort)
+      const finalGrpcAvailable = await portManager.isPortAvailable(grpcPort)
+      if (!finalHttpAvailable || !finalGrpcAvailable) {
+        console.log(
+          `   ⚠️  waitForStopped: Ports still in use after ${portTimeoutMs}ms - ` +
+            `HTTP:${httpPort}=${finalHttpAvailable}, gRPC:${grpcPort}=${finalGrpcAvailable}`,
+        )
+      }
     }
   }
 
   // On Windows, add extra delay for file handle release
+  // Memory-mapped files and Windows antivirus/indexing can hold handles
   // This helps prevent EBUSY errors during rename/delete operations
   if (isWindows()) {
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 3000))
   }
 
   return true
