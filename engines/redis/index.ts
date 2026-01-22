@@ -23,6 +23,7 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
+import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import {
   type Platform,
   type Arch,
@@ -39,6 +40,20 @@ import {
 const execAsync = promisify(exec)
 
 const ENGINE = 'redis'
+
+/**
+ * Escape a Redis key for use in CLI commands.
+ * Escapes backslashes, double quotes, and control characters to prevent
+ * command injection and ensure keys are parsed correctly by the CLI.
+ */
+function escapeKeyForCommand(key: string): string {
+  return key
+    .replace(/\\/g, '\\\\')   // Backslashes first to prevent double-escaping
+    .replace(/"/g, '\\"')     // Double quotes
+    .replace(/\n/g, '\\n')    // Newline
+    .replace(/\r/g, '\\r')    // Carriage return
+    .replace(/\t/g, '\\t')    // Tab
+}
 const engineDef = getEngineDefaults(ENGINE)
 
 /**
@@ -85,6 +100,87 @@ function toCygwinPath(windowsPath: string): string {
   const driveLetter = driveMatch[1].toLowerCase()
   const restOfPath = windowsPath.slice(3).replace(/\\/g, '/')
   return `/cygdrive/${driveLetter}/${restOfPath}`
+}
+
+/**
+ * Parse a Redis connection string
+ * Supported schemes:
+ * - redis://   (plain, no TLS)
+ * - rediss://  (TLS enabled)
+ *
+ * Format: scheme://[user:password@]host[:port][/database]
+ *
+ * Examples:
+ * - redis://localhost:6379
+ * - rediss://secure.host:6379/0  (TLS)
+ * - redis://:password@localhost:6379/0
+ * - redis://user:password@remote.host:6380/5
+ */
+function parseRedisConnectionString(connectionString: string): {
+  host: string
+  port: number
+  username: string | undefined
+  password: string | undefined
+  database: number
+  tls: boolean
+} {
+  let url: URL
+
+  const normalized = connectionString.trim()
+
+  // Check for valid schemes
+  const validSchemes = ['redis://', 'rediss://']
+  const hasValidScheme = validSchemes.some((scheme) =>
+    normalized.startsWith(scheme),
+  )
+
+  if (!hasValidScheme) {
+    throw new Error(
+      `Invalid Redis connection string: ${connectionString}\n` +
+        'Expected format: scheme://[user:password@]host:port[/database]\n' +
+        'Supported schemes: redis://, rediss://\n' +
+        '(Use rediss:// for TLS connections)',
+    )
+  }
+
+  try {
+    url = new URL(normalized)
+  } catch {
+    throw new Error(
+      `Invalid Redis connection string: ${connectionString}\n` +
+        'Expected format: scheme://[user:password@]host:port[/database]',
+    )
+  }
+
+  // Determine TLS based on scheme
+  const tls = normalized.startsWith('rediss://')
+
+  const host = url.hostname || 'localhost'
+  const port = parseInt(url.port, 10) || 6379
+
+  // Redis 6.0+ supports ACL with usernames
+  // Format: redis://username:password@host:port/db
+  const username = url.username || undefined
+  const password = url.password || undefined
+
+  // Database is in the path (e.g., /5 means database 5)
+  let database = 0
+  if (url.pathname && url.pathname !== '/') {
+    const dbNum = parseInt(url.pathname.replace('/', ''), 10)
+    if (!isNaN(dbNum)) {
+      if (dbNum < 0 || dbNum > 15) {
+        throw new RangeError(
+          `Invalid Redis database number: ${dbNum} (from path "${url.pathname}").\n` +
+            'Redis databases must be 0-15 by default.\n' +
+            'If your server is configured with more databases (via the "databases" setting),\n' +
+            'you may need to increase the limit in server configuration.',
+        )
+      }
+      database = dbNum
+    }
+  }
+
+  return { host, port, username, password, database, tls }
 }
 
 // Build a redis-cli command for inline command execution
@@ -918,20 +1014,279 @@ export class RedisEngine extends BaseEngine {
 
   /**
    * Dump from a remote Redis connection
-   * Redis doesn't support remote dump like pg_dump/mongodump
-   * Throw an error with guidance
+   * Creates a text-format backup by scanning all keys from the remote server
+   *
+   * Connection string format: redis://[user:password@]host:port[/db]
    */
   async dumpFromConnectionString(
-    _connectionString: string,
-    _outputPath: string,
+    connectionString: string,
+    outputPath: string,
   ): Promise<DumpResult> {
-    throw new Error(
-      'Redis does not support creating containers from remote connection strings.\n' +
-        'To migrate data from a remote Redis instance:\n' +
-        '  1. On remote server: redis-cli --rdb dump.rdb\n' +
-        '  2. Copy dump.rdb to local machine\n' +
-        '  3. spindb restore <container> dump.rdb',
+    const redisCli = await getRedisCliPath()
+    if (!redisCli) {
+      throw new Error(REDIS_CLI_NOT_FOUND_ERROR)
+    }
+
+    // Parse connection string
+    const { host, port, username, password, database, tls } =
+      parseRedisConnectionString(connectionString)
+
+    logDebug(
+      `Connecting to remote Redis at ${host}:${port} (db: ${database}, tls: ${tls})`,
     )
+
+    // Build CLI args for remote connection (password passed via env var for security)
+    const buildArgs = (): string[] => {
+      const args = ['-h', host, '-p', String(port)]
+      // Redis 6.0+ ACL: pass username via --user flag
+      if (username) {
+        args.push('--user', username)
+      }
+      // Enable TLS for rediss:// scheme
+      if (tls) {
+        args.push('--tls')
+      }
+      // Note: password is passed via REDISCLI_AUTH env var, not command line
+      args.push('-n', String(database))
+      return args
+    }
+
+    // Execute a Redis command on the remote server with timeout
+    const execRemote = async (
+      command: string,
+      timeoutMs = 30000,
+    ): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const args = buildArgs()
+        // Pass password via REDISCLI_AUTH env var to avoid exposing it in process listings
+        const env = password
+          ? { ...process.env, REDISCLI_AUTH: password }
+          : process.env
+        const proc = spawn(redisCli, args, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+        })
+
+        let stdout = ''
+        let stderr = ''
+        let settled = false
+
+        // Timeout handler to prevent hanging
+        const timeoutId = setTimeout(() => {
+          if (settled) return
+          settled = true
+          proc.kill()
+          reject(
+            new Error(
+              `Command timed out after ${timeoutMs}ms: ${command.slice(0, 50)}...`,
+            ),
+          )
+        }, timeoutMs)
+
+        proc.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        proc.on('error', (err) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeoutId)
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeoutId)
+          // Ignore auth-related warnings in stderr (password provided via REDISCLI_AUTH)
+          if (code === 0 || code === null) {
+            resolve(stdout)
+          } else {
+            reject(new Error(stderr || `redis-cli exited with code ${code}`))
+          }
+        })
+
+        proc.stdin.write(command + '\n')
+        proc.stdin.end()
+      })
+    }
+
+    // Test connectivity
+    try {
+      const pingResult = await execRemote('PING')
+      if (!pingResult.trim().includes('PONG')) {
+        throw new Error(`Unexpected PING response: ${pingResult.trim()}`)
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to connect to Redis at ${host}:${port}: ${(error as Error).message}`,
+      )
+    }
+
+    // Build text backup from remote keys
+    const commands: string[] = []
+    commands.push('# Redis backup generated by SpinDB')
+    commands.push(`# Source: ${host}:${port}`)
+    commands.push(`# Date: ${new Date().toISOString()}`)
+    commands.push('')
+
+    // WARNING: KEYS * blocks the Redis server during execution.
+    // This is acceptable for small datasets but will cause performance issues
+    // on large databases. For production use with large datasets, consider
+    // implementing SCAN-based iteration instead.
+    // TODO: Replace with SCAN iterator for large dataset support
+    const keysOutput = await execRemote('KEYS *')
+    const keys = keysOutput
+      .trim()
+      .split(/\r?\n/)
+      .map((k) => k.trim())
+      .filter((k) => k)
+
+    logDebug(`Found ${keys.length} keys on remote Redis`)
+
+    for (const key of keys) {
+      // Get key type
+      const typeOutput = await execRemote(
+        `TYPE "${escapeKeyForCommand(key)}"`,
+      )
+      const keyType = typeOutput.trim()
+
+      // Get TTL
+      const ttlOutput = await execRemote(`TTL "${escapeKeyForCommand(key)}"`)
+      const ttl = parseInt(ttlOutput.trim(), 10)
+
+      // Quote the key for output commands if it contains special chars
+      const quotedKey =
+        key.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(key)
+          ? `"${key.replace(/"/g, '\\"')}"`
+          : key
+
+      // Redis-cli compatible double-quote escaping for values
+      // Escapes backslashes and double quotes, converts newlines to \n sequences
+      // Note: This approach doesn't handle binary data.
+      // For binary-safe backups, consider using DUMP/RESTORE commands instead.
+      const escapeValue = (value: string): string => {
+        const escaped = value
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+        return `"${escaped}"`
+      }
+
+      // Strip only trailing newline from execRemote output, preserving intentional whitespace
+      const stripTrailingNewline = (s: string): string => s.replace(/\r?\n$/, '')
+
+      switch (keyType) {
+        case 'string': {
+          const value = await execRemote(`GET "${escapeKeyForCommand(key)}"`)
+          commands.push(`SET ${quotedKey} ${escapeValue(stripTrailingNewline(value))}`)
+          break
+        }
+        case 'hash': {
+          const hashData = await execRemote(
+            `HGETALL "${escapeKeyForCommand(key)}"`,
+          )
+          const lines = stripTrailingNewline(hashData)
+            .split(/\r?\n/)
+            .filter((l) => l)
+          if (lines.length >= 2) {
+            const pairs: string[] = []
+            // Handle odd number of lines (incomplete field/value pair)
+            const completeCount = lines.length - (lines.length % 2)
+            if (lines.length % 2 !== 0) {
+              logWarning(`Hash ${quotedKey} has incomplete field/value pair, skipping last field`)
+            }
+            for (let i = 0; i < completeCount; i += 2) {
+              const field = lines[i]
+              const value = lines[i + 1]
+              const quotedField =
+                field.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(field)
+                  ? `"${field.replace(/"/g, '\\"')}"`
+                  : field
+              pairs.push(`${quotedField} ${escapeValue(value)}`)
+            }
+            if (pairs.length > 0) {
+              commands.push(`HSET ${quotedKey} ${pairs.join(' ')}`)
+            }
+          }
+          break
+        }
+        case 'list': {
+          const listData = await execRemote(
+            `LRANGE "${escapeKeyForCommand(key)}" 0 -1`,
+          )
+          const items = stripTrailingNewline(listData)
+            .split(/\r?\n/)
+            .filter((l) => l)
+          if (items.length > 0) {
+            const escapedItems = items.map((item) => escapeValue(item))
+            commands.push(`RPUSH ${quotedKey} ${escapedItems.join(' ')}`)
+          }
+          break
+        }
+        case 'set': {
+          const setData = await execRemote(
+            `SMEMBERS "${escapeKeyForCommand(key)}"`,
+          )
+          const members = stripTrailingNewline(setData)
+            .split(/\r?\n/)
+            .filter((l) => l)
+          if (members.length > 0) {
+            const escapedMembers = members.map((m) => escapeValue(m))
+            commands.push(`SADD ${quotedKey} ${escapedMembers.join(' ')}`)
+          }
+          break
+        }
+        case 'zset': {
+          const zsetData = await execRemote(
+            `ZRANGE "${escapeKeyForCommand(key)}" 0 -1 WITHSCORES`,
+          )
+          const lines = stripTrailingNewline(zsetData)
+            .split(/\r?\n/)
+            .filter((l) => l)
+          if (lines.length >= 2) {
+            const pairs: string[] = []
+            // Handle odd number of lines (incomplete member/score pair)
+            const completeCount = lines.length - (lines.length % 2)
+            if (lines.length % 2 !== 0) {
+              logWarning(`ZSet ${quotedKey} has odd line count, skipping incomplete entry: ${lines[lines.length - 1]}`)
+            }
+            for (let i = 0; i < completeCount; i += 2) {
+              const member = lines[i]
+              const score = lines[i + 1]
+              pairs.push(`${score} ${escapeValue(member)}`)
+            }
+            if (pairs.length > 0) {
+              commands.push(`ZADD ${quotedKey} ${pairs.join(' ')}`)
+            }
+          }
+          break
+        }
+        // TODO: Add Redis Streams support (XRANGE/XADD commands)
+        // Streams are a complex data type that would require special handling
+        // for the message IDs and fields. Consider implementing if there's demand.
+        default:
+          logWarning(`Skipping key ${key} with unsupported type: ${keyType}`)
+      }
+
+      // Add EXPIRE if key has TTL
+      if (ttl > 0) {
+        commands.push(`EXPIRE ${quotedKey} ${ttl}`)
+      }
+    }
+
+    // Write commands to file
+    const content = commands.join('\n') + '\n'
+    await writeFile(outputPath, content, 'utf-8')
+
+    return {
+      filePath: outputPath,
+      warnings: keys.length === 0 ? ['Remote Redis database is empty'] : undefined,
+    }
   }
 
   // Create a backup

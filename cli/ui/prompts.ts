@@ -95,6 +95,7 @@ export async function promptEngine(options?: {
       name: 'engine',
       message: 'Select database engine:',
       choices,
+      pageSize: 15,
     },
   ])
 

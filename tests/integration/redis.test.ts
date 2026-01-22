@@ -2,6 +2,10 @@
  * Redis System Integration Tests
  *
  * Tests the full container lifecycle with real Redis processes.
+ *
+ * TODO: Add integration tests for dumpFromConnectionString once we have a
+ * test environment with remote Redis instances (e.g., via Docker Compose in CI).
+ * Currently, connection string parsing is tested in unit/redis-restore.test.ts.
  */
 
 import { describe, it, before, after } from 'node:test'

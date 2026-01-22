@@ -40,12 +40,16 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 
 SpinDB supports two types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse)
+### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management
 - Use port allocation and process management
 - Have log files and PID tracking
+
+**Sub-types:**
+- **CLI-based servers** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse): Interact via CLI tools (psql, mysql, redis-cli, etc.)
+- **REST API servers** (Qdrant): Interact via HTTP REST API instead of CLI tools. These require special handling in tests and CLI commands since `spindb run` doesn't apply.
 
 ### File-Based Databases (SQLite, DuckDB)
 
@@ -130,12 +134,13 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `engines/{engine}/hostdb-releases.ts` - Fetch versions from releases.json
 - [ ] `engines/{engine}/cli-utils.ts` - Shared CLI utilities (optional)
 
-### Configuration Files (11 files)
+### Configuration Files (12 files)
 
 - [ ] `engines/index.ts` - Register engine with aliases
 - [ ] `types/index.ts` - Add to `Engine` enum, `ALL_ENGINES`, and `BinaryTool` type
 - [ ] `config/engine-defaults.ts` - Add engine defaults
 - [ ] `config/engines.json` - Add engine metadata (icon, versions, status)
+- [ ] `config/engines.schema.json` - Update `queryLanguage` enum if adding new query type (e.g., `rest`)
 - [ ] `config/backup-formats.ts` - Add backup format configuration (extensions, labels, defaults)
 - [ ] `config/os-dependencies.ts` - Add system dependencies
 - [ ] `core/dependency-manager.ts` - Add binary tools to `KNOWN_BINARY_TOOLS` array
@@ -148,11 +153,12 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 
 - [ ] `cli/commands/create.ts` - Update `--engine` help text and `detectLocationType()` for connection strings
 
-### CLI Menu Handlers (4 files)
+### CLI Menu Handlers (5 files)
 
-- [ ] `cli/commands/menu/container-handlers.ts` - Skip database name prompt if numbered DBs
-- [ ] `cli/commands/menu/shell-handlers.ts` - Add engine-specific shell and enhanced CLI
+- [ ] `cli/commands/menu/container-handlers.ts` - Skip database name prompt if numbered DBs; **hide "Run SQL file" for REST API engines**
+- [ ] `cli/commands/menu/shell-handlers.ts` - Add engine-specific shell and enhanced CLI (skip for REST API engines)
 - [ ] `cli/commands/menu/sql-handlers.ts` - Update script type terminology (SQL/Script/Command)
+- [ ] `cli/commands/menu/backup-handlers.ts` - Add connection string validation for the engine in `handleRestore()` and `handleRestoreForContainer()`
 - [ ] `cli/commands/menu/engine-handlers.ts` - Add to "Manage Engines" display
 
 ### Package Metadata (1 file)
@@ -161,7 +167,11 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 
 ### Testing (6+ files)
 
-- [ ] `tests/fixtures/{engine}/seeds/sample-db.{ext}` - Test seed file
+- [ ] `tests/fixtures/{engine}/seeds/sample-db.{ext}` - Test seed file (REQUIRED - see "Test Fixtures" section)
+  - **CRITICAL:** Every engine MUST have a fixtures directory, even REST API engines
+  - SQL engines: `sample-db.sql` with 5 test_user records
+  - Key-value engines: `sample-db.{engine}` with 6 keys (5 users + count)
+  - REST API engines (e.g., Qdrant): `README.md` explaining the API-based approach
 - [ ] `tests/integration/{engine}.test.ts` - Integration tests (14+ tests minimum)
 - [ ] `tests/integration/helpers.ts` - Add engine to helper functions
 - [ ] `tests/unit/{engine}-version-validator.test.ts` - Version validator unit tests
@@ -182,7 +192,7 @@ pnpm test:docker              # Run all engine tests
 pnpm test:docker -- {engine}  # Run single engine test (faster for debugging)
 ```
 
-Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`, `duckdb`
+Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`, `duckdb`, `qdrant`
 
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
 - [ ] `tests/docker/Dockerfile` - Add any required library dependencies (e.g., `libaio1` for MySQL, `libncurses6` for MariaDB)
@@ -197,6 +207,7 @@ Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `
 - [ ] `tests/docker/run-e2e.sh` - Add connectivity test case in `run_test()` function
 - [ ] `tests/docker/run-e2e.sh` - Add engine test execution at bottom of file
 - [ ] For file-based engines: Update `cleanup_data_lifecycle()` and start/stop skip conditions
+- [ ] For REST API engines: Add curl-based connectivity test and seed data insertion (see Qdrant example)
 
 ### Documentation (7 files)
 
@@ -787,6 +798,16 @@ if (engine === 'redis' || engine === 'valkey' || engine === 'yourengine') {
 }
 ```
 
+**For REST API engines** (like Qdrant), hide the "Run SQL file" option entirely since there's no CLI shell:
+
+```ts
+// Hide "Run SQL file" for REST API engines (they don't have CLI shells)
+if (config.engine !== 'qdrant') {
+  const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
+  // ... add the run-sql action choice
+}
+```
+
 ### 2. Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
 
 **CRITICAL:** Add your engine to avoid defaulting to PostgreSQL tools.
@@ -820,6 +841,47 @@ const isNonSqlEngine = config.engine === 'redis' || config.engine === 'valkey' |
   installHint = 'spindb engines download yourengine'
 }
 ```
+
+4. **For engines with built-in web UIs** (like Qdrant, ClickHouse):
+
+If your engine has a built-in web dashboard or query interface, open it in the browser instead of launching a CLI shell:
+
+```ts
+} else if (config.engine === 'yourengine') {
+  // YourEngine has a built-in web UI - open in browser
+  const dashboardUrl = `http://127.0.0.1:${config.port}/dashboard`
+  console.log()
+  console.log(uiInfo(`Opening YourEngine Dashboard in browser...`))
+  console.log(chalk.gray(`  ${dashboardUrl}`))
+  console.log()
+  // Show API info for REST API engines
+  console.log(chalk.cyan('YourEngine REST API:'))
+  console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+  console.log()
+
+  openInBrowser(dashboardUrl)
+  await pressEnterToContinue()
+  return
+}
+```
+
+Also update the menu option to show a browser icon instead of the shell icon:
+
+```ts
+// In the choices array
+{
+  name: config.engine === 'yourengine'
+    ? `🌐 Open Web Dashboard in browser`
+    : `>_ Use default shell (${defaultShellName})`,
+  value: 'default',
+}
+```
+
+The `openInBrowser()` helper uses platform-specific commands (`open` on macOS, `xdg-open` on Linux, `cmd /c start` on Windows).
+
+**Engines with built-in web UIs:**
+- **Qdrant**: Dashboard at `/dashboard`
+- **ClickHouse**: Play UI at `/play` (on HTTP port 8123)
 
 ### 3. SQL Handlers (`cli/commands/menu/sql-handlers.ts`)
 
@@ -864,11 +926,41 @@ if (yourengineEngines.length > 0) {
 }
 ```
 
+### 5. Backup Handlers (`cli/commands/menu/backup-handlers.ts`)
+
+**CRITICAL:** Add connection string validation for your engine. The `handleRestore()` and `handleRestoreForContainer()` functions validate connection string schemes.
+
+Add your engine to the validation switch statement in **both functions**:
+
+```ts
+validate: (input: string) => {
+  if (!input) return true
+  switch (config.engine) {
+    // ... existing engines ...
+    case 'yourengine':
+      if (!input.startsWith('yourengine://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+        return 'Connection string must start with yourengine://, http://, or https://'
+      }
+      break
+    default:
+      // PostgreSQL and others
+      if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
+        return 'Connection string must start with postgresql:// or postgres://'
+      }
+  }
+  return true
+}
+```
+
+**Note:** REST API engines (like Qdrant) typically use `http://` or `https://` schemes, while CLI-based engines use their protocol schemes (e.g., `redis://`, `mongodb://`).
+
 ---
 
 ## Testing Requirements
 
 ### Test Fixtures
+
+**CRITICAL:** Every engine MUST have a fixtures directory. This is a required part of adding any new engine.
 
 Create test fixtures with the appropriate file extension. **These seed files are used by both integration tests AND Docker E2E tests.**
 
@@ -879,6 +971,21 @@ tests/fixtures/{engine}/
 ```
 
 **Important:** The seed file must create exactly the number of records specified in `EXPECTED_COUNTS` in `run-e2e.sh`. The standard is **5 records** for SQL databases (in `test_user` table) and **6 keys** for key-value stores (5 user keys + 1 count key).
+
+**For REST API engines** (like Qdrant), create a `README.md` instead of a seed file:
+```text
+tests/fixtures/{engine}/
+└── seeds/
+    └── README.md    # Explains the REST API approach and sample data structure
+```
+
+The README should document:
+1. Why no traditional seed file exists
+2. How seed data is inserted via REST API (curl commands)
+3. Sample data structure (JSON format)
+4. Expected data count for verification
+
+**Note on Qdrant snapshots:** Qdrant snapshots are NOT suitable as test fixtures because even a collection with 3 points creates a ~334MB snapshot file (includes indices, segments, and WAL). Use the REST API approach for Qdrant testing.
 
 **For SQL databases** (`sample-db.sql`):
 ```sql
@@ -1285,6 +1392,31 @@ If you're adding a file-based engine, you must update:
 1. `run-e2e.sh` - Add to start/stop skip conditions
 2. `cli/commands/run.ts` - Add to file-based engine check (so `spindb run` works without "not running" error)
 
+**REST API engines** (Qdrant):
+- Server-based but interact via HTTP REST API instead of CLI tools
+- `spindb run` is not applicable (no CLI shell)
+- Connectivity tests use `curl` to check health endpoint
+- Seed data insertion uses `curl` to REST API endpoints
+- Backup/restore uses snapshot endpoints via REST API
+
+If you're adding a REST API engine, you must update:
+1. `run-e2e.sh` - Add curl-based connectivity test case
+2. `run-e2e.sh` - Add curl-based seed data insertion in `insert_seed_data()`
+3. `run-e2e.sh` - Add curl-based data count in `get_data_count()`
+4. `tests/fixtures/{engine}/seeds/README.md` - Document the REST API approach
+
+**Example (Qdrant connectivity test in run-e2e.sh):**
+```bash
+qdrant)
+  # Qdrant uses REST API - check health endpoint via curl
+  local qdrant_port
+  qdrant_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+  if [ -n "$qdrant_port" ] && curl -sf "http://127.0.0.1:${qdrant_port}/healthz" &>/dev/null; then
+    query_ok=true
+  fi
+  ;;
+```
+
 ### Dockerfile (`tests/docker/Dockerfile`)
 
 Add your engine to the comment listing downloaded engines:
@@ -1578,7 +1710,7 @@ SpinDB provides four base classes for binary managers. Choose the appropriate on
 
 | Base Class | Used By | When to Use |
 |------------|---------|-------------|
-| `BaseBinaryManager` | Redis, Valkey | Key-value stores with `bin/` directory structure in archives |
+| `BaseBinaryManager` | Redis, Valkey, Qdrant | Key-value/vector stores; handles both `bin/` and flat archive structures |
 | `BaseServerBinaryManager` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL server engines with version verification (override `verify()` for custom formats) |
 | `BaseDocumentBinaryManager` | MongoDB, FerretDB | Document-oriented DBs with macOS tar recovery and major.minor version matching |
 | `BaseEmbeddedBinaryManager` | SQLite, DuckDB | Embedded/file-based engines with flat archives (executables at root) |
@@ -1621,6 +1753,27 @@ protected override async extractWindowsBinaries(): Promise<void> {
 ```
 
 See `engines/clickhouse/binary-manager.ts` for a complete example.
+
+**Handling flat archives for server-based engines:**
+
+Most server-based engines have archives with a `bin/` subdirectory structure (e.g., `redis/bin/redis-server`). However, some server-based engines (like Qdrant) have flat archives where executables are at the root level (e.g., `qdrant/qdrant`).
+
+The base classes handle this automatically via `moveExtractedEntries()`:
+- If the archive has a `bin/` subdirectory → preserves structure as-is
+- If the archive is flat → creates a `bin/` subdirectory and moves executables there
+
+If your server-based engine uses flat archives, `BaseBinaryManager` will work correctly. The method identifies executables by:
+- Windows: Files ending in `.exe` or `.dll`
+- Unix: Files without extensions that aren't config/metadata files
+
+**Example (Qdrant uses flat archives with BaseBinaryManager):**
+```ts
+// Qdrant binary manager uses BaseBinaryManager despite being a server-based engine
+// because its archives have a flat structure (qdrant binary at root)
+class QdrantBinaryManager extends BaseBinaryManager {
+  // ... flat archive is handled automatically by moveExtractedEntries()
+}
+```
 
 **Example implementations:**
 
@@ -1834,6 +1987,90 @@ async function restoreBackup(backupPath: string, ...): Promise<RestoreResult> {
 **When streaming applies:**
 - Engines that pipe SQL/commands to a CLI tool (SQLite, DuckDB, Redis, Valkey, ClickHouse)
 - Engines where the CLI reads files directly (PostgreSQL `pg_restore`, MySQL `mysql`) don't need this pattern
+
+---
+
+## Remote Database Dump (dumpFromConnectionString)
+
+**REQUIRED:** Every engine MUST implement `dumpFromConnectionString()` to support restoring from remote databases. This feature enables users to pull production data into local containers using `spindb restore --from-url`.
+
+### Implementation Pattern
+
+```ts
+async dumpFromConnectionString(
+  connectionString: string,
+  outputPath?: string,
+): Promise<string> {
+  // 1. Parse the connection string to extract host, port, credentials
+  const { host, port, password, database } = parseConnectionString(connectionString)
+
+  // 2. Create a temporary file path if not provided
+  const tempPath = outputPath ?? path.join(os.tmpdir(), `${engine}-${Date.now()}.${ext}`)
+
+  // 3. Connect to remote database and dump data
+  //    - For CLI-based engines: use native CLI tools with remote connection flags
+  //    - For REST API engines: use fetch() to interact with the API
+
+  // 4. Return the path to the dump file
+  return tempPath
+}
+```
+
+### Engine-Specific Approaches
+
+| Engine | Approach | Connection String Format |
+|--------|----------|--------------------------|
+| PostgreSQL | `pg_dump` with remote host | `postgresql://user:pass@host:5432/db` |
+| MySQL/MariaDB | `mysqldump` with `-h` flag | `mysql://root:pass@host:3306/db` |
+| MongoDB | `mongodump` with `--uri` | `mongodb://user:pass@host:27017/db` |
+| Redis/Valkey | CLI with `-h` flag + SCAN | `redis://:password@host:6379/0` |
+| ClickHouse | HTTP API with remote host | `clickhouse://default:pass@host:8123/db` |
+| Qdrant | REST API snapshots | `http://host:6333?api_key=KEY` |
+| SQLite/DuckDB | N/A (file-based) | File path copy |
+
+### Connection String Parsing
+
+Create a helper function to parse the connection string:
+
+```ts
+function parseYourEngineConnectionString(connectionString: string): {
+  host: string
+  port: number
+  password?: string
+  database: string
+} {
+  // Handle multiple URL schemes (e.g., redis://, yourengine://)
+  const url = new URL(connectionString)
+
+  return {
+    host: url.hostname,
+    port: url.port ? parseInt(url.port, 10) : DEFAULT_PORT,
+    password: url.password || undefined,
+    database: url.pathname.replace(/^\//, '') || '0',
+  }
+}
+```
+
+### Error Handling
+
+- Throw descriptive errors for connection failures
+- Include the remote host in error messages (but NOT the password)
+- Handle authentication failures separately from connection failures
+
+### Testing
+
+Add unit tests for connection string parsing in `tests/unit/{engine}-restore.test.ts`:
+
+```ts
+describe('parseConnectionString', () => {
+  it('should parse full connection URL', () => { })
+  it('should handle missing password', () => { })
+  it('should use default port when not specified', () => { })
+  it('should handle URL-encoded passwords', () => { })
+})
+```
+
+**Note:** Integration tests for `dumpFromConnectionString` require a remote database instance and are not run in CI. Add a TODO comment in your test file for future test coverage when a remote testing environment is available.
 
 ---
 

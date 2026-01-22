@@ -95,8 +95,8 @@ async function showMainMenu(): Promise<void> {
     },
     {
       name: hasEngines
-        ? `${chalk.yellow('⚙')} List installed engines`
-        : chalk.gray('⚙ List installed engines'),
+        ? `${chalk.yellow('⚙')} Manage installed engines`
+        : chalk.gray('⚙ Manage installed engines'),
       value: 'engines',
       disabled: hasEngines ? false : 'No engines installed',
     },

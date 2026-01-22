@@ -3,6 +3,10 @@
  *
  * Tests the full container lifecycle with real Valkey processes.
  * Valkey is a Redis fork with full protocol compatibility.
+ *
+ * TODO: Add integration tests for dumpFromConnectionString once we have a
+ * test environment with remote Valkey instances (e.g., via Docker Compose in CI).
+ * Currently, connection string parsing is tested in unit/valkey-restore.test.ts.
  */
 
 import { describe, it, before, after } from 'node:test'

@@ -7,6 +7,7 @@ import { BaseEngine } from '../base-engine'
 import { postgresqlBinaryManager } from './binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
+import { containerManager } from '../../core/container-manager'
 import {
   platformService,
   isWindows,
@@ -126,6 +127,101 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
+  /**
+   * Gets the binary path with self-healing fallback logic.
+   *
+   * If binaries for the exact version don't exist:
+   * 1. Looks for any installed binaries with the same major version
+   * 2. If found, uses those and optionally updates the container config
+   * 3. If not found, downloads the current supported version for that major
+   *
+   * @param version - The version from container config (e.g., "17.7.0")
+   * @param containerName - Container name for config updates (optional)
+   * @param onProgress - Progress callback for downloads
+   * @returns Object with binPath and actualVersion (may differ from requested)
+   */
+  async getBinaryPathWithFallback(
+    version: string,
+    containerName?: string,
+    onProgress?: ProgressCallback,
+  ): Promise<{ binPath: string; actualVersion: string; wasHealed: boolean }> {
+    const fullVersion = this.resolveFullVersion(version)
+    const { platform: p, arch: a } = this.getPlatformInfo()
+
+    // Check if exact version binaries exist
+    const expectedPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version: fullVersion,
+      platform: p,
+      arch: a,
+    })
+
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(expectedPath, 'bin', `pg_ctl${ext}`)
+
+    if (existsSync(pgCtlPath)) {
+      return { binPath: expectedPath, actualVersion: fullVersion, wasHealed: false }
+    }
+
+    // Binaries don't exist - try to find same major version
+    const majorVersion = fullVersion.split('.')[0]
+
+    // Check if we have any installed binaries for this major version
+    const installed = paths.findInstalledBinaryForMajor(
+      'postgresql',
+      majorVersion,
+      p,
+      a,
+    )
+
+    if (installed) {
+      // Found compatible binaries - verify they work
+      const installedPgCtl = join(installed.path, 'bin', `pg_ctl${ext}`)
+      if (existsSync(installedPgCtl)) {
+        // Update container config if container name provided
+        if (containerName) {
+          await containerManager.updateConfig(containerName, {
+            version: installed.version,
+          })
+        }
+        return {
+          binPath: installed.path,
+          actualVersion: installed.version,
+          wasHealed: true,
+        }
+      }
+    }
+
+    // No compatible binaries found - download the current supported version
+    const targetVersion = POSTGRESQL_VERSION_MAP[majorVersion]
+    if (!targetVersion) {
+      throw new Error(
+        `PostgreSQL major version ${majorVersion} is not supported. ` +
+          `Supported versions: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}`,
+      )
+    }
+
+    onProgress?.({
+      stage: 'downloading',
+      message: `Binaries for PostgreSQL ${fullVersion} not found, downloading ${targetVersion}...`,
+    })
+
+    const binPath = await this.ensureBinaries(targetVersion, onProgress)
+
+    // Update container config if container name provided
+    if (containerName && targetVersion !== fullVersion) {
+      await containerManager.updateConfig(containerName, {
+        version: targetVersion,
+      })
+    }
+
+    return {
+      binPath,
+      actualVersion: targetVersion,
+      wasHealed: targetVersion !== fullVersion,
+    }
+  }
+
   getBinaryUrl(version: string, plat: Platform, arc: Arch): string {
     return getBinaryUrl(version, plat, arc)
   }
@@ -184,6 +280,37 @@ export class PostgreSQLEngine extends BaseEngine {
   async isBinaryInstalled(version: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
     return postgresqlBinaryManager.isInstalled(version, p, a)
+  }
+
+  /**
+   * Check if any compatible binaries are installed for the given version.
+   * Returns true if either the exact version OR any same-major-version binaries exist.
+   * This is used by the CLI to determine if it needs to prompt for download.
+   */
+  hasCompatibleBinaries(version: string): boolean {
+    const fullVersion = this.resolveFullVersion(version)
+    const { platform: p, arch: a } = this.getPlatformInfo()
+
+    // Check if exact version exists
+    const expectedPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version: fullVersion,
+      platform: p,
+      arch: a,
+    })
+
+    const ext = platformService.getExecutableExtension()
+    const pgCtlPath = join(expectedPath, 'bin', `pg_ctl${ext}`)
+
+    if (existsSync(pgCtlPath)) {
+      return true
+    }
+
+    // Check if any same-major version exists
+    const majorVersion = fullVersion.split('.')[0]
+    const installed = paths.findInstalledBinaryForMajor('postgresql', majorVersion, p, a)
+
+    return installed !== null
   }
 
   async initDataDir(
@@ -277,7 +404,20 @@ export class PostgreSQLEngine extends BaseEngine {
       }
     }
 
-    const binPath = this.getBinaryPath(version)
+    // Get binary path with self-healing fallback
+    const { binPath, wasHealed } = await this.getBinaryPathWithFallback(
+      version,
+      name,
+      onProgress,
+    )
+
+    if (wasHealed) {
+      onProgress?.({
+        stage: 'info',
+        message: 'Container version updated to match available binaries',
+      })
+    }
+
     const ext = platformService.getExecutableExtension()
     const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
@@ -298,7 +438,10 @@ export class PostgreSQLEngine extends BaseEngine {
 
   async stop(container: ContainerConfig): Promise<void> {
     const { name, version } = container
-    const binPath = this.getBinaryPath(version)
+
+    // Get binary path with self-healing fallback (no progress callback for stop)
+    const { binPath } = await this.getBinaryPathWithFallback(version, name)
+
     const ext = platformService.getExecutableExtension()
     const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
@@ -308,7 +451,10 @@ export class PostgreSQLEngine extends BaseEngine {
 
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, version } = container
-    const binPath = this.getBinaryPath(version)
+
+    // Get binary path with self-healing fallback (no progress callback for status)
+    const { binPath } = await this.getBinaryPathWithFallback(version, name)
+
     const ext = platformService.getExecutableExtension()
     const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })

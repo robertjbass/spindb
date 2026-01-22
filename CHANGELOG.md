@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.3] - 2026-01-21
+
+### Fixed
+- **Qdrant start command hang on Linux** - Fixed `spindb start` not exiting on Linux/Docker due to piped stdio streams keeping Node.js event loop alive. Now uses `['ignore', 'ignore', 'ignore']` stdio on non-Windows platforms (matching MySQL/MariaDB pattern)
+- **Qdrant snapshot path** - Fixed snapshot storage location by explicitly setting `snapshots_path` in Qdrant config to `{dataDir}/snapshots`, ensuring backups are created and found in the expected location. Also ensures snapshots directory is created during container initialization and startup
+- **Redis/Valkey database validation** - Now throws RangeError for invalid database numbers outside 0-15 range instead of silently defaulting to 0
+- **Redis/Valkey shell escaping** - Fixed POSIX quoting for values containing single quotes using standard `'...'\''..'` pattern
+- **JSON error format consistency** - Removed redundant `success: false` from restore command error output to match other commands
+- **Version sorting edge case** - Fixed handling of non-numeric version segments (e.g., "1.0.0-beta") which previously caused NaN comparison issues
+- **SQL handlers casing** - Fixed inconsistent casing in script type terminology (`'SQL'` → `'sql'`)
+
+### Changed
+- **Redis/Valkey password security** - Password now passed via `REDISCLI_AUTH` environment variable instead of `-a` command-line flag to avoid exposure in process listings
+- **Redis/Valkey remote timeout** - Added 30-second timeout to remote commands to prevent indefinite hanging on unresponsive servers
+- **Qdrant remote timeout** - Added AbortController-based timeout handling to `remoteQdrantRequest` (30s default)
+- **Qdrant API info menu** - Added distinct `'api-info'` ShellChoice, separated from `'browser'` for clearer intent
+- **Shell handlers imports** - Converted dynamic imports (`paths`, `fs/promises`) to static imports for consistency
+- **Shell handlers path resolution** - Replaced `join(targetPath, '..')` with `dirname(targetPath)` for clarity
+
+### Improved
+- **Qdrant listSnapshots performance** - Parallelized `stat()` calls using `Promise.all` for better performance with many snapshots
+- **Engine handlers documentation** - Enhanced comment explaining reverse-parsing strategy for Windows paths with colons
+- **Test output cleanup** - Removed verbose `[DEBUG]` logs from PostgreSQL integration tests for cleaner output
+
+### Added
+- **`spindb databases` command** - New CLI command for managing database tracking within containers:
+  - `spindb databases list <container>` - List tracked databases
+  - `spindb databases add <container> <database>` - Add database to tracking
+  - `spindb databases remove <container> <database>` - Remove database from tracking
+  - `spindb databases sync <container> <old> <new>` - Sync tracking after SQL rename operations
+  - All subcommands support `--json` flag for scripting
+  - Useful for keeping SpinDB's registry in sync after external changes (SQL renames, scripts that create/drop databases)
+
+- **PostgreSQL self-healing binary resolution** - Containers now automatically recover from missing binaries:
+  - If exact version binaries are missing, SpinDB finds compatible binaries with the same major version
+  - If no compatible binaries exist, prompts to download the current supported version for that major
+  - Container config is automatically updated to reflect the actual version used
+  - Prevents ENOENT errors when binaries are deleted or moved
+  - Start command now checks for any compatible binaries (same major version) instead of requiring exact version match
+
+## [0.21.2] - 2026-01-21
+
+### Fixed
+- **JSON output pollution** - Update notification banner no longer appears before JSON output when using `--json` flag. The banner now only displays once when entering the interactive menu.
+- **JSON error handling** - Commands with `--json` flag now output proper JSON for error cases instead of human-readable messages:
+  - `info` - Empty containers returns `[]`, not found returns `{ "error": "..." }`
+  - `create` - Validation errors (invalid format, missing tools, etc.) return JSON
+  - `list` - Errors return JSON
+  - `start` - No containers, not found, already running errors return JSON
+  - `stop` - No running containers, not found, not running errors return JSON
+  - `delete` - No containers, not found, running errors return JSON; skips confirmation prompt in JSON mode
+  - `backup` - No containers, not running, invalid format errors return JSON
+  - `restore` - No containers, not running errors return JSON
+
+### Changed
+- **Update notification style** - Simplified from bordered box to clean header lines for better terminal compatibility
+
+## [0.21.1] - 2026-01-21
+
+### Added
+- **Universal remote dump support** - All engines now support `dumpFromConnectionString()` for `spindb restore --from-url`:
+  - **Redis/Valkey** - Scans all keys from remote server, exports data types (strings, hashes, lists, sets, sorted sets) with TTL preservation
+  - **ClickHouse** - Uses HTTP API to fetch schema and export data as SQL INSERT statements
+  - **Qdrant** - Creates snapshot on remote server, downloads it, then cleans up
+- **FEATURE.md improvements** - Comprehensive documentation for adding REST API engines:
+  - REST API engine sub-type documentation
+  - Connection string validation guidance for backup-handlers.ts
+  - Flat archive handling for server-based engines
+  - Docker E2E test patterns for curl-based testing
+
+### Changed
+- **Engine management menu UX** - Replaced grouped engine list with flat selectable list showing all installed engines. Added interactive submenu for individual engine management (delete, back navigation).
+- **Binary manager flat archive handling** - `BaseBinaryManager.moveExtractedEntries()` now correctly handles flat archives (executables at root) for both Unix and Windows, creating `bin/` subdirectory structure as needed
+- **engines.schema.json** - Added "rest" to `queryLanguage` enum for REST API engines
+
+### Fixed
+- **Qdrant API response parsing** - Fixed JSON parsing errors for non-JSON endpoints like `/healthz`
+- **Qdrant "Run SQL file" menu option** - Hidden for Qdrant since it uses REST API, not CLI
+- **Connection string validation** - Added validation for all engines (Qdrant, ClickHouse, Redis, Valkey, MariaDB) in restore menu handlers
+
+### Notes
+- Integration tests for `dumpFromConnectionString()` are pending remote database test infrastructure
+- Docker E2E backup/restore tests skipped for Qdrant (covered by integration tests)
+
+## [0.21.0] - 2026-01-21
+
+### Added
+- **Qdrant engine support** - Full container lifecycle for Qdrant, the vector similarity search engine
+  - Downloadable binaries for all platforms (macOS Intel/ARM, Linux x64/ARM, Windows)
+  - Version 1 supported (1.16.3 from hostdb)
+  - Default port 6333 (REST/HTTP), gRPC port 6334
+  - Uses `http://` connection scheme for REST API
+  - Backup format: `.snapshot` (Qdrant native snapshot)
+  - Collections-based data model (no traditional databases)
+  - Full integration tests across all platforms in CI
+  - Docker E2E tests included
+  - Apache-2.0 licensed
+- **Qdrant in Manage Engines menu** - Can now download, list, and delete Qdrant engine versions
+
+### Notes
+- Qdrant uses REST API for all operations (no CLI shell like psql/mysql)
+- Connect shows API endpoint information instead of launching a shell
+- Backup/restore uses Qdrant's snapshot API
+
 ## [0.20.1] - 2026-01-20
 
 ### Added

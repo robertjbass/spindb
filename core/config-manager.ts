@@ -60,6 +60,8 @@ const REDIS_TOOLS: BinaryTool[] = ['redis-server', 'redis-cli']
 
 const VALKEY_TOOLS: BinaryTool[] = ['valkey-server', 'valkey-cli']
 
+const QDRANT_TOOLS: BinaryTool[] = ['qdrant']
+
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
 const DUCKDB_TOOLS: BinaryTool[] = ['duckdb']
@@ -79,6 +81,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...MONGODB_TOOLS,
   ...REDIS_TOOLS,
   ...VALKEY_TOOLS,
+  ...QDRANT_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -93,6 +96,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.MongoDB]: MONGODB_TOOLS,
   [Engine.Redis]: REDIS_TOOLS,
   [Engine.Valkey]: VALKEY_TOOLS,
+  [Engine.Qdrant]: QDRANT_TOOLS,
 }
 
 export class ConfigManager {
@@ -556,6 +560,7 @@ export {
   MONGODB_TOOLS,
   REDIS_TOOLS,
   VALKEY_TOOLS,
+  QDRANT_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

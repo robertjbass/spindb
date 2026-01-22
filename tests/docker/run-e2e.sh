@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -112,7 +112,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Format names are engine-specific semantic names (no longer sql|dump for all)
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -124,6 +124,7 @@ declare -A BACKUP_FORMATS=(
   [clickhouse]="sql"
   [sqlite]="sql|binary"
   [duckdb]="sql|binary"
+  [qdrant]="snapshot"
 )
 
 # Results tracking
@@ -303,7 +304,40 @@ insert_seed_data() {
     valkey)
       seed_file="$FIXTURES_DIR/valkey/seeds/sample-db.valkey"
       ;;
+    qdrant)
+      # Qdrant uses REST API - seed data via curl (no seed file needed)
+      seed_file=""
+      ;;
   esac
+
+  # Qdrant uses REST API for seeding, not a file
+  if [ "$engine" = "qdrant" ]; then
+    local qdrant_port
+    qdrant_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+    if [ -z "$qdrant_port" ]; then
+      LAST_ERROR="Could not get Qdrant port"
+      return 1
+    fi
+    # Create collection
+    if ! curl -sf -X PUT "http://127.0.0.1:${qdrant_port}/collections/test_vectors" \
+      -H 'Content-Type: application/json' \
+      -d '{"vectors": {"size": 4, "distance": "Cosine"}}' &>/dev/null; then
+      LAST_ERROR="Failed to create Qdrant collection"
+      return 1
+    fi
+    # Insert test points (3 points to match EXPECTED_COUNTS[qdrant]=3)
+    if ! curl -sf -X PUT "http://127.0.0.1:${qdrant_port}/collections/test_vectors/points" \
+      -H 'Content-Type: application/json' \
+      -d '{"points": [
+        {"id": 1, "vector": [0.1, 0.2, 0.3, 0.4], "payload": {"name": "Alice", "city": "NYC"}},
+        {"id": 2, "vector": [0.2, 0.3, 0.4, 0.5], "payload": {"name": "Bob", "city": "LA"}},
+        {"id": 3, "vector": [0.9, 0.8, 0.7, 0.6], "payload": {"name": "Charlie", "city": "SF"}}
+      ]}' &>/dev/null; then
+      LAST_ERROR="Failed to insert Qdrant points"
+      return 1
+    fi
+    return 0
+  fi
 
   if [ ! -f "$seed_file" ]; then
     LAST_ERROR="Seed file not found: $seed_file"
@@ -357,6 +391,15 @@ get_data_count() {
       output=$(spindb run "$container_name" -c "DBSIZE" -d "$database" 2>/dev/null)
       echo "$output" | grep -oE '[0-9]+' | head -1
       ;;
+    qdrant)
+      # Qdrant uses REST API - get point count via curl
+      local qdrant_port
+      qdrant_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$qdrant_port" ]; then
+        output=$(curl -sf "http://127.0.0.1:${qdrant_port}/collections/test_vectors" 2>/dev/null)
+        echo "$output" | jq -r '.result.points_count' 2>/dev/null
+      fi
+      ;;
   esac
 }
 
@@ -409,6 +452,9 @@ get_backup_extension() {
       ;;
     clickhouse)
       echo ".sql" ;;
+    qdrant)
+      # Qdrant uses snapshot format for backups
+      echo ".snapshot" ;;
     *)
       echo ".$format" ;;
   esac
@@ -880,6 +926,14 @@ run_test() {
     redis|valkey)
       spindb run "$container_name" -c "PING" &>/dev/null && query_ok=true
       ;;
+    qdrant)
+      # Qdrant uses REST API - check health endpoint via curl
+      local qdrant_port
+      qdrant_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$qdrant_port" ] && curl -sf "http://127.0.0.1:${qdrant_port}/healthz" &>/dev/null; then
+        query_ok=true
+      fi
+      ;;
   esac
 
   if [ "$query_ok" = "false" ]; then
@@ -947,13 +1001,28 @@ run_test() {
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 5: Backup/Restore Tests
   # ─────────────────────────────────────────────────────────────────────────
-  local formats="${BACKUP_FORMATS[$engine]}"
-  local primary_format="${formats%%|*}"
-  local secondary_format="${formats#*|}"
+  # TODO: Qdrant backup/restore in Docker E2E tests
+  # Qdrant uses REST API for snapshot-based backup/restore which requires:
+  # 1. Creating snapshot via POST /collections/{name}/snapshots
+  # 2. Waiting for snapshot creation to complete
+  # 3. Downloading snapshot file
+  # 4. Restoring via snapshot recovery endpoint
+  # For now, skip backup/restore tests for Qdrant in Docker E2E.
+  # The integration tests (pnpm test:qdrant) cover backup/restore functionality.
+  if [ "$engine" = "qdrant" ]; then
+    log_section "Backup/Restore: snapshot format"
+    log_step "Backup/restore tests"
+    log_step_result "skip"
+    log_detail "Qdrant backup/restore uses REST API (tested in integration tests)"
+    test_details="smoke test (backup/restore skipped)"
+  else
+    local formats="${BACKUP_FORMATS[$engine]}"
+    local primary_format="${formats%%|*}"
+    local secondary_format="${formats#*|}"
 
-  # Format names are now semantic - no display name mapping needed
-  log_section "Backup/Restore: $primary_format format"
-  if ! test_backup_format "$engine" "$container_name" "$primary_format"; then
+    # Format names are now semantic - no display name mapping needed
+    log_section "Backup/Restore: $primary_format format"
+    if ! test_backup_format "$engine" "$container_name" "$primary_format"; then
     cleanup_data_lifecycle "$engine" "$container_name"
     [ "$is_file_based" = "false" ] && spindb stop "$container_name" &>/dev/null || true
     spindb delete "$container_name" --yes &>/dev/null || true
@@ -979,6 +1048,7 @@ run_test() {
     fi
     test_details="$primary_format, $secondary_format"
   fi
+  fi # End Qdrant skip check
 
   fi # End SMOKE_TEST != true block (Data Lifecycle + Backup/Restore)
 
@@ -1361,7 +1431,8 @@ echo "  ${BOLD}SpinDB:${RESET}    $(spindb version 2>/dev/null || echo 'not inst
 
 # Check required tools
 log_section "Checking Required Tools"
-REQUIRED_TOOLS="jq node pnpm spindb"
+# curl is required for Qdrant REST API tests
+REQUIRED_TOOLS="jq node pnpm spindb curl"
 for tool in $REQUIRED_TOOLS; do
   log_step "Check $tool"
   if command -v "$tool" &>/dev/null; then
@@ -1428,7 +1499,7 @@ else
 fi
 
 # Run engine tests
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

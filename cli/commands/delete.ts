@@ -22,6 +22,12 @@ export const deleteCommand = new Command('delete')
         let containerName = name
 
         if (!containerName) {
+          // JSON mode requires container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
 
           if (containers.length === 0) {
@@ -39,11 +45,15 @@ export const deleteCommand = new Command('delete')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(uiError(`Container "${containerName}" not found`))
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+          } else {
+            console.error(uiError(`Container "${containerName}" not found`))
+          }
           process.exit(1)
         }
 
-        if (!options.yes) {
+        if (!options.yes && !options.json) {
           const confirmed = await promptConfirm(
             `Are you sure you want to delete "${containerName}"? This cannot be undone.`,
             false,
@@ -69,11 +79,12 @@ export const deleteCommand = new Command('delete')
 
             stopSpinner?.succeed(`Stopped "${containerName}"`)
           } else {
-            console.error(
-              uiError(
-                `Container "${containerName}" is running. Stop it first or use --force`,
-              ),
-            )
+            const errorMsg = `Container "${containerName}" is running. Stop it first or use --force`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         }
@@ -99,7 +110,11 @@ export const deleteCommand = new Command('delete')
         }
       } catch (error) {
         const e = error as Error
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       }
     },

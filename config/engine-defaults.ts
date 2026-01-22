@@ -148,6 +148,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['clickhouse'],
     maxConnections: 0, // Not applicable
   },
+  [Engine.Qdrant]: {
+    defaultVersion: '1',
+    defaultPort: 6333, // HTTP REST API port (gRPC is 6334)
+    portRange: { start: 6333, end: 6400 },
+    latestVersion: '1',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'http',
+    logFileName: 'qdrant.log',
+    pidFileName: 'qdrant.pid',
+    dataSubdir: 'storage',
+    clientTools: [], // Qdrant uses REST API, no separate CLI tools
+    maxConnections: 0, // Not applicable for vector DB
+  },
 }
 
 /**

@@ -12,6 +12,8 @@ import {
 import { paths } from '../config/paths'
 import { processManager } from './process-manager'
 import { portManager } from './port-manager'
+import { isWindows } from './platform-service'
+import { logDebug } from './error-handler'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
@@ -387,7 +389,32 @@ export class ContainerManager {
     }
 
     const containerPath = paths.getContainerPath(name, { engine })
-    await rm(containerPath, { recursive: true, force: true })
+    await this.safeRemoveDirectory(containerPath)
+  }
+
+  // Removes a directory with retry logic for Windows EBUSY errors.
+  // Windows may hold file handles after process termination.
+  // Windows can hold file locks for 30+ seconds due to antivirus/indexing.
+  private async safeRemoveDirectory(dirPath: string): Promise<void> {
+    const maxRetries = isWindows() ? 30 : 1
+    const retryDelay = 2000 // 2 seconds between retries
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await rm(dirPath, { recursive: true, force: true })
+        return // Success
+      } catch (error) {
+        const e = error as NodeJS.ErrnoException
+        if (e.code === 'EBUSY' && attempt < maxRetries) {
+          logDebug(
+            `EBUSY on rmdir attempt ${attempt}/${maxRetries}, retrying in ${retryDelay}ms...`,
+          )
+          await new Promise((resolve) => setTimeout(resolve, retryDelay))
+        } else {
+          throw error
+        }
+      }
+    }
   }
 
   async clone(
@@ -588,31 +615,46 @@ export class ContainerManager {
 
   // Moves a directory atomically when possible (same filesystem).
   // Falls back to copy+delete for cross-filesystem moves.
+  // On Windows, retries on EBUSY errors (file handles held after process termination).
+  // Windows can hold file locks for 30+ seconds due to antivirus/indexing.
   private async atomicMoveDirectory(
     sourcePath: string,
     targetPath: string,
   ): Promise<void> {
-    try {
-      // Try atomic rename first (only works on same filesystem)
-      await fsRename(sourcePath, targetPath)
-    } catch (error) {
-      const e = error as NodeJS.ErrnoException
-      if (e.code === 'EXDEV') {
-        // Cross-filesystem move - fall back to copy+delete
-        await cp(sourcePath, targetPath, { recursive: true })
-        try {
-          await rm(sourcePath, { recursive: true, force: true })
-        } catch {
-          // If delete fails after copy, we have duplicates
-          // Try to clean up the target to avoid inconsistency
-          await rm(targetPath, { recursive: true, force: true }).catch(() => {})
-          throw new Error(
-            `Failed to complete move: source and target may both exist. ` +
-              `Please manually remove one of: ${sourcePath} or ${targetPath}`,
+    const maxRetries = isWindows() ? 30 : 1
+    const retryDelay = 2000 // 2 seconds between retries
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Try atomic rename first (only works on same filesystem)
+        await fsRename(sourcePath, targetPath)
+        return // Success
+      } catch (error) {
+        const e = error as NodeJS.ErrnoException
+        if (e.code === 'EXDEV') {
+          // Cross-filesystem move - fall back to copy+delete
+          await cp(sourcePath, targetPath, { recursive: true })
+          try {
+            await rm(sourcePath, { recursive: true, force: true })
+          } catch {
+            // If delete fails after copy, we have duplicates
+            // Try to clean up the target to avoid inconsistency
+            await rm(targetPath, { recursive: true, force: true }).catch(() => {})
+            throw new Error(
+              `Failed to complete move: source and target may both exist. ` +
+                `Please manually remove one of: ${sourcePath} or ${targetPath}`,
+            )
+          }
+          return // Success
+        } else if (e.code === 'EBUSY' && attempt < maxRetries) {
+          // Windows: file handles may still be held - retry after delay
+          logDebug(
+            `EBUSY on rename attempt ${attempt}/${maxRetries}, retrying in ${retryDelay}ms...`,
           )
+          await new Promise((resolve) => setTimeout(resolve, retryDelay))
+        } else {
+          throw error
         }
-      } else {
-        throw error
       }
     }
   }

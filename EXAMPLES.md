@@ -2334,15 +2334,84 @@ node scripts/test-migration.js
 
 ---
 
+## Database Tracking
+
+SpinDB tracks which databases exist within each container. When external scripts or SQL operations create, drop, or rename databases, you can sync SpinDB's tracking to stay in sync.
+
+### List Tracked Databases
+
+```bash
+# Show all databases SpinDB knows about
+spindb databases list mydb
+
+# JSON output for scripting
+spindb databases list mydb --json
+# {"container":"mydb","primary":"myapp","databases":["myapp","analytics","staging"]}
+```
+
+### Add/Remove Databases from Tracking
+
+```bash
+# After creating a database via SQL
+spindb run mydb -c "CREATE DATABASE analytics"
+spindb databases add mydb analytics
+
+# After dropping a database via SQL
+spindb run mydb -c "DROP DATABASE old_backup"
+spindb databases remove mydb old_backup
+```
+
+### Sync After Rename Operations
+
+When a script renames databases (e.g., for blue-green deployments or backup rotation), sync the tracking:
+
+```bash
+# After renaming: ALTER DATABASE old_name RENAME TO new_name
+spindb databases sync mydb old_name new_name
+```
+
+### Example: Production Clone Script
+
+A common pattern is cloning production data to local development, which involves renaming databases:
+
+```bash
+#!/bin/bash
+# clone-prod.sh - Clone production to local with backup
+
+CONTAINER="dev-db"
+CLONE_DB="myapp_prod"
+BACKUP_NAME="myapp_backup_$(date +%Y%m%d_%H%M%S)"
+
+# 1. Clone production data to a temporary database
+spindb restore $CONTAINER --from-url "$PROD_URL" -d $CLONE_DB
+
+# 2. Rename current database to backup
+spindb run $CONTAINER -d postgres -c "ALTER DATABASE myapp RENAME TO $BACKUP_NAME"
+
+# 3. Rename clone to become the active database
+spindb run $CONTAINER -d postgres -c "ALTER DATABASE $CLONE_DB RENAME TO myapp"
+
+# 4. Sync SpinDB tracking to reflect the changes
+spindb databases remove $CONTAINER $CLONE_DB    # No longer exists (renamed to myapp)
+spindb databases add $CONTAINER $BACKUP_NAME    # New backup database
+
+echo "Done! Previous database backed up as: $BACKUP_NAME"
+```
+
+> **Note:** The `databases` commands only update SpinDB's tracking registry. They do NOT create or drop actual databases. Use `spindb run` for SQL operations.
+
+---
+
 ## Summary
 
-This guide covers all SpinDB commands across all five supported database engines. Key patterns:
+This guide covers all SpinDB commands across all supported database engines. Key patterns:
 
 1. **Server databases** (PostgreSQL, MySQL, MongoDB, Redis) need start/stop, use ports
 2. **File-based databases** (SQLite) are always available, use file paths
 3. **All engines** support backup, restore, clone, run, connect
 4. **Automation** is easy - use `--json` for scripting and spawn databases in tests
 5. **MongoDB** uses JavaScript, **Redis** uses Redis commands instead of SQL
+6. **Database tracking** - Use `spindb databases` to sync tracking after external SQL changes
 
 ---
 

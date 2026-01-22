@@ -34,6 +34,7 @@ See [ENGINES.md](ENGINES.md) for full engine status and details.
 - [x] MongoDB (document database)
 - [x] MariaDB as standalone engine (using hostdb binaries)
 - [x] ClickHouse (column-oriented OLAP database)
+- [x] Qdrant (vector similarity search engine)
 
 ### Engine Binary Migration (hostdb)
 
@@ -76,15 +77,31 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
 
 ## Backlog
 
-### Redis Enhancements
+### Remote Dump/Restore Enhancements
 
-- [ ] **Redis remote dump/restore** - Support creating containers from remote Redis connection strings
-  - Unlike PostgreSQL/MySQL/MongoDB, Redis doesn't have a native remote dump tool
-  - Options to explore:
-    - Use `DUMP`/`RESTORE` commands to serialize individual keys
-    - Implement incremental key migration using `SCAN` + `DUMP`
-    - Add `--migrate` flag that copies keys from remote to local
-  - Current behavior: throws helpful error with manual migration instructions
+- [x] **Redis/Valkey remote dump** - Implemented using `redis-cli`/`valkey-cli` with SCAN to iterate keys
+  - Supports all data types: strings, hashes, lists, sets, sorted sets
+  - Preserves TTLs for keys with expiration
+  - Exports as text format commands for restore
+
+- [x] **ClickHouse remote dump** - Implemented using HTTP API
+  - Fetches schema with `SHOW CREATE TABLE`
+  - Exports data as SQL INSERT statements
+
+- [x] **Qdrant remote dump** - Implemented using REST API snapshots
+  - Creates snapshot on remote server
+  - Downloads and cleans up snapshot file
+
+- [ ] **Integration tests for dumpFromConnectionString** - Requires remote database instances
+  - Currently unit tests cover connection string parsing
+  - Integration tests for actual remote dumps need a test environment with running remote databases
+  - Consider using Docker Compose for CI remote database testing
+
+- [ ] **Browser/Web UI tests for Qdrant and ClickHouse**
+  - Test Qdrant Web UI download functionality (`downloadQdrantWebUI`)
+  - Test ClickHouse Play UI browser opening
+  - Verify `openInBrowser()` works cross-platform (macOS, Windows, Linux)
+  - Test Qdrant dashboard availability check before opening
 
 - [x] **Redis CI/CD tests** - Redis integration tests added to CI matrix
   - All platforms: macOS (Intel/ARM), Linux (Ubuntu 22.04/24.04), Windows
@@ -148,6 +165,7 @@ Combine common multi-step workflows into single commands. These should remain in
 - [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
   - Platforms: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64
+- [ ] **Bun-based packaging** - Consider Bun for creating smaller, faster distribution packages (faster startup and smaller downloads)
 - [x] **Fix package-manager mismatch for tests** - ~~`npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed~~ Fixed: now using `npm-run-all` so scripts work with any package manager
 - [ ] **Self-host compiled engine binaries** - Compile and host database engine binaries instead of relying on external sources (zonky.io for PostgreSQL). This would:
   - Reduce dependency on third-party binary hosts
@@ -158,6 +176,62 @@ Combine common multi-step workflows into single commands. These should remain in
 ---
 
 ## Known Issues & Technical Debt
+
+### Migrate Tests to Vitest
+
+**Context:** Currently using Node.js built-in test runner which lacks features needed for robust CI:
+
+- [ ] **No bail-on-failure support** - Node.js test runner continues running all tests even after failures, wasting CI time
+- [ ] **Limited configuration** - No easy way to set timeouts, retries, or platform-specific behavior
+- [ ] **No watch mode** - Development iteration is slower without file watching
+
+**Benefits of Vitest:**
+- `--bail` flag to stop on first failure
+- Built-in retry support for flaky tests
+- Better TypeScript support
+- Watch mode for development
+- Compatible with existing test structure (minimal migration effort)
+
+**Migration plan:**
+- [ ] Install vitest as dev dependency
+- [ ] Update test scripts in package.json
+- [ ] Migrate test files (should be mostly compatible)
+- [ ] Add vitest.config.ts with platform-specific settings
+- [ ] Consider separate configs for unit vs integration tests
+
+### Design Review: Database Tracking (`databases` array)
+
+**Context:** Container configs store a `databases` array to track which databases exist within each container. This was added to show users what databases they have without querying the server. However, it creates a sync problem when databases are created/dropped/renamed outside of SpinDB (via SQL, scripts, etc.).
+
+**Current solution:** Added `spindb databases` CLI command to manually sync tracking after external changes.
+
+**Problems with current approach:**
+- [ ] **Cache invalidation** - The `databases` array is essentially a cache that can get stale
+- [ ] **Manual sync required** - Users must remember to run `spindb databases sync` after SQL renames
+- [ ] **Complexity** - Added a whole CLI command just to maintain a cache
+- [ ] **Duplication** - Information already exists in the database server
+
+**What CAN be determined from filesystem (no server needed):**
+| Engine | Method | Notes |
+|--------|--------|-------|
+| MySQL/MariaDB | `ls data/` | Each database is a directory |
+| ClickHouse | `ls data/` | Each database is a directory |
+| SQLite/DuckDB | N/A | File IS the database |
+| Redis/Valkey | N/A | Numbered 0-15, nothing to track |
+
+**What CANNOT be determined from filesystem:**
+| Engine | Why | Alternative |
+|--------|-----|-------------|
+| PostgreSQL | Data stored by OID, not name | Query `pg_database` (requires running server) |
+| MongoDB | WiredTiger doesn't expose DB names cleanly | Query `show dbs` (requires running server) |
+
+**Alternative approaches to evaluate:**
+- [ ] **Query on demand** - When running, query server. When stopped, show "start to list databases"
+- [ ] **Filesystem inference** - For MySQL/MariaDB/ClickHouse, read directories. For PG/Mongo, require server
+- [ ] **Keep only `database` (singular)** - Track just the primary database (user intent), not full list
+- [ ] **Hybrid** - Auto-populate from server when running, cache on stop, clear cache on start
+
+**Decision:** Evaluate whether the maintenance burden of `databases` array is worth the benefit. The `database` (singular) field for primary/default database is still useful for user intent.
 
 ### Critical: Version Containerization Uses Wrong Binary
 
@@ -229,11 +303,13 @@ Multiple CLI instances can corrupt `container.json` or SQLite registry.
 For potential Electron/web frontend integration:
 
 - [ ] **Wire up progress callbacks** - `ProgressCallback` exists but CLI uses spinners instead
-- [ ] **Standardize JSON output** - Only 10/24 commands have `--json`, inconsistent error formats
-- [ ] **Add `--json` to all commands** - backup, clone, connect, create, delete, logs, restore, run, start, stop
-- [ ] **Structured error format** - Standard `{ code, message, suggestion, context }` for all JSON errors
+- [x] **Standardize JSON error output** - Core commands (info, create, list, start, stop, delete, backup, restore) now output `{ error: "..." }` for errors in JSON mode
+- [ ] **Add `--json` to remaining commands** - clone, connect, logs, run, edit, attach, detach
+- [ ] **Structured error format** - Standard `{ success, error, code, suggestion }` for all JSON errors (currently just `{ error }`)
 - [ ] **Add timestamps to JSON output** - For audit trails and debugging
 - [ ] **Add event streaming mode** - WebSocket or SSE for real-time progress updates
+- [x] **Block interactive prompts in JSON mode** - Commands now error with `{ error: "Container name is required" }` JSON when required args are missing instead of prompting
+- [x] **Suppress spinners in JSON mode** - Commands using `--json` now skip spinners using `options.json ? null : createSpinner(...)`
 
 ### Medium: Version Validation at Wrong Layer
 

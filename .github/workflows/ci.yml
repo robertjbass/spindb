@@ -37,17 +37,27 @@ jobs:
   # Tests on multiple OS versions to catch platform-specific issues
   # ============================================
   unit-tests:
-    name: Unit Tests (${{ matrix.os }})
+    name: Unit ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -124,17 +134,27 @@ jobs:
   # Uses SpinDB to download and manage PostgreSQL
   # ============================================
   test-postgresql:
-    name: PostgreSQL (${{ matrix.os }})
+    name: PostgreSQL ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -178,17 +198,27 @@ jobs:
   # Uses SpinDB to download and manage MariaDB binaries (like PostgreSQL)
   # ============================================
   test-mariadb:
-    name: MariaDB (${{ matrix.os }})
+    name: MariaDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -230,17 +260,27 @@ jobs:
   # Uses SpinDB to download and manage MySQL binaries (like PostgreSQL)
   # ============================================
   test-mysql:
-    name: MySQL (${{ matrix.os }})
+    name: MySQL ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -300,17 +340,27 @@ jobs:
   # Uses SpinDB to download and manage SQLite binaries from hostdb
   # ============================================
   test-sqlite:
-    name: SQLite (${{ matrix.os }})
+    name: SQLite ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -351,17 +401,27 @@ jobs:
   # Uses SpinDB to download and manage DuckDB binaries from hostdb
   # ============================================
   test-duckdb:
-    name: DuckDB (${{ matrix.os }})
+    name: DuckDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -402,17 +462,27 @@ jobs:
   # Uses SpinDB to download and manage MongoDB binaries from hostdb
   # ============================================
   test-mongodb:
-    name: MongoDB (${{ matrix.os }})
+    name: MongoDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -453,17 +523,27 @@ jobs:
   # Uses SpinDB to download and manage Redis binaries from hostdb
   # ============================================
   test-redis:
-    name: Redis (${{ matrix.os }})
+    name: Redis ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -527,17 +607,27 @@ jobs:
   # Uses SpinDB to download and manage Valkey binaries from hostdb
   # ============================================
   test-valkey:
-    name: Valkey (${{ matrix.os }})
+    name: Valkey ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -602,16 +692,24 @@ jobs:
   # Note: ClickHouse is not available for Windows on hostdb
   # ============================================
   test-clickhouse:
-    name: ClickHouse (${{ matrix.os }})
+    name: ClickHouse ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
           # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
       - name: Checkout
@@ -664,20 +762,122 @@ jobs:
           find ~/.spindb/containers/clickhouse -name "*.xml" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No config files found"
 
   # ============================================
+  # Qdrant Integration Tests
+  # Uses SpinDB to download and manage Qdrant binaries from hostdb
+  # NOTE: Qdrant is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # ============================================
+  test-qdrant:
+    name: Qdrant ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Qdrant binaries - these are downloaded from hostdb
+      - name: Cache Qdrant binaries
+        uses: actions/cache@v4
+        id: qdrant-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-qdrant-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Qdrant binaries
+      - name: Install Qdrant via SpinDB
+        run: pnpm start engines download qdrant 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Qdrant integration tests
+        run: pnpm test:qdrant
+        timeout-minutes: 15
+
+      - name: Show Qdrant logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== Qdrant container directories ==="
+          ls -la ~/.spindb/containers/qdrant/ 2>/dev/null || echo "No Qdrant containers directory"
+          echo ""
+          echo "=== Qdrant binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i qdrant || echo "No Qdrant binaries found"
+          echo ""
+          echo "=== Qdrant log files ==="
+          find ~/.spindb/containers/qdrant -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show Qdrant logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Qdrant container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\qdrant" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Qdrant binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "qdrant*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Qdrant log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\qdrant" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
-    name: CLI E2E (${{ matrix.os }})
+    name: CLI E2E ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-          - macos-15 # Intel
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -723,15 +923,21 @@ jobs:
   # Uses PostgreSQL as representative engine
   # ============================================
   test-rename-clone:
-    name: Rename & Clone (${{ matrix.os }})
+    name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -862,14 +1068,18 @@ jobs:
   # ClickHouse is not available on Windows
   # ============================================
   test-clickhouse-rename:
-    name: ClickHouse Rename (${{ matrix.os }})
+    name: ClickHouse Rename ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-14 # ARM64
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu
+          - os: macos-14
+            icon: 🍎
+            label: ARM
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -984,15 +1194,21 @@ jobs:
   # Simulates a user installing SpinDB for the first time
   # ============================================
   test-fresh-install:
-    name: Fresh Install (${{ matrix.os }})
+    name: Fresh Install ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1075,15 +1291,21 @@ jobs:
   # Simulates a user upgrading SpinDB with existing data
   # ============================================
   test-upgrade:
-    name: Upgrade Test (${{ matrix.os }})
+    name: Upgrade ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1175,15 +1397,21 @@ jobs:
   # Installs a specific version and tries to update it
   # ============================================
   test-self-update:
-    name: Self-Update Test (${{ matrix.os }})
+    name: Self-Update ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-14 # ARM64
-          - windows-latest
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
     steps:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -1243,7 +1471,7 @@ jobs:
   #   # Native ARM64 runner (requires GitHub Teams/Enterprise or larger runners)
   #   runs-on: ubuntu-24.04-arm64
   #   strategy:
-  #     fail-fast: false
+  #     fail-fast: true
   #     matrix:
   #       test:
   #         - unit
@@ -1378,6 +1606,7 @@ jobs:
         test-redis,
         test-valkey,
         test-clickhouse,
+        test-qdrant,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -1430,6 +1659,10 @@ jobs:
           fi
           if [ "${{ needs.test-clickhouse.result }}" != "success" ]; then
             echo "ClickHouse tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-qdrant.result }}" != "success" ]; then
+            echo "Qdrant tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

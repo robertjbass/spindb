@@ -25,6 +25,7 @@ export const TEST_PORTS = {
   redis: { base: 6399, clone: 6401, renamed: 6400 },
   valkey: { base: 6410, clone: 6412, renamed: 6411 },
   clickhouse: { base: 9050, clone: 9052, renamed: 9051 },
+  qdrant: { base: 6350, clone: 6352, renamed: 6351 },
 }
 
 /**
@@ -106,12 +107,30 @@ export async function cleanupTestContainers(): Promise<string[]> {
         const config = await containerManager.getConfig(container.name)
         if (config) {
           await engine.stop(config)
+          // Wait for the container to fully stop on Windows
+          // Windows is slower to release ports and file handles
+          if (isWindows()) {
+            await new Promise((resolve) => setTimeout(resolve, 5000))
+          }
         }
       }
 
-      // Delete container
-      await containerManager.delete(container.name, { force: true })
-      deleted.push(container.name)
+      // Delete container with retry on Windows
+      // Windows may hold file handles longer after process termination
+      let deleteAttempts = isWindows() ? 3 : 1
+      while (deleteAttempts > 0) {
+        try {
+          await containerManager.delete(container.name, { force: true })
+          deleted.push(container.name)
+          break
+        } catch {
+          deleteAttempts--
+          if (deleteAttempts > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+          }
+          // If all attempts fail, silently continue (it's cleanup)
+        }
+      }
     } catch {
       // Ignore errors during cleanup
     }
@@ -494,6 +513,22 @@ export async function waitForReady(
           `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --query "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.Qdrant) {
+        // Use fetch to ping Qdrant REST API with timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('Qdrant health check failed or timed out')
+        }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -515,6 +550,8 @@ export async function waitForReady(
 /**
  * Wait for a container to be fully stopped (process terminated, PID file removed).
  * This is important for operations like rename that require the container to be stopped.
+ *
+ * On Windows, also waits for ports to be released and adds extra delay for file handles.
  */
 export async function waitForStopped(
   containerName: string,
@@ -524,32 +561,69 @@ export async function waitForStopped(
   const startTime = Date.now()
   const checkInterval = 200
 
-  console.log(
-    `   [DEBUG] waitForStopped: checking if "${containerName}" is stopped...`,
-  )
-
-  let iterations = 0
+  // First wait for process to stop
   while (Date.now() - startTime < timeoutMs) {
-    iterations++
     const running = await processManager.isRunning(containerName, { engine })
     if (!running) {
-      console.log(
-        `   [DEBUG] waitForStopped: "${containerName}" is stopped after ${iterations} checks (${Date.now() - startTime}ms)`,
-      )
-      return true
-    }
-    if (iterations <= 3 || iterations % 10 === 0) {
-      console.log(
-        `   [DEBUG] waitForStopped: "${containerName}" still running (check ${iterations})`,
-      )
+      break
     }
     await new Promise((resolve) => setTimeout(resolve, checkInterval))
   }
 
-  console.log(
-    `   [DEBUG] waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
-  )
-  return false
+  // Check if we timed out waiting for process
+  const stillRunning = await processManager.isRunning(containerName, { engine })
+  if (stillRunning) {
+    console.log(
+      `   ⚠️  waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
+    )
+    return false
+  }
+
+  // For Qdrant on Windows, also wait for ports to be released
+  // Windows is slower to release ports after process termination (TIME_WAIT state)
+  // Can take 30+ seconds for TCP ports to be fully released
+  if (engine === Engine.Qdrant && isWindows()) {
+    const config = await containerManager.getConfig(containerName)
+    if (config) {
+      const httpPort = config.port
+      const grpcPort = config.port + 1
+
+      // Wait for both HTTP and gRPC ports to be available
+      // Use 60 seconds to match the engine's port wait timeout
+      const portTimeoutMs = Math.min(60000, timeoutMs - (Date.now() - startTime))
+      const portStartTime = Date.now()
+
+      while (Date.now() - portStartTime < portTimeoutMs) {
+        const httpAvailable = await portManager.isPortAvailable(httpPort)
+        const grpcAvailable = await portManager.isPortAvailable(grpcPort)
+
+        if (httpAvailable && grpcAvailable) {
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, checkInterval))
+      }
+
+      // Verify ports are actually available after waiting
+      const finalHttpAvailable = await portManager.isPortAvailable(httpPort)
+      const finalGrpcAvailable = await portManager.isPortAvailable(grpcPort)
+      if (!finalHttpAvailable || !finalGrpcAvailable) {
+        console.log(
+          `   ⚠️  waitForStopped: Ports still in use after ${portTimeoutMs}ms - ` +
+            `HTTP:${httpPort}=${finalHttpAvailable}, gRPC:${grpcPort}=${finalGrpcAvailable}`,
+        )
+      }
+    }
+  }
+
+  // On Windows, add extra delay for file handle release
+  // Memory-mapped files and Windows antivirus/indexing can hold handles
+  // This helps prevent EBUSY errors during rename/delete operations
+  // Qdrant uses memory-mapped files which can take a long time to release
+  if (isWindows()) {
+    await new Promise((resolve) => setTimeout(resolve, 10000))
+  }
+
+  return true
 }
 
 /**
@@ -593,7 +667,107 @@ export function getConnectionString(
   if (engine === Engine.ClickHouse) {
     return `clickhouse://default@127.0.0.1:${port}/${database}`
   }
+  if (engine === Engine.Qdrant) {
+    return `http://127.0.0.1:${port}`
+  }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
+}
+
+// Qdrant helper functions
+
+/**
+ * Get the number of collections in Qdrant
+ */
+export async function getQdrantCollectionCount(port: number): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections`)
+    const data = await response.json() as { result?: { collections?: unknown[] } }
+    return data.result?.collections?.length || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Create a collection in Qdrant
+ */
+export async function createQdrantCollection(
+  port: number,
+  name: string,
+  vectorSize = 128,
+): Promise<boolean> {
+  try {
+    const encodedName = encodeURIComponent(name)
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${encodedName}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vectors: {
+          size: vectorSize,
+          distance: 'Cosine',
+        },
+      }),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Delete a collection in Qdrant
+ */
+export async function deleteQdrantCollection(
+  port: number,
+  name: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${name}`, {
+      method: 'DELETE',
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the point count in a Qdrant collection
+ */
+export async function getQdrantPointCount(
+  port: number,
+  collection: string,
+): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${collection}`)
+    const data = await response.json() as { result?: { points_count?: number } }
+    return data.result?.points_count || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Insert points into a Qdrant collection
+ */
+export async function insertQdrantPoints(
+  port: number,
+  collection: string,
+  points: Array<{ id: number; vector: number[]; payload?: Record<string, unknown> }>,
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/collections/${collection}/points`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points }),
+      },
+    )
+    return response.ok
+  } catch {
+    return false
+  }
 }
 
 /**

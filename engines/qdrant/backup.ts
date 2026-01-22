@@ -1,0 +1,165 @@
+/**
+ * Qdrant backup module
+ * Supports snapshot-based backup using Qdrant's REST API
+ */
+
+import { mkdir, stat, copyFile, readdir } from 'fs/promises'
+import { existsSync } from 'fs'
+import { join, dirname } from 'path'
+import { logDebug } from '../../core/error-handler'
+import { paths } from '../../config/paths'
+import { qdrantApiRequest } from './api-client'
+import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+
+// Backup operations may take longer than the default timeout
+const BACKUP_TIMEOUT_MS = 600000 // 10 minutes
+
+/**
+ * Create a snapshot backup using Qdrant's REST API
+ * This creates a full snapshot of the entire Qdrant instance
+ */
+export async function createBackup(
+  container: ContainerConfig,
+  outputPath: string,
+  _options: BackupOptions,
+): Promise<BackupResult> {
+  const { port, name } = container
+
+  // Ensure output directory exists
+  const outputDir = dirname(outputPath)
+  if (!existsSync(outputDir)) {
+    await mkdir(outputDir, { recursive: true })
+  }
+
+  // Trigger snapshot creation via REST API
+  logDebug(`Creating Qdrant snapshot via REST API on port ${port}`)
+
+  const response = await qdrantApiRequest(
+    port,
+    'POST',
+    '/snapshots',
+    undefined,
+    BACKUP_TIMEOUT_MS,
+  )
+
+  if (response.status !== 200) {
+    throw new Error(
+      `Failed to create Qdrant snapshot: ${JSON.stringify(response.data)}`,
+    )
+  }
+
+  const snapshotData = response.data as { result?: { name?: string } }
+  const snapshotName = snapshotData?.result?.name
+
+  if (!snapshotName) {
+    throw new Error(
+      `Qdrant snapshot creation failed: no snapshot name returned`,
+    )
+  }
+
+  logDebug(`Qdrant snapshot created: ${snapshotName}`)
+
+  // The snapshot is stored in the data directory's snapshots folder
+  const dataDir = paths.getContainerDataPath(name, { engine: 'qdrant' })
+  const snapshotsDir = join(dataDir, 'snapshots')
+  const snapshotPath = join(snapshotsDir, snapshotName)
+
+  // Wait for the snapshot file to be ready and fully written
+  // Qdrant writes snapshots asynchronously, so we need to wait for both:
+  // 1. The file to exist
+  // 2. The file size to stabilize (no longer being written)
+  const maxWait = 60000 // 60 seconds
+  const startTime = Date.now()
+  let lastSize = -1
+
+  while (Date.now() - startTime < maxWait) {
+    if (existsSync(snapshotPath)) {
+      try {
+        const currentStats = await stat(snapshotPath)
+        if (currentStats.size > 0 && currentStats.size === lastSize) {
+          // Size hasn't changed, file is likely complete
+          break
+        }
+        lastSize = currentStats.size
+      } catch {
+        // File may have been deleted or inaccessible between existsSync and stat
+        // Reset lastSize and continue polling
+        lastSize = -1
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+
+  if (!existsSync(snapshotPath)) {
+    throw new Error(
+      `Qdrant snapshot file not found at ${snapshotPath} after timeout`,
+    )
+  }
+
+  // Copy snapshot to output path
+  await copyFile(snapshotPath, outputPath)
+
+  const stats = await stat(outputPath)
+
+  return {
+    path: outputPath,
+    format: 'snapshot',
+    size: stats.size,
+  }
+}
+
+/**
+ * Create a backup for cloning purposes
+ * Uses snapshot format for reliable data transfer
+ */
+export async function createCloneBackup(
+  container: ContainerConfig,
+  outputPath: string,
+): Promise<BackupResult> {
+  return createBackup(container, outputPath, { database: 'default' })
+}
+
+/**
+ * List available snapshots for a container
+ */
+export async function listSnapshots(container: ContainerConfig): Promise<
+  Array<{
+    name: string
+    createdAt: string
+    size: number
+  }>
+> {
+  const { name } = container
+  const dataDir = paths.getContainerDataPath(name, { engine: 'qdrant' })
+  const snapshotsDir = join(dataDir, 'snapshots')
+
+  if (!existsSync(snapshotsDir)) {
+    return []
+  }
+
+  const files = await readdir(snapshotsDir)
+  const snapshotFiles = files.filter((file) => file.endsWith('.snapshot'))
+
+  // Stat all snapshot files in parallel for better performance
+  // Filter out any files that fail to stat (e.g., deleted during iteration)
+  const statsResults = await Promise.all(
+    snapshotFiles.map(async (file) => {
+      const filePath = join(snapshotsDir, file)
+      try {
+        const stats = await stat(filePath)
+        return {
+          name: file,
+          createdAt: stats.mtime.toISOString(),
+          size: stats.size,
+        }
+      } catch {
+        // File may have been deleted between readdir and stat
+        return null
+      }
+    }),
+  )
+
+  return statsResults.filter(
+    (result): result is NonNullable<typeof result> => result !== null,
+  )
+}

@@ -43,12 +43,16 @@ async function createSqliteContainer(
   const { path: filePath, from: restoreLocation, connect, json } = options
 
   // Check dependencies
-  const depsSpinner = createSpinner('Checking required tools...')
-  depsSpinner.start()
+  const depsSpinner = json ? null : createSpinner('Checking required tools...')
+  depsSpinner?.start()
 
   const missingDeps = await getMissingDependencies('sqlite')
   if (missingDeps.length > 0) {
-    depsSpinner.warn(
+    if (json) {
+      console.log(JSON.stringify({ error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}` }))
+      process.exit(1)
+    }
+    depsSpinner?.warn(
       `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
     )
     const installed = await promptInstallDependencies(
@@ -59,13 +63,19 @@ async function createSqliteContainer(
       process.exit(1)
     }
   } else {
-    depsSpinner.succeed('Required tools available')
+    depsSpinner?.succeed('Required tools available')
   }
 
   // Check if container already exists
-  while (await containerManager.exists(containerName)) {
-    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
-    containerName = await promptContainerName()
+  if (await containerManager.exists(containerName)) {
+    if (json) {
+      console.log(JSON.stringify({ error: `Container "${containerName}" already exists` }))
+      process.exit(1)
+    }
+    while (await containerManager.exists(containerName)) {
+      console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+      containerName = await promptContainerName()
+    }
   }
 
   // Determine file path
@@ -74,19 +84,23 @@ async function createSqliteContainer(
 
   // Check if file already exists
   if (existsSync(absolutePath)) {
-    console.error(uiError(`File already exists: ${absolutePath}`))
+    if (json) {
+      console.log(JSON.stringify({ error: `File already exists: ${absolutePath}` }))
+    } else {
+      console.error(uiError(`File already exists: ${absolutePath}`))
+    }
     process.exit(1)
   }
 
-  const createSpinnerInstance = createSpinner('Creating SQLite database...')
-  createSpinnerInstance.start()
+  const createSpinnerInstance = json ? null : createSpinner('Creating SQLite database...')
+  createSpinnerInstance?.start()
 
   try {
     // Initialize the SQLite database file and register in registry
     await dbEngine.initDataDir(containerName, version, { path: absolutePath })
-    createSpinnerInstance.succeed('SQLite database created')
+    createSpinnerInstance?.succeed('SQLite database created')
   } catch (error) {
-    createSpinnerInstance.fail('Failed to create SQLite database')
+    createSpinnerInstance?.fail('Failed to create SQLite database')
     throw error
   }
 
@@ -95,16 +109,16 @@ async function createSqliteContainer(
     const config = await containerManager.getConfig(containerName)
     if (config) {
       const format = await dbEngine.detectBackupFormat(restoreLocation)
-      const restoreSpinner = createSpinner(
+      const restoreSpinner = json ? null : createSpinner(
         `Restoring from ${format.description}...`,
       )
-      restoreSpinner.start()
+      restoreSpinner?.start()
 
       try {
         await dbEngine.restore(config, restoreLocation)
-        restoreSpinner.succeed('Backup restored successfully')
+        restoreSpinner?.succeed('Backup restored successfully')
       } catch (error) {
-        restoreSpinner.fail('Failed to restore backup')
+        restoreSpinner?.fail('Failed to restore backup')
         // Clean up the created container on restore failure
         try {
           await containerManager.delete(containerName, { force: true })
@@ -176,12 +190,16 @@ async function createDuckDBContainer(
   const { path: filePath, from: restoreLocation, connect, json } = options
 
   // Check dependencies
-  const depsSpinner = createSpinner('Checking required tools...')
-  depsSpinner.start()
+  const depsSpinner = json ? null : createSpinner('Checking required tools...')
+  depsSpinner?.start()
 
   const missingDeps = await getMissingDependencies('duckdb')
   if (missingDeps.length > 0) {
-    depsSpinner.warn(
+    if (json) {
+      console.log(JSON.stringify({ error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}` }))
+      process.exit(1)
+    }
+    depsSpinner?.warn(
       `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
     )
     const installed = await promptInstallDependencies(
@@ -192,13 +210,19 @@ async function createDuckDBContainer(
       process.exit(1)
     }
   } else {
-    depsSpinner.succeed('Required tools available')
+    depsSpinner?.succeed('Required tools available')
   }
 
   // Check if container already exists
-  while (await containerManager.exists(containerName)) {
-    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
-    containerName = await promptContainerName()
+  if (await containerManager.exists(containerName)) {
+    if (json) {
+      console.log(JSON.stringify({ error: `Container "${containerName}" already exists` }))
+      process.exit(1)
+    }
+    while (await containerManager.exists(containerName)) {
+      console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+      containerName = await promptContainerName()
+    }
   }
 
   // Determine file path
@@ -207,19 +231,23 @@ async function createDuckDBContainer(
 
   // Check if file already exists
   if (existsSync(absolutePath)) {
-    console.error(uiError(`File already exists: ${absolutePath}`))
+    if (json) {
+      console.log(JSON.stringify({ error: `File already exists: ${absolutePath}` }))
+    } else {
+      console.error(uiError(`File already exists: ${absolutePath}`))
+    }
     process.exit(1)
   }
 
-  const createSpinnerInstance = createSpinner('Creating DuckDB database...')
-  createSpinnerInstance.start()
+  const createSpinnerInstance = json ? null : createSpinner('Creating DuckDB database...')
+  createSpinnerInstance?.start()
 
   try {
     // Initialize the DuckDB database file and register in registry
     await dbEngine.initDataDir(containerName, version, { path: absolutePath })
-    createSpinnerInstance.succeed('DuckDB database created')
+    createSpinnerInstance?.succeed('DuckDB database created')
   } catch (error) {
-    createSpinnerInstance.fail('Failed to create DuckDB database')
+    createSpinnerInstance?.fail('Failed to create DuckDB database')
     throw error
   }
 
@@ -228,16 +256,16 @@ async function createDuckDBContainer(
     const config = await containerManager.getConfig(containerName)
     if (config) {
       const format = await dbEngine.detectBackupFormat(restoreLocation)
-      const restoreSpinner = createSpinner(
+      const restoreSpinner = json ? null : createSpinner(
         `Restoring from ${format.description}...`,
       )
-      restoreSpinner.start()
+      restoreSpinner?.start()
 
       try {
         await dbEngine.restore(config, restoreLocation)
-        restoreSpinner.succeed('Backup restored successfully')
+        restoreSpinner?.succeed('Backup restored successfully')
       } catch (error) {
-        restoreSpinner.fail('Failed to restore backup')
+        restoreSpinner?.fail('Failed to restore backup')
         // Clean up the created container on restore failure
         try {
           await containerManager.delete(containerName, { force: true })
@@ -399,12 +427,21 @@ export const createCommand = new Command('create')
           const locationInfo = detectLocationType(options.from)
 
           if (locationInfo.type === 'not_found') {
-            console.error(uiError(`Location not found: ${options.from}`))
-            console.log(
-              chalk.gray(
-                '  Provide a valid file path or connection string (postgresql://, mysql://)',
-              ),
-            )
+            if (options.json) {
+              console.log(JSON.stringify({ error: `Location not found: ${options.from}` }))
+            } else {
+              console.error(uiError(`Location not found: ${options.from}`))
+              console.log(
+                chalk.gray(
+                  '  Provide a valid file path or connection string:',
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  '  postgresql://, mysql://, mongodb://, redis://, sqlite://, duckdb://',
+                ),
+              )
+            }
             process.exit(1)
           }
 
@@ -413,19 +450,25 @@ export const createCommand = new Command('create')
 
           if (!options.engine && locationInfo.inferredEngine) {
             engine = locationInfo.inferredEngine
-            console.log(
-              chalk.gray(
-                `  Inferred engine "${engine}" from connection string`,
-              ),
-            )
+            if (!options.json) {
+              console.log(
+                chalk.gray(
+                  `  Inferred engine "${engine}" from connection string`,
+                ),
+              )
+            }
           }
 
           if (options.start === false) {
-            console.error(
-              uiError(
-                'Cannot use --no-start with --from (restore requires running container)',
-              ),
-            )
+            if (options.json) {
+              console.log(JSON.stringify({ error: 'Cannot use --no-start with --from (restore requires running container)' }))
+            } else {
+              console.error(
+                uiError(
+                  'Cannot use --no-start with --from (restore requires running container)',
+                ),
+              )
+            }
             process.exit(1)
           }
         }
@@ -437,6 +480,12 @@ export const createCommand = new Command('create')
         }
 
         if (!containerName) {
+          // JSON mode requires container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const answers = await promptCreateOptions()
           containerName = answers.name
           engine = answers.engine as Engine
@@ -451,37 +500,42 @@ export const createCommand = new Command('create')
           // Validate Redis/Valkey database is a pure integer string 0-15
           // Reject decimals ("1.5"), scientific notation ("1e2"), and trailing garbage ("5abc")
           if (!/^[0-9]+$/.test(database)) {
-            console.error(
-              uiError(
-                'Redis/Valkey database must be an integer between 0 and 15',
-              ),
-            )
+            const errorMsg = 'Redis/Valkey database must be an integer between 0 and 15'
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
           const dbIndex = parseInt(database, 10)
           if (dbIndex < 0 || dbIndex > 15) {
-            console.error(
-              uiError(
-                'Redis/Valkey database must be an integer between 0 and 15',
-              ),
-            )
+            const errorMsg = 'Redis/Valkey database must be an integer between 0 and 15'
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         } else {
           database = database ?? containerName.replace(/-/g, '_')
           // Validate database name to prevent SQL injection
           if (!isValidDatabaseName(database)) {
-            console.error(
-              uiError(
-                'Database name must start with a letter and contain only letters, numbers, and underscores',
-              ),
-            )
+            const errorMsg = 'Database name must start with a letter and contain only letters, numbers, and underscores'
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         }
 
-        console.log(header('Creating Database Container'))
-        console.log()
+        if (!options.json) {
+          console.log(header('Creating Database Container'))
+          console.log()
+        }
 
         const dbEngine = getEngine(engine)
         const isPostgreSQL = engine === Engine.PostgreSQL
@@ -510,11 +564,19 @@ export const createCommand = new Command('create')
 
         // For server databases, validate --connect with --no-start
         if (options.connect && options.start === false) {
-          console.error(
-            uiError(
-              'Cannot use --no-start with --connect (connection requires running container)',
-            ),
-          )
+          const errorMsg = 'Cannot use --no-start with --connect (connection requires running container)'
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
+          }
+          process.exit(1)
+        }
+
+        // In JSON mode, require explicit --start or --no-start flag to avoid interactive prompts
+        if (options.json && options.start === undefined && !restoreLocation && !options.connect) {
+          const errorMsg = 'In JSON mode, you must specify --start or --no-start for server databases'
+          console.log(JSON.stringify({ error: errorMsg }))
           process.exit(1)
         }
 
@@ -522,27 +584,32 @@ export const createCommand = new Command('create')
         if (options.maxConnections) {
           const parsed = parseInt(options.maxConnections, 10)
           if (!Number.isFinite(parsed) || parsed <= 0) {
-            console.error(
-              uiError(
-                'Invalid --max-connections value: must be a positive integer',
-              ),
-            )
+            const errorMsg = 'Invalid --max-connections value: must be a positive integer'
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         }
 
-        const portSpinner = createSpinner('Finding available port...')
-        portSpinner.start()
+        const portSpinner = options.json ? null : createSpinner('Finding available port...')
+        portSpinner?.start()
 
         let port: number
         if (options.port) {
           port = parseInt(options.port, 10)
           const available = await portManager.isPortAvailable(port)
           if (!available) {
-            portSpinner.fail(`Port ${port} is already in use`)
+            if (options.json) {
+              console.log(JSON.stringify({ error: `Port ${port} is already in use` }))
+            } else {
+              portSpinner?.fail(`Port ${port} is already in use`)
+            }
             process.exit(1)
           }
-          portSpinner.succeed(`Using port ${port}`)
+          portSpinner?.succeed(`Using port ${port}`)
         } else {
           const { port: foundPort, isDefault } =
             await portManager.findAvailablePort({
@@ -551,9 +618,9 @@ export const createCommand = new Command('create')
             })
           port = foundPort
           if (isDefault) {
-            portSpinner.succeed(`Using default port ${port}`)
+            portSpinner?.succeed(`Using default port ${port}`)
           } else {
-            portSpinner.warn(
+            portSpinner?.warn(
               `Default port ${engineDefaults.defaultPort} is in use, using port ${port}`,
             )
           }
@@ -562,33 +629,41 @@ export const createCommand = new Command('create')
         // For PostgreSQL, ensure binaries FIRST - they include client tools (psql, pg_dump, etc.)
         // ensureBinaries also registers tool paths in config cache so getMissingDependencies can find them
         if (isPostgreSQL) {
-          const binarySpinner = createSpinner(
-            `Checking ${dbEngine.displayName} ${version} binaries...`,
-          )
-          binarySpinner.start()
+          const binarySpinner = options.json
+            ? null
+            : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+          binarySpinner?.start()
 
           // Always call ensureBinaries - it handles cached binaries gracefully
           // and registers client tool paths in config (needed for dependency checks)
           await dbEngine.ensureBinaries(version, ({ stage, message }) => {
-            if (stage === 'cached') {
-              binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
-            } else {
-              binarySpinner.text = message
+            if (binarySpinner) {
+              if (stage === 'cached') {
+                binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
+              } else {
+                binarySpinner.text = message
+              }
             }
           })
-          binarySpinner.succeed(
-            `${dbEngine.displayName} ${version} binaries ready`,
-          )
+          binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
         }
 
         // Check dependencies (all engines need this)
         // For PostgreSQL, this runs AFTER binary download so client tools are available
-        const depsSpinner = createSpinner('Checking required tools...')
-        depsSpinner.start()
+        const depsSpinner = options.json ? null : createSpinner('Checking required tools...')
+        depsSpinner?.start()
 
         let missingDeps = await getMissingDependencies(engine)
         if (missingDeps.length > 0) {
-          depsSpinner.warn(
+          // In JSON mode, error out instead of prompting
+          if (options.json) {
+            console.log(JSON.stringify({
+              error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+            }))
+            process.exit(1)
+          }
+
+          depsSpinner?.warn(
             `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
           )
 
@@ -614,42 +689,54 @@ export const createCommand = new Command('create')
           console.log(chalk.green('  ✓ All required tools are now available'))
           console.log()
         } else {
-          depsSpinner.succeed('Required tools available')
+          depsSpinner?.succeed('Required tools available')
         }
 
         // For non-PostgreSQL engines, validate version and get binary path
         // Store the binary path for version consistency
         let binaryPath: string | undefined
         if (!isPostgreSQL) {
-          const binarySpinner = createSpinner(
-            `Checking ${dbEngine.displayName} ${version} binaries...`,
-          )
-          binarySpinner.start()
+          const binarySpinner = options.json
+            ? null
+            : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+          binarySpinner?.start()
 
           try {
             // ensureBinaries validates the version and returns the binary path
             binaryPath = await dbEngine.ensureBinaries(
               version,
               ({ message }) => {
-                binarySpinner.text = message
+                if (binarySpinner) {
+                  binarySpinner.text = message
+                }
               },
             )
-            binarySpinner.succeed(
-              `${dbEngine.displayName} ${version} binaries ready`,
-            )
+            binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
           } catch (error) {
-            binarySpinner.fail(
-              `${dbEngine.displayName} ${version} not available`,
-            )
+            if (options.json) {
+              console.log(JSON.stringify({
+                error: `${dbEngine.displayName} ${version} not available`,
+              }))
+              process.exit(1)
+            }
+            binarySpinner?.fail(`${dbEngine.displayName} ${version} not available`)
             throw error
           }
         }
 
-        while (await containerManager.exists(containerName)) {
-          console.log(
-            chalk.yellow(`  Container "${containerName}" already exists.`),
-          )
-          containerName = await promptContainerName()
+        if (await containerManager.exists(containerName)) {
+          if (options.json) {
+            console.log(JSON.stringify({
+              error: `Container "${containerName}" already exists`,
+            }))
+            process.exit(1)
+          }
+          while (await containerManager.exists(containerName)) {
+            console.log(
+              chalk.yellow(`  Container "${containerName}" already exists.`),
+            )
+            containerName = await promptContainerName()
+          }
         }
 
         const tx = new TransactionManager()
@@ -957,6 +1044,10 @@ export const createCommand = new Command('create')
         )
 
         if (matchingPattern) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: e.message }))
+            process.exit(1)
+          }
           const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
@@ -967,7 +1058,11 @@ export const createCommand = new Command('create')
           process.exit(1)
         }
 
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       } finally {
         if (tempDumpPath) {

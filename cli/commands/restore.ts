@@ -53,6 +53,12 @@ export const restoreCommand = new Command('restore')
         let backupPath = backup
 
         if (!containerName) {
+          // JSON mode requires container name argument
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
           const running = containers.filter((c) => c.status === 'running')
 
@@ -83,7 +89,11 @@ export const restoreCommand = new Command('restore')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(uiError(`Container "${containerName}" not found`))
+          if (options.json) {
+            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+          } else {
+            console.error(uiError(`Container "${containerName}" not found`))
+          }
           process.exit(1)
         }
 
@@ -92,20 +102,41 @@ export const restoreCommand = new Command('restore')
 
         // Check if container needs to be running for restore
         // - File-based engines (SQLite, DuckDB) don't need to be running
-        // - Redis/Valkey RDB restore requires container to be STOPPED
+        // - Redis/Valkey RDB restore requires container to be STOPPED (text format needs running)
+        // - Qdrant snapshot restore requires container to be STOPPED
         // - All other engines require container to be running
         // We defer the running check until after format detection for Redis/Valkey
         const isRedisLike = engineName === 'redis' || engineName === 'valkey'
-        if (!isFileBasedEngine(engineName) && !isRedisLike) {
+        const isQdrant = engineName === 'qdrant'
+
+        if (isQdrant) {
+          // Qdrant snapshot restore requires the container to be stopped
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          if (running) {
+            const errorMsg =
+              `Container "${containerName}" must be stopped for Qdrant snapshot restore.\n` +
+              `Run: spindb stop ${containerName}\n\n` +
+              `Note: Restoring a Qdrant snapshot will replace all existing collections.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
+            process.exit(1)
+          }
+        } else if (!isFileBasedEngine(engineName) && !isRedisLike) {
           const running = await processManager.isRunning(containerName, {
             engine: engineName,
           })
           if (!running) {
-            console.error(
-              uiError(
-                `Container "${containerName}" is not running. Start it first.`,
-              ),
-            )
+            const errorMsg = `Container "${containerName}" is not running. Start it first.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
             process.exit(1)
           }
         }
@@ -314,7 +345,6 @@ export const restoreCommand = new Command('restore')
             if (options.json) {
               console.log(
                 JSON.stringify({
-                  success: false,
                   error: `Database "${databaseName}" already exists. Use --force to overwrite.`,
                 }),
               )
@@ -516,6 +546,10 @@ export const restoreCommand = new Command('restore')
         )
 
         if (matchingPattern) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: e.message }))
+            process.exit(1)
+          }
           const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
@@ -526,7 +560,11 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       } finally {
         if (tempDumpPath) {
