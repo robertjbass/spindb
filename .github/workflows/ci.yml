@@ -50,13 +50,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -147,13 +147,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -211,13 +211,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -273,13 +273,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -353,13 +353,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -414,13 +414,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -475,13 +475,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -536,13 +536,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -620,13 +620,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -705,10 +705,10 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
@@ -782,13 +782,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -876,13 +876,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -964,13 +964,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1027,10 +1027,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1172,7 +1172,7 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
     steps:
       - name: Checkout
@@ -1298,10 +1298,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1395,10 +1395,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1501,10 +1501,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Setup pnpm
