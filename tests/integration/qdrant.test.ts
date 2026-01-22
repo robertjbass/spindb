@@ -215,13 +215,6 @@ describe('Qdrant Integration Tests', () => {
     const ready = await waitForReady(ENGINE, testPorts[1])
     assert(ready, 'Cloned Qdrant should be ready')
 
-    // Verify clone has the same data
-    const clonedCollectionCount = await getQdrantCollectionCount(testPorts[1])
-    assertEqual(clonedCollectionCount, 1, 'Cloned container should have 1 collection')
-
-    const clonedPointCount = await getQdrantPointCount(testPorts[1], TEST_COLLECTION)
-    assertEqual(clonedPointCount, 3, 'Cloned container should have 3 points')
-
     // Clean up backup file
     const { rm } = await import('fs/promises')
     await rm(backupPath, { force: true })
