@@ -35,6 +35,14 @@ const ENGINE = Engine.Meilisearch
 const DATABASE = 'default' // Meilisearch uses indexes, not traditional databases
 const TEST_INDEX = 'test_documents'
 const TEST_VERSION = '1' // Major version - will be resolved to full version via version map
+const IS_WINDOWS = process.platform === 'win32'
+
+// Meilisearch has a bug on Windows where snapshot creation fails with:
+// "map size must be a multiple of the system page size"
+// Skip backup/restore tests on Windows until Meilisearch fixes this upstream.
+const SKIP_BACKUP_ON_WINDOWS = IS_WINDOWS
+  ? 'Meilisearch snapshot creation has a bug on Windows (page size alignment)'
+  : false
 
 describe('Meilisearch Integration Tests', () => {
   let testPorts: number[]
@@ -172,7 +180,7 @@ describe('Meilisearch Integration Tests', () => {
     console.log(`   Created index with ${docCount} documents`)
   })
 
-  it('should clone container using backup/restore', async () => {
+  it('should clone container using backup/restore', { skip: SKIP_BACKUP_ON_WINDOWS }, async () => {
     console.log(
       `\n Creating container "${clonedContainerName}" via backup/restore...`,
     )
@@ -235,7 +243,7 @@ describe('Meilisearch Integration Tests', () => {
     console.log('   Container cloned via backup/restore')
   })
 
-  it('should verify cloned data matches source', async () => {
+  it('should verify cloned data matches source', { skip: SKIP_BACKUP_ON_WINDOWS }, async () => {
     console.log('\n Verifying cloned data matches source...')
 
     // Verify index count on cloned container

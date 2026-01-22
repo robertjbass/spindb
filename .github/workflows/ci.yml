@@ -859,6 +859,8 @@ jobs:
   # NOTE: Meilisearch is a REST API engine (no CLI shell like psql/redis-cli)
   #       Tests use HTTP requests to interact with the database
   #       Docker E2E tests use curl for connectivity/data operations
+  # WINDOWS: Backup/restore tests are skipped due to upstream Meilisearch bug
+  #          with snapshot creation (page size alignment issue). Other tests pass.
   # ============================================
   test-meilisearch:
     name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
