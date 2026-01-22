@@ -239,12 +239,12 @@ describe('Qdrant Integration Tests', () => {
     if (isRunning) {
       await engine.stop(config!)
       await containerManager.updateConfig(containerName, { status: 'stopped' })
-
-      // Wait for the container to be fully stopped
-      // Use longer timeout on Windows for port/file release
-      const stopped = await waitForStopped(containerName, ENGINE, 90000)
-      assert(stopped, 'Container should be fully stopped before rename')
     }
+
+    // Always wait for container to be fully stopped, even if already stopped
+    // This ensures file handles are released before rename (especially on Windows)
+    const stopped = await waitForStopped(containerName, ENGINE, 120000)
+    assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
     await containerManager.rename(containerName, renamedContainerName)

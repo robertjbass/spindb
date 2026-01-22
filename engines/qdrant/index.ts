@@ -685,35 +685,52 @@ export class QdrantEngine extends BaseEngine {
     }
 
     // Kill process if running
+    // On Windows, use force kill immediately (graceful shutdown often doesn't release resources)
     if (pid && platformService.isProcessRunning(pid)) {
       logDebug(`Killing Qdrant process ${pid}`)
       try {
-        await platformService.terminateProcess(pid, false)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-
-        if (platformService.isProcessRunning(pid)) {
-          logWarning(`Graceful termination failed, force killing ${pid}`)
+        // On Windows, skip graceful termination - it often doesn't release file handles
+        if (isWindows()) {
           await platformService.terminateProcess(pid, true)
+        } else {
+          await platformService.terminateProcess(pid, false)
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+
+          if (platformService.isProcessRunning(pid)) {
+            logWarning(`Graceful termination failed, force killing ${pid}`)
+            await platformService.terminateProcess(pid, true)
+          }
         }
       } catch (error) {
         logDebug(`Process termination error: ${error}`)
       }
     }
 
-    // Also kill any processes still listening on the ports
-    // This handles cases where the PID file is stale or child processes exist
+    // Wait for process to fully terminate
+    if (isWindows()) {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+
+    // Kill any processes still listening on the ports
+    // This handles cases where the PID file is stale, child processes exist,
+    // or the main process termination didn't work
     const portPids = await platformService.findProcessByPort(port)
     const grpcPids = await platformService.findProcessByPort(grpcPort)
     const allPids = [...new Set([...portPids, ...grpcPids])]
     for (const portPid of allPids) {
-      if (portPid !== pid && platformService.isProcessRunning(portPid)) {
-        logDebug(`Killing orphaned process ${portPid} on port ${port}/${grpcPort}`)
+      if (platformService.isProcessRunning(portPid)) {
+        logDebug(`Killing process ${portPid} still on port ${port}/${grpcPort}`)
         try {
           await platformService.terminateProcess(portPid, true)
         } catch {
           // Ignore
         }
       }
+    }
+
+    // On Windows, wait again after killing port processes
+    if (isWindows() && allPids.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
     }
 
     // Cleanup PID file

@@ -618,8 +618,9 @@ export async function waitForStopped(
   // On Windows, add extra delay for file handle release
   // Memory-mapped files and Windows antivirus/indexing can hold handles
   // This helps prevent EBUSY errors during rename/delete operations
+  // Qdrant uses memory-mapped files which can take a long time to release
   if (isWindows()) {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await new Promise((resolve) => setTimeout(resolve, 10000))
   }
 
   return true
