@@ -3,7 +3,7 @@ import inquirer from 'inquirer'
 import { spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, rm } from 'fs/promises'
-import { join, dirname } from 'path'
+import { join, dirname, resolve } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
   isUsqlInstalled,
@@ -574,29 +574,39 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
     const buffer = Buffer.from(await downloadResponse.arrayBuffer())
     await writeFile(tempZip, buffer)
 
-    // Extract zip - the zip contains a 'dist' folder, we need its contents
-    const unzipper = await import('unzipper')
-    const directory = await unzipper.Open.file(tempZip)
+    try {
+      // Extract zip - the zip contains a 'dist' folder, we need its contents
+      const unzipper = await import('unzipper')
+      const directory = await unzipper.Open.file(tempZip)
 
-    for (const entry of directory.files) {
-      // Skip directories and files not in dist/
-      if (entry.type === 'Directory') continue
-      if (!entry.path.startsWith('dist/')) continue
+      // Resolve staticDir to absolute path for zip-slip protection
+      const resolvedStaticDir = resolve(staticDir)
 
-      // Remove 'dist/' prefix to get relative path
-      const relativePath = entry.path.replace(/^dist\//, '')
-      if (!relativePath) continue
+      for (const entry of directory.files) {
+        // Skip directories and files not in dist/
+        if (entry.type === 'Directory') continue
+        if (!entry.path.startsWith('dist/')) continue
 
-      const targetPath = join(staticDir, relativePath)
-      const targetDir = dirname(targetPath)
+        // Remove 'dist/' prefix to get relative path
+        const relativePath = entry.path.replace(/^dist\//, '')
+        if (!relativePath) continue
 
-      await mkdir(targetDir, { recursive: true })
-      const content = await entry.buffer()
-      await writeFile(targetPath, content)
+        // Zip-slip protection: ensure resolved path is within staticDir
+        const targetPath = resolve(staticDir, relativePath)
+        if (!targetPath.startsWith(resolvedStaticDir + '/')) {
+          // Path traversal attempt - skip this entry
+          continue
+        }
+
+        const targetDir = dirname(targetPath)
+        await mkdir(targetDir, { recursive: true })
+        const content = await entry.buffer()
+        await writeFile(targetPath, content)
+      }
+    } finally {
+      // Clean up temp zip even if extraction fails
+      await rm(tempZip, { force: true })
     }
-
-    // Clean up temp zip
-    await rm(tempZip, { force: true })
 
     spinner.succeed(`Qdrant Web UI ${releaseData.tag_name} installed`)
     console.log()

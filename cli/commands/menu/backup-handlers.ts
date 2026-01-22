@@ -54,18 +54,28 @@ function stripQuotes(path: string): string {
 /**
  * Mask the password portion of a connection string for display.
  * Example: postgresql://user:secretpass@host:5432/db → postgresql://user:****@host:5432/db
+ * Handles passwords containing '@' characters by using URL parsing.
  */
 function maskConnectionStringPassword(connectionString: string): string {
   if (!connectionString) return connectionString
   try {
-    // Match pattern: scheme://[user[:password]@]host
-    // This regex captures: scheme://user: then password, then @host...
-    return connectionString.replace(
-      /^([a-z+]+:\/\/[^:]*:)([^@]+)(@.*)$/i,
-      (_, prefix, _password, suffix) => `${prefix}****${suffix}`,
-    )
-  } catch {
+    // Use URL constructor for robust parsing (handles @ in passwords)
+    const url = new URL(connectionString)
+    if (url.password) {
+      url.password = '****'
+      return url.toString()
+    }
     return connectionString
+  } catch {
+    // Fallback for malformed URLs - use greedy regex that captures everything up to last @
+    try {
+      return connectionString.replace(
+        /^([a-z+]+:\/\/[^:]*:)(.+)(@[^@]+)$/i,
+        (_, prefix, _password, suffix) => `${prefix}****${suffix}`,
+      )
+    } catch {
+      return connectionString
+    }
   }
 }
 

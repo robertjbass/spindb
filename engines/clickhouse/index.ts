@@ -884,6 +884,10 @@ export class ClickHouseEngine extends BaseEngine {
     const { baseUrl, user, password, database } =
       parseClickHouseConnectionString(connectionString)
 
+    // Validate and escape database identifier for SQL injection prevention
+    validateClickHouseIdentifier(database, 'database')
+    const escapedDatabase = escapeClickHouseIdentifier(database)
+
     logDebug(`Connecting to remote ClickHouse at ${baseUrl} (db: ${database})`)
 
     // Build headers for authentication
@@ -958,7 +962,7 @@ export class ClickHouseEngine extends BaseEngine {
         const createUrl = new URL(baseUrl)
         createUrl.searchParams.set(
           'query',
-          `SHOW CREATE TABLE ${database}.${escapedTable} FORMAT TSVRaw`,
+          `SHOW CREATE TABLE ${escapedDatabase}.${escapedTable} FORMAT TSVRaw`,
         )
 
         const createResponse = await fetch(createUrl.toString(), { headers })
@@ -988,7 +992,7 @@ export class ClickHouseEngine extends BaseEngine {
         const dataUrl = new URL(baseUrl)
         dataUrl.searchParams.set(
           'query',
-          `SELECT * FROM ${database}.${escapedTable} FORMAT SQLInsert`,
+          `SELECT * FROM ${escapedDatabase}.${escapedTable} FORMAT SQLInsert`,
         )
 
         const dataResponse = await fetch(dataUrl.toString(), { headers })

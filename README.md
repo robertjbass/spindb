@@ -85,7 +85,7 @@ SpinDB works across **10 database engines** and **5 platform architectures** wit
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**50 combinations. One CLI. Zero configuration.**
+**49 combinations. One CLI. Zero configuration.**
 
 ---
 

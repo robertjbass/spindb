@@ -573,6 +573,13 @@ export const createCommand = new Command('create')
           process.exit(1)
         }
 
+        // In JSON mode, require explicit --start or --no-start flag to avoid interactive prompts
+        if (options.json && options.start === undefined && !restoreLocation && !options.connect) {
+          const errorMsg = 'In JSON mode, you must specify --start or --no-start for server databases'
+          console.log(JSON.stringify({ error: errorMsg }))
+          process.exit(1)
+        }
+
         // Validate --max-connections if provided
         if (options.maxConnections) {
           const parsed = parseInt(options.maxConnections, 10)
@@ -587,18 +594,22 @@ export const createCommand = new Command('create')
           }
         }
 
-        const portSpinner = createSpinner('Finding available port...')
-        portSpinner.start()
+        const portSpinner = options.json ? null : createSpinner('Finding available port...')
+        portSpinner?.start()
 
         let port: number
         if (options.port) {
           port = parseInt(options.port, 10)
           const available = await portManager.isPortAvailable(port)
           if (!available) {
-            portSpinner.fail(`Port ${port} is already in use`)
+            if (options.json) {
+              console.log(JSON.stringify({ error: `Port ${port} is already in use` }))
+            } else {
+              portSpinner?.fail(`Port ${port} is already in use`)
+            }
             process.exit(1)
           }
-          portSpinner.succeed(`Using port ${port}`)
+          portSpinner?.succeed(`Using port ${port}`)
         } else {
           const { port: foundPort, isDefault } =
             await portManager.findAvailablePort({
@@ -607,9 +618,9 @@ export const createCommand = new Command('create')
             })
           port = foundPort
           if (isDefault) {
-            portSpinner.succeed(`Using default port ${port}`)
+            portSpinner?.succeed(`Using default port ${port}`)
           } else {
-            portSpinner.warn(
+            portSpinner?.warn(
               `Default port ${engineDefaults.defaultPort} is in use, using port ${port}`,
             )
           }
@@ -618,33 +629,41 @@ export const createCommand = new Command('create')
         // For PostgreSQL, ensure binaries FIRST - they include client tools (psql, pg_dump, etc.)
         // ensureBinaries also registers tool paths in config cache so getMissingDependencies can find them
         if (isPostgreSQL) {
-          const binarySpinner = createSpinner(
-            `Checking ${dbEngine.displayName} ${version} binaries...`,
-          )
-          binarySpinner.start()
+          const binarySpinner = options.json
+            ? null
+            : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+          binarySpinner?.start()
 
           // Always call ensureBinaries - it handles cached binaries gracefully
           // and registers client tool paths in config (needed for dependency checks)
           await dbEngine.ensureBinaries(version, ({ stage, message }) => {
-            if (stage === 'cached') {
-              binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
-            } else {
-              binarySpinner.text = message
+            if (binarySpinner) {
+              if (stage === 'cached') {
+                binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
+              } else {
+                binarySpinner.text = message
+              }
             }
           })
-          binarySpinner.succeed(
-            `${dbEngine.displayName} ${version} binaries ready`,
-          )
+          binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
         }
 
         // Check dependencies (all engines need this)
         // For PostgreSQL, this runs AFTER binary download so client tools are available
-        const depsSpinner = createSpinner('Checking required tools...')
-        depsSpinner.start()
+        const depsSpinner = options.json ? null : createSpinner('Checking required tools...')
+        depsSpinner?.start()
 
         let missingDeps = await getMissingDependencies(engine)
         if (missingDeps.length > 0) {
-          depsSpinner.warn(
+          // In JSON mode, error out instead of prompting
+          if (options.json) {
+            console.log(JSON.stringify({
+              error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+            }))
+            process.exit(1)
+          }
+
+          depsSpinner?.warn(
             `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
           )
 
@@ -670,42 +689,54 @@ export const createCommand = new Command('create')
           console.log(chalk.green('  ✓ All required tools are now available'))
           console.log()
         } else {
-          depsSpinner.succeed('Required tools available')
+          depsSpinner?.succeed('Required tools available')
         }
 
         // For non-PostgreSQL engines, validate version and get binary path
         // Store the binary path for version consistency
         let binaryPath: string | undefined
         if (!isPostgreSQL) {
-          const binarySpinner = createSpinner(
-            `Checking ${dbEngine.displayName} ${version} binaries...`,
-          )
-          binarySpinner.start()
+          const binarySpinner = options.json
+            ? null
+            : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+          binarySpinner?.start()
 
           try {
             // ensureBinaries validates the version and returns the binary path
             binaryPath = await dbEngine.ensureBinaries(
               version,
               ({ message }) => {
-                binarySpinner.text = message
+                if (binarySpinner) {
+                  binarySpinner.text = message
+                }
               },
             )
-            binarySpinner.succeed(
-              `${dbEngine.displayName} ${version} binaries ready`,
-            )
+            binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
           } catch (error) {
-            binarySpinner.fail(
-              `${dbEngine.displayName} ${version} not available`,
-            )
+            if (options.json) {
+              console.log(JSON.stringify({
+                error: `${dbEngine.displayName} ${version} not available`,
+              }))
+              process.exit(1)
+            }
+            binarySpinner?.fail(`${dbEngine.displayName} ${version} not available`)
             throw error
           }
         }
 
-        while (await containerManager.exists(containerName)) {
-          console.log(
-            chalk.yellow(`  Container "${containerName}" already exists.`),
-          )
-          containerName = await promptContainerName()
+        if (await containerManager.exists(containerName)) {
+          if (options.json) {
+            console.log(JSON.stringify({
+              error: `Container "${containerName}" already exists`,
+            }))
+            process.exit(1)
+          }
+          while (await containerManager.exists(containerName)) {
+            console.log(
+              chalk.yellow(`  Container "${containerName}" already exists.`),
+            )
+            containerName = await promptContainerName()
+          }
         }
 
         const tx = new TransactionManager()

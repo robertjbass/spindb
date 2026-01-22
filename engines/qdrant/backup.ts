@@ -8,59 +8,11 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
+import { qdrantApiRequest } from './api-client'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
-/**
- * Make an HTTP request to Qdrant REST API
- */
-async function qdrantApiRequest(
-  port: number,
-  method: string,
-  path: string,
-  body?: Record<string, unknown>,
-  timeoutMs = 600000, // 10 minutes for potentially large snapshot operations
-): Promise<{ status: number; data: unknown }> {
-  const url = `http://127.0.0.1:${port}${path}`
-
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-  const options: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    signal: controller.signal,
-  }
-
-  if (body) {
-    options.body = JSON.stringify(body)
-  }
-
-  try {
-    const response = await fetch(url, options)
-
-    // Try to parse as JSON, fall back to text for non-JSON responses
-    let data: unknown
-    const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      data = await response.json()
-    } else {
-      data = await response.text()
-    }
-
-    return { status: response.status, data }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(
-        `Qdrant API request timed out after ${timeoutMs / 1000}s: ${method} ${path}`,
-      )
-    }
-    throw error
-  } finally {
-    clearTimeout(timeoutId)
-  }
-}
+// Backup operations may take longer than the default timeout
+const BACKUP_TIMEOUT_MS = 600000 // 10 minutes
 
 /**
  * Create a snapshot backup using Qdrant's REST API
@@ -82,7 +34,13 @@ export async function createBackup(
   // Trigger snapshot creation via REST API
   logDebug(`Creating Qdrant snapshot via REST API on port ${port}`)
 
-  const response = await qdrantApiRequest(port, 'POST', '/snapshots')
+  const response = await qdrantApiRequest(
+    port,
+    'POST',
+    '/snapshots',
+    undefined,
+    BACKUP_TIMEOUT_MS,
+  )
 
   if (response.status !== 200) {
     throw new Error(
@@ -116,12 +74,18 @@ export async function createBackup(
 
   while (Date.now() - startTime < maxWait) {
     if (existsSync(snapshotPath)) {
-      const currentStats = await stat(snapshotPath)
-      if (currentStats.size > 0 && currentStats.size === lastSize) {
-        // Size hasn't changed, file is likely complete
-        break
+      try {
+        const currentStats = await stat(snapshotPath)
+        if (currentStats.size > 0 && currentStats.size === lastSize) {
+          // Size hasn't changed, file is likely complete
+          break
+        }
+        lastSize = currentStats.size
+      } catch {
+        // File may have been deleted or inaccessible between existsSync and stat
+        // Reset lastSize and continue polling
+        lastSize = -1
       }
-      lastSize = currentStats.size
     }
     await new Promise((r) => setTimeout(r, 500))
   }

@@ -36,7 +36,9 @@ databasesCommand
         process.exit(1)
       }
 
-      const databases = config.databases || [config.database]
+      // Merge config.databases with config.database to ensure primary is always included
+      const rawDatabases = config.databases || []
+      const databases = [...new Set([config.database, ...rawDatabases])]
 
       if (options.json) {
         console.log(JSON.stringify({
@@ -213,6 +215,17 @@ databasesCommand
       // Cannot sync if old name is the primary database
       if (oldName === config.database) {
         const errorMsg = `Cannot sync primary database "${oldName}". Use 'spindb edit' to change the primary database.`
+        if (options.json) {
+          console.log(JSON.stringify({ error: errorMsg }))
+        } else {
+          console.error(uiError(errorMsg))
+        }
+        process.exit(1)
+      }
+
+      // No-op if old and new names are the same
+      if (oldName === newName) {
+        const errorMsg = `Old and new database names are the same: "${oldName}"`
         if (options.json) {
           console.log(JSON.stringify({ error: errorMsg }))
         } else {

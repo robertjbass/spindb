@@ -973,7 +973,7 @@ tests/fixtures/{engine}/
 **Important:** The seed file must create exactly the number of records specified in `EXPECTED_COUNTS` in `run-e2e.sh`. The standard is **5 records** for SQL databases (in `test_user` table) and **6 keys** for key-value stores (5 user keys + 1 count key).
 
 **For REST API engines** (like Qdrant), create a `README.md` instead of a seed file:
-```
+```text
 tests/fixtures/{engine}/
 └── seeds/
     └── README.md    # Explains the REST API approach and sample data structure

@@ -67,6 +67,14 @@ const TEST_DATA = {
   ],
 }
 
+/**
+ * URL-encode a collection name for use in REST API paths.
+ * Handles special characters that could cause path issues.
+ */
+function encodeCollectionName(name: string): string {
+  return encodeURIComponent(name)
+}
+
 async function qdrantRequest(
   port: number,
   method: string,
@@ -217,14 +225,15 @@ async function main() {
 
   // Delete collection if it exists
   console.log(`Cleaning up existing ${COLLECTION_NAME} collection...`)
-  await qdrantRequest(port, 'DELETE', `/collections/${COLLECTION_NAME}`)
+  const encodedName = encodeCollectionName(COLLECTION_NAME)
+  await qdrantRequest(port, 'DELETE', `/collections/${encodedName}`)
 
   // Create collection
   console.log(`Creating ${COLLECTION_NAME} collection...`)
   const createResponse = await qdrantRequest(
     port,
     'PUT',
-    `/collections/${COLLECTION_NAME}`,
+    `/collections/${encodedName}`,
     { vectors: TEST_DATA.vectors },
   )
 
@@ -239,7 +248,7 @@ async function main() {
   const insertResponse = await qdrantRequest(
     port,
     'PUT',
-    `/collections/${COLLECTION_NAME}/points`,
+    `/collections/${encodedName}/points`,
     { points: TEST_DATA.points },
   )
 
@@ -253,7 +262,7 @@ async function main() {
   const infoResponse = await qdrantRequest(
     port,
     'GET',
-    `/collections/${COLLECTION_NAME}`,
+    `/collections/${encodedName}`,
   )
   const info = (await infoResponse.json()) as {
     result: { points_count: number }
@@ -265,7 +274,7 @@ async function main() {
   const snapshotResponse = await qdrantRequest(
     port,
     'POST',
-    `/collections/${COLLECTION_NAME}/snapshots`,
+    `/collections/${encodedName}/snapshots`,
   )
 
   if (!snapshotResponse.ok) {
@@ -288,7 +297,7 @@ async function main() {
   console.log(`Downloading snapshot to: ${outputPath}`)
 
   const downloadResponse = await fetch(
-    `http://127.0.0.1:${port}/collections/${COLLECTION_NAME}/snapshots/${snapshotName}`,
+    `http://127.0.0.1:${port}/collections/${encodedName}/snapshots/${encodeURIComponent(snapshotName)}`,
   )
 
   if (!downloadResponse.ok || !downloadResponse.body) {
@@ -305,13 +314,13 @@ async function main() {
 
   // Clean up - delete the collection
   console.log(`Cleaning up ${COLLECTION_NAME} collection...`)
-  await qdrantRequest(port, 'DELETE', `/collections/${COLLECTION_NAME}`)
+  await qdrantRequest(port, 'DELETE', `/collections/${encodedName}`)
 
   // Delete the snapshot from Qdrant (we have our local copy)
   await qdrantRequest(
     port,
     'DELETE',
-    `/collections/${COLLECTION_NAME}/snapshots/${snapshotName}`,
+    `/collections/${encodedName}/snapshots/${encodeURIComponent(snapshotName)}`,
   ).catch(() => {
     // Collection already deleted, snapshot goes with it
   })

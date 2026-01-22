@@ -33,6 +33,7 @@ export const stopCommand = new Command('stop')
           }
 
           const stoppedNames: string[] = []
+          const failedNames: string[] = []
 
           for (const container of running) {
             const spinner = options.json
@@ -61,16 +62,19 @@ export const stopCommand = new Command('stop')
                 )
                 if (!killed) {
                   spinner?.fail(`Failed to stop "${container.name}"`)
-                  console.log(
-                    chalk.gray(
-                      `  The PostgreSQL ${container.version} engine is not installed.`,
-                    ),
-                  )
-                  console.log(
-                    chalk.gray(
-                      `  Run "spindb engines download postgresql ${container.version.split('.')[0]}" to reinstall.`,
-                    ),
-                  )
+                  if (!options.json) {
+                    console.log(
+                      chalk.gray(
+                        `  The PostgreSQL ${container.version} engine is not installed.`,
+                      ),
+                    )
+                    console.log(
+                      chalk.gray(
+                        `  Run "spindb engines download postgresql ${container.version.split('.')[0]}" to reinstall.`,
+                      ),
+                    )
+                  }
+                  failedNames.push(container.name)
                   stopFailed = true
                 } else {
                   usedFallback = true
@@ -97,13 +101,14 @@ export const stopCommand = new Command('stop')
           if (options.json) {
             console.log(
               JSON.stringify({
-                success: true,
+                success: failedNames.length === 0,
                 stopped: stoppedNames,
+                failed: failedNames,
                 count: stoppedNames.length,
               }),
             )
           } else {
-            console.log(uiSuccess(`Stopped ${running.length} container(s)`))
+            console.log(uiSuccess(`Stopped ${stoppedNames.length} container(s)`))
           }
           return
         }

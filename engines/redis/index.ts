@@ -40,6 +40,14 @@ import {
 const execAsync = promisify(exec)
 
 const ENGINE = 'redis'
+
+/**
+ * Escape a Redis key for use in CLI commands.
+ * Escapes double quotes to prevent command injection.
+ */
+function escapeKeyForCommand(key: string): string {
+  return key.replace(/"/g, '\\"')
+}
 const engineDef = getEngineDefaults(ENGINE)
 
 /**
@@ -100,6 +108,7 @@ function toCygwinPath(windowsPath: string): string {
 function parseRedisConnectionString(connectionString: string): {
   host: string
   port: number
+  username: string | undefined
   password: string | undefined
   database: number
 } {
@@ -126,8 +135,9 @@ function parseRedisConnectionString(connectionString: string): {
   const host = url.hostname || 'localhost'
   const port = parseInt(url.port, 10) || 6379
 
-  // Password can be in URL.password or as part of username (redis://:password@...)
-  // Redis doesn't use usernames traditionally, so password is often just :password@
+  // Redis 6.0+ supports ACL with usernames
+  // Format: redis://username:password@host:port/db
+  const username = url.username || undefined
   const password = url.password || undefined
 
   // Database is in the path (e.g., /5 means database 5)
@@ -138,14 +148,16 @@ function parseRedisConnectionString(connectionString: string): {
       if (dbNum < 0 || dbNum > 15) {
         throw new RangeError(
           `Invalid Redis database number: ${dbNum} (from path "${url.pathname}").\n` +
-            'Redis databases must be 0-15.',
+            'Redis databases must be 0-15 by default.\n' +
+            'If your server is configured with more databases (via the "databases" setting),\n' +
+            'you may need to increase the limit in server configuration.',
         )
       }
       database = dbNum
     }
   }
 
-  return { host, port, password, database }
+  return { host, port, username, password, database }
 }
 
 // Build a redis-cli command for inline command execution
@@ -993,7 +1005,7 @@ export class RedisEngine extends BaseEngine {
     }
 
     // Parse connection string
-    const { host, port, password, database } =
+    const { host, port, username, password, database } =
       parseRedisConnectionString(connectionString)
 
     logDebug(
@@ -1003,6 +1015,10 @@ export class RedisEngine extends BaseEngine {
     // Build CLI args for remote connection (password passed via env var for security)
     const buildArgs = (): string[] => {
       const args = ['-h', host, '-p', String(port)]
+      // Redis 6.0+ ACL: pass username via --user flag
+      if (username) {
+        args.push('--user', username)
+      }
       // Note: password is passed via REDISCLI_AUTH env var, not command line
       args.push('-n', String(database))
       return args
@@ -1107,12 +1123,12 @@ export class RedisEngine extends BaseEngine {
     for (const key of keys) {
       // Get key type
       const typeOutput = await execRemote(
-        `TYPE "${key.replace(/"/g, '\\"')}"`,
+        `TYPE "${escapeKeyForCommand(key)}"`,
       )
       const keyType = typeOutput.trim()
 
       // Get TTL
-      const ttlOutput = await execRemote(`TTL "${key.replace(/"/g, '\\"')}"`)
+      const ttlOutput = await execRemote(`TTL "${escapeKeyForCommand(key)}"`)
       const ttl = parseInt(ttlOutput.trim(), 10)
 
       // Quote the key for output commands if it contains special chars
@@ -1121,91 +1137,105 @@ export class RedisEngine extends BaseEngine {
           ? `"${key.replace(/"/g, '\\"')}"`
           : key
 
-      // POSIX shell escaping: end single-quoted string, add escaped quote, restart
-      // This handles values containing single quotes correctly
-      // Note: This approach doesn't handle binary data or control characters.
+      // Redis-cli compatible double-quote escaping for values
+      // Escapes backslashes and double quotes, converts newlines to \n sequences
+      // Note: This approach doesn't handle binary data.
       // For binary-safe backups, consider using DUMP/RESTORE commands instead.
       const escapeValue = (value: string): string => {
-        return `'${value.replace(/'/g, "'\\''")}'`
+        const escaped = value
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+        return `"${escaped}"`
       }
+
+      // Strip only trailing newline from execRemote output, preserving intentional whitespace
+      const stripTrailingNewline = (s: string): string => s.replace(/\r?\n$/, '')
 
       switch (keyType) {
         case 'string': {
-          const value = await execRemote(`GET "${key.replace(/"/g, '\\"')}"`)
-          commands.push(`SET ${quotedKey} ${escapeValue(value.trim())}`)
+          const value = await execRemote(`GET "${escapeKeyForCommand(key)}"`)
+          commands.push(`SET ${quotedKey} ${escapeValue(stripTrailingNewline(value))}`)
           break
         }
         case 'hash': {
           const hashData = await execRemote(
-            `HGETALL "${key.replace(/"/g, '\\"')}"`,
+            `HGETALL "${escapeKeyForCommand(key)}"`,
           )
-          const lines = hashData
-            .trim()
+          const lines = stripTrailingNewline(hashData)
             .split(/\r?\n/)
-            .map((l) => l.trim())
             .filter((l) => l)
           if (lines.length >= 2) {
             const pairs: string[] = []
-            for (let i = 0; i < lines.length; i += 2) {
-              const field = lines[i].trim()
-              const value = lines[i + 1]?.trim() || ''
+            // Handle odd number of lines (incomplete field/value pair)
+            const completeCount = lines.length - (lines.length % 2)
+            if (lines.length % 2 !== 0) {
+              logWarning(`Hash ${quotedKey} has incomplete field/value pair, skipping last field`)
+            }
+            for (let i = 0; i < completeCount; i += 2) {
+              const field = lines[i]
+              const value = lines[i + 1]
               const quotedField =
                 field.includes(' ') || /[*?[\]{}$`"'\\!<>|;&()]/.test(field)
                   ? `"${field.replace(/"/g, '\\"')}"`
                   : field
               pairs.push(`${quotedField} ${escapeValue(value)}`)
             }
-            commands.push(`HSET ${quotedKey} ${pairs.join(' ')}`)
+            if (pairs.length > 0) {
+              commands.push(`HSET ${quotedKey} ${pairs.join(' ')}`)
+            }
           }
           break
         }
         case 'list': {
           const listData = await execRemote(
-            `LRANGE "${key.replace(/"/g, '\\"')}" 0 -1`,
+            `LRANGE "${escapeKeyForCommand(key)}" 0 -1`,
           )
-          const items = listData
-            .trim()
+          const items = stripTrailingNewline(listData)
             .split(/\r?\n/)
-            .map((l) => l.trim())
             .filter((l) => l)
           if (items.length > 0) {
-            const escapedItems = items.map((item) => escapeValue(item.trim()))
+            const escapedItems = items.map((item) => escapeValue(item))
             commands.push(`RPUSH ${quotedKey} ${escapedItems.join(' ')}`)
           }
           break
         }
         case 'set': {
           const setData = await execRemote(
-            `SMEMBERS "${key.replace(/"/g, '\\"')}"`,
+            `SMEMBERS "${escapeKeyForCommand(key)}"`,
           )
-          const members = setData
-            .trim()
+          const members = stripTrailingNewline(setData)
             .split(/\r?\n/)
-            .map((l) => l.trim())
             .filter((l) => l)
           if (members.length > 0) {
-            const escapedMembers = members.map((m) => escapeValue(m.trim()))
+            const escapedMembers = members.map((m) => escapeValue(m))
             commands.push(`SADD ${quotedKey} ${escapedMembers.join(' ')}`)
           }
           break
         }
         case 'zset': {
           const zsetData = await execRemote(
-            `ZRANGE "${key.replace(/"/g, '\\"')}" 0 -1 WITHSCORES`,
+            `ZRANGE "${escapeKeyForCommand(key)}" 0 -1 WITHSCORES`,
           )
-          const lines = zsetData
-            .trim()
+          const lines = stripTrailingNewline(zsetData)
             .split(/\r?\n/)
-            .map((l) => l.trim())
             .filter((l) => l)
           if (lines.length >= 2) {
             const pairs: string[] = []
-            for (let i = 0; i < lines.length; i += 2) {
-              const member = lines[i].trim()
-              const score = lines[i + 1]?.trim() || '0'
+            // Handle odd number of lines (incomplete member/score pair)
+            const completeCount = lines.length - (lines.length % 2)
+            if (lines.length % 2 !== 0) {
+              logWarning(`ZSet ${quotedKey} has odd line count, skipping incomplete entry: ${lines[lines.length - 1]}`)
+            }
+            for (let i = 0; i < completeCount; i += 2) {
+              const member = lines[i]
+              const score = lines[i + 1]
               pairs.push(`${score} ${escapeValue(member)}`)
             }
-            commands.push(`ZADD ${quotedKey} ${pairs.join(' ')}`)
+            if (pairs.length > 0) {
+              commands.push(`ZADD ${quotedKey} ${pairs.join(' ')}`)
+            }
           }
           break
         }

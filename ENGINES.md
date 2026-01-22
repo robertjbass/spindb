@@ -52,7 +52,7 @@
 - **Multi-version support:** Yes (all platforms)
 - **Implementation notes:**
   - Uses PING/PONG for status checks
-  - Does NOT support remote dump (dumpFromConnectionString throws an error with guidance)
+  - Supports remote dump via `redis-cli` (text format with Redis commands)
   - Generates `redis.conf` in data directory for server configuration
 
 ### 🍃 MongoDB
@@ -89,7 +89,7 @@
   - Fully API-compatible with Redis
   - Uses `redis://` connection scheme for client compatibility
   - Uses numbered databases (0-15) like Redis
-  - Does NOT support remote dump (same as Redis)
+  - Supports remote dump via `valkey-cli` (text format with Redis commands)
 
 ### 🏠 ClickHouse
 

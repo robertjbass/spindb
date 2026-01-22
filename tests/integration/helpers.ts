@@ -496,10 +496,20 @@ export async function waitForReady(
           { timeout: 5000 },
         )
       } else if (engine === Engine.Qdrant) {
-        // Use fetch to ping Qdrant REST API
-        const response = await fetch(`http://127.0.0.1:${port}/healthz`)
-        if (response.ok) {
-          return true
+        // Use fetch to ping Qdrant REST API with timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('Qdrant health check failed or timed out')
         }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
@@ -522,6 +532,8 @@ export async function waitForReady(
 /**
  * Wait for a container to be fully stopped (process terminated, PID file removed).
  * This is important for operations like rename that require the container to be stopped.
+ *
+ * On Windows, also waits for ports to be released and adds extra delay for file handles.
  */
 export async function waitForStopped(
   containerName: string,
@@ -531,18 +543,55 @@ export async function waitForStopped(
   const startTime = Date.now()
   const checkInterval = 200
 
+  // First wait for process to stop
   while (Date.now() - startTime < timeoutMs) {
     const running = await processManager.isRunning(containerName, { engine })
     if (!running) {
-      return true
+      break
     }
     await new Promise((resolve) => setTimeout(resolve, checkInterval))
   }
 
-  console.log(
-    `   ⚠️  waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
-  )
-  return false
+  // Check if we timed out waiting for process
+  const stillRunning = await processManager.isRunning(containerName, { engine })
+  if (stillRunning) {
+    console.log(
+      `   ⚠️  waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
+    )
+    return false
+  }
+
+  // For Qdrant on Windows, also wait for ports to be released
+  // Windows is slower to release ports after process termination
+  if (engine === Engine.Qdrant && isWindows()) {
+    const config = await containerManager.getConfig(containerName)
+    if (config) {
+      const httpPort = config.port
+      const grpcPort = config.port + 1
+
+      // Wait for both HTTP and gRPC ports to be available
+      const portTimeoutMs = Math.min(10000, timeoutMs - (Date.now() - startTime))
+      const portStartTime = Date.now()
+
+      while (Date.now() - portStartTime < portTimeoutMs) {
+        const httpAvailable = await portManager.isPortAvailable(httpPort)
+        const grpcAvailable = await portManager.isPortAvailable(grpcPort)
+
+        if (httpAvailable && grpcAvailable) {
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, checkInterval))
+      }
+    }
+  }
+
+  // On Windows, add extra delay for file handle release
+  // This helps prevent EBUSY errors during rename/delete operations
+  if (isWindows()) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+
+  return true
 }
 
 /**
@@ -616,7 +665,8 @@ export async function createQdrantCollection(
   vectorSize = 128,
 ): Promise<boolean> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/collections/${name}`, {
+    const encodedName = encodeURIComponent(name)
+    const response = await fetch(`http://127.0.0.1:${port}/collections/${encodedName}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

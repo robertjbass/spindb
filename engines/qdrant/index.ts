@@ -25,6 +25,7 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
+import { qdrantApiRequest } from './api-client'
 import {
   type Platform,
   type Arch,
@@ -65,58 +66,6 @@ storage:
 
 log_level: INFO
 `
-}
-
-/**
- * Make an HTTP request to Qdrant REST API
- */
-async function qdrantApiRequest(
-  port: number,
-  method: string,
-  path: string,
-  body?: Record<string, unknown>,
-  timeoutMs = 30000,
-): Promise<{ status: number; data: unknown }> {
-  const url = `http://127.0.0.1:${port}${path}`
-
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-  const options: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    signal: controller.signal,
-  }
-
-  if (body) {
-    options.body = JSON.stringify(body)
-  }
-
-  try {
-    const response = await fetch(url, options)
-
-    // Try to parse as JSON, fall back to text for endpoints like /healthz
-    let data: unknown
-    const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      data = await response.json()
-    } else {
-      data = await response.text()
-    }
-
-    return { status: response.status, data }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(
-        `Qdrant API request timed out after ${timeoutMs / 1000}s: ${method} ${path}`,
-      )
-    }
-    throw error
-  } finally {
-    clearTimeout(timeoutId)
-  }
 }
 
 /**
@@ -593,6 +542,16 @@ export class QdrantEngine extends BaseEngine {
             })
           } else {
             settled = true
+
+            // Clean up the orphaned detached process before rejecting
+            if (proc.pid && platformService.isProcessRunning(proc.pid)) {
+              try {
+                await platformService.terminateProcess(proc.pid, true)
+              } catch {
+                // Ignore cleanup errors - best effort
+              }
+            }
+
             const portError = await checkLogForError()
 
             const errorDetails = [
@@ -685,6 +644,7 @@ export class QdrantEngine extends BaseEngine {
     const { name, port } = container
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'qdrant.pid')
+    const grpcPort = port + 1
 
     logDebug(`Stopping Qdrant container "${name}" on port ${port}`)
 
@@ -722,6 +682,26 @@ export class QdrantEngine extends BaseEngine {
         await unlink(pidFile)
       } catch {
         // Ignore
+      }
+    }
+
+    // On Windows, wait for ports to be released
+    // Windows holds onto ports longer after process termination (TIME_WAIT state)
+    if (isWindows()) {
+      logDebug(`Waiting for ports ${port} and ${grpcPort} to be released...`)
+      const portWaitStart = Date.now()
+      const portWaitTimeout = 5000 // 5 seconds max
+      const checkInterval = 200
+
+      while (Date.now() - portWaitStart < portWaitTimeout) {
+        const httpAvailable = await portManager.isPortAvailable(port)
+        const grpcAvailable = await portManager.isPortAvailable(grpcPort)
+
+        if (httpAvailable && grpcAvailable) {
+          logDebug('Ports released successfully')
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, checkInterval))
       }
     }
 

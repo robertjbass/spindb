@@ -102,11 +102,31 @@ export const restoreCommand = new Command('restore')
 
         // Check if container needs to be running for restore
         // - File-based engines (SQLite, DuckDB) don't need to be running
-        // - Redis/Valkey RDB restore requires container to be STOPPED
+        // - Redis/Valkey RDB restore requires container to be STOPPED (text format needs running)
+        // - Qdrant snapshot restore requires container to be STOPPED
         // - All other engines require container to be running
         // We defer the running check until after format detection for Redis/Valkey
         const isRedisLike = engineName === 'redis' || engineName === 'valkey'
-        if (!isFileBasedEngine(engineName) && !isRedisLike) {
+        const isQdrant = engineName === 'qdrant'
+
+        if (isQdrant) {
+          // Qdrant snapshot restore requires the container to be stopped
+          const running = await processManager.isRunning(containerName, {
+            engine: engineName,
+          })
+          if (running) {
+            const errorMsg =
+              `Container "${containerName}" must be stopped for Qdrant snapshot restore.\n` +
+              `Run: spindb stop ${containerName}\n\n` +
+              `Note: Restoring a Qdrant snapshot will replace all existing collections.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
+            process.exit(1)
+          }
+        } else if (!isFileBasedEngine(engineName) && !isRedisLike) {
           const running = await processManager.isRunning(containerName, {
             engine: engineName,
           })
