@@ -224,9 +224,10 @@ databasesCommand
       // Add new name first (in case old name doesn't exist in tracking)
       await containerManager.addDatabase(container, newName)
 
-      // Remove old name (ignore if not present)
+      // Remove old name if it was tracked
       const databases = config.databases || [config.database]
-      if (databases.includes(oldName)) {
+      const wasTracked = databases.includes(oldName)
+      if (wasTracked) {
         await containerManager.removeDatabase(container, oldName)
       }
 
@@ -234,12 +235,16 @@ databasesCommand
       const updatedDatabases = updatedConfig?.databases || []
 
       if (options.json) {
-        console.log(JSON.stringify({
+        const result: Record<string, unknown> = {
           success: true,
-          removed: oldName,
           added: newName,
           databases: updatedDatabases,
-        }))
+        }
+        // Only include 'removed' if the old name was actually tracked
+        if (wasTracked) {
+          result.removed = oldName
+        }
+        console.log(JSON.stringify(result))
       } else {
         console.log(uiSuccess(`Synced database rename: "${oldName}" -> "${newName}" in "${container}"`))
       }

@@ -49,8 +49,11 @@ describe('Qdrant Integration Tests', () => {
     }
 
     console.log('\n Finding available test ports...')
-    testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.qdrant.base)
-    console.log(`   Using ports: ${testPorts.join(', ')}`)
+    // Qdrant uses HTTP port + 1 for gRPC, so we need 2 ports per container
+    // Request 6 consecutive ports and use every other one to avoid gRPC conflicts
+    const allPorts = await findConsecutiveFreePorts(6, TEST_PORTS.qdrant.base)
+    testPorts = [allPorts[0], allPorts[2], allPorts[4]]
+    console.log(`   Using ports: ${testPorts.join(', ')} (with gRPC on +1 each)`)
 
     containerName = generateTestName('qdrant-test')
     clonedContainerName = generateTestName('qdrant-test-clone')

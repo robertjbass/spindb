@@ -996,8 +996,9 @@ export class ClickHouseEngine extends BaseEngine {
           const data = (await dataResponse.text()).trim()
           if (data) {
             // SQLInsert format uses 'table' as placeholder, replace with actual table name
+            // Handle variations: TABLE, `table`, "table", 'table' with optional whitespace
             const insertData = data.replace(
-              /INSERT INTO table \(/gi,
+              /INSERT\s+INTO\s+[`"']?table[`"']?\s*\(/gi,
               `INSERT INTO ${escapedTable} (`,
             )
             lines.push(insertData)

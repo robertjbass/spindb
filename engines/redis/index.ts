@@ -1209,6 +1209,9 @@ export class RedisEngine extends BaseEngine {
           }
           break
         }
+        // TODO: Add Redis Streams support (XRANGE/XADD commands)
+        // Streams are a complex data type that would require special handling
+        // for the message IDs and fields. Consider implementing if there's demand.
         default:
           logWarning(`Skipping key ${key} with unsupported type: ${keyType}`)
       }

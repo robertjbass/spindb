@@ -102,15 +102,16 @@ async function restoreSnapshotBackup(
     await mkdir(snapshotsDir, { recursive: true })
   }
 
-  // Remove existing data to allow clean restore
+  // Copy backup to snapshots directory FIRST to ensure it succeeds
+  // before removing any existing data (prevents data loss if copy fails)
+  await copyFile(backupPath, targetPath)
+
+  // Remove existing collections after successful copy for clean restore
   const collectionsDir = join(targetDir, 'collections')
   if (existsSync(collectionsDir)) {
     logDebug('Removing existing collections for clean restore')
     await rm(collectionsDir, { recursive: true, force: true })
   }
-
-  // Copy backup to snapshots directory
-  await copyFile(backupPath, targetPath)
 
   return {
     format: 'snapshot',
@@ -149,14 +150,14 @@ export async function restoreBackup(
 
 /**
  * Parse Qdrant connection string
- * Format: http://host[:port] or grpc://host[:port]
+ * Format: http://host[:port], https://host[:port], or grpc://host[:port]
  *
  * Qdrant uses collections instead of traditional databases
  */
 export function parseConnectionString(connectionString: string): {
   host: string
   port: number
-  protocol: 'http' | 'grpc'
+  protocol: 'http' | 'https' | 'grpc'
 } {
   if (!connectionString || typeof connectionString !== 'string') {
     throw new Error(
@@ -176,20 +177,22 @@ export function parseConnectionString(connectionString: string): {
   }
 
   // Validate protocol
-  let protocol: 'http' | 'grpc'
-  if (url.protocol === 'http:' || url.protocol === 'https:') {
+  let protocol: 'http' | 'https' | 'grpc'
+  if (url.protocol === 'http:') {
     protocol = 'http'
+  } else if (url.protocol === 'https:') {
+    protocol = 'https'
   } else if (url.protocol === 'grpc:') {
     protocol = 'grpc'
   } else {
     throw new Error(
       `Invalid Qdrant connection string: unsupported protocol "${url.protocol}". ` +
-        `Expected "http://" or "grpc://"`,
+        `Expected "http://", "https://", or "grpc://"`,
     )
   }
 
   const host = url.hostname || '127.0.0.1'
-  const defaultPort = protocol === 'http' ? 6333 : 6334
+  const defaultPort = protocol === 'grpc' ? 6334 : 6333
   const port = parseInt(url.port, 10) || defaultPort
 
   return {

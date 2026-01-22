@@ -369,6 +369,27 @@ export abstract class BaseBinaryManager {
       const destBinDir = join(binPath, 'bin')
       await mkdir(destBinDir, { recursive: true })
 
+      // Common non-binary files without extensions (case-insensitive)
+      const nonBinaryFiles = new Set([
+        'license',
+        'licence',
+        'readme',
+        'notice',
+        'changelog',
+        'contributing',
+        'authors',
+        'copying',
+        'version',
+        'makefile',
+        'dockerfile',
+        'manifest',
+        'install',
+        'news',
+        'thanks',
+        'todo',
+        'history',
+      ])
+
       for (const entry of sourceEntries) {
         const sourcePath = join(sourceDir, entry.name)
         // Identify executables: .exe/.dll on Windows, or files without config extensions on Unix
@@ -383,8 +404,12 @@ export abstract class BaseBinaryManager {
           entry.name.endsWith('.xml') ||
           entry.name.endsWith('.txt') ||
           entry.name.endsWith('.md')
+        const isKnownNonBinary = nonBinaryFiles.has(entry.name.toLowerCase())
         const isUnixExecutable =
-          entry.isFile() && !isConfigOrMetadata && !entry.name.includes('.')
+          entry.isFile() &&
+          !isConfigOrMetadata &&
+          !isKnownNonBinary &&
+          !entry.name.includes('.')
 
         const isBinary = isWindowsExecutable || isUnixExecutable
         const destPath = isBinary

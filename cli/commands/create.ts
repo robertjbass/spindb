@@ -433,7 +433,12 @@ export const createCommand = new Command('create')
               console.error(uiError(`Location not found: ${options.from}`))
               console.log(
                 chalk.gray(
-                  '  Provide a valid file path or connection string (postgresql://, mysql://)',
+                  '  Provide a valid file path or connection string:',
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  '  postgresql://, mysql://, mongodb://, redis://, sqlite://, duckdb://',
                 ),
               )
             }

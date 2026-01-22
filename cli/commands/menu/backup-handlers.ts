@@ -330,9 +330,13 @@ export async function handleRestore(): Promise<void> {
                 }
                 break
               case 'redis':
+                if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
+                  return 'Connection string must start with redis:// or rediss://'
+                }
+                break
               case 'valkey':
-                if (!input.startsWith('redis://')) {
-                  return 'Connection string must start with redis://'
+                if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
+                  return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
                 }
                 break
               case 'clickhouse':
@@ -1058,9 +1062,13 @@ export async function handleRestoreForContainer(
               }
               break
             case 'redis':
+              if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
+                return 'Connection string must start with redis:// or rediss://'
+              }
+              break
             case 'valkey':
-              if (!input.startsWith('redis://')) {
-                return 'Connection string must start with redis://'
+              if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
+                return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
               }
               break
             case 'clickhouse':

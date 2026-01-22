@@ -1431,7 +1431,8 @@ echo "  ${BOLD}SpinDB:${RESET}    $(spindb version 2>/dev/null || echo 'not inst
 
 # Check required tools
 log_section "Checking Required Tools"
-REQUIRED_TOOLS="jq node pnpm spindb"
+# curl is required for Qdrant REST API tests
+REQUIRED_TOOLS="jq node pnpm spindb curl"
 for tool in $REQUIRED_TOOLS; do
   log_step "Check $tool"
   if command -v "$tool" &>/dev/null; then

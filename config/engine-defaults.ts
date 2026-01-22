@@ -158,7 +158,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     logFileName: 'qdrant.log',
     pidFileName: 'qdrant.pid',
     dataSubdir: 'storage',
-    clientTools: ['qdrant'],
+    clientTools: [], // Qdrant uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable for vector DB
   },
 }

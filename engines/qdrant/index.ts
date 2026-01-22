@@ -1,7 +1,9 @@
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -9,6 +11,7 @@ import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
+import { portManager } from '../../core/port-manager'
 import { qdrantBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import {
@@ -164,7 +167,8 @@ function parseQdrantConnectionString(connectionString: string): {
   }
 
   // Construct base URL without query params
-  const port = url.port || (scheme === 'https' ? '443' : '6333')
+  // Qdrant REST API uses port 6333 regardless of http/https
+  const port = url.port || '6333'
   const baseUrl = `${scheme}://${url.hostname}:${port}`
 
   return { baseUrl, headers }
@@ -460,6 +464,14 @@ export class QdrantEngine extends BaseEngine {
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'qdrant.pid')
     const grpcPort = port + 1
+
+    // Check if gRPC port is available (Qdrant uses HTTP port + 1 for gRPC)
+    if (!(await portManager.isPortAvailable(grpcPort))) {
+      throw new Error(
+        `gRPC port ${grpcPort} is already in use. ` +
+          `Qdrant requires both HTTP port ${port} and gRPC port ${grpcPort} to be available.`,
+      )
+    }
 
     // Ensure snapshots directory exists
     if (!existsSync(snapshotsDir)) {
@@ -766,6 +778,16 @@ export class QdrantEngine extends BaseEngine {
     _options: { database?: string; flush?: boolean } = {},
   ): Promise<RestoreResult> {
     const { name } = container
+
+    // Check if container is running - Qdrant must be stopped for snapshot restore
+    const statusResult = await this.status(container)
+    if (statusResult.running) {
+      throw new Error(
+        `Qdrant container "${name}" must be stopped before restore. ` +
+          `Run: spindb stop ${name}`,
+      )
+    }
+
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
 
     return restoreBackup(backupPath, {
@@ -945,9 +967,18 @@ export class QdrantEngine extends BaseEngine {
       )
     }
 
-    // Save to output path
-    const buffer = await downloadResponse.arrayBuffer()
-    await writeFile(outputPath, Buffer.from(buffer))
+    // Stream to output path instead of buffering in memory
+    if (!downloadResponse.body) {
+      throw new Error('Download failed: response has no body')
+    }
+    const fileStream = createWriteStream(outputPath)
+    try {
+      const nodeStream = Readable.fromWeb(downloadResponse.body)
+      await pipeline(nodeStream, fileStream)
+    } catch (streamError) {
+      fileStream.destroy()
+      throw streamError
+    }
 
     logDebug(`Snapshot downloaded to ${outputPath}`)
 

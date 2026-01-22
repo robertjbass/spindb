@@ -1417,8 +1417,8 @@ enginesCommand
         })
         console.log(chalk.gray(`  Location: ${binPath}`))
 
-        // Check for bundled client tools and install missing ones
-        await checkAndInstallClientTools('qdrant', binPath)
+        // Skip client tools check for Qdrant - it's a REST API server
+        // with no CLI client tools (uses HTTP/gRPC protocols instead)
         return
       }
 

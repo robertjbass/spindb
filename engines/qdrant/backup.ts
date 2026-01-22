@@ -106,13 +106,22 @@ export async function createBackup(
   const snapshotsDir = join(dataDir, 'snapshots')
   const snapshotPath = join(snapshotsDir, snapshotName)
 
-  // Wait for the snapshot file to be ready
+  // Wait for the snapshot file to be ready and fully written
+  // Qdrant writes snapshots asynchronously, so we need to wait for both:
+  // 1. The file to exist
+  // 2. The file size to stabilize (no longer being written)
   const maxWait = 60000 // 60 seconds
   const startTime = Date.now()
+  let lastSize = -1
 
   while (Date.now() - startTime < maxWait) {
     if (existsSync(snapshotPath)) {
-      break
+      const currentStats = await stat(snapshotPath)
+      if (currentStats.size > 0 && currentStats.size === lastSize) {
+        // Size hasn't changed, file is likely complete
+        break
+      }
+      lastSize = currentStats.size
     }
     await new Promise((r) => setTimeout(r, 500))
   }
@@ -168,17 +177,25 @@ export async function listSnapshots(container: ContainerConfig): Promise<
   const snapshotFiles = files.filter((file) => file.endsWith('.snapshot'))
 
   // Stat all snapshot files in parallel for better performance
+  // Filter out any files that fail to stat (e.g., deleted during iteration)
   const statsResults = await Promise.all(
     snapshotFiles.map(async (file) => {
       const filePath = join(snapshotsDir, file)
-      const stats = await stat(filePath)
-      return {
-        name: file,
-        createdAt: stats.mtime.toISOString(),
-        size: stats.size,
+      try {
+        const stats = await stat(filePath)
+        return {
+          name: file,
+          createdAt: stats.mtime.toISOString(),
+          size: stats.size,
+        }
+      } catch {
+        // File may have been deleted between readdir and stat
+        return null
       }
     }),
   )
 
-  return statsResults
+  return statsResults.filter(
+    (result): result is NonNullable<typeof result> => result !== null,
+  )
 }

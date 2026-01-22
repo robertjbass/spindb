@@ -87,7 +87,7 @@ describe('Qdrant Restore Module', () => {
       const result = parseConnectionString('https://qdrant.example.com:6333')
       assertEqual(result.host, 'qdrant.example.com', 'Host should be correct')
       assertEqual(result.port, 6333, 'Port should be 6333')
-      assertEqual(result.protocol, 'http', 'Protocol should be http (normalized)')
+      assertEqual(result.protocol, 'https', 'Protocol should preserve https')
     })
 
     it('should parse grpc connection string', () => {

@@ -45,9 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - If no compatible binaries exist, prompts to download the current supported version for that major
   - Container config is automatically updated to reflect the actual version used
   - Prevents ENOENT errors when binaries are deleted or moved
-
-### Changed
-- **Start command binary check** - Now checks for any compatible PostgreSQL binaries (same major version) instead of requiring exact version match. Self-healing handles version resolution automatically.
+  - Start command now checks for any compatible binaries (same major version) instead of requiring exact version match
 
 ## [0.21.2] - 2026-01-21
 
