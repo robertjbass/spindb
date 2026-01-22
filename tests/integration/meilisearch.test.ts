@@ -296,7 +296,7 @@ describe('Meilisearch Integration Tests', () => {
     )
   })
 
-  it('should delete cloned container', async () => {
+  it('should delete cloned container', { skip: SKIP_BACKUP_ON_WINDOWS }, async () => {
     console.log(`\n Deleting cloned container "${clonedContainerName}"...`)
 
     const config = await containerManager.getConfig(clonedContainerName)

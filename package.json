@@ -45,7 +45,8 @@
     "sqlite",
     "duckdb",
     "tui",
-    "cli"
+    "cli",
+    "package manager"
   ],
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
