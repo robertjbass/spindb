@@ -215,17 +215,21 @@ describe('Qdrant Integration Tests', () => {
     const ready = await waitForReady(ENGINE, testPorts[1])
     assert(ready, 'Cloned Qdrant should be ready')
 
+    // Verify clone has the same data
+    const clonedCollectionCount = await getQdrantCollectionCount(testPorts[1])
+    assertEqual(clonedCollectionCount, 1, 'Cloned container should have 1 collection')
+
+    const clonedPointCount = await getQdrantPointCount(testPorts[1], TEST_COLLECTION)
+    assertEqual(clonedPointCount, 3, 'Cloned container should have 3 points')
+
     // Clean up backup file
     const { rm } = await import('fs/promises')
     await rm(backupPath, { force: true })
 
-    // Restart source container
-    await engine.start(sourceConfig!)
-    await containerManager.updateConfig(containerName, { status: 'running' })
-
-    // Wait for source container to be ready
-    const sourceReady = await waitForReady(ENGINE, testPorts[0])
-    assert(sourceReady, 'Source Qdrant should be ready after restart')
+    // Note: We don't restart the source container here because:
+    // 1. On Windows, TCP TIME_WAIT can hold ports for minutes after process termination
+    // 2. The backup/restore is already verified by the clone starting successfully
+    // 3. The next test will handle the source container (rename to different port)
 
     console.log('   Container cloned via backup/restore')
   })
@@ -236,15 +240,18 @@ describe('Qdrant Integration Tests', () => {
     const config = await containerManager.getConfig(containerName)
     assert(config !== null, 'Container config should exist')
 
-    // Stop the container
+    // Stop the container if running (might already be stopped from previous test)
     const engine = getEngine(ENGINE)
-    await engine.stop(config!)
-    await containerManager.updateConfig(containerName, { status: 'stopped' })
+    const isRunning = await processManager.isRunning(containerName, { engine: ENGINE })
+    if (isRunning) {
+      await engine.stop(config!)
+      await containerManager.updateConfig(containerName, { status: 'stopped' })
 
-    // Wait for the container to be fully stopped
-    // Use longer timeout on Windows for port/file release
-    const stopped = await waitForStopped(containerName, ENGINE, 90000)
-    assert(stopped, 'Container should be fully stopped before rename')
+      // Wait for the container to be fully stopped
+      // Use longer timeout on Windows for port/file release
+      const stopped = await waitForStopped(containerName, ENGINE, 90000)
+      assert(stopped, 'Container should be fully stopped before rename')
+    }
 
     // Rename container and change port
     await containerManager.rename(containerName, renamedContainerName)
