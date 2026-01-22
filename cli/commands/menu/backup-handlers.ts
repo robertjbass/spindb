@@ -263,7 +263,7 @@ export async function handleRestore(): Promise<void> {
     // All engines now support dumpFromConnectionString
     const restoreChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
       {
-        name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+        name: `${chalk.magenta('☰')} Dump file (drag and drop or enter path)`,
         value: 'file',
       },
     ]
@@ -536,7 +536,7 @@ export async function handleRestore(): Promise<void> {
               value: 'new',
             },
             {
-              name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+              name: `${chalk.yellow('↻')} Replace existing database ${chalk.gray('(overwrites data)')}`,
               value: 'replace',
               disabled:
                 existingDatabases.length === 0
@@ -647,7 +647,7 @@ export async function handleRestore(): Promise<void> {
           message: 'How should existing data be handled?',
           choices: [
             {
-              name: `${chalk.yellow('🔄')} Replace all ${chalk.gray('(FLUSHDB - clear database first)')}`,
+              name: `${chalk.yellow('↻')} Replace all ${chalk.gray('(FLUSHDB - clear database first)')}`,
               value: 'replace',
             },
             {
@@ -991,7 +991,7 @@ export async function handleRestoreForContainer(
   // All engines now support dumpFromConnectionString
   const restoreChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
     {
-      name: `${chalk.magenta('📁')} Dump file (drag and drop or enter path)`,
+      name: `${chalk.magenta('☰')} Dump file (drag and drop or enter path)`,
       value: 'file',
     },
     {
@@ -1198,7 +1198,7 @@ export async function handleRestoreForContainer(
             value: 'new',
           },
           {
-            name: `${chalk.yellow('🔄')} Replace existing database ${chalk.gray('(overwrites data)')}`,
+            name: `${chalk.yellow('↻')} Replace existing database ${chalk.gray('(overwrites data)')}`,
             value: 'replace',
             disabled:
               existingDatabases.length === 0 ? 'No existing databases' : false,
@@ -1300,7 +1300,7 @@ export async function handleRestoreForContainer(
         message: 'How should existing data be handled?',
         choices: [
           {
-            name: `${chalk.yellow('🔄')} Replace all ${chalk.gray('(FLUSHDB - clear database first)')}`,
+            name: `${chalk.yellow('↻')} Replace all ${chalk.gray('(FLUSHDB - clear database first)')}`,
             value: 'replace',
           },
           {

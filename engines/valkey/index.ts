@@ -136,7 +136,13 @@ function parseValkeyConnectionString(connectionString: string): {
   let database = 0
   if (url.pathname && url.pathname !== '/') {
     const dbNum = parseInt(url.pathname.replace('/', ''), 10)
-    if (!isNaN(dbNum) && dbNum >= 0 && dbNum <= 15) {
+    if (!isNaN(dbNum)) {
+      if (dbNum < 0 || dbNum > 15) {
+        throw new RangeError(
+          `Invalid Valkey database number: ${dbNum} (from path "${url.pathname}").\n` +
+            'Valkey databases must be 0-15.',
+        )
+      }
       database = dbNum
     }
   }
@@ -1004,26 +1010,45 @@ export class ValkeyEngine extends BaseEngine {
       `Connecting to remote Valkey at ${host}:${port} (db: ${database})`,
     )
 
-    // Build CLI args for remote connection
+    // Build CLI args for remote connection (password passed via env var for security)
     const buildArgs = (): string[] => {
       const args = ['-h', host, '-p', String(port)]
-      if (password) {
-        args.push('-a', password)
-      }
+      // Note: password is passed via REDISCLI_AUTH env var, not command line
       args.push('-n', String(database))
       return args
     }
 
-    // Execute a Valkey command on the remote server
-    const execRemote = async (command: string): Promise<string> => {
+    // Execute a Valkey command on the remote server with timeout
+    const execRemote = async (
+      command: string,
+      timeoutMs = 30000,
+    ): Promise<string> => {
       return new Promise((resolve, reject) => {
         const args = buildArgs()
+        // Pass password via REDISCLI_AUTH env var to avoid exposing it in process listings
+        const env = password
+          ? { ...process.env, REDISCLI_AUTH: password }
+          : process.env
         const proc = spawn(valkeyCli, args, {
           stdio: ['pipe', 'pipe', 'pipe'],
+          env,
         })
 
         let stdout = ''
         let stderr = ''
+        let settled = false
+
+        // Timeout handler to prevent hanging
+        const timeoutId = setTimeout(() => {
+          if (settled) return
+          settled = true
+          proc.kill()
+          reject(
+            new Error(
+              `Command timed out after ${timeoutMs}ms: ${command.slice(0, 50)}...`,
+            ),
+          )
+        }, timeoutMs)
 
         proc.stdout.on('data', (data: Buffer) => {
           stdout += data.toString()
@@ -1032,10 +1057,18 @@ export class ValkeyEngine extends BaseEngine {
           stderr += data.toString()
         })
 
-        proc.on('error', reject)
+        proc.on('error', (err) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeoutId)
+          reject(err)
+        })
 
         proc.on('close', (code) => {
-          // Ignore auth-related warnings in stderr (password provided via -a)
+          if (settled) return
+          settled = true
+          clearTimeout(timeoutId)
+          // Ignore auth-related warnings in stderr (password provided via REDISCLI_AUTH)
           if (code === 0 || code === null) {
             resolve(stdout)
           } else {
@@ -1067,7 +1100,11 @@ export class ValkeyEngine extends BaseEngine {
     commands.push(`# Date: ${new Date().toISOString()}`)
     commands.push('')
 
-    // Get all keys (KEYS * works for small datasets)
+    // WARNING: KEYS * blocks the Valkey server during execution.
+    // This is acceptable for small datasets but will cause performance issues
+    // on large databases. For production use with large datasets, consider
+    // implementing SCAN-based iteration instead.
+    // TODO: Replace with SCAN iterator for large dataset support
     const keysOutput = await execRemote('KEYS *')
     const keys = keysOutput
       .trim()
@@ -1094,8 +1131,12 @@ export class ValkeyEngine extends BaseEngine {
           ? `"${key.replace(/"/g, '\\"')}"`
           : key
 
+      // POSIX shell escaping: end single-quoted string, add escaped quote, restart
+      // This handles values containing single quotes correctly
+      // Note: This approach doesn't handle binary data or control characters (newlines, etc.).
+      // For binary-safe backups, consider using DUMP/RESTORE commands instead.
       const escapeValue = (value: string): string => {
-        return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+        return `'${value.replace(/'/g, "'\\''")}'`
       }
 
       switch (keyType) {

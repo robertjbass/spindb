@@ -146,13 +146,23 @@ export const paths = {
       }
 
       // Sort by version descending (newest first)
+      // Handles non-numeric segments (e.g., "1.0.0-beta") by falling back to string comparison
       return results.sort((a, b) => {
-        const aParts = a.version.split('.').map(Number)
-        const bParts = b.version.split('.').map(Number)
+        const aParts = a.version.split('.')
+        const bParts = b.version.split('.')
         for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-          const aVal = aParts[i] || 0
-          const bVal = bParts[i] || 0
-          if (bVal !== aVal) return bVal - aVal
+          const aRaw = aParts[i] || '0'
+          const bRaw = bParts[i] || '0'
+          const aNum = Number(aRaw)
+          const bNum = Number(bRaw)
+          // If both are valid numbers, compare numerically
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            if (bNum !== aNum) return bNum - aNum
+          } else {
+            // Fall back to string comparison for non-numeric segments
+            const cmp = bRaw.localeCompare(aRaw)
+            if (cmp !== 0) return cmp
+          }
         }
         return 0
       })

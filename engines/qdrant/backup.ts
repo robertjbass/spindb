@@ -165,19 +165,20 @@ export async function listSnapshots(container: ContainerConfig): Promise<
   }
 
   const files = await readdir(snapshotsDir)
-  const snapshots: Array<{ name: string; createdAt: string; size: number }> = []
+  const snapshotFiles = files.filter((file) => file.endsWith('.snapshot'))
 
-  for (const file of files) {
-    if (file.endsWith('.snapshot')) {
+  // Stat all snapshot files in parallel for better performance
+  const statsResults = await Promise.all(
+    snapshotFiles.map(async (file) => {
       const filePath = join(snapshotsDir, file)
       const stats = await stat(filePath)
-      snapshots.push({
+      return {
         name: file,
         createdAt: stats.mtime.toISOString(),
         size: stats.size,
-      })
-    }
-  }
+      }
+    }),
+  )
 
-  return snapshots
+  return statsResults
 }

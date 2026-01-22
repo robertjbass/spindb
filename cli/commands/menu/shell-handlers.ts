@@ -2,7 +2,8 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { spawn } from 'child_process'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { mkdir, writeFile, rm } from 'fs/promises'
+import { join, dirname } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
   isUsqlInstalled,
@@ -28,6 +29,7 @@ import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
+import { paths } from '../../../config/paths'
 
 /**
  * Open a URL in the system's default browser
@@ -119,6 +121,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   type ShellChoice =
     | 'default'
     | 'browser'
+    | 'api-info'
     | 'install-webui'
     | 'usql'
     | 'install-usql'
@@ -208,9 +211,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   // Check if Qdrant Web UI is installed
   let qdrantWebUiInstalled = false
   if (config.engine === 'qdrant') {
-    const containerDir = await import('../../../config/paths').then(m =>
-      m.paths.getContainerPath(config.name, { engine: 'qdrant' })
-    )
+    const containerDir = paths.getContainerPath(config.name, { engine: 'qdrant' })
     const staticDir = join(containerDir, 'static')
     qdrantWebUiInstalled = existsSync(staticDir)
   }
@@ -223,7 +224,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   if (config.engine === 'qdrant') {
     if (qdrantWebUiInstalled) {
       choices.push({
-        name: `🌐 Open Web UI in browser`,
+        name: `◎ Open Web UI in browser`,
         value: 'default',
       })
     } else {
@@ -234,8 +235,8 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
     // Always show API info option for Qdrant
     choices.push({
-      name: `📋 Show API info`,
-      value: 'browser', // Reuse 'browser' to show API info without opening browser
+      name: `ℹ Show API info`,
+      value: 'api-info',
     })
   } else {
     // Non-Qdrant engines: show default shell option
@@ -249,7 +250,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   if (config.engine === 'clickhouse') {
     const httpPort = config.port + 1
     choices.push({
-      name: `🌐 Open Play UI in browser (port ${httpPort})`,
+      name: `◎ Open Play UI in browser (port ${httpPort})`,
       value: 'browser',
     })
   }
@@ -309,7 +310,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  // Handle browser option for ClickHouse Play UI or Qdrant API info
+  // Handle browser option for ClickHouse Play UI
   if (shellChoice === 'browser') {
     if (config.engine === 'clickhouse') {
       // ClickHouse HTTP port is native port + 1 (e.g., 9000 -> 9001)
@@ -321,19 +322,22 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       console.log()
       openInBrowser(playUrl)
       await pressEnterToContinue()
-    } else if (config.engine === 'qdrant') {
-      // Show Qdrant API info (without opening browser)
-      console.log()
-      console.log(chalk.cyan('Qdrant REST API:'))
-      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
-      console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
-      console.log()
-      console.log(chalk.gray('Example curl commands:'))
-      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
-      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
-      console.log()
-      await pressEnterToContinue()
     }
+    return
+  }
+
+  // Handle Qdrant API info display
+  if (shellChoice === 'api-info') {
+    console.log()
+    console.log(chalk.cyan('Qdrant REST API:'))
+    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+    console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
+    console.log()
+    console.log(chalk.gray('Example curl commands:'))
+    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
+    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
+    console.log()
+    await pressEnterToContinue()
     return
   }
 
@@ -521,9 +525,6 @@ export async function handleOpenShell(containerName: string): Promise<void> {
  * Download and install Qdrant Web UI from GitHub releases
  */
 async function downloadQdrantWebUI(containerName: string): Promise<void> {
-  const { paths } = await import('../../../config/paths')
-  const { mkdir, writeFile, rm } = await import('fs/promises')
-
   console.log()
   const spinner = createSpinner('Downloading Qdrant Web UI...')
   spinner.start()
@@ -587,7 +588,7 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
       if (!relativePath) continue
 
       const targetPath = join(staticDir, relativePath)
-      const targetDir = join(targetPath, '..')
+      const targetDir = dirname(targetPath)
 
       await mkdir(targetDir, { recursive: true })
       const content = await entry.buffer()

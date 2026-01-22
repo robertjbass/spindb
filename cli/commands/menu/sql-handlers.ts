@@ -66,7 +66,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
     if (engine === 'mongodb' || engine === 'qdrant') {
       return { type: 'Script', lower: 'script' }
     }
-    return { type: 'SQL', lower: 'SQL' }
+    return { type: 'SQL', lower: 'sql' }
   }
 
   const { type: scriptType, lower: scriptTypeLower } = getScriptType(

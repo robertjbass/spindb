@@ -531,30 +531,16 @@ export async function waitForStopped(
   const startTime = Date.now()
   const checkInterval = 200
 
-  console.log(
-    `   [DEBUG] waitForStopped: checking if "${containerName}" is stopped...`,
-  )
-
-  let iterations = 0
   while (Date.now() - startTime < timeoutMs) {
-    iterations++
     const running = await processManager.isRunning(containerName, { engine })
     if (!running) {
-      console.log(
-        `   [DEBUG] waitForStopped: "${containerName}" is stopped after ${iterations} checks (${Date.now() - startTime}ms)`,
-      )
       return true
-    }
-    if (iterations <= 3 || iterations % 10 === 0) {
-      console.log(
-        `   [DEBUG] waitForStopped: "${containerName}" still running (check ${iterations})`,
-      )
     }
     await new Promise((resolve) => setTimeout(resolve, checkInterval))
   }
 
   console.log(
-    `   [DEBUG] waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
+    `   ⚠️  waitForStopped: TIMEOUT - "${containerName}" still running after ${timeoutMs}ms`,
   )
   return false
 }

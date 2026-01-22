@@ -45,6 +45,7 @@ function generateQdrantConfig(options: {
   port: number
   grpcPort: number
   dataDir: string
+  snapshotsDir: string
 }): string {
   // Qdrant config uses forward slashes even on Windows
   const normalizePathForQdrant = (p: string) => p.replace(/\\/g, '/')
@@ -57,6 +58,7 @@ service:
 
 storage:
   storage_path: ${normalizePathForQdrant(options.dataDir)}
+  snapshots_path: ${normalizePathForQdrant(options.snapshotsDir)}
 
 log_level: INFO
 `
@@ -177,30 +179,46 @@ async function remoteQdrantRequest(
   path: string,
   headers: Record<string, string>,
   body?: Record<string, unknown>,
+  timeoutMs = 30000,
 ): Promise<{ status: number; data: unknown }> {
   const url = `${baseUrl}${path}`
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   const options: RequestInit = {
     method,
     headers,
+    signal: controller.signal,
   }
 
   if (body) {
     options.body = JSON.stringify(body)
   }
 
-  const response = await fetch(url, options)
+  try {
+    const response = await fetch(url, options)
 
-  // Try to parse as JSON, fall back to text
-  let data: unknown
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    data = await response.json()
-  } else {
-    data = await response.text()
+    // Try to parse as JSON, fall back to text
+    let data: unknown
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      data = await response.json()
+    } else {
+      data = await response.text()
+    }
+
+    return { status: response.status, data }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(
+        `Remote Qdrant request timed out after ${timeoutMs / 1000}s: ${method} ${path}`,
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  return { status: response.status, data }
 }
 
 export class QdrantEngine extends BaseEngine {
@@ -315,12 +333,20 @@ export class QdrantEngine extends BaseEngine {
       logDebug(`Created Qdrant data directory: ${dataDir}`)
     }
 
+    // Create snapshots directory
+    const snapshotsDir = join(dataDir, 'snapshots')
+    if (!existsSync(snapshotsDir)) {
+      await mkdir(snapshotsDir, { recursive: true })
+      logDebug(`Created Qdrant snapshots directory: ${snapshotsDir}`)
+    }
+
     // Generate config.yaml
     const configPath = join(containerDir, 'config.yaml')
     const configContent = generateQdrantConfig({
       port,
       grpcPort,
       dataDir,
+      snapshotsDir,
     })
     await writeFile(configPath, configContent)
     logDebug(`Generated Qdrant config: ${configPath}`)
@@ -430,15 +456,22 @@ export class QdrantEngine extends BaseEngine {
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'config.yaml')
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
+    const snapshotsDir = join(dataDir, 'snapshots')
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'qdrant.pid')
     const grpcPort = port + 1
+
+    // Ensure snapshots directory exists
+    if (!existsSync(snapshotsDir)) {
+      await mkdir(snapshotsDir, { recursive: true })
+    }
 
     // Regenerate config with current port (in case it changed)
     const configContent = generateQdrantConfig({
       port,
       grpcPort,
       dataDir,
+      snapshotsDir,
     })
     await writeFile(configPath, configContent)
 
@@ -471,88 +504,142 @@ export class QdrantEngine extends BaseEngine {
 
     // Qdrant runs in foreground, so we need to spawn detached
     // Set cwd to container directory so any files Qdrant creates stay there
-    return new Promise((resolve, reject) => {
-      const spawnOpts: SpawnOptions = {
-        cwd: containerDir,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true,
-        windowsHide: isWindows(),
-      }
+    const args = ['--config-path', configPath]
 
-      const args = ['--config-path', configPath]
-      const proc = spawn(qdrantServer, args, spawnOpts)
-      let settled = false
-      let stderrOutput = ''
-      let stdoutOutput = ''
-
-      // Handle spawn errors
-      proc.on('error', (err) => {
-        if (settled) return
-        settled = true
-        reject(new Error(`Failed to spawn Qdrant server: ${err.message}`))
-      })
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        const str = data.toString()
-        stdoutOutput += str
-        logDebug(`qdrant stdout: ${str}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        const str = data.toString()
-        stderrOutput += str
-        logDebug(`qdrant stderr: ${str}`)
-      })
-
-      // Detach the process
-      proc.unref()
-
-      // Give spawn a moment to fail if it's going to, then check readiness
-      setTimeout(async () => {
-        if (settled) return
-
-        // Verify process actually started
-        if (!proc.pid) {
-          settled = true
-          reject(new Error('Qdrant server process failed to start (no PID)'))
-          return
+    // On non-Windows, use 'ignore' for stdio to allow Node.js process to exit
+    // (piped streams keep the event loop alive even after unref)
+    // On Windows, use 'pipe' to capture stderr for better error messages
+    if (isWindows()) {
+      return new Promise((resolve, reject) => {
+        const spawnOpts: SpawnOptions = {
+          cwd: containerDir,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: true,
+          windowsHide: true,
         }
 
-        // Write PID file
-        try {
-          await writeFile(pidFile, String(proc.pid))
-        } catch {
-          // Non-fatal
-        }
+        const proc = spawn(qdrantServer, args, spawnOpts)
+        let settled = false
+        let stderrOutput = ''
+        let stdoutOutput = ''
 
-        // Wait for Qdrant to be ready
-        const ready = await this.waitForReady(port)
-        if (settled) return
-
-        if (ready) {
+        proc.on('error', (err) => {
+          if (settled) return
           settled = true
-          resolve({
-            port,
-            connectionString: this.getConnectionString(container),
-          })
-        } else {
+          reject(new Error(`Failed to spawn Qdrant server: ${err.message}`))
+        })
+
+        proc.on('exit', (code, signal) => {
+          if (settled) return
           settled = true
-          const portError = await checkLogForError()
+          const reason = signal ? `signal ${signal}` : `code ${code}`
+          reject(
+            new Error(
+              `Qdrant process exited unexpectedly (${reason}).\n` +
+                `Stderr: ${stderrOutput || '(none)'}\n` +
+                `Stdout: ${stdoutOutput || '(none)'}`,
+            ),
+          )
+        })
 
-          const errorDetails = [
-            portError || 'Qdrant failed to start within timeout.',
-            `Binary: ${qdrantServer}`,
-            `Config: ${configPath}`,
-            `Log file: ${logFile}`,
-            stderrOutput ? `Stderr:\n${stderrOutput}` : '',
-            stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n')
+        proc.stdout?.on('data', (data: Buffer) => {
+          const str = data.toString()
+          stdoutOutput += str
+          logDebug(`qdrant stdout: ${str}`)
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          const str = data.toString()
+          stderrOutput += str
+          logDebug(`qdrant stderr: ${str}`)
+        })
 
-          reject(new Error(errorDetails))
-        }
-      }, 500)
+        proc.unref()
+
+        setTimeout(async () => {
+          if (settled) return
+
+          if (!proc.pid) {
+            settled = true
+            reject(new Error('Qdrant server process failed to start (no PID)'))
+            return
+          }
+
+          try {
+            await writeFile(pidFile, String(proc.pid))
+          } catch {
+            // Non-fatal
+          }
+
+          const ready = await this.waitForReady(port)
+          if (settled) return
+
+          if (ready) {
+            settled = true
+            resolve({
+              port,
+              connectionString: this.getConnectionString(container),
+            })
+          } else {
+            settled = true
+            const portError = await checkLogForError()
+
+            const errorDetails = [
+              portError || 'Qdrant failed to start within timeout.',
+              `Binary: ${qdrantServer}`,
+              `Config: ${configPath}`,
+              `Log file: ${logFile}`,
+              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
+              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n')
+
+            reject(new Error(errorDetails))
+          }
+        }, 500)
+      })
+    }
+
+    // macOS/Linux: spawn with ignored stdio so Node.js can exit cleanly
+    const proc = spawn(qdrantServer, args, {
+      cwd: containerDir,
+      stdio: ['ignore', 'ignore', 'ignore'],
+      detached: true,
     })
+    proc.unref()
+
+    if (!proc.pid) {
+      throw new Error('Qdrant server process failed to start (no PID)')
+    }
+
+    try {
+      await writeFile(pidFile, String(proc.pid))
+    } catch {
+      // Non-fatal
+    }
+
+    // Wait for Qdrant to be ready
+    const ready = await this.waitForReady(port)
+
+    if (ready) {
+      return {
+        port,
+        connectionString: this.getConnectionString(container),
+      }
+    }
+
+    const portError = await checkLogForError()
+
+    const errorDetails = [
+      portError || 'Qdrant failed to start within timeout.',
+      `Binary: ${qdrantServer}`,
+      `Config: ${configPath}`,
+      `Log file: ${logFile}`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    throw new Error(errorDetails)
   }
 
   // Wait for Qdrant to be ready to accept connections

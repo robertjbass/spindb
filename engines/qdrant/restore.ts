@@ -75,8 +75,6 @@ export async function detectBackupFormat(
 export type RestoreOptions = {
   containerName: string
   dataDir?: string
-  // Port for running Qdrant instance (required for API-based restore)
-  port?: number
 }
 
 /**

@@ -325,7 +325,6 @@ export const restoreCommand = new Command('restore')
             if (options.json) {
               console.log(
                 JSON.stringify({
-                  success: false,
                   error: `Database "${databaseName}" already exists. Use --force to overwrite.`,
                 }),
               )

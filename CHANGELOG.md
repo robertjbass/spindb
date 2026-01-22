@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.3] - 2026-01-21
+
+### Fixed
+- **Qdrant start command hang on Linux** - Fixed `spindb start` not exiting on Linux/Docker due to piped stdio streams keeping Node.js event loop alive. Now uses `['ignore', 'ignore', 'ignore']` stdio on non-Windows platforms (matching MySQL/MariaDB pattern)
+- **Qdrant snapshot path** - Fixed snapshot storage location by explicitly setting `snapshots_path` in Qdrant config to `{dataDir}/snapshots`, ensuring backups are created and found in the expected location. Also ensures snapshots directory is created during container initialization and startup
+- **Redis/Valkey database validation** - Now throws RangeError for invalid database numbers outside 0-15 range instead of silently defaulting to 0
+- **Redis/Valkey shell escaping** - Fixed POSIX quoting for values containing single quotes using standard `'...'\''..'` pattern
+- **JSON error format consistency** - Removed redundant `success: false` from restore command error output to match other commands
+- **Version sorting edge case** - Fixed handling of non-numeric version segments (e.g., "1.0.0-beta") which previously caused NaN comparison issues
+- **SQL handlers casing** - Fixed inconsistent casing in script type terminology (`'SQL'` → `'sql'`)
+
+### Changed
+- **Redis/Valkey password security** - Password now passed via `REDISCLI_AUTH` environment variable instead of `-a` command-line flag to avoid exposure in process listings
+- **Redis/Valkey remote timeout** - Added 30-second timeout to remote commands to prevent indefinite hanging on unresponsive servers
+- **Qdrant remote timeout** - Added AbortController-based timeout handling to `remoteQdrantRequest` (30s default)
+- **Qdrant API info menu** - Added distinct `'api-info'` ShellChoice, separated from `'browser'` for clearer intent
+- **Shell handlers imports** - Converted dynamic imports (`paths`, `fs/promises`) to static imports for consistency
+- **Shell handlers path resolution** - Replaced `join(targetPath, '..')` with `dirname(targetPath)` for clarity
+
+### Improved
+- **Qdrant listSnapshots performance** - Parallelized `stat()` calls using `Promise.all` for better performance with many snapshots
+- **Engine handlers documentation** - Enhanced comment explaining reverse-parsing strategy for Windows paths with colons
+- **Test output cleanup** - Removed verbose `[DEBUG]` logs from PostgreSQL integration tests for cleaner output
+
 ### Added
 - **`spindb databases` command** - New CLI command for managing database tracking within containers:
   - `spindb databases list <container>` - List tracked databases

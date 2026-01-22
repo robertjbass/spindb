@@ -120,8 +120,9 @@ export async function handleEngines(): Promise<void> {
   }
 
   if (action.startsWith('select:')) {
-    // Parse from the end to preserve colons in path
-    // Format: select:path:engineName:engineVersion:sizeBytes
+    // Parse from the end using lastIndexOf to correctly handle colons in Windows
+    // paths (e.g., C:\Users\...). Format: select:path:engineName:engineVersion:sizeBytes
+    // We extract sizeBytes first, then version, then name, leaving path with any colons intact.
     const withoutPrefix = action.slice('select:'.length)
     const lastColon = withoutPrefix.lastIndexOf(':')
     const sizeBytes = parseInt(withoutPrefix.slice(lastColon + 1), 10)
