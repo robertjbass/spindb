@@ -415,11 +415,34 @@ export class QdrantEngine extends BaseEngine {
     const grpcPort = port + 1
 
     // Check if gRPC port is available (Qdrant uses HTTP port + 1 for gRPC)
-    if (!(await portManager.isPortAvailable(grpcPort))) {
-      throw new Error(
-        `gRPC port ${grpcPort} is already in use. ` +
-          `Qdrant requires both HTTP port ${port} and gRPC port ${grpcPort} to be available.`,
-      )
+    // On Windows, wait longer for ports to be released (TIME_WAIT state can persist)
+    const portWaitTimeout = isWindows() ? 15000 : 0
+    const portCheckStart = Date.now()
+    const portCheckInterval = 500
+
+    while (!(await portManager.isPortAvailable(grpcPort))) {
+      if (Date.now() - portCheckStart >= portWaitTimeout) {
+        throw new Error(
+          `gRPC port ${grpcPort} is already in use. ` +
+            `Qdrant requires both HTTP port ${port} and gRPC port ${grpcPort} to be available.`,
+        )
+      }
+      logDebug(`Waiting for gRPC port ${grpcPort} to become available...`)
+      await new Promise((resolve) => setTimeout(resolve, portCheckInterval))
+    }
+
+    // Also check HTTP port on Windows
+    if (isWindows()) {
+      while (!(await portManager.isPortAvailable(port))) {
+        if (Date.now() - portCheckStart >= portWaitTimeout) {
+          throw new Error(
+            `HTTP port ${port} is already in use. ` +
+              `Qdrant requires both HTTP port ${port} and gRPC port ${grpcPort} to be available.`,
+          )
+        }
+        logDebug(`Waiting for HTTP port ${port} to become available...`)
+        await new Promise((resolve) => setTimeout(resolve, portCheckInterval))
+      }
     }
 
     // Ensure snapshots directory exists
