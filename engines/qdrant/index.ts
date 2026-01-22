@@ -956,12 +956,34 @@ export class QdrantEngine extends BaseEngine {
 
     logDebug(`Remote snapshot created: ${snapshotName}`)
 
-    // Download the snapshot
+    // Download the snapshot with timeout (5 minutes for large snapshots)
     const snapshotUrl = `${baseUrl}/snapshots/${snapshotName}`
     logDebug(`Downloading snapshot from ${snapshotUrl}...`)
 
-    const downloadResponse = await fetch(snapshotUrl, { headers })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+    let downloadResponse: Response
+    try {
+      downloadResponse = await fetch(snapshotUrl, {
+        headers,
+        signal: controller.signal,
+      })
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      // Clean up the snapshot we created
+      await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch(
+        () => {},
+      )
+      const err = fetchError as Error
+      if (err.name === 'AbortError') {
+        throw new Error('Snapshot download timed out after 5 minutes')
+      }
+      throw fetchError
+    }
+
     if (!downloadResponse.ok) {
+      clearTimeout(timeoutId)
       // Clean up the snapshot we created
       await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch(
         () => {},
@@ -973,14 +995,24 @@ export class QdrantEngine extends BaseEngine {
 
     // Stream to output path instead of buffering in memory
     if (!downloadResponse.body) {
+      clearTimeout(timeoutId)
       throw new Error('Download failed: response has no body')
     }
+
     const fileStream = createWriteStream(outputPath)
     try {
       const nodeStream = Readable.fromWeb(downloadResponse.body)
       await pipeline(nodeStream, fileStream)
+      clearTimeout(timeoutId)
     } catch (streamError) {
+      clearTimeout(timeoutId)
       fileStream.destroy()
+      // Remove partial output file
+      await unlink(outputPath).catch(() => {})
+      // Clean up the snapshot on remote server
+      await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch(
+        () => {},
+      )
       throw streamError
     }
 

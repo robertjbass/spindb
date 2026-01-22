@@ -177,6 +177,28 @@ Combine common multi-step workflows into single commands. These should remain in
 
 ## Known Issues & Technical Debt
 
+### Migrate Tests to Vitest
+
+**Context:** Currently using Node.js built-in test runner which lacks features needed for robust CI:
+
+- [ ] **No bail-on-failure support** - Node.js test runner continues running all tests even after failures, wasting CI time
+- [ ] **Limited configuration** - No easy way to set timeouts, retries, or platform-specific behavior
+- [ ] **No watch mode** - Development iteration is slower without file watching
+
+**Benefits of Vitest:**
+- `--bail` flag to stop on first failure
+- Built-in retry support for flaky tests
+- Better TypeScript support
+- Watch mode for development
+- Compatible with existing test structure (minimal migration effort)
+
+**Migration plan:**
+- [ ] Install vitest as dev dependency
+- [ ] Update test scripts in package.json
+- [ ] Migrate test files (should be mostly compatible)
+- [ ] Add vitest.config.ts with platform-specific settings
+- [ ] Consider separate configs for unit vs integration tests
+
 ### Design Review: Database Tracking (`databases` array)
 
 **Context:** Container configs store a `databases` array to track which databases exist within each container. This was added to show users what databases they have without querying the server. However, it creates a sync problem when databases are created/dropped/renamed outside of SpinDB (via SQL, scripts, etc.).
