@@ -350,6 +350,10 @@ export function detectLocationType(location: string): {
     return { type: 'connection', inferredEngine: Engine.Valkey }
   }
 
+  if (location.startsWith('meilisearch://')) {
+    return { type: 'connection', inferredEngine: Engine.Meilisearch }
+  }
+
   if (existsSync(location)) {
     // Check if it's a SQLite file (case-insensitive)
     const lowerLocation = location.toLowerCase()
@@ -375,7 +379,7 @@ export const createCommand = new Command('create')
   .argument('[name]', 'Container name')
   .option(
     '-e, --engine <engine>',
-    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, redis, valkey)',
+    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant, meilisearch)',
   )
   .option('--db-version <version>', 'Database version (e.g., 17, 8.0)')
   .option('-d, --database <database>', 'Database name')

@@ -152,6 +152,22 @@
       "clientTools": ["qdrant"],
       "licensing": "Apache-2.0",
       "notes": "Vector similarity search engine. REST API on port 6333, gRPC on 6334. Uses collections instead of databases."
+    },
+    "meilisearch": {
+      "displayName": "Meilisearch",
+      "icon": "🔍",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["1.33.1"],
+      "defaultVersion": "1.33.1",
+      "defaultPort": 7700,
+      "runtime": "server",
+      "queryLanguage": "rest",
+      "connectionScheme": "http",
+      "superuser": null,
+      "clientTools": ["meilisearch"],
+      "licensing": "MIT",
+      "notes": "Full-text search engine. REST API on port 7700. Uses indexes instead of databases."
     }
   }
 }

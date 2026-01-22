@@ -13,6 +13,7 @@
 | 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
 | 🧭 **Qdrant** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (vector similarity search) |
+| 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (full-text search) |
 
 ## Planned
 
@@ -129,6 +130,26 @@
   - No shell connection - displays API endpoint info
   - Apache-2.0 license
 
+### 🔍 Meilisearch
+
+- **Status:** ✅ Complete
+- **Versions:** 1
+- **Data location:** `~/.spindb/containers/meilisearch/{name}/`
+- **Process:** Server process (`meilisearch`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** REST API (no traditional shell, use curl or API clients)
+- **Backup format:** `.snapshot` (Meilisearch native snapshot)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `meilisearch` binary
+- **Implementation notes:**
+  - Full-text search engine
+  - Uses REST API only (port 7700)
+  - Indexes instead of traditional databases
+  - CLI flags for configuration (no config file)
+  - Dashboard at root URL (/)
+  - Health check at /health
+  - MIT license
+
 ---
 
 ## Backup Format Summary
@@ -143,6 +164,7 @@
 | MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
 | ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL for portability |
 | Qdrant | N/A | `.snapshot` (native) | Snapshot for backups |
+| Meilisearch | N/A | `.snapshot` (native) | Snapshot for backups |
 
 ---
 
@@ -158,6 +180,7 @@
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
 | Universal | - | `usql` | Works with all SQL databases |
 | Qdrant | REST API | - | Use curl or HTTP clients |
+| Meilisearch | REST API | - | Use curl or HTTP clients |
 
 ---
 
@@ -184,6 +207,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🪶 | SQLite |
 | 🏠 | ClickHouse |
 | 🧭 | Qdrant |
+| 🔍 | Meilisearch |
 
 ---
 

@@ -26,6 +26,7 @@ export const TEST_PORTS = {
   valkey: { base: 6410, clone: 6412, renamed: 6411 },
   clickhouse: { base: 9050, clone: 9052, renamed: 9051 },
   qdrant: { base: 6350, clone: 6352, renamed: 6351 },
+  meilisearch: { base: 7710, clone: 7712, renamed: 7711 },
 }
 
 /**
@@ -529,6 +530,22 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('Qdrant health check failed or timed out')
         }
+      } else if (engine === Engine.Meilisearch) {
+        // Use fetch to ping Meilisearch REST API with timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/health`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('Meilisearch health check failed or timed out')
+        }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -668,6 +685,9 @@ export function getConnectionString(
     return `clickhouse://default@127.0.0.1:${port}/${database}`
   }
   if (engine === Engine.Qdrant) {
+    return `http://127.0.0.1:${port}`
+  }
+  if (engine === Engine.Meilisearch) {
     return `http://127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -821,4 +841,138 @@ export async function runScriptSQL(
     sql,
     database,
   })
+}
+
+// Meilisearch helper functions
+
+/**
+ * Get the number of indexes in Meilisearch
+ */
+export async function getMeilisearchIndexCount(port: number): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/indexes`)
+    const data = (await response.json()) as { results?: unknown[] }
+    return data.results?.length || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Create an index in Meilisearch
+ */
+export async function createMeilisearchIndex(
+  port: number,
+  uid: string,
+  primaryKey = 'id',
+): Promise<{ success: boolean; taskUid?: number }> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/indexes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid,
+        primaryKey,
+      }),
+    })
+    // Meilisearch returns 202 Accepted for async tasks
+    if (response.status === 202 || response.ok) {
+      const data = (await response.json()) as { taskUid?: number }
+      return { success: true, taskUid: data.taskUid }
+    }
+    return { success: false }
+  } catch {
+    return { success: false }
+  }
+}
+
+/**
+ * Wait for a Meilisearch task to complete
+ */
+export async function waitForMeilisearchTask(
+  port: number,
+  taskUid: number,
+  timeoutMs = 30000,
+): Promise<boolean> {
+  const startTime = Date.now()
+  const checkInterval = 200
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/tasks/${taskUid}`)
+      const task = (await response.json()) as { status?: string }
+      if (task.status === 'succeeded') {
+        return true
+      }
+      if (task.status === 'failed') {
+        return false
+      }
+    } catch {
+      // Ignore errors and keep waiting
+    }
+    await new Promise((resolve) => setTimeout(resolve, checkInterval))
+  }
+  return false
+}
+
+/**
+ * Delete an index in Meilisearch
+ */
+export async function deleteMeilisearchIndex(
+  port: number,
+  uid: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/indexes/${uid}`, {
+      method: 'DELETE',
+    })
+    return response.status === 202 || response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the document count in a Meilisearch index
+ */
+export async function getMeilisearchDocumentCount(
+  port: number,
+  indexUid: string,
+): Promise<number> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/indexes/${indexUid}/stats`,
+    )
+    const data = (await response.json()) as { numberOfDocuments?: number }
+    return data.numberOfDocuments || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Insert documents into a Meilisearch index
+ */
+export async function insertMeilisearchDocuments(
+  port: number,
+  indexUid: string,
+  documents: Array<Record<string, unknown>>,
+): Promise<{ success: boolean; taskUid?: number }> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/indexes/${indexUid}/documents`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(documents),
+      },
+    )
+    if (response.status === 202 || response.ok) {
+      const data = (await response.json()) as { taskUid?: number }
+      return { success: true, taskUid: data.taskUid }
+    }
+    return { success: false }
+  } catch {
+    return { success: false }
+  }
 }

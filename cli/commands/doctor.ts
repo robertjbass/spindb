@@ -197,14 +197,21 @@ async function checkSqliteRegistry(): Promise<HealthCheckResult> {
 async function checkBinaries(): Promise<HealthCheckResult> {
   try {
     const engines = getSupportedEngines()
+
+    // Run all engine checks in parallel for better performance (especially on Windows)
+    const engineChecks = await Promise.all(
+      engines.map(async (engine) => {
+        const statuses = await checkEngineDependencies(engine)
+        const installed = statuses.filter((s) => s.installed).length
+        const total = statuses.length
+        return { engine, installed, total }
+      }),
+    )
+
     const results: string[] = []
     let hasWarning = false
 
-    for (const engine of engines) {
-      const statuses = await checkEngineDependencies(engine)
-      const installed = statuses.filter((s) => s.installed).length
-      const total = statuses.length
-
+    for (const { engine, installed, total } of engineChecks) {
       if (installed < total) {
         hasWarning = true
         results.push(`${engine}: ${installed}/${total} tools installed`)
@@ -253,12 +260,13 @@ export const doctorCommand = new Command('doctor')
   .description('Check system health and fix common issues')
   .option('--json', 'Output as JSON')
   .action(async (options: { json?: boolean }) => {
-    const checks = [
-      await checkConfiguration(),
-      await checkContainers(),
-      await checkSqliteRegistry(),
-      await checkBinaries(),
-    ]
+    // Run all checks in parallel for better performance
+    const checks = await Promise.all([
+      checkConfiguration(),
+      checkContainers(),
+      checkSqliteRegistry(),
+      checkBinaries(),
+    ])
 
     if (options.json) {
       // Strip action handlers for JSON output

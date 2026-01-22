@@ -41,6 +41,7 @@ import {
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledQdrantEngine,
+  type InstalledMeilisearchEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -56,6 +57,7 @@ import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
 import { duckdbBinaryManager } from '../../engines/duckdb/binary-manager'
 import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager'
 import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
+import { meilisearchBinaryManager } from '../../engines/meilisearch/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -443,6 +445,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const qdrantEngines = engines.filter(
     (e): e is InstalledQdrantEngine => e.engine === 'qdrant',
   )
+  const meilisearchEngines = engines.filter(
+    (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -577,6 +582,21 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // Meilisearch rows
+  for (const engine of meilisearchEngines) {
+    const icon = ENGINE_ICONS.meilisearch
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} meilisearch`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -647,6 +667,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  Qdrant: ${qdrantEngines.length} version(s), ${formatBytes(totalQdrantSize)}`,
+      ),
+    )
+  }
+  if (meilisearchEngines.length > 0) {
+    const totalMeilisearchSize = meilisearchEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  Meilisearch: ${meilisearchEngines.length} version(s), ${formatBytes(totalMeilisearchSize)}`,
       ),
     )
   }
@@ -1422,9 +1453,53 @@ enginesCommand
         return
       }
 
+      if (['meilisearch', 'meili', 'ms'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('Meilisearch requires a version (e.g., 1)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.Meilisearch)
+
+        const spinner = createSpinner(`Checking Meilisearch ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `Meilisearch ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`Meilisearch ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`Meilisearch ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: meilisearchPlatform, arch: meilisearchArch } =
+          platformService.getPlatformInfo()
+        const meilisearchFullVersion = meilisearchBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'meilisearch',
+          version: meilisearchFullVersion,
+          platform: meilisearchPlatform,
+          arch: meilisearchArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for Meilisearch - it's a REST API server
+        // with no CLI client tools (uses HTTP protocols instead)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant, meilisearch`,
         ),
       )
       process.exit(1)

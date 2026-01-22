@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -112,7 +112,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Format names are engine-specific semantic names (no longer sql|dump for all)
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -125,6 +125,7 @@ declare -A BACKUP_FORMATS=(
   [sqlite]="sql|binary"
   [duckdb]="sql|binary"
   [qdrant]="snapshot"
+  [meilisearch]="snapshot"
 )
 
 # Results tracking
@@ -308,6 +309,10 @@ insert_seed_data() {
       # Qdrant uses REST API - seed data via curl (no seed file needed)
       seed_file=""
       ;;
+    meilisearch)
+      # Meilisearch uses REST API - seed data via curl (no seed file needed)
+      seed_file=""
+      ;;
   esac
 
   # Qdrant uses REST API for seeding, not a file
@@ -336,6 +341,39 @@ insert_seed_data() {
       LAST_ERROR="Failed to insert Qdrant points"
       return 1
     fi
+    return 0
+  fi
+
+  # Meilisearch uses REST API for seeding, not a file
+  if [ "$engine" = "meilisearch" ]; then
+    local meili_port
+    meili_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+    if [ -z "$meili_port" ]; then
+      LAST_ERROR="Could not get Meilisearch port"
+      return 1
+    fi
+    # Create index
+    if ! curl -sf -X POST "http://127.0.0.1:${meili_port}/indexes" \
+      -H 'Content-Type: application/json' \
+      -d '{"uid": "test_documents", "primaryKey": "id"}' &>/dev/null; then
+      LAST_ERROR="Failed to create Meilisearch index"
+      return 1
+    fi
+    # Wait for index creation
+    sleep 2
+    # Insert test documents (3 documents to match EXPECTED_COUNTS[meilisearch]=3)
+    if ! curl -sf -X POST "http://127.0.0.1:${meili_port}/indexes/test_documents/documents" \
+      -H 'Content-Type: application/json' \
+      -d '[
+        {"id": 1, "title": "Hello World", "content": "First document"},
+        {"id": 2, "title": "Second Post", "content": "Second document"},
+        {"id": 3, "title": "Third Entry", "content": "Third document"}
+      ]' &>/dev/null; then
+      LAST_ERROR="Failed to insert Meilisearch documents"
+      return 1
+    fi
+    # Wait for indexing
+    sleep 2
     return 0
   fi
 
@@ -400,6 +438,15 @@ get_data_count() {
         echo "$output" | jq -r '.result.points_count' 2>/dev/null
       fi
       ;;
+    meilisearch)
+      # Meilisearch uses REST API - get document count via curl
+      local meili_port
+      meili_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$meili_port" ]; then
+        output=$(curl -sf "http://127.0.0.1:${meili_port}/indexes/test_documents/stats" 2>/dev/null)
+        echo "$output" | jq -r '.numberOfDocuments' 2>/dev/null
+      fi
+      ;;
   esac
 }
 
@@ -454,6 +501,9 @@ get_backup_extension() {
       echo ".sql" ;;
     qdrant)
       # Qdrant uses snapshot format for backups
+      echo ".snapshot" ;;
+    meilisearch)
+      # Meilisearch uses snapshot format for backups
       echo ".snapshot" ;;
     *)
       echo ".$format" ;;
@@ -934,6 +984,14 @@ run_test() {
         query_ok=true
       fi
       ;;
+    meilisearch)
+      # Meilisearch uses REST API - check health endpoint via curl
+      local meili_port
+      meili_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$meili_port" ] && curl -sf "http://127.0.0.1:${meili_port}/health" &>/dev/null; then
+        query_ok=true
+      fi
+      ;;
   esac
 
   if [ "$query_ok" = "false" ]; then
@@ -1001,19 +1059,19 @@ run_test() {
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 5: Backup/Restore Tests
   # ─────────────────────────────────────────────────────────────────────────
-  # TODO: Qdrant backup/restore in Docker E2E tests
-  # Qdrant uses REST API for snapshot-based backup/restore which requires:
-  # 1. Creating snapshot via POST /collections/{name}/snapshots
+  # TODO: Qdrant/Meilisearch backup/restore in Docker E2E tests
+  # Qdrant and Meilisearch use REST API for snapshot-based backup/restore which requires:
+  # 1. Creating snapshot via REST API
   # 2. Waiting for snapshot creation to complete
   # 3. Downloading snapshot file
-  # 4. Restoring via snapshot recovery endpoint
-  # For now, skip backup/restore tests for Qdrant in Docker E2E.
-  # The integration tests (pnpm test:qdrant) cover backup/restore functionality.
-  if [ "$engine" = "qdrant" ]; then
+  # 4. Restoring via snapshot recovery/import
+  # For now, skip backup/restore tests for these engines in Docker E2E.
+  # The integration tests (pnpm test:qdrant, pnpm test:meilisearch) cover backup/restore.
+  if [ "$engine" = "qdrant" ] || [ "$engine" = "meilisearch" ]; then
     log_section "Backup/Restore: snapshot format"
     log_step "Backup/restore tests"
     log_step_result "skip"
-    log_detail "Qdrant backup/restore uses REST API (tested in integration tests)"
+    log_detail "$engine backup/restore uses REST API (tested in integration tests)"
     test_details="smoke test (backup/restore skipped)"
   else
     local formats="${BACKUP_FORMATS[$engine]}"
@@ -1499,7 +1557,7 @@ else
 fi
 
 # Run engine tests
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

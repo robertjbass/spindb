@@ -4,7 +4,7 @@ import inquirer from 'inquirer'
 import { containerManager } from '../../../core/container-manager'
 import { promptInstallDependencies } from '../../ui/prompts'
 import { header, uiError } from '../../ui/theme'
-import { getInstalledEngines } from '../../helpers'
+import { hasAnyInstalledEngines } from '../../helpers'
 import {
   handleCreate,
   handleList,
@@ -22,9 +22,9 @@ async function showMainMenu(): Promise<void> {
   console.log()
 
   // Parallelize container list and engine checks for faster startup
-  const [containers, engines] = await Promise.all([
+  const [containers, hasEngines] = await Promise.all([
     containerManager.list(),
-    getInstalledEngines(),
+    hasAnyInstalledEngines(),
   ])
 
   const running = containers.filter((c) => c.status === 'running').length
@@ -41,9 +41,6 @@ async function showMainMenu(): Promise<void> {
   const canStop = running > 0
   const canRestore = running > 0
   const canClone = containers.length > 0
-
-  // Check if any engines are installed
-  const hasEngines = engines.length > 0
 
   // If containers exist, show List first; otherwise show Create first
   const hasContainers = containers.length > 0

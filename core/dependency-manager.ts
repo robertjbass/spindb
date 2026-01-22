@@ -69,6 +69,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'clickhouse',
   // Qdrant
   'qdrant',
+  // Meilisearch
+  'meilisearch',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

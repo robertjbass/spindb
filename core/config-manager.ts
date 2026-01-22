@@ -62,6 +62,8 @@ const VALKEY_TOOLS: BinaryTool[] = ['valkey-server', 'valkey-cli']
 
 const QDRANT_TOOLS: BinaryTool[] = ['qdrant']
 
+const MEILISEARCH_TOOLS: BinaryTool[] = ['meilisearch']
+
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
 const DUCKDB_TOOLS: BinaryTool[] = ['duckdb']
@@ -82,6 +84,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...REDIS_TOOLS,
   ...VALKEY_TOOLS,
   ...QDRANT_TOOLS,
+  ...MEILISEARCH_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -97,6 +100,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.Redis]: REDIS_TOOLS,
   [Engine.Valkey]: VALKEY_TOOLS,
   [Engine.Qdrant]: QDRANT_TOOLS,
+  [Engine.Meilisearch]: MEILISEARCH_TOOLS,
 }
 
 export class ConfigManager {
@@ -326,6 +330,7 @@ export class ConfigManager {
     mongodb: { found: BinaryTool[]; missing: BinaryTool[] }
     redis: { found: BinaryTool[]; missing: BinaryTool[] }
     valkey: { found: BinaryTool[]; missing: BinaryTool[] }
+    meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
     // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
@@ -370,6 +375,10 @@ export class ConfigManager {
       valkey: {
         found: found.filter((t) => VALKEY_TOOLS.includes(t)),
         missing: missing.filter((t) => VALKEY_TOOLS.includes(t)),
+      },
+      meilisearch: {
+        found: found.filter((t) => MEILISEARCH_TOOLS.includes(t)),
+        missing: missing.filter((t) => MEILISEARCH_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
@@ -561,6 +570,7 @@ export {
   REDIS_TOOLS,
   VALKEY_TOOLS,
   QDRANT_TOOLS,
+  MEILISEARCH_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

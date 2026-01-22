@@ -50,13 +50,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -147,13 +147,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -190,7 +190,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run PostgreSQL integration tests
-        run: pnpm test:pg
+        run: pnpm test:engine postgresql
         timeout-minutes: 15
 
   # ============================================
@@ -211,13 +211,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -252,7 +252,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run MariaDB integration tests
-        run: pnpm test:mariadb
+        run: pnpm test:engine mariadb
         timeout-minutes: 15
 
   # ============================================
@@ -273,13 +273,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -332,7 +332,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run MySQL integration tests
-        run: pnpm test:mysql
+        run: pnpm test:engine mysql
         timeout-minutes: 15
 
   # ============================================
@@ -353,13 +353,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -393,7 +393,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run SQLite integration tests
-        run: pnpm test:sqlite
+        run: pnpm test:engine sqlite
         timeout-minutes: 10
 
   # ============================================
@@ -414,13 +414,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -454,7 +454,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run DuckDB integration tests
-        run: pnpm test:duckdb
+        run: pnpm test:engine duckdb
         timeout-minutes: 10
 
   # ============================================
@@ -475,13 +475,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -515,7 +515,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run MongoDB integration tests
-        run: pnpm test:mongodb
+        run: pnpm test:engine mongodb
         timeout-minutes: 15
 
   # ============================================
@@ -536,13 +536,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -577,7 +577,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Redis integration tests
-        run: pnpm test:redis
+        run: pnpm test:engine redis
         timeout-minutes: 15
 
       - name: Show Redis logs on failure (Windows)
@@ -620,13 +620,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -661,7 +661,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Valkey integration tests
-        run: pnpm test:valkey
+        run: pnpm test:engine valkey
         timeout-minutes: 15
 
       - name: Show Valkey logs on failure (Windows)
@@ -705,10 +705,10 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
@@ -743,7 +743,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run ClickHouse integration tests
-        run: pnpm test:clickhouse
+        run: pnpm test:engine clickhouse
         timeout-minutes: 15
 
       - name: Show ClickHouse logs on failure
@@ -782,13 +782,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -822,7 +822,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Qdrant integration tests
-        run: pnpm test:qdrant
+        run: pnpm test:engine qdrant
         timeout-minutes: 15
 
       - name: Show Qdrant logs on failure (Unix)
@@ -854,6 +854,100 @@ jobs:
           }
 
   # ============================================
+  # Meilisearch Integration Tests
+  # Uses SpinDB to download and manage Meilisearch binaries from hostdb
+  # NOTE: Meilisearch is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # WINDOWS: Backup/restore tests are skipped due to upstream Meilisearch bug
+  #          with snapshot creation (page size alignment issue). Other tests pass.
+  # ============================================
+  test-meilisearch:
+    name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Meilisearch binaries - these are downloaded from hostdb
+      - name: Cache Meilisearch binaries
+        uses: actions/cache@v4
+        id: meilisearch-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-meilisearch-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Meilisearch binaries
+      - name: Install Meilisearch via SpinDB
+        run: pnpm start engines download meilisearch 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Meilisearch integration tests
+        run: pnpm test:engine meilisearch
+        timeout-minutes: 15
+
+      - name: Show Meilisearch logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== Meilisearch container directories ==="
+          ls -la ~/.spindb/containers/meilisearch/ 2>/dev/null || echo "No Meilisearch containers directory"
+          echo ""
+          echo "=== Meilisearch binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i meilisearch || echo "No Meilisearch binaries found"
+          echo ""
+          echo "=== Meilisearch log files ==="
+          find ~/.spindb/containers/meilisearch -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show Meilisearch logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Meilisearch container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\meilisearch" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Meilisearch binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "meilisearch*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Meilisearch log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\meilisearch" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -870,13 +964,13 @@ jobs:
             icon: 🐧
             label: Ubuntu 24
           - os: macos-15
-            icon: 🍎
+            icon: 💻
             label: Intel
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -933,10 +1027,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1078,7 +1172,7 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
     steps:
       - name: Checkout
@@ -1204,10 +1298,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1301,10 +1395,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Checkout
@@ -1407,10 +1501,10 @@ jobs:
             icon: 🐧
             label: Ubuntu
           - os: macos-14
-            icon: 🍎
+            icon: 💻
             label: ARM
           - os: windows-latest
-            icon: 🪟
+            icon: 🔷
             label: Windows
     steps:
       - name: Setup pnpm
@@ -1550,42 +1644,42 @@ jobs:
   #
   #     - name: Run PostgreSQL tests
   #       if: matrix.test == 'postgresql'
-  #       run: pnpm test:pg
+  #       run: pnpm test:engine postgresql
   #       timeout-minutes: 15
   #
   #     - name: Run MySQL tests
   #       if: matrix.test == 'mysql'
-  #       run: pnpm test:mysql
+  #       run: pnpm test:engine mysql
   #       timeout-minutes: 15
   #
   #     - name: Run MariaDB tests
   #       if: matrix.test == 'mariadb'
-  #       run: pnpm test:mariadb
+  #       run: pnpm test:engine mariadb
   #       timeout-minutes: 15
   #
   #     - name: Run SQLite tests
   #       if: matrix.test == 'sqlite'
-  #       run: pnpm test:sqlite
+  #       run: pnpm test:engine sqlite
   #       timeout-minutes: 10
   #
   #     - name: Run MongoDB tests
   #       if: matrix.test == 'mongodb'
-  #       run: pnpm test:mongodb
+  #       run: pnpm test:engine mongodb
   #       timeout-minutes: 15
   #
   #     - name: Run Redis tests
   #       if: matrix.test == 'redis'
-  #       run: pnpm test:redis
+  #       run: pnpm test:engine redis
   #       timeout-minutes: 15
   #
   #     - name: Run Valkey tests
   #       if: matrix.test == 'valkey'
-  #       run: pnpm test:valkey
+  #       run: pnpm test:engine valkey
   #       timeout-minutes: 15
   #
   #     - name: Run ClickHouse tests
   #       if: matrix.test == 'clickhouse'
-  #       run: pnpm test:clickhouse
+  #       run: pnpm test:engine clickhouse
   #       timeout-minutes: 15
 
   # ============================================
@@ -1607,6 +1701,7 @@ jobs:
         test-valkey,
         test-clickhouse,
         test-qdrant,
+        test-meilisearch,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -1663,6 +1758,10 @@ jobs:
           fi
           if [ "${{ needs.test-qdrant.result }}" != "success" ]; then
             echo "Qdrant tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-meilisearch.result }}" != "success" ]; then
+            echo "Meilisearch tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
