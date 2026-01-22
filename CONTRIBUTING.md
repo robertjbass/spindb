@@ -17,11 +17,13 @@ Please run both commands before opening a PR.
 ## Running Tests
 
 ```bash
-pnpm test           # All tests (unit + integration)
-pnpm test:unit      # Unit tests only
-pnpm test:pg        # PostgreSQL integration
-pnpm test:mysql     # MySQL integration
-pnpm test:sqlite    # SQLite integration
+pnpm test              # All tests (unit + integration)
+pnpm test:unit         # Unit tests only
+pnpm test:engine       # All integration tests
+pnpm test:engine pg    # PostgreSQL integration (aliases: postgres, postgresql)
+pnpm test:engine mysql # MySQL integration
+pnpm test:engine mongo # MongoDB integration (alias: mongodb)
+pnpm test:engine --help # Show all available engines and aliases
 ```
 
 ### Why `--test-concurrency=1`?

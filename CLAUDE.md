@@ -272,13 +272,13 @@ spindb databases sync <container> <old> <new>  # Sync after rename
 ### Running Tests
 
 ```bash
-pnpm test:unit      # Unit only
-pnpm test:pg        # PostgreSQL integration
-pnpm test:mysql     # MySQL integration
-pnpm test:duckdb    # DuckDB integration
-pnpm test:qdrant    # Qdrant integration
-pnpm test:meilisearch  # Meilisearch integration
-pnpm test:docker    # Docker Linux E2E (all engines)
+pnpm test:unit              # Unit tests only
+pnpm test:engine            # All integration tests
+pnpm test:engine postgres   # PostgreSQL integration (aliases: pg, postgresql)
+pnpm test:engine mysql      # MySQL integration
+pnpm test:engine mongo      # MongoDB integration (aliases: mongodb)
+pnpm test:engine meilisearch # Meilisearch integration (aliases: meili, ms)
+pnpm test:docker            # Docker Linux E2E (all engines)
 pnpm test:docker -- clickhouse  # Single engine
 pnpm test:docker -- qdrant      # Qdrant (uses curl for REST API tests)
 pnpm test:docker -- meilisearch # Meilisearch (uses curl for REST API tests)
@@ -315,15 +315,16 @@ Always run these verification steps before considering a task complete:
 
 ```bash
 pnpm lint          # TypeScript compilation + ESLint
-pnpm test:unit     # Unit tests (711+ tests)
+pnpm test:unit     # Unit tests (740+ tests)
 ```
 
 If modifying a specific engine, also run its integration tests:
 ```bash
-pnpm test:pg       # PostgreSQL
-pnpm test:mysql    # MySQL
-pnpm test:qdrant   # Qdrant
-# etc.
+pnpm test:engine postgres    # PostgreSQL (aliases: pg, postgresql)
+pnpm test:engine mysql       # MySQL
+pnpm test:engine qdrant      # Qdrant (aliases: qd)
+pnpm test:engine meilisearch # Meilisearch (aliases: meili, ms)
+# Run `pnpm test:engine --help` for all options
 ```
 
 ### After Adding Any Feature

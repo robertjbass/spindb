@@ -190,7 +190,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run PostgreSQL integration tests
-        run: pnpm test:pg
+        run: pnpm test:engine postgresql
         timeout-minutes: 15
 
   # ============================================
@@ -252,7 +252,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run MariaDB integration tests
-        run: pnpm test:mariadb
+        run: pnpm test:engine mariadb
         timeout-minutes: 15
 
   # ============================================
@@ -332,7 +332,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run MySQL integration tests
-        run: pnpm test:mysql
+        run: pnpm test:engine mysql
         timeout-minutes: 15
 
   # ============================================
@@ -393,7 +393,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run SQLite integration tests
-        run: pnpm test:sqlite
+        run: pnpm test:engine sqlite
         timeout-minutes: 10
 
   # ============================================
@@ -454,7 +454,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run DuckDB integration tests
-        run: pnpm test:duckdb
+        run: pnpm test:engine duckdb
         timeout-minutes: 10
 
   # ============================================
@@ -515,7 +515,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run MongoDB integration tests
-        run: pnpm test:mongodb
+        run: pnpm test:engine mongodb
         timeout-minutes: 15
 
   # ============================================
@@ -577,7 +577,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Redis integration tests
-        run: pnpm test:redis
+        run: pnpm test:engine redis
         timeout-minutes: 15
 
       - name: Show Redis logs on failure (Windows)
@@ -661,7 +661,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Valkey integration tests
-        run: pnpm test:valkey
+        run: pnpm test:engine valkey
         timeout-minutes: 15
 
       - name: Show Valkey logs on failure (Windows)
@@ -743,7 +743,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run ClickHouse integration tests
-        run: pnpm test:clickhouse
+        run: pnpm test:engine clickhouse
         timeout-minutes: 15
 
       - name: Show ClickHouse logs on failure
@@ -822,7 +822,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Qdrant integration tests
-        run: pnpm test:qdrant
+        run: pnpm test:engine qdrant
         timeout-minutes: 15
 
       - name: Show Qdrant logs on failure (Unix)
@@ -914,7 +914,7 @@ jobs:
         run: pnpm start engines list
 
       - name: Run Meilisearch integration tests
-        run: pnpm test:meilisearch
+        run: pnpm test:engine meilisearch
         timeout-minutes: 15
 
       - name: Show Meilisearch logs on failure (Unix)
@@ -1642,42 +1642,42 @@ jobs:
   #
   #     - name: Run PostgreSQL tests
   #       if: matrix.test == 'postgresql'
-  #       run: pnpm test:pg
+  #       run: pnpm test:engine postgresql
   #       timeout-minutes: 15
   #
   #     - name: Run MySQL tests
   #       if: matrix.test == 'mysql'
-  #       run: pnpm test:mysql
+  #       run: pnpm test:engine mysql
   #       timeout-minutes: 15
   #
   #     - name: Run MariaDB tests
   #       if: matrix.test == 'mariadb'
-  #       run: pnpm test:mariadb
+  #       run: pnpm test:engine mariadb
   #       timeout-minutes: 15
   #
   #     - name: Run SQLite tests
   #       if: matrix.test == 'sqlite'
-  #       run: pnpm test:sqlite
+  #       run: pnpm test:engine sqlite
   #       timeout-minutes: 10
   #
   #     - name: Run MongoDB tests
   #       if: matrix.test == 'mongodb'
-  #       run: pnpm test:mongodb
+  #       run: pnpm test:engine mongodb
   #       timeout-minutes: 15
   #
   #     - name: Run Redis tests
   #       if: matrix.test == 'redis'
-  #       run: pnpm test:redis
+  #       run: pnpm test:engine redis
   #       timeout-minutes: 15
   #
   #     - name: Run Valkey tests
   #       if: matrix.test == 'valkey'
-  #       run: pnpm test:valkey
+  #       run: pnpm test:engine valkey
   #       timeout-minutes: 15
   #
   #     - name: Run ClickHouse tests
   #       if: matrix.test == 'clickhouse'
-  #       run: pnpm test:clickhouse
+  #       run: pnpm test:engine clickhouse
   #       timeout-minutes: 15
 
   # ============================================

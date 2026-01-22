@@ -1315,7 +1315,7 @@ test-yourengine:
       run: pnpm start engines list
 
     - name: Run YourEngine integration tests
-      run: pnpm test:yourengine
+      run: pnpm test:engine yourengine
       timeout-minutes: 15
 ```
 
@@ -2214,7 +2214,7 @@ An engine implementation is **complete** when ALL of the following pass:
 
 1. **Lint**: `pnpm lint` passes with no errors
 2. **Unit Tests**: `pnpm test:unit` passes (includes new engine tests)
-3. **Integration Tests**: `pnpm test:{engine}` passes (14+ tests)
+3. **Integration Tests**: `pnpm test:engine {engine}` passes (14+ tests)
 4. **All Integration Tests**: `pnpm test:integration` passes (no regressions)
 
 ### CI Verification
