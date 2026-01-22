@@ -3,7 +3,7 @@
  * Supports snapshot-based restore using Meilisearch's snapshot files
  */
 
-import { copyFile, open, mkdir, rm } from 'fs/promises'
+import { copyFile, open, mkdir, rm, writeFile } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join, basename } from 'path'
 import { paths } from '../../config/paths'
@@ -81,8 +81,8 @@ export type RestoreOptions = {
  * Restore from snapshot backup
  *
  * IMPORTANT: Meilisearch should be stopped before snapshot restore.
- * The snapshot file is copied to the snapshots directory, then Meilisearch should be restarted.
- * Meilisearch can be started with --import-snapshot flag to restore from the snapshot.
+ * The snapshot file is copied to the snapshots directory, and a marker file
+ * is created so that the next start() call will use --import-snapshot flag.
  */
 async function restoreSnapshotBackup(
   backupPath: string,
@@ -92,7 +92,12 @@ async function restoreSnapshotBackup(
   const targetDir =
     dataDir ||
     paths.getContainerDataPath(containerName, { engine: 'meilisearch' })
-  const snapshotsDir = join(targetDir, 'snapshots')
+  // Snapshots directory must be sibling of data, not inside it
+  // IMPORTANT: Meilisearch fails if --snapshot-dir is inside --db-path
+  const containerDir = paths.getContainerPath(containerName, {
+    engine: 'meilisearch',
+  })
+  const snapshotsDir = join(containerDir, 'snapshots')
   const snapshotName = basename(backupPath)
   const targetPath = join(snapshotsDir, snapshotName)
 
@@ -121,11 +126,15 @@ async function restoreSnapshotBackup(
     await rm(tasksDir, { recursive: true, force: true })
   }
 
+  // Write marker file so start() knows to use --import-snapshot
+  // The marker contains the path to the snapshot to import
+  const markerPath = join(containerDir, 'pending-snapshot-import')
+  await writeFile(markerPath, targetPath, 'utf-8')
+  logDebug(`Created pending import marker: ${markerPath}`)
+
   return {
     format: 'snapshot',
-    stdout:
-      `Restored snapshot to ${targetPath}. Restart Meilisearch with --import-snapshot flag to load the data.\n` +
-      `Or restart normally and the snapshot will be available for import.`,
+    stdout: `Restored snapshot to ${targetPath}. Next start will auto-import the snapshot.`,
     code: 0,
   }
 }

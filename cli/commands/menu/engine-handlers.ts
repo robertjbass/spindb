@@ -36,7 +36,10 @@ export async function handleEngines(): Promise<void> {
   console.log(header('Installed Engines'))
   console.log()
 
+  const spinner = createSpinner('Loading installed engines...')
+  spinner.start()
   const engines = await getInstalledEngines()
+  spinner.stop()
 
   if (engines.length === 0) {
     console.log(uiInfo('No engines installed yet.'))

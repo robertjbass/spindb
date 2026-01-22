@@ -60,9 +60,10 @@ export async function createBackup(
     await waitForTask(port, taskUid, BACKUP_TIMEOUT_MS)
   }
 
-  // The snapshot is stored in the data directory's snapshots folder
-  const dataDir = paths.getContainerDataPath(name, { engine: 'meilisearch' })
-  const snapshotsDir = join(dataDir, 'snapshots')
+  // The snapshot is stored in the snapshots folder (sibling of data, not inside it)
+  // IMPORTANT: Meilisearch fails if --snapshot-dir is inside --db-path
+  const containerDir = paths.getContainerPath(name, { engine: 'meilisearch' })
+  const snapshotsDir = join(containerDir, 'snapshots')
 
   // Wait for the snapshot file to appear
   const maxWait = 60000 // 60 seconds
@@ -89,16 +90,25 @@ export async function createBackup(
     )
   }
 
-  // Wait for file to be fully written
+  // Wait for file to be fully written (size stabilizes)
   let lastSize = -1
+  let stabilized = false
   const writeWaitStart = Date.now()
   while (Date.now() - writeWaitStart < 30000) {
     const currentStats = await stat(snapshotPath)
     if (currentStats.size > 0 && currentStats.size === lastSize) {
+      stabilized = true
       break
     }
     lastSize = currentStats.size
     await new Promise((r) => setTimeout(r, 500))
+  }
+
+  if (!stabilized) {
+    throw new Error(
+      `Meilisearch snapshot did not stabilize within 30 seconds. ` +
+        `File may still be writing: ${snapshotPath}`,
+    )
   }
 
   // Copy snapshot to output path
@@ -170,8 +180,9 @@ export async function listSnapshots(container: ContainerConfig): Promise<
   }>
 > {
   const { name } = container
-  const dataDir = paths.getContainerDataPath(name, { engine: 'meilisearch' })
-  const snapshotsDir = join(dataDir, 'snapshots')
+  // Snapshots directory is sibling of data, not inside it
+  const containerDir = paths.getContainerPath(name, { engine: 'meilisearch' })
+  const snapshotsDir = join(containerDir, 'snapshots')
 
   if (!existsSync(snapshotsDir)) {
     return []

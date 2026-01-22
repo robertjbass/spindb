@@ -12,11 +12,7 @@ import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { meilisearchBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
-import {
-  normalizeVersion,
-  SUPPORTED_MAJOR_VERSIONS,
-  MEILISEARCH_VERSION_MAP,
-} from './version-maps'
+import { normalizeVersion, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 import { fetchAvailableVersions as fetchHostdbVersions } from './hostdb-releases'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -171,12 +167,11 @@ export class MeilisearchEngine extends BaseEngine {
 
   // Resolves version string to full version (e.g., '1' -> '1.33.1')
   resolveFullVersion(version: string): string {
-    // Check if already a full version (has at least two dots)
-    if (/^\d+\.\d+\.\d+$/.test(version)) {
-      return version
-    }
-    // It's a major version, resolve using version map
-    return MEILISEARCH_VERSION_MAP[version] || `${version}.0.0`
+    // Use normalizeVersion which handles all cases:
+    // - Maps known versions (1 -> 1.33.1, 1.33 -> 1.33.1)
+    // - Returns full versions as-is (1.33.1 -> 1.33.1)
+    // - Returns unknown versions as-is with a warning (avoids invalid 4-part versions)
+    return normalizeVersion(version)
   }
 
   // Get the path where binaries for a version would be installed
@@ -404,6 +399,18 @@ export class MeilisearchEngine extends BaseEngine {
       await mkdir(snapshotsDir, { recursive: true })
     }
 
+    // Check for pending snapshot import (created by restore operation)
+    const importMarkerPath = join(containerDir, 'pending-snapshot-import')
+    let pendingSnapshotImport: string | null = null
+    if (existsSync(importMarkerPath)) {
+      try {
+        pendingSnapshotImport = (await readFile(importMarkerPath, 'utf-8')).trim()
+        logDebug(`Found pending snapshot import: ${pendingSnapshotImport}`)
+      } catch {
+        logDebug('Failed to read pending snapshot import marker')
+      }
+    }
+
     onProgress?.({ stage: 'starting', message: 'Starting Meilisearch...' })
 
     // Build command arguments
@@ -419,6 +426,12 @@ export class MeilisearchEngine extends BaseEngine {
       '--snapshot-dir',
       snapshotsDir,
     ]
+
+    // If there's a pending snapshot import, add the flag
+    if (pendingSnapshotImport && existsSync(pendingSnapshotImport)) {
+      args.push('--import-snapshot', pendingSnapshotImport)
+      logDebug(`Will import snapshot: ${pendingSnapshotImport}`)
+    }
 
     logDebug(`Starting meilisearch with args: ${args.join(' ')}`)
 
@@ -514,6 +527,15 @@ export class MeilisearchEngine extends BaseEngine {
 
           if (ready) {
             settled = true
+            // Clean up pending snapshot import marker if it exists
+            if (existsSync(importMarkerPath)) {
+              try {
+                await unlink(importMarkerPath)
+                logDebug('Cleaned up pending snapshot import marker')
+              } catch {
+                // Non-fatal
+              }
+            }
             resolve({
               port,
               connectionString: this.getConnectionString(container),
@@ -570,6 +592,15 @@ export class MeilisearchEngine extends BaseEngine {
     const ready = await this.waitForReady(port)
 
     if (ready) {
+      // Clean up pending snapshot import marker if it exists
+      if (existsSync(importMarkerPath)) {
+        try {
+          await unlink(importMarkerPath)
+          logDebug('Cleaned up pending snapshot import marker')
+        } catch {
+          // Non-fatal
+        }
+      }
       return {
         port,
         connectionString: this.getConnectionString(container),

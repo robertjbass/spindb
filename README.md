@@ -165,7 +165,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 | Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
 |---------|--------|--------|--------|--------------|-------|
 | No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Multiple DB engines | ✅ 10 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
+| Multiple DB engines | ✅ 11 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
 | CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
 | Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
@@ -179,7 +179,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 ## Supported Databases
 
-SpinDB supports **10 database engines** with **multiple versions** for each:
+SpinDB supports **11 database engines** with **multiple versions** for each:
 
 | Engine | Type | Versions | Default Port | Query Language |
 |--------|------|----------|--------------|----------------|
@@ -193,10 +193,11 @@ SpinDB supports **10 database engines** with **multiple versions** for each:
 | 🔷 **Valkey** | Key-Value Store | 8, 9 | 6379 | Redis commands |
 | 🏠 **ClickHouse** | Columnar OLAP | 25.12 | 9000 (TCP), 8123 (HTTP) | SQL (ClickHouse dialect) |
 | 🧭 **Qdrant** | Vector Search | 1 | 6333 (HTTP), 6334 (gRPC) | REST API |
+| 🔍 **Meilisearch** | Full-Text Search | 1 | 7700 | REST API |
 
 ### Engine Categories
 
-**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant):
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch):
 - Start/stop server processes
 - Bind to localhost ports
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
@@ -571,6 +572,7 @@ SpinDB supports enhanced database shells with auto-completion, syntax highlighti
 | Valkey | `valkey-cli` | `iredis` (compatible) | - |
 | ClickHouse | `clickhouse-client` | - | `usql` |
 | Qdrant | REST API | - | - |
+| Meilisearch | REST API | - | - |
 
 Install and use in one command:
 
@@ -670,6 +672,16 @@ spindb backup mydb --format sql         # SQL dump (only format)
 spindb backup mydb --format snapshot    # Snapshot (only format)
 ```
 
+### Meilisearch
+
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| snapshot | `.snapshot` | REST API | Full instance snapshot |
+
+```bash
+spindb backup mydb --format snapshot    # Snapshot (only format)
+```
+
 ---
 
 ## Advanced Features
@@ -710,6 +722,7 @@ spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production
 | Valkey | `redis://` | `redis://:password@host:6379/0` |
 | ClickHouse | `clickhouse://` or `http://` | `clickhouse://default:pass@host:8123/db` |
 | Qdrant | `qdrant://` or `http://` | `http://host:6333?api_key=KEY` |
+| Meilisearch | `meilisearch://` or `http://` | `http://host:7700?api_key=KEY` |
 
 ### Multi-Version Support
 
@@ -780,7 +793,6 @@ The following engines may be added based on community interest:
 | Engine | Type | Notes |
 |--------|------|-------|
 | **libSQL** | Embedded relational | SQLite fork with replication |
-| **Meilisearch** | Search engine | Developer-friendly full-text search |
 | **OpenSearch** | Search engine | Elasticsearch alternative |
 | **InfluxDB** | Time-series | Metrics and IoT data |
 | **Neo4j** | Graph database | Relationships and network data |
@@ -791,7 +803,7 @@ The following engines may be added based on community interest:
 
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
-- **Qdrant** - Uses REST API instead of CLI shell. Access via HTTP at the configured port.
+- **Qdrant & Meilisearch** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---
 
@@ -866,7 +878,7 @@ See [FEATURE.md](FEATURE.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 10 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 11 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 

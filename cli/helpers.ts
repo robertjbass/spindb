@@ -814,6 +814,25 @@ export function compareVersions(a: string, b: string): number {
   return 0
 }
 
+/**
+ * Lightweight check to see if any engines are installed.
+ * Only reads the bin directory - no subprocess spawning or size calculations.
+ * Use this for UI decisions where you only need to know if engines exist.
+ */
+export async function hasAnyInstalledEngines(): Promise<boolean> {
+  const binDir = paths.bin
+  if (!existsSync(binDir)) {
+    return false
+  }
+
+  try {
+    const entries = await readdir(binDir, { withFileTypes: true })
+    return entries.some((entry) => entry.isDirectory())
+  } catch {
+    return false
+  }
+}
+
 export async function getInstalledEngines(): Promise<InstalledEngine[]> {
   // Parallelize all engine checks for faster startup
   const [
