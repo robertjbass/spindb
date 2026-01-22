@@ -63,7 +63,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
     if (engine === 'redis' || engine === 'valkey') {
       return { type: 'Command', lower: 'command' }
     }
-    if (engine === 'mongodb' || engine === 'qdrant') {
+    if (engine === 'mongodb' || engine === 'qdrant' || engine === 'meilisearch') {
       return { type: 'Script', lower: 'script' }
     }
     return { type: 'SQL', lower: 'sql' }

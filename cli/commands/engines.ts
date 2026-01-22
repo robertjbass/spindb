@@ -56,6 +56,7 @@ import { sqliteBinaryManager } from '../../engines/sqlite/binary-manager'
 import { duckdbBinaryManager } from '../../engines/duckdb/binary-manager'
 import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager'
 import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
+import { meilisearchBinaryManager } from '../../engines/meilisearch/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -1422,9 +1423,53 @@ enginesCommand
         return
       }
 
+      if (['meilisearch', 'meili', 'ms'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('Meilisearch requires a version (e.g., 1)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.Meilisearch)
+
+        const spinner = createSpinner(`Checking Meilisearch ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `Meilisearch ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`Meilisearch ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`Meilisearch ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: meilisearchPlatform, arch: meilisearchArch } =
+          platformService.getPlatformInfo()
+        const meilisearchFullVersion = meilisearchBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'meilisearch',
+          version: meilisearchFullVersion,
+          platform: meilisearchPlatform,
+          arch: meilisearchArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for Meilisearch - it's a REST API server
+        // with no CLI client tools (uses HTTP protocols instead)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant, meilisearch`,
         ),
       )
       process.exit(1)

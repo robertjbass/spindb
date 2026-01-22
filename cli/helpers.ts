@@ -164,6 +164,16 @@ export type InstalledQdrantEngine = {
   source: 'downloaded'
 }
 
+export type InstalledMeilisearchEngine = {
+  engine: 'meilisearch'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -175,6 +185,7 @@ export type InstalledEngine =
   | InstalledValkeyEngine
   | InstalledClickHouseEngine
   | InstalledQdrantEngine
+  | InstalledMeilisearchEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -735,6 +746,62 @@ async function getInstalledQdrantEngines(): Promise<InstalledQdrantEngine[]> {
   return engines
 }
 
+// Get Meilisearch version from binary path
+async function getMeilisearchVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const meilisearchPath = join(binPath, 'bin', `meilisearch${ext}`)
+  if (!existsSync(meilisearchPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(meilisearchPath, ['--version'])
+    // Parse output like "meilisearch 1.33.1" or "v1.33.1"
+    const match = stdout.match(/(?:meilisearch\s+)?v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed Meilisearch engines from downloaded binaries
+async function getInstalledMeilisearchEngines(): Promise<InstalledMeilisearchEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledMeilisearchEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('meilisearch-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'meilisearch-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getMeilisearchVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'meilisearch',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -760,6 +827,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     valkeyEngines,
     clickhouseEngines,
     qdrantEngines,
+    meilisearchEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -771,6 +839,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledValkeyEngines(),
     getInstalledClickHouseEngines(),
     getInstalledQdrantEngines(),
+    getInstalledMeilisearchEngines(),
   ])
 
   return [
@@ -784,6 +853,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...valkeyEngines,
     ...clickhouseEngines,
     ...qdrantEngines,
+    ...meilisearchEngines,
   ]
 }
 
@@ -797,4 +867,5 @@ export {
   getInstalledValkeyEngines,
   getInstalledClickHouseEngines,
   getInstalledQdrantEngines,
+  getInstalledMeilisearchEngines,
 }

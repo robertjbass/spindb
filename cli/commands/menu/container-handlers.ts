@@ -100,10 +100,11 @@ export async function handleCreate(): Promise<'main' | void> {
   // Step 4: Database name (defaults to container name, sanitized)
   // Redis and Valkey use numbered databases 0-15, so skip prompt and default to "0"
   // Qdrant uses collections (not databases), so default to "default"
+  // Meilisearch uses indexes (not databases), so default to "default"
   let database: string
   if (engine === 'redis' || engine === 'valkey') {
     database = '0'
-  } else if (engine === 'qdrant') {
+  } else if (engine === 'qdrant' || engine === 'meilisearch') {
     database = 'default'
   } else {
     database = await promptDatabaseName(name, engine)
@@ -636,8 +637,8 @@ export async function showContainerSubmenu(
   })
 
   // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
-  // Qdrant uses REST API and doesn't support script files - hide the option entirely
-  if (config.engine !== 'qdrant') {
+  // Qdrant and Meilisearch use REST API and don't support script files - hide the option entirely
+  if (config.engine !== 'qdrant' && config.engine !== 'meilisearch') {
     const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
     // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, others use SQL
     const runScriptLabel =

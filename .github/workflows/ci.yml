@@ -854,6 +854,98 @@ jobs:
           }
 
   # ============================================
+  # Meilisearch Integration Tests
+  # Uses SpinDB to download and manage Meilisearch binaries from hostdb
+  # NOTE: Meilisearch is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # ============================================
+  test-meilisearch:
+    name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 🍎
+            label: Intel
+          - os: macos-14
+            icon: 🍎
+            label: ARM
+          - os: windows-latest
+            icon: 🪟
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Meilisearch binaries - these are downloaded from hostdb
+      - name: Cache Meilisearch binaries
+        uses: actions/cache@v4
+        id: meilisearch-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-meilisearch-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Meilisearch binaries
+      - name: Install Meilisearch via SpinDB
+        run: pnpm start engines download meilisearch 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Meilisearch integration tests
+        run: pnpm test:meilisearch
+        timeout-minutes: 15
+
+      - name: Show Meilisearch logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== Meilisearch container directories ==="
+          ls -la ~/.spindb/containers/meilisearch/ 2>/dev/null || echo "No Meilisearch containers directory"
+          echo ""
+          echo "=== Meilisearch binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i meilisearch || echo "No Meilisearch binaries found"
+          echo ""
+          echo "=== Meilisearch log files ==="
+          find ~/.spindb/containers/meilisearch -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show Meilisearch logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Meilisearch container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\meilisearch" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Meilisearch binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "meilisearch*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== Meilisearch log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\meilisearch" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -1607,6 +1699,7 @@ jobs:
         test-valkey,
         test-clickhouse,
         test-qdrant,
+        test-meilisearch,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -1663,6 +1756,10 @@ jobs:
           fi
           if [ "${{ needs.test-qdrant.result }}" != "success" ]; then
             echo "Qdrant tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-meilisearch.result }}" != "success" ]; then
+            echo "Meilisearch tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

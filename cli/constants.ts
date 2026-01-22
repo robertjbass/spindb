@@ -11,6 +11,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   valkey: '🔷',
   clickhouse: '🏠',
   qdrant: '🧭',
+  meilisearch: '🔍',
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

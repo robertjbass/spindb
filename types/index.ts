@@ -27,6 +27,7 @@ export enum Engine {
   Valkey = 'valkey',
   ClickHouse = 'clickhouse',
   Qdrant = 'qdrant',
+  Meilisearch = 'meilisearch',
 }
 
 // Supported operating systems (matches Node.js process.platform)
@@ -57,6 +58,7 @@ export const ALL_ENGINES = [
   Engine.Valkey,
   Engine.ClickHouse,
   Engine.Qdrant,
+  Engine.Meilisearch,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -180,6 +182,7 @@ export type RedisFormat = 'text' | 'rdb'
 export type ValkeyFormat = 'text' | 'rdb'
 export type ClickHouseFormat = 'sql'
 export type QdrantFormat = 'snapshot'
+export type MeilisearchFormat = 'snapshot'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -193,6 +196,7 @@ export type BackupFormatType =
   | ValkeyFormat
   | ClickHouseFormat
   | QdrantFormat
+  | MeilisearchFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -206,6 +210,7 @@ type EngineFormatMap = {
   [Engine.Valkey]: ValkeyFormat
   [Engine.ClickHouse]: ClickHouseFormat
   [Engine.Qdrant]: QdrantFormat
+  [Engine.Meilisearch]: MeilisearchFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -305,6 +310,8 @@ export type BinaryTool =
   | 'clickhouse'
   // Qdrant tools
   | 'qdrant'
+  // Meilisearch tools
+  | 'meilisearch'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -374,6 +381,8 @@ export type SpinDBConfig = {
     clickhouse?: BinaryConfig
     // Qdrant tools
     qdrant?: BinaryConfig
+    // Meilisearch tools
+    meilisearch?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

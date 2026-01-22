@@ -20,6 +20,7 @@ import {
   type ValkeyFormat,
   type ClickHouseFormat,
   type QdrantFormat,
+  type MeilisearchFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -49,6 +50,7 @@ export const BACKUP_FORMATS: {
   [Engine.Valkey]: EngineBackupFormats<ValkeyFormat>
   [Engine.ClickHouse]: EngineBackupFormats<ClickHouseFormat>
   [Engine.Qdrant]: EngineBackupFormats<QdrantFormat>
+  [Engine.Meilisearch]: EngineBackupFormats<MeilisearchFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -212,6 +214,18 @@ export const BACKUP_FORMATS: {
         extension: '.snapshot',
         label: '.snapshot',
         description: 'Qdrant snapshot - full database backup',
+        spinnerLabel: 'snapshot',
+      },
+    },
+    supportsFormatChoice: false, // Only snapshot format supported
+    defaultFormat: 'snapshot',
+  },
+  [Engine.Meilisearch]: {
+    formats: {
+      snapshot: {
+        extension: '.snapshot',
+        label: '.snapshot',
+        description: 'Meilisearch snapshot - full database backup',
         spinnerLabel: 'snapshot',
       },
     },

@@ -8,6 +8,7 @@ import { redisEngine } from './redis'
 import { valkeyEngine } from './valkey'
 import { clickhouseEngine } from './clickhouse'
 import { qdrantEngine } from './qdrant'
+import { meilisearchEngine } from './meilisearch'
 import type { BaseEngine } from './base-engine'
 import type { EngineInfo } from '../types'
 
@@ -41,6 +42,10 @@ export const engines: Record<string, BaseEngine> = {
   // Qdrant and aliases
   qdrant: qdrantEngine,
   qd: qdrantEngine,
+  // Meilisearch and aliases
+  meilisearch: meilisearchEngine,
+  meili: meilisearchEngine,
+  ms: meilisearchEngine,
 }
 
 // Get an engine by name

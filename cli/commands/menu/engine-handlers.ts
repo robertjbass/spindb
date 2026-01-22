@@ -19,6 +19,7 @@ import {
   type InstalledValkeyEngine,
   type InstalledClickHouseEngine,
   type InstalledQdrantEngine,
+  type InstalledMeilisearchEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -66,6 +67,9 @@ export async function handleEngines(): Promise<void> {
       (e): e is InstalledClickHouseEngine => e.engine === 'clickhouse',
     ),
     ...engines.filter((e): e is InstalledQdrantEngine => e.engine === 'qdrant'),
+    ...engines.filter(
+      (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
+    ),
   ]
 
   // Calculate total size

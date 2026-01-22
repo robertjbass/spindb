@@ -359,6 +359,11 @@ export async function handleRestore(): Promise<void> {
                   return 'Connection string must start with qdrant://, http://, or https://'
                 }
                 break
+              case 'meilisearch':
+                if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+                  return 'Connection string must start with meilisearch://, http://, or https://'
+                }
+                break
               default:
                 // PostgreSQL and others
                 if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
@@ -1089,6 +1094,11 @@ export async function handleRestoreForContainer(
             case 'qdrant':
               if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
                 return 'Connection string must start with qdrant://, http://, or https://'
+              }
+              break
+            case 'meilisearch':
+              if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+                return 'Connection string must start with meilisearch://, http://, or https://'
               }
               break
             default:

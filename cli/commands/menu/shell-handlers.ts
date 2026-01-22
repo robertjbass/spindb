@@ -200,6 +200,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'meilisearch') {
+    // Meilisearch uses REST API, open dashboard in browser
+    defaultShellName = 'Web Dashboard'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -240,8 +247,19 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       name: `ℹ Show API info`,
       value: 'api-info',
     })
+  } else if (config.engine === 'meilisearch') {
+    // Meilisearch: dashboard is built-in at root URL
+    choices.push({
+      name: `◎ Open Dashboard in browser`,
+      value: 'default',
+    })
+    // Always show API info option for Meilisearch
+    choices.push({
+      name: `ℹ Show API info`,
+      value: 'api-info',
+    })
   } else {
-    // Non-Qdrant engines: show default shell option
+    // Non-Qdrant/Meilisearch engines: show default shell option
     choices.push({
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
@@ -272,12 +290,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, and Qdrant
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, Qdrant, and Meilisearch
   const isNonSqlEngine =
     config.engine === 'redis' ||
     config.engine === 'valkey' ||
     config.engine === 'mongodb' ||
-    config.engine === 'qdrant'
+    config.engine === 'qdrant' ||
+    config.engine === 'meilisearch'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -328,16 +347,26 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  // Handle Qdrant API info display
+  // Handle Qdrant/Meilisearch API info display
   if (shellChoice === 'api-info') {
     console.log()
-    console.log(chalk.cyan('Qdrant REST API:'))
-    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
-    console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
-    console.log()
-    console.log(chalk.gray('Example curl commands:'))
-    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
-    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
+    if (config.engine === 'qdrant') {
+      console.log(chalk.cyan('Qdrant REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
+    } else if (config.engine === 'meilisearch') {
+      console.log(chalk.cyan('Meilisearch REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/indexes`))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/stats`))
+    }
     console.log()
     await pressEnterToContinue()
     return
@@ -769,6 +798,15 @@ async function launchShell(
     // Qdrant: Open Web UI in browser (only shown when Web UI is installed)
     const dashboardUrl = `http://127.0.0.1:${config.port}/dashboard`
     console.log(uiInfo(`Opening Qdrant Dashboard in browser...`))
+    console.log(chalk.gray(`  ${dashboardUrl}`))
+    console.log()
+    openInBrowser(dashboardUrl)
+    await pressEnterToContinue()
+    return
+  } else if (config.engine === 'meilisearch') {
+    // Meilisearch: Open dashboard in browser (served at root URL)
+    const dashboardUrl = `http://127.0.0.1:${config.port}`
+    console.log(uiInfo(`Opening Meilisearch Dashboard in browser...`))
     console.log(chalk.gray(`  ${dashboardUrl}`))
     console.log()
     openInBrowser(dashboardUrl)

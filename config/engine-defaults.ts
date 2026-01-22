@@ -161,6 +161,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // Qdrant uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable for vector DB
   },
+  [Engine.Meilisearch]: {
+    defaultVersion: '1',
+    defaultPort: 7700, // HTTP REST API port
+    portRange: { start: 7700, end: 7800 },
+    latestVersion: '1',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'http',
+    logFileName: 'meilisearch.log',
+    pidFileName: 'meilisearch.pid',
+    dataSubdir: 'data',
+    clientTools: [], // Meilisearch uses REST API, no separate CLI tools
+    maxConnections: 0, // Not applicable for search engine
+  },
 }
 
 /**

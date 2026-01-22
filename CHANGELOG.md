@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-01-22
+
+### Added
+- **Meilisearch engine support** - Full integration for Meilisearch full-text search engine:
+  - REST API-based engine (like Qdrant)
+  - Default port 7700, version 1.33.1 from hostdb
+  - Snapshot-based backup/restore via REST API (`POST /snapshots`)
+  - Dashboard opens at root URL (/) in browser via `spindb connect`
+  - Uses "indexes" instead of traditional databases (index UID auto-converted from container name with dashes → underscores)
+  - Health check at `/health` endpoint
+  - Aliases: `meilisearch`, `meili`, `ms`
+  - Full cross-platform support (macOS, Linux, Windows)
+
 ## [0.21.3] - 2026-01-21
 
 ### Fixed

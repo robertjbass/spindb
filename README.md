@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 10 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 11 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -48,7 +48,7 @@ One consistent interface across SQL databases, document stores, key-value stores
 
 ```bash
 # Same commands work for ANY database
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|redis|valkey|clickhouse|sqlite|duckdb|qdrant]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -70,7 +70,7 @@ spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
 
 ## Platform Coverage
 
-SpinDB works across **10 database engines** and **5 platform architectures** with a **single, consistent API**.
+SpinDB works across **11 database engines** and **5 platform architectures** with a **single, consistent API**.
 
 | Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
 |----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
@@ -84,8 +84,9 @@ SpinDB works across **10 database engines** and **5 platform architectures** wit
 | 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔍 **Meilisearch** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**49 combinations. One CLI. Zero configuration.**
+**54 combinations. One CLI. Zero configuration.**
 
 ---
 
