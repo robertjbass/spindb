@@ -394,9 +394,10 @@ export class ContainerManager {
 
   // Removes a directory with retry logic for Windows EBUSY errors.
   // Windows may hold file handles after process termination.
+  // Windows can hold file locks for 30+ seconds due to antivirus/indexing.
   private async safeRemoveDirectory(dirPath: string): Promise<void> {
-    const maxRetries = isWindows() ? 10 : 1
-    const retryDelay = 1000 // 1 second between retries
+    const maxRetries = isWindows() ? 30 : 1
+    const retryDelay = 2000 // 2 seconds between retries
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -615,12 +616,13 @@ export class ContainerManager {
   // Moves a directory atomically when possible (same filesystem).
   // Falls back to copy+delete for cross-filesystem moves.
   // On Windows, retries on EBUSY errors (file handles held after process termination).
+  // Windows can hold file locks for 30+ seconds due to antivirus/indexing.
   private async atomicMoveDirectory(
     sourcePath: string,
     targetPath: string,
   ): Promise<void> {
-    const maxRetries = isWindows() ? 10 : 1
-    const retryDelay = 1000 // 1 second between retries
+    const maxRetries = isWindows() ? 30 : 1
+    const retryDelay = 2000 // 2 seconds between retries
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {

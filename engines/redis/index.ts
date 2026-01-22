@@ -43,10 +43,16 @@ const ENGINE = 'redis'
 
 /**
  * Escape a Redis key for use in CLI commands.
- * Escapes double quotes to prevent command injection.
+ * Escapes backslashes, double quotes, and control characters to prevent
+ * command injection and ensure keys are parsed correctly by the CLI.
  */
 function escapeKeyForCommand(key: string): string {
-  return key.replace(/"/g, '\\"')
+  return key
+    .replace(/\\/g, '\\\\')   // Backslashes first to prevent double-escaping
+    .replace(/"/g, '\\"')     // Double quotes
+    .replace(/\n/g, '\\n')    // Newline
+    .replace(/\r/g, '\\r')    // Carriage return
+    .replace(/\t/g, '\\t')    // Tab
 }
 const engineDef = getEngineDefaults(ENGINE)
 
@@ -98,10 +104,15 @@ function toCygwinPath(windowsPath: string): string {
 
 /**
  * Parse a Redis connection string
- * Format: redis://[user:password@]host[:port][/database]
+ * Supported schemes:
+ * - redis://   (plain, no TLS)
+ * - rediss://  (TLS enabled)
+ *
+ * Format: scheme://[user:password@]host[:port][/database]
  *
  * Examples:
  * - redis://localhost:6379
+ * - rediss://secure.host:6379/0  (TLS)
  * - redis://:password@localhost:6379/0
  * - redis://user:password@remote.host:6380/5
  */
@@ -111,15 +122,24 @@ function parseRedisConnectionString(connectionString: string): {
   username: string | undefined
   password: string | undefined
   database: number
+  tls: boolean
 } {
   let url: URL
 
-  // Ensure the connection string starts with redis://
   const normalized = connectionString.trim()
-  if (!normalized.startsWith('redis://')) {
+
+  // Check for valid schemes
+  const validSchemes = ['redis://', 'rediss://']
+  const hasValidScheme = validSchemes.some((scheme) =>
+    normalized.startsWith(scheme),
+  )
+
+  if (!hasValidScheme) {
     throw new Error(
       `Invalid Redis connection string: ${connectionString}\n` +
-        'Expected format: redis://[user:password@]host:port[/database]',
+        'Expected format: scheme://[user:password@]host:port[/database]\n' +
+        'Supported schemes: redis://, rediss://\n' +
+        '(Use rediss:// for TLS connections)',
     )
   }
 
@@ -128,9 +148,12 @@ function parseRedisConnectionString(connectionString: string): {
   } catch {
     throw new Error(
       `Invalid Redis connection string: ${connectionString}\n` +
-        'Expected format: redis://[user:password@]host:port[/database]',
+        'Expected format: scheme://[user:password@]host:port[/database]',
     )
   }
+
+  // Determine TLS based on scheme
+  const tls = normalized.startsWith('rediss://')
 
   const host = url.hostname || 'localhost'
   const port = parseInt(url.port, 10) || 6379
@@ -157,7 +180,7 @@ function parseRedisConnectionString(connectionString: string): {
     }
   }
 
-  return { host, port, username, password, database }
+  return { host, port, username, password, database, tls }
 }
 
 // Build a redis-cli command for inline command execution
@@ -1005,11 +1028,11 @@ export class RedisEngine extends BaseEngine {
     }
 
     // Parse connection string
-    const { host, port, username, password, database } =
+    const { host, port, username, password, database, tls } =
       parseRedisConnectionString(connectionString)
 
     logDebug(
-      `Connecting to remote Redis at ${host}:${port} (db: ${database})`,
+      `Connecting to remote Redis at ${host}:${port} (db: ${database}, tls: ${tls})`,
     )
 
     // Build CLI args for remote connection (password passed via env var for security)
@@ -1018,6 +1041,10 @@ export class RedisEngine extends BaseEngine {
       // Redis 6.0+ ACL: pass username via --user flag
       if (username) {
         args.push('--user', username)
+      }
+      // Enable TLS for rediss:// scheme
+      if (tls) {
+        args.push('--tls')
       }
       // Note: password is passed via REDISCLI_AUTH env var, not command line
       args.push('-n', String(database))

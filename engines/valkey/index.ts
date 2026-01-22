@@ -43,10 +43,16 @@ const ENGINE = 'valkey'
 
 /**
  * Escape a Valkey key for use in CLI commands.
- * Escapes double quotes to prevent command injection.
+ * Escapes backslashes, double quotes, and control characters to prevent
+ * command injection and ensure keys are parsed correctly by the CLI.
  */
 function escapeKeyForCommand(key: string): string {
-  return key.replace(/"/g, '\\"')
+  return key
+    .replace(/\\/g, '\\\\')   // Backslashes first to prevent double-escaping
+    .replace(/"/g, '\\"')     // Double quotes
+    .replace(/\n/g, '\\n')    // Newline
+    .replace(/\r/g, '\\r')    // Carriage return
+    .replace(/\t/g, '\\t')    // Tab
 }
 const engineDef = getEngineDefaults(ENGINE)
 
@@ -98,13 +104,19 @@ function toCygwinPath(windowsPath: string): string {
 
 /**
  * Parse a Valkey connection string
- * Format: redis://[user:password@]host[:port][/database]
- * Note: Uses redis:// scheme for compatibility (Valkey is Redis-compatible)
+ * Supported schemes:
+ * - redis://   (plain, no TLS)
+ * - rediss://  (TLS enabled)
+ * - valkey://  (plain, no TLS)
+ * - valkeys:// (TLS enabled)
+ *
+ * Format: scheme://[user:password@]host[:port][/database]
  *
  * Examples:
  * - redis://localhost:6379
- * - redis://:password@localhost:6379/0
- * - redis://user:password@remote.host:6380/5
+ * - rediss://secure.host:6379/0  (TLS)
+ * - valkey://localhost:6379
+ * - valkeys://secure.host:6379   (TLS)
  */
 function parseValkeyConnectionString(connectionString: string): {
   host: string
@@ -112,27 +124,47 @@ function parseValkeyConnectionString(connectionString: string): {
   username: string | undefined
   password: string | undefined
   database: number
+  tls: boolean
 } {
   let url: URL
 
-  // Ensure the connection string starts with redis:// (Valkey uses Redis protocol)
   const normalized = connectionString.trim()
-  if (!normalized.startsWith('redis://')) {
+
+  // Check for valid schemes
+  const validSchemes = ['redis://', 'rediss://', 'valkey://', 'valkeys://']
+  const hasValidScheme = validSchemes.some((scheme) =>
+    normalized.startsWith(scheme),
+  )
+
+  if (!hasValidScheme) {
     throw new Error(
       `Invalid Valkey connection string: ${connectionString}\n` +
-        'Expected format: redis://[user:password@]host:port[/database]\n' +
-        'Note: Valkey uses redis:// scheme for Redis protocol compatibility',
+        'Expected format: scheme://[user:password@]host:port[/database]\n' +
+        'Supported schemes: redis://, rediss://, valkey://, valkeys://\n' +
+        '(Use rediss:// or valkeys:// for TLS connections)',
     )
   }
 
+  // Normalize valkey(s):// to redis(s):// for URL parsing
+  let urlString = normalized
+  if (normalized.startsWith('valkeys://')) {
+    urlString = normalized.replace('valkeys://', 'rediss://')
+  } else if (normalized.startsWith('valkey://')) {
+    urlString = normalized.replace('valkey://', 'redis://')
+  }
+
   try {
-    url = new URL(normalized)
+    url = new URL(urlString)
   } catch {
     throw new Error(
       `Invalid Valkey connection string: ${connectionString}\n` +
-        'Expected format: redis://[user:password@]host:port[/database]',
+        'Expected format: scheme://[user:password@]host:port[/database]',
     )
   }
+
+  // Determine TLS based on original scheme
+  const tls =
+    normalized.startsWith('rediss://') || normalized.startsWith('valkeys://')
 
   const host = url.hostname || 'localhost'
   const port = parseInt(url.port, 10) || 6379
@@ -157,7 +189,7 @@ function parseValkeyConnectionString(connectionString: string): {
     }
   }
 
-  return { host, port, username, password, database }
+  return { host, port, username, password, database, tls }
 }
 
 // Build a valkey-cli command for inline command execution
@@ -1013,11 +1045,11 @@ export class ValkeyEngine extends BaseEngine {
     }
 
     // Parse connection string (uses redis:// for compatibility)
-    const { host, port, username, password, database } =
+    const { host, port, username, password, database, tls } =
       parseValkeyConnectionString(connectionString)
 
     logDebug(
-      `Connecting to remote Valkey at ${host}:${port} (db: ${database})`,
+      `Connecting to remote Valkey at ${host}:${port} (db: ${database}, tls: ${tls})`,
     )
 
     // Build CLI args for remote connection (password passed via env var for security)
@@ -1026,6 +1058,10 @@ export class ValkeyEngine extends BaseEngine {
       // ACL: pass username via --user flag (inherited from Redis 6.0+)
       if (username) {
         args.push('--user', username)
+      }
+      // Enable TLS for rediss:// or valkeys:// schemes
+      if (tls) {
+        args.push('--tls')
       }
       // Note: password is passed via REDISCLI_AUTH env var, not command line
       args.push('-n', String(database))

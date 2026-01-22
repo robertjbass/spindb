@@ -416,9 +416,10 @@ export class QdrantEngine extends BaseEngine {
 
     // Check if gRPC port is available (Qdrant uses HTTP port + 1 for gRPC)
     // On Windows, wait longer for ports to be released (TIME_WAIT state can persist)
-    const portWaitTimeout = isWindows() ? 15000 : 0
+    // Windows can hold ports for 30+ seconds after process termination
+    const portWaitTimeout = isWindows() ? 60000 : 0
     const portCheckStart = Date.now()
-    const portCheckInterval = 500
+    const portCheckInterval = 1000
 
     while (!(await portManager.isPortAvailable(grpcPort))) {
       if (Date.now() - portCheckStart >= portWaitTimeout) {

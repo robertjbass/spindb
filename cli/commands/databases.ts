@@ -86,7 +86,9 @@ databasesCommand
         process.exit(1)
       }
 
-      const databases = config.databases || [config.database]
+      // Merge config.databases with config.database to ensure primary is always included
+      const rawDatabases = config.databases || []
+      const databases = [...new Set([config.database, ...rawDatabases])]
       if (databases.includes(database)) {
         if (options.json) {
           console.log(JSON.stringify({
@@ -154,7 +156,9 @@ databasesCommand
         process.exit(1)
       }
 
-      const databases = config.databases || [config.database]
+      // Merge config.databases with config.database to ensure primary is always included
+      const rawDatabases = config.databases || []
+      const databases = [...new Set([config.database, ...rawDatabases])]
       if (!databases.includes(database)) {
         if (options.json) {
           console.log(JSON.stringify({
@@ -238,7 +242,9 @@ databasesCommand
       await containerManager.addDatabase(container, newName)
 
       // Remove old name if it was tracked
-      const databases = config.databases || [config.database]
+      // Merge config.databases with config.database to ensure primary is always included
+      const rawDatabases = config.databases || []
+      const databases = [...new Set([config.database, ...rawDatabases])]
       const wasTracked = databases.includes(oldName)
       if (wasTracked) {
         await containerManager.removeDatabase(container, oldName)

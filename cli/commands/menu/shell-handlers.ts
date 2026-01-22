@@ -3,7 +3,7 @@ import inquirer from 'inquirer'
 import { spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, rm } from 'fs/promises'
-import { join, dirname, resolve } from 'path'
+import { join, dirname, resolve, sep } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
   isUsqlInstalled,
@@ -208,12 +208,14 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstallValue = 'install-pgcli'
   }
 
-  // Check if Qdrant Web UI is installed
+  // Check if Qdrant Web UI is installed by verifying actual Web UI files exist
+  // (not just an empty static directory)
   let qdrantWebUiInstalled = false
   if (config.engine === 'qdrant') {
     const containerDir = paths.getContainerPath(config.name, { engine: 'qdrant' })
     const staticDir = join(containerDir, 'static')
-    qdrantWebUiInstalled = existsSync(staticDir)
+    // Check for index.html which is always present in a valid Web UI install
+    qdrantWebUiInstalled = existsSync(join(staticDir, 'index.html'))
   }
 
   const choices: Array<
@@ -592,8 +594,9 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
         if (!relativePath) continue
 
         // Zip-slip protection: ensure resolved path is within staticDir
+        // Use path.sep for platform-safe comparison (backslash on Windows, forward slash on Unix)
         const targetPath = resolve(staticDir, relativePath)
-        if (!targetPath.startsWith(resolvedStaticDir + '/')) {
+        if (!targetPath.startsWith(resolvedStaticDir + sep)) {
           // Path traversal attempt - skip this entry
           continue
         }

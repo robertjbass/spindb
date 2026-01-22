@@ -19,7 +19,7 @@
     "test:valkey": "node --import tsx --test --experimental-test-isolation=none tests/integration/valkey.test.ts",
     "test:clickhouse": "node --import tsx --test --experimental-test-isolation=none tests/integration/clickhouse.test.ts",
     "test:duckdb": "node --import tsx --test --experimental-test-isolation=none tests/integration/duckdb.test.ts",
-    "test:qdrant": "node --import tsx --test --experimental-test-isolation=none tests/integration/qdrant.test.ts",
+    "test:qdrant": "node --import tsx --test --test-bail --experimental-test-isolation=none tests/integration/qdrant.test.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",
     "test:cli": "node --import tsx --test --experimental-test-isolation=none tests/integration/cli-e2e.test.ts",
     "test:hostdb-sync": "node --import tsx --test --experimental-test-isolation=none tests/integration/hostdb-sync.test.ts",

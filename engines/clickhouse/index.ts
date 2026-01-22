@@ -996,7 +996,12 @@ export class ClickHouseEngine extends BaseEngine {
         )
 
         const dataResponse = await fetch(dataUrl.toString(), { headers })
-        if (dataResponse.ok) {
+        if (!dataResponse.ok) {
+          const errorText = await dataResponse.text()
+          logWarning(
+            `Could not export data for ${table}: HTTP ${dataResponse.status} - ${errorText}`,
+          )
+        } else {
           const data = (await dataResponse.text()).trim()
           if (data) {
             // SQLInsert format uses 'table' as placeholder, replace with actual table name
