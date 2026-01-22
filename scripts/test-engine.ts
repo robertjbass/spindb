@@ -86,18 +86,17 @@ function printUsage(): void {
   console.log('  engine    Engine name or alias (optional, runs all if omitted)')
   console.log('')
   console.log('Available engines:')
-  console.log(
-    '  postgresql (aliases: postgres, pg)     MySQL')
-  console.log(
-    '  mariadb                                SQLite (aliases: lite)')
-  console.log(
-    '  duckdb (aliases: duck)                 MongoDB (aliases: mongo)')
-  console.log(
-    '  redis                                  Valkey')
-  console.log(
-    '  clickhouse                             Qdrant (aliases: qd)')
-  console.log(
-    '  meilisearch (aliases: meili, ms)')
+  console.log('  postgresql    (aliases: postgres, pg)')
+  console.log('  mysql')
+  console.log('  mariadb')
+  console.log('  sqlite        (aliases: lite)')
+  console.log('  duckdb        (aliases: duck)')
+  console.log('  mongodb       (aliases: mongo)')
+  console.log('  redis')
+  console.log('  valkey')
+  console.log('  clickhouse')
+  console.log('  qdrant        (aliases: qd)')
+  console.log('  meilisearch   (aliases: meili, ms)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')

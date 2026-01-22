@@ -815,9 +815,28 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
+ * Known engine directory prefixes in the bin directory.
+ * Directory names follow the pattern: {engine}-{version}-{platform}-{arch}
+ */
+const ENGINE_PREFIXES = [
+  'postgresql-',
+  'mysql-',
+  'mariadb-',
+  'sqlite-',
+  'duckdb-',
+  'mongodb-',
+  'redis-',
+  'valkey-',
+  'clickhouse-',
+  'qdrant-',
+  'meilisearch-',
+] as const
+
+/**
  * Lightweight check to see if any engines are installed.
  * Only reads the bin directory - no subprocess spawning or size calculations.
  * Use this for UI decisions where you only need to know if engines exist.
+ * Validates directory names against known engine prefixes to avoid false positives.
  */
 export async function hasAnyInstalledEngines(): Promise<boolean> {
   const binDir = paths.bin
@@ -827,7 +846,12 @@ export async function hasAnyInstalledEngines(): Promise<boolean> {
 
   try {
     const entries = await readdir(binDir, { withFileTypes: true })
-    return entries.some((entry) => entry.isDirectory())
+    return entries.some(
+      (entry) =>
+        entry.isDirectory() &&
+        !entry.name.startsWith('.') &&
+        ENGINE_PREFIXES.some((prefix) => entry.name.startsWith(prefix)),
+    )
   } catch {
     return false
   }

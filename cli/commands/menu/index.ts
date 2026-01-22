@@ -42,8 +42,6 @@ async function showMainMenu(): Promise<void> {
   const canRestore = running > 0
   const canClone = containers.length > 0
 
-  // hasEngines is now directly returned from hasAnyInstalledEngines()
-
   // If containers exist, show List first; otherwise show Create first
   const hasContainers = containers.length > 0
 

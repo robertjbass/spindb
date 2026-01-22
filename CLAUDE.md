@@ -178,6 +178,21 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
 
 Missing entries cause `findBinary()` to skip config lookup and fall back to PATH search, which silently fails if the tool isn't in PATH.
 
+### Critical: ENGINE_PREFIXES
+
+When adding a new engine, the prefix **MUST** be added to `ENGINE_PREFIXES` in `cli/helpers.ts`:
+
+```ts
+const ENGINE_PREFIXES = [
+  'postgresql-',
+  'mysql-',
+  'meilisearch-',
+  // ... add new engine prefix here
+] as const
+```
+
+This array is used by `hasAnyInstalledEngines()` to detect whether any engine binaries have been downloaded. Missing entries cause the function to return `false` even when binaries exist, which affects UI decisions (e.g., showing "Manage engines" menu option).
+
 ### Type-Safe Engine Handling
 
 ```ts
@@ -302,8 +317,9 @@ See [FEATURE.md](FEATURE.md) for complete guide. Quick checklist:
 1. Create `engines/{engine}/` with index.ts, backup.ts, restore.ts, version-maps.ts
 2. Add to `Engine` enum, `ALL_ENGINES`, and `config/engines.json`
 3. Add tools to `KNOWN_BINARY_TOOLS` in dependency-manager.ts
-4. Add CI cache step in `.github/workflows/ci.yml`
-5. **Create fixtures** in `tests/fixtures/{engine}/seeds/` (REQUIRED for all engines)
+4. Add engine prefix to `ENGINE_PREFIXES` in cli/helpers.ts
+5. Add CI cache step in `.github/workflows/ci.yml`
+6. **Create fixtures** in `tests/fixtures/{engine}/seeds/` (REQUIRED for all engines)
    - SQL engines: `sample-db.sql` with 5 test_user records
    - Key-value engines: `sample-db.{ext}` with 6 keys
    - REST API engines: `README.md` documenting the API-based approach

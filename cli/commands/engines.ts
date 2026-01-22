@@ -41,6 +41,7 @@ import {
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledQdrantEngine,
+  type InstalledMeilisearchEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -444,6 +445,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const qdrantEngines = engines.filter(
     (e): e is InstalledQdrantEngine => e.engine === 'qdrant',
   )
+  const meilisearchEngines = engines.filter(
+    (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -578,6 +582,21 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // Meilisearch rows
+  for (const engine of meilisearchEngines) {
+    const icon = ENGINE_ICONS.meilisearch
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} meilisearch`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -648,6 +667,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  Qdrant: ${qdrantEngines.length} version(s), ${formatBytes(totalQdrantSize)}`,
+      ),
+    )
+  }
+  if (meilisearchEngines.length > 0) {
+    const totalMeilisearchSize = meilisearchEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  Meilisearch: ${meilisearchEngines.length} version(s), ${formatBytes(totalMeilisearchSize)}`,
       ),
     )
   }

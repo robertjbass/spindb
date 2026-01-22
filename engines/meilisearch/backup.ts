@@ -75,10 +75,25 @@ export async function createBackup(
       const files = await readdir(snapshotsDir)
       const snapshotFiles = files.filter((f) => f.endsWith('.snapshot'))
       if (snapshotFiles.length > 0) {
-        // Get the most recent snapshot
-        snapshotFiles.sort().reverse()
-        snapshotPath = join(snapshotsDir, snapshotFiles[0])
-        break
+        // Get the most recent snapshot by mtime (not lexicographic sort)
+        let newestFile: string | null = null
+        let newestMtime = 0
+        for (const file of snapshotFiles) {
+          const filePath = join(snapshotsDir, file)
+          try {
+            const fileStat = await stat(filePath)
+            if (fileStat.mtimeMs > newestMtime) {
+              newestMtime = fileStat.mtimeMs
+              newestFile = file
+            }
+          } catch {
+            // Skip files that can't be stat'd (may be deleted during iteration)
+          }
+        }
+        if (newestFile) {
+          snapshotPath = join(snapshotsDir, newestFile)
+          break
+        }
       }
     }
     await new Promise((r) => setTimeout(r, 500))

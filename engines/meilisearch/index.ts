@@ -37,6 +37,12 @@ const ENGINE = 'meilisearch'
 const engineDef = getEngineDefaults(ENGINE)
 
 /**
+ * Initial delay before checking if Meilisearch is ready after spawning.
+ * Windows requires a longer delay as process startup is slower.
+ */
+const START_CHECK_DELAY_MS = isWindows() ? 2000 : 500
+
+/**
  * Parse a Meilisearch connection string
  * Supported formats:
  * - http://host:port
@@ -566,7 +572,7 @@ export class MeilisearchEngine extends BaseEngine {
 
             reject(new Error(errorDetails))
           }
-        }, 500)
+        }, START_CHECK_DELAY_MS)
       })
     }
 
@@ -604,6 +610,32 @@ export class MeilisearchEngine extends BaseEngine {
       return {
         port,
         connectionString: this.getConnectionString(container),
+      }
+    }
+
+    // Clean up the orphaned detached process before throwing
+    if (proc.pid) {
+      try {
+        // Try to kill the process group first (POSIX)
+        process.kill(-proc.pid, 'SIGTERM')
+        logDebug(`Killed process group ${proc.pid}`)
+      } catch {
+        // Process group kill failed, try individual process
+        try {
+          process.kill(proc.pid, 'SIGTERM')
+          logDebug(`Killed process ${proc.pid}`)
+        } catch {
+          // Ignore - process may have already exited
+        }
+      }
+    }
+
+    // Clean up PID file
+    if (existsSync(pidFile)) {
+      try {
+        await unlink(pidFile)
+      } catch {
+        // Non-fatal
       }
     }
 

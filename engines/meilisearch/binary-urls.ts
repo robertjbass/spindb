@@ -1,6 +1,5 @@
-import { MEILISEARCH_VERSION_MAP } from './version-maps'
+import { normalizeVersion } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
-import { logDebug } from '../../core/error-handler'
 import { Engine, Platform, type Arch } from '../../types'
 
 /**
@@ -59,7 +58,7 @@ export function getBinaryUrl(
   }
 
   // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
-  const fullVersion = normalizeVersion(version, MEILISEARCH_VERSION_MAP)
+  const fullVersion = normalizeVersion(version)
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
   return buildHostdbUrl(Engine.Meilisearch, {
@@ -67,49 +66,4 @@ export function getBinaryUrl(
     hostdbPlatform,
     extension: ext,
   })
-}
-
-/**
- * Normalize version string to X.Y.Z format
- *
- * @param version - Version string (e.g., '1', '1.33', '1.33.1')
- * @param versionMap - Optional version map for major version lookup
- * @returns Normalized version (e.g., '1.33.1')
- */
-function normalizeVersion(
-  version: string,
-  versionMap: Record<string, string> = MEILISEARCH_VERSION_MAP,
-): string {
-  // Check if it's an exact key in the map (handles "1", "1.33", etc.)
-  if (versionMap[version]) {
-    return versionMap[version]
-  }
-
-  const parts = version.split('.')
-
-  // If it's already a full version (X.Y.Z), return as-is
-  if (parts.length === 3) {
-    return version
-  }
-
-  // For two-part versions (e.g., "1.33"), first try exact two-part key, then fall back to major
-  if (parts.length === 2) {
-    const twoPart = `${parts[0]}.${parts[1]}`
-    if (versionMap[twoPart]) {
-      return versionMap[twoPart]
-    }
-    // Fall back to major version for latest patch
-    const major = parts[0]
-    const mapped = versionMap[major]
-    if (mapped) {
-      return mapped
-    }
-  }
-
-  // Unknown version format - log and return as-is
-  // This may cause download failures if the version doesn't exist in hostdb
-  logDebug(
-    `Meilisearch version '${version}' not in version map, may not be available in hostdb`,
-  )
-  return version
 }

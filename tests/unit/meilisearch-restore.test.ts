@@ -90,14 +90,29 @@ describe('Meilisearch Restore Module', () => {
       assertEqual(result.protocol, 'https', 'Protocol should preserve https')
     })
 
-    it('should use default port for http', () => {
-      const result = parseConnectionString('http://127.0.0.1')
-      assertEqual(result.port, 7700, 'Default HTTP port should be 7700')
+    it('should parse meilisearch:// scheme as http', () => {
+      const result = parseConnectionString('meilisearch://127.0.0.1:7700')
+      assertEqual(result.host, '127.0.0.1', 'Host should be 127.0.0.1')
+      assertEqual(result.port, 7700, 'Port should be 7700')
+      assertEqual(result.protocol, 'http', 'meilisearch:// should map to http')
     })
 
-    it('should use default port for https', () => {
+    it('should use Meilisearch default port for http without explicit port', () => {
+      const result = parseConnectionString('http://127.0.0.1')
+      assertEqual(
+        result.port,
+        7700,
+        'Default port should be 7700 (Meilisearch default, not standard HTTP 80)',
+      )
+    })
+
+    it('should use Meilisearch default port for https without explicit port', () => {
       const result = parseConnectionString('https://127.0.0.1')
-      assertEqual(result.port, 7700, 'Default HTTPS port should be 7700')
+      assertEqual(
+        result.port,
+        7700,
+        'Default port should be 7700 (Meilisearch default, not standard HTTPS 443)',
+      )
     })
 
     it('should throw for invalid connection string', () => {

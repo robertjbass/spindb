@@ -146,7 +146,7 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `core/dependency-manager.ts` - Add binary tools to `KNOWN_BINARY_TOOLS` array
 - [ ] `core/config-manager.ts` - Add `XXX_TOOLS` constant and to `ENGINE_BINARY_MAP`
 - [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS`
-- [ ] `cli/helpers.ts` - Add `InstalledXxxEngine` type and detection function
+- [ ] `cli/helpers.ts` - Add `InstalledXxxEngine` type, detection function, and engine prefix to `ENGINE_PREFIXES`
 - [ ] `cli/commands/engines.ts` - Add download case and list display for the engine
 
 ### CLI Commands (1 file)
@@ -631,6 +631,20 @@ export async function getInstalledYourEngineEngines(): Promise<InstalledYourEngi
   return engines
 }
 ```
+
+**CRITICAL:** Add your engine prefix to the `ENGINE_PREFIXES` array:
+
+```ts
+const ENGINE_PREFIXES = [
+  'postgresql-',
+  'mysql-',
+  'mariadb-',
+  // ... existing prefixes
+  'yourengine-',  // Add your engine prefix
+] as const
+```
+
+This array is used by `hasAnyInstalledEngines()` to detect whether any engine binaries have been downloaded. Without this entry, the function returns `false` even when your engine's binaries exist, which affects UI decisions (e.g., the "Manage engines" menu option won't appear).
 
 Update the union type and `getInstalledEngines()` function to include your engine.
 

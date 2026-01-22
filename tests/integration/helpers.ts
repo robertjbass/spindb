@@ -865,7 +865,7 @@ export async function createMeilisearchIndex(
   port: number,
   uid: string,
   primaryKey = 'id',
-): Promise<boolean> {
+): Promise<{ success: boolean; taskUid?: number }> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/indexes`, {
       method: 'POST',
@@ -876,9 +876,13 @@ export async function createMeilisearchIndex(
       }),
     })
     // Meilisearch returns 202 Accepted for async tasks
-    return response.status === 202 || response.ok
+    if (response.status === 202 || response.ok) {
+      const data = (await response.json()) as { taskUid?: number }
+      return { success: true, taskUid: data.taskUid }
+    }
+    return { success: false }
   } catch {
-    return false
+    return { success: false }
   }
 }
 

@@ -168,8 +168,9 @@ export async function restoreBackup(
 
 /**
  * Parse Meilisearch connection string
- * Format: http://host[:port] or https://host[:port]
+ * Format: http://host[:port], https://host[:port], or meilisearch://host[:port]
  *
+ * The meilisearch:// scheme is an alias for http://
  * Meilisearch uses indexes instead of traditional databases
  */
 export function parseConnectionString(connectionString: string): {
@@ -189,21 +190,21 @@ export function parseConnectionString(connectionString: string): {
   } catch (error) {
     throw new Error(
       `Invalid Meilisearch connection string: "${connectionString}". ` +
-        `Expected format: http://host[:port]`,
+        `Expected format: http://host[:port] or meilisearch://host[:port]`,
       { cause: error },
     )
   }
 
-  // Validate protocol
+  // Validate protocol (meilisearch:// is an alias for http://)
   let protocol: 'http' | 'https'
-  if (url.protocol === 'http:') {
+  if (url.protocol === 'http:' || url.protocol === 'meilisearch:') {
     protocol = 'http'
   } else if (url.protocol === 'https:') {
     protocol = 'https'
   } else {
     throw new Error(
       `Invalid Meilisearch connection string: unsupported protocol "${url.protocol}". ` +
-        `Expected "http://" or "https://"`,
+        `Expected "http://", "https://", or "meilisearch://"`,
     )
   }
 

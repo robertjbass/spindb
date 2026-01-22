@@ -138,11 +138,20 @@ describe('Meilisearch Integration Tests', () => {
     console.log(`\n Creating index and inserting test data...`)
 
     // Create a test index
-    const created = await createMeilisearchIndex(testPorts[0], TEST_INDEX, 'id')
-    assert(created, 'Should create index')
+    const createResult = await createMeilisearchIndex(testPorts[0], TEST_INDEX, 'id')
+    assert(createResult.success, 'Should create index')
 
     // Wait for the index to be created (async operation)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    if (createResult.taskUid !== undefined) {
+      const taskComplete = await waitForMeilisearchTask(
+        testPorts[0],
+        createResult.taskUid,
+      )
+      assert(taskComplete, 'Index creation task should complete')
+    } else {
+      // Fallback: give time for async processing if no taskUid
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
 
     // Insert some test documents
     const documents = [
@@ -150,22 +159,22 @@ describe('Meilisearch Integration Tests', () => {
       { id: 2, title: 'Second Post', content: 'This is another document' },
       { id: 3, title: 'Third Entry', content: 'Yet another test document' },
     ]
-    const result = await insertMeilisearchDocuments(
+    const insertResult = await insertMeilisearchDocuments(
       testPorts[0],
       TEST_INDEX,
       documents,
     )
-    assert(result.success, 'Should insert documents')
+    assert(insertResult.success, 'Should insert documents')
 
     // Wait for the task to complete
-    if (result.taskUid !== undefined) {
+    if (insertResult.taskUid !== undefined) {
       const taskComplete = await waitForMeilisearchTask(
         testPorts[0],
-        result.taskUid,
+        insertResult.taskUid,
       )
       assert(taskComplete, 'Document insertion task should complete')
     } else {
-      // Give time for async processing
+      // Fallback: give time for async processing if no taskUid
       await new Promise((resolve) => setTimeout(resolve, 2000))
     }
 

@@ -13,7 +13,7 @@
 | 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
 | 🧭 **Qdrant** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (vector similarity search) |
-| 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1.33.1 (full-text search) |
+| 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (full-text search) |
 
 ## Planned
 
@@ -133,7 +133,7 @@
 ### 🔍 Meilisearch
 
 - **Status:** ✅ Complete
-- **Versions:** 1.33.1
+- **Versions:** 1
 - **Data location:** `~/.spindb/containers/meilisearch/{name}/`
 - **Process:** Server process (`meilisearch`)
 - **Binary source:** hostdb downloads (all platforms)
