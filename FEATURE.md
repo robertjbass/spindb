@@ -60,6 +60,19 @@ SpinDB supports two types of database engines:
 - Use a registry to track file locations
 - Status is `running` when file exists, `stopped` when missing
 
+### Composite Engines (FerretDB)
+
+Composite engines require **multiple binaries** working together:
+
+- **FerretDB** requires `ferretdb` (proxy) + `postgresql-documentdb` (backend)
+- Each container manages two processes (FerretDB + embedded PostgreSQL)
+- Two ports: external (MongoDB 27017) + internal (PostgreSQL 54320+)
+- Backup uses PostgreSQL native tools (pg_dump) on embedded backend
+
+**Platform limitations:** FerretDB v2 requires DocumentDB extension, which can't be built for Windows. FerretDB binary supports Windows, but the backend doesn't.
+
+See [plans/FERRETDB.md](plans/FERRETDB.md) for complete implementation guide.
+
 **Edge cases for file-based engines:**
 
 When implementing a file-based engine like SQLite or DuckDB, these operations behave differently:
@@ -2319,5 +2332,6 @@ Use these implementations as references:
 | **ClickHouse** | Server | hostdb (macOS/Linux) | OLAP, XML configs, YY.MM versioning |
 | **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
 | **DuckDB** | File-based | hostdb (all platforms) | Embedded OLAP, flat archive handling example |
+| **FerretDB** | Composite | hostdb (no Windows) | Two binaries (ferretdb + postgresql-documentdb), dual ports |
 
-**Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example.
+**Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example. For composite engines, see [plans/FERRETDB.md](plans/FERRETDB.md).

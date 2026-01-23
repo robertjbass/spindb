@@ -352,36 +352,37 @@ The `postgresql-documentdb` build must include:
 ```ts
 // engines/ferretdb/version-maps.ts
 export const FERRETDB_VERSION_MAP: Record<string, string> = {
-  '2': '2.7.0',  // Latest stable
+  '2': '2.7.0',  // Latest stable (from hostdb)
 }
 
 // Maps FerretDB version to required postgresql-documentdb version
 export const FERRETDB_PG_DOCUMENTDB_COMPAT: Record<string, string> = {
-  '2.7.0': '17-0.108.0',
-  '2.0.0': '17-0.102.0',
+  '2.7.0': '17-0.107.0',  // Current hostdb release
 }
 ```
 
 ## Implementation Checklist
 
-### Phase 1: hostdb - Build Binaries (BLOCKING)
+### Phase 1: hostdb - Build Binaries (COMPLETE)
 
-This must be completed before any SpinDB work begins.
+**FerretDB binary:** ✅
+- [x] Add FerretDB to hostdb releases.json
+- [x] Build FerretDB 2.7.0 binaries for all platforms (darwin-arm64, darwin-x64, linux-x64, linux-arm64, win32-x64)
+- [x] Bundle mongosh and database-tools
 
-**FerretDB binary:**
-- [ ] Add FerretDB to hostdb releases.json
-- [ ] Build FerretDB 2.x binaries for darwin-arm64, darwin-x64, linux-x64, linux-arm64, win32-x64
-- [ ] FerretDB is a Go binary - cross-compiles easily to all platforms
+**PostgreSQL+DocumentDB binary:** ✅
+- [x] Create `postgresql-documentdb` engine in hostdb
+- [x] Build PostgreSQL 17 with DocumentDB 0.107.0 extension
+- [x] Include extensions: pg_cron 1.6.4, pgvector 0.8.0, PostGIS 3.5.1, rum 1.3.14
+- [x] Pre-configure `shared_preload_libraries` in postgresql.conf.sample
+- [x] Build for darwin-arm64, darwin-x64, linux-x64, linux-arm64
+- [x] **Note:** Windows (win32-x64) not available - see [Windows Limitations](#windows-limitations)
 
-**PostgreSQL+DocumentDB binary:**
-- [ ] Create new `postgresql-documentdb` engine in hostdb
-- [ ] Build PostgreSQL 17 with DocumentDB extension compiled in
-- [ ] Include required extensions: pg_cron, tsm_system_rows, vector (pgvector), PostGIS, rum
-- [ ] Test extension loads correctly with `shared_preload_libraries`
-- [ ] Build for darwin-arm64, darwin-x64, linux-x64, linux-arm64
-- [ ] **Note:** Windows (win32-x64) is out of scope - see [Stretch Goals](#stretch-goals-windows-support)
+**hostdb releases (use these):**
+- [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) - All platforms
+- [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) - No Windows
 
-**References:**
+**Upstream references:**
 - [FerretDB releases](https://github.com/FerretDB/FerretDB/releases)
 - [DocumentDB releases](https://github.com/FerretDB/documentdb/releases)
 - [FerretDB Docker images](https://github.com/orgs/FerretDB/packages/container/package/postgres-documentdb) (reference for build config)
@@ -795,6 +796,14 @@ All binaries are available from the [hostdb releases page](https://github.com/ro
 | darwin-x64 | [ferretdb-2.7.0-darwin-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-darwin-x64.tar.gz) |
 | darwin-arm64 | [ferretdb-2.7.0-darwin-arm64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-darwin-arm64.tar.gz) |
 | win32-x64 | [ferretdb-2.7.0-win32-x64.zip](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-win32-x64.zip) (requires WSL for backend) |
+
+**SHA256 Checksums (postgresql-documentdb-17-0.107.0):**
+| Platform | SHA256 |
+|----------|--------|
+| darwin-arm64 | `2a3892c1fb5fc91ba6cfcaf883b8deff89d11be3c7fa9e8ab3820290f6cc26a6` |
+| darwin-x64 | `e8de62aac7a93352a89d9a501b8966accb69412ef6dbf829f3009c5c6752f6b6` |
+| linux-arm64 | `3ef93791c96d04ec5c5e018a8fa821a6b1b4fd1fa3656d6781e3961f8c032015` |
+| linux-x64 | `b86be77dc8a809c627fdbc83768734eb537b5b708bba1e4cd2e63967d86d14ba` |
 
 ### How FerretDB Proxies to PostgreSQL
 

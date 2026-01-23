@@ -150,6 +150,29 @@ All engines download binaries from [hostdb](https://github.com/robertjbass/hostd
 - **PostgreSQL on Windows**: Uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries. File IDs in `engines/postgresql/edb-binary-urls.ts`.
 - **ClickHouse**: macOS/Linux only (no Windows support in hostdb)
 
+### FerretDB (Composite Engine)
+
+FerretDB is a MongoDB-compatible proxy that requires **two binaries** from hostdb:
+
+1. **ferretdb** - Stateless proxy (MongoDB wire protocol → PostgreSQL SQL)
+2. **postgresql-documentdb** - PostgreSQL 17 with DocumentDB extension
+
+**Architecture:**
+```
+MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)
+```
+
+**Key constraints:**
+- **FerretDB v2 only** - Requires DocumentDB extension (v1 not supported)
+- **No Windows** - postgresql-documentdb can't be built for Windows (PostGIS/rum blockers)
+- **Two ports per container** - External (27017 for MongoDB) + internal (54320+ for PostgreSQL backend)
+
+**hostdb releases:**
+- [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) - linux-x64, linux-arm64, darwin-x64, darwin-arm64
+- [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) - All platforms including win32-x64
+
+See [plans/FERRETDB.md](plans/FERRETDB.md) for implementation details.
+
 **Platform Philosophy:** Originally, engines were only added if binaries were available for all OS/architectures. This changed when ClickHouse couldn't be built for Windows on hostdb. The new approach: engines can be added even with partial platform support. **Future direction:** hostdb and SpinDB will be combined to provide better UX - dynamically showing available engines based on the user's OS and architecture rather than requiring universal availability.
 
 ### Critical: Version Maps Sync
