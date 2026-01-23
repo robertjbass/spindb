@@ -767,3 +767,259 @@ These stretch goals should be tracked in:
 - [FerretDB Documentation](https://docs.ferretdb.io/)
 - [DocumentDB GitHub](https://github.com/FerretDB/documentdb)
 - [DocumentDB Releases](https://github.com/FerretDB/documentdb/releases)
+
+---
+
+## Notes from hostdb
+
+This section contains implementation details from the hostdb project about how the binaries are structured and how they can be used together.
+
+### Binary Download Links
+
+All binaries are available from the [hostdb releases page](https://github.com/robertjbass/hostdb/releases).
+
+**postgresql-documentdb** (PostgreSQL 17 with DocumentDB extension):
+| Platform | Download |
+|----------|----------|
+| linux-x64 | [postgresql-documentdb-17-0.107.0-linux-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-17-0.107.0/postgresql-documentdb-17-0.107.0-linux-x64.tar.gz) |
+| linux-arm64 | [postgresql-documentdb-17-0.107.0-linux-arm64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-17-0.107.0/postgresql-documentdb-17-0.107.0-linux-arm64.tar.gz) |
+| darwin-x64 | [postgresql-documentdb-17-0.107.0-darwin-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-17-0.107.0/postgresql-documentdb-17-0.107.0-darwin-x64.tar.gz) |
+| darwin-arm64 | [postgresql-documentdb-17-0.107.0-darwin-arm64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-17-0.107.0/postgresql-documentdb-17-0.107.0-darwin-arm64.tar.gz) |
+| win32-x64 | Not available (see [Windows Limitations](#windows-limitations)) |
+
+**ferretdb** (MongoDB-compatible proxy):
+| Platform | Download |
+|----------|----------|
+| linux-x64 | [ferretdb-2.7.0-linux-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-linux-x64.tar.gz) |
+| linux-arm64 | [ferretdb-2.7.0-linux-arm64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-linux-arm64.tar.gz) |
+| darwin-x64 | [ferretdb-2.7.0-darwin-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-darwin-x64.tar.gz) |
+| darwin-arm64 | [ferretdb-2.7.0-darwin-arm64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-darwin-arm64.tar.gz) |
+| win32-x64 | [ferretdb-2.7.0-win32-x64.zip](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-win32-x64.zip) (requires WSL for backend) |
+
+### How FerretDB Proxies to PostgreSQL
+
+FerretDB is a **stateless proxy** that translates MongoDB wire protocol to PostgreSQL SQL:
+
+```
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────────────┐
+│  MongoDB Client │   TCP   │    FerretDB     │   TCP   │  PostgreSQL+DocumentDB  │
+│   (mongosh,     │ ──────► │     Proxy       │ ──────► │      Backend            │
+│    app, etc.)   │  :27017 │                 │ :54320  │                         │
+└─────────────────┘         └─────────────────┘         └─────────────────────────┘
+                            Translates MongoDB          Stores data as JSONB
+                            queries to SQL              in PostgreSQL tables
+```
+
+**Port assignment:**
+- **FerretDB (external)**: Listens on port `27017` (or next available) for MongoDB wire protocol connections. This is the port users connect to.
+- **PostgreSQL (internal)**: Runs on a dynamically allocated port from a high range (e.g., `54320`, `54321`, `54322`, etc.). This port is internal and not exposed to users.
+
+**Why dynamic backend ports?** Each FerretDB container has its own embedded PostgreSQL instance. If you run multiple FerretDB containers (e.g., "myapp-dev" and "myapp-test"), each needs a unique PostgreSQL port:
+
+| Container | FerretDB Port | PostgreSQL Backend Port |
+|-----------|---------------|------------------------|
+| myapp-dev | 27017 | 54320 |
+| myapp-test | 27018 | 54321 |
+| analytics | 27019 | 54322 |
+
+The backend port is stored in `container.json` as `backendPort` and is allocated by SpinDB's port manager. Users never need to know or use this port directly - they only interact with the FerretDB port using MongoDB connection strings like `mongodb://localhost:27017`.
+
+### Binary Availability Status
+
+| Platform | postgresql-documentdb | ferretdb | Status |
+|----------|----------------------|----------|--------|
+| linux-x64 | Extracted from Docker | Official binary | Ready |
+| linux-arm64 | Extracted from Docker | Official binary | Ready |
+| darwin-x64 | Built from source | Cross-compiled (Go) | Ready |
+| darwin-arm64 | Built from source | Cross-compiled (Go) | Ready |
+| win32-x64 | Not available | Cross-compiled (Go) | FerretDB only (no backend) |
+
+### postgresql-documentdb Binary Structure
+
+The `postgresql-documentdb` tarball extracts to a self-contained PostgreSQL installation with all required extensions pre-built:
+
+```
+postgresql-documentdb-17-0.107.0-darwin-arm64/
+├── postgresql-documentdb/
+│   ├── bin/
+│   │   ├── postgres
+│   │   ├── pg_ctl
+│   │   ├── pg_dump
+│   │   ├── pg_restore
+│   │   ├── psql
+│   │   ├── initdb
+│   │   └── ... (other PostgreSQL tools)
+│   ├── lib/
+│   │   ├── pg_documentdb.dylib        # DocumentDB main extension
+│   │   ├── pg_documentdb_core.dylib   # DocumentDB core
+│   │   ├── pg_cron.dylib              # Job scheduler
+│   │   ├── vector.dylib               # pgvector
+│   │   ├── rum.dylib                  # RUM index
+│   │   ├── postgis-3.dylib            # PostGIS (macOS via Homebrew)
+│   │   └── ... (PostgreSQL libraries)
+│   ├── share/
+│   │   ├── extension/
+│   │   │   ├── documentdb.control
+│   │   │   ├── pg_cron.control
+│   │   │   ├── vector.control
+│   │   │   ├── rum.control
+│   │   │   ├── postgis.control
+│   │   │   └── ... (SQL files)
+│   │   └── postgresql.conf.sample     # Pre-configured with shared_preload_libraries
+│   └── .hostdb-metadata.json          # Build metadata
+```
+
+**Linux note:** On Linux, extensions use `.so` suffix instead of `.dylib`.
+
+### ferretdb Binary Structure
+
+The `ferretdb` tarball is simpler - a single Go binary with optional bundled tools:
+
+```
+ferretdb-2.7.0-darwin-arm64/
+├── bin/
+│   └── ferretdb                       # Main FerretDB binary (~30MB)
+├── mongosh/                           # Optional: bundled MongoDB shell
+│   └── bin/
+│       └── mongosh
+├── database-tools/                    # Optional: bundled MongoDB tools
+│   └── bin/
+│       ├── mongodump
+│       ├── mongorestore
+│       └── ...
+└── .hostdb-metadata.json
+```
+
+### Pre-configured postgresql.conf.sample
+
+The `postgresql-documentdb` binary includes a pre-configured `postgresql.conf.sample` that `initdb` will use. Key settings:
+
+```ini
+# Extensions - required for DocumentDB functionality
+shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb'
+
+# pg_cron configuration
+cron.database_name = 'postgres'
+
+# Connection settings
+listen_addresses = 'localhost'
+port = 5432
+```
+
+**SpinDB integration:** When initializing `pg_data/`, the `initdb` command will automatically copy this sample to `postgresql.conf`. SpinDB only needs to:
+1. Change the `port` to the allocated `backendPort`
+2. Optionally adjust `listen_addresses` if needed
+
+### Component Versions (17-0.107.0)
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| PostgreSQL | 17 | Base database |
+| DocumentDB | 0.107.0 | MongoDB wire protocol support |
+| pg_cron | 1.6.4 | Job scheduler (required by DocumentDB) |
+| pgvector | 0.8.0 | Vector similarity search |
+| PostGIS | 3.5.1 | Geospatial (macOS: Homebrew, Linux: Docker) |
+| rum | 1.3.14 | RUM index access method |
+
+### Source Types by Platform
+
+| Platform | postgresql-documentdb Source | Notes |
+|----------|------------------------------|-------|
+| linux-x64 | `docker-extract` | Extracted from `ghcr.io/ferretdb/postgres-documentdb:17-0.107.0` |
+| linux-arm64 | `docker-extract` | Same image, `linux/arm64` platform |
+| darwin-x64 | `build-required` | Built from source on `macos-15-intel` runner |
+| darwin-arm64 | `build-required` | Built from source on `macos-14` runner |
+| win32-x64 | `build-required` | Stretch goal - PostGIS/rum blockers |
+
+### SpinDB Binary Path Conventions
+
+Based on hostdb structure, SpinDB should expect:
+
+```ts
+// Binary paths
+const pgBinDir = `~/.spindb/bin/postgresql-documentdb-17-0.107.0-${platform}/postgresql-documentdb/bin`
+const ferretBinDir = `~/.spindb/bin/ferretdb-2.7.0-${platform}/bin`
+
+// Key executables
+const postgres = `${pgBinDir}/postgres`
+const pgCtl = `${pgBinDir}/pg_ctl`
+const initdb = `${pgBinDir}/initdb`
+const psql = `${pgBinDir}/psql`
+const pgDump = `${pgBinDir}/pg_dump`
+const pgRestore = `${pgBinDir}/pg_restore`
+const ferretdb = `${ferretBinDir}/ferretdb`
+```
+
+### Initialization Sequence
+
+1. **Download binaries** (if not cached):
+   - Download `postgresql-documentdb-17-0.107.0-{platform}.tar.gz`
+   - Download `ferretdb-2.7.0-{platform}.tar.gz`
+   - Extract to `~/.spindb/bin/`
+
+2. **Initialize PostgreSQL data directory**:
+   ```bash
+   ./postgresql-documentdb/bin/initdb -D /path/to/pg_data
+   ```
+   This automatically uses the pre-configured `postgresql.conf.sample`.
+
+3. **Modify postgresql.conf** (minimal changes needed):
+   ```bash
+   # Only need to change port - extensions already configured
+   sed -i 's/port = 5432/port = 54321/' /path/to/pg_data/postgresql.conf
+   ```
+
+   **Why change the port?** Each FerretDB container runs its own embedded PostgreSQL on a unique "backend port" (see [Port Management](#port-management)). This prevents conflicts when running multiple FerretDB containers or when port 5432 is already in use. SpinDB allocates ports from a high range (e.g., 54320+) for these internal backends.
+
+4. **Start PostgreSQL**:
+   ```bash
+   ./postgresql-documentdb/bin/pg_ctl -D /path/to/pg_data -l pg.log start
+   ```
+
+5. **Create FerretDB database** (first run only):
+   ```bash
+   ./postgresql-documentdb/bin/psql -p 54321 -c "CREATE DATABASE ferretdb;"
+   ./postgresql-documentdb/bin/psql -p 54321 -d ferretdb -c "CREATE EXTENSION documentdb CASCADE;"
+   ```
+
+6. **Start FerretDB**:
+   ```bash
+   ./ferretdb --postgresql-url="postgres://localhost:54321/ferretdb" --listen-addr=":27017"
+   ```
+
+### Metadata Files
+
+Both binaries include `.hostdb-metadata.json` for version tracking:
+
+```json
+// postgresql-documentdb metadata
+{
+  "name": "postgresql-documentdb",
+  "version": "17-0.107.0",
+  "platform": "darwin-arm64",
+  "source": "source-build",  // or "docker-extract" for Linux
+  "components": {
+    "postgresql": "17",
+    "documentdb": "0.107.0",
+    "pg_cron": "1.6.4",
+    "pgvector": "0.8.0",
+    "rum": "1.3.14"
+  },
+  "rehosted_by": "hostdb",
+  "rehosted_at": "2025-01-23T..."
+}
+```
+
+SpinDB can read this metadata to verify binary compatibility and display version info.
+
+### Windows Limitations
+
+Windows support is blocked by `postgresql-documentdb`, not FerretDB:
+
+- **FerretDB binary**: Works on Windows (Go cross-compiles easily)
+- **postgresql-documentdb**: Blocked by PostGIS and rum extension build complexity
+
+If Windows support is ever needed, options include:
+1. WSL2 (recommend to users)
+2. Build a minimal `postgresql-documentdb` without PostGIS/rum (reduced functionality)
+3. Significant investment in Windows build infrastructure for GEOS/PROJ/GDAL
