@@ -912,13 +912,51 @@ The `openInBrowser()` helper uses platform-specific commands (`open` on macOS, `
 
 ### 3. SQL Handlers (`cli/commands/menu/sql-handlers.ts`)
 
-Update terminology for non-SQL engines:
+**CRITICAL:** Update the `getScriptType()` function to include your engine. This determines the terminology shown to users when running scripts ("SQL file", "Script file", or "Command file").
+
+**Script type categories:**
+
+| Category | Engines | Terminology | File Types |
+|----------|---------|-------------|------------|
+| **SQL** | PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse | "SQL file" | `.sql` |
+| **Script** | MongoDB, FerretDB (JavaScript), Qdrant, Meilisearch (REST/JSON) | "Script file" | `.js`, `.json` |
+| **Command** | Redis, Valkey | "Command file" | `.redis`, `.valkey` |
+
+Add your engine to the appropriate `case` in the switch statement:
 
 ```ts
-const isRedisLike = config.engine === 'redis' || config.engine === 'valkey' || config.engine === 'yourengine'
-const isMongoDB = config.engine === 'mongodb'
-const scriptType = isRedisLike ? 'Command' : isMongoDB ? 'Script' : 'SQL'
+const getScriptType = (
+  engine: Engine | string,
+): { type: string; lower: string } => {
+  switch (engine) {
+    // Redis-like engines use "Command" terminology
+    case Engine.Redis:
+    case Engine.Valkey:
+      return { type: 'Command', lower: 'command' }
+
+    // Document/search engines use "Script" terminology
+    case Engine.MongoDB:
+    case Engine.FerretDB:
+    case Engine.Qdrant:
+    case Engine.Meilisearch:
+      return { type: 'Script', lower: 'script' }
+
+    // SQL engines use "SQL" terminology
+    case Engine.PostgreSQL:
+    case Engine.MySQL:
+    case Engine.MariaDB:
+    case Engine.SQLite:
+    case Engine.DuckDB:
+    case Engine.ClickHouse:
+      return { type: 'SQL', lower: 'sql' }
+
+    default:
+      return { type: 'SQL', lower: 'sql' }
+  }
+}
 ```
+
+**Note:** The function uses the `Engine` enum for type safety. Always use enum values, not string literals.
 
 ### 4. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
 

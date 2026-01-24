@@ -14,6 +14,7 @@ import {
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { followFile, getLastNLines } from '../../utils/file-follower'
+import { Engine } from '../../../types'
 
 export async function handleRunSql(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
@@ -57,16 +58,41 @@ export async function handleRunSql(containerName: string): Promise<void> {
   const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
   // Get script type terminology based on engine
+  // IMPORTANT: When adding a new engine, update this function and FEATURE.md
+  // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse
+  // - Script: MongoDB, FerretDB (JavaScript via mongosh), Qdrant, Meilisearch (REST API)
+  // - Command: Redis, Valkey (Redis commands)
   const getScriptType = (
-    engine: string,
+    engine: Engine | string,
   ): { type: string; lower: string } => {
-    if (engine === 'redis' || engine === 'valkey') {
-      return { type: 'Command', lower: 'command' }
+    switch (engine) {
+      // Redis-like engines use "Command" terminology
+      case Engine.Redis:
+      case Engine.Valkey:
+        return { type: 'Command', lower: 'command' }
+
+      // Document/search engines use "Script" terminology
+      // MongoDB and FerretDB use JavaScript via mongosh
+      // Qdrant and Meilisearch use REST API (JSON)
+      case Engine.MongoDB:
+      case Engine.FerretDB:
+      case Engine.Qdrant:
+      case Engine.Meilisearch:
+        return { type: 'Script', lower: 'script' }
+
+      // SQL engines use "SQL" terminology
+      case Engine.PostgreSQL:
+      case Engine.MySQL:
+      case Engine.MariaDB:
+      case Engine.SQLite:
+      case Engine.DuckDB:
+      case Engine.ClickHouse:
+        return { type: 'SQL', lower: 'sql' }
+
+      // Fallback for any unhandled engine (should not happen if enum is complete)
+      default:
+        return { type: 'SQL', lower: 'sql' }
     }
-    if (engine === 'mongodb' || engine === 'qdrant' || engine === 'meilisearch') {
-      return { type: 'Script', lower: 'script' }
-    }
-    return { type: 'SQL', lower: 'sql' }
   }
 
   const { type: scriptType, lower: scriptTypeLower } = getScriptType(
