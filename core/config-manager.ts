@@ -332,6 +332,7 @@ export class ConfigManager {
     mysql: { found: BinaryTool[]; missing: BinaryTool[] }
     mariadb: { found: BinaryTool[]; missing: BinaryTool[] }
     mongodb: { found: BinaryTool[]; missing: BinaryTool[] }
+    ferretdb: { found: BinaryTool[]; missing: BinaryTool[] }
     redis: { found: BinaryTool[]; missing: BinaryTool[] }
     valkey: { found: BinaryTool[]; missing: BinaryTool[] }
     meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
@@ -371,6 +372,10 @@ export class ConfigManager {
       mongodb: {
         found: found.filter((t) => MONGODB_TOOLS.includes(t)),
         missing: missing.filter((t) => MONGODB_TOOLS.includes(t)),
+      },
+      ferretdb: {
+        found: found.filter((t) => FERRETDB_TOOLS.includes(t)),
+        missing: missing.filter((t) => FERRETDB_TOOLS.includes(t)),
       },
       redis: {
         found: found.filter((t) => REDIS_TOOLS.includes(t)),
