@@ -2,12 +2,11 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { rm } from 'fs/promises'
 import { join, dirname, basename } from 'path'
-import stringWidth from 'string-width'
 import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
 import { header, uiError, uiWarning, uiInfo, formatBytes } from '../../ui/theme'
 import { promptConfirm } from '../../ui/prompts'
-import { getEngineIcon } from '../../constants'
+import { getEngineIcon, getEngineIconPadded } from '../../constants'
 import {
   getInstalledEngines,
   type InstalledPostgresEngine,
@@ -25,13 +24,6 @@ import {
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
-
-// Pad string to target visual width, accounting for Unicode character widths
-function padToWidth(str: string, targetWidth: number): string {
-  const currentWidth = stringWidth(str)
-  const padding = Math.max(0, targetWidth - currentWidth)
-  return str + ' '.repeat(padding)
-}
 
 export async function handleEngines(): Promise<void> {
   console.clear()
@@ -82,15 +74,19 @@ export async function handleEngines(): Promise<void> {
   const totalSize = allEnginesSorted.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   // Column widths for formatting
-  const COL_ENGINE = 13
+  // Engine name column: longest name "meilisearch" (11) + padding (2) = 13
+  const COL_ENGINE_NAME = 13
   const COL_VERSION = 12
   const COL_PLATFORM = 14
   const COL_SIZE = 10
 
   // Build selectable choices with formatted display
   const choices: MenuChoice[] = allEnginesSorted.map((e) => {
-    const icon = getEngineIcon(e.engine)
-    const engineDisplay = padToWidth(`${icon} ${e.engine}`, COL_ENGINE)
+    // Use getEngineIconPadded to handle emoji width inconsistencies
+    // Icons like 🦭 and 🪶 render at width 1, others at width 2
+    const icon = getEngineIconPadded(e.engine)
+    const engineName = e.engine.padEnd(COL_ENGINE_NAME)
+    const engineDisplay = `${icon}${engineName}`
     const versionDisplay = e.version.padEnd(COL_VERSION)
     const platformDisplay = `${e.platform}-${e.arch}`.padEnd(COL_PLATFORM)
     const sizeDisplay = formatBytes(e.sizeBytes).padStart(COL_SIZE)

@@ -52,6 +52,7 @@ import {
 } from './backup-handlers'
 import { Engine, isFileBasedEngine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
+import { getEngineIconPadded } from '../../constants'
 
 export async function handleCreate(): Promise<'main' | void> {
   console.log()
@@ -434,13 +435,13 @@ export async function handleList(
   console.log(
     chalk.gray('  ') +
       chalk.bold.white('NAME'.padEnd(16)) +
-      chalk.bold.white('ENGINE'.padEnd(11)) +
+      chalk.bold.white('   ENGINE'.padEnd(14)) +
       chalk.bold.white('VERSION'.padEnd(8)) +
       chalk.bold.white('PORT'.padEnd(6)) +
       chalk.bold.white('SIZE'.padEnd(9)) +
       chalk.bold.white('STATUS'),
   )
-  console.log(chalk.gray('  ' + '─'.repeat(58)))
+  console.log(chalk.gray('  ' + '─'.repeat(61)))
 
   for (let i = 0; i < containers.length; i++) {
     const container = containers[i]
@@ -467,10 +468,13 @@ export async function handleList(
     // File-based DBs show dash instead of port
     const portDisplay = isFileBasedDB ? '—' : String(container.port)
 
+    const engineIcon = getEngineIconPadded(container.engine)
+    const engineDisplay = `${engineIcon}${container.engine}`
+
     console.log(
       chalk.gray('  ') +
         chalk.cyan(displayName.padEnd(16)) +
-        chalk.white(container.engine.padEnd(11)) +
+        chalk.white(engineDisplay.padEnd(14)) +
         chalk.yellow(container.version.padEnd(8)) +
         chalk.green(portDisplay.padEnd(6)) +
         chalk.magenta(sizeDisplay.padEnd(9)) +
@@ -521,9 +525,10 @@ export async function handleList(
         : c.status === 'running'
           ? chalk.green('● running')
           : chalk.gray('○ stopped')
+      const icon = getEngineIconPadded(c.engine)
 
       return {
-        name: `${c.name} ${statusLabel}`,
+        name: `${icon}${c.name} ${statusLabel}`,
         value: c.name,
         short: c.name,
       }
