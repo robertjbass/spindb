@@ -22,6 +22,7 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import { containerManager } from '../../core/container-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
@@ -292,7 +293,8 @@ export class FerretDBEngine extends BaseEngine {
     // (directory may exist but be empty if created by containerManager.create)
     const pgVersionFile = join(pgDataDir, 'PG_VERSION')
     if (!existsSync(pgVersionFile)) {
-      const initdb = join(documentdbPath, 'bin', 'initdb')
+      const ext = platformService.getExecutableExtension()
+      const initdb = join(documentdbPath, 'bin', `initdb${ext}`)
 
       if (!existsSync(initdb)) {
         throw new Error(`initdb not found at ${initdb}`)
@@ -360,9 +362,10 @@ export class FerretDBEngine extends BaseEngine {
       arch,
     )
 
-    const ferretdbBinary = join(ferretdbPath, 'bin', 'ferretdb')
-    const pgCtl = join(documentdbPath, 'bin', 'pg_ctl')
-    const psql = join(documentdbPath, 'bin', 'psql')
+    const ext = platformService.getExecutableExtension()
+    const ferretdbBinary = join(ferretdbPath, 'bin', `ferretdb${ext}`)
+    const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
+    const psql = join(documentdbPath, 'bin', `psql${ext}`)
 
     // Verify binaries exist
     if (!existsSync(ferretdbBinary)) {
@@ -516,6 +519,12 @@ export class FerretDBEngine extends BaseEngine {
 
       logDebug(`FerretDB started on port ${port}`)
 
+      // Persist the allocated backend port if it was newly allocated
+      if (!existingBackendPort && backendPort) {
+        await containerManager.updateConfig(name, { backendPort })
+        logDebug(`Persisted backend port ${backendPort} to container config`)
+      }
+
       return {
         port,
         connectionString: this.getConnectionString(container),
@@ -548,7 +557,8 @@ export class FerretDBEngine extends BaseEngine {
       platform,
       arch,
     )
-    const pgCtl = join(documentdbPath, 'bin', 'pg_ctl')
+    const ext = platformService.getExecutableExtension()
+    const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
 
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const pgDataDir = join(containerDir, 'pg_data')

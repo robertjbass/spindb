@@ -35,7 +35,8 @@ function getPgDumpPath(container: ContainerConfig): string {
     arch,
   )
 
-  return join(documentdbPath, 'bin', 'pg_dump')
+  const ext = platformService.getExecutableExtension()
+  return join(documentdbPath, 'bin', `pg_dump${ext}`)
 }
 
 /**
@@ -127,7 +128,7 @@ export async function createBackup(
 
         resolve({
           path: outputPath,
-          format: format === 'custom' ? 'custom' : 'plain',
+          format: format === 'custom' ? 'custom' : 'sql',
           size,
         })
       } else {

@@ -210,19 +210,31 @@ class FerretDBCompositeBinaryManager {
       }
     }
 
-    // Download both binaries
+    // Download both binaries - ensure atomicity by cleaning up FerretDB if DocumentDB fails
     const ferretdbPath = await this.downloadFerretDB(
       version,
       platform,
       arch,
       onProgress,
     )
-    const documentdbPath = await this.downloadDocumentDB(
-      backendVersion,
-      platform,
-      arch,
-      onProgress,
-    )
+
+    let documentdbPath: string
+    try {
+      documentdbPath = await this.downloadDocumentDB(
+        backendVersion,
+        platform,
+        arch,
+        onProgress,
+      )
+    } catch (error) {
+      // Clean up the FerretDB installation to maintain atomicity
+      onProgress?.({
+        stage: 'error',
+        message: 'postgresql-documentdb download failed, cleaning up FerretDB...',
+      })
+      await rm(ferretdbPath, { recursive: true, force: true }).catch(() => {})
+      throw error
+    }
 
     return { ferretdbPath, documentdbPath }
   }

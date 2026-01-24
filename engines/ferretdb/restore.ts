@@ -32,7 +32,8 @@ function getPgRestorePath(container: ContainerConfig): string {
     arch,
   )
 
-  return join(documentdbPath, 'bin', 'pg_restore')
+  const ext = platformService.getExecutableExtension()
+  return join(documentdbPath, 'bin', `pg_restore${ext}`)
 }
 
 /**
@@ -51,7 +52,8 @@ function getPsqlPath(container: ContainerConfig): string {
     arch,
   )
 
-  return join(documentdbPath, 'bin', 'psql')
+  const ext = platformService.getExecutableExtension()
+  return join(documentdbPath, 'bin', `psql${ext}`)
 }
 
 /**
@@ -76,10 +78,12 @@ export async function detectBackupFormat(
 
   // Check file header to determine format
   try {
-    const buffer = Buffer.alloc(16)
+    const buffer = Buffer.alloc(256)
     const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
+    let bytesRead = 0
     try {
-      await fd.read(buffer, 0, 16, 0)
+      const result = await fd.read(buffer, 0, 256, 0)
+      bytesRead = result.bytesRead
     } finally {
       await fd.close().catch(() => {})
     }
@@ -94,15 +98,18 @@ export async function detectBackupFormat(
       }
     }
 
-    // Check for SQL format (starts with common SQL patterns)
-    const textHeader = buffer.toString('utf8', 0, 16)
-    if (
+    // Check for SQL format using a larger buffer with word-boundary checks
+    const textHeader = buffer.toString('utf8', 0, bytesRead).toLowerCase()
+    const isSqlFormat =
       textHeader.startsWith('--') ||
       textHeader.startsWith('/*') ||
-      textHeader.includes('CREATE') ||
-      textHeader.includes('INSERT') ||
-      textHeader.includes('PGDUMP')
-    ) {
+      textHeader.includes('\n--') ||
+      textHeader.includes('\n/*') ||
+      /(?:^|\s)create\s/.test(textHeader) ||
+      /(?:^|\s)insert\s/.test(textHeader) ||
+      /(?:^|\s)drop\s/.test(textHeader) ||
+      textHeader.includes('pg_dump')
+    if (isSqlFormat) {
       return {
         format: 'sql',
         description: 'Plain SQL backup',
