@@ -10,6 +10,10 @@ export type ContainerConfig = {
   clonedFrom?: string
   // Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis)
   binaryPath?: string
+  // FerretDB-specific: version of the postgresql-documentdb backend (e.g., "17-0.107.0")
+  backendVersion?: string
+  // FerretDB-specific: internal PostgreSQL backend port (e.g., 54320)
+  backendPort?: number
 }
 
 /**
@@ -23,6 +27,7 @@ export enum Engine {
   SQLite = 'sqlite',
   DuckDB = 'duckdb',
   MongoDB = 'mongodb',
+  FerretDB = 'ferretdb',
   Redis = 'redis',
   Valkey = 'valkey',
   ClickHouse = 'clickhouse',
@@ -54,6 +59,7 @@ export const ALL_ENGINES = [
   Engine.SQLite,
   Engine.DuckDB,
   Engine.MongoDB,
+  Engine.FerretDB,
   Engine.Redis,
   Engine.Valkey,
   Engine.ClickHouse,
@@ -183,6 +189,7 @@ export type ValkeyFormat = 'text' | 'rdb'
 export type ClickHouseFormat = 'sql'
 export type QdrantFormat = 'snapshot'
 export type MeilisearchFormat = 'snapshot'
+export type FerretDBFormat = 'sql' | 'custom'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -192,6 +199,7 @@ export type BackupFormatType =
   | SQLiteFormat
   | DuckDBFormat
   | MongoDBFormat
+  | FerretDBFormat
   | RedisFormat
   | ValkeyFormat
   | ClickHouseFormat
@@ -206,6 +214,7 @@ type EngineFormatMap = {
   [Engine.SQLite]: SQLiteFormat
   [Engine.DuckDB]: DuckDBFormat
   [Engine.MongoDB]: MongoDBFormat
+  [Engine.FerretDB]: FerretDBFormat
   [Engine.Redis]: RedisFormat
   [Engine.Valkey]: ValkeyFormat
   [Engine.ClickHouse]: ClickHouseFormat
@@ -312,6 +321,8 @@ export type BinaryTool =
   | 'qdrant'
   // Meilisearch tools
   | 'meilisearch'
+  // FerretDB tools
+  | 'ferretdb'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -383,6 +394,8 @@ export type SpinDBConfig = {
     qdrant?: BinaryConfig
     // Meilisearch tools
     meilisearch?: BinaryConfig
+    // FerretDB tools
+    ferretdb?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

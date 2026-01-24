@@ -7,6 +7,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   sqlite: '🪶 ', // Extra space - feather emoji renders narrow
   duckdb: '🦆',
   mongodb: '🍃',
+  ferretdb: '🦔',
   redis: '🔴',
   valkey: '🔷',
   clickhouse: '🏠',

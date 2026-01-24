@@ -38,6 +38,7 @@ import {
   type InstalledSqliteEngine,
   type InstalledDuckDBEngine,
   type InstalledMongodbEngine,
+  type InstalledFerretDBEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledQdrantEngine,
@@ -58,6 +59,7 @@ import { duckdbBinaryManager } from '../../engines/duckdb/binary-manager'
 import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager'
 import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
 import { meilisearchBinaryManager } from '../../engines/meilisearch/binary-manager'
+import { ferretdbBinaryManager } from '../../engines/ferretdb/binary-manager'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -436,6 +438,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const mongodbEngines = engines.filter(
     (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
   )
+  const ferretdbEngines = engines.filter(
+    (e): e is InstalledFerretDBEngine => e.engine === 'ferretdb',
+  )
   const redisEngines = engines.filter(
     (e): e is InstalledRedisEngine => e.engine === 'redis',
   )
@@ -527,6 +532,21 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     const icon = ENGINE_ICONS.mongodb
     const platformInfo = `${engine.platform}-${engine.arch}`
     const engineDisplay = `${icon} mongodb`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // FerretDB rows
+  for (const engine of ferretdbEngines) {
+    const icon = ENGINE_ICONS.ferretdb
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} ferretdb`
 
     console.log(
       chalk.gray('  ') +
@@ -637,6 +657,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  MongoDB: ${mongodbEngines.length} version(s), ${formatBytes(totalMongodbSize)}`,
+      ),
+    )
+  }
+  if (ferretdbEngines.length > 0) {
+    const totalFerretdbSize = ferretdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  FerretDB: ${ferretdbEngines.length} version(s), ${formatBytes(totalFerretdbSize)}`,
       ),
     )
   }
@@ -1497,9 +1528,78 @@ enginesCommand
         return
       }
 
+      if (['ferretdb', 'ferret'].includes(normalizedEngine)) {
+        // Check platform support - FerretDB requires postgresql-documentdb which is not available on Windows
+        const { platform } = platformService.getPlatformInfo()
+        if (platform === Platform.Win32) {
+          console.error(
+            uiError('FerretDB is not available on Windows'),
+          )
+          console.log(
+            chalk.gray(
+              '  postgresql-documentdb (the PostgreSQL backend) cannot be built for Windows.',
+            ),
+          )
+          console.log(chalk.gray('  Options:'))
+          console.log(chalk.gray('    1. Use WSL (Windows Subsystem for Linux)'))
+          console.log(chalk.gray('    2. Use native MongoDB: spindb create mydb --engine mongodb'))
+          process.exit(1)
+        }
+
+        if (!version) {
+          console.error(uiError('FerretDB requires a version (e.g., 2)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.FerretDB)
+
+        const spinner = createSpinner(`Checking FerretDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `FerretDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`FerretDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`FerretDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: ferretPlatform, arch: ferretArch } =
+          platformService.getPlatformInfo()
+        const ferretFullVersion = ferretdbBinaryManager.getFullVersion(version)
+        const binPath = ferretdbBinaryManager.getFerretDBBinaryPath(
+          ferretFullVersion,
+          ferretPlatform,
+          ferretArch,
+        )
+        console.log(chalk.gray(`  FerretDB location: ${binPath}`))
+
+        // Also show postgresql-documentdb location
+        const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
+          '17-0.107.0', // Default backend version
+          ferretPlatform,
+          ferretArch,
+        )
+        console.log(chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`))
+
+        // Skip client tools check - FerretDB uses MongoDB client tools (mongosh)
+        // which are installed separately via: spindb engines download mongodb
+        console.log(chalk.gray('  Note: Use mongosh to connect (install via: spindb engines download mongodb)'))
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant, meilisearch`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch`,
         ),
       )
       process.exit(1)

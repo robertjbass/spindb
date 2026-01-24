@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, and Meilisearch.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, and Meilisearch.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -124,6 +124,7 @@ See [FEATURE.md](FEATURE.md) for detailed implementation guidance and code examp
 Engines can be referenced by aliases in CLI commands:
 - `postgresql`, `postgres`, `pg` → PostgreSQL
 - `mongodb`, `mongo` → MongoDB
+- `ferretdb`, `ferret` → FerretDB
 - `sqlite`, `lite` → SQLite
 - `qdrant`, `qd` → Qdrant
 - `meilisearch`, `meili`, `ms` → Meilisearch
@@ -136,6 +137,7 @@ Engines can be referenced by aliases in CLI commands:
 | MySQL 🐬 | 8.0, 8.4, 9 | SQL | |
 | MariaDB 🦭 | 10.11, 11.4, 11.8 | SQL | |
 | MongoDB 🍃 | 7.0, 8.0, 8.2 | JavaScript | Uses mongosh |
+| FerretDB 🦔 | 2 | JavaScript | MongoDB-compatible, PostgreSQL backend |
 | Redis 🔴 | 7, 8 | Redis commands | Databases 0-15 (numbered) |
 | Valkey 🔷 | 8, 9 | Redis commands | Uses `redis://` scheme for compatibility |
 | ClickHouse 🏠 | 25.12 | SQL | XML configs, HTTP port 8123 |
@@ -158,7 +160,8 @@ FerretDB is a MongoDB-compatible proxy that requires **two binaries** from hostd
 2. **postgresql-documentdb** - PostgreSQL 17 with DocumentDB extension
 
 **Architecture:**
-```
+
+```text
 MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)
 ```
 
@@ -239,6 +242,7 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | SQLite | `sql` (.sql) | `binary` (.sqlite) | `binary` |
 | DuckDB | `sql` (.sql) | `binary` (.duckdb) | `binary` |
 | MongoDB | `bson` (directory) | `archive` (.archive) | `archive` |
+| FerretDB | `sql` (.sql) | `custom` (.dump) | `sql` |
 | Redis | `text` (.redis) | `rdb` (.rdb) | `rdb` |
 | Valkey | `text` (.valkey) | `rdb` (.rdb) | `rdb` |
 | ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
@@ -261,7 +265,7 @@ See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant' | 'meilisearch'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant' | 'meilisearch'
   version: string
   port: number              // 0 for file-based engines
   database: string          // Primary database name
@@ -269,6 +273,8 @@ type ContainerConfig = {
   created: string           // ISO timestamp
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string       // Source container if cloned
+  backendVersion?: string   // FerretDB: PostgreSQL backend version
+  backendPort?: number      // FerretDB: PostgreSQL backend port
 }
 ```
 
@@ -373,7 +379,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 ## Implementation Details
 
 ### Port Management
-PostgreSQL: 5432 | MySQL: 3306 | MongoDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700
 
 Auto-increments on conflict (e.g., 5432 → 5433).
 
@@ -404,8 +410,9 @@ Menu navigation patterns:
 
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
-3. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
-4. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
+3. **FerretDB Windows** - Not supported (postgresql-documentdb unavailable for Windows)
+4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
+5. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
 
 ## Publishing
 

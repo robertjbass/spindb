@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-01-23
+
+### Added
+- **FerretDB engine support** - MongoDB-compatible database using PostgreSQL as backend:
+  - First composite engine requiring two binaries: `ferretdb` proxy + `postgresql-documentdb` backend
+  - Two processes per container: PostgreSQL backend + FerretDB proxy
+  - Two ports per container: external (27017 for MongoDB) + internal (54320+ for PostgreSQL)
+  - Uses `mongodb://` connection scheme, compatible with mongosh
+  - Backup/restore via pg_dump/pg_restore on PostgreSQL backend (formats: `sql`, `custom`)
+  - Aliases: `ferretdb`, `ferret`
+  - macOS and Linux support (Windows not supported due to postgresql-documentdb build constraints)
+  - Version 2.7.0 with postgresql-documentdb 17-0.107.0 from hostdb
+  - **Note**: Requires fixed hostdb binaries with proper rpath settings (pending hostdb update)
+
+### Changed
+- **Port allocation for stopped containers** - Stopped containers no longer block port suggestions when creating new containers. Previously, a stopped MongoDB container on port 27017 would cause new containers to suggest 27018. Now only running containers are considered port conflicts, giving users more control over port management.
+
 ## [0.22.1] - 2026-01-23
 
 ### Changed

@@ -247,11 +247,12 @@ export async function promptPort(
     ? getEngineDefaults(engine).portRange
     : defaults.portRange
 
-  // Get all existing container ports for conflict detection
+  // Get running container ports for conflict detection
+  // Stopped containers don't block ports - users can manage conflicts themselves
   const existingContainers = await containerManager.list()
   const containerPorts = new Map<number, string>()
   for (const c of existingContainers) {
-    if (c.port > 0) {
+    if (c.port > 0 && c.status === 'running') {
       containerPorts.set(c.port, c.name)
     }
   }

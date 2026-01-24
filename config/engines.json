@@ -168,6 +168,22 @@
       "clientTools": ["meilisearch"],
       "licensing": "MIT",
       "notes": "Full-text search engine. REST API on port 7700. Uses indexes instead of databases."
+    },
+    "ferretdb": {
+      "displayName": "FerretDB",
+      "icon": "🦔",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["2.7.0"],
+      "defaultVersion": "2.7.0",
+      "defaultPort": 27017,
+      "runtime": "server",
+      "queryLanguage": "javascript",
+      "connectionScheme": "mongodb",
+      "superuser": null,
+      "clientTools": ["ferretdb"],
+      "licensing": "Apache-2.0",
+      "notes": "MongoDB-compatible proxy using PostgreSQL as backend. Requires postgresql-documentdb. Not available on Windows."
     }
   }
 }
