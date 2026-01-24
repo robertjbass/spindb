@@ -58,6 +58,25 @@ export const DEFAULT_DOCUMENTDB_VERSION = '17-0.107.0'
 export const FALLBACK_VERSION_MAP: Record<string, string> = FERRETDB_VERSION_MAP
 
 /**
+ * Compare two semantic version strings numerically
+ * @returns positive if a > b, negative if a < b, 0 if equal
+ */
+function compareSemver(a: string, b: string): number {
+  const aParts = a.split('.').map((p) => parseInt(p, 10) || 0)
+  const bParts = b.split('.').map((p) => parseInt(p, 10) || 0)
+  const maxLen = Math.max(aParts.length, bParts.length)
+
+  for (let i = 0; i < maxLen; i++) {
+    const aVal = aParts[i] ?? 0
+    const bVal = bParts[i] ?? 0
+    if (aVal !== bVal) {
+      return aVal - bVal
+    }
+  }
+  return 0
+}
+
+/**
  * Get the full version for a FerretDB version string
  * @param version - Version string (e.g., "2", "2.7", "2.7.0")
  * @returns Full version or null if not found
@@ -72,7 +91,7 @@ export function getFullVersion(version: string): string | null {
   const majorOnly = version.split('.')[0]
   const matchingVersions = Object.entries(FERRETDB_VERSION_MAP)
     .filter(([key]) => key.split('.')[0] === majorOnly)
-    .sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }))
+    .sort(([a], [b]) => compareSemver(b, a)) // Sort descending by semver
 
   if (matchingVersions.length > 0) {
     return matchingVersions[0][1]
