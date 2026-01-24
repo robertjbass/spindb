@@ -480,6 +480,8 @@ export class FerretDBEngine extends BaseEngine {
         `127.0.0.1:${port}`,
         '--postgresql-url',
         `postgres://postgres@127.0.0.1:${backendPort}/ferretdb`,
+        '--state-dir',
+        containerDir,
       ]
 
       logDebug(`Starting FerretDB with args: ${ferretArgs.join(' ')}`)
@@ -701,7 +703,7 @@ export class FerretDBEngine extends BaseEngine {
   // Get connection string (MongoDB-compatible)
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
-    const db = database || 'test'
+    const db = database || container.database || 'test'
     return `mongodb://127.0.0.1:${port}/${db}`
   }
 
