@@ -99,7 +99,11 @@ export async function detectBackupFormat(
     }
 
     // Check for SQL format using a larger buffer with word-boundary checks
-    const textHeader = buffer.toString('utf8', 0, bytesRead).toLowerCase()
+    // Strip BOM (Byte Order Mark) if present to avoid false negatives
+    const textHeader = buffer
+      .toString('utf8', 0, bytesRead)
+      .replace(/^\uFEFF/, '')
+      .toLowerCase()
     const isSqlFormat =
       textHeader.startsWith('--') ||
       textHeader.startsWith('/*') ||
