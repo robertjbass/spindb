@@ -303,6 +303,15 @@ class FerretDBCompositeBinaryManager {
         }
       }
 
+      // On macOS, re-sign binaries to fix code signature issues
+      if (platform === Platform.Darwin) {
+        onProgress?.({
+          stage: 'signing',
+          message: 'Re-signing FerretDB binaries for macOS...',
+        })
+        await this.resignMacOSBinaries(binPath)
+      }
+
       // Verify the installation
       onProgress?.({ stage: 'verifying', message: 'Verifying FerretDB...' })
       await this.verifyFerretDB(fullVersion, platform, arch)
@@ -376,6 +385,16 @@ class FerretDBCompositeBinaryManager {
         for (const binary of binaries) {
           await chmod(join(binaryDir, binary), 0o755)
         }
+      }
+
+      // On macOS, re-sign binaries and libraries to fix code signature issues
+      // (signatures become invalid after download due to quarantine/Gatekeeper)
+      if (platform === Platform.Darwin) {
+        onProgress?.({
+          stage: 'signing',
+          message: 'Re-signing binaries for macOS...',
+        })
+        await this.resignMacOSBinaries(binPath)
       }
 
       // Verify the installation
@@ -624,7 +643,18 @@ class FerretDBCompositeBinaryManager {
         )
       }
     } catch (error) {
-      const err = error as Error
+      const err = error as Error & { code?: string | number | null }
+
+      // Check for library loading issues (common on macOS/Linux with hostdb binaries)
+      if (err.code === null || err.code === 'ENOENT' || err.message.includes('dyld') || err.message.includes('GLIBC')) {
+        throw new Error(
+          `postgresql-documentdb binary failed to execute. This is likely due to missing or incompatible libraries.\n` +
+          `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
+          `See: https://github.com/robertjbass/hostdb/issues\n` +
+          `Original error: ${err.message || 'Process killed (library loading failed)'}`,
+        )
+      }
+
       throw new Error(
         `Failed to verify postgresql-documentdb binary: ${err.message}`,
       )
@@ -655,6 +685,62 @@ class FerretDBCompositeBinaryManager {
     }
     if (existsSync(documentdbPath)) {
       await rm(documentdbPath, { recursive: true, force: true })
+    }
+  }
+
+  /**
+   * Re-sign macOS binaries with ad-hoc signature
+   *
+   * Downloaded binaries may have invalid signatures due to Gatekeeper quarantine.
+   * Re-signing with ad-hoc signature (-s -) allows them to run without issues.
+   */
+  private async resignMacOSBinaries(binPath: string): Promise<void> {
+    // Sign all dylibs first (binaries depend on them)
+    const libDir = join(binPath, 'lib')
+    if (existsSync(libDir)) {
+      const libs = await readdir(libDir)
+      for (const lib of libs) {
+        if (lib.endsWith('.dylib')) {
+          const libPath = join(libDir, lib)
+          try {
+            await spawnAsync('codesign', ['--force', '--deep', '-s', '-', libPath])
+          } catch {
+            // Ignore signing errors for individual libs
+            logDebug(`Failed to sign ${lib}, continuing...`)
+          }
+        }
+      }
+
+      // Also sign libs in postgresql/ subdirectory if it exists
+      const pgLibDir = join(libDir, 'postgresql')
+      if (existsSync(pgLibDir)) {
+        const pgLibs = await readdir(pgLibDir)
+        for (const lib of pgLibs) {
+          if (lib.endsWith('.dylib')) {
+            const libPath = join(pgLibDir, lib)
+            try {
+              await spawnAsync('codesign', ['--force', '--deep', '-s', '-', libPath])
+            } catch {
+              logDebug(`Failed to sign ${lib}, continuing...`)
+            }
+          }
+        }
+      }
+    }
+
+    // Sign all binaries
+    const binDir = join(binPath, 'bin')
+    if (existsSync(binDir)) {
+      const binaries = await readdir(binDir)
+      for (const binary of binaries) {
+        const binaryPath = join(binDir, binary)
+        try {
+          await spawnAsync('codesign', ['--force', '--deep', '-s', '-', binaryPath])
+        } catch {
+          // Ignore signing errors for individual binaries
+          logDebug(`Failed to sign ${binary}, continuing...`)
+        }
+      }
     }
   }
 }

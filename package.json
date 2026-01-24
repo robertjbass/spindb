@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.23.4",
+  "version": "0.23.5",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
