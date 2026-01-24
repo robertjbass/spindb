@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -970,7 +970,7 @@ run_test() {
     postgresql|mysql|mariadb|sqlite|duckdb|clickhouse)
       spindb run "$container_name" -c "SELECT 1;" &>/dev/null && query_ok=true
       ;;
-    mongodb)
+    mongodb|ferretdb)
       spindb run "$container_name" -c "db.runCommand({ping: 1})" &>/dev/null && query_ok=true
       ;;
     redis|valkey)
@@ -1557,7 +1557,7 @@ else
 fi
 
 # Run engine tests
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch; do
+for engine in postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

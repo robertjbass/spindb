@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-01-23
+
+### Fixed
+- Added FerretDB to `--engine` help text in create command
+- Added FerretDB to Docker E2E test suite
+
 ## [0.23.1] - 2026-01-23
 
 ### Changed

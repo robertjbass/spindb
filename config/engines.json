@@ -183,7 +183,7 @@
       "superuser": null,
       "clientTools": ["ferretdb"],
       "licensing": "Apache-2.0",
-      "notes": "MongoDB-compatible proxy using PostgreSQL as backend. Requires postgresql-documentdb. Not available on Windows."
+      "notes": "MongoDB-compatible proxy using PostgreSQL as backend. Requires postgresql-documentdb."
     }
   }
 }
