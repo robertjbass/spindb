@@ -81,6 +81,7 @@ export async function createBackup(
     String(backendPort),
     '-U',
     'postgres',
+    '--no-password',
     '-d',
     database,
   ]
@@ -98,7 +99,7 @@ export async function createBackup(
   logDebug(`Running pg_dump with args: ${args.join(' ')}`)
 
   const spawnOptions: SpawnOptions = {
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'ignore', 'pipe'],
   }
 
   return new Promise((resolve, reject) => {
@@ -106,9 +107,6 @@ export async function createBackup(
 
     let stderr = ''
 
-    proc.stdout?.on('data', () => {
-      // pg_dump outputs to file, stdout is typically empty
-    })
     proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
