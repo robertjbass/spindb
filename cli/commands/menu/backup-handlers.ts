@@ -31,6 +31,7 @@ import {
   promptBackupDirectory,
   promptInstallDependencies,
   promptConfirm,
+  escapeablePrompt,
 } from '../../ui/prompts'
 import { createSpinner } from '../../ui/spinner'
 import {
@@ -203,7 +204,7 @@ export async function handleRestore(): Promise<void> {
       },
     ]
 
-    const { selectedContainer } = await inquirer.prompt<{
+    const { selectedContainer } = await escapeablePrompt<{
       selectedContainer: string
     }>([
       {
@@ -291,7 +292,7 @@ export async function handleRestore(): Promise<void> {
       },
     )
 
-    const { restoreSource } = await inquirer.prompt<{
+    const { restoreSource } = await escapeablePrompt<{
       restoreSource: 'file' | 'connection' | '__back__'
     }>([
       {
@@ -311,9 +312,9 @@ export async function handleRestore(): Promise<void> {
 
     if (restoreSource === 'connection') {
       console.log(
-        chalk.gray('  Enter connection string, or press Enter to go back'),
+        chalk.gray('  Enter connection string, or press Enter to go back (esc - main menu)'),
       )
-      const { connectionString } = await inquirer.prompt<{
+      const { connectionString } = await escapeablePrompt<{
         connectionString: string
       }>([
         {
@@ -502,10 +503,10 @@ export async function handleRestore(): Promise<void> {
     } else {
       console.log(
         chalk.gray(
-          '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+          '  Drag & drop, enter path (abs or rel), or press Enter to go back (esc - main menu)',
         ),
       )
-      const { backupPath: rawBackupPath } = await inquirer.prompt<{
+      const { backupPath: rawBackupPath } = await escapeablePrompt<{
         backupPath: string
       }>([
         {
@@ -544,7 +545,7 @@ export async function handleRestore(): Promise<void> {
       // Redis: Always restore to existing database (0-15)
       restoreMode = 'replace'
     } else {
-      const result = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+      const result = await escapeablePrompt<{ restoreMode: RestoreMode }>([
         {
           type: 'list',
           name: 'restoreMode',
@@ -657,7 +658,7 @@ export async function handleRestore(): Promise<void> {
     // For Redis .redis text files, ask about merge vs replace behavior
     let flushBeforeRestore = false
     if (isRedis && format.format === 'redis') {
-      const { restoreBehavior } = await inquirer.prompt<{
+      const { restoreBehavior } = await escapeablePrompt<{
         restoreBehavior: 'replace' | 'merge'
       }>([
         {
@@ -1027,7 +1028,7 @@ export async function handleRestoreForContainer(
     },
   )
 
-  const { restoreSource } = await inquirer.prompt<{
+  const { restoreSource } = await escapeablePrompt<{
     restoreSource: 'file' | 'connection' | '__back__'
   }>([
     {
@@ -1048,9 +1049,9 @@ export async function handleRestoreForContainer(
   if (restoreSource === 'connection') {
     // Handle connection string restore
     console.log(
-      chalk.gray('  Enter connection string, or press Enter to go back'),
+      chalk.gray('  Enter connection string, or press Enter to go back (esc - main menu)'),
     )
-    const { connectionString } = await inquirer.prompt<{
+    const { connectionString } = await escapeablePrompt<{
       connectionString: string
     }>([
       {
@@ -1151,7 +1152,7 @@ export async function handleRestoreForContainer(
         '  Drag and drop the backup file here, or type the path (press Enter to cancel)',
       ),
     )
-    const { backupPath: rawBackupPath } = await inquirer.prompt<{
+    const { backupPath: rawBackupPath } = await escapeablePrompt<{
       backupPath: string
     }>([
       {
@@ -1215,7 +1216,7 @@ export async function handleRestoreForContainer(
     // Redis: Always restore to existing database (0-15)
     restoreMode = 'replace'
   } else {
-    const result = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+    const result = await escapeablePrompt<{ restoreMode: RestoreMode }>([
       {
         type: 'list',
         name: 'restoreMode',
@@ -1304,7 +1305,7 @@ export async function handleRestoreForContainer(
       databaseName = existingDatabases[0]
       console.log(chalk.gray(`  Using database: ${databaseName}`))
     } else {
-      const { database } = await inquirer.prompt<{ database: string }>([
+      const { database } = await escapeablePrompt<{ database: string }>([
         {
           type: 'list',
           name: 'database',
@@ -1319,7 +1320,7 @@ export async function handleRestoreForContainer(
   // For Redis .redis text files, ask about merge vs replace behavior
   let flushBeforeRestore = false
   if (isRedis && format.format === 'redis') {
-    const { restoreBehavior } = await inquirer.prompt<{
+    const { restoreBehavior } = await escapeablePrompt<{
       restoreBehavior: 'replace' | 'merge'
     }>([
       {
@@ -1424,7 +1425,7 @@ export async function handleClone(): Promise<void> {
     return
   }
 
-  const { targetName } = await inquirer.prompt<{ targetName: string }>([
+  const { targetName } = await escapeablePrompt<{ targetName: string }>([
     {
       type: 'input',
       name: 'targetName',

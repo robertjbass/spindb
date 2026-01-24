@@ -5,7 +5,7 @@ import { join, dirname, basename } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
 import { header, uiError, uiWarning, uiInfo, formatBytes } from '../../ui/theme'
-import { promptConfirm } from '../../ui/prompts'
+import { promptConfirm, escapeablePrompt } from '../../ui/prompts'
 import { getEngineIcon, getEngineIconPadded } from '../../constants'
 import {
   getInstalledEngines,
@@ -109,10 +109,10 @@ export async function handleEngines(): Promise<void> {
     ),
   )
   choices.push(new inquirer.Separator())
-  choices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })
+  choices.push({ name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' })
   choices.push(new inquirer.Separator()) // Separator for when list wraps around
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -122,6 +122,7 @@ export async function handleEngines(): Promise<void> {
     },
   ])
 
+  // Back returns to main menu (escape is handled globally)
   if (action === 'back') {
     return
   }
@@ -175,10 +176,10 @@ async function showEngineSubmenu(
     },
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back`, value: 'back' },
-    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
+    { name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`, value: 'main' },
   ]
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -223,7 +224,7 @@ async function handleDeleteEngine(
       ),
     )
     console.log()
-    await inquirer.prompt([
+    await escapeablePrompt([
       {
         type: 'input',
         name: 'continue',

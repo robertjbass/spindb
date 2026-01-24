@@ -1,6 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { spawn } from 'child_process'
+import { escapeablePrompt } from '../../ui/prompts'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname, resolve, sep } from 'path'
@@ -78,7 +79,7 @@ export async function handleCopyConnectionString(
   }
   console.log()
 
-  await inquirer.prompt([
+  await escapeablePrompt([
     {
       type: 'input',
       name: 'continue',
@@ -318,7 +319,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     value: 'back',
   })
 
-  const { shellChoice } = await inquirer.prompt<{ shellChoice: ShellChoice }>([
+  const { shellChoice } = await escapeablePrompt<{ shellChoice: ShellChoice }>([
     {
       type: 'list',
       name: 'shellChoice',

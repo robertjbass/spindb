@@ -1,5 +1,4 @@
 import chalk from 'chalk'
-import inquirer from 'inquirer'
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { spawn } from 'child_process'
@@ -10,6 +9,7 @@ import { paths } from '../../../config/paths'
 import {
   promptInstallDependencies,
   promptDatabaseSelect,
+  escapeablePrompt,
 } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
@@ -102,10 +102,10 @@ export async function handleRunSql(containerName: string): Promise<void> {
   // Prompt for file path (empty input = go back)
   console.log(
     chalk.gray(
-      '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+      '  Drag & drop, enter path (abs or rel), or press Enter to go back (esc - main menu)',
     ),
   )
-  const { filePath: rawFilePath } = await inquirer.prompt<{
+  const { filePath: rawFilePath } = await escapeablePrompt<{
     filePath: string
   }>([
     {
@@ -184,7 +184,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
     return
   }
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',

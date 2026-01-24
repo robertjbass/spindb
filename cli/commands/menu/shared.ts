@@ -1,5 +1,6 @@
 import chalk from 'chalk'
-import inquirer from 'inquirer'
+import type inquirer from 'inquirer'
+import { escapeablePrompt } from '../../ui/prompts'
 
 // Menu choice type for inquirer list prompts
 export type MenuChoice =
@@ -12,7 +13,7 @@ export type MenuChoice =
 
 // Helper to pause and wait for user to press Enter
 export async function pressEnterToContinue(): Promise<void> {
-  await inquirer.prompt([
+  await escapeablePrompt([
     {
       type: 'input',
       name: 'continue',

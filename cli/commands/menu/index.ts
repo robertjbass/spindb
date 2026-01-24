@@ -2,7 +2,13 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { containerManager } from '../../../core/container-manager'
-import { promptInstallDependencies } from '../../ui/prompts'
+import {
+  promptInstallDependencies,
+  enableGlobalEscape,
+  checkAndResetEscape,
+  escapeablePrompt,
+  EscapeError,
+} from '../../ui/prompts'
 import { header, uiError } from '../../ui/theme'
 import { hasAnyInstalledEngines } from '../../helpers'
 import {
@@ -100,10 +106,10 @@ async function showMainMenu(): Promise<void> {
     },
     { name: `${chalk.bgRed.white('+')} System health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
-    { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
+    { name: `${chalk.gray('⏻')} Exit ${chalk.gray('(ctrl+c)')}`, value: 'exit' },
   ]
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -155,30 +161,42 @@ async function showMainMenu(): Promise<void> {
 export const menuCommand = new Command('menu')
   .description('Interactive menu for managing containers')
   .action(async () => {
-    try {
-      await showMainMenu()
-    } catch (error) {
-      const e = error as Error
+    // Enable global escape key handling - pressing escape anywhere returns to main menu
+    // This also handles ctrl+c for graceful exit with goodbye message
+    enableGlobalEscape()
 
-      // Check if this is a missing tool error
-      if (
-        e.message.includes('pg_restore not found') ||
-        e.message.includes('psql not found') ||
-        e.message.includes('pg_dump not found')
-      ) {
-        const missingTool = e.message.includes('pg_restore')
-          ? 'pg_restore'
-          : e.message.includes('pg_dump')
-            ? 'pg_dump'
-            : 'psql'
-        const installed = await promptInstallDependencies(missingTool)
-        if (installed) {
-          console.log(chalk.yellow('  Please re-run spindb to continue.'))
+    // Run menu in a loop so escape can restart it
+    while (true) {
+      try {
+        await showMainMenu()
+      } catch (error) {
+        const e = error as Error
+
+        // If escape was pressed, just restart the menu
+        if (error instanceof EscapeError || checkAndResetEscape() || !e.message || e.message.includes('prompt was closed')) {
+          continue
         }
+
+        // Check if this is a missing tool error
+        if (
+          e.message.includes('pg_restore not found') ||
+          e.message.includes('psql not found') ||
+          e.message.includes('pg_dump not found')
+        ) {
+          const missingTool = e.message.includes('pg_restore')
+            ? 'pg_restore'
+            : e.message.includes('pg_dump')
+              ? 'pg_dump'
+              : 'psql'
+          const installed = await promptInstallDependencies(missingTool)
+          if (installed) {
+            console.log(chalk.yellow('  Please re-run spindb to continue.'))
+          }
+          process.exit(1)
+        }
+
+        console.error(uiError(e.message))
         process.exit(1)
       }
-
-      console.error(uiError(e.message))
-      process.exit(1)
     }
   })

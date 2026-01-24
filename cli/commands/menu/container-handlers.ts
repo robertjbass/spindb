@@ -30,6 +30,7 @@ import {
   promptPort,
   promptDatabaseName,
   promptFileDatabasePath,
+  escapeablePrompt,
   BACK_VALUE,
   MAIN_MENU_VALUE,
 } from '../../ui/prompts'
@@ -304,7 +305,7 @@ export async function handleCreate(): Promise<'main' | void> {
 
       console.log()
 
-      await inquirer.prompt([
+      await escapeablePrompt([
         {
           type: 'input',
           name: 'continue',
@@ -372,7 +373,7 @@ export async function handleCreate(): Promise<'main' | void> {
 
       console.log()
 
-      await inquirer.prompt([
+      await escapeablePrompt([
         {
           type: 'input',
           name: 'continue',
@@ -414,7 +415,7 @@ export async function handleList(
     )
     console.log()
 
-    await inquirer.prompt([
+    await escapeablePrompt([
       {
         type: 'input',
         name: 'continue',
@@ -520,11 +521,9 @@ export async function handleList(
   )
   containerChoices.push(new inquirer.Separator())
   containerChoices.push({ name: `${chalk.green('+')} Create new`, value: 'create' })
-  containerChoices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })
+  containerChoices.push({ name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' })
 
-  const { selectedContainer } = await inquirer.prompt<{
-    selectedContainer: string
-  }>([
+  const { selectedContainer } = await escapeablePrompt<{ selectedContainer: string }>([
     {
       type: 'list',
       name: 'selectedContainer',
@@ -534,8 +533,8 @@ export async function handleList(
     },
   ])
 
+  // Back returns to main menu (escape is handled globally)
   if (selectedContainer === 'back') {
-    await showMainMenu()
     return
   }
 
@@ -735,12 +734,12 @@ export async function showContainerSubmenu(
       value: 'back',
     },
     {
-      name: `${chalk.blue('⌂')} Back to main menu`,
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: 'main',
     },
   )
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -749,6 +748,8 @@ export async function showContainerSubmenu(
       pageSize: 15,
     },
   ])
+
+  // Escape is handled globally by the menu loop
 
   switch (action) {
     case 'start':
@@ -1052,11 +1053,11 @@ async function handleEditContainer(
     value: 'back',
   })
   editChoices.push({
-    name: `${chalk.blue('⌂')} Back to main menu`,
+    name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
     value: 'main',
   })
 
-  const { field } = await inquirer.prompt<{ field: string }>([
+  const { field } = await escapeablePrompt<{ field: string }>([
     {
       type: 'list',
       name: 'field',
@@ -1075,7 +1076,7 @@ async function handleEditContainer(
   }
 
   if (field === 'name') {
-    const { newName } = await inquirer.prompt<{ newName: string }>([
+    const { newName } = await escapeablePrompt<{ newName: string }>([
       {
         type: 'input',
         name: 'newName',
@@ -1113,7 +1114,7 @@ async function handleEditContainer(
   }
 
   if (field === 'port') {
-    const { newPort } = await inquirer.prompt<{ newPort: number }>([
+    const { newPort } = await escapeablePrompt<{ newPort: number }>([
       {
         type: 'input',
         name: 'newPort',
@@ -1154,7 +1155,7 @@ async function handleEditContainer(
   if (field === 'relocate') {
     const currentFileName = basename(config.database)
 
-    const { inputPath } = await inquirer.prompt<{ inputPath: string }>([
+    const { inputPath } = await escapeablePrompt<{ inputPath: string }>([
       {
         type: 'input',
         name: 'inputPath',
@@ -1224,7 +1225,7 @@ async function handleEditContainer(
     const destDir = dirname(finalPath)
     if (!existsSync(destDir)) {
       console.log(uiWarning(`Directory does not exist: ${destDir}`))
-      const { createDir } = await inquirer.prompt<{ createDir: string }>([
+      const { createDir } = await escapeablePrompt<{ createDir: string }>([
         {
           type: 'list',
           name: 'createDir',
@@ -1322,7 +1323,7 @@ async function handleCloneFromSubmenu(
     return
   }
 
-  const { targetName } = await inquirer.prompt<{ targetName: string }>([
+  const { targetName } = await escapeablePrompt<{ targetName: string }>([
     {
       type: 'input',
       name: 'targetName',
