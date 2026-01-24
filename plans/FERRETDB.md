@@ -1117,3 +1117,69 @@ If Windows support is ever needed, options include:
 1. WSL2 (recommend to users)
 2. Build a minimal `postgresql-documentdb` without PostGIS/rum (reduced functionality)
 3. Significant investment in Windows build infrastructure for GEOS/PROJ/GDAL
+
+---
+
+## DocumentDB SQL Patching (January 2026)
+
+This section documents upstream bugs in DocumentDB's SQL files that required patching in hostdb.
+
+### Issue 1: Token Concatenation Operator (`##`)
+
+**Problem:** DocumentDB's SQL files use `##` as a token concatenation operator (like C preprocessor), but PostgreSQL doesn't support this syntax.
+
+**Example broken SQL:**
+```sql
+bson##rum## single_path_ops      -- Invalid: ## not recognized
+get##documentdb_api##_binary_version  -- Invalid
+```
+
+**Fix:** Replace `##` with proper token concatenation:
+```bash
+sed -e 's/## //g' -e 's/##_/_/g' -e 's/_##/_/g' -e 's/##//g'
+```
+
+**Result:**
+```sql
+bson_rum_single_path_ops         -- Valid
+get_documentdb_api_binary_version  -- Valid
+```
+
+### Issue 2: Wrong Library References in Upgrade Scripts
+
+**Problem:** DocumentDB upgrade scripts (`documentdb--0.101-0--0.102-0.sql`, `documentdb--0.102-0--0.102-1.sql`) incorrectly reference functions from `pg_documentdb_core.dylib` using `MODULE_PATHNAME`, which resolves to `pg_documentdb.dylib`.
+
+**Affected functions:**
+- `bson_in`, `bson_out`, `bson_send`, `bson_recv` (type I/O functions)
+- `bsonquery_equal`, `bsonquery_lt`, `bsonquery_lte`, `bsonquery_gt`, `bsonquery_gte` (comparison functions)
+
+**Error message:**
+```
+ERROR: could not find function "bson_in" in file ".../pg_documentdb.dylib"
+```
+
+**Root cause:** These functions are defined in `pg_documentdb_core.dylib`, but the upgrade scripts use `MODULE_PATHNAME` (which expands to `$libdir/pg_documentdb` per the control file).
+
+**Fix:** Patch the SQL files to use explicit library path:
+```bash
+# Before
+AS 'MODULE_PATHNAME', $function$bson_in$function$;
+
+# After
+AS '$libdir/pg_documentdb_core', $function$bson_in$function$;
+```
+
+**Files patched:**
+| File | Functions | Lines |
+|------|-----------|-------|
+| `documentdb--0.101-0--0.102-0.sql` | bson_in/out/send/recv | 951, 957, 963, 969 |
+| `documentdb--0.101-0--0.102-0.sql` | bsonquery_* | 1020, 1026, 1032, 1038, 1044 |
+| `documentdb--0.102-0--0.102-1.sql` | bson_in/out/send/recv | 988, 994, 1000, 1006 |
+| `documentdb--0.102-0--0.102-1.sql` | bsonquery_* | 1057, 1063, 1069, 1075, 1081 |
+
+### Upstream Bug Reports
+
+These are bugs in the DocumentDB project itself, not hostdb or SpinDB. Consider reporting upstream:
+- Repository: https://github.com/FerretDB/documentdb
+- The `##` syntax appears to be a build-time macro that wasn't properly expanded
+- The MODULE_PATHNAME references suggest the upgrade scripts weren't tested in isolation
