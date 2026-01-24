@@ -32,9 +32,14 @@ describe('FerretDB Version Maps', () => {
     })
 
     it('should have identity mapping for full versions', () => {
+      // Find a full version key (x.y.z format) dynamically
+      const fullVersionKey = Object.keys(FERRETDB_VERSION_MAP).find((key) =>
+        /^\d+\.\d+\.\d+$/.test(key),
+      )
+      assert(fullVersionKey !== undefined, 'Should have at least one full version key')
       assertEqual(
-        FERRETDB_VERSION_MAP['2.7.0'],
-        '2.7.0',
+        FERRETDB_VERSION_MAP[fullVersionKey!],
+        fullVersionKey,
         'Full version should map to itself',
       )
     })
@@ -101,9 +106,8 @@ describe('FerretDB Version Maps', () => {
     })
 
     it('should return null for unknown version', () => {
-      const _result = getFullVersion('99')
-      // Could return null or try to find a match
-      // This depends on implementation - test just verifies no crash
+      const result = getFullVersion('99')
+      assertEqual(result, null, 'Should return null for unknown version')
     })
   })
 
