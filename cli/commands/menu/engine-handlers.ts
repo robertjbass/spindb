@@ -1,6 +1,6 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { rm } from 'fs/promises'
+import { rm, readdir } from 'fs/promises'
 import { join, dirname, basename } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
@@ -261,7 +261,6 @@ async function handleDeleteEngine(
 
       // Find matching postgresql-documentdb directory
       const documentdbPattern = `postgresql-documentdb-`
-      const { readdir } = await import('fs/promises')
       const entries = await readdir(binDir, { withFileTypes: true })
       for (const entry of entries) {
         if (
