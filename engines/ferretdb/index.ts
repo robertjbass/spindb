@@ -314,6 +314,33 @@ export class FerretDBEngine extends BaseEngine {
         const err = error as Error
         throw new Error(`Failed to initialize PostgreSQL: ${err.message}`)
       }
+
+      // Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
+      // This is critical for DocumentDB extension to load properly
+      const bundledConf = join(documentdbPath, 'share', 'postgresql.conf.sample')
+      const pgConf = join(pgDataDir, 'postgresql.conf')
+
+      if (existsSync(bundledConf)) {
+        try {
+          // Read the bundled config
+          let confContent = await readFile(bundledConf, 'utf8')
+
+          // Update cron.database_name to 'ferretdb' (required for pg_cron to work with DocumentDB)
+          confContent = confContent.replace(
+            /cron\.database_name\s*=\s*'[^']*'/,
+            "cron.database_name = 'ferretdb'",
+          )
+
+          // Write the modified config
+          await writeFile(pgConf, confContent)
+          logDebug(`Copied and configured postgresql.conf to ${pgConf}`)
+        } catch (copyError) {
+          logDebug(`Warning: Could not copy postgresql.conf.sample: ${copyError}`)
+          // Continue anyway - initdb creates a default config
+        }
+      } else {
+        logDebug(`Bundled postgresql.conf.sample not found at ${bundledConf}`)
+      }
     }
 
     return pgDataDir
@@ -460,7 +487,7 @@ export class FerretDBEngine extends BaseEngine {
           '-d',
           'ferretdb',
           '-c',
-          'CREATE EXTENSION IF NOT EXISTS documentdb;',
+          'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;',
         ]).catch((error) => {
           logWarning(`Failed to create documentdb extension: ${error}`)
           // Continue anyway - extension might already exist

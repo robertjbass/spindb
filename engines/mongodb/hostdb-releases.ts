@@ -89,4 +89,3 @@ export async function getLatestVersion(
   const versions = await fetchAvailableVersions()
   return versions[majorMinor] || null
 }
-

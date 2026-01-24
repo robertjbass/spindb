@@ -771,6 +771,88 @@ These stretch goals should be tracked in:
 
 ---
 
+## Extension Loading Fix (January 2026)
+
+This section documents the fix for the DocumentDB extension loading issue.
+
+### The Problem
+
+FerretDB containers were failing to load the documentdb extension with errors like:
+```
+ERROR: could not open extension control file "/opt/homebrew/share/postgresql@17/extension/documentdb.control": No such file or directory
+```
+
+This happened because PostgreSQL was looking for extension files at `/opt/homebrew/...` (the Homebrew-compiled paths) instead of the bundled location (`~/.spindb/bin/postgresql-documentdb-17-0.107.0-<platform>/`).
+
+### Root Cause
+
+**PostgreSQL IS designed to be relocatable** - it computes `sharedir` and `pkglibdir` relative to the binary location when the directory structure follows the standard layout. The problem was Homebrew's non-standard layout:
+
+**Homebrew layout (non-standard):**
+```text
+/opt/homebrew/opt/postgresql@17/bin/postgres    ← Binary
+/opt/homebrew/share/postgresql@17/extension/    ← Extension files (DIFFERENT prefix tree!)
+/opt/homebrew/lib/postgresql@17/                ← Libraries (DIFFERENT prefix tree!)
+```
+
+**Standard PostgreSQL layout (what we need):**
+```text
+$PREFIX/bin/postgres                            ← Binary
+$PREFIX/share/postgresql/extension/             ← Extension files (SAME prefix tree)
+$PREFIX/lib/postgresql/                         ← Libraries (SAME prefix tree)
+```
+
+PostgreSQL's internal `make_relative_path()` function computes paths relative to where the binary is located. With the standard layout, PostgreSQL automatically finds files in the bundled directory. With Homebrew's layout, the relative path computation breaks.
+
+### The Fix
+
+**Build PostgreSQL from source** with a standard `--prefix` layout instead of using Homebrew's pre-built binaries:
+
+```bash
+# Build PostgreSQL with standard prefix
+./configure --prefix=/usr/local/pgsql --with-openssl --with-libxml
+make && make install DESTDIR="${BUILD_DIR}"
+
+# The resulting structure is relocatable:
+postgresql-documentdb/
+├── bin/postgres           ← Computes paths relative to THIS location
+├── share/postgresql/      ← Found via relative path from bin/
+│   └── extension/
+└── lib/postgresql/        ← Found via relative path from bin/
+```
+
+When installed to `~/.spindb/bin/postgresql-documentdb-17-0.107.0-darwin-arm64/`, PostgreSQL automatically computes:
+- `sharedir` = `~/.spindb/bin/.../share/postgresql/`
+- `pkglibdir` = `~/.spindb/bin/.../lib/postgresql/`
+
+**No symlinks, no hardcoded paths, no sudo required** - just correct binary compilation.
+
+### Implementation Details
+
+**hostdb changes:**
+1. **`build-macos.sh`**: Rewrote to build PostgreSQL from source instead of using Homebrew
+2. **`legacy/`**: Contains the old Homebrew-based build script for reference
+
+**SpinDB changes:**
+1. **`engines/ferretdb/index.ts`**: Copy bundled `postgresql.conf.sample` after `initdb` to ensure `shared_preload_libraries` is pre-configured
+
+### Verification
+
+After rebuilding binaries:
+```bash
+# Verify PostgreSQL computes relative paths correctly
+cd ~/.spindb/bin/postgresql-documentdb-17-0.107.0-darwin-arm64
+./bin/pg_config --sharedir
+# Should output: /Users/bob/.spindb/bin/.../share/postgresql (NOT /opt/homebrew/...)
+
+# Test FerretDB container
+spindb create test-fdb --engine ferretdb
+spindb start test-fdb
+# Should not show "could not open extension control file" errors
+```
+
+---
+
 ## Notes from hostdb
 
 This section contains implementation details from the hostdb project about how the binaries are structured and how they can be used together.
