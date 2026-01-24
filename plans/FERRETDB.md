@@ -13,6 +13,28 @@ FerretDB is an open-source MongoDB alternative that uses PostgreSQL as its stora
 1. `ferretdb` - The proxy server (Go binary)
 2. `postgres` - The storage backend (already in SpinDB)
 
+## Current Progress (January 2026)
+
+**Status:** FerretDB engine is functional on darwin-arm64. Rebuilding binaries for other platforms.
+
+### What's Working
+- ✅ FerretDB engine implementation complete (create, start, stop, connect, url)
+- ✅ Authentication fixed (`--no-auth` for local development)
+- ✅ Debug port conflicts fixed (dynamic `--debug-addr` per container)
+- ✅ Binary verification for pg_ctl and initdb
+- ✅ LD_LIBRARY_PATH handling for Linux
+- ✅ Integration tests created and passing on darwin-arm64
+
+### In Progress
+- 🔄 Rebuilding postgresql-documentdb binaries for darwin-x64 and linux-arm64
+  - These platforms had library path issues with the initial hostdb builds
+  - Fixing dylib/rpath settings for proper relocatability
+- 🔄 Docker E2E tests for FerretDB
+
+### Known Issues
+- Backup/restore between FerretDB containers has limitations due to DocumentDB internal tables
+- See "FerretDB Runtime Troubleshooting" section below for details
+
 ## Architecture Decision: Embedded PostgreSQL
 
 **Recommended approach:** Each FerretDB container manages its own embedded PostgreSQL data directory.
@@ -387,44 +409,45 @@ export const FERRETDB_PG_DOCUMENTDB_COMPAT: Record<string, string> = {
 - [DocumentDB releases](https://github.com/FerretDB/documentdb/releases)
 - [FerretDB Docker images](https://github.com/orgs/FerretDB/packages/container/package/postgres-documentdb) (reference for build config)
 
-### Phase 2: SpinDB Type System
-- [ ] Add `FerretDB = 'ferretdb'` to `Engine` enum in `types/index.ts`
-- [ ] Add `'ferretdb'` to `ALL_ENGINES` array
-- [ ] Add `'ferretdb'` tool to `BinaryTool` type
-- [ ] Add `'ferretdb'` to `KNOWN_BINARY_TOOLS` in `core/dependency-manager.ts`
+### Phase 2: SpinDB Type System (COMPLETE)
+- [x] Add `FerretDB = 'ferretdb'` to `Engine` enum in `types/index.ts`
+- [x] Add `'ferretdb'` to `ALL_ENGINES` array
+- [x] Add `'ferretdb'` tool to `BinaryTool` type
+- [x] Add `'ferretdb'` to `KNOWN_BINARY_TOOLS` in `core/dependency-manager.ts`
 
-### Phase 3: SpinDB Configuration
-- [ ] Add ferretdb entry to `config/engines.json`
-- [ ] Add defaults to `config/engine-defaults.ts` (port 27017, etc.)
-- [ ] Create `engines/ferretdb/version-maps.ts`
+### Phase 3: SpinDB Configuration (COMPLETE)
+- [x] Add ferretdb entry to `config/engines.json`
+- [x] Add defaults to `config/engine-defaults.ts` (port 27017, etc.)
+- [x] Create `engines/ferretdb/version-maps.ts`
 
-### Phase 4: SpinDB Engine Implementation
-- [ ] Create `engines/ferretdb/index.ts` (main engine class)
-- [ ] Create `engines/ferretdb/binary-manager.ts` (manages both ferretdb + postgresql-documentdb binaries)
-- [ ] Create `engines/ferretdb/backup.ts` (delegates to pg_dump)
-- [ ] Create `engines/ferretdb/restore.ts` (delegates to pg_restore)
-- [ ] Implement embedded PostgreSQL management:
-  - [ ] Initialize pg_data directory with DocumentDB extensions
-  - [ ] Configure `postgresql.conf` with `shared_preload_libraries`
-  - [ ] Start/stop PostgreSQL backend on internal port
-- [ ] Handle two-process lifecycle (start/stop both FerretDB + PostgreSQL)
+### Phase 4: SpinDB Engine Implementation (COMPLETE)
+- [x] Create `engines/ferretdb/index.ts` (main engine class)
+- [x] Create `engines/ferretdb/binary-manager.ts` (manages both ferretdb + postgresql-documentdb binaries)
+- [x] Create `engines/ferretdb/backup.ts` (delegates to pg_dump)
+- [x] Create `engines/ferretdb/restore.ts` (delegates to pg_restore)
+- [x] Implement embedded PostgreSQL management:
+  - [x] Initialize pg_data directory with DocumentDB extensions
+  - [x] Configure `postgresql.conf` with `shared_preload_libraries`
+  - [x] Start/stop PostgreSQL backend on internal port
+- [x] Handle two-process lifecycle (start/stop both FerretDB + PostgreSQL)
 
-### Phase 5: SpinDB Integration
-- [ ] Register engine in `engines/index.ts`
-- [ ] Update CLI commands to support ferretdb
-- [ ] Add ferretdb to interactive menus
-- [ ] Support `spindb connect` with mongosh (if user has it installed)
+### Phase 5: SpinDB Integration (COMPLETE)
+- [x] Register engine in `engines/index.ts`
+- [x] Update CLI commands to support ferretdb
+- [x] Add ferretdb to interactive menus
+- [x] Support `spindb connect` with mongosh (if user has it installed)
 
-### Phase 6: Testing
-- [ ] Unit tests for FerretDB engine
-- [ ] Integration tests (create, start, stop, backup, restore)
-- [ ] Test with mongosh client (optional, not required)
+### Phase 6: Testing (IN PROGRESS)
+- [x] Unit tests for FerretDB engine
+- [x] Integration tests (create, start, stop, backup, restore)
+- [x] Test with mongosh client (optional, not required)
+- [ ] Docker E2E tests for FerretDB
 - [ ] Add CI cache step in `.github/workflows/ci.yml`
 
-### Phase 7: Documentation
+### Phase 7: Documentation (PARTIAL)
 - [ ] Update README.md
-- [ ] Update CLAUDE.md tables
-- [ ] Update ENGINES.md
+- [x] Update CLAUDE.md tables
+- [x] Update ENGINES.md
 - [ ] Add CHANGELOG entry
 
 ## Decisions Made

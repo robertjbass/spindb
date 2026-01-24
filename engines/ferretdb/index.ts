@@ -300,6 +300,13 @@ export class FerretDBEngine extends BaseEngine {
         throw new Error(`initdb not found at ${initdb}`)
       }
 
+      // Get spawn env for Linux (LD_LIBRARY_PATH)
+      const spawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+        fullBackendVersion,
+        platform,
+        arch,
+      )
+
       try {
         await spawnAsync(initdb, [
           '-D',
@@ -308,7 +315,7 @@ export class FerretDBEngine extends BaseEngine {
           'postgres',
           '--encoding=UTF8',
           '--locale=C',
-        ])
+        ], { env: spawnEnv })
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
       } catch (error) {
         const err = error as Error
@@ -389,6 +396,13 @@ export class FerretDBEngine extends BaseEngine {
       arch,
     )
 
+    // Get spawn env for Linux (LD_LIBRARY_PATH for postgresql-documentdb binaries)
+    const pgSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+      fullBackendVersion,
+      platform,
+      arch,
+    )
+
     const ext = platformService.getExecutableExtension()
     const ferretdbBinary = join(ferretdbPath, 'bin', `ferretdb${ext}`)
     const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
@@ -433,7 +447,7 @@ export class FerretDBEngine extends BaseEngine {
         '-o',
         `-p ${backendPort} -h 127.0.0.1`,
         '-w', // Wait for startup
-      ])
+      ], { env: pgSpawnEnv })
 
       pgStarted = true
       logDebug(`PostgreSQL started on port ${backendPort}`)
@@ -458,7 +472,7 @@ export class FerretDBEngine extends BaseEngine {
           'postgres',
           '-c',
           "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
-        ]).catch(() => {
+        ], { env: pgSpawnEnv }).catch(() => {
           // Ignore error if database already exists (error code 42P04)
         })
 
@@ -474,7 +488,7 @@ export class FerretDBEngine extends BaseEngine {
           'ferretdb',
           '-c',
           'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;',
-        ]).catch((error) => {
+        ], { env: pgSpawnEnv }).catch((error) => {
           logWarning(`Failed to create documentdb extension: ${error}`)
           // Continue anyway - extension might already exist
         })
@@ -558,7 +572,7 @@ export class FerretDBEngine extends BaseEngine {
         await this.stopFerretDBProcess(containerDir).catch(() => {})
       }
       if (pgStarted) {
-        await this.stopPostgreSQLProcess(pgCtl, pgDataDir).catch(() => {})
+        await this.stopPostgreSQLProcess(pgCtl, pgDataDir, pgSpawnEnv).catch(() => {})
       }
       throw error
     }
@@ -580,6 +594,14 @@ export class FerretDBEngine extends BaseEngine {
       platform,
       arch,
     )
+
+    // Get spawn env for Linux (LD_LIBRARY_PATH for postgresql-documentdb binaries)
+    const pgSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+      fullBackendVersion,
+      platform,
+      arch,
+    )
+
     const ext = platformService.getExecutableExtension()
     const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
 
@@ -593,7 +615,7 @@ export class FerretDBEngine extends BaseEngine {
 
     // 2. Stop PostgreSQL
     if (existsSync(pgCtl)) {
-      await this.stopPostgreSQLProcess(pgCtl, pgDataDir)
+      await this.stopPostgreSQLProcess(pgCtl, pgDataDir, pgSpawnEnv)
     }
 
     logDebug('FerretDB stopped')
@@ -634,15 +656,16 @@ export class FerretDBEngine extends BaseEngine {
   private async stopPostgreSQLProcess(
     pgCtl: string,
     pgDataDir: string,
+    spawnEnv?: Record<string, string>,
   ): Promise<void> {
     try {
-      await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'fast', '-w'])
+      await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'fast', '-w'], { env: spawnEnv })
       logDebug('PostgreSQL stopped')
     } catch (error) {
       logDebug(`pg_ctl stop error: ${error}`)
       // Try immediate mode if fast fails
       try {
-        await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'immediate', '-w'])
+        await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'immediate', '-w'], { env: spawnEnv })
       } catch {
         logWarning('Failed to stop PostgreSQL gracefully')
       }

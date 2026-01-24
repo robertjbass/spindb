@@ -2,17 +2,22 @@
 
 FerretDB is a MongoDB-compatible proxy that stores data in PostgreSQL.
 
+## Authentication
+
+SpinDB runs FerretDB with `--no-auth` for local development, similar to how
+PostgreSQL uses trust authentication and MySQL uses `--skip-grant-tables`.
+No credentials are required to connect.
+
 ## Seed Data
 
 The `sample-db.js` file contains test data that can be run with mongosh:
 
 ```bash
-mongosh mongodb://localhost:27017/test --file sample-db.js
+mongosh mongodb://localhost:27017/testdb --file sample-db.js
 ```
 
 This creates:
-- `test_users` collection with 5 user documents
-- `test_products` collection with 3 product documents
+- `test_user` collection with 5 user documents
 
 ## Testing Approach
 
@@ -25,3 +30,7 @@ connection strings.
 
 For Docker E2E tests, use mongosh (when available) or curl against the
 MongoDB wire protocol (FerretDB listens on port 27017 by default).
+
+```bash
+mongosh mongodb://localhost:27017/test
+```

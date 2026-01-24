@@ -133,6 +133,39 @@ class FerretDBCompositeBinaryManager {
   }
 
   /**
+   * Get environment variables needed to run postgresql-documentdb binaries
+   *
+   * On Linux, the bundled binaries need LD_LIBRARY_PATH set to find libpq.so
+   * and other shared libraries in the lib/ directory.
+   *
+   * On macOS, the binaries use @loader_path which doesn't need env vars.
+   * On Windows, DLLs are found via PATH or same directory.
+   */
+  getDocumentDBSpawnEnv(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+  ): Record<string, string> | undefined {
+    // Only Linux needs LD_LIBRARY_PATH
+    if (platform !== Platform.Linux) {
+      return undefined
+    }
+
+    const documentdbPath = this.getDocumentDBBinaryPath(version, platform, arch)
+    const libPath = join(documentdbPath, 'lib')
+
+    // Prepend our lib path to any existing LD_LIBRARY_PATH
+    const existingLdPath = process.env['LD_LIBRARY_PATH'] || ''
+    const newLdPath = existingLdPath
+      ? `${libPath}:${existingLdPath}`
+      : libPath
+
+    return {
+      LD_LIBRARY_PATH: newLdPath,
+    }
+  }
+
+  /**
    * List all installed FerretDB versions
    */
   async listInstalled(): Promise<InstalledBinary[]> {
@@ -639,9 +672,12 @@ class FerretDBCompositeBinaryManager {
       throw new Error(`initdb not found at ${binPath}/bin/ - required for container initialization`)
     }
 
+    // Get spawn env for Linux (LD_LIBRARY_PATH)
+    const spawnEnv = this.getDocumentDBSpawnEnv(version, platform, arch)
+
     // Verify pg_ctl works
     try {
-      const { stdout } = await spawnAsync(pgCtl, ['--version'])
+      const { stdout } = await spawnAsync(pgCtl, ['--version'], { env: spawnEnv })
       // Expected output: "pg_ctl (PostgreSQL) 17.x.x"
       const match = stdout.match(/PostgreSQL[)\s]+(\d+)/)
       if (!match) {
@@ -679,7 +715,7 @@ class FerretDBCompositeBinaryManager {
 
     // Verify initdb works (critical for container creation)
     try {
-      const { stdout } = await spawnAsync(initdb, ['--version'])
+      const { stdout } = await spawnAsync(initdb, ['--version'], { env: spawnEnv })
       // Expected output: "initdb (PostgreSQL) 17.x.x"
       const match = stdout.match(/PostgreSQL[)\s]+(\d+)/)
       if (!match) {

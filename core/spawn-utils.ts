@@ -10,6 +10,7 @@ import { spawn } from 'child_process'
 export type SpawnOptions = {
   cwd?: string
   timeout?: number
+  env?: Record<string, string>
 }
 
 export type SpawnResult = {
@@ -35,6 +36,7 @@ export function spawnAsync(
     const proc = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: options?.cwd,
+      env: options?.env ? { ...process.env, ...options.env } : undefined,
     })
 
     let stdout = ''
