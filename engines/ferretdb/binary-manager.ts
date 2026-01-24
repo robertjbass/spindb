@@ -210,7 +210,14 @@ class FerretDBCompositeBinaryManager {
       }
     }
 
+    // Check if FerretDB is already installed (DocumentDB might be missing)
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    const ferretdbBinaryPath = this.getFerretDBBinaryPath(fullVersion, platform, arch)
+    const ferretdbBinary = join(ferretdbBinaryPath, 'bin', `ferretdb${ext}`)
+    const ferretdbAlreadyInstalled = existsSync(ferretdbBinary)
+
     // Download both binaries - ensure atomicity by cleaning up FerretDB if DocumentDB fails
+    // (only if FerretDB was newly downloaded in this call)
     const ferretdbPath = await this.downloadFerretDB(
       version,
       platform,
@@ -227,12 +234,14 @@ class FerretDBCompositeBinaryManager {
         onProgress,
       )
     } catch (error) {
-      // Clean up the FerretDB installation to maintain atomicity
-      onProgress?.({
-        stage: 'error',
-        message: 'postgresql-documentdb download failed, cleaning up FerretDB...',
-      })
-      await rm(ferretdbPath, { recursive: true, force: true }).catch(() => {})
+      // Only clean up FerretDB if it was newly downloaded (not pre-existing)
+      if (!ferretdbAlreadyInstalled) {
+        onProgress?.({
+          stage: 'error',
+          message: 'postgresql-documentdb download failed, cleaning up FerretDB...',
+        })
+        await rm(ferretdbPath, { recursive: true, force: true }).catch(() => {})
+      }
       throw error
     }
 
