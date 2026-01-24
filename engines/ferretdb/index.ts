@@ -40,7 +40,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import {
-  Platform,
+  type Platform,
   type Arch,
   type ContainerConfig,
   type ProgressCallback,
@@ -235,16 +235,6 @@ export class FerretDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()
-
-    // Check platform support
-    if (platform === Platform.Win32) {
-      throw new Error(
-        'FerretDB is not available on Windows because postgresql-documentdb cannot be built.\n\n' +
-          'Options:\n' +
-          '  1. Use WSL (Windows Subsystem for Linux)\n' +
-          '  2. Use native MongoDB: spindb create mydb --engine mongodb',
-      )
-    }
 
     // Download both binaries
     const { ferretdbPath } =

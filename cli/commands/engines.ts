@@ -1529,23 +1529,6 @@ enginesCommand
       }
 
       if (['ferretdb', 'ferret'].includes(normalizedEngine)) {
-        // Check platform support - FerretDB requires postgresql-documentdb which is not available on Windows
-        const { platform } = platformService.getPlatformInfo()
-        if (platform === Platform.Win32) {
-          console.error(
-            uiError('FerretDB is not available on Windows'),
-          )
-          console.log(
-            chalk.gray(
-              '  postgresql-documentdb (the PostgreSQL backend) cannot be built for Windows.',
-            ),
-          )
-          console.log(chalk.gray('  Options:'))
-          console.log(chalk.gray('    1. Use WSL (Windows Subsystem for Linux)'))
-          console.log(chalk.gray('    2. Use native MongoDB: spindb create mydb --engine mongodb'))
-          process.exit(1)
-        }
-
         if (!version) {
           console.error(uiError('FerretDB requires a version (e.g., 2)'))
           process.exit(1)

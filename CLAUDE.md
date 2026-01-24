@@ -167,7 +167,6 @@ MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)
 
 **Key constraints:**
 - **FerretDB v2 only** - Requires DocumentDB extension (v1 not supported)
-- **No Windows** - postgresql-documentdb can't be built for Windows (PostGIS/rum blockers)
 - **Two ports per container** - External (27017 for MongoDB) + internal (54320+ for PostgreSQL backend)
 
 **hostdb releases:**
@@ -410,7 +409,6 @@ Menu navigation patterns:
 
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
-3. **FerretDB Windows** - Not supported (postgresql-documentdb unavailable for Windows)
 4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
 5. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
 

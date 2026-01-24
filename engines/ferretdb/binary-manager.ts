@@ -95,17 +95,16 @@ class FerretDBCompositeBinaryManager {
       return false
     }
 
-    // Check postgresql-documentdb (not available on Windows)
-    if (platform !== Platform.Win32) {
-      const documentdbPath = this.getDocumentDBBinaryPath(
-        fullBackendVersion,
-        platform,
-        arch,
-      )
-      const pgCtl = join(documentdbPath, 'bin', 'pg_ctl')
-      if (!existsSync(pgCtl)) {
-        return false
-      }
+    // Check postgresql-documentdb
+    const documentdbPath = this.getDocumentDBBinaryPath(
+      fullBackendVersion,
+      platform,
+      arch,
+    )
+    const pgCtlExt = platform === Platform.Win32 ? '.exe' : ''
+    const pgCtl = join(documentdbPath, 'bin', `pg_ctl${pgCtlExt}`)
+    if (!existsSync(pgCtl)) {
+      return false
     }
 
     return true
@@ -190,16 +189,6 @@ class FerretDBCompositeBinaryManager {
     onProgress?: ProgressCallback,
     backendVersion: string = DEFAULT_DOCUMENTDB_VERSION,
   ): Promise<FerretDBBinaryPaths> {
-    // Reject Windows early
-    if (platform === Platform.Win32) {
-      throw new Error(
-        'FerretDB is not available on Windows because postgresql-documentdb cannot be built.\n\n' +
-          'Options:\n' +
-          '  1. Use WSL (Windows Subsystem for Linux)\n' +
-          '  2. Use native MongoDB: spindb create mydb --engine mongodb',
-      )
-    }
-
     const fullVersion = this.getFullVersion(version)
     const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
 

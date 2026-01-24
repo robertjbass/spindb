@@ -69,7 +69,7 @@ Composite engines require **multiple binaries** working together:
 - Two ports: external (MongoDB 27017) + internal (PostgreSQL 54320+)
 - Backup uses PostgreSQL native tools (pg_dump) on embedded backend
 
-**Platform limitations:** FerretDB v2 requires DocumentDB extension, which can't be built for Windows. FerretDB binary supports Windows, but the backend doesn't.
+**Platform support:** FerretDB v2 with DocumentDB extension is available on all platforms (macOS, Linux, Windows).
 
 See [plans/FERRETDB.md](plans/FERRETDB.md) for complete implementation guide.
 
@@ -2332,6 +2332,6 @@ Use these implementations as references:
 | **ClickHouse** | Server | hostdb (macOS/Linux) | OLAP, XML configs, YY.MM versioning |
 | **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
 | **DuckDB** | File-based | hostdb (all platforms) | Embedded OLAP, flat archive handling example |
-| **FerretDB** | Composite | hostdb (no Windows) | Two binaries (ferretdb + postgresql-documentdb), dual ports |
+| **FerretDB** | Composite | hostdb (all platforms) | Two binaries (ferretdb + postgresql-documentdb), dual ports |
 
 **Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example. For composite engines, see [plans/FERRETDB.md](plans/FERRETDB.md).

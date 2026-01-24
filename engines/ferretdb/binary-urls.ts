@@ -3,15 +3,15 @@
  *
  * Generates download URLs for FerretDB binaries from the hostdb GitHub releases.
  * FerretDB requires two binaries:
- * - ferretdb: MongoDB-compatible proxy (all platforms including Windows)
- * - postgresql-documentdb: PostgreSQL 17 + DocumentDB extension (no Windows)
+ * - ferretdb: MongoDB-compatible proxy (all platforms)
+ * - postgresql-documentdb: PostgreSQL 17 + DocumentDB extension (all platforms)
  */
 
 import { normalizeVersion, normalizeDocumentDBVersion } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 import { Engine, Platform, type Arch } from '../../types'
 
-// Supported platforms for FerretDB proxy (Go binary, all platforms)
+// Supported platforms for FerretDB (both proxy and backend)
 export const FERRETDB_SUPPORTED_PLATFORMS = new Set([
   'darwin-arm64',
   'darwin-x64',
@@ -20,12 +20,13 @@ export const FERRETDB_SUPPORTED_PLATFORMS = new Set([
   'win32-x64',
 ])
 
-// Supported platforms for postgresql-documentdb backend (no Windows)
+// Supported platforms for postgresql-documentdb backend
 export const DOCUMENTDB_SUPPORTED_PLATFORMS = new Set([
   'darwin-arm64',
   'darwin-x64',
   'linux-arm64',
   'linux-x64',
+  'win32-x64',
 ])
 
 /**
@@ -41,11 +42,9 @@ export function getHostdbPlatform(
 
 /**
  * Check if the current platform supports FerretDB
- * Windows is not supported because postgresql-documentdb cannot be built for Windows
  */
 export function isPlatformSupported(platform: Platform, arch: Arch): boolean {
   const key = `${platform}-${arch}`
-  // FerretDB requires postgresql-documentdb which is not available on Windows
   return DOCUMENTDB_SUPPORTED_PLATFORMS.has(key)
 }
 
@@ -84,7 +83,7 @@ export function getFerretDBBinaryUrl(
  * Get the download URL for postgresql-documentdb backend binary
  *
  * @param version - DocumentDB version (e.g., "17-0.107.0")
- * @param platform - Operating system (darwin, linux - NOT win32)
+ * @param platform - Operating system (darwin, linux, win32)
  * @param arch - Architecture (arm64, x64)
  * @returns Download URL
  */
@@ -98,17 +97,16 @@ export function getDocumentDBBinaryUrl(
 
   if (!DOCUMENTDB_SUPPORTED_PLATFORMS.has(key)) {
     throw new Error(
-      `Unsupported platform: ${platform}-${arch}. postgresql-documentdb binaries are only available for: darwin-arm64, darwin-x64, linux-arm64, linux-x64\n` +
-        'Windows is not supported because postgresql-documentdb cannot be built for Windows.',
+      `Unsupported platform: ${platform}-${arch}. postgresql-documentdb binaries are available for: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64`,
     )
   }
 
   // postgresql-documentdb uses a specific tag format: postgresql-documentdb-{version}
   // e.g., postgresql-documentdb-17-0.107.0
-  const ext = 'tar.gz' // Always tar.gz (no Windows support)
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
   // Build URL manually since it's a different engine name format
-  // Format: https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-{version}/postgresql-documentdb-{version}-{platform}-{arch}.tar.gz
+  // Format: https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-{version}/postgresql-documentdb-{version}-{platform}-{arch}.{ext}
   const baseUrl = 'https://github.com/robertjbass/hostdb/releases/download'
   const tag = `postgresql-documentdb-${fullVersion}`
   const filename = `postgresql-documentdb-${fullVersion}-${key}.${ext}`
@@ -131,14 +129,11 @@ export function getBinaryUrls(
   platform: Platform,
   arch: Arch,
 ): { ferretdb: string; documentdb: string } {
-  // Validate platform supports FerretDB (requires postgresql-documentdb)
+  // Validate platform supports FerretDB
   if (!isPlatformSupported(platform, arch)) {
     throw new Error(
       `FerretDB is not available on ${platform}-${arch}.\n` +
-        'postgresql-documentdb cannot be built for Windows.\n\n' +
-        'Options:\n' +
-        '  1. Use WSL (Windows Subsystem for Linux)\n' +
-        '  2. Use native MongoDB: spindb create mydb --engine mongodb',
+        'Supported platforms: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64',
     )
   }
 

@@ -9,7 +9,7 @@
 | 🦭 **MariaDB** | ✅ Complete | hostdb (all platforms) | ~120 MB | Versions 10.11, 11.4, 11.8 |
 | 🪶 **SQLite** | ✅ Complete | hostdb (all platforms) | ~5 MB | File-based, stores in project directories |
 | 🍃 **MongoDB** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 7.0, 8.0, 8.2 |
-| 🦔 **FerretDB** | ✅ Complete | hostdb (macOS/Linux) | ~100 MB | MongoDB-compatible, PostgreSQL backend |
+| 🦔 **FerretDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | MongoDB-compatible, PostgreSQL backend |
 | 🔴 **Redis** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 7, 8 |
 | 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
@@ -79,10 +79,10 @@
 - **Versions:** 2
 - **Data location:** `~/.spindb/containers/ferretdb/{name}/`
 - **Process:** Two processes (PostgreSQL backend + FerretDB proxy)
-- **Binary source:** hostdb downloads (macOS/Linux only, no Windows)
+- **Binary source:** hostdb downloads (all platforms)
 - **Enhanced CLI:** `mongosh` (MongoDB Shell - uses MongoDB protocol)
 - **Backup format:** `.sql` or `.dump` (PostgreSQL formats, via pg_dump)
-- **Multi-version support:** Yes (macOS/Linux)
+- **Multi-version support:** Yes (all platforms)
 - **Bundled tools:** ferretdb, postgresql-documentdb (includes pg_ctl, initdb, pg_dump, etc.)
 - **Implementation notes:**
   - Composite engine requiring two binaries from hostdb
@@ -91,7 +91,6 @@
   - Two ports per container: external (27017 for MongoDB) + internal (54320+ for PostgreSQL)
   - Uses `mongodb://` connection scheme for clients
   - Backups use pg_dump on the embedded PostgreSQL database
-  - Not available on Windows (postgresql-documentdb cannot be built)
   - Apache-2.0 license
 
 ### 🔷 Valkey
