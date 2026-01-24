@@ -16,13 +16,15 @@ import { logDebug } from './error-handler'
 export function isRenameFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const code = (error as NodeJS.ErrnoException).code
-  return typeof code === 'string' && ['EXDEV', 'EPERM', 'ENOTEMPTY'].includes(code)
+  return (
+    typeof code === 'string' && ['EXDEV', 'EPERM', 'ENOTEMPTY'].includes(code)
+  )
 }
 
 /**
  * Move a file or directory from source to destination.
  * Uses rename() for efficiency, with fallback to cp() + rm() for cross-device
- * moves or permission issues (EXDEV, EPERM).
+ * moves, permission issues, or non-empty target directories (EXDEV, EPERM, ENOTEMPTY).
  *
  * @param sourcePath - Source file or directory path
  * @param destPath - Destination file or directory path
