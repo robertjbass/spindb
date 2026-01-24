@@ -237,11 +237,28 @@ class FerretDBCompositeBinaryManager {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullVersion(version)
-    const url = getFerretDBBinaryUrl(version, platform, arch)
     const binPath = this.getFerretDBBinaryPath(fullVersion, platform, arch)
+
+    // Check if FerretDB is already installed
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    const ferretdbBinary = join(binPath, 'bin', `ferretdb${ext}`)
+    if (existsSync(ferretdbBinary)) {
+      onProgress?.({
+        stage: 'cached',
+        message: 'FerretDB proxy already installed',
+      })
+      return binPath
+    }
+
+    const url = getFerretDBBinaryUrl(version, platform, arch)
     const tempDir = join(paths.bin, `temp-ferretdb-${fullVersion}-${platform}-${arch}`)
-    const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
-    const archiveFile = join(tempDir, `ferretdb.${ext}`)
+    const archiveExt = platform === Platform.Win32 ? 'zip' : 'tar.gz'
+    const archiveFile = join(tempDir, `ferretdb.${archiveExt}`)
+
+    // Clean up any partial installation
+    if (existsSync(binPath)) {
+      await rm(binPath, { recursive: true, force: true })
+    }
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })
@@ -300,13 +317,29 @@ class FerretDBCompositeBinaryManager {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const fullVersion = this.getFullDocumentDBVersion(version)
-    const url = getDocumentDBBinaryUrl(version, platform, arch)
     const binPath = this.getDocumentDBBinaryPath(fullVersion, platform, arch)
+
+    // Check if postgresql-documentdb is already installed
+    const pgCtl = join(binPath, 'bin', 'pg_ctl')
+    if (existsSync(pgCtl)) {
+      onProgress?.({
+        stage: 'cached',
+        message: 'postgresql-documentdb already installed',
+      })
+      return binPath
+    }
+
+    const url = getDocumentDBBinaryUrl(version, platform, arch)
     const tempDir = join(
       paths.bin,
       `temp-postgresql-documentdb-${fullVersion}-${platform}-${arch}`,
     )
     const archiveFile = join(tempDir, 'postgresql-documentdb.tar.gz')
+
+    // Clean up any partial installation
+    if (existsSync(binPath)) {
+      await rm(binPath, { recursive: true, force: true })
+    }
 
     // Ensure directories exist
     await mkdir(paths.bin, { recursive: true })

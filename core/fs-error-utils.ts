@@ -11,11 +11,12 @@ import { logDebug } from './error-handler'
  * Check if an error is a filesystem error that should trigger cp fallback
  * - EXDEV: cross-device link (rename across filesystems)
  * - EPERM: permission error (Windows filesystem operations)
+ * - ENOTEMPTY: directory not empty (target exists with content)
  */
 export function isRenameFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const code = (error as NodeJS.ErrnoException).code
-  return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
+  return typeof code === 'string' && ['EXDEV', 'EPERM', 'ENOTEMPTY'].includes(code)
 }
 
 /**

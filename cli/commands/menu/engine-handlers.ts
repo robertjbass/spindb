@@ -1,6 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { rm } from 'fs/promises'
+import { join, dirname, basename } from 'path'
 import stringWidth from 'string-width'
 import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
@@ -15,6 +16,7 @@ import {
   type InstalledSqliteEngine,
   type InstalledDuckDBEngine,
   type InstalledMongodbEngine,
+  type InstalledFerretDBEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledClickHouseEngine,
@@ -64,6 +66,7 @@ export async function handleEngines(): Promise<void> {
     ...engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
     ...engines.filter((e): e is InstalledDuckDBEngine => e.engine === 'duckdb'),
     ...engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
+    ...engines.filter((e): e is InstalledFerretDBEngine => e.engine === 'ferretdb'),
     ...engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
     ...engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
     ...engines.filter(
@@ -248,6 +251,34 @@ async function handleDeleteEngine(
 
   try {
     await rm(enginePath, { recursive: true, force: true })
+
+    // FerretDB is a composite engine - also clean up postgresql-documentdb backend
+    if (engineName === 'ferretdb') {
+      // enginePath is like: ~/.spindb/bin/ferretdb-2.7.0-darwin-arm64
+      // We need to find: ~/.spindb/bin/postgresql-documentdb-*-darwin-arm64
+      const binDir = dirname(enginePath)
+      const ferretDirName = basename(enginePath)
+      // Extract platform-arch from ferretdb directory name (e.g., "darwin-arm64")
+      const parts = ferretDirName.split('-')
+      const platformArch = parts.slice(-2).join('-') // "darwin-arm64"
+
+      // Find matching postgresql-documentdb directory
+      const documentdbPattern = `postgresql-documentdb-`
+      const { readdir } = await import('fs/promises')
+      const entries = await readdir(binDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (
+          entry.isDirectory() &&
+          entry.name.startsWith(documentdbPattern) &&
+          entry.name.endsWith(platformArch)
+        ) {
+          const documentdbPath = join(binDir, entry.name)
+          spinner.text = `Deleting postgresql-documentdb backend...`
+          await rm(documentdbPath, { recursive: true, force: true })
+        }
+      }
+    }
+
     spinner.succeed(`Deleted ${engineName} ${engineVersion}`)
   } catch (error) {
     const e = error as Error

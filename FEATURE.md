@@ -922,36 +922,31 @@ const scriptType = isRedisLike ? 'Command' : isMongoDB ? 'Script' : 'SQL'
 
 ### 4. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
 
-Add to "Manage Engines" menu:
+Add to "Manage Engines" interactive menu. This file controls the engine selection menu shown when users run `spindb` and select "Manage engines".
+
+**Step 1:** Add the type import:
 
 ```ts
-import { type InstalledYourEngineEngine } from '../../helpers'
-
-// Filter engines
-const yourengineEngines = engines.filter(
-  (e): e is InstalledYourEngineEngine => e.engine === 'yourengine',
-)
-
-// Calculate size
-const totalYourEngineSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-
-// Add to sorted array
-const allEnginesSorted = [
-  ...pgEngines,
-  ...mariadbEngines,
-  ...mysqlEngines,
-  ...sqliteEngines,
-  ...mongodbEngines,
-  ...redisEngines,
-  ...valkeyEngines,
-  ...yourengineEngines,
-]
-
-// Add summary display
-if (yourengineEngines.length > 0) {
-  console.log(chalk.gray(`  YourEngine: ${yourengineEngines.length} version(s), ${formatBytes(totalYourEngineSize)}`))
-}
+import {
+  getInstalledEngines,
+  type InstalledPostgresEngine,
+  // ... other existing types ...
+  type InstalledYourEngineEngine,  // Add your engine type
+} from '../../helpers'
 ```
+
+**Step 2:** Add your engine to the `allEnginesSorted` array (around line 58). This array determines which engines appear in the menu:
+
+```ts
+const allEnginesSorted = [
+  ...engines.filter((e): e is InstalledPostgresEngine => e.engine === 'postgresql'),
+  ...engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
+  // ... other existing engines ...
+  ...engines.filter((e): e is InstalledYourEngineEngine => e.engine === 'yourengine'),
+]
+```
+
+**Important:** If you skip this step, your engine will not appear in the interactive "Manage engines" menu even though it shows up in `spindb engines list`.
 
 ### 5. Backup Handlers (`cli/commands/menu/backup-handlers.ts`)
 

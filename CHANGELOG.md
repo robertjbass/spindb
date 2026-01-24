@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.4] - 2026-01-23
+
+### Fixed
+- FerretDB binary downloads now skip already-installed components and clean up partial installations
+- FerretDB engine deletion now also removes the postgresql-documentdb backend
+- Added ENOTEMPTY to filesystem fallback errors for better extraction handling
+
+## [0.23.3] - 2026-01-23
+
+### Fixed
+- Added FerretDB to interactive engines menu
+
 ## [0.23.2] - 2026-01-23
 
 ### Fixed
