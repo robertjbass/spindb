@@ -222,7 +222,7 @@ Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `
 - [ ] For file-based engines: Update `cleanup_data_lifecycle()` and start/stop skip conditions
 - [ ] For REST API engines: Add curl-based connectivity test and seed data insertion (see Qdrant example)
 
-### Documentation (7 files)
+### Documentation (8 files)
 
 - [ ] `README.md` - Add engine section with full documentation
 - [ ] `README.md` - Update `--engine` option help text to include new engine
@@ -231,6 +231,7 @@ Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `
 - [ ] `ENGINES.md` - Add to supported engines table and details
 - [ ] `ENGINES.md` - Add to Engine Emojis table
 - [ ] `CLAUDE.md` - Update project documentation
+- [ ] `CHEATSHEET.md` - Add to create examples, Default Ports table, and Connection String Formats
 
 ---
 
@@ -2259,6 +2260,13 @@ Update:
 - Port Management section
 - Binary Sources by Engine section
 - Engine Icons list
+
+### CHEATSHEET.md
+
+Update:
+- Container Lifecycle section (add `spindb create mydb -e yourengine`)
+- Default Ports table (add engine's default port and range)
+- Connection String Formats section (add engine's connection string format)
 
 ### TODO.md
 
