@@ -45,7 +45,7 @@ export function getHostdbPlatform(
  */
 export function isPlatformSupported(platform: Platform, arch: Arch): boolean {
   const key = `${platform}-${arch}`
-  return DOCUMENTDB_SUPPORTED_PLATFORMS.has(key)
+  return FERRETDB_SUPPORTED_PLATFORMS.has(key)
 }
 
 /**
