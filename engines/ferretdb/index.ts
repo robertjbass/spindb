@@ -457,23 +457,9 @@ export class FerretDBEngine extends BaseEngine {
           '-U',
           'postgres',
           '-c',
-          "SELECT 1 FROM pg_database WHERE datname='ferretdb'" +
-            " OR (SELECT count(*) FROM pg_database WHERE datname='ferretdb') = 0" +
-            " AND pg_catalog.pg_create_database('ferretdb', template := 'template0', encoding := 'UTF8') IS NOT NULL;",
-        ]).catch(async () => {
-          // Database might already exist, try creating it directly
-          await spawnAsync(psql, [
-            '-h',
-            '127.0.0.1',
-            '-p',
-            String(backendPort),
-            '-U',
-            'postgres',
-            '-c',
-            "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
-          ]).catch(() => {
-            // Ignore error if database already exists
-          })
+          "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
+        ]).catch(() => {
+          // Ignore error if database already exists (error code 42P04)
         })
 
         // Create DocumentDB extension
@@ -947,7 +933,7 @@ export class FerretDBEngine extends BaseEngine {
       const script = options.sql
       const cmd = isWindows()
         ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --eval "${script.replace(/"/g, '\\"')}"`
-        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --eval '${script.replace(/'/g, "'\\''")}' `
+        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --eval '${script.replace(/'/g, "'\\''")}'`
 
       const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
       if (stdout) process.stdout.write(stdout)
