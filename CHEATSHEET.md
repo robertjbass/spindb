@@ -12,6 +12,10 @@ spindb create mydb -e mongodb           # Create MongoDB
 spindb create mydb -e redis             # Create Redis
 spindb create mydb -e valkey            # Create Valkey
 spindb create mydb -e clickhouse        # Create ClickHouse
+spindb create mydb -e duckdb            # Create DuckDB
+spindb create mydb -e ferretdb          # Create FerretDB
+spindb create mydb -e qdrant            # Create Qdrant
+spindb create mydb -e meilisearch       # Create Meilisearch
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -132,28 +136,36 @@ spindb deps install                     # Install missing tools
 
 ## Default Ports
 
-| Engine     | Default | Range         |
-|------------|---------|---------------|
-| PostgreSQL | 5432    | 5432-5500     |
-| MySQL      | 3306    | 3306-3400     |
-| MariaDB    | 3307    | 3307-3400     |
-| MongoDB    | 27017   | 27017-27100   |
-| Redis      | 6379    | 6379-6400     |
-| Valkey     | 6379    | 6379-6479     |
-| ClickHouse | 9000    | 9000-9100     |
-| SQLite     | N/A     | File-based    |
+| Engine      | Default | Range         |
+|-------------|---------|---------------|
+| PostgreSQL  | 5432    | 5432-5500     |
+| MySQL       | 3306    | 3306-3400     |
+| MariaDB     | 3307    | 3307-3400     |
+| MongoDB     | 27017   | 27017-27100   |
+| FerretDB    | 27017   | 27017-27100   |
+| Redis       | 6379    | 6379-6400     |
+| Valkey      | 6379    | 6379-6479     |
+| ClickHouse  | 9000    | 9000-9100     |
+| Qdrant      | 6333    | 6333-6400     |
+| Meilisearch | 7700    | 7700-7800     |
+| SQLite      | N/A     | File-based    |
+| DuckDB      | N/A     | File-based    |
 
 ## Connection String Formats
 
 ```
-PostgreSQL: postgresql://postgres@127.0.0.1:5432/mydb
-MySQL:      mysql://root@127.0.0.1:3306/mydb
-MariaDB:    mysql://root@127.0.0.1:3307/mydb
-MongoDB:    mongodb://127.0.0.1:27017/mydb
-Redis:      redis://127.0.0.1:6379/0
-Valkey:     redis://127.0.0.1:6379/0
-ClickHouse: clickhouse://default@127.0.0.1:9000/default
-SQLite:     sqlite:///path/to/file.sqlite
+PostgreSQL:  postgresql://postgres@127.0.0.1:5432/mydb
+MySQL:       mysql://root@127.0.0.1:3306/mydb
+MariaDB:     mysql://root@127.0.0.1:3307/mydb
+MongoDB:     mongodb://127.0.0.1:27017/mydb
+FerretDB:    mongodb://127.0.0.1:27017/mydb
+Redis:       redis://127.0.0.1:6379/0
+Valkey:      redis://127.0.0.1:6379/0
+ClickHouse:  clickhouse://default@127.0.0.1:9000/default
+Qdrant:      http://127.0.0.1:6333
+Meilisearch: http://127.0.0.1:7700
+SQLite:      sqlite:///path/to/file.sqlite
+DuckDB:      duckdb:///path/to/file.duckdb
 ```
 
 ## JSON Output (for scripting)
