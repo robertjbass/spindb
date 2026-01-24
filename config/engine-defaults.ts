@@ -174,6 +174,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // Meilisearch uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable for search engine
   },
+  [Engine.FerretDB]: {
+    defaultVersion: '2',
+    defaultPort: 27017, // MongoDB-compatible port
+    portRange: { start: 27017, end: 27100 },
+    latestVersion: '2',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'mongodb', // MongoDB-compatible protocol
+    logFileName: 'ferretdb.log',
+    pidFileName: 'ferretdb.pid',
+    dataSubdir: 'pg_data', // PostgreSQL backend data directory
+    clientTools: ['mongosh', 'mongodump', 'mongorestore'], // Uses MongoDB client tools
+    maxConnections: 200, // PostgreSQL backend default
+  },
 }
 
 /**

@@ -780,6 +780,7 @@ This section contains implementation details from the hostdb project about how t
 All binaries are available from the [hostdb releases page](https://github.com/robertjbass/hostdb/releases).
 
 **postgresql-documentdb** (PostgreSQL 17 with DocumentDB extension):
+
 | Platform | Download |
 |----------|----------|
 | linux-x64 | [postgresql-documentdb-17-0.107.0-linux-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-17-0.107.0/postgresql-documentdb-17-0.107.0-linux-x64.tar.gz) |
@@ -789,6 +790,7 @@ All binaries are available from the [hostdb releases page](https://github.com/ro
 | win32-x64 | Not available (see [Windows Limitations](#windows-limitations)) |
 
 **ferretdb** (MongoDB-compatible proxy):
+
 | Platform | Download |
 |----------|----------|
 | linux-x64 | [ferretdb-2.7.0-linux-x64.tar.gz](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-linux-x64.tar.gz) |
@@ -798,6 +800,7 @@ All binaries are available from the [hostdb releases page](https://github.com/ro
 | win32-x64 | [ferretdb-2.7.0-win32-x64.zip](https://github.com/robertjbass/hostdb/releases/download/ferretdb-2.7.0/ferretdb-2.7.0-win32-x64.zip) (requires WSL for backend) |
 
 **SHA256 Checksums (postgresql-documentdb-17-0.107.0):**
+
 | Platform | SHA256 |
 |----------|--------|
 | darwin-arm64 | `2a3892c1fb5fc91ba6cfcaf883b8deff89d11be3c7fa9e8ab3820290f6cc26a6` |
@@ -809,7 +812,7 @@ All binaries are available from the [hostdb releases page](https://github.com/ro
 
 FerretDB is a **stateless proxy** that translates MongoDB wire protocol to PostgreSQL SQL:
 
-```
+```text
 ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────────────┐
 │  MongoDB Client │   TCP   │    FerretDB     │   TCP   │  PostgreSQL+DocumentDB  │
 │   (mongosh,     │ ──────► │     Proxy       │ ──────► │      Backend            │
@@ -847,7 +850,7 @@ The backend port is stored in `container.json` as `backendPort` and is allocated
 
 The `postgresql-documentdb` tarball extracts to a self-contained PostgreSQL installation with all required extensions pre-built:
 
-```
+```text
 postgresql-documentdb-17-0.107.0-darwin-arm64/
 ├── postgresql-documentdb/
 │   ├── bin/
@@ -884,7 +887,7 @@ postgresql-documentdb-17-0.107.0-darwin-arm64/
 
 The `ferretdb` tarball is simpler - a single Go binary with optional bundled tools:
 
-```
+```text
 ferretdb-2.7.0-darwin-arm64/
 ├── bin/
 │   └── ferretdb                       # Main FerretDB binary (~30MB)

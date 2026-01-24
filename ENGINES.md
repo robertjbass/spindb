@@ -9,6 +9,7 @@
 | 🦭 **MariaDB** | ✅ Complete | hostdb (all platforms) | ~120 MB | Versions 10.11, 11.4, 11.8 |
 | 🪶 **SQLite** | ✅ Complete | hostdb (all platforms) | ~5 MB | File-based, stores in project directories |
 | 🍃 **MongoDB** | ✅ Complete | hostdb (all platforms) | ~200 MB | Versions 7.0, 8.0, 8.2 |
+| 🦔 **FerretDB** | ✅ Complete | hostdb (macOS/Linux) | ~100 MB | MongoDB-compatible, PostgreSQL backend |
 | 🔴 **Redis** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 7, 8 |
 | 🔷 **Valkey** | ✅ Complete | hostdb (all platforms) | ~15 MB | Versions 8, 9 (Redis fork) |
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
@@ -71,6 +72,27 @@
   - Uses JavaScript for scripts instead of SQL
   - mongodump creates gzipped archive by default
   - Full cross-platform support (macOS, Linux, Windows)
+
+### 🦔 FerretDB
+
+- **Status:** ✅ Complete
+- **Versions:** 2
+- **Data location:** `~/.spindb/containers/ferretdb/{name}/`
+- **Process:** Two processes (PostgreSQL backend + FerretDB proxy)
+- **Binary source:** hostdb downloads (macOS/Linux only, no Windows)
+- **Enhanced CLI:** `mongosh` (MongoDB Shell - uses MongoDB protocol)
+- **Backup format:** `.sql` or `.dump` (PostgreSQL formats, via pg_dump)
+- **Multi-version support:** Yes (macOS/Linux)
+- **Bundled tools:** ferretdb, postgresql-documentdb (includes pg_ctl, initdb, pg_dump, etc.)
+- **Implementation notes:**
+  - Composite engine requiring two binaries from hostdb
+  - FerretDB is a stateless Go proxy (MongoDB wire protocol → PostgreSQL SQL)
+  - PostgreSQL backend uses DocumentDB extension for MongoDB compatibility
+  - Two ports per container: external (27017 for MongoDB) + internal (54320+ for PostgreSQL)
+  - Uses `mongodb://` connection scheme for clients
+  - Backups use pg_dump on the embedded PostgreSQL database
+  - Not available on Windows (postgresql-documentdb cannot be built)
+  - Apache-2.0 license
 
 ### 🔷 Valkey
 
@@ -162,6 +184,7 @@
 | Redis | `.redis` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | Valkey | `.valkey` (text commands) | `.rdb` (RDB snapshot) | RDB for backups |
 | MongoDB | `.json` (mongoexport) | `.bson` (mongodump) | BSON for backups |
+| FerretDB | `.sql` (pg_dump) | `.dump` (custom format) | SQL for portability |
 | ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL for portability |
 | Qdrant | N/A | `.snapshot` (native) | Snapshot for backups |
 | Meilisearch | N/A | `.snapshot` (native) | Snapshot for backups |
@@ -178,6 +201,7 @@
 | Redis | `redis-cli` | `iredis` | Auto-completion, syntax highlighting |
 | Valkey | `valkey-cli` | `iredis` | Protocol-compatible with iredis |
 | MongoDB | `mongosh` | - | Built-in shell is already enhanced |
+| FerretDB | `mongosh` | - | Uses MongoDB shell (mongosh) |
 | Universal | - | `usql` | Works with all SQL databases |
 | Qdrant | REST API | - | Use curl or HTTP clients |
 | Meilisearch | REST API | - | Use curl or HTTP clients |
@@ -202,6 +226,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🐬 | MySQL |
 | 🐘 | PostgreSQL |
 | 🍃 | MongoDB |
+| 🦔 | FerretDB |
 | 🔴 | Redis |
 | 🔷 | Valkey |
 | 🪶 | SQLite |

@@ -4,6 +4,7 @@ import { mariadbEngine } from './mariadb'
 import { sqliteEngine } from './sqlite'
 import { duckdbEngine } from './duckdb'
 import { mongodbEngine } from './mongodb'
+import { ferretdbEngine } from './ferretdb'
 import { redisEngine } from './redis'
 import { valkeyEngine } from './valkey'
 import { clickhouseEngine } from './clickhouse'
@@ -32,6 +33,9 @@ export const engines: Record<string, BaseEngine> = {
   // MongoDB and aliases
   mongodb: mongodbEngine,
   mongo: mongodbEngine,
+  // FerretDB and aliases
+  ferretdb: ferretdbEngine,
+  ferret: ferretdbEngine,
   // Redis and aliases
   redis: redisEngine,
   // Valkey and aliases

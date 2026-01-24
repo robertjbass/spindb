@@ -174,6 +174,16 @@ export type InstalledMeilisearchEngine = {
   source: 'downloaded'
 }
 
+export type InstalledFerretDBEngine = {
+  engine: 'ferretdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -181,6 +191,7 @@ export type InstalledEngine =
   | InstalledSqliteEngine
   | InstalledDuckDBEngine
   | InstalledMongodbEngine
+  | InstalledFerretDBEngine
   | InstalledRedisEngine
   | InstalledValkeyEngine
   | InstalledClickHouseEngine
@@ -802,6 +813,62 @@ async function getInstalledMeilisearchEngines(): Promise<InstalledMeilisearchEng
   return engines
 }
 
+// Get FerretDB version from binary path
+async function getFerretDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const ferretdbPath = join(binPath, 'bin', `ferretdb${ext}`)
+  if (!existsSync(ferretdbPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(ferretdbPath, ['--version'])
+    // Parse output like "ferretdb version 2.7.0" or "v2.7.0"
+    const match = stdout.match(/(?:ferretdb\s+)?(?:version\s+)?v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed FerretDB engines from downloaded binaries
+async function getInstalledFerretDBEngines(): Promise<InstalledFerretDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledFerretDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('ferretdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'ferretdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getFerretDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'ferretdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -825,6 +892,8 @@ const ENGINE_PREFIXES = [
   'sqlite-',
   'duckdb-',
   'mongodb-',
+  'ferretdb-',
+  'postgresql-documentdb-',
   'redis-',
   'valkey-',
   'clickhouse-',
@@ -866,6 +935,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     sqliteEngines,
     duckdbEngines,
     mongodbEngines,
+    ferretdbEngines,
     redisEngines,
     valkeyEngines,
     clickhouseEngines,
@@ -878,6 +948,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledSqliteEngines(),
     getInstalledDuckDBEngines(),
     getInstalledMongodbEngines(),
+    getInstalledFerretDBEngines(),
     getInstalledRedisEngines(),
     getInstalledValkeyEngines(),
     getInstalledClickHouseEngines(),
@@ -892,6 +963,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...sqliteEngines,
     ...duckdbEngines,
     ...mongodbEngines,
+    ...ferretdbEngines,
     ...redisEngines,
     ...valkeyEngines,
     ...clickhouseEngines,
@@ -906,6 +978,7 @@ export {
   getInstalledSqliteEngines,
   getInstalledDuckDBEngines,
   getInstalledMongodbEngines,
+  getInstalledFerretDBEngines,
   getInstalledRedisEngines,
   getInstalledValkeyEngines,
   getInstalledClickHouseEngines,

@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 11 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 12 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -48,7 +48,7 @@ One consistent interface across SQL databases, document stores, key-value stores
 
 ```bash
 # Same commands work for ANY database
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -70,7 +70,7 @@ spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
 
 ## Platform Coverage
 
-SpinDB works across **11 database engines** and **5 platform architectures** with a **single, consistent API**.
+SpinDB works across **12 database engines** and **5 platform architectures** with a **single, consistent API**.
 
 | Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
 |----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
@@ -80,13 +80,14 @@ SpinDB works across **11 database engines** and **5 platform architectures** wit
 | 🪶 **SQLite** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🦆 **DuckDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🍃 **MongoDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦔 **FerretDB** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🔴 **Redis** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔍 **Meilisearch** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**54 combinations. One CLI. Zero configuration.**
+**58 combinations. One CLI. Zero configuration.**
 
 ---
 
@@ -165,7 +166,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 | Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
 |---------|--------|--------|--------|--------------|-------|
 | No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Multiple DB engines | ✅ 11 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
+| Multiple DB engines | ✅ 12 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
 | CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
 | Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
@@ -179,7 +180,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 ## Supported Databases
 
-SpinDB supports **11 database engines** with **multiple versions** for each:
+SpinDB supports **12 database engines** with **multiple versions** for each:
 
 | Engine | Type | Versions | Default Port | Query Language |
 |--------|------|----------|--------------|----------------|
@@ -189,6 +190,7 @@ SpinDB supports **11 database engines** with **multiple versions** for each:
 | 🪶 **SQLite** | Embedded (SQL) | 3 | N/A (file-based) | SQL |
 | 🦆 **DuckDB** | Embedded OLAP | 1.4.3 | N/A (file-based) | SQL |
 | 🍃 **MongoDB** | Document Store | 7.0, 8.0, 8.2 | 27017 | JavaScript (mongosh) |
+| 🦔 **FerretDB** | Document Store | 2 | 27017 | JavaScript (mongosh) |
 | 🔴 **Redis** | Key-Value Store | 7, 8 | 6379 | Redis commands |
 | 🔷 **Valkey** | Key-Value Store | 8, 9 | 6379 | Redis commands |
 | 🏠 **ClickHouse** | Columnar OLAP | 25.12 | 9000 (TCP), 8123 (HTTP) | SQL (ClickHouse dialect) |
@@ -197,7 +199,7 @@ SpinDB supports **11 database engines** with **multiple versions** for each:
 
 ### Engine Categories
 
-**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch):
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch):
 - Start/stop server processes
 - Bind to localhost ports
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
@@ -481,6 +483,29 @@ spindb connect logs
 **Query language:** JavaScript (via `mongosh`)
 **Tools:** `mongod`, `mongosh`, `mongodump`, `mongorestore` (included)
 
+### FerretDB 🦔
+
+```bash
+# Create FerretDB database (MongoDB-compatible, PostgreSQL backend)
+spindb create docs --engine ferretdb
+
+# Same MongoDB queries work
+spindb run docs -c "db.users.insertOne({name: 'Alice'})"
+spindb run docs -c "db.users.find().pretty()"
+
+# Connect with mongosh
+spindb connect docs
+```
+
+**Version:** 2 (2.7.0)
+**Platforms:** macOS, Linux (no Windows - postgresql-documentdb unavailable)
+**Architecture:** FerretDB proxy + PostgreSQL with DocumentDB extension
+**Query language:** JavaScript (via `mongosh`)
+**Backups:** Uses `pg_dump` on embedded PostgreSQL backend
+**Tools:** `ferretdb`, `mongosh` (for client connections)
+
+FerretDB is a MongoDB-compatible database that stores data in PostgreSQL. It's useful when you want MongoDB's API but PostgreSQL's reliability and SQL access to your data.
+
 ### Redis 🔴 & Valkey 🔷
 
 ```bash
@@ -568,6 +593,7 @@ SpinDB supports enhanced database shells with auto-completion, syntax highlighti
 | SQLite | `sqlite3` | `litecli` | `usql` |
 | DuckDB | `duckdb` | - | `usql` |
 | MongoDB | `mongosh` | - | - |
+| FerretDB | `mongosh` | - | - |
 | Redis | `redis-cli` | `iredis` | - |
 | Valkey | `valkey-cli` | `iredis` (compatible) | - |
 | ClickHouse | `clickhouse-client` | - | `usql` |
@@ -779,7 +805,6 @@ See [TODO.md](TODO.md) for the complete roadmap.
 
 ### v1.2 - Additional Engines
 - **CockroachDB** - Distributed PostgreSQL-compatible database
-- **FerretDB** - MongoDB-compatible database built on PostgreSQL
 
 ### v1.3 - Advanced Features
 - Container templates for common configurations
@@ -803,6 +828,7 @@ The following engines may be added based on community interest:
 
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
+- **FerretDB Windows** - Not supported (postgresql-documentdb unavailable for Windows).
 - **Qdrant & Meilisearch** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---

@@ -38,9 +38,9 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 
 ## Engine Types
 
-SpinDB supports two types of database engines:
+SpinDB supports three types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant)
+### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management

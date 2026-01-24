@@ -16,6 +16,7 @@ import {
   type SQLiteFormat,
   type DuckDBFormat,
   type MongoDBFormat,
+  type FerretDBFormat,
   type RedisFormat,
   type ValkeyFormat,
   type ClickHouseFormat,
@@ -46,6 +47,7 @@ export const BACKUP_FORMATS: {
   [Engine.SQLite]: EngineBackupFormats<SQLiteFormat>
   [Engine.DuckDB]: EngineBackupFormats<DuckDBFormat>
   [Engine.MongoDB]: EngineBackupFormats<MongoDBFormat>
+  [Engine.FerretDB]: EngineBackupFormats<FerretDBFormat>
   [Engine.Redis]: EngineBackupFormats<RedisFormat>
   [Engine.Valkey]: EngineBackupFormats<ValkeyFormat>
   [Engine.ClickHouse]: EngineBackupFormats<ClickHouseFormat>
@@ -159,6 +161,24 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: true,
     defaultFormat: 'archive',
+  },
+  [Engine.FerretDB]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'Plain SQL - human-readable, larger file',
+        spinnerLabel: 'SQL',
+      },
+      custom: {
+        extension: '.dump',
+        label: '.dump',
+        description: 'Custom format - smaller file, faster restore',
+        spinnerLabel: 'custom',
+      },
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'sql',
   },
   [Engine.Redis]: {
     formats: {

@@ -167,9 +167,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = mycliInstalled
     engineSpecificValue = 'mycli'
     engineSpecificInstallValue = 'install-mycli'
-  } else if (config.engine === 'mongodb') {
+  } else if (config.engine === 'mongodb' || config.engine === 'ferretdb') {
     defaultShellName = 'mongosh'
-    // mongosh IS the enhanced shell for MongoDB (no separate enhanced CLI like pgcli/mycli)
+    // mongosh IS the enhanced shell for MongoDB/FerretDB (no separate enhanced CLI like pgcli/mycli)
     engineSpecificCli = null
     engineSpecificInstalled = false
     engineSpecificValue = null
@@ -290,11 +290,12 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, Qdrant, and Meilisearch
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, FerretDB, Qdrant, and Meilisearch
   const isNonSqlEngine =
     config.engine === 'redis' ||
     config.engine === 'valkey' ||
     config.engine === 'mongodb' ||
+    config.engine === 'ferretdb' ||
     config.engine === 'qdrant' ||
     config.engine === 'meilisearch'
   if (!isNonSqlEngine) {
@@ -739,7 +740,7 @@ async function launchShell(
       config.database,
     ]
     installHint = 'spindb engines download mariadb'
-  } else if (config.engine === 'mongodb') {
+  } else if (config.engine === 'mongodb' || config.engine === 'ferretdb') {
     shellCmd = 'mongosh'
     shellArgs = [connectionString]
     installHint = 'brew install mongosh'
