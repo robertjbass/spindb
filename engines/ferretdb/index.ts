@@ -488,6 +488,11 @@ export class FerretDBEngine extends BaseEngine {
       // 4. Start FerretDB proxy
       onProgress?.({ stage: 'starting', message: 'Starting FerretDB proxy...' })
 
+      // Disable authentication for local development (similar to PostgreSQL trust auth)
+      // FerretDB 2.x has auth enabled by default, but for local dev we disable it
+      // Use a unique debug port to avoid conflicts when running multiple FerretDB containers
+      const FERRETDB_DEBUG_PORT_OFFSET = 10000
+      const debugPort = port + FERRETDB_DEBUG_PORT_OFFSET
       const ferretArgs = [
         '--listen-addr',
         `127.0.0.1:${port}`,
@@ -495,6 +500,9 @@ export class FerretDBEngine extends BaseEngine {
         `postgres://postgres@127.0.0.1:${backendPort}/ferretdb`,
         '--state-dir',
         containerDir,
+        '--no-auth',
+        '--debug-addr',
+        `127.0.0.1:${debugPort}`,
       ]
 
       logDebug(`Starting FerretDB with args: ${ferretArgs.join(' ')}`)
@@ -534,7 +542,7 @@ export class FerretDBEngine extends BaseEngine {
 
       logDebug(`FerretDB started on port ${port}`)
 
-      // Persist the allocated backend port if it was newly allocated
+      // Persist the allocated backend port if newly allocated
       if (!existingBackendPort && backendPort) {
         await containerManager.updateConfig(name, { backendPort })
         logDebug(`Persisted backend port ${backendPort} to container config`)
@@ -717,6 +725,7 @@ export class FerretDBEngine extends BaseEngine {
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
     const db = database || container.database || 'test'
+    // No authentication required - FerretDB runs with --no-auth for local dev
     return `mongodb://127.0.0.1:${port}/${db}`
   }
 
@@ -773,15 +782,31 @@ export class FerretDBEngine extends BaseEngine {
 
   /**
    * Create a new database
-   * FerretDB/MongoDB creates databases implicitly when you write to them
+   * FerretDB/MongoDB creates databases implicitly when you first write to them.
+   * To force immediate creation, we create a temporary collection and drop it.
+   * This leaves the database visible in tools without any marker clutter.
    */
   async createDatabase(
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    // MongoDB/FerretDB creates databases implicitly
-    // Just verify the connection works
-    logDebug(`Database "${database}" will be created when first accessed`)
+    const { port } = container
+
+    try {
+      const mongosh = await this.getMongoshPath()
+      // Create a temp collection then immediately drop it to force database creation
+      // without leaving any visible marker collections.
+      const script = 'db.createCollection("_spindb_init"); db._spindb_init.drop();'
+      const cmd = isWindows()
+        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval "${script}"`
+        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval '${script}'`
+
+      await execAsync(cmd, { timeout: 10000 })
+      logDebug(`Database "${database}" created via temp collection`)
+    } catch (error) {
+      // Ignore errors - database may already exist or collection cleanup succeeded
+      logDebug(`createDatabase result: ${error}`)
+    }
   }
 
   // Drop a database

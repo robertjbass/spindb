@@ -8,8 +8,9 @@ import { postgresqlEngine } from '../../engines/postgresql'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { uiError, uiWarning } from '../ui/theme'
+import { uiWarning } from '../ui/theme'
 import { Engine } from '../../types'
+import { exitWithError } from '../../core/error-handler'
 
 export const startCommand = new Command('start')
   .description('Start a container')
@@ -22,8 +23,7 @@ export const startCommand = new Command('start')
       if (!containerName) {
         // JSON mode requires container name argument
         if (options.json) {
-          console.log(JSON.stringify({ error: 'Container name is required' }))
-          process.exit(1)
+          return exitWithError({ message: 'Container name is required', json: true })
         }
 
         const containers = await containerManager.list()
@@ -50,12 +50,10 @@ export const startCommand = new Command('start')
 
       const config = await containerManager.getConfig(containerName)
       if (!config) {
-        if (options.json) {
-          console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
-        } else {
-          console.error(uiError(`Container "${containerName}" not found`))
-        }
-        process.exit(1)
+        return exitWithError({
+          message: `Container "${containerName}" not found`,
+          json: options.json,
+        })
       }
 
       const { engine: engineName } = config
@@ -65,8 +63,10 @@ export const startCommand = new Command('start')
       })
       if (running) {
         if (options.json) {
-          console.log(JSON.stringify({ error: `Container "${containerName}" is already running` }))
-          process.exit(1)
+          return exitWithError({
+            message: `Container "${containerName}" is already running`,
+            json: true,
+          })
         }
         console.log(
           uiWarning(`Container "${containerName}" is already running`),
@@ -141,10 +141,10 @@ export const startCommand = new Command('start')
 
       if (!result.success) {
         spinner.fail(`Failed to start "${containerName}"`)
-        if (result.error) {
-          console.error(uiError(result.error.message))
-        }
-        process.exit(1)
+        return exitWithError({
+          message: result.error?.message || 'Unknown error',
+          json: options.json,
+        })
       }
 
       await containerManager.updateConfig(containerName, { status: 'running' })
@@ -196,11 +196,6 @@ export const startCommand = new Command('start')
       }
     } catch (error) {
       const e = error as Error
-      if (options.json) {
-        console.log(JSON.stringify({ error: e.message }))
-      } else {
-        console.error(uiError(e.message))
-      }
-      process.exit(1)
+      return exitWithError({ message: e.message, json: options.json })
     }
   })

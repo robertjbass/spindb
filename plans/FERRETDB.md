@@ -851,6 +851,97 @@ spindb start test-fdb
 # Should not show "could not open extension control file" errors
 ```
 
+### macOS dylib Path Rewriting (Detailed)
+
+When bundling Homebrew dependencies on macOS, library paths must be rewritten for relocatability. This section documents the complete process used in hostdb.
+
+**The Problem:**
+
+Homebrew libraries have hardcoded absolute paths:
+```bash
+$ otool -L /opt/homebrew/lib/libssl.3.dylib
+/opt/homebrew/lib/libssl.3.dylib:
+    /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib (compatibility version 3.0.0)
+    /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib (compatibility version 3.0.0)
+    /usr/lib/libSystem.B.dylib (compatibility version 1.0.0)
+```
+
+**macOS Path Prefixes:**
+
+| Prefix | Meaning | Usage |
+|--------|---------|-------|
+| `@rpath` | Search paths in binary's LC_RPATH | Multi-location libraries |
+| `@loader_path` | Directory of loading binary | Bundled libraries |
+| `@executable_path` | Directory of main executable | App bundles |
+
+**Step-by-Step Process:**
+
+1. **Find dependencies recursively:**
+   ```bash
+   otool -L binary.dylib | tail -n +2 | awk '{print $1}'
+   ```
+
+2. **Handle special path types:**
+   - `/usr/lib/*` and `/System/*` → Skip (system libs)
+   - `@loader_path/*` → Resolve relative to current library
+   - `@rpath/*` → Search in Homebrew locations
+
+3. **Copy libraries to bundle:**
+   ```bash
+   cp -L /opt/homebrew/lib/libssl.3.dylib ${BUNDLE_LIB_DIR}/
+   ```
+
+4. **Change library's own ID:**
+   ```bash
+   install_name_tool -id "@loader_path/libssl.3.dylib" libssl.3.dylib
+   ```
+
+5. **Rewrite references to other libraries:**
+   ```bash
+   install_name_tool -change "/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib" \
+       "@loader_path/libcrypto.3.dylib" libssl.3.dylib
+   ```
+
+6. **Fix rpaths on binaries:**
+   ```bash
+   # Remove Homebrew rpaths
+   install_name_tool -delete_rpath "/opt/homebrew/lib" binary
+
+   # Add @loader_path for finding bundled libraries
+   install_name_tool -add_rpath "@loader_path" binary
+   ```
+
+7. **Re-sign after modification (REQUIRED):**
+   ```bash
+   codesign -s - --force --preserve-metadata=entitlements,requirements,flags,runtime binary
+   ```
+
+**Key Insight - @rpath Resolution:**
+
+When a library references `@rpath/libfoo.dylib`, the build script must resolve this by searching:
+1. The library's directory
+2. `/opt/homebrew/lib`
+3. `/usr/local/lib` (Intel Macs)
+4. The bundle's lib directory
+
+```bash
+if [[ "$dep" == @rpath/* ]]; then
+    rpath_lib="${dep#@rpath/}"
+    for search_dir in "/opt/homebrew/lib" "/usr/local/lib" "${lib_dir}"; do
+        if [[ -f "${search_dir}/${rpath_lib}" ]]; then
+            copy_lib_recursive "${search_dir}/${rpath_lib}"
+            break
+        fi
+    done
+fi
+```
+
+**Common Issues:**
+
+1. **Missing GEOS/PROJ for PostGIS** - These transitive dependencies often reference `@rpath` and need explicit resolution
+2. **Unsigned binaries fail to load** - Always re-sign after using `install_name_tool`
+3. **PostgreSQL extension loading fails** - Extensions (.so/.dylib) also need path rewriting
+
 ---
 
 ## Notes from hostdb
@@ -1117,6 +1208,94 @@ If Windows support is ever needed, options include:
 1. WSL2 (recommend to users)
 2. Build a minimal `postgresql-documentdb` without PostGIS/rum (reduced functionality)
 3. Significant investment in Windows build infrastructure for GEOS/PROJ/GDAL
+
+---
+
+## FerretDB Runtime Troubleshooting (January 2026)
+
+This section documents common issues and their solutions when running FerretDB containers.
+
+### Issue: Authentication Errors
+
+**Symptoms:**
+```
+MongoServerError: Command insert requires authentication
+MongoServerError: Authentication failed
+```
+
+**Cause:** FerretDB 2.x enables SCRAM authentication by default on the MongoDB wire protocol.
+
+**Solution:** Use the `--no-auth` flag when starting FerretDB. This is the default in SpinDB's FerretDB engine (similar to PostgreSQL's "trust" authentication for local development).
+
+**Important:** The flags `--setup-username` and `--setup-password` do NOT exist in FerretDB 2.7.0 despite what some documentation may suggest. Always use `--no-auth` for local development.
+
+```ts
+// In engines/ferretdb/index.ts start() method
+const ferretArgs = [
+  '--listen-addr', `127.0.0.1:${port}`,
+  '--postgresql-url', `postgres://postgres@127.0.0.1:${backendPort}/ferretdb`,
+  '--state-dir', containerDir,
+  '--no-auth',  // Required for local development
+]
+```
+
+### Issue: Debug Port Conflicts (Port 8088 in Use)
+
+**Symptoms:**
+```
+ERROR: Failed to create debug handler: listen tcp 127.0.0.1:8088: bind: address already in use
+```
+
+**Cause:** FerretDB has a debug HTTP handler that listens on port 8088 by default. When running multiple FerretDB containers, they all try to use the same debug port.
+
+**Solution:** Use `--debug-addr` to assign a unique debug port per container. SpinDB uses `port + 10000` (e.g., MongoDB port 27017 → debug port 37017):
+
+```ts
+const debugPort = port + 10000
+const ferretArgs = [
+  // ... other args
+  '--debug-addr', `127.0.0.1:${debugPort}`,
+]
+```
+
+### Issue: Backup/Restore Data Loss
+
+**Symptoms:**
+- Restore completes with warnings about duplicate keys
+- Restored container has 0 documents
+- Error: `COPY failed for table "job": duplicate key value violates unique constraint "job_pkey"`
+
+**Cause:** The DocumentDB extension creates internal metadata tables (e.g., `job`, `documentdb_api_catalog.*`) during initialization. When restoring a pg_dump to a newly initialized FerretDB container, these tables already exist and conflict with the backup.
+
+**Current behavior:**
+- pg_restore with `--clean --if-exists` attempts to drop and recreate objects
+- Some internal DocumentDB tables cannot be properly cleaned/restored
+- MongoDB collection data may not transfer correctly between containers
+
+**Workarounds:**
+1. Use `custom` format (not `sql`) for backup - it supports `--clean --if-exists`:
+   ```ts
+   await engine.backup(sourceConfig, dumpPath, { format: 'custom' })
+   ```
+
+2. For production cloning, consider using mongodump/mongorestore on the MongoDB protocol side instead of pg_dump/pg_restore on the PostgreSQL backend.
+
+3. Accept that FerretDB backup/restore through PostgreSQL has limitations - the integration tests document this as a known limitation.
+
+**Future improvement:** Investigate using mongodump/mongorestore (bundled with FerretDB from hostdb) for more reliable backup/restore.
+
+### Issue: Container Fails to Start After Rename
+
+**Symptoms:**
+- Container was renamed successfully
+- Start fails with port or path errors
+
+**Cause:** The `backendPort` in container.json may reference the old container path, or ports may have been released during rename.
+
+**Solution:** The engine's `start()` method re-validates and re-allocates ports as needed. If issues persist, check:
+1. `container.json` has correct paths
+2. No stale PID files in the container directory
+3. Backend port is available
 
 ---
 

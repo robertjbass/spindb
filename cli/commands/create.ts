@@ -20,7 +20,7 @@ import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
-import { isValidDatabaseName } from '../../core/error-handler'
+import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
 import { resolve } from 'path'
 import { Engine } from '../../types'
 import type { BaseEngine } from '../../engines/base-engine'
@@ -1049,8 +1049,7 @@ export const createCommand = new Command('create')
 
         if (matchingPattern) {
           if (options.json) {
-            console.log(JSON.stringify({ error: e.message }))
-            process.exit(1)
+            return exitWithError({ message: e.message, json: true })
           }
           const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
@@ -1059,15 +1058,10 @@ export const createCommand = new Command('create')
               chalk.yellow('  Please re-run your command to continue.'),
             )
           }
-          process.exit(1)
+          return exitWithError({ message: 'Missing required tools', json: options.json })
         }
 
-        if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
-        } else {
-          console.error(uiError(e.message))
-        }
-        process.exit(1)
+        return exitWithError({ message: e.message, json: options.json })
       } finally {
         if (tempDumpPath) {
           try {

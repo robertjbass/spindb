@@ -98,6 +98,11 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Dashboard URL**: `/dashboard`
 - **Config file**: Uses YAML config (`config.yaml`) for settings
 
+**MongoDB & FerretDB:**
+- **Implicit database creation**: MongoDB/FerretDB don't create databases until you first write data. To force immediate creation (so the database appears in tools like TablePlus), `createDatabase()` creates a temp collection `_spindb_init` and immediately drops it. This leaves the database visible with no marker clutter.
+- **Connection via mongosh**: Both engines use MongoDB's `mongosh` shell for connections and script execution
+- **Database validation**: Database names must be alphanumeric + underscores (same as SQL engines)
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
@@ -168,10 +173,38 @@ MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)
 **Key constraints:**
 - **FerretDB v2 only** - Requires DocumentDB extension (v1 not supported)
 - **Two ports per container** - External (27017 for MongoDB) + internal (54320+ for PostgreSQL backend)
+- **Three ports total** - MongoDB (27017), PostgreSQL backend (54320+), and debug HTTP handler (37017+)
+
+**FerretDB-specific flags (in `engines/ferretdb/index.ts`):**
+- `--no-auth` - Disables SCRAM authentication for local development (FerretDB 2.x enables auth by default)
+- `--debug-addr=127.0.0.1:${port + 10000}` - Unique debug HTTP port per container (default 8088 causes conflicts)
+- `--listen-addr=127.0.0.1:${port}` - MongoDB wire protocol port
+- `--postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb` - Backend connection
+
+**Known issues & gotchas:**
+1. **Authentication**: FerretDB 2.x enables SCRAM authentication by default. The `--setup-username` and `--setup-password` flags do NOT exist despite documentation suggestions. Use `--no-auth` instead for local development.
+2. **Debug port conflicts**: Running multiple FerretDB containers fails if all use default debug port 8088. Solution: `--debug-addr=127.0.0.1:${port + 10000}` (e.g., MongoDB port 27017 → debug port 37017).
+3. **Backup/restore limitations**: pg_dump/pg_restore between FerretDB containers has issues because DocumentDB creates internal metadata tables (e.g., `job`) that conflict during restore. The restore may partially fail with "duplicate key value violates unique constraint" errors. **Workaround**: Use `custom` format with `--clean --if-exists`, but some data loss may occur. For production cloning, consider mongodump/mongorestore on the MongoDB protocol side.
+4. **Connection strings**: No authentication needed with `--no-auth`: `mongodb://127.0.0.1:${port}/${db}`
 
 **hostdb releases:**
-- [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) - linux-x64, linux-arm64, darwin-x64, darwin-arm64
+- [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) - linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
 - [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) - All platforms including win32-x64
+
+**postgresql-documentdb bundle contents:**
+The hostdb binary is a complete PostgreSQL 17 installation with:
+- PostgreSQL server and client tools (psql, pg_dump, pg_restore)
+- DocumentDB extension (MongoDB-compatible storage for FerretDB v2)
+- PostGIS extension (built from source, not Homebrew)
+- pgvector extension
+- All required dylibs bundled and path-rewritten for relocatability
+
+**Why custom PostgreSQL build?** Homebrew PostgreSQL has hardcoded paths (`/opt/homebrew/lib/...`) that break on other machines. The hostdb build:
+1. Builds PostgreSQL from source with relative paths
+2. Builds PostGIS from source against that PostgreSQL
+3. Bundles all Homebrew dependencies (OpenSSL, ICU, GEOS, PROJ, etc.)
+4. Rewrites dylib paths to use `@loader_path` for macOS relocatability
+5. Re-signs all binaries (macOS requires code signing after modification)
 
 See [plans/FERRETDB.md](plans/FERRETDB.md) for implementation details.
 

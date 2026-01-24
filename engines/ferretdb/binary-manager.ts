@@ -619,6 +619,7 @@ class FerretDBCompositeBinaryManager {
 
   /**
    * Verify postgresql-documentdb binary installation
+   * Tests both pg_ctl and initdb since initdb is used during container creation
    */
   private async verifyDocumentDB(
     version: string,
@@ -626,12 +627,19 @@ class FerretDBCompositeBinaryManager {
     arch: Arch,
   ): Promise<void> {
     const binPath = this.getDocumentDBBinaryPath(version, platform, arch)
-    const pgCtl = join(binPath, 'bin', 'pg_ctl')
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    const pgCtl = join(binPath, 'bin', `pg_ctl${ext}`)
+    const initdb = join(binPath, 'bin', `initdb${ext}`)
 
     if (!existsSync(pgCtl)) {
       throw new Error(`postgresql-documentdb binary not found at ${binPath}/bin/`)
     }
 
+    if (!existsSync(initdb)) {
+      throw new Error(`initdb not found at ${binPath}/bin/ - required for container initialization`)
+    }
+
+    // Verify pg_ctl works
     try {
       const { stdout } = await spawnAsync(pgCtl, ['--version'])
       // Expected output: "pg_ctl (PostgreSQL) 17.x.x"
@@ -657,7 +665,7 @@ class FerretDBCompositeBinaryManager {
       // Check for library loading issues (common on macOS/Linux with hostdb binaries)
       if (err.code === null || err.code === 'ENOENT' || err.message.includes('dyld') || err.message.includes('GLIBC')) {
         throw new Error(
-          `postgresql-documentdb binary failed to execute. This is likely due to missing or incompatible libraries.\n` +
+          `postgresql-documentdb pg_ctl failed to execute. This is likely due to missing or incompatible libraries.\n` +
           `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
           `See: https://github.com/robertjbass/hostdb/issues\n` +
           `Original error: ${err.message || 'Process killed (library loading failed)'}`,
@@ -665,7 +673,37 @@ class FerretDBCompositeBinaryManager {
       }
 
       throw new Error(
-        `Failed to verify postgresql-documentdb binary: ${err.message}`,
+        `Failed to verify postgresql-documentdb pg_ctl: ${err.message}`,
+      )
+    }
+
+    // Verify initdb works (critical for container creation)
+    try {
+      const { stdout } = await spawnAsync(initdb, ['--version'])
+      // Expected output: "initdb (PostgreSQL) 17.x.x"
+      const match = stdout.match(/PostgreSQL[)\s]+(\d+)/)
+      if (!match) {
+        throw new Error(
+          `Could not parse initdb version from: ${stdout.trim()}`,
+        )
+      }
+      logDebug(`initdb verified: ${stdout.trim()}`)
+    } catch (error) {
+      const err = error as Error & { code?: string | number | null }
+
+      // Check for library loading issues
+      if (err.code === null || err.code === 'ENOENT' || err.message.includes('dyld') || err.message.includes('GLIBC')) {
+        throw new Error(
+          `postgresql-documentdb initdb failed to execute. This is likely due to missing or incompatible libraries.\n` +
+          `initdb is required for FerretDB container initialization.\n` +
+          `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
+          `See: https://github.com/robertjbass/hostdb/issues\n` +
+          `Original error: ${err.message || 'Process killed (library loading failed)'}`,
+        )
+      }
+
+      throw new Error(
+        `Failed to verify postgresql-documentdb initdb: ${err.message}`,
       )
     }
   }

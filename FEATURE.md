@@ -66,10 +66,32 @@ Composite engines require **multiple binaries** working together:
 
 - **FerretDB** requires `ferretdb` (proxy) + `postgresql-documentdb` (backend)
 - Each container manages two processes (FerretDB + embedded PostgreSQL)
-- Two ports: external (MongoDB 27017) + internal (PostgreSQL 54320+)
+- Three ports: external MongoDB (27017), internal PostgreSQL (54320+), debug HTTP (37017+)
 - Backup uses PostgreSQL native tools (pg_dump) on embedded backend
 
 **Platform support:** FerretDB v2 with DocumentDB extension is available on all platforms (macOS, Linux, Windows).
+
+**hostdb postgresql-documentdb bundle:**
+
+The `postgresql-documentdb` binary from hostdb is a self-contained PostgreSQL 17 installation that includes:
+- PostgreSQL server and all client tools (psql, pg_dump, pg_restore, etc.)
+- DocumentDB extension (provides MongoDB-compatible storage layer)
+- PostGIS extension (built from source for relocatability)
+- pgvector extension
+- All required shared libraries bundled (OpenSSL, ICU, GEOS, PROJ, etc.)
+
+**Why a custom build?** Standard Homebrew PostgreSQL has hardcoded absolute paths that break when copied to another machine. The hostdb build:
+1. Compiles PostgreSQL from source with relative library paths
+2. Builds PostGIS from source (Homebrew PostGIS also has hardcoded paths)
+3. Bundles all Homebrew dependencies recursively
+4. Rewrites dylib paths using `install_name_tool` with `@loader_path`
+5. Re-signs all binaries with ad-hoc signatures (macOS requires this after modification)
+
+**Known DocumentDB SQL issues (patched in hostdb build):**
+1. Token concatenation (`##`) - PostgreSQL doesn't support C preprocessor-style token concatenation
+2. Wrong library references - Some functions reference `MODULE_PATHNAME` but live in `pg_documentdb_core`
+
+These patches are applied automatically during the hostdb build process.
 
 See [plans/FERRETDB.md](plans/FERRETDB.md) for complete implementation guide.
 
