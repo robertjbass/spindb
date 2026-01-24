@@ -2,7 +2,7 @@
  * Unit tests for FerretDB backup format detection
  */
 
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import { assertEqual, assert } from '../utils/assertions'
 import { writeFile, mkdir, rm } from 'fs/promises'
 import { join } from 'path'
@@ -12,9 +12,12 @@ import { detectBackupFormat } from '../../engines/ferretdb/restore'
 describe('FerretDB Backup Format Detection', () => {
   const testDir = join(tmpdir(), 'ferretdb-test-' + Date.now())
 
-  // Setup test directory
-  it('setup test directory', async () => {
+  before(async () => {
     await mkdir(testDir, { recursive: true })
+  })
+
+  after(async () => {
+    await rm(testDir, { recursive: true, force: true })
   })
 
   describe('detectBackupFormat', () => {
@@ -51,8 +54,15 @@ describe('FerretDB Backup Format Detection', () => {
       try {
         await detectBackupFormat(join(testDir, 'nonexistent.sql'))
         assert(false, 'Should have thrown an error')
-      } catch {
-        assert(true, 'Threw expected error')
+      } catch (error) {
+        const err = error as Error & { code?: string }
+        assert(
+          err.code === 'ENOENT' ||
+            err.message.includes('no such file') ||
+            err.message.includes('ENOENT') ||
+            err.message.includes('not found'),
+          `Expected file not found error, got: ${err.message}`,
+        )
       }
     })
 
@@ -79,10 +89,5 @@ describe('FerretDB Backup Format Detection', () => {
       const format = await detectBackupFormat(dirPath)
       assertEqual(format.format, 'directory', 'Should detect directory format')
     })
-  })
-
-  // Cleanup
-  it('cleanup test directory', async () => {
-    await rm(testDir, { recursive: true, force: true })
   })
 })
