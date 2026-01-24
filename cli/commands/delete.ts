@@ -5,6 +5,7 @@ import { getEngine } from '../../engines'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning } from '../ui/theme'
+import chalk from 'chalk'
 
 export const deleteCommand = new Command('delete')
   .alias('rm')
@@ -25,6 +26,13 @@ export const deleteCommand = new Command('delete')
           // JSON mode requires container name argument
           if (options.json) {
             console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
+          // Non-interactive mode requires container name argument
+          if (!process.stdin.isTTY) {
+            console.error(uiError('Container name is required in non-interactive mode'))
+            console.error(chalk.gray('  Usage: spindb delete <name> --force'))
             process.exit(1)
           }
 
@@ -53,7 +61,16 @@ export const deleteCommand = new Command('delete')
           process.exit(1)
         }
 
-        if (!options.yes && !options.json) {
+        if (!options.yes && !options.force && !options.json) {
+          // Detect non-interactive mode (piped input, scripts, CI)
+          if (!process.stdin.isTTY) {
+            console.error(
+              uiError('Cannot prompt for confirmation in non-interactive mode'),
+            )
+            console.error(chalk.gray('  Use --force or --yes to skip confirmation'))
+            process.exit(1)
+          }
+
           const confirmed = await promptConfirm(
             `Are you sure you want to delete "${containerName}"? This cannot be undone.`,
             false,

@@ -91,10 +91,19 @@ export function checkAndResetEscape(): boolean {
 /**
  * Wrapper around inquirer.prompt that registers/unregisters with global escape handler.
  * Use this instead of inquirer.prompt() directly for escape key support.
+ *
+ * Automatically detects non-interactive mode (piped input, scripts, CI) and throws
+ * a clear error instead of hanging on user input that can never come.
  */
 export async function escapeablePrompt<T extends Record<string, unknown>>(
   questions: Parameters<typeof inquirer.prompt>[0],
 ): Promise<T> {
+  // Detect non-interactive mode (piped input, scripts, CI environments)
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      'Cannot prompt in non-interactive mode. Use appropriate flags (--force, --yes, --json) or provide required arguments.',
+    )
+  }
   // Create a promise that rejects when escape is pressed
   const escapePromise = new Promise<never>((_, reject) => {
     escapeReject = reject
@@ -135,6 +144,9 @@ export function wasEscapePressed(result: unknown): boolean {
  * When escape is pressed globally, an EscapeError is thrown,
  * which is caught by the main menu loop to restart the menu.
  *
+ * Automatically detects non-interactive mode (piped input, scripts, CI) and throws
+ * a clear error instead of hanging on user input that can never come.
+ *
  * @example
  * const { action } = await promptWithEscape(
  *   inquirer.prompt([{ type: 'list', name: 'action', choices: [...] }])
@@ -144,6 +156,12 @@ export async function promptWithEscape<T extends Record<string, unknown>>(
   promptPromise: Promise<T>,
   _fieldName = 'action',
 ): Promise<T> {
+  // Detect non-interactive mode (piped input, scripts, CI environments)
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      'Cannot prompt in non-interactive mode. Use appropriate flags (--force, --yes, --json) or provide required arguments.',
+    )
+  }
   // Create a promise that rejects when escape is pressed
   const escapePromise = new Promise<never>((_, reject) => {
     escapeReject = reject

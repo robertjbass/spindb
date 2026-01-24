@@ -23,7 +23,7 @@ spindb create mydb --from backup.sql    # Create from backup
 spindb start mydb                       # Start container
 spindb stop mydb                        # Stop container
 spindb stop --all                       # Stop all containers
-spindb delete mydb -f -y                # Force delete without prompt
+spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
 spindb list                             # List all containers
 spindb info mydb                        # Show container details
 ```
@@ -193,5 +193,5 @@ spindb stop prod && spindb clone prod test && spindb start test
 spindb backup mydb --format sql -o ~/backups
 
 # Reset database
-spindb delete mydb -f -y && spindb create mydb --start
+spindb delete mydb -f && spindb create mydb --start
 ```
