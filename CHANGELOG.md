@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.23.1] - 2026-01-23
 
 ### Changed
-- **FerretDB Windows support** - FerretDB now supports Windows (hostdb builds for ferretdb and postgresql-documentdb are now available for win32-x64)
+- **FerretDB Windows binaries added** - hostdb now provides win32-x64 builds for ferretdb and postgresql-documentdb, completing cross-platform support
 
 ## [0.23.0] - 2026-01-23
 
@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses `mongodb://` connection scheme, compatible with mongosh
   - Backup/restore via pg_dump/pg_restore on PostgreSQL backend (formats: `sql`, `custom`)
   - Aliases: `ferretdb`, `ferret`
-  - All platforms supported (macOS, Linux, Windows)
+  - Supported architectures: darwin-arm64, darwin-x64, linux-arm64, linux-x64 (win32-x64 added in 0.23.1)
   - Version 2.7.0 with postgresql-documentdb 17-0.107.0 from hostdb
 
 ### Changed

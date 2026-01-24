@@ -409,8 +409,8 @@ Menu navigation patterns:
 
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
-4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
-5. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
+3. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
+4. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
 
 ## Publishing
 
