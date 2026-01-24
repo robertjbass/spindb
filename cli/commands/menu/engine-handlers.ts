@@ -110,6 +110,7 @@ export async function handleEngines(): Promise<void> {
   )
   choices.push(new inquirer.Separator())
   choices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })
+  choices.push(new inquirer.Separator()) // Separator for when list wraps around
 
   const { action } = await inquirer.prompt<{ action: string }>([
     {

@@ -90,6 +90,7 @@ async function showMainMenu(): Promise<void> {
       value: 'clone',
       disabled: canClone ? false : 'No containers',
     },
+    new inquirer.Separator(),
     {
       name: hasEngines
         ? `${chalk.yellow('⚙')} Manage installed engines`
@@ -97,7 +98,6 @@ async function showMainMenu(): Promise<void> {
       value: 'engines',
       disabled: hasEngines ? false : 'No engines installed',
     },
-    new inquirer.Separator(),
     { name: `${chalk.bgRed.white('+')} System health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
     { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
