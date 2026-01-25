@@ -516,9 +516,12 @@ export class CouchDBEngine extends BaseEngine {
       const expectedVmArgs = join(binDir, 'etc', 'vm.args')
       try {
         await writeFile(expectedVmArgs, vmArgsContent)
-        logDebug(`Copied vm.args to ${expectedVmArgs}`)
+        if (process.env.DEBUG === 'spindb') {
+          console.error(`[CouchDB Debug] Wrote vm.args to ${expectedVmArgs}`)
+          console.error(`[CouchDB Debug] Content includes start_disksup: ${vmArgsContent.includes('start_disksup')}`)
+        }
       } catch (err) {
-        logDebug(`Failed to copy vm.args: ${err}`)
+        console.error(`[CouchDB Debug] Failed to copy vm.args: ${err}`)
       }
     }
 
