@@ -507,6 +507,15 @@ export class CouchDBEngine extends BaseEngine {
       COUCHDB_ARGS_FILE: vmArgsPath,
     }
 
+    logDebug(`CouchDB environment:`)
+    logDebug(`  COUCHDB_INI_FILES: ${env.COUCHDB_INI_FILES}`)
+    logDebug(`  COUCHDB_ARGS_FILE: ${env.COUCHDB_ARGS_FILE}`)
+    logDebug(`  Binary: ${couchdbServer}`)
+    logDebug(`  CWD: ${containerDir}`)
+    logDebug(`  Default ini exists: ${existsSync(defaultIni)}`)
+    logDebug(`  Config path exists: ${existsSync(configPath)}`)
+    logDebug(`  VM args exists: ${existsSync(vmArgsPath)}`)
+
     // Spawn CouchDB process
     if (isWindows()) {
       return new Promise((resolve, reject) => {
@@ -519,6 +528,7 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
+        logDebug(`Spawning: cmd.exe /c ${couchdbServer}`)
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
