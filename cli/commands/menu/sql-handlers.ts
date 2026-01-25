@@ -1,5 +1,4 @@
 import chalk from 'chalk'
-import inquirer from 'inquirer'
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { spawn } from 'child_process'
@@ -10,10 +9,12 @@ import { paths } from '../../../config/paths'
 import {
   promptInstallDependencies,
   promptDatabaseSelect,
+  escapeablePrompt,
 } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { followFile, getLastNLines } from '../../utils/file-follower'
+import { Engine, assertExhaustive } from '../../../types'
 
 export async function handleRunSql(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
@@ -57,16 +58,38 @@ export async function handleRunSql(containerName: string): Promise<void> {
   const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
   // Get script type terminology based on engine
-  const getScriptType = (
-    engine: string,
-  ): { type: string; lower: string } => {
-    if (engine === 'redis' || engine === 'valkey') {
-      return { type: 'Command', lower: 'command' }
+  // IMPORTANT: When adding a new engine, update this function and FEATURE.md
+  // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse
+  // - Script: MongoDB, FerretDB (JavaScript via mongosh), Qdrant, Meilisearch (REST API)
+  // - Command: Redis, Valkey (Redis commands)
+  const getScriptType = (engine: Engine): { type: string; lower: string } => {
+    switch (engine) {
+      // Redis-like engines use "Command" terminology
+      case Engine.Redis:
+      case Engine.Valkey:
+        return { type: 'Command', lower: 'command' }
+
+      // Document/search engines use "Script" terminology
+      // MongoDB and FerretDB use JavaScript via mongosh
+      // Qdrant and Meilisearch use REST API (JSON)
+      case Engine.MongoDB:
+      case Engine.FerretDB:
+      case Engine.Qdrant:
+      case Engine.Meilisearch:
+        return { type: 'Script', lower: 'script' }
+
+      // SQL engines use "SQL" terminology
+      case Engine.PostgreSQL:
+      case Engine.MySQL:
+      case Engine.MariaDB:
+      case Engine.SQLite:
+      case Engine.DuckDB:
+      case Engine.ClickHouse:
+        return { type: 'SQL', lower: 'sql' }
+
+      default:
+        assertExhaustive(engine)
     }
-    if (engine === 'mongodb' || engine === 'qdrant' || engine === 'meilisearch') {
-      return { type: 'Script', lower: 'script' }
-    }
-    return { type: 'SQL', lower: 'sql' }
   }
 
   const { type: scriptType, lower: scriptTypeLower } = getScriptType(
@@ -76,10 +99,10 @@ export async function handleRunSql(containerName: string): Promise<void> {
   // Prompt for file path (empty input = go back)
   console.log(
     chalk.gray(
-      '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+      '  Drag & drop, enter path (abs or rel), or press Enter to go back (esc - main menu)',
     ),
   )
-  const { filePath: rawFilePath } = await inquirer.prompt<{
+  const { filePath: rawFilePath } = await escapeablePrompt<{
     filePath: string
   }>([
     {
@@ -158,7 +181,7 @@ export async function handleViewLogs(containerName: string): Promise<void> {
     return
   }
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',

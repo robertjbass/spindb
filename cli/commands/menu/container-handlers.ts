@@ -30,6 +30,7 @@ import {
   promptPort,
   promptDatabaseName,
   promptFileDatabasePath,
+  escapeablePrompt,
   BACK_VALUE,
   MAIN_MENU_VALUE,
 } from '../../ui/prompts'
@@ -52,6 +53,7 @@ import {
 } from './backup-handlers'
 import { Engine, isFileBasedEngine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
+import { getEngineIconPadded } from '../../constants'
 
 export async function handleCreate(): Promise<'main' | void> {
   console.log()
@@ -303,7 +305,7 @@ export async function handleCreate(): Promise<'main' | void> {
 
       console.log()
 
-      await inquirer.prompt([
+      await escapeablePrompt([
         {
           type: 'input',
           name: 'continue',
@@ -371,7 +373,7 @@ export async function handleCreate(): Promise<'main' | void> {
 
       console.log()
 
-      await inquirer.prompt([
+      await escapeablePrompt([
         {
           type: 'input',
           name: 'continue',
@@ -400,15 +402,20 @@ export async function handleList(
   console.clear()
   console.log(header('Containers'))
   console.log()
+
+  const spinner = createSpinner('Loading containers...')
+  spinner.start()
+
   const containers = await containerManager.list()
 
   if (containers.length === 0) {
+    spinner.stop()
     console.log(
       uiInfo('No containers found. Create one with the "Create" option.'),
     )
     console.log()
 
-    await inquirer.prompt([
+    await escapeablePrompt([
       {
         type: 'input',
         name: 'continue',
@@ -418,6 +425,7 @@ export async function handleList(
     return
   }
 
+  // Fetch sizes for running containers
   const sizes = await Promise.all(
     containers.map(async (container) => {
       if (container.status !== 'running') return null
@@ -430,64 +438,63 @@ export async function handleList(
     }),
   )
 
-  console.log()
-  console.log(
-    chalk.gray('  ') +
-      chalk.bold.white('NAME'.padEnd(16)) +
-      chalk.bold.white('ENGINE'.padEnd(11)) +
-      chalk.bold.white('VERSION'.padEnd(8)) +
-      chalk.bold.white('PORT'.padEnd(6)) +
-      chalk.bold.white('SIZE'.padEnd(9)) +
-      chalk.bold.white('STATUS'),
-  )
-  console.log(chalk.gray('  ' + '─'.repeat(58)))
+  spinner.stop()
 
-  for (let i = 0; i < containers.length; i++) {
-    const container = containers[i]
+  // Column widths for formatting
+  const COL_NAME = 16
+  const COL_ENGINE = 13
+  const COL_VERSION = 8
+  const COL_PORT = 6
+  const COL_SIZE = 9
+
+  // Build selectable choices with formatted display (like engines menu)
+  const containerChoices: MenuChoice[] = containers.map((c, i) => {
     const size = sizes[i]
-    const isFileBasedDB = isFileBasedEngine(container.engine)
+    const isFileBased = isFileBasedEngine(c.engine)
 
-    // File-based DBs use available/missing, server databases use running/stopped
-    const statusDisplay = isFileBasedDB
-      ? container.status === 'running'
+    // Status display
+    const statusDisplay = isFileBased
+      ? c.status === 'running'
         ? chalk.blue('● available')
         : chalk.gray('○ missing')
-      : container.status === 'running'
+      : c.status === 'running'
         ? chalk.green('● running')
         : chalk.gray('○ stopped')
 
-    const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
-
     // Truncate name if too long
     const displayName =
-      container.name.length > 15
-        ? container.name.slice(0, 14) + '…'
-        : container.name
+      c.name.length > COL_NAME - 1 ? c.name.slice(0, COL_NAME - 2) + '…' : c.name
 
-    // File-based DBs show dash instead of port
-    const portDisplay = isFileBasedDB ? '—' : String(container.port)
+    // Port or dash for file-based
+    const portDisplay = isFileBased ? '—' : String(c.port)
 
-    console.log(
-      chalk.gray('  ') +
-        chalk.cyan(displayName.padEnd(16)) +
-        chalk.white(container.engine.padEnd(11)) +
-        chalk.yellow(container.version.padEnd(8)) +
-        chalk.green(portDisplay.padEnd(6)) +
-        chalk.magenta(sizeDisplay.padEnd(9)) +
-        statusDisplay,
-    )
-  }
+    // Size display
+    const sizeDisplay = size !== null ? formatBytes(size) : '—'
 
-  console.log()
+    // Build formatted row
+    const icon = getEngineIconPadded(c.engine)
+    const row =
+      chalk.cyan(displayName.padEnd(COL_NAME)) +
+      chalk.white(`${icon}${c.engine}`.padEnd(COL_ENGINE + 2)) +
+      chalk.yellow(c.version.padEnd(COL_VERSION)) +
+      chalk.green(portDisplay.padEnd(COL_PORT)) +
+      chalk.magenta(sizeDisplay.padEnd(COL_SIZE)) +
+      statusDisplay
 
-  // Separate counts for server databases and file-based databases
+    return {
+      name: row,
+      value: c.name,
+      short: c.name,
+    }
+  })
+
+  // Calculate summary
   const serverContainers = containers.filter(
     (c) => !isFileBasedEngine(c.engine),
   )
   const fileBasedContainers = containers.filter((c) =>
     isFileBasedEngine(c.engine),
   )
-
   const running = serverContainers.filter((c) => c.status === 'running').length
   const stopped = serverContainers.filter((c) => c.status !== 'running').length
   const available = fileBasedContainers.filter(
@@ -505,48 +512,29 @@ export async function handleList(
     )
   }
 
-  console.log(
-    chalk.gray(`  ${containers.length} container(s): ${parts.join('; ')}`),
+  // Add separator with summary and actions
+  containerChoices.push(new inquirer.Separator(chalk.gray('─'.repeat(60))))
+  containerChoices.push(
+    new inquirer.Separator(
+      chalk.gray(`${containers.length} container(s): ${parts.join('; ')}`),
+    ),
   )
+  containerChoices.push(new inquirer.Separator())
+  containerChoices.push({ name: `${chalk.green('+')} Create new`, value: 'create' })
+  containerChoices.push({ name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' })
 
-  console.log()
-  const containerChoices = [
-    ...containers.map((c) => {
-      // Simpler selector - table already shows details
-      const isFileBased = isFileBasedEngine(c.engine)
-      const statusLabel = isFileBased
-        ? c.status === 'running'
-          ? chalk.blue('● available')
-          : chalk.gray('○ missing')
-        : c.status === 'running'
-          ? chalk.green('● running')
-          : chalk.gray('○ stopped')
-
-      return {
-        name: `${c.name} ${statusLabel}`,
-        value: c.name,
-        short: c.name,
-      }
-    }),
-    new inquirer.Separator(),
-    { name: `${chalk.green('+')} Create new`, value: 'create' },
-    { name: `${chalk.blue('←')} Back to main menu`, value: 'back' },
-  ]
-
-  const { selectedContainer } = await inquirer.prompt<{
-    selectedContainer: string
-  }>([
+  const { selectedContainer } = await escapeablePrompt<{ selectedContainer: string }>([
     {
       type: 'list',
       name: 'selectedContainer',
-      message: 'Select a container for more options:',
+      message: 'Select a container:',
       choices: containerChoices,
       pageSize: 15,
     },
   ])
 
+  // Back returns to main menu (escape is handled globally)
   if (selectedContainer === 'back') {
-    await showMainMenu()
     return
   }
 
@@ -746,12 +734,12 @@ export async function showContainerSubmenu(
       value: 'back',
     },
     {
-      name: `${chalk.blue('⌂')} Back to main menu`,
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: 'main',
     },
   )
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -760,6 +748,8 @@ export async function showContainerSubmenu(
       pageSize: 15,
     },
   ])
+
+  // Escape is handled globally by the menu loop
 
   switch (action) {
     case 'start':
@@ -1063,11 +1053,11 @@ async function handleEditContainer(
     value: 'back',
   })
   editChoices.push({
-    name: `${chalk.blue('⌂')} Back to main menu`,
+    name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
     value: 'main',
   })
 
-  const { field } = await inquirer.prompt<{ field: string }>([
+  const { field } = await escapeablePrompt<{ field: string }>([
     {
       type: 'list',
       name: 'field',
@@ -1086,7 +1076,7 @@ async function handleEditContainer(
   }
 
   if (field === 'name') {
-    const { newName } = await inquirer.prompt<{ newName: string }>([
+    const { newName } = await escapeablePrompt<{ newName: string }>([
       {
         type: 'input',
         name: 'newName',
@@ -1124,7 +1114,7 @@ async function handleEditContainer(
   }
 
   if (field === 'port') {
-    const { newPort } = await inquirer.prompt<{ newPort: number }>([
+    const { newPort } = await escapeablePrompt<{ newPort: number }>([
       {
         type: 'input',
         name: 'newPort',
@@ -1165,7 +1155,7 @@ async function handleEditContainer(
   if (field === 'relocate') {
     const currentFileName = basename(config.database)
 
-    const { inputPath } = await inquirer.prompt<{ inputPath: string }>([
+    const { inputPath } = await escapeablePrompt<{ inputPath: string }>([
       {
         type: 'input',
         name: 'inputPath',
@@ -1235,7 +1225,7 @@ async function handleEditContainer(
     const destDir = dirname(finalPath)
     if (!existsSync(destDir)) {
       console.log(uiWarning(`Directory does not exist: ${destDir}`))
-      const { createDir } = await inquirer.prompt<{ createDir: string }>([
+      const { createDir } = await escapeablePrompt<{ createDir: string }>([
         {
           type: 'list',
           name: 'createDir',
@@ -1333,7 +1323,7 @@ async function handleCloneFromSubmenu(
     return
   }
 
-  const { targetName } = await inquirer.prompt<{ targetName: string }>([
+  const { targetName } = await escapeablePrompt<{ targetName: string }>([
     {
       type: 'input',
       name: 'targetName',

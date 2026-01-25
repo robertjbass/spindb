@@ -11,17 +11,20 @@ import { logDebug } from './error-handler'
  * Check if an error is a filesystem error that should trigger cp fallback
  * - EXDEV: cross-device link (rename across filesystems)
  * - EPERM: permission error (Windows filesystem operations)
+ * - ENOTEMPTY: directory not empty (target exists with content)
  */
 export function isRenameFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const code = (error as NodeJS.ErrnoException).code
-  return typeof code === 'string' && ['EXDEV', 'EPERM'].includes(code)
+  return (
+    typeof code === 'string' && ['EXDEV', 'EPERM', 'ENOTEMPTY'].includes(code)
+  )
 }
 
 /**
  * Move a file or directory from source to destination.
  * Uses rename() for efficiency, with fallback to cp() + rm() for cross-device
- * moves or permission issues (EXDEV, EPERM).
+ * moves, permission issues, or non-empty target directories (EXDEV, EPERM, ENOTEMPTY).
  *
  * @param sourcePath - Source file or directory path
  * @param destPath - Destination file or directory path
@@ -34,7 +37,7 @@ export async function moveEntry(
     await rename(sourcePath, destPath)
   } catch (error) {
     if (isRenameFallbackError(error)) {
-      await cp(sourcePath, destPath, { recursive: true })
+      await cp(sourcePath, destPath, { recursive: true, force: true })
       // Attempt cleanup of source, but don't fail if it doesn't work
       // (the destination was successfully created)
       try {

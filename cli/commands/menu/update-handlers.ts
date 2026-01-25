@@ -1,6 +1,6 @@
 import { existsSync } from 'fs'
 import chalk from 'chalk'
-import inquirer from 'inquirer'
+import { escapeablePrompt } from '../../ui/prompts'
 import { updateManager } from '../../../core/update-manager'
 import { containerManager } from '../../../core/container-manager'
 import { configManager } from '../../../core/config-manager'
@@ -42,7 +42,7 @@ export async function handleCheckUpdate(): Promise<void> {
     )
     console.log()
 
-    const { action } = await inquirer.prompt<{ action: string }>([
+    const { action } = await escapeablePrompt<{ action: string }>([
       {
         type: 'list',
         name: 'action',
@@ -344,7 +344,7 @@ export async function handleDoctor(): Promise<void> {
       { name: chalk.gray('Skip (do nothing)'), value: 'skip' },
     ]
 
-    const { selectedAction } = await inquirer.prompt<{
+    const { selectedAction } = await escapeablePrompt<{
       selectedAction: string
     }>([
       {

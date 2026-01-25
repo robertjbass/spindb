@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, and Meilisearch.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, and Meilisearch.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -98,6 +98,11 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Dashboard URL**: `/dashboard`
 - **Config file**: Uses YAML config (`config.yaml`) for settings
 
+**MongoDB & FerretDB:**
+- **Implicit database creation**: MongoDB/FerretDB don't create databases until you first write data. To force immediate creation (so the database appears in tools like TablePlus), `createDatabase()` creates a temp collection `_spindb_init` and immediately drops it. This leaves the database visible with no marker clutter.
+- **Connection via mongosh**: Both engines use MongoDB's `mongosh` shell for connections and script execution
+- **Database validation**: Database names must be alphanumeric + underscores (same as SQL engines)
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
@@ -124,6 +129,7 @@ See [FEATURE.md](FEATURE.md) for detailed implementation guidance and code examp
 Engines can be referenced by aliases in CLI commands:
 - `postgresql`, `postgres`, `pg` → PostgreSQL
 - `mongodb`, `mongo` → MongoDB
+- `ferretdb`, `ferret` → FerretDB
 - `sqlite`, `lite` → SQLite
 - `qdrant`, `qd` → Qdrant
 - `meilisearch`, `meili`, `ms` → Meilisearch
@@ -136,6 +142,7 @@ Engines can be referenced by aliases in CLI commands:
 | MySQL 🐬 | 8.0, 8.4, 9 | SQL | |
 | MariaDB 🦭 | 10.11, 11.4, 11.8 | SQL | |
 | MongoDB 🍃 | 7.0, 8.0, 8.2 | JavaScript | Uses mongosh |
+| FerretDB 🦔 | 2 | JavaScript | MongoDB-compatible, PostgreSQL backend |
 | Redis 🔴 | 7, 8 | Redis commands | Databases 0-15 (numbered) |
 | Valkey 🔷 | 8, 9 | Redis commands | Uses `redis://` scheme for compatibility |
 | ClickHouse 🏠 | 25.12 | SQL | XML configs, HTTP port 8123 |
@@ -149,6 +156,60 @@ Engines can be referenced by aliases in CLI commands:
 All engines download binaries from [hostdb](https://github.com/robertjbass/hostdb) except:
 - **PostgreSQL on Windows**: Uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries. File IDs in `engines/postgresql/edb-binary-urls.ts`.
 - **ClickHouse**: macOS/Linux only (no Windows support in hostdb)
+- **FerretDB**: macOS/Linux only (postgresql-documentdb has Windows startup issues)
+
+### FerretDB (Composite Engine)
+
+FerretDB is a MongoDB-compatible proxy that requires **two binaries** from hostdb:
+
+1. **ferretdb** - Stateless proxy (MongoDB wire protocol → PostgreSQL SQL)
+2. **postgresql-documentdb** - PostgreSQL 17 with DocumentDB extension
+
+**Architecture:**
+
+```text
+MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)
+```
+
+**Key constraints:**
+- **FerretDB v2 only** - Requires DocumentDB extension (v1 not supported)
+- **Two ports per container** - External (27017 for MongoDB) + internal (54320+ for PostgreSQL backend)
+- **Three ports total** - MongoDB (27017), PostgreSQL backend (54320+), and debug HTTP handler (37017+)
+
+**FerretDB-specific flags (in `engines/ferretdb/index.ts`):**
+- `--no-auth` - Disables SCRAM authentication for local development (FerretDB 2.x enables auth by default)
+- `--debug-addr=127.0.0.1:${port + 10000}` - Unique debug HTTP port per container (default 8088 causes conflicts)
+- `--listen-addr=127.0.0.1:${port}` - MongoDB wire protocol port
+- `--postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb` - Backend connection
+
+**Known issues & gotchas:**
+1. **Authentication**: FerretDB 2.x enables SCRAM authentication by default. The `--setup-username` and `--setup-password` flags do NOT exist despite documentation suggestions. Use `--no-auth` instead for local development.
+2. **Debug port conflicts**: Running multiple FerretDB containers fails if all use default debug port 8088. Solution: `--debug-addr=127.0.0.1:${port + 10000}` (e.g., MongoDB port 27017 → debug port 37017).
+3. **Backup/restore limitations**: pg_dump/pg_restore between FerretDB containers has issues because DocumentDB creates internal metadata tables (e.g., `job`) that conflict during restore. The restore may partially fail with "duplicate key value violates unique constraint" errors. **Workaround**: Use `custom` format with `--clean --if-exists`, but some data loss may occur. For production cloning, consider mongodump/mongorestore on the MongoDB protocol side.
+4. **Connection strings**: No authentication needed with `--no-auth`: `mongodb://127.0.0.1:${port}/${db}`
+
+**hostdb releases:**
+- [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) - linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
+- [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) - All platforms including win32-x64
+
+**Note on FerretDB platform support:** While the FerretDB proxy binary is available on all platforms, the full FerretDB stack requires both binaries (ferretdb + postgresql-documentdb). SpinDB automatically downloads both binaries for supported platforms. Check the postgresql-documentdb release for the actual platforms where FerretDB can run.
+
+**postgresql-documentdb bundle contents:**
+The hostdb binary is a complete PostgreSQL 17 installation with:
+- PostgreSQL server and client tools (psql, pg_dump, pg_restore)
+- DocumentDB extension (MongoDB-compatible storage for FerretDB v2)
+- PostGIS extension (built from source, not Homebrew)
+- pgvector extension
+- All required dylibs bundled and path-rewritten for relocatability
+
+**Why custom PostgreSQL build?** Homebrew PostgreSQL has hardcoded paths (`/opt/homebrew/lib/...`) that break on other machines. The hostdb build:
+1. Builds PostgreSQL from source with relative paths
+2. Builds PostGIS from source against that PostgreSQL
+3. Bundles all Homebrew dependencies (OpenSSL, ICU, GEOS, PROJ, etc.)
+4. Rewrites dylib paths to use `@loader_path` for macOS relocatability
+5. Re-signs all binaries (macOS requires code signing after modification)
+
+See [plans/FERRETDB.md](plans/FERRETDB.md) for implementation details.
 
 **Platform Philosophy:** Originally, engines were only added if binaries were available for all OS/architectures. This changed when ClickHouse couldn't be built for Windows on hostdb. The new approach: engines can be added even with partial platform support. **Future direction:** hostdb and SpinDB will be combined to provide better UX - dynamically showing available engines based on the user's OS and architecture rather than requiring universal availability.
 
@@ -216,6 +277,7 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | SQLite | `sql` (.sql) | `binary` (.sqlite) | `binary` |
 | DuckDB | `sql` (.sql) | `binary` (.duckdb) | `binary` |
 | MongoDB | `bson` (directory) | `archive` (.archive) | `archive` |
+| FerretDB | `sql` (.sql) | `custom` (.dump) | `sql` |
 | Redis | `text` (.redis) | `rdb` (.rdb) | `rdb` |
 | Valkey | `text` (.valkey) | `rdb` (.rdb) | `rdb` |
 | ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
@@ -238,7 +300,7 @@ See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant' | 'meilisearch'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant' | 'meilisearch'
   version: string
   port: number              // 0 for file-based engines
   database: string          // Primary database name
@@ -246,6 +308,8 @@ type ContainerConfig = {
   created: string           // ISO timestamp
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string       // Source container if cloned
+  backendVersion?: string   // FerretDB: PostgreSQL backend version
+  backendPort?: number      // FerretDB: PostgreSQL backend port
 }
 ```
 
@@ -350,7 +414,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 ## Implementation Details
 
 ### Port Management
-PostgreSQL: 5432 | MySQL: 3306 | MongoDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700
 
 Auto-increments on conflict (e.g., 5432 → 5433).
 
@@ -381,8 +445,9 @@ Menu navigation patterns:
 
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
-3. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
-4. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
+3. **FerretDB Windows** - Not supported (postgresql-documentdb startup issues, works in WSL)
+4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
+5. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
 
 ## Publishing
 

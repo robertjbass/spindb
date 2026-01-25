@@ -2,8 +2,15 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { containerManager } from '../../../core/container-manager'
-import { promptInstallDependencies } from '../../ui/prompts'
+import {
+  promptInstallDependencies,
+  enableGlobalEscape,
+  checkAndResetEscape,
+  escapeablePrompt,
+  EscapeError,
+} from '../../ui/prompts'
 import { header, uiError } from '../../ui/theme'
+import { MissingToolError } from '../../../core/error-handler'
 import { hasAnyInstalledEngines } from '../../helpers'
 import {
   handleCreate,
@@ -90,6 +97,7 @@ async function showMainMenu(): Promise<void> {
       value: 'clone',
       disabled: canClone ? false : 'No containers',
     },
+    new inquirer.Separator(),
     {
       name: hasEngines
         ? `${chalk.yellow('⚙')} Manage installed engines`
@@ -97,13 +105,12 @@ async function showMainMenu(): Promise<void> {
       value: 'engines',
       disabled: hasEngines ? false : 'No engines installed',
     },
-    new inquirer.Separator(),
     { name: `${chalk.bgRed.white('+')} System health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
-    { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
+    { name: `${chalk.gray('⏻')} Exit ${chalk.gray('(ctrl+c)')}`, value: 'exit' },
   ]
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -155,30 +162,63 @@ async function showMainMenu(): Promise<void> {
 export const menuCommand = new Command('menu')
   .description('Interactive menu for managing containers')
   .action(async () => {
-    try {
-      await showMainMenu()
-    } catch (error) {
-      const e = error as Error
+    // Enable global escape key handling - pressing escape anywhere returns to main menu
+    // This also handles ctrl+c for graceful exit with goodbye message
+    enableGlobalEscape()
 
-      // Check if this is a missing tool error
-      if (
-        e.message.includes('pg_restore not found') ||
-        e.message.includes('psql not found') ||
-        e.message.includes('pg_dump not found')
-      ) {
-        const missingTool = e.message.includes('pg_restore')
-          ? 'pg_restore'
-          : e.message.includes('pg_dump')
-            ? 'pg_dump'
-            : 'psql'
-        const installed = await promptInstallDependencies(missingTool)
-        if (installed) {
-          console.log(chalk.yellow('  Please re-run spindb to continue.'))
+    // Run menu in a loop so escape can restart it
+    while (true) {
+      try {
+        await showMainMenu()
+      } catch (error) {
+        const e = error as Error
+
+        // If escape was pressed, just restart the menu
+        if (
+          error instanceof EscapeError ||
+          checkAndResetEscape() ||
+          e.message?.includes('prompt was closed')
+        ) {
+          continue
         }
+
+        // Check if this is a missing tool error (prefer typed error, fallback to string matching)
+        let missingTool: string | null = null
+
+        if (error instanceof MissingToolError) {
+          missingTool = error.tool
+        } else if (e.message) {
+          // Fallback for older callers that may throw plain Error with message
+          // Use regex to extract tool name from "<tool> not found" pattern
+          const toolMatch = e.message.match(/(\w+(?:-\w+)*)\s+not found/i)
+          if (toolMatch) {
+            missingTool = toolMatch[1]
+          }
+        }
+
+        if (missingTool) {
+          try {
+            const installed = await promptInstallDependencies(missingTool)
+            if (installed) {
+              // Installation succeeded, continue the menu loop so user can retry
+              continue
+            }
+            // Installation failed or was declined
+            process.exit(1)
+          } catch (installError) {
+            // User pressed Escape during install prompt - treat as declined
+            if (
+              installError instanceof EscapeError ||
+              (installError as Error).message?.includes('prompt was closed')
+            ) {
+              continue
+            }
+            throw installError
+          }
+        }
+
+        console.error(uiError(e.message))
         process.exit(1)
       }
-
-      console.error(uiError(e.message))
-      process.exit(1)
     }
   })

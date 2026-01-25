@@ -31,6 +31,7 @@ import {
   promptBackupDirectory,
   promptInstallDependencies,
   promptConfirm,
+  escapeablePrompt,
 } from '../../ui/prompts'
 import { createSpinner } from '../../ui/spinner'
 import {
@@ -42,7 +43,7 @@ import {
   formatBytes,
 } from '../../ui/theme'
 import { getEngineIcon } from '../../constants'
-import { type Engine } from '../../../types'
+import { Engine, assertExhaustive } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
 
@@ -77,6 +78,129 @@ function maskConnectionStringPassword(connectionString: string): string {
       return connectionString
     }
   }
+}
+
+/**
+ * Validate a connection string for the given engine.
+ * Returns true if valid, or an error message string if invalid.
+ *
+ * Empty input is intentionally allowed (returns true) to support the
+ * "press Enter to go back" UX pattern. Callers must check for empty
+ * input after the prompt returns (e.g., `if (!connectionString.trim()) return`).
+ */
+function validateConnectionString(
+  input: string,
+  engine: Engine,
+): true | string {
+  // Allow empty input for "press Enter to go back" UX - callers handle this case
+  if (!input) return true
+
+  switch (engine) {
+    case Engine.PostgreSQL:
+      if (
+        !input.startsWith('postgresql://') &&
+        !input.startsWith('postgres://')
+      ) {
+        return 'Connection string must start with postgresql:// or postgres://'
+      }
+      break
+    case Engine.MySQL:
+      if (!input.startsWith('mysql://')) {
+        return 'Connection string must start with mysql://'
+      }
+      break
+    case Engine.MariaDB:
+      if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
+        return 'Connection string must start with mysql:// or mariadb://'
+      }
+      break
+    case Engine.MongoDB:
+    case Engine.FerretDB:
+      if (
+        !input.startsWith('mongodb://') &&
+        !input.startsWith('mongodb+srv://')
+      ) {
+        return 'Connection string must start with mongodb:// or mongodb+srv://'
+      }
+      break
+    case Engine.Redis:
+      if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
+        return 'Connection string must start with redis:// or rediss://'
+      }
+      break
+    case Engine.Valkey:
+      if (
+        !input.startsWith('redis://') &&
+        !input.startsWith('rediss://') &&
+        !input.startsWith('valkey://') &&
+        !input.startsWith('valkeys://')
+      ) {
+        return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
+      }
+      break
+    case Engine.ClickHouse:
+      if (
+        !input.startsWith('clickhouse://') &&
+        !input.startsWith('http://') &&
+        !input.startsWith('https://')
+      ) {
+        return 'Connection string must start with clickhouse://, http://, or https://'
+      }
+      break
+    case Engine.Qdrant:
+      if (
+        !input.startsWith('qdrant://') &&
+        !input.startsWith('http://') &&
+        !input.startsWith('https://')
+      ) {
+        return 'Connection string must start with qdrant://, http://, or https://'
+      }
+      break
+    case Engine.Meilisearch:
+      if (
+        !input.startsWith('meilisearch://') &&
+        !input.startsWith('http://') &&
+        !input.startsWith('https://')
+      ) {
+        return 'Connection string must start with meilisearch://, http://, or https://'
+      }
+      break
+    case Engine.SQLite:
+    case Engine.DuckDB:
+      return 'File-based engines do not support remote connection strings'
+    default:
+      assertExhaustive(engine)
+  }
+  return true
+}
+
+/**
+ * Prompt for a connection string with validation and password masking.
+ * Shows a hint about pressing Enter to go back and Escape for main menu.
+ *
+ * @param engine - The database engine for connection string validation
+ * @returns The connection string, or null if empty/escaped
+ */
+async function promptConnectionString(engine: Engine): Promise<string | null> {
+  console.log(
+    chalk.gray(
+      '  Enter connection string, or press Enter to go back (esc - main menu)',
+    ),
+  )
+  const { connectionString } = await escapeablePrompt<{
+    connectionString: string
+  }>([
+    {
+      type: 'input',
+      name: 'connectionString',
+      message: 'Connection string:',
+      transformer: (input: string) => maskConnectionStringPassword(input.trim()),
+      validate: (input: string) => validateConnectionString(input.trim(), engine),
+    },
+  ])
+
+  const trimmed = connectionString.trim()
+  return trimmed || null
 }
 
 export async function handleCreateForRestore(): Promise<{
@@ -203,7 +327,7 @@ export async function handleRestore(): Promise<void> {
       },
     ]
 
-    const { selectedContainer } = await inquirer.prompt<{
+    const { selectedContainer } = await escapeablePrompt<{
       selectedContainer: string
     }>([
       {
@@ -271,7 +395,9 @@ export async function handleRestore(): Promise<void> {
     }
 
     // All engines now support dumpFromConnectionString
-    const restoreChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
+    const restoreChoices: Array<
+      { name: string; value: string } | inquirer.Separator
+    > = [
       {
         name: `${chalk.magenta('☰')} Dump file (drag and drop or enter path)`,
         value: 'file',
@@ -283,15 +409,12 @@ export async function handleRestore(): Promise<void> {
       value: 'connection',
     })
 
-    restoreChoices.push(
-      new inquirer.Separator(),
-      {
-        name: `${chalk.blue('←')} Back`,
-        value: '__back__',
-      },
-    )
+    restoreChoices.push(new inquirer.Separator(), {
+      name: `${chalk.blue('←')} Back`,
+      value: '__back__',
+    })
 
-    const { restoreSource } = await inquirer.prompt<{
+    const { restoreSource } = await escapeablePrompt<{
       restoreSource: 'file' | 'connection' | '__back__'
     }>([
       {
@@ -310,72 +433,8 @@ export async function handleRestore(): Promise<void> {
     let isTempFile = false
 
     if (restoreSource === 'connection') {
-      console.log(
-        chalk.gray('  Enter connection string, or press Enter to go back'),
-      )
-      const { connectionString } = await inquirer.prompt<{
-        connectionString: string
-      }>([
-        {
-          type: 'input',
-          name: 'connectionString',
-          message: 'Connection string:',
-          transformer: (input: string) => maskConnectionStringPassword(input),
-          validate: (input: string) => {
-            if (!input) return true
-            switch (config.engine) {
-              case 'mysql':
-                if (!input.startsWith('mysql://')) {
-                  return 'Connection string must start with mysql://'
-                }
-                break
-              case 'mariadb':
-                if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
-                  return 'Connection string must start with mysql:// or mariadb://'
-                }
-                break
-              case 'mongodb':
-                if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
-                  return 'Connection string must start with mongodb:// or mongodb+srv://'
-                }
-                break
-              case 'redis':
-                if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
-                  return 'Connection string must start with redis:// or rediss://'
-                }
-                break
-              case 'valkey':
-                if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
-                  return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
-                }
-                break
-              case 'clickhouse':
-                if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                  return 'Connection string must start with clickhouse://, http://, or https://'
-                }
-                break
-              case 'qdrant':
-                if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                  return 'Connection string must start with qdrant://, http://, or https://'
-                }
-                break
-              case 'meilisearch':
-                if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                  return 'Connection string must start with meilisearch://, http://, or https://'
-                }
-                break
-              default:
-                // PostgreSQL and others
-                if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
-                  return 'Connection string must start with postgresql:// or postgres://'
-                }
-            }
-            return true
-          },
-        },
-      ])
-
-      if (!connectionString.trim()) {
+      const connectionString = await promptConnectionString(config.engine)
+      if (!connectionString) {
         continue // Return to container selection
       }
 
@@ -383,8 +442,14 @@ export async function handleRestore(): Promise<void> {
 
       const timestamp = Date.now()
       const defaultFormat = getDefaultFormat(config.engine as Engine)
-      const dumpExtension = getBackupExtension(config.engine as Engine, defaultFormat)
-      const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}${dumpExtension}`)
+      const dumpExtension = getBackupExtension(
+        config.engine as Engine,
+        defaultFormat,
+      )
+      const tempDumpPath = join(
+        tmpdir(),
+        `spindb-dump-${timestamp}${dumpExtension}`,
+      )
 
       let dumpSuccess = false
       let attempts = 0
@@ -502,10 +567,10 @@ export async function handleRestore(): Promise<void> {
     } else {
       console.log(
         chalk.gray(
-          '  Drag & drop, enter path (abs or rel), or press Enter to go back',
+          '  Drag & drop, enter path (abs or rel), or press Enter to go back (esc - main menu)',
         ),
       )
-      const { backupPath: rawBackupPath } = await inquirer.prompt<{
+      const { backupPath: rawBackupPath } = await escapeablePrompt<{
         backupPath: string
       }>([
         {
@@ -544,7 +609,7 @@ export async function handleRestore(): Promise<void> {
       // Redis: Always restore to existing database (0-15)
       restoreMode = 'replace'
     } else {
-      const result = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+      const result = await escapeablePrompt<{ restoreMode: RestoreMode }>([
         {
           type: 'list',
           name: 'restoreMode',
@@ -657,7 +722,7 @@ export async function handleRestore(): Promise<void> {
     // For Redis .redis text files, ask about merge vs replace behavior
     let flushBeforeRestore = false
     if (isRedis && format.format === 'redis') {
-      const { restoreBehavior } = await inquirer.prompt<{
+      const { restoreBehavior } = await escapeablePrompt<{
         restoreBehavior: 'replace' | 'merge'
       }>([
         {
@@ -1008,7 +1073,9 @@ export async function handleRestoreForContainer(
 
   // Restore source selection (file or connection string)
   // All engines now support dumpFromConnectionString
-  const restoreChoices: Array<{ name: string; value: string } | inquirer.Separator> = [
+  const restoreChoices: Array<
+    { name: string; value: string } | inquirer.Separator
+  > = [
     {
       name: `${chalk.magenta('☰')} Dump file (drag and drop or enter path)`,
       value: 'file',
@@ -1019,15 +1086,12 @@ export async function handleRestoreForContainer(
     },
   ]
 
-  restoreChoices.push(
-    new inquirer.Separator(),
-    {
-      name: `${chalk.blue('←')} Back`,
-      value: '__back__',
-    },
-  )
+  restoreChoices.push(new inquirer.Separator(), {
+    name: `${chalk.blue('←')} Back`,
+    value: '__back__',
+  })
 
-  const { restoreSource } = await inquirer.prompt<{
+  const { restoreSource } = await escapeablePrompt<{
     restoreSource: 'file' | 'connection' | '__back__'
   }>([
     {
@@ -1046,80 +1110,21 @@ export async function handleRestoreForContainer(
   let isTempFile = false
 
   if (restoreSource === 'connection') {
-    // Handle connection string restore
-    console.log(
-      chalk.gray('  Enter connection string, or press Enter to go back'),
-    )
-    const { connectionString } = await inquirer.prompt<{
-      connectionString: string
-    }>([
-      {
-        type: 'input',
-        name: 'connectionString',
-        message: 'Connection string:',
-        transformer: (input: string) => maskConnectionStringPassword(input),
-        validate: (input: string) => {
-          if (!input) return true
-          switch (config.engine) {
-            case 'mysql':
-              if (!input.startsWith('mysql://')) {
-                return 'Connection string must start with mysql://'
-              }
-              break
-            case 'mariadb':
-              if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
-                return 'Connection string must start with mysql:// or mariadb://'
-              }
-              break
-            case 'mongodb':
-              if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
-                return 'Connection string must start with mongodb:// or mongodb+srv://'
-              }
-              break
-            case 'redis':
-              if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
-                return 'Connection string must start with redis:// or rediss://'
-              }
-              break
-            case 'valkey':
-              if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
-                return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
-              }
-              break
-            case 'clickhouse':
-              if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                return 'Connection string must start with clickhouse://, http://, or https://'
-              }
-              break
-            case 'qdrant':
-              if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                return 'Connection string must start with qdrant://, http://, or https://'
-              }
-              break
-            case 'meilisearch':
-              if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                return 'Connection string must start with meilisearch://, http://, or https://'
-              }
-              break
-            default:
-              // PostgreSQL and others
-              if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
-                return 'Connection string must start with postgresql:// or postgres://'
-              }
-          }
-          return true
-        },
-      },
-    ])
-
-    if (!connectionString.trim()) {
+    const connectionString = await promptConnectionString(config.engine)
+    if (!connectionString) {
       return
     }
 
     const timestamp = Date.now()
     const defaultFormat = getDefaultFormat(config.engine as Engine)
-    const dumpExtension = getBackupExtension(config.engine as Engine, defaultFormat)
-    const tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}${dumpExtension}`)
+    const dumpExtension = getBackupExtension(
+      config.engine as Engine,
+      defaultFormat,
+    )
+    const tempDumpPath = join(
+      tmpdir(),
+      `spindb-dump-${timestamp}${dumpExtension}`,
+    )
 
     const dumpSpinner = createSpinner('Creating dump from remote database...')
     dumpSpinner.start()
@@ -1148,10 +1153,10 @@ export async function handleRestoreForContainer(
     // Handle file restore
     console.log(
       chalk.gray(
-        '  Drag and drop the backup file here, or type the path (press Enter to cancel)',
+        '  Drag & drop, enter path (abs or rel), or press Enter to go back (esc - main menu)',
       ),
     )
-    const { backupPath: rawBackupPath } = await inquirer.prompt<{
+    const { backupPath: rawBackupPath } = await escapeablePrompt<{
       backupPath: string
     }>([
       {
@@ -1215,7 +1220,7 @@ export async function handleRestoreForContainer(
     // Redis: Always restore to existing database (0-15)
     restoreMode = 'replace'
   } else {
-    const result = await inquirer.prompt<{ restoreMode: RestoreMode }>([
+    const result = await escapeablePrompt<{ restoreMode: RestoreMode }>([
       {
         type: 'list',
         name: 'restoreMode',
@@ -1304,7 +1309,7 @@ export async function handleRestoreForContainer(
       databaseName = existingDatabases[0]
       console.log(chalk.gray(`  Using database: ${databaseName}`))
     } else {
-      const { database } = await inquirer.prompt<{ database: string }>([
+      const { database } = await escapeablePrompt<{ database: string }>([
         {
           type: 'list',
           name: 'database',
@@ -1319,7 +1324,7 @@ export async function handleRestoreForContainer(
   // For Redis .redis text files, ask about merge vs replace behavior
   let flushBeforeRestore = false
   if (isRedis && format.format === 'redis') {
-    const { restoreBehavior } = await inquirer.prompt<{
+    const { restoreBehavior } = await escapeablePrompt<{
       restoreBehavior: 'replace' | 'merge'
     }>([
       {
@@ -1424,7 +1429,7 @@ export async function handleClone(): Promise<void> {
     return
   }
 
-  const { targetName } = await inquirer.prompt<{ targetName: string }>([
+  const { targetName } = await escapeablePrompt<{ targetName: string }>([
     {
       type: 'input',
       name: 'targetName',

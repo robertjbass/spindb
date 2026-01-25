@@ -1,0 +1,138 @@
+/**
+ * FerretDB binary URL generation for hostdb
+ *
+ * Generates download URLs for FerretDB binaries from the hostdb GitHub releases.
+ * FerretDB requires two binaries:
+ * - ferretdb: MongoDB-compatible proxy
+ * - postgresql-documentdb: PostgreSQL 17 + DocumentDB extension
+ *
+ * Note: Windows is not currently supported due to postgresql-documentdb startup issues.
+ * The binaries exist on hostdb but fail to start properly on Windows.
+ */
+
+import { normalizeVersion, normalizeDocumentDBVersion } from './version-maps'
+import { buildHostdbUrl } from '../../core/hostdb-client'
+import { Engine, Platform, type Arch } from '../../types'
+
+// Supported platforms for FerretDB (both proxy and backend)
+// Note: Windows (win32-x64) is excluded due to postgresql-documentdb startup issues
+export const FERRETDB_SUPPORTED_PLATFORMS = new Set([
+  'darwin-arm64',
+  'darwin-x64',
+  'linux-arm64',
+  'linux-x64',
+])
+
+// Supported platforms for postgresql-documentdb backend
+export const DOCUMENTDB_SUPPORTED_PLATFORMS = FERRETDB_SUPPORTED_PLATFORMS
+
+/**
+ * Map Node.js platform/arch to hostdb platform key
+ */
+export function getHostdbPlatform(
+  platform: Platform,
+  arch: Arch,
+): string | null {
+  const key = `${platform}-${arch}`
+  return FERRETDB_SUPPORTED_PLATFORMS.has(key) ? key : null
+}
+
+/**
+ * Check if the current platform supports FerretDB
+ */
+export function isPlatformSupported(platform: Platform, arch: Arch): boolean {
+  const key = `${platform}-${arch}`
+  return FERRETDB_SUPPORTED_PLATFORMS.has(key)
+}
+
+/**
+ * Get the download URL for FerretDB proxy binary
+ *
+ * @param version - FerretDB version (major or full)
+ * @param platform - Operating system (darwin, linux, win32)
+ * @param arch - Architecture (arm64, x64)
+ * @returns Download URL
+ */
+export function getFerretDBBinaryUrl(
+  version: string,
+  platform: Platform,
+  arch: Arch,
+): string {
+  const fullVersion = normalizeVersion(version)
+  const hostdbPlatform = getHostdbPlatform(platform, arch)
+
+  if (!hostdbPlatform) {
+    throw new Error(
+      `Unsupported platform: ${platform}-${arch}. FerretDB is only supported on macOS and Linux.`,
+    )
+  }
+
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
+
+  return buildHostdbUrl(Engine.FerretDB, {
+    version: fullVersion,
+    hostdbPlatform,
+    extension: ext,
+  })
+}
+
+/**
+ * Get the download URL for postgresql-documentdb backend binary
+ *
+ * @param version - DocumentDB version (e.g., "17-0.107.0")
+ * @param platform - Operating system (darwin, linux, win32)
+ * @param arch - Architecture (arm64, x64)
+ * @returns Download URL
+ */
+export function getDocumentDBBinaryUrl(
+  version: string,
+  platform: Platform,
+  arch: Arch,
+): string {
+  const fullVersion = normalizeDocumentDBVersion(version)
+  const key = `${platform}-${arch}`
+
+  if (!DOCUMENTDB_SUPPORTED_PLATFORMS.has(key)) {
+    throw new Error(
+      `Unsupported platform: ${platform}-${arch}. FerretDB is only supported on macOS and Linux.`,
+    )
+  }
+
+  const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
+
+  // Use shared buildHostdbUrl with 'postgresql-documentdb' as the engine
+  return buildHostdbUrl('postgresql-documentdb', {
+    version: fullVersion,
+    hostdbPlatform: key,
+    extension: ext,
+  })
+}
+
+/**
+ * Get the combined binary URLs for FerretDB (both proxy and backend)
+ *
+ * @param version - FerretDB version (major or full)
+ * @param backendVersion - postgresql-documentdb version (e.g., "17-0.107.0")
+ * @param platform - Operating system
+ * @param arch - Architecture
+ * @returns Object with ferretdb and documentdb URLs
+ */
+export function getBinaryUrls(
+  version: string,
+  backendVersion: string,
+  platform: Platform,
+  arch: Arch,
+): { ferretdb: string; documentdb: string } {
+  // Validate platform supports FerretDB
+  if (!isPlatformSupported(platform, arch)) {
+    throw new Error(
+      `FerretDB is not available on ${platform}-${arch}.\n` +
+        'FerretDB is only supported on macOS and Linux.',
+    )
+  }
+
+  return {
+    ferretdb: getFerretDBBinaryUrl(version, platform, arch),
+    documentdb: getDocumentDBBinaryUrl(backendVersion, platform, arch),
+  }
+}

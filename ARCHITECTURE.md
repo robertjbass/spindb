@@ -1,6 +1,6 @@
 # SpinDB Architecture
 
-This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and SQLite.
+This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, and Meilisearch.
 
 ## Table of Contents
 
@@ -35,8 +35,8 @@ SpinDB follows a **three-tier layered architecture**:
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
 │                   Engine Layer (engines/)                   │
-│  PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey,        │
-│  ClickHouse, SQLite, DuckDB                                 │
+│  PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis,      │
+│  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,8 +210,127 @@ The core layer contains business logic independent of CLI concerns.
 The engine layer implements database-specific logic via the abstract `BaseEngine` class.
 
 **Engine Types:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis): Process management, port allocation
-- **File-based** (SQLite): No server, files in project directories
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch): Process management, port allocation
+- **File-based** (SQLite, DuckDB): No server, files in project directories
+- **Composite** (FerretDB): Multiple processes working together (see [FerretDB Architecture](#ferretdb-architecture))
+
+---
+
+## FerretDB Architecture
+
+FerretDB is a **composite engine** that requires two separate processes to function: FerretDB (a stateless proxy) and PostgreSQL+DocumentDB (the storage backend). This makes it architecturally distinct from other engines.
+
+### How It Works
+
+```
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────────────┐
+│  MongoDB Client │   TCP   │    FerretDB     │   TCP   │  PostgreSQL+DocumentDB  │
+│   (mongosh,     │ ──────► │     Proxy       │ ──────► │      Backend            │
+│    app, etc.)   │  :27017 │                 │ :54320  │                         │
+└─────────────────┘         └─────────────────┘         └─────────────────────────┘
+                            Translates MongoDB          Stores data as JSONB
+                            queries to SQL              in PostgreSQL tables
+```
+
+**FerretDB** accepts MongoDB wire protocol connections and translates them to SQL queries.
+**PostgreSQL+DocumentDB** is a PostgreSQL instance with the DocumentDB extension that stores documents as JSONB.
+
+### Two-Port Architecture
+
+Each FerretDB container uses TWO user-relevant ports:
+
+| Port | Purpose | Visibility | Default Range |
+|------|---------|------------|---------------|
+| **External** | MongoDB wire protocol | User-facing | 27017+ |
+| **Internal** | PostgreSQL backend | Hidden | 54320+ |
+
+Users connect to the external port with MongoDB connection strings (`mongodb://localhost:27017`). The internal PostgreSQL port is managed automatically by SpinDB.
+
+> **Note:** FerretDB also binds a debug HTTP port (external port + 10000) for internal metrics/debugging. This port is not exposed to users and is managed automatically by SpinDB.
+
+### Container Structure
+
+```
+~/.spindb/containers/ferretdb/myapp/
+├── container.json          # Config (includes backendVersion, backendPort)
+├── pg_data/                # PostgreSQL data directory (embedded)
+├── logs/
+│   ├── ferretdb.log
+│   └── postgres.log
+└── ferretdb.pid
+```
+
+### Binary Dependencies
+
+FerretDB requires TWO binary packages from hostdb:
+
+1. **ferretdb** - The Go proxy binary (~30MB)
+2. **postgresql-documentdb** - PostgreSQL 17 with DocumentDB extension and dependencies (pg_cron, pgvector, PostGIS, rum)
+
+```
+~/.spindb/bin/
+├── ferretdb-2.7.0-darwin-arm64/
+│   └── bin/ferretdb
+└── postgresql-documentdb-17-0.107.0-darwin-arm64/
+    ├── bin/postgres, pg_ctl, psql, initdb, pg_dump, pg_restore
+    ├── lib/pg_documentdb.dylib, pg_documentdb_core.dylib, ...
+    └── share/extension/documentdb.control, ...
+```
+
+### Lifecycle Differences
+
+Unlike simple engines, FerretDB must coordinate two processes:
+
+**Start sequence:**
+1. Allocate backend port (54320+)
+2. Start PostgreSQL on backend port
+3. Wait for PostgreSQL health check
+4. Create `documentdb` extension if first run
+5. Start FerretDB pointing to PostgreSQL
+6. Verify FerretDB can accept connections
+
+**Stop sequence:**
+1. Stop FerretDB (SIGTERM)
+2. Stop PostgreSQL (pg_ctl stop)
+
+**Failure handling:** If any step fails, rollback by stopping any started processes.
+
+### Backup Strategy
+
+FerretDB uses PostgreSQL-native backup (pg_dump) on the embedded backend, not MongoDB tools:
+
+```bash
+# Internally calls pg_dump on the backend port
+spindb backup myferret --format sql
+```
+
+This approach:
+- Reuses existing PostgreSQL binaries (no extra dependencies)
+- Provides consistent backup/restore behavior with other PostgreSQL-based engines
+- Avoids MongoDB licensing concerns
+
+### Configuration Extensions
+
+FerretDB containers have additional fields in `container.json`:
+
+```ts
+type FerretDBContainerConfig = ContainerConfig & {
+  backendVersion: string   // PostgreSQL version (e.g., "17")
+  backendPort: number      // Internal PostgreSQL port (e.g., 54320)
+}
+```
+
+### Platform Support
+
+| Platform | FerretDB | PostgreSQL+DocumentDB | Notes |
+|----------|----------|----------------------|-------|
+| darwin-arm64 | ✅ | ❌ | FerretDB only (no backend) |
+| darwin-x64 | ✅ | ❌ | FerretDB only (no backend) |
+| linux-x64 | ✅ | ✅ | Full support |
+| linux-arm64 | ✅ | ❌ | FerretDB only (no backend) |
+| win32-x64 | ✅ | ❌ | FerretDB only (no backend) |
+
+> **Note:** `postgresql-documentdb-17-0.107.0` is currently only available for linux-x64 on hostdb. FerretDB requires both the proxy binary and the PostgreSQL+DocumentDB backend to function. Until hostdb adds more architectures, FerretDB is effectively linux-x64-only. Update this table when additional platforms become available.
 
 ---
 
@@ -264,8 +383,14 @@ getEngine('postgresql')  // or 'postgres', 'pg'
 getEngine('mysql')       // MySQL engine
 getEngine('mariadb')     // MariaDB engine (separate from MySQL)
 getEngine('mongodb')     // or 'mongo'
+getEngine('ferretdb')    // or 'ferret' - MongoDB-compatible with PostgreSQL backend
 getEngine('redis')       // Redis engine
+getEngine('valkey')      // Redis-compatible fork
+getEngine('clickhouse')  // OLAP database
 getEngine('sqlite')      // or 'lite'
+getEngine('duckdb')      // or 'duck' - OLAP file-based
+getEngine('qdrant')      // or 'qd' - Vector database
+getEngine('meilisearch') // or 'meili', 'ms' - Full-text search
 ```
 
 ---
@@ -434,7 +559,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch'
   version: string
   port: number
   database: string        // Primary database
@@ -442,6 +567,10 @@ type ContainerConfig = {
   created: string         // ISO timestamp
   status: 'created' | 'running' | 'stopped'
   clonedFrom?: string     // Source container if cloned
+
+  // FerretDB-specific (composite engine)
+  backendVersion?: string // PostgreSQL backend version
+  backendPort?: number    // PostgreSQL backend port
 }
 ```
 
@@ -550,15 +679,26 @@ const engines = {
   mysql: new MySQLEngine(),
   mariadb: new MariaDBEngine(),
   mongodb: new MongoDBEngine(),
+  ferretdb: new FerretDBEngine(),
   redis: new RedisEngine(),
+  valkey: new ValkeyEngine(),
+  clickhouse: new ClickHouseEngine(),
   sqlite: new SQLiteEngine(),
+  duckdb: new DuckDBEngine(),
+  qdrant: new QdrantEngine(),
+  meilisearch: new MeilisearchEngine(),
 }
 
 const aliases = {
   postgres: 'postgresql',
   pg: 'postgresql',
   mongo: 'mongodb',
+  ferret: 'ferretdb',
   lite: 'sqlite',
+  duck: 'duckdb',
+  qd: 'qdrant',
+  meili: 'meilisearch',
+  ms: 'meilisearch',
 }
 ```
 
@@ -591,7 +731,7 @@ Core types are centralized in `types/index.ts`:
 | Type | Purpose |
 |------|---------|
 | `ContainerConfig` | Container state and metadata |
-| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite |
+| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch |
 | `BackupFormat` | Backup file format detection |
 | `BackupOptions` | Backup command options |
 | `BackupResult` | Backup operation result |
@@ -630,15 +770,17 @@ Error messages include actionable fix suggestions.
 
 All database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for all supported platforms.
 
-| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | Redis | SQLite |
-|----------|------------|-------|---------|---------|-------|--------|
-| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | FerretDB | Redis | Valkey | ClickHouse | SQLite | DuckDB | Qdrant | Meilisearch |
+|----------|------------|-------|---------|---------|----------|-------|--------|------------|--------|--------|--------|-------------|
+| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | ❌** | hostdb | hostdb | hostdb | hostdb |
 
 *PostgreSQL on Windows uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries.
+
+**ClickHouse binaries not available for Windows in hostdb. Use WSL2.
 
 **Binary source:**
 - **hostdb**: https://github.com/robertjbass/hostdb - Pre-built database binaries for all platforms

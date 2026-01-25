@@ -704,7 +704,9 @@ export class MongoDBEngine extends BaseEngine {
 
   /**
    * Create a new database
-   * MongoDB creates databases implicitly - we just verify the connection works
+   * MongoDB creates databases implicitly when you first write to them.
+   * To force immediate creation, we create a temporary collection and drop it.
+   * This leaves the database visible in tools without any marker clutter.
    */
   async createDatabase(
     container: ContainerConfig,
@@ -715,24 +717,19 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await this.getMongoshPath()
 
-    // MongoDB creates databases implicitly when you write to them
-    // We just verify the connection and create an empty collection to ensure the db exists
+    // MongoDB creates databases implicitly when you write to them.
+    // Create a temp collection then immediately drop it to force database creation
+    // without leaving any visible marker collections.
+    // First drop any existing _spindb_init collection (ignore errors), then create and drop.
+    // This ensures cleanup even if a previous createDatabase was interrupted.
     const cmd = buildMongoshCommand(
       mongosh,
       port,
       database,
-      'db.createCollection("_spindb_init"); db.getCollectionNames();',
+      'try { db._spindb_init.drop(); } catch(e) {} db.createCollection("_spindb_init"); db._spindb_init.drop();',
     )
 
-    try {
-      await execAsync(cmd, { timeout: 10000 })
-    } catch (error) {
-      const err = error as Error
-      // Ignore "collection already exists" error
-      if (!err.message.includes('already exists')) {
-        throw error
-      }
-    }
+    await execAsync(cmd, { timeout: 10000 })
   }
 
   // Drop a database

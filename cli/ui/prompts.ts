@@ -21,6 +21,152 @@ import { type ContainerConfig, type Engine, type BackupFormatType } from '../../
 // Navigation sentinel values for menu navigation
 export const BACK_VALUE = '__back__'
 export const MAIN_MENU_VALUE = '__main__'
+export const ESCAPE_VALUE = '__escape__'
+
+// Global escape handler state
+let globalEscapeEnabled = false
+let escapeTriggered = false
+let escapeReject: ((error: Error) => void) | null = null
+let currentPromptUi: { close?: () => void } | null = null
+
+// Custom error class for escape
+export class EscapeError extends Error {
+  constructor() {
+    super('Escape pressed')
+    this.name = 'EscapeError'
+  }
+}
+
+// Module-scoped stdin data handler for escape key detection
+// Defined at module scope so disableGlobalEscape() can remove it
+function onEscapeData(data: Buffer): void {
+  // Ctrl+C is byte 3 - handle graceful exit
+  if (data.length === 1 && data[0] === 3) {
+    console.log(chalk.gray('\n  Goodbye!\n'))
+    process.exit(0)
+  }
+
+  // Escape key is byte 27 (0x1b) by itself
+  // Arrow keys and other sequences start with 27 but have more bytes
+  if (data.length === 1 && data[0] === 27) {
+    escapeTriggered = true
+    // First reject the escape promise to interrupt the prompt
+    if (escapeReject) {
+      const reject = escapeReject
+      escapeReject = null
+      reject(new EscapeError())
+    }
+    // Then close the prompt UI to stop it from rendering
+    // Do this after rejecting so the error propagates first
+    // Wrap in try/catch as inquirer internals may change between versions
+    if (currentPromptUi?.close) {
+      try {
+        currentPromptUi.close()
+      } catch {
+        // Swallow errors from inquirer internals - close() behavior may vary
+      }
+      currentPromptUi = null
+    }
+    // Clear the screen
+    console.clear()
+  }
+}
+
+/**
+ * Enable global escape key handling for the interactive menu.
+ * When escape is pressed, the current prompt is closed and escapeTriggered flag is set.
+ * Call this once at the start of the interactive menu session.
+ */
+export function enableGlobalEscape(): void {
+  if (globalEscapeEnabled) return
+  globalEscapeEnabled = true
+  process.stdin.on('data', onEscapeData)
+}
+
+/**
+ * Disable global escape key handling and clean up state.
+ * Call this when exiting interactive mode or in tests to remove the stdin listener.
+ */
+export function disableGlobalEscape(): void {
+  if (!globalEscapeEnabled) return
+  process.stdin.off('data', onEscapeData)
+  globalEscapeEnabled = false
+  escapeTriggered = false
+  escapeReject = null
+  currentPromptUi = null
+}
+
+/**
+ * Check if escape was triggered and reset the flag.
+ * Call this at the start of main menu to handle escape from anywhere.
+ */
+export function checkAndResetEscape(): boolean {
+  const wasTriggered = escapeTriggered
+  escapeTriggered = false
+  return wasTriggered
+}
+
+
+/**
+ * Wrapper around inquirer.prompt that registers/unregisters with global escape handler.
+ * Use this instead of inquirer.prompt() directly for escape key support.
+ *
+ * Automatically detects non-interactive mode (piped input, scripts, CI) and throws
+ * a clear error instead of hanging on user input that can never come.
+ */
+export async function escapeablePrompt<T extends Record<string, unknown>>(
+  questions: Parameters<typeof inquirer.prompt>[0],
+): Promise<T> {
+  // Detect non-interactive mode (piped input, scripts, CI environments)
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      'Cannot prompt in non-interactive mode. Use appropriate flags (--force, --yes, --json) or provide required arguments.',
+    )
+  }
+
+  // Create a promise that rejects when escape is pressed
+  const escapePromise = new Promise<never>((_, reject) => {
+    escapeReject = reject
+  })
+
+  try {
+    const p = inquirer.prompt(questions)
+    // Register the prompt UI so we can close it on escape
+    // Use runtime guard to safely access inquirer's internal ui property
+    // which may change between versions.
+    // Validated against inquirer@9.3.7 - the prompt object exposes a .ui
+    // property with a .close() method for programmatic prompt termination.
+    const promptWithUi = p as unknown as Record<string, unknown>
+    if (
+      promptWithUi.ui &&
+      typeof promptWithUi.ui === 'object' &&
+      promptWithUi.ui !== null &&
+      typeof (promptWithUi.ui as Record<string, unknown>).close === 'function'
+    ) {
+      currentPromptUi = promptWithUi.ui as { close: () => void }
+    } else {
+      currentPromptUi = null
+    }
+
+    // Race the prompt against the escape promise
+    const result = (await Promise.race([p, escapePromise])) as T
+    return result
+  } finally {
+    escapeReject = null
+    currentPromptUi = null
+  }
+}
+
+/**
+ * Check if a prompt result indicates escape was pressed
+ */
+export function wasEscapePressed(result: unknown): boolean {
+  if (typeof result === 'string') return result === ESCAPE_VALUE
+  if (typeof result === 'object' && result !== null) {
+    return Object.values(result).some((v) => v === ESCAPE_VALUE)
+  }
+  return false
+}
 
 /**
  * Prompt for container name
@@ -39,7 +185,7 @@ export async function promptContainerName(
   defaultName?: string,
   options?: { allowBack?: boolean },
 ): Promise<string | null> {
-  const { name } = await inquirer.prompt<{ name: string }>([
+  const { name } = await escapeablePrompt<{ name: string }>([
     {
       type: 'input',
       name: 'name',
@@ -84,12 +230,12 @@ export async function promptEngine(options?: {
     choices.push(new inquirer.Separator())
     choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
     choices.push({
-      name: `${chalk.blue('⌂')} Back to main menu`,
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: MAIN_MENU_VALUE,
     })
   }
 
-  const { engine } = await inquirer.prompt<{ engine: string }>([
+  const { engine } = await escapeablePrompt<{ engine: string }>([
     {
       type: 'list',
       name: 'engine',
@@ -98,6 +244,11 @@ export async function promptEngine(options?: {
       pageSize: 15,
     },
   ])
+
+  // Escape returns to main menu
+  if (engine === ESCAPE_VALUE) {
+    return MAIN_MENU_VALUE
+  }
 
   return engine
 }
@@ -165,12 +316,12 @@ export async function promptVersion(
     majorChoices.push(new inquirer.Separator())
     majorChoices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
     majorChoices.push({
-      name: `${chalk.blue('⌂')} Back to main menu`,
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: MAIN_MENU_VALUE,
     })
   }
 
-  const { majorVersion } = await inquirer.prompt<{ majorVersion: string }>([
+  const { majorVersion } = await escapeablePrompt<{ majorVersion: string }>([
     {
       type: 'list',
       name: 'majorVersion',
@@ -180,9 +331,13 @@ export async function promptVersion(
     },
   ])
 
-  // Handle navigation
-  if (majorVersion === BACK_VALUE || majorVersion === MAIN_MENU_VALUE) {
-    return majorVersion
+  // Handle navigation (including escape)
+  if (
+    majorVersion === ESCAPE_VALUE ||
+    majorVersion === BACK_VALUE ||
+    majorVersion === MAIN_MENU_VALUE
+  ) {
+    return majorVersion === ESCAPE_VALUE ? MAIN_MENU_VALUE : majorVersion
   }
 
   // Step 2: Select specific version within the major version
@@ -206,12 +361,12 @@ export async function promptVersion(
       value: BACK_VALUE,
     })
     minorChoices.push({
-      name: `${chalk.blue('⌂')} Back to main menu`,
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: MAIN_MENU_VALUE,
     })
   }
 
-  const { version } = await inquirer.prompt<{ version: string }>([
+  const { version } = await escapeablePrompt<{ version: string }>([
     {
       type: 'list',
       name: 'version',
@@ -221,7 +376,10 @@ export async function promptVersion(
     },
   ])
 
-  // Handle navigation from minor version selection
+  // Handle navigation from minor version selection (including escape)
+  if (version === ESCAPE_VALUE) {
+    return MAIN_MENU_VALUE
+  }
   if (version === BACK_VALUE) {
     // Go back to major version selection (recursive call)
     return promptVersion(engineName, options)
@@ -247,11 +405,12 @@ export async function promptPort(
     ? getEngineDefaults(engine).portRange
     : defaults.portRange
 
-  // Get all existing container ports for conflict detection
+  // Get running container ports for conflict detection
+  // Stopped containers don't block ports - users can manage conflicts themselves
   const existingContainers = await containerManager.list()
   const containerPorts = new Map<number, string>()
   for (const c of existingContainers) {
-    if (c.port > 0) {
+    if (c.port > 0 && c.status === 'running') {
       containerPorts.set(c.port, c.name)
     }
   }
@@ -276,7 +435,7 @@ export async function promptPort(
     }
   }
 
-  const { port } = await inquirer.prompt<{ port: number }>([
+  const { port } = await escapeablePrompt<{ port: number }>([
     {
       type: 'input',
       name: 'port',
@@ -307,7 +466,7 @@ export async function promptPort(
     )
     console.log()
 
-    const { proceed } = await inquirer.prompt<{ proceed: string }>([
+    const { proceed } = await escapeablePrompt<{ proceed: string }>([
       {
         type: 'list',
         name: 'proceed',
@@ -337,7 +496,7 @@ export async function promptPort(
       )
       console.log()
 
-      const { proceed } = await inquirer.prompt<{ proceed: string }>([
+      const { proceed } = await escapeablePrompt<{ proceed: string }>([
         {
           type: 'list',
           name: 'proceed',
@@ -363,7 +522,7 @@ export async function promptConfirm(
   message: string,
   defaultValue: boolean = true,
 ): Promise<boolean> {
-  const { confirmed } = await inquirer.prompt<{ confirmed: string }>([
+  const { confirmed } = await escapeablePrompt<{ confirmed: string }>([
     {
       type: 'list',
       name: 'confirmed',
@@ -410,7 +569,7 @@ export async function promptContainerSelect(
     choices.push({ name: `${chalk.blue('←')} Back`, value: '__back__' })
   }
 
-  const { container } = await inquirer.prompt<{ container: string }>([
+  const { container } = await escapeablePrompt<{ container: string }>([
     {
       type: 'list',
       name: 'container',
@@ -499,7 +658,7 @@ export async function promptDatabaseName(
       ? `${baseLabel} [${sanitizedDefault}]:`
       : `${baseLabel}:`
 
-  const { database } = await inquirer.prompt<{ database: string }>([
+  const { database } = await escapeablePrompt<{ database: string }>([
     {
       type: 'input',
       name: 'database',
@@ -573,7 +732,7 @@ export async function promptDatabaseSelect(
     choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
   }
 
-  const { database } = await inquirer.prompt<{ database: string }>([
+  const { database } = await escapeablePrompt<{ database: string }>([
     {
       type: 'list',
       name: 'database',
@@ -632,7 +791,7 @@ export async function promptBackupFormat(
     choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
   }
 
-  const { format } = await inquirer.prompt<{ format: string }>([
+  const { format } = await escapeablePrompt<{ format: string }>([
     {
       type: 'list',
       name: 'format',
@@ -653,7 +812,7 @@ export async function promptBackupFormat(
 export async function promptBackupDirectory(): Promise<string | null> {
   const cwd = process.cwd()
 
-  const { choice } = await inquirer.prompt<{ choice: string }>([
+  const { choice } = await escapeablePrompt<{ choice: string }>([
     {
       type: 'list',
       name: 'choice',
@@ -676,7 +835,7 @@ export async function promptBackupDirectory(): Promise<string | null> {
   if (choice === BACK_VALUE) return null
   if (choice === 'cwd') return cwd
 
-  const { customPath } = await inquirer.prompt<{ customPath: string }>([
+  const { customPath } = await escapeablePrompt<{ customPath: string }>([
     {
       type: 'input',
       name: 'customPath',
@@ -721,7 +880,7 @@ export async function promptBackupFilename(
     ? `Backup filename [${defaultName}]:`
     : 'Backup filename:'
 
-  const { filename } = await inquirer.prompt<{ filename: string }>([
+  const { filename } = await escapeablePrompt<{ filename: string }>([
     {
       type: 'input',
       name: 'filename',
@@ -770,7 +929,7 @@ export async function promptFileDatabasePath(
   console.log(chalk.gray(`  Default: ${defaultPath}`))
   console.log()
 
-  const { useDefault } = await inquirer.prompt<{ useDefault: string }>([
+  const { useDefault } = await escapeablePrompt<{ useDefault: string }>([
     {
       type: 'list',
       name: 'useDefault',
@@ -786,7 +945,7 @@ export async function promptFileDatabasePath(
     return undefined // Use default
   }
 
-  const { inputPath } = await inquirer.prompt<{ inputPath: string }>([
+  const { inputPath } = await escapeablePrompt<{ inputPath: string }>([
     {
       type: 'input',
       name: 'inputPath',
@@ -838,7 +997,7 @@ export async function promptFileDatabasePath(
   // Check if file already exists
   if (existsSync(finalPath)) {
     console.log(chalk.yellow(`  Warning: File already exists: ${finalPath}`))
-    const { overwrite } = await inquirer.prompt<{ overwrite: string }>([
+    const { overwrite } = await escapeablePrompt<{ overwrite: string }>([
       {
         type: 'list',
         name: 'overwrite',
@@ -963,7 +1122,7 @@ export async function promptInstallDependencies(
   let shouldInstall = 'yes'
 
   if (!isCI) {
-    const response = await inquirer.prompt<{ shouldInstall: string }>([
+    const response = await escapeablePrompt<{ shouldInstall: string }>([
       {
         type: 'list',
         name: 'shouldInstall',

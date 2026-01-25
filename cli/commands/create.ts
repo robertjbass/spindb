@@ -13,14 +13,14 @@ import {
   promptConfirm,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { header, uiError, connectionBox } from '../ui/theme'
+import { header, connectionBox } from '../ui/theme'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
-import { isValidDatabaseName } from '../../core/error-handler'
+import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
 import { resolve } from 'path'
 import { Engine } from '../../types'
 import type { BaseEngine } from '../../engines/base-engine'
@@ -49,8 +49,10 @@ async function createSqliteContainer(
   const missingDeps = await getMissingDependencies('sqlite')
   if (missingDeps.length > 0) {
     if (json) {
-      console.log(JSON.stringify({ error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}` }))
-      process.exit(1)
+      return exitWithError({
+        message: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+        json: true,
+      })
     }
     depsSpinner?.warn(
       `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
@@ -60,7 +62,7 @@ async function createSqliteContainer(
       'sqlite',
     )
     if (!installed) {
-      process.exit(1)
+      return exitWithError({ message: 'Required tools not installed' })
     }
   } else {
     depsSpinner?.succeed('Required tools available')
@@ -69,8 +71,10 @@ async function createSqliteContainer(
   // Check if container already exists
   if (await containerManager.exists(containerName)) {
     if (json) {
-      console.log(JSON.stringify({ error: `Container "${containerName}" already exists` }))
-      process.exit(1)
+      return exitWithError({
+        message: `Container "${containerName}" already exists`,
+        json: true,
+      })
     }
     while (await containerManager.exists(containerName)) {
       console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
@@ -84,12 +88,10 @@ async function createSqliteContainer(
 
   // Check if file already exists
   if (existsSync(absolutePath)) {
-    if (json) {
-      console.log(JSON.stringify({ error: `File already exists: ${absolutePath}` }))
-    } else {
-      console.error(uiError(`File already exists: ${absolutePath}`))
-    }
-    process.exit(1)
+    return exitWithError({
+      message: `File already exists: ${absolutePath}`,
+      json,
+    })
   }
 
   const createSpinnerInstance = json ? null : createSpinner('Creating SQLite database...')
@@ -196,8 +198,10 @@ async function createDuckDBContainer(
   const missingDeps = await getMissingDependencies('duckdb')
   if (missingDeps.length > 0) {
     if (json) {
-      console.log(JSON.stringify({ error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}` }))
-      process.exit(1)
+      return exitWithError({
+        message: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+        json: true,
+      })
     }
     depsSpinner?.warn(
       `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
@@ -207,7 +211,7 @@ async function createDuckDBContainer(
       'duckdb',
     )
     if (!installed) {
-      process.exit(1)
+      return exitWithError({ message: 'Required tools not installed' })
     }
   } else {
     depsSpinner?.succeed('Required tools available')
@@ -216,8 +220,10 @@ async function createDuckDBContainer(
   // Check if container already exists
   if (await containerManager.exists(containerName)) {
     if (json) {
-      console.log(JSON.stringify({ error: `Container "${containerName}" already exists` }))
-      process.exit(1)
+      return exitWithError({
+        message: `Container "${containerName}" already exists`,
+        json: true,
+      })
     }
     while (await containerManager.exists(containerName)) {
       console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
@@ -231,12 +237,10 @@ async function createDuckDBContainer(
 
   // Check if file already exists
   if (existsSync(absolutePath)) {
-    if (json) {
-      console.log(JSON.stringify({ error: `File already exists: ${absolutePath}` }))
-    } else {
-      console.error(uiError(`File already exists: ${absolutePath}`))
-    }
-    process.exit(1)
+    return exitWithError({
+      message: `File already exists: ${absolutePath}`,
+      json,
+    })
   }
 
   const createSpinnerInstance = json ? null : createSpinner('Creating DuckDB database...')
@@ -379,7 +383,7 @@ export const createCommand = new Command('create')
   .argument('[name]', 'Container name')
   .option(
     '-e, --engine <engine>',
-    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, redis, valkey, clickhouse, qdrant, meilisearch)',
+    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch)',
   )
   .option('--db-version <version>', 'Database version (e.g., 17, 8.0)')
   .option('-d, --database <database>', 'Database name')
@@ -431,22 +435,10 @@ export const createCommand = new Command('create')
           const locationInfo = detectLocationType(options.from)
 
           if (locationInfo.type === 'not_found') {
-            if (options.json) {
-              console.log(JSON.stringify({ error: `Location not found: ${options.from}` }))
-            } else {
-              console.error(uiError(`Location not found: ${options.from}`))
-              console.log(
-                chalk.gray(
-                  '  Provide a valid file path or connection string:',
-                ),
-              )
-              console.log(
-                chalk.gray(
-                  '  postgresql://, mysql://, mongodb://, redis://, sqlite://, duckdb://',
-                ),
-              )
-            }
-            process.exit(1)
+            return exitWithError({
+              message: `Location not found: ${options.from}. Provide a valid file path or connection string (postgresql://, mysql://, redis://, sqlite://, duckdb://)`,
+              json: options.json,
+            })
           }
 
           restoreLocation = options.from
@@ -464,16 +456,10 @@ export const createCommand = new Command('create')
           }
 
           if (options.start === false) {
-            if (options.json) {
-              console.log(JSON.stringify({ error: 'Cannot use --no-start with --from (restore requires running container)' }))
-            } else {
-              console.error(
-                uiError(
-                  'Cannot use --no-start with --from (restore requires running container)',
-                ),
-              )
-            }
-            process.exit(1)
+            return exitWithError({
+              message: 'Cannot use --no-start with --from (restore requires running container)',
+              json: options.json,
+            })
           }
         }
 
@@ -486,8 +472,7 @@ export const createCommand = new Command('create')
         if (!containerName) {
           // JSON mode requires container name argument
           if (options.json) {
-            console.log(JSON.stringify({ error: 'Container name is required' }))
-            process.exit(1)
+            return exitWithError({ message: 'Container name is required', json: true })
           }
 
           const answers = await promptCreateOptions()
@@ -504,35 +489,26 @@ export const createCommand = new Command('create')
           // Validate Redis/Valkey database is a pure integer string 0-15
           // Reject decimals ("1.5"), scientific notation ("1e2"), and trailing garbage ("5abc")
           if (!/^[0-9]+$/.test(database)) {
-            const errorMsg = 'Redis/Valkey database must be an integer between 0 and 15'
-            if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
-            } else {
-              console.error(uiError(errorMsg))
-            }
-            process.exit(1)
+            return exitWithError({
+              message: 'Redis/Valkey database must be an integer between 0 and 15',
+              json: options.json,
+            })
           }
           const dbIndex = parseInt(database, 10)
           if (dbIndex < 0 || dbIndex > 15) {
-            const errorMsg = 'Redis/Valkey database must be an integer between 0 and 15'
-            if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
-            } else {
-              console.error(uiError(errorMsg))
-            }
-            process.exit(1)
+            return exitWithError({
+              message: 'Redis/Valkey database must be an integer between 0 and 15',
+              json: options.json,
+            })
           }
         } else {
           database = database ?? containerName.replace(/-/g, '_')
           // Validate database name to prevent SQL injection
           if (!isValidDatabaseName(database)) {
-            const errorMsg = 'Database name must start with a letter and contain only letters, numbers, and underscores'
-            if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
-            } else {
-              console.error(uiError(errorMsg))
-            }
-            process.exit(1)
+            return exitWithError({
+              message: 'Database name must start with a letter and contain only letters, numbers, and underscores',
+              json: options.json,
+            })
           }
         }
 
@@ -568,33 +544,28 @@ export const createCommand = new Command('create')
 
         // For server databases, validate --connect with --no-start
         if (options.connect && options.start === false) {
-          const errorMsg = 'Cannot use --no-start with --connect (connection requires running container)'
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
-          }
-          process.exit(1)
+          return exitWithError({
+            message: 'Cannot use --no-start with --connect (connection requires running container)',
+            json: options.json,
+          })
         }
 
         // In JSON mode, require explicit --start or --no-start flag to avoid interactive prompts
         if (options.json && options.start === undefined && !restoreLocation && !options.connect) {
-          const errorMsg = 'In JSON mode, you must specify --start or --no-start for server databases'
-          console.log(JSON.stringify({ error: errorMsg }))
-          process.exit(1)
+          return exitWithError({
+            message: 'In JSON mode, you must specify --start or --no-start for server databases',
+            json: true,
+          })
         }
 
         // Validate --max-connections if provided
         if (options.maxConnections) {
           const parsed = parseInt(options.maxConnections, 10)
           if (!Number.isFinite(parsed) || parsed <= 0) {
-            const errorMsg = 'Invalid --max-connections value: must be a positive integer'
-            if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
-            } else {
-              console.error(uiError(errorMsg))
-            }
-            process.exit(1)
+            return exitWithError({
+              message: 'Invalid --max-connections value: must be a positive integer',
+              json: options.json,
+            })
           }
         }
 
@@ -606,12 +577,11 @@ export const createCommand = new Command('create')
           port = parseInt(options.port, 10)
           const available = await portManager.isPortAvailable(port)
           if (!available) {
-            if (options.json) {
-              console.log(JSON.stringify({ error: `Port ${port} is already in use` }))
-            } else {
-              portSpinner?.fail(`Port ${port} is already in use`)
-            }
-            process.exit(1)
+            portSpinner?.fail(`Port ${port} is already in use`)
+            return exitWithError({
+              message: `Port ${port} is already in use`,
+              json: options.json,
+            })
           }
           portSpinner?.succeed(`Using port ${port}`)
         } else {
@@ -661,10 +631,10 @@ export const createCommand = new Command('create')
         if (missingDeps.length > 0) {
           // In JSON mode, error out instead of prompting
           if (options.json) {
-            console.log(JSON.stringify({
-              error: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-            }))
-            process.exit(1)
+            return exitWithError({
+              message: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+              json: true,
+            })
           }
 
           depsSpinner?.warn(
@@ -677,17 +647,14 @@ export const createCommand = new Command('create')
           )
 
           if (!installed) {
-            process.exit(1)
+            return exitWithError({ message: 'Required tools not installed' })
           }
 
           missingDeps = await getMissingDependencies(engine)
           if (missingDeps.length > 0) {
-            console.error(
-              uiError(
-                `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-              ),
-            )
-            process.exit(1)
+            return exitWithError({
+              message: `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+            })
           }
 
           console.log(chalk.green('  ✓ All required tools are now available'))
@@ -717,23 +684,23 @@ export const createCommand = new Command('create')
             )
             binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
           } catch (error) {
-            if (options.json) {
-              console.log(JSON.stringify({
-                error: `${dbEngine.displayName} ${version} not available`,
-              }))
-              process.exit(1)
-            }
             binarySpinner?.fail(`${dbEngine.displayName} ${version} not available`)
+            if (options.json) {
+              return exitWithError({
+                message: `${dbEngine.displayName} ${version} not available`,
+                json: true,
+              })
+            }
             throw error
           }
         }
 
         if (await containerManager.exists(containerName)) {
           if (options.json) {
-            console.log(JSON.stringify({
-              error: `Container "${containerName}" already exists`,
-            }))
-            process.exit(1)
+            return exitWithError({
+              message: `Container "${containerName}" already exists`,
+              json: true,
+            })
           }
           while (await containerManager.exists(containerName)) {
             console.log(
@@ -798,8 +765,14 @@ export const createCommand = new Command('create')
         } else if (options.start === false) {
           shouldStart = false
         } else {
-          console.log()
-          shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
+          // In non-interactive mode (no TTY), default to not starting
+          // This allows scripts/CI to run without --no-start flag
+          if (!process.stdin.isTTY) {
+            shouldStart = false
+          } else {
+            console.log()
+            shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
+          }
         }
 
         const config = await containerManager.getConfig(containerName)
@@ -918,23 +891,29 @@ export const createCommand = new Command('create')
                   e.message.includes('pg_dump not found') ||
                   e.message.includes('ENOENT')
                 ) {
+                  // In JSON mode, don't prompt - just exit with error
+                  if (options.json) {
+                    return exitWithError({ message: 'pg_dump not installed', json: true })
+                  }
                   const installed = await promptInstallDependencies('pg_dump')
                   if (!installed) {
-                    process.exit(1)
+                    return exitWithError({ message: 'pg_dump not installed', json: options.json })
                   }
                   continue
                 }
 
-                console.log()
-                console.error(uiError('pg_dump error:'))
-                console.log(chalk.gray(`  ${e.message}`))
-                process.exit(1)
+                return exitWithError({
+                  message: `pg_dump error: ${e.message}`,
+                  json: options.json,
+                })
               }
             }
 
             if (!dumpSuccess) {
-              console.error(uiError('Failed to create dump after retries'))
-              process.exit(1)
+              return exitWithError({
+                message: 'Failed to create dump after retries',
+                json: options.json,
+              })
             }
           } else {
             backupPath = restoreLocation
@@ -1049,8 +1028,7 @@ export const createCommand = new Command('create')
 
         if (matchingPattern) {
           if (options.json) {
-            console.log(JSON.stringify({ error: e.message }))
-            process.exit(1)
+            return exitWithError({ message: e.message, json: true })
           }
           const missingTool = matchingPattern.replace(' not found', '')
           const installed = await promptInstallDependencies(missingTool)
@@ -1059,15 +1037,10 @@ export const createCommand = new Command('create')
               chalk.yellow('  Please re-run your command to continue.'),
             )
           }
-          process.exit(1)
+          return exitWithError({ message: 'Missing required tools', json: options.json })
         }
 
-        if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
-        } else {
-          console.error(uiError(e.message))
-        }
-        process.exit(1)
+        return exitWithError({ message: e.message, json: options.json })
       } finally {
         if (tempDumpPath) {
           try {

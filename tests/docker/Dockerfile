@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y \
 # libncurses6: terminal library required by MariaDB client
 # libxml2: XML library required by PostgreSQL (hostdb binaries compiled with XML support)
 # libicu70: ICU library required by PostgreSQL (Ubuntu 22.04 ships ICU 70)
+# locales: needed for PostgreSQL locale configuration (en_US.UTF-8)
 # sudo: needed for non-root user to run privileged commands
 # lsof: needed by SpinDB's findProcessByPort() to detect running database processes
 RUN apt-get update && apt-get install -y \
@@ -71,9 +72,15 @@ RUN apt-get update && apt-get install -y \
     libncurses6 \
     libxml2 \
     libicu70 \
+    locales \
     sudo \
     lsof \
+    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
+
+# Set locale environment variables
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 # Install pnpm (pinned for reproducible builds)
 ARG PNPM_VERSION=9.14.2

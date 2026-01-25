@@ -1,10 +1,11 @@
 import { Command } from 'commander'
 import { containerManager } from '../../core/container-manager'
+import { exitWithError, isInteractiveMode } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { uiError, uiWarning } from '../ui/theme'
+import { uiWarning } from '../ui/theme'
 
 export const deleteCommand = new Command('delete')
   .alias('rm')
@@ -24,8 +25,14 @@ export const deleteCommand = new Command('delete')
         if (!containerName) {
           // JSON mode requires container name argument
           if (options.json) {
-            console.log(JSON.stringify({ error: 'Container name is required' }))
-            process.exit(1)
+            return exitWithError({ message: 'Container name is required', json: true })
+          }
+
+          // Non-interactive mode requires container name argument
+          if (!isInteractiveMode()) {
+            return exitWithError({
+              message: 'Container name is required in non-interactive mode. Usage: spindb delete <name> --force',
+            })
           }
 
           const containers = await containerManager.list()
@@ -45,15 +52,20 @@ export const deleteCommand = new Command('delete')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          if (options.json) {
-            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
-          } else {
-            console.error(uiError(`Container "${containerName}" not found`))
-          }
-          process.exit(1)
+          return exitWithError({
+            message: `Container "${containerName}" not found`,
+            json: options.json,
+          })
         }
 
-        if (!options.yes && !options.json) {
+        if (!options.yes && !options.force && !options.json) {
+          // Detect non-interactive mode (piped input, scripts, CI)
+          if (!isInteractiveMode()) {
+            return exitWithError({
+              message: 'Cannot prompt for confirmation in non-interactive mode. Use --force or --yes to skip confirmation',
+            })
+          }
+
           const confirmed = await promptConfirm(
             `Are you sure you want to delete "${containerName}"? This cannot be undone.`,
             false,
@@ -79,13 +91,10 @@ export const deleteCommand = new Command('delete')
 
             stopSpinner?.succeed(`Stopped "${containerName}"`)
           } else {
-            const errorMsg = `Container "${containerName}" is running. Stop it first or use --force`
-            if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
-            } else {
-              console.error(uiError(errorMsg))
-            }
-            process.exit(1)
+            return exitWithError({
+              message: `Container "${containerName}" is running. Stop it first or use --force`,
+              json: options.json,
+            })
           }
         }
 
@@ -110,12 +119,7 @@ export const deleteCommand = new Command('delete')
         }
       } catch (error) {
         const e = error as Error
-        if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
-        } else {
-          console.error(uiError(e.message))
-        }
-        process.exit(1)
+        return exitWithError({ message: e.message, json: options.json })
       }
     },
   )

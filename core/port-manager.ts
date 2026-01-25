@@ -106,7 +106,11 @@ export class PortManager {
             try {
               const content = await readFile(configPath, 'utf8')
               const config = JSON.parse(content) as ContainerConfig
-              ports.push(config.port)
+              // Only include ports from running containers
+              // Stopped containers don't block ports - users can manage conflicts themselves
+              if (config.status === 'running') {
+                ports.push(config.port)
+              }
             } catch (error) {
               logDebug('Skipping invalid container config', {
                 configPath,

@@ -21,6 +21,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   sqlite: 'sqlite.test.ts',
   duckdb: 'duckdb.test.ts',
   mongodb: 'mongodb.test.ts',
+  ferretdb: 'ferretdb.test.ts',
   redis: 'redis.test.ts',
   valkey: 'valkey.test.ts',
   clickhouse: 'clickhouse.test.ts',
@@ -35,6 +36,9 @@ const ENGINE_ALIASES: Record<string, string> = {
   pg: 'postgresql',
   // MongoDB aliases
   mongo: 'mongodb',
+  // FerretDB aliases
+  ferret: 'ferretdb',
+  fdb: 'ferretdb',
   // SQLite aliases
   lite: 'sqlite',
   // DuckDB aliases
@@ -54,6 +58,7 @@ const TEST_ORDER = [
   'sqlite',
   'duckdb',
   'mongodb',
+  'ferretdb',
   'redis',
   'valkey',
   'clickhouse',
@@ -92,6 +97,7 @@ function printUsage(): void {
   console.log('  sqlite        (aliases: lite)')
   console.log('  duckdb        (aliases: duck)')
   console.log('  mongodb       (aliases: mongo)')
+  console.log('  ferretdb      (aliases: ferret, fdb)')
   console.log('  redis')
   console.log('  valkey')
   console.log('  clickhouse')

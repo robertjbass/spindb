@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.5] - 2026-01-24
+
+### Fixed
+- Re-sign FerretDB and postgresql-documentdb binaries on macOS after download to fix Gatekeeper code signature issues
+
+### Changed
+- Improved error message when postgresql-documentdb binaries fail to execute due to library loading issues
+
+## [0.23.4] - 2026-01-23
+
+### Fixed
+- FerretDB binary downloads now skip already-installed components and clean up partial installations
+- FerretDB engine deletion now also removes the postgresql-documentdb backend
+- Added ENOTEMPTY to filesystem fallback errors for better extraction handling
+
+## [0.23.3] - 2026-01-23
+
+### Fixed
+- Added FerretDB to interactive engines menu
+
+## [0.23.2] - 2026-01-23
+
+### Fixed
+- Added FerretDB to `--engine` help text in create command
+- Added FerretDB to Docker E2E test suite
+
+## [0.23.1] - 2026-01-23
+
+### Changed
+- **FerretDB Windows binaries added** - hostdb now provides win32-x64 builds for ferretdb and postgresql-documentdb, completing cross-platform support
+
+## [0.23.0] - 2026-01-23
+
+### Added
+- **FerretDB engine support** - MongoDB-compatible database using PostgreSQL as backend:
+  - First composite engine requiring two binaries: `ferretdb` proxy + `postgresql-documentdb` backend
+  - Two processes per container: PostgreSQL backend + FerretDB proxy
+  - Two ports per container: external (27017 for MongoDB) + internal (54320+ for PostgreSQL)
+  - Uses `mongodb://` connection scheme, compatible with mongosh
+  - Backup/restore via pg_dump/pg_restore on PostgreSQL backend (formats: `sql`, `custom`)
+  - Aliases: `ferretdb`, `ferret`
+  - Supported architectures: darwin-arm64, darwin-x64, linux-arm64, linux-x64 (win32-x64 added in 0.23.1)
+  - Version 2.7.0 with postgresql-documentdb 17-0.107.0 from hostdb
+
+### Changed
+- **Port allocation for stopped containers** - Stopped containers no longer block port suggestions when creating new containers. Previously, a stopped MongoDB container on port 27017 would cause new containers to suggest 27018. Now only running containers are considered port conflicts, giving users more control over port management.
+
+## [0.22.1] - 2026-01-23
+
+### Changed
+- Updated documentation
+
 ## [0.22.0] - 2026-01-22
 
 ### Added

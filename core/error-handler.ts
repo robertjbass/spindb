@@ -121,6 +121,21 @@ export class SpinDBError extends Error {
   }
 }
 
+/**
+ * Error thrown when a required CLI tool is missing (e.g., psql, pg_dump, mysql).
+ * Used to trigger installation prompts in the interactive menu.
+ */
+export class MissingToolError extends Error {
+  public readonly tool: string
+
+  constructor(tool: string, message?: string) {
+    super(message ?? `${tool} not found`)
+    this.name = 'MissingToolError'
+    this.tool = tool
+    Error.captureStackTrace(this, MissingToolError)
+  }
+}
+
 function getLogPath(): string {
   return join(getSpinDBRoot(), 'spindb.log')
 }
@@ -295,4 +310,70 @@ export function assertValidDatabaseName(name: string): void {
       { databaseName: name },
     )
   }
+}
+
+/**
+ * Check if the current process is running in an interactive terminal.
+ * Returns true if stdin is a TTY (user can interact with prompts).
+ */
+export function isInteractiveMode(): boolean {
+  return Boolean(process.stdin.isTTY)
+}
+
+/**
+ * Wait for user to press Enter before continuing.
+ * Only shows the prompt in interactive mode.
+ */
+async function waitForEnter(): Promise<void> {
+  if (!isInteractiveMode()) {
+    return
+  }
+
+  return new Promise((resolve) => {
+    process.stdout.write(chalk.gray('\nPress Enter to continue...'))
+    try {
+      // Disable raw mode so Enter key works normally (not just any keypress)
+      // setRawMode may fail if stdin is not a TTY (already checked above, but guard anyway)
+      process.stdin.setRawMode?.(false)
+      process.stdin.resume()
+      process.stdin.once('data', () => {
+        process.stdin.pause()
+        resolve()
+      })
+    } catch {
+      // If stdin operations fail (e.g., stdin closed), just resolve immediately
+      resolve()
+    }
+  })
+}
+
+/**
+ * Exit the process with an error, optionally waiting for user input in interactive mode.
+ * This provides a better UX for interactive CLI usage while maintaining
+ * proper exit codes for scripts and CI pipelines.
+ *
+ * @param options.message - Error message to display
+ * @param options.code - Exit code (default: 1)
+ * @param options.json - If true, output error as JSON and skip interactive prompt
+ */
+export async function exitWithError(options: {
+  message: string
+  code?: number
+  json?: boolean
+}): Promise<never> {
+  const { message, code = 1, json = false } = options
+
+  if (json) {
+    console.log(JSON.stringify({ error: message }))
+  } else {
+    console.error(chalk.red(`\n  ✕ ${message}`))
+
+    // In interactive mode, wait for user to press Enter before exiting
+    // This gives users time to read the error message
+    if (isInteractiveMode()) {
+      await waitForEnter()
+    }
+  }
+
+  process.exit(code)
 }

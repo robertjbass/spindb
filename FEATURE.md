@@ -33,14 +33,15 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 2. **Wrapper Pattern**: Functions wrap CLI tools (psql, mysql, mongosh, redis-cli) rather than implementing database logic
 3. **Cross-Platform**: Must work on macOS, Linux, and Windows
 4. **Transactional**: Multi-step operations must be atomic with rollback support
+5. **CI-Verified**: All engines MUST have CI integration tests that pass on all supported platforms before merge
 
 ---
 
 ## Engine Types
 
-SpinDB supports two types of database engines:
+SpinDB supports three types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant)
+### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management
@@ -59,6 +60,41 @@ SpinDB supports two types of database engines:
 - Connection string is the file path
 - Use a registry to track file locations
 - Status is `running` when file exists, `stopped` when missing
+
+### Composite Engines (FerretDB)
+
+Composite engines require **multiple binaries** working together:
+
+- **FerretDB** requires `ferretdb` (proxy) + `postgresql-documentdb` (backend)
+- Each container manages two processes (FerretDB + embedded PostgreSQL)
+- Three ports: external MongoDB (27017), internal PostgreSQL (54320+), debug HTTP (37017+)
+- Backup uses PostgreSQL native tools (pg_dump) on embedded backend
+
+**Platform support:** FerretDB v2 with DocumentDB extension is available on all platforms (macOS, Linux, Windows).
+
+**hostdb postgresql-documentdb bundle:**
+
+The `postgresql-documentdb` binary from hostdb is a self-contained PostgreSQL 17 installation that includes:
+- PostgreSQL server and all client tools (psql, pg_dump, pg_restore, etc.)
+- DocumentDB extension (provides MongoDB-compatible storage layer)
+- PostGIS extension (built from source for relocatability)
+- pgvector extension
+- All required shared libraries bundled (OpenSSL, ICU, GEOS, PROJ, etc.)
+
+**Why a custom build?** Standard Homebrew PostgreSQL has hardcoded absolute paths that break when copied to another machine. The hostdb build:
+1. Compiles PostgreSQL from source with relative library paths
+2. Builds PostGIS from source (Homebrew PostGIS also has hardcoded paths)
+3. Bundles all Homebrew dependencies recursively
+4. Rewrites dylib paths using `install_name_tool` with `@loader_path`
+5. Re-signs all binaries with ad-hoc signatures (macOS requires this after modification)
+
+**Known DocumentDB SQL issues (patched in hostdb build):**
+1. Token concatenation (`##`) - PostgreSQL doesn't support C preprocessor-style token concatenation
+2. Wrong library references - Some functions reference `MODULE_PATHNAME` but live in `pg_documentdb_core`
+
+These patches are applied automatically during the hostdb build process.
+
+See [plans/FERRETDB.md](plans/FERRETDB.md) for complete implementation guide.
 
 **Edge cases for file-based engines:**
 
@@ -178,9 +214,11 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `tests/unit/{engine}-restore.test.ts` - Restore/backup format unit tests
 - [ ] `package.json` - Add `test:{engine}` script
 
-### CI/CD (2 files)
+### CI/CD (2 files) - REQUIRED
 
-- [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching
+**CRITICAL:** An engine is NOT complete without CI tests. The CI workflow must test your engine on all supported platforms (Ubuntu 22, Ubuntu 24, macOS Intel, macOS ARM, Windows) before merging to main.
+
+- [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching (all 5 OS variants)
 - [ ] `.github/workflows/ci.yml` - Add to `ci-success` job needs and checks
 
 ### Docker Tests (2 files) - CRITICAL
@@ -209,7 +247,7 @@ Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `
 - [ ] For file-based engines: Update `cleanup_data_lifecycle()` and start/stop skip conditions
 - [ ] For REST API engines: Add curl-based connectivity test and seed data insertion (see Qdrant example)
 
-### Documentation (7 files)
+### Documentation (8 files)
 
 - [ ] `README.md` - Add engine section with full documentation
 - [ ] `README.md` - Update `--engine` option help text to include new engine
@@ -218,6 +256,7 @@ Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `
 - [ ] `ENGINES.md` - Add to supported engines table and details
 - [ ] `ENGINES.md` - Add to Engine Emojis table
 - [ ] `CLAUDE.md` - Update project documentation
+- [ ] `CHEATSHEET.md` - Add to create examples, Default Ports table, and Connection String Formats
 
 ---
 
@@ -899,46 +938,79 @@ The `openInBrowser()` helper uses platform-specific commands (`open` on macOS, `
 
 ### 3. SQL Handlers (`cli/commands/menu/sql-handlers.ts`)
 
-Update terminology for non-SQL engines:
+**CRITICAL:** Update the `getScriptType()` function to include your engine. This determines the terminology shown to users when running scripts ("SQL file", "Script file", or "Command file").
+
+**Script type categories:**
+
+| Category | Engines | Terminology | File Types |
+|----------|---------|-------------|------------|
+| **SQL** | PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse | "SQL file" | `.sql` |
+| **Script** | MongoDB, FerretDB (JavaScript), Qdrant, Meilisearch (REST/JSON) | "Script file" | `.js`, `.json` |
+| **Command** | Redis, Valkey | "Command file" | `.redis`, `.valkey` |
+
+Add your engine to the appropriate `case` in the switch statement:
 
 ```ts
-const isRedisLike = config.engine === 'redis' || config.engine === 'valkey' || config.engine === 'yourengine'
-const isMongoDB = config.engine === 'mongodb'
-const scriptType = isRedisLike ? 'Command' : isMongoDB ? 'Script' : 'SQL'
+const getScriptType = (
+  engine: Engine | string,
+): { type: string; lower: string } => {
+  switch (engine) {
+    // Redis-like engines use "Command" terminology
+    case Engine.Redis:
+    case Engine.Valkey:
+      return { type: 'Command', lower: 'command' }
+
+    // Document/search engines use "Script" terminology
+    case Engine.MongoDB:
+    case Engine.FerretDB:
+    case Engine.Qdrant:
+    case Engine.Meilisearch:
+      return { type: 'Script', lower: 'script' }
+
+    // SQL engines use "SQL" terminology
+    case Engine.PostgreSQL:
+    case Engine.MySQL:
+    case Engine.MariaDB:
+    case Engine.SQLite:
+    case Engine.DuckDB:
+    case Engine.ClickHouse:
+      return { type: 'SQL', lower: 'sql' }
+
+    default:
+      return { type: 'SQL', lower: 'sql' }
+  }
+}
 ```
+
+**Note:** The function uses the `Engine` enum for type safety. Always use enum values, not string literals.
 
 ### 4. Engine Handlers (`cli/commands/menu/engine-handlers.ts`)
 
-Add to "Manage Engines" menu:
+Add to "Manage Engines" interactive menu. This file controls the engine selection menu shown when users run `spindb` and select "Manage engines".
+
+**Step 1:** Add the type import:
 
 ```ts
-import { type InstalledYourEngineEngine } from '../../helpers'
-
-// Filter engines
-const yourengineEngines = engines.filter(
-  (e): e is InstalledYourEngineEngine => e.engine === 'yourengine',
-)
-
-// Calculate size
-const totalYourEngineSize = yourengineEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-
-// Add to sorted array
-const allEnginesSorted = [
-  ...pgEngines,
-  ...mariadbEngines,
-  ...mysqlEngines,
-  ...sqliteEngines,
-  ...mongodbEngines,
-  ...redisEngines,
-  ...valkeyEngines,
-  ...yourengineEngines,
-]
-
-// Add summary display
-if (yourengineEngines.length > 0) {
-  console.log(chalk.gray(`  YourEngine: ${yourengineEngines.length} version(s), ${formatBytes(totalYourEngineSize)}`))
-}
+import {
+  getInstalledEngines,
+  type InstalledPostgresEngine,
+  // ... other existing types ...
+  type InstalledYourEngineEngine,  // Add your engine type
+} from '../../helpers'
 ```
+
+**Step 2:** Add your engine to the `allEnginesSorted` array (around line 58). This array determines which engines appear in the menu:
+
+```ts
+const allEnginesSorted = [
+  ...engines.filter((e): e is InstalledPostgresEngine => e.engine === 'postgresql'),
+  ...engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
+  // ... other existing engines ...
+  ...engines.filter((e): e is InstalledYourEngineEngine => e.engine === 'yourengine'),
+]
+```
+
+**Important:** If you skip this step, your engine will not appear in the interactive "Manage engines" menu even though it shows up in `spindb engines list`.
 
 ### 5. Backup Handlers (`cli/commands/menu/backup-handlers.ts`)
 
@@ -2214,6 +2286,13 @@ Update:
 - Binary Sources by Engine section
 - Engine Icons list
 
+### CHEATSHEET.md
+
+Update:
+- Container Lifecycle section (add `spindb create mydb -e yourengine`)
+- Default Ports table (add engine's default port and range)
+- Connection String Formats section (add engine's connection string format)
+
 ### TODO.md
 
 Mark engine as completed in the roadmap.
@@ -2231,11 +2310,15 @@ An engine implementation is **complete** when ALL of the following pass:
 3. **Integration Tests**: `pnpm test:engine {engine}` passes (14+ tests)
 4. **All Integration Tests**: `pnpm test:integration` passes (no regressions)
 
-### CI Verification
+### CI Verification - BLOCKING REQUIREMENT
 
-1. GitHub Actions runs on all platforms (ubuntu, macos, windows)
-2. Binary caching is configured for hostdb downloads
-3. CI success job includes your engine
+**An engine cannot be merged to main without passing CI tests on all supported platforms.**
+
+1. **GitHub Actions workflow must include your engine** with a dedicated `test-{engine}` job
+2. **All 5 OS variants must pass**: Ubuntu 22.04, Ubuntu 24.04, macOS 15 (Intel), macOS 14 (ARM), Windows
+3. Binary caching is configured for hostdb downloads (speeds up CI runs)
+4. `ci-success` job must include your engine in its `needs` array and verification checks
+5. **No exceptions**: If your engine doesn't support a platform (e.g., ClickHouse on Windows), exclude that platform from the matrix but test all others
 
 ### File Count Verification
 
@@ -2319,5 +2402,6 @@ Use these implementations as references:
 | **ClickHouse** | Server | hostdb (macOS/Linux) | OLAP, XML configs, YY.MM versioning |
 | **SQLite** | File-based | hostdb (all platforms) | Embedded, no server process |
 | **DuckDB** | File-based | hostdb (all platforms) | Embedded OLAP, flat archive handling example |
+| **FerretDB** | Composite | hostdb (all platforms) | Two binaries (ferretdb + postgresql-documentdb), dual ports |
 
-**Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example.
+**Recommended starting point:** Copy Valkey implementation and modify for your engine, as it's the most recent and complete example. For composite engines, see [plans/FERRETDB.md](plans/FERRETDB.md).

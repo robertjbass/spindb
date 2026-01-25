@@ -64,6 +64,8 @@ const QDRANT_TOOLS: BinaryTool[] = ['qdrant']
 
 const MEILISEARCH_TOOLS: BinaryTool[] = ['meilisearch']
 
+const FERRETDB_TOOLS: BinaryTool[] = ['ferretdb']
+
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
 const DUCKDB_TOOLS: BinaryTool[] = ['duckdb']
@@ -81,6 +83,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...MYSQL_TOOLS,
   ...MARIADB_TOOLS,
   ...MONGODB_TOOLS,
+  ...FERRETDB_TOOLS,
   ...REDIS_TOOLS,
   ...VALKEY_TOOLS,
   ...QDRANT_TOOLS,
@@ -97,6 +100,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.MySQL]: MYSQL_TOOLS,
   [Engine.MariaDB]: MARIADB_TOOLS,
   [Engine.MongoDB]: MONGODB_TOOLS,
+  [Engine.FerretDB]: FERRETDB_TOOLS,
   [Engine.Redis]: REDIS_TOOLS,
   [Engine.Valkey]: VALKEY_TOOLS,
   [Engine.Qdrant]: QDRANT_TOOLS,
@@ -328,6 +332,7 @@ export class ConfigManager {
     mysql: { found: BinaryTool[]; missing: BinaryTool[] }
     mariadb: { found: BinaryTool[]; missing: BinaryTool[] }
     mongodb: { found: BinaryTool[]; missing: BinaryTool[] }
+    ferretdb: { found: BinaryTool[]; missing: BinaryTool[] }
     redis: { found: BinaryTool[]; missing: BinaryTool[] }
     valkey: { found: BinaryTool[]; missing: BinaryTool[] }
     meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
@@ -367,6 +372,10 @@ export class ConfigManager {
       mongodb: {
         found: found.filter((t) => MONGODB_TOOLS.includes(t)),
         missing: missing.filter((t) => MONGODB_TOOLS.includes(t)),
+      },
+      ferretdb: {
+        found: found.filter((t) => FERRETDB_TOOLS.includes(t)),
+        missing: missing.filter((t) => FERRETDB_TOOLS.includes(t)),
       },
       redis: {
         found: found.filter((t) => REDIS_TOOLS.includes(t)),
@@ -567,6 +576,7 @@ export {
   MARIADB_SERVER_TOOLS,
   MARIADB_CLIENT_TOOLS,
   MONGODB_TOOLS,
+  FERRETDB_TOOLS,
   REDIS_TOOLS,
   VALKEY_TOOLS,
   QDRANT_TOOLS,

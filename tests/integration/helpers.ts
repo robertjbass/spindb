@@ -16,12 +16,52 @@ import { compareVersions } from '../../core/version-utils'
 
 const execAsync = promisify(exec)
 
+/**
+ * Build and execute a mongosh command for MongoDB-compatible engines (MongoDB, FerretDB)
+ * Handles platform-specific shell escaping
+ */
+async function runMongoshCommand(
+  engine: Engine,
+  port: number,
+  database: string,
+  script: string,
+): Promise<{ stdout: string; stderr: string }> {
+  const engineImpl = getEngine(engine)
+  const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
+
+  let cmd: string
+  if (isWindows()) {
+    const escaped = script.replace(/"/g, '\\"')
+    cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
+  } else {
+    const escaped = script.replace(/'/g, "'\\''")
+    cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
+  }
+  return execAsync(cmd)
+}
+
+/**
+ * Execute a JavaScript file via mongosh for MongoDB-compatible engines (MongoDB, FerretDB)
+ */
+async function runMongoshFile(
+  engine: Engine,
+  port: number,
+  database: string,
+  filePath: string,
+): Promise<{ stdout: string; stderr: string }> {
+  const engineImpl = getEngine(engine)
+  const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
+  const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
+  return execAsync(cmd)
+}
+
 // Default test port configuration
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
   mysql: { base: 3333, clone: 3335, renamed: 3334 },
   mariadb: { base: 3340, clone: 3342, renamed: 3341 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
+  ferretdb: { base: 27060, clone: 27062, renamed: 27061 },
   redis: { base: 6399, clone: 6401, renamed: 6400 },
   valkey: { base: 6410, clone: 6412, renamed: 6411 },
   clickhouse: { base: 9050, clone: 9052, renamed: 9051 },
@@ -195,20 +235,9 @@ export async function executeSQL(
       .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MongoDB) {
-    const engineImpl = getEngine(engine)
-    // Use configured/bundled mongosh if available
-    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    // Windows uses double quotes, Unix uses single quotes for shell escaping
-    let cmd: string
-    if (isWindows()) {
-      const escaped = sql.replace(/"/g, '\\"')
-      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
-    } else {
-      const escaped = sql.replace(/'/g, "'\\''")
-      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
-    }
-    return execAsync(cmd)
+  } else if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+    // MongoDB and FerretDB use mongosh (FerretDB runs with --no-auth for local development)
+    return runMongoshCommand(engine, port, database, sql)
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled redis-cli if available
@@ -279,11 +308,9 @@ export async function executeSQLFile(
       .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MongoDB) {
-    const engineImpl = getEngine(engine)
-    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
-    return execAsync(cmd)
+  } else if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+    // MongoDB and FerretDB use mongosh (FerretDB runs with --no-auth for local development)
+    return runMongoshFile(engine, port, database, filePath)
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
     const redisCliPath = await engineImpl
@@ -327,8 +354,8 @@ export async function getRowCount(
   database: string,
   table: string,
 ): Promise<number> {
-  if (engine === Engine.MongoDB) {
-    // MongoDB uses countDocuments() for collections
+  if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+    // MongoDB/FerretDB uses countDocuments() for collections
     const { stdout } = await executeSQL(
       engine,
       port,
@@ -463,8 +490,8 @@ export async function waitForReady(
           .getMysqladminPath()
           .catch(() => 'mysqladmin')
         await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
-      } else if (engine === Engine.MongoDB) {
-        // Use mongosh to ping MongoDB
+      } else if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+        // Use mongosh to ping MongoDB/FerretDB (both use MongoDB wire protocol)
         const engineImpl = getEngine(engine)
         const mongoshPath = await engineImpl
           .getMongoshPath()
@@ -678,6 +705,9 @@ export function getConnectionString(
   if (engine === Engine.MongoDB) {
     return `mongodb://127.0.0.1:${port}/${database}`
   }
+  if (engine === Engine.FerretDB) {
+    return `mongodb://127.0.0.1:${port}/${database}`
+  }
   if (engine === Engine.Redis || engine === Engine.Valkey) {
     return `redis://127.0.0.1:${port}/${database}`
   }
@@ -841,6 +871,19 @@ export async function runScriptSQL(
     sql,
     database,
   })
+}
+
+/**
+ * Execute inline JavaScript using engine.runScript for MongoDB-compatible engines.
+ * Alias for runScriptSQL - MongoDB/FerretDB use JavaScript instead of SQL.
+ * Named separately for clarity when testing document databases.
+ */
+export async function runScriptJS(
+  containerName: string,
+  script: string,
+  database?: string,
+): Promise<void> {
+  return runScriptSQL(containerName, script, database)
 }
 
 // Meilisearch helper functions

@@ -1,12 +1,12 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
-import { rm } from 'fs/promises'
-import stringWidth from 'string-width'
+import { rm, readdir } from 'fs/promises'
+import { join, dirname, basename } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
 import { header, uiError, uiWarning, uiInfo, formatBytes } from '../../ui/theme'
-import { promptConfirm } from '../../ui/prompts'
-import { getEngineIcon } from '../../constants'
+import { promptConfirm, escapeablePrompt } from '../../ui/prompts'
+import { getEngineIcon, getEngineIconPadded } from '../../constants'
 import {
   getInstalledEngines,
   type InstalledPostgresEngine,
@@ -15,6 +15,7 @@ import {
   type InstalledSqliteEngine,
   type InstalledDuckDBEngine,
   type InstalledMongodbEngine,
+  type InstalledFerretDBEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledClickHouseEngine,
@@ -23,13 +24,6 @@ import {
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
-
-// Pad string to target visual width, accounting for Unicode character widths
-function padToWidth(str: string, targetWidth: number): string {
-  const currentWidth = stringWidth(str)
-  const padding = Math.max(0, targetWidth - currentWidth)
-  return str + ' '.repeat(padding)
-}
 
 export async function handleEngines(): Promise<void> {
   console.clear()
@@ -64,6 +58,7 @@ export async function handleEngines(): Promise<void> {
     ...engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
     ...engines.filter((e): e is InstalledDuckDBEngine => e.engine === 'duckdb'),
     ...engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
+    ...engines.filter((e): e is InstalledFerretDBEngine => e.engine === 'ferretdb'),
     ...engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
     ...engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
     ...engines.filter(
@@ -79,15 +74,19 @@ export async function handleEngines(): Promise<void> {
   const totalSize = allEnginesSorted.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   // Column widths for formatting
-  const COL_ENGINE = 13
+  // Engine name column: longest name "meilisearch" (11) + padding (2) = 13
+  const COL_ENGINE_NAME = 13
   const COL_VERSION = 12
   const COL_PLATFORM = 14
   const COL_SIZE = 10
 
   // Build selectable choices with formatted display
   const choices: MenuChoice[] = allEnginesSorted.map((e) => {
-    const icon = getEngineIcon(e.engine)
-    const engineDisplay = padToWidth(`${icon} ${e.engine}`, COL_ENGINE)
+    // Use getEngineIconPadded to handle emoji width inconsistencies
+    // Icons like 🦭 and 🪶 render at width 1, others at width 2
+    const icon = getEngineIconPadded(e.engine)
+    const engineName = e.engine.padEnd(COL_ENGINE_NAME)
+    const engineDisplay = `${icon}${engineName}`
     const versionDisplay = e.version.padEnd(COL_VERSION)
     const platformDisplay = `${e.platform}-${e.arch}`.padEnd(COL_PLATFORM)
     const sizeDisplay = formatBytes(e.sizeBytes).padStart(COL_SIZE)
@@ -110,9 +109,10 @@ export async function handleEngines(): Promise<void> {
     ),
   )
   choices.push(new inquirer.Separator())
-  choices.push({ name: `${chalk.blue('←')} Back to main menu`, value: 'back' })
+  choices.push({ name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' })
+  choices.push(new inquirer.Separator()) // Separator for when list wraps around
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -122,6 +122,7 @@ export async function handleEngines(): Promise<void> {
     },
   ])
 
+  // Back returns to main menu (escape is handled globally)
   if (action === 'back') {
     return
   }
@@ -175,10 +176,10 @@ async function showEngineSubmenu(
     },
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back`, value: 'back' },
-    { name: `${chalk.blue('⌂')} Back to main menu`, value: 'main' },
+    { name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`, value: 'main' },
   ]
 
-  const { action } = await inquirer.prompt<{ action: string }>([
+  const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
@@ -223,7 +224,7 @@ async function handleDeleteEngine(
       ),
     )
     console.log()
-    await inquirer.prompt([
+    await escapeablePrompt([
       {
         type: 'input',
         name: 'continue',
@@ -248,6 +249,50 @@ async function handleDeleteEngine(
 
   try {
     await rm(enginePath, { recursive: true, force: true })
+
+    // FerretDB is a composite engine - also clean up postgresql-documentdb backend
+    // But only if no other FerretDB installations share it
+    if (engineName === 'ferretdb') {
+      // enginePath is like: ~/.spindb/bin/ferretdb-2.7.0-darwin-arm64
+      // We need to find: ~/.spindb/bin/postgresql-documentdb-*-darwin-arm64
+      const binDir = dirname(enginePath)
+      const ferretDirName = basename(enginePath)
+      // Extract platform-arch from ferretdb directory name (e.g., "darwin-arm64")
+      const parts = ferretDirName.split('-')
+      const platformArch = parts.slice(-2).join('-') // "darwin-arm64"
+
+      const entries = await readdir(binDir, { withFileTypes: true })
+
+      // Check if other FerretDB installations exist for the same platform
+      // If so, don't delete the shared postgresql-documentdb backend
+      const otherFerretInstalls = entries.filter(
+        (entry) =>
+          entry.isDirectory() &&
+          entry.name.startsWith('ferretdb-') &&
+          entry.name.endsWith(platformArch) &&
+          entry.name !== ferretDirName,
+      )
+
+      if (otherFerretInstalls.length > 0) {
+        // Other FerretDB versions exist - skip documentdb deletion
+        spinner.text = `Skipping postgresql-documentdb (shared by ${otherFerretInstalls.length} other FerretDB install(s))`
+      } else {
+        // No other FerretDB installs - safe to delete documentdb backend
+        const documentdbPattern = `postgresql-documentdb-`
+        for (const entry of entries) {
+          if (
+            entry.isDirectory() &&
+            entry.name.startsWith(documentdbPattern) &&
+            entry.name.endsWith(platformArch)
+          ) {
+            const documentdbPath = join(binDir, entry.name)
+            spinner.text = `Deleting postgresql-documentdb backend...`
+            await rm(documentdbPath, { recursive: true, force: true })
+          }
+        }
+      }
+    }
+
     spinner.succeed(`Deleted ${engineName} ${engineVersion}`)
   } catch (error) {
     const e = error as Error
