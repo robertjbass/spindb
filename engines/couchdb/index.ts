@@ -501,13 +501,19 @@ export class CouchDBEngine extends BaseEngine {
     // CouchDB uses COUCHDB_INI_FILES to load config files in order
     // COUCHDB_ARGS_FILE specifies custom vm.args with unique node name
     // On Windows, CouchDB may need additional paths set
-    const env = {
+    const env: Record<string, string | undefined> = {
       ...process.env,
       COUCHDB_INI_FILES: `${defaultIni} ${configPath}`,
       COUCHDB_ARGS_FILE: vmArgsPath,
       // Set CouchDB binary directory for Windows
       COUCHDB_BINDIR: join(binDir, 'bin'),
       COUCHDB_QUERY_SERVER_JAVASCRIPT: join(binDir, 'bin', 'couchjs'),
+    }
+
+    // On Windows, disable os_mon completely to avoid win32sysinfo port crash
+    if (isWindows()) {
+      // Pass extra Erlang flags to disable os_mon application
+      env.ERL_FLAGS = '-os_mon start_disksup false -os_mon start_memsup false -os_mon start_cpu_sup false'
     }
 
     // On Windows, CouchDB ignores COUCHDB_ARGS_FILE and looks for etc/vm.args
