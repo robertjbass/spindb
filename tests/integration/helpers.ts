@@ -691,9 +691,7 @@ export function containerDataExists(
     // For simplicity in tests, we return false for SQLite
     return false
   }
-  // FerretDB containers are stored under 'ferretdb' engine directory
-  const effectiveEngine = engine === Engine.FerretDB ? Engine.FerretDB : engine
-  const containerPath = paths.getContainerPath(containerName, { engine: effectiveEngine })
+  const containerPath = paths.getContainerPath(containerName, { engine })
   return existsSync(containerPath)
 }
 

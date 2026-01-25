@@ -1583,7 +1583,7 @@ enginesCommand
 
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch`,
         ),
       )
       process.exit(1)
