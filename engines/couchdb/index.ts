@@ -581,6 +581,9 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
+        console.error(`[CouchDB Windows] Starting: cmd.exe /c ${couchdbServer}`)
+        console.error(`[CouchDB Windows] CWD: ${binDir}`)
+        console.error(`[CouchDB Windows] PATH includes: ${env.PATH?.substring(0, 200)}...`)
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
@@ -608,12 +611,12 @@ export class CouchDBEngine extends BaseEngine {
         proc.stdout?.on('data', (data: Buffer) => {
           const str = data.toString()
           stdoutOutput += str
-          logDebug(`couchdb stdout: ${str}`)
+          console.error(`[CouchDB Windows stdout] ${str}`)
         })
         proc.stderr?.on('data', (data: Buffer) => {
           const str = data.toString()
           stderrOutput += str
-          logDebug(`couchdb stderr: ${str}`)
+          console.error(`[CouchDB Windows stderr] ${str}`)
         })
 
         proc.unref()

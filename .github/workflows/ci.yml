@@ -1104,18 +1104,6 @@ jobs:
       - name: Show installed engines
         run: pnpm start engines list
 
-      # Debug: Try starting CouchDB manually to see any error output
-      - name: Test CouchDB startup manually (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          echo === Testing CouchDB startup ===
-          cd %USERPROFILE%\.spindb\bin\couchdb-3.5.1-win32-x64
-          echo Current directory: %CD%
-          echo Running couchdb.cmd...
-          timeout /t 5 /nobreak > nul & bin\couchdb.cmd
-        continue-on-error: true
-
       - name: Run CouchDB integration tests
         run: pnpm test:engine couchdb
         timeout-minutes: 15
