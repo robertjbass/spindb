@@ -33,6 +33,7 @@ export enum Engine {
   ClickHouse = 'clickhouse',
   Qdrant = 'qdrant',
   Meilisearch = 'meilisearch',
+  CouchDB = 'couchdb',
 }
 
 // Supported operating systems (matches Node.js process.platform)
@@ -65,6 +66,7 @@ export const ALL_ENGINES = [
   Engine.ClickHouse,
   Engine.Qdrant,
   Engine.Meilisearch,
+  Engine.CouchDB,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -190,6 +192,7 @@ export type ClickHouseFormat = 'sql'
 export type QdrantFormat = 'snapshot'
 export type MeilisearchFormat = 'snapshot'
 export type FerretDBFormat = 'sql' | 'custom'
+export type CouchDBFormat = 'json'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -205,6 +208,7 @@ export type BackupFormatType =
   | ClickHouseFormat
   | QdrantFormat
   | MeilisearchFormat
+  | CouchDBFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -220,6 +224,7 @@ type EngineFormatMap = {
   [Engine.ClickHouse]: ClickHouseFormat
   [Engine.Qdrant]: QdrantFormat
   [Engine.Meilisearch]: MeilisearchFormat
+  [Engine.CouchDB]: CouchDBFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -323,6 +328,8 @@ export type BinaryTool =
   | 'meilisearch'
   // FerretDB tools
   | 'ferretdb'
+  // CouchDB tools
+  | 'couchdb'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -396,6 +403,8 @@ export type SpinDBConfig = {
     meilisearch?: BinaryConfig
     // FerretDB tools
     ferretdb?: BinaryConfig
+    // CouchDB tools
+    couchdb?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

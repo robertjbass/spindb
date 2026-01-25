@@ -10,6 +10,7 @@ import { valkeyEngine } from './valkey'
 import { clickhouseEngine } from './clickhouse'
 import { qdrantEngine } from './qdrant'
 import { meilisearchEngine } from './meilisearch'
+import { couchdbEngine } from './couchdb'
 import { platformService } from '../core/platform-service'
 import { Engine, Platform } from '../types'
 import type { BaseEngine } from './base-engine'
@@ -57,6 +58,9 @@ export const engines: Record<string, BaseEngine> = {
   [Engine.Meilisearch]: meilisearchEngine,
   meili: meilisearchEngine,
   ms: meilisearchEngine,
+  // CouchDB and aliases
+  [Engine.CouchDB]: couchdbEngine,
+  couch: couchdbEngine,
 }
 
 // Get an engine by name

@@ -73,6 +73,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'qdrant',
   // Meilisearch
   'meilisearch',
+  // CouchDB
+  'couchdb',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

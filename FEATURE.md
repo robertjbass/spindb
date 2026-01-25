@@ -41,7 +41,7 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 
 SpinDB supports three types of database engines:
 
-### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch)
+### Server-Based Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB)
 
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
 - Require start/stop lifecycle management
@@ -50,7 +50,7 @@ SpinDB supports three types of database engines:
 
 **Sub-types:**
 - **CLI-based servers** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse): Interact via CLI tools (psql, mysql, redis-cli, etc.)
-- **REST API servers** (Qdrant): Interact via HTTP REST API instead of CLI tools. These require special handling in tests and CLI commands since `spindb run` doesn't apply.
+- **REST API servers** (Qdrant, Meilisearch, CouchDB): Interact via HTTP REST API instead of CLI tools. These require special handling in tests and CLI commands since `spindb run` doesn't apply.
 
 ### File-Based Databases (SQLite, DuckDB)
 
@@ -181,7 +181,7 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `config/os-dependencies.ts` - Add system dependencies
 - [ ] `core/dependency-manager.ts` - Add binary tools to `KNOWN_BINARY_TOOLS` array
 - [ ] `core/config-manager.ts` - Add `XXX_TOOLS` constant and to `ENGINE_BINARY_MAP`
-- [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS`
+- [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS` and width to `ENGINE_ICON_WIDTHS` (verify spacing in "Create new container" menu)
 - [ ] `cli/helpers.ts` - Add `InstalledXxxEngine` type, detection function, and engine prefix to `ENGINE_PREFIXES`
 - [ ] `cli/commands/engines.ts` - Add download case and list display for the engine
 
@@ -451,6 +451,9 @@ Add your engine's backup format configuration. **Important:** Format names are e
 | Redis | `text` | `rdb` | `rdb` |
 | Valkey | `text` | `rdb` | `rdb` |
 | ClickHouse | `sql` | _(none)_ | `sql` |
+| Qdrant | `snapshot` | _(none)_ | `snapshot` |
+| Meilisearch | `snapshot` | _(none)_ | `snapshot` |
+| CouchDB | `json` | _(none)_ | `json` |
 
 ```ts
 export const BACKUP_FORMATS: Record<string, EngineBackupFormats> = {
@@ -611,7 +614,7 @@ export {
 
 ### 8. Engine Icon (`cli/constants.ts`)
 
-Add your engine's icon:
+Add your engine's icon and configure its display width:
 
 ```ts
 export const ENGINE_ICONS: Record<string, string> = {
@@ -624,7 +627,30 @@ export const ENGINE_ICONS: Record<string, string> = {
   valkey: '🔷',
   yourengine: '🔶',  // Add your engine icon
 }
+
+// Configure icon width for proper menu alignment
+export const ENGINE_ICON_WIDTHS: Record<string, number> = {
+  // Most emojis render at width 2
+  postgresql: 2,
+  mysql: 2,
+  // Some emojis render narrower (width 1) - these need padding
+  mariadb: 1,   // 🦭 seal renders narrow
+  sqlite: 1,    // 🪶 feather renders narrow
+  couchdb: 1,   // 🛋 couch renders narrow
+  yourengine: 2,  // Add your engine - test and adjust if needed
+}
 ```
+
+**Important: Verify icon spacing after adding a new engine!**
+
+Different emojis render at different widths in terminals. After adding a new engine:
+
+1. Run `spindb` and navigate to "Create new container"
+2. Check if your engine's icon aligns with others in the list
+3. If the text appears too close to the icon (no space), set width to `1`
+4. If there's extra space before the text, set width to `2`
+
+The `getEngineIconPadded()` function adds padding based on these widths to ensure consistent alignment in menus.
 
 ### 9. CLI Helpers (`cli/helpers.ts`)
 
@@ -851,15 +877,17 @@ if (engine === 'redis' || engine === 'valkey' || engine === 'yourengine') {
 }
 ```
 
-**For REST API engines** (like Qdrant), hide the "Run SQL file" option entirely since there's no CLI shell:
+**For REST API engines** (Qdrant, Meilisearch, CouchDB), hide the "Run SQL file" option entirely since there's no CLI shell:
 
 ```ts
 // Hide "Run SQL file" for REST API engines (they don't have CLI shells)
-if (config.engine !== 'qdrant') {
+if (config.engine !== Engine.Qdrant && config.engine !== Engine.Meilisearch && config.engine !== Engine.CouchDB) {
   const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
   // ... add the run-sql action choice
 }
 ```
+
+**Important:** Always use the `Engine` enum (e.g., `Engine.Qdrant`) instead of string literals (e.g., `'qdrant'`) for type safety.
 
 ### 2. Shell Handlers (`cli/commands/menu/shell-handlers.ts`)
 
@@ -945,7 +973,7 @@ The `openInBrowser()` helper uses platform-specific commands (`open` on macOS, `
 | Category | Engines | Terminology | File Types |
 |----------|---------|-------------|------------|
 | **SQL** | PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse | "SQL file" | `.sql` |
-| **Script** | MongoDB, FerretDB (JavaScript), Qdrant, Meilisearch (REST/JSON) | "Script file" | `.js`, `.json` |
+| **Script** | MongoDB, FerretDB (JavaScript), Qdrant, Meilisearch, CouchDB (REST/JSON) | "Script file" | `.js`, `.json` |
 | **Command** | Redis, Valkey | "Command file" | `.redis`, `.valkey` |
 
 Add your engine to the appropriate `case` in the switch statement:

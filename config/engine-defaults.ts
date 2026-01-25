@@ -187,6 +187,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['mongosh', 'mongodump', 'mongorestore'], // Uses MongoDB client tools
     maxConnections: 200, // PostgreSQL backend default
   },
+  [Engine.CouchDB]: {
+    defaultVersion: '3',
+    defaultPort: 5984, // CouchDB default HTTP port
+    portRange: { start: 5984, end: 6084 },
+    latestVersion: '3',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'http',
+    logFileName: 'couchdb.log',
+    pidFileName: 'couchdb.pid',
+    dataSubdir: 'data',
+    clientTools: [], // CouchDB uses REST API, no separate CLI tools
+    maxConnections: 0, // Not applicable
+  },
 }
 
 /**

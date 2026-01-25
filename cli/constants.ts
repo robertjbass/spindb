@@ -12,6 +12,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   clickhouse: '🏠',
   qdrant: '🧭',
   meilisearch: '🔍',
+  couchdb: '🛋',
 }
 
 // Visual width of each icon in terminal columns
@@ -30,6 +31,7 @@ export const ENGINE_ICON_WIDTHS: Record<string, number> = {
   clickhouse: 2,
   qdrant: 2,
   meilisearch: 2,
+  couchdb: 1, // 🛋 couch renders narrow
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

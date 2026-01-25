@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 12 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 13 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -48,7 +48,7 @@ One consistent interface across SQL databases, document stores, key-value stores
 
 ```bash
 # Same commands work for ANY database
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -70,7 +70,7 @@ spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
 
 ## Platform Coverage
 
-SpinDB works across **12 database engines** and **5 platform architectures** with a **single, consistent API**.
+SpinDB works across **13 database engines** and **5 platform architectures** with a **single, consistent API**.
 
 | Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
 |----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
@@ -86,8 +86,9 @@ SpinDB works across **12 database engines** and **5 platform architectures** wit
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔍 **Meilisearch** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🛋 **CouchDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**58 combinations. One CLI. Zero configuration.**
+**63 combinations. One CLI. Zero configuration.**
 
 ---
 
@@ -166,7 +167,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 | Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
 |---------|--------|--------|--------|--------------|-------|
 | No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Multiple DB engines | ✅ 12 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
+| Multiple DB engines | ✅ 13 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
 | CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
 | Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
@@ -180,7 +181,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 ## Supported Databases
 
-SpinDB supports **12 database engines** with **multiple versions** for each:
+SpinDB supports **13 database engines** with **multiple versions** for each:
 
 | Engine | Type | Versions | Default Port | Query Language |
 |--------|------|----------|--------------|----------------|
@@ -196,10 +197,11 @@ SpinDB supports **12 database engines** with **multiple versions** for each:
 | 🏠 **ClickHouse** | Columnar OLAP | 25.12 | 9000 (TCP), 8123 (HTTP) | SQL (ClickHouse dialect) |
 | 🧭 **Qdrant** | Vector Search | 1 | 6333 (HTTP), 6334 (gRPC) | REST API |
 | 🔍 **Meilisearch** | Full-Text Search | 1 | 7700 | REST API |
+| 🛋 **CouchDB** | Document Store | 3 | 5984 | REST API |
 
 ### Engine Categories
 
-**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch):
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB):
 - Start/stop server processes
 - Bind to localhost ports
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
@@ -601,6 +603,7 @@ SpinDB supports enhanced database shells with auto-completion, syntax highlighti
 | ClickHouse | `clickhouse-client` | - | `usql` |
 | Qdrant | REST API | - | - |
 | Meilisearch | REST API | - | - |
+| CouchDB | REST API | - | - |
 
 Install and use in one command:
 
@@ -751,6 +754,7 @@ spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production
 | ClickHouse | `clickhouse://` or `http://` | `clickhouse://default:pass@host:8123/db` |
 | Qdrant | `qdrant://` or `http://` | `http://host:6333?api_key=KEY` |
 | Meilisearch | `meilisearch://` or `http://` | `http://host:7700?api_key=KEY` |
+| CouchDB | `couchdb://` or `http://` | `http://user:pass@host:5984/db` |
 
 ### Multi-Version Support
 
@@ -831,7 +835,7 @@ The following engines may be added based on community interest:
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
 - **FerretDB Windows** - Not supported (postgresql-documentdb has startup issues on Windows).
-- **Qdrant & Meilisearch** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
+- **Qdrant, Meilisearch & CouchDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---
 
@@ -906,7 +910,7 @@ See [FEATURE.md](FEATURE.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 11 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 12 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 

@@ -184,6 +184,16 @@ export type InstalledFerretDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledCouchDBEngine = {
+  engine: 'couchdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -197,6 +207,7 @@ export type InstalledEngine =
   | InstalledClickHouseEngine
   | InstalledQdrantEngine
   | InstalledMeilisearchEngine
+  | InstalledCouchDBEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -813,6 +824,58 @@ async function getInstalledMeilisearchEngines(): Promise<InstalledMeilisearchEng
   return engines
 }
 
+// Get CouchDB version from binary path
+// Note: CouchDB doesn't support --version flag, so we just verify the binary exists
+// and return null to use the version from the directory name
+async function getCouchDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const couchdbPath = join(binPath, 'bin', `couchdb${ext}`)
+  if (!existsSync(couchdbPath)) {
+    return null
+  }
+  // CouchDB is an Erlang app that tries to start when run with any args
+  // Just return null to use directory-parsed version
+  return null
+}
+
+// Get installed CouchDB engines from downloaded binaries
+async function getInstalledCouchDBEngines(): Promise<InstalledCouchDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledCouchDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('couchdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'couchdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getCouchDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'couchdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 // Get FerretDB version from binary path
 async function getFerretDBVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -899,6 +962,7 @@ const ENGINE_PREFIXES = [
   'clickhouse-',
   'qdrant-',
   'meilisearch-',
+  'couchdb-',
 ] as const
 
 /**
@@ -941,6 +1005,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     clickhouseEngines,
     qdrantEngines,
     meilisearchEngines,
+    couchdbEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -954,6 +1019,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledClickHouseEngines(),
     getInstalledQdrantEngines(),
     getInstalledMeilisearchEngines(),
+    getInstalledCouchDBEngines(),
   ])
 
   return [
@@ -969,6 +1035,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...clickhouseEngines,
     ...qdrantEngines,
     ...meilisearchEngines,
+    ...couchdbEngines,
   ]
 }
 
@@ -984,4 +1051,5 @@ export {
   getInstalledClickHouseEngines,
   getInstalledQdrantEngines,
   getInstalledMeilisearchEngines,
+  getInstalledCouchDBEngines,
 }

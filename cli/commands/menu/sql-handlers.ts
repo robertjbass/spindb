@@ -71,11 +71,12 @@ export async function handleRunSql(containerName: string): Promise<void> {
 
       // Document/search engines use "Script" terminology
       // MongoDB and FerretDB use JavaScript via mongosh
-      // Qdrant and Meilisearch use REST API (JSON)
+      // Qdrant, Meilisearch, and CouchDB use REST API (JSON)
       case Engine.MongoDB:
       case Engine.FerretDB:
       case Engine.Qdrant:
       case Engine.Meilisearch:
+      case Engine.CouchDB:
         return { type: 'Script', lower: 'script' }
 
       // SQL engines use "SQL" terminology

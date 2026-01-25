@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -119,7 +119,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -133,6 +133,7 @@ declare -A BACKUP_FORMATS=(
   [duckdb]="sql|binary"
   [qdrant]="snapshot"
   [meilisearch]="snapshot"
+  [couchdb]="json"
 )
 
 # Results tracking
@@ -323,6 +324,10 @@ insert_seed_data() {
       # Meilisearch uses REST API - seed data via curl (no seed file needed)
       seed_file=""
       ;;
+    couchdb)
+      # CouchDB uses REST API - seed data via curl (no seed file needed)
+      seed_file=""
+      ;;
   esac
 
   # Qdrant uses REST API for seeding, not a file
@@ -384,6 +389,37 @@ insert_seed_data() {
     fi
     # Wait for indexing
     sleep 2
+    return 0
+  fi
+
+  # CouchDB uses REST API for seeding, not a file
+  if [ "$engine" = "couchdb" ]; then
+    local couchdb_port
+    couchdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+    if [ -z "$couchdb_port" ]; then
+      LAST_ERROR="Could not get CouchDB port"
+      return 1
+    fi
+    # Create database
+    if ! curl -sf -X PUT "http://127.0.0.1:${couchdb_port}/testdb" &>/dev/null; then
+      LAST_ERROR="Failed to create CouchDB database"
+      return 1
+    fi
+    # Insert test documents (5 documents to match EXPECTED_COUNTS[couchdb]=5)
+    if ! curl -sf -X POST "http://127.0.0.1:${couchdb_port}/testdb/_bulk_docs" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "docs": [
+          {"_id": "user1", "name": "Alice", "age": 30},
+          {"_id": "user2", "name": "Bob", "age": 25},
+          {"_id": "user3", "name": "Charlie", "age": 35},
+          {"_id": "user4", "name": "Diana", "age": 28},
+          {"_id": "user5", "name": "Eve", "age": 32}
+        ]
+      }' &>/dev/null; then
+      LAST_ERROR="Failed to insert CouchDB documents"
+      return 1
+    fi
     return 0
   fi
 
@@ -457,6 +493,15 @@ get_data_count() {
         echo "$output" | jq -r '.numberOfDocuments' 2>/dev/null
       fi
       ;;
+    couchdb)
+      # CouchDB uses REST API - get document count via curl
+      local couchdb_port
+      couchdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$couchdb_port" ]; then
+        output=$(curl -sf "http://127.0.0.1:${couchdb_port}/${database}" 2>/dev/null)
+        echo "$output" | jq -r '.doc_count' 2>/dev/null
+      fi
+      ;;
   esac
 }
 
@@ -515,6 +560,9 @@ get_backup_extension() {
     meilisearch)
       # Meilisearch uses snapshot format for backups
       echo ".snapshot" ;;
+    couchdb)
+      # CouchDB uses JSON format for backups
+      echo ".json" ;;
     *)
       echo ".$format" ;;
   esac
@@ -1026,6 +1074,14 @@ run_test() {
         query_ok=true
       fi
       ;;
+    couchdb)
+      # CouchDB uses REST API - check welcome endpoint via curl
+      local couchdb_port
+      couchdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$couchdb_port" ] && curl -sf "http://127.0.0.1:${couchdb_port}/" &>/dev/null; then
+        query_ok=true
+      fi
+      ;;
   esac
 
   if [ "$query_ok" = "false" ]; then
@@ -1093,16 +1149,18 @@ run_test() {
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 5: Backup/Restore Tests
   # ─────────────────────────────────────────────────────────────────────────
-  # TODO: Qdrant/Meilisearch backup/restore in Docker E2E tests
-  # Qdrant and Meilisearch use REST API for snapshot-based backup/restore which requires:
-  # 1. Creating snapshot via REST API
+  # TODO: Qdrant/Meilisearch/CouchDB backup/restore in Docker E2E tests
+  # Qdrant, Meilisearch, and CouchDB use REST API for backup/restore which requires:
+  # 1. Creating snapshot/backup via REST API
   # 2. Waiting for snapshot creation to complete
   # 3. Downloading snapshot file
   # 4. Restoring via snapshot recovery/import
   # For now, skip backup/restore tests for these engines in Docker E2E.
-  # The integration tests (pnpm test:qdrant, pnpm test:meilisearch) cover backup/restore.
-  if [ "$engine" = "qdrant" ] || [ "$engine" = "meilisearch" ]; then
-    log_section "Backup/Restore: snapshot format"
+  # The integration tests (pnpm test:engine qdrant/meilisearch/couchdb) cover backup/restore.
+  if [ "$engine" = "qdrant" ] || [ "$engine" = "meilisearch" ] || [ "$engine" = "couchdb" ]; then
+    local format_name="snapshot"
+    [ "$engine" = "couchdb" ] && format_name="json"
+    log_section "Backup/Restore: $format_name format"
     log_step "Backup/restore tests"
     log_step_result "skip"
     log_detail "$engine backup/restore uses REST API (tested in integration tests)"
@@ -1594,7 +1652,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

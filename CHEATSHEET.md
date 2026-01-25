@@ -16,6 +16,7 @@ spindb create mydb -e duckdb            # Create DuckDB
 spindb create mydb -e ferretdb          # Create FerretDB
 spindb create mydb -e qdrant            # Create Qdrant
 spindb create mydb -e meilisearch       # Create Meilisearch
+spindb create mydb -e couchdb           # Create CouchDB
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -165,6 +166,7 @@ spindb doctor --json                    # JSON output for scripting
 | ClickHouse  | 9000    | 9000-9100     |
 | Qdrant      | 6333    | 6333-6400     |
 | Meilisearch | 7700    | 7700-7800     |
+| CouchDB     | 5984    | 5984-6000     |
 | SQLite      | N/A     | File-based    |
 | DuckDB      | N/A     | File-based    |
 
@@ -183,6 +185,7 @@ Valkey:      redis://127.0.0.1:6379/0
 ClickHouse:  clickhouse://default@127.0.0.1:9000/default
 Qdrant:      http://127.0.0.1:6333
 Meilisearch: http://127.0.0.1:7700
+CouchDB:     http://127.0.0.1:5984/mydb
 SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```

@@ -165,6 +165,15 @@ function validateConnectionString(
         return 'Connection string must start with meilisearch://, http://, or https://'
       }
       break
+    case Engine.CouchDB:
+      if (
+        !input.startsWith('couchdb://') &&
+        !input.startsWith('http://') &&
+        !input.startsWith('https://')
+      ) {
+        return 'Connection string must start with couchdb://, http://, or https://'
+      }
+      break
     case Engine.SQLite:
     case Engine.DuckDB:
       return 'File-based engines do not support remote connection strings'

@@ -70,6 +70,8 @@ const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
 const DUCKDB_TOOLS: BinaryTool[] = ['duckdb']
 
+const COUCHDB_TOOLS: BinaryTool[] = ['couchdb']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -88,6 +90,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...VALKEY_TOOLS,
   ...QDRANT_TOOLS,
   ...MEILISEARCH_TOOLS,
+  ...COUCHDB_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -105,6 +108,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.Valkey]: VALKEY_TOOLS,
   [Engine.Qdrant]: QDRANT_TOOLS,
   [Engine.Meilisearch]: MEILISEARCH_TOOLS,
+  [Engine.CouchDB]: COUCHDB_TOOLS,
 }
 
 export class ConfigManager {
@@ -581,6 +585,7 @@ export {
   VALKEY_TOOLS,
   QDRANT_TOOLS,
   MEILISEARCH_TOOLS,
+  COUCHDB_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

@@ -15,7 +15,7 @@ import {
   installEngineDependencies,
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
-import { getEngineIcon } from '../constants'
+import { getEngineIcon, getEngineIconPadded } from '../constants'
 import { type ContainerConfig, type Engine, type BackupFormatType } from '../../types'
 
 // Navigation sentinel values for menu navigation
@@ -221,7 +221,7 @@ export async function promptEngine(options?: {
     | inquirer.Separator
 
   const choices: Choice[] = engines.map((e) => ({
-    name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    name: `${getEngineIconPadded(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
@@ -233,6 +233,7 @@ export async function promptEngine(options?: {
       name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: MAIN_MENU_VALUE,
     })
+    choices.push(new inquirer.Separator())
   }
 
   const { engine } = await escapeablePrompt<{ engine: string }>([
