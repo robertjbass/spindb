@@ -1107,6 +1107,8 @@ jobs:
       - name: Run CouchDB integration tests
         run: pnpm test:engine couchdb
         timeout-minutes: 15
+        env:
+          DEBUG: spindb
 
       - name: Show CouchDB logs on failure (Unix)
         if: failure() && runner.os != 'Windows'

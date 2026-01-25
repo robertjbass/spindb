@@ -1,4 +1,4 @@
-import { spawn, type SpawnOptions } from 'child_process'
+import { spawn, execSync, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join, dirname } from 'path'
@@ -538,6 +538,23 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
+        // Debug: try running couchdb to see what error we get
+        if (process.env.DEBUG === 'spindb') {
+          try {
+            const testResult = execSync(`"${couchdbServer}" 2>&1`, {
+              cwd: binDir,
+              env,
+              timeout: 10000,
+              encoding: 'utf8',
+            })
+            console.error(`[CouchDB Debug] Output: ${testResult}`)
+          } catch (err) {
+            const e = err as { message?: string; stderr?: string; stdout?: string }
+            console.error(`[CouchDB Debug] Error: ${e.message}`)
+            console.error(`[CouchDB Debug] stdout: ${e.stdout}`)
+            console.error(`[CouchDB Debug] stderr: ${e.stderr}`)
+          }
+        }
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
