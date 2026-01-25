@@ -134,6 +134,24 @@ function generateVmArgs(port: number, _containerDir: string): string {
 }
 
 /**
+ * Generate Erlang sys.config to disable os_mon features before application starts.
+ * On Windows, os_mon tries to use win32sysinfo which may crash if the port program
+ * is missing or broken. Setting these in sys.config takes effect before os_mon starts.
+ */
+function generateSysConfig(): string {
+  return `%% SpinDB generated sys.config
+%% Disable os_mon features to avoid win32sysinfo crash on Windows
+[
+ {os_mon, [
+   {start_cpu_sup, false},
+   {start_disksup, false},
+   {start_memsup, false}
+ ]}
+].
+`
+}
+
+/**
  * Parse a CouchDB connection string for remote operations
  */
 function parseCouchDBConnectionString(connectionString: string): {
@@ -510,24 +528,32 @@ export class CouchDBEngine extends BaseEngine {
       COUCHDB_QUERY_SERVER_JAVASCRIPT: join(binDir, 'bin', 'couchjs'),
     }
 
-    // On Windows, disable os_mon completely to avoid win32sysinfo port crash
+    // On Windows, use sys.config to disable os_mon before it starts
+    // The vm.args settings are too late - os_mon crashes during init
     if (isWindows()) {
-      // Pass extra Erlang flags to disable os_mon application
-      env.ERL_FLAGS = '-os_mon start_disksup false -os_mon start_memsup false -os_mon start_cpu_sup false'
-    }
+      // Create sys.config in the container directory
+      const sysConfigPath = join(containerDir, 'sys.config')
+      const sysConfigContent = generateSysConfig()
+      await writeFile(sysConfigPath, sysConfigContent)
 
-    // On Windows, CouchDB ignores COUCHDB_ARGS_FILE and looks for etc/vm.args
-    // Copy our custom vm.args to the expected location
-    if (isWindows()) {
+      // Also write to binary's etc directory (CouchDB may look there)
+      const binSysConfigPath = join(binDir, 'etc', 'sys.config')
+      await writeFile(binSysConfigPath, sysConfigContent)
+
+      // Copy vm.args to where Windows CouchDB expects it
       const expectedVmArgs = join(binDir, 'etc', 'vm.args')
-      try {
-        await writeFile(expectedVmArgs, vmArgsContent)
-        if (process.env.DEBUG === 'spindb') {
-          console.error(`[CouchDB Debug] Wrote vm.args to ${expectedVmArgs}`)
-          console.error(`[CouchDB Debug] Content includes start_disksup: ${vmArgsContent.includes('start_disksup')}`)
-        }
-      } catch (err) {
-        console.error(`[CouchDB Debug] Failed to copy vm.args: ${err}`)
+      await writeFile(expectedVmArgs, vmArgsContent)
+
+      // ERL_FLAGS to point to our sys.config
+      // -config must be the base name without .config extension
+      const configBase = sysConfigPath.replace(/\.config$/, '')
+      env.ERL_FLAGS = `-config "${configBase}"`
+
+      if (process.env.DEBUG === 'spindb') {
+        console.error(`[CouchDB Debug] Wrote sys.config to ${sysConfigPath}`)
+        console.error(`[CouchDB Debug] Wrote sys.config to ${binSysConfigPath}`)
+        console.error(`[CouchDB Debug] Wrote vm.args to ${expectedVmArgs}`)
+        console.error(`[CouchDB Debug] ERL_FLAGS: ${env.ERL_FLAGS}`)
       }
     }
 
