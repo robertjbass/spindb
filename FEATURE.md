@@ -33,6 +33,7 @@ SpinDB supports multiple database engines through an abstract `BaseEngine` class
 2. **Wrapper Pattern**: Functions wrap CLI tools (psql, mysql, mongosh, redis-cli) rather than implementing database logic
 3. **Cross-Platform**: Must work on macOS, Linux, and Windows
 4. **Transactional**: Multi-step operations must be atomic with rollback support
+5. **CI-Verified**: All engines MUST have CI integration tests that pass on all supported platforms before merge
 
 ---
 
@@ -213,9 +214,11 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `tests/unit/{engine}-restore.test.ts` - Restore/backup format unit tests
 - [ ] `package.json` - Add `test:{engine}` script
 
-### CI/CD (2 files)
+### CI/CD (2 files) - REQUIRED
 
-- [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching
+**CRITICAL:** An engine is NOT complete without CI tests. The CI workflow must test your engine on all supported platforms (Ubuntu 22, Ubuntu 24, macOS Intel, macOS ARM, Windows) before merging to main.
+
+- [ ] `.github/workflows/ci.yml` - Add integration test job with binary caching (all 5 OS variants)
 - [ ] `.github/workflows/ci.yml` - Add to `ci-success` job needs and checks
 
 ### Docker Tests (2 files) - CRITICAL
@@ -2307,11 +2310,15 @@ An engine implementation is **complete** when ALL of the following pass:
 3. **Integration Tests**: `pnpm test:engine {engine}` passes (14+ tests)
 4. **All Integration Tests**: `pnpm test:integration` passes (no regressions)
 
-### CI Verification
+### CI Verification - BLOCKING REQUIREMENT
 
-1. GitHub Actions runs on all platforms (ubuntu, macos, windows)
-2. Binary caching is configured for hostdb downloads
-3. CI success job includes your engine
+**An engine cannot be merged to main without passing CI tests on all supported platforms.**
+
+1. **GitHub Actions workflow must include your engine** with a dedicated `test-{engine}` job
+2. **All 5 OS variants must pass**: Ubuntu 22.04, Ubuntu 24.04, macOS 15 (Intel), macOS 14 (ARM), Windows
+3. Binary caching is configured for hostdb downloads (speeds up CI runs)
+4. `ci-success` job must include your engine in its `needs` array and verification checks
+5. **No exceptions**: If your engine doesn't support a platform (e.g., ClickHouse on Windows), exclude that platform from the matrix but test all others
 
 ### File Count Verification
 
