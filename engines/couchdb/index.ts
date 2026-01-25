@@ -139,15 +139,9 @@ function generateVmArgs(port: number, _containerDir: string): string {
  * is missing or broken. Setting these in sys.config takes effect before os_mon starts.
  */
 function generateSysConfig(): string {
-  return `%% SpinDB generated sys.config
-%% Disable os_mon features to avoid win32sysinfo crash on Windows
-[
- {os_mon, [
-   {start_cpu_sup, false},
-   {start_disksup, false},
-   {start_memsup, false}
- ]}
-].
+  // Minimal Erlang sys.config - no comments, just config
+  // os_mon settings must be set BEFORE the application starts
+  return `[{os_mon,[{start_cpu_sup,false},{start_disksup,false},{start_memsup,false}]}].
 `
 }
 
@@ -538,10 +532,6 @@ export class CouchDBEngine extends BaseEngine {
       const releasesSysConfig = join(binDir, 'releases', 'sys.config')
       await writeFile(releasesSysConfig, sysConfigContent)
 
-      // Also write to etc directory for good measure
-      const etcSysConfig = join(binDir, 'etc', 'sys.config')
-      await writeFile(etcSysConfig, sysConfigContent)
-
       // Copy vm.args to where Windows CouchDB expects it
       const expectedVmArgs = join(binDir, 'etc', 'vm.args')
       await writeFile(expectedVmArgs, vmArgsContent)
@@ -550,9 +540,17 @@ export class CouchDBEngine extends BaseEngine {
       const releasesVmArgs = join(binDir, 'releases', 'vm.args')
       await writeFile(releasesVmArgs, vmArgsContent)
 
+      // Add os_mon priv/bin to PATH so win32sysinfo.exe can be found
+      // Also add ERTS bin for any other port programs
+      const osMonPrivBin = join(binDir, 'lib', 'os_mon-2.9.1', 'priv', 'bin')
+      const ertsBin = join(binDir, 'erts-14.2.5.12', 'bin')
+      const existingPath = env.PATH || process.env.PATH || ''
+      env.PATH = `${osMonPrivBin};${ertsBin};${existingPath}`
+
       if (process.env.DEBUG === 'spindb') {
         console.error(`[CouchDB Debug] Wrote sys.config to ${releasesSysConfig}`)
         console.error(`[CouchDB Debug] Wrote vm.args to ${releasesVmArgs}`)
+        console.error(`[CouchDB Debug] Added to PATH: ${osMonPrivBin}`)
       }
     }
 
