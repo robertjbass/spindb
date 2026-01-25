@@ -1,4 +1,4 @@
-import { spawn, execSync, type SpawnOptions } from 'child_process'
+import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join, dirname } from 'path'
@@ -540,7 +540,7 @@ export class CouchDBEngine extends BaseEngine {
       const releasesVmArgs = join(binDir, 'releases', 'vm.args')
       await writeFile(releasesVmArgs, vmArgsContent)
 
-      // AGGRESSIVE FIX: Modify the os_mon.app file directly to disable features
+      // Modify the os_mon.app file directly to disable features
       // This sets the default env values in the application spec itself
       const osMonAppPath = join(binDir, 'lib', 'os_mon-2.9.1', 'ebin', 'os_mon.app')
       try {
@@ -551,13 +551,9 @@ export class CouchDBEngine extends BaseEngine {
           .replace('{start_disksup, true}', '{start_disksup, false}')
           .replace('{start_memsup, true}', '{start_memsup, false}')
         await writeFile(osMonAppPath, modifiedApp)
-        if (process.env.DEBUG === 'spindb') {
-          console.error(`[CouchDB Debug] Modified os_mon.app to disable features`)
-        }
+        logDebug('Modified os_mon.app to disable features')
       } catch (err) {
-        if (process.env.DEBUG === 'spindb') {
-          console.error(`[CouchDB Debug] Failed to modify os_mon.app: ${err}`)
-        }
+        logDebug(`Failed to modify os_mon.app: ${err}`)
       }
 
       // Add os_mon priv/bin to PATH so win32sysinfo.exe can be found
@@ -565,11 +561,9 @@ export class CouchDBEngine extends BaseEngine {
       const existingPath = env.PATH || process.env.PATH || ''
       env.PATH = `${osMonPrivBin};${existingPath}`
 
-      if (process.env.DEBUG === 'spindb') {
-        console.error(`[CouchDB Debug] Wrote sys.config to ${releasesSysConfig}`)
-        console.error(`[CouchDB Debug] Wrote vm.args to ${releasesVmArgs}`)
-        console.error(`[CouchDB Debug] Added to PATH: ${osMonPrivBin}`)
-      }
+      logDebug(`Wrote sys.config to ${releasesSysConfig}`)
+      logDebug(`Wrote vm.args to ${releasesVmArgs}`)
+      logDebug(`Added to PATH: ${osMonPrivBin}`)
     }
 
 
@@ -587,23 +581,6 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
-        // Debug: try running couchdb to see what error we get
-        if (process.env.DEBUG === 'spindb') {
-          try {
-            const testResult = execSync(`"${couchdbServer}" 2>&1`, {
-              cwd: binDir,
-              env,
-              timeout: 10000,
-              encoding: 'utf8',
-            })
-            console.error(`[CouchDB Debug] Output: ${testResult}`)
-          } catch (err) {
-            const e = err as { message?: string; stderr?: string; stdout?: string }
-            console.error(`[CouchDB Debug] Error: ${e.message}`)
-            console.error(`[CouchDB Debug] stdout: ${e.stdout}`)
-            console.error(`[CouchDB Debug] stderr: ${e.stderr}`)
-          }
-        }
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
