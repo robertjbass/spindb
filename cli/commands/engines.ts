@@ -60,7 +60,10 @@ import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager
 import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
 import { meilisearchBinaryManager } from '../../engines/meilisearch/binary-manager'
 import { ferretdbBinaryManager } from '../../engines/ferretdb/binary-manager'
-import { DEFAULT_DOCUMENTDB_VERSION } from '../../engines/ferretdb/version-maps'
+import {
+  DEFAULT_DOCUMENTDB_VERSION,
+  normalizeDocumentDBVersion,
+} from '../../engines/ferretdb/version-maps'
 
 // Pad string to width, accounting for emoji taking 2 display columns
 function padWithEmoji(str: string, width: number): string {
@@ -1568,8 +1571,11 @@ enginesCommand
         console.log(chalk.gray(`  FerretDB location: ${binPath}`))
 
         // Also show postgresql-documentdb location
-        const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
+        const fullDocumentDBVersion = normalizeDocumentDBVersion(
           DEFAULT_DOCUMENTDB_VERSION,
+        )
+        const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
+          fullDocumentDBVersion,
           ferretPlatform,
           ferretArch,
         )

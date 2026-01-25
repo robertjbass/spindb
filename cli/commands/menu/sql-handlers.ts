@@ -14,7 +14,7 @@ import {
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { followFile, getLastNLines } from '../../utils/file-follower'
-import { Engine } from '../../../types'
+import { Engine, assertExhaustive } from '../../../types'
 
 export async function handleRunSql(containerName: string): Promise<void> {
   const config = await containerManager.getConfig(containerName)
@@ -62,9 +62,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
   // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse
   // - Script: MongoDB, FerretDB (JavaScript via mongosh), Qdrant, Meilisearch (REST API)
   // - Command: Redis, Valkey (Redis commands)
-  const getScriptType = (
-    engine: Engine | string,
-  ): { type: string; lower: string } => {
+  const getScriptType = (engine: Engine): { type: string; lower: string } => {
     switch (engine) {
       // Redis-like engines use "Command" terminology
       case Engine.Redis:
@@ -89,9 +87,8 @@ export async function handleRunSql(containerName: string): Promise<void> {
       case Engine.ClickHouse:
         return { type: 'SQL', lower: 'sql' }
 
-      // Fallback for any unhandled engine (should not happen if enum is complete)
       default:
-        return { type: 'SQL', lower: 'sql' }
+        assertExhaustive(engine)
     }
   }
 

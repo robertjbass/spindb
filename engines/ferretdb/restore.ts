@@ -155,7 +155,11 @@ export async function detectBackupFormat(
 export type RestoreOptions = {
   database: string
   drop?: boolean
+  timeoutMs?: number // Timeout in milliseconds (default: 5 minutes)
 }
+
+// Default timeout for restore operations (5 minutes)
+const DEFAULT_RESTORE_TIMEOUT_MS = 5 * 60 * 1000
 
 /**
  * Restore a backup to a FerretDB container
@@ -168,7 +172,7 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const { backendPort } = container
-  const { database, drop = true } = options
+  const { database, drop = true, timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS } = options
 
   if (!backendPort) {
     throw new Error(
@@ -235,6 +239,28 @@ export async function restoreBackup(
     let stdout = ''
     let stderr = ''
     let finished = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    // Helper to clean up and mark finished
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      finished = true
+    }
+
+    // Start timeout timer
+    timeoutId = setTimeout(() => {
+      if (finished) return
+      cleanup()
+      proc.kill('SIGTERM')
+      reject(
+        new Error(
+          `Restore timed out after ${timeoutMs}ms. The ${isSqlFormat ? 'psql' : 'pg_restore'} process was killed.`,
+        ),
+      )
+    }, timeoutMs)
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -246,13 +272,13 @@ export async function restoreBackup(
     proc.on('error', (err) => {
       // Immediately reject and mark finished to prevent race with close handler
       if (finished) return
-      finished = true
+      cleanup()
       reject(err)
     })
 
     proc.on('close', (code) => {
       if (finished) return
-      finished = true
+      cleanup()
 
       if (code === 0) {
         resolve({

@@ -237,7 +237,7 @@ FerretDB is a **composite engine** that requires two separate processes to funct
 
 ### Two-Port Architecture
 
-Each FerretDB container uses TWO ports:
+Each FerretDB container uses TWO user-relevant ports:
 
 | Port | Purpose | Visibility | Default Range |
 |------|---------|------------|---------------|
@@ -245,6 +245,8 @@ Each FerretDB container uses TWO ports:
 | **Internal** | PostgreSQL backend | Hidden | 54320+ |
 
 Users connect to the external port with MongoDB connection strings (`mongodb://localhost:27017`). The internal PostgreSQL port is managed automatically by SpinDB.
+
+> **Note:** FerretDB also binds a debug HTTP port (external port + 10000) for internal metrics/debugging. This port is not exposed to users and is managed automatically by SpinDB.
 
 ### Container Structure
 

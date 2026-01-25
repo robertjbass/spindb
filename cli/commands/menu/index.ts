@@ -194,8 +194,10 @@ export const menuCommand = new Command('menu')
               : 'psql'
           const installed = await promptInstallDependencies(missingTool)
           if (installed) {
-            console.log(chalk.yellow('  Please re-run spindb to continue.'))
+            // Installation succeeded, continue the menu loop so user can retry
+            continue
           }
+          // Installation failed or was declined
           process.exit(1)
         }
 

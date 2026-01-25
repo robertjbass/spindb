@@ -465,8 +465,9 @@ describe('FerretDB Integration Tests', () => {
     })
     assert(!running, 'Container should be stopped')
 
-    // Attempting to stop again should not throw
-    console.log('   ✓ Container is already stopped (would show warning in CLI)')
+    // Attempting to stop again should not throw (idempotent behavior)
+    await engine.stop(config!)
+    console.log('   ✓ Container is already stopped (double-stop handled gracefully)')
   })
 
   it('should delete container with --force', async () => {
