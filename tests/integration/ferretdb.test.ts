@@ -189,6 +189,7 @@ describe('FerretDB Integration Tests', () => {
     assert(sourceConfig !== null, 'Source config should exist')
 
     const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
     const dumpPath = join(tmpdir(), `ferretdb-test-dump-${Date.now()}.dump`)
 
     // Use 'custom' format which supports --clean for proper restore
@@ -201,13 +202,14 @@ describe('FerretDB Integration Tests', () => {
     const updatedConfig = await containerManager.getConfig(clonedContainerName)
     assert(updatedConfig !== null, 'Updated cloned container config should exist')
 
-    await engine.restore(updatedConfig!, dumpPath, {
-      database: 'ferretdb',
-    })
-
-    // Clean up dump file
-    const { rm } = await import('fs/promises')
-    await rm(dumpPath, { force: true })
+    try {
+      await engine.restore(updatedConfig!, dumpPath, {
+        database: 'ferretdb',
+      })
+    } finally {
+      // Clean up dump file regardless of restore success/failure
+      await rm(dumpPath, { force: true })
+    }
 
     console.log('   ✓ Container created from connection string')
   })
@@ -382,21 +384,45 @@ describe('FerretDB Integration Tests', () => {
     const engine = getEngine(ENGINE)
     await engine.initDataDir(portConflictContainerName, TEST_VERSION, {})
 
-    // The container should be created but when we try to start, it should detect conflict
-    const config = await containerManager.getConfig(portConflictContainerName)
-    assert(config !== null, 'Container should be created')
+    // The container should be created with the conflicting port initially
+    const configBefore = await containerManager.getConfig(portConflictContainerName)
+    assert(configBefore !== null, 'Container should be created')
     assertEqual(
-      config?.port,
+      configBefore?.port,
       testPorts[2],
       'Port should be set to conflicting port initially',
     )
 
-    // Clean up this test container
-    await containerManager.delete(portConflictContainerName, { force: true })
+    try {
+      // Attempt to start the container - should either throw or auto-reassign port
+      await engine.start(configBefore!)
+      await containerManager.updateConfig(portConflictContainerName, {
+        status: 'running',
+      })
 
-    console.log(
-      '   ✓ Container created with conflicting port (would auto-reassign on start)',
-    )
+      // If start succeeded, port should have been auto-reassigned
+      const configAfter = await containerManager.getConfig(portConflictContainerName)
+      assert(configAfter !== null, 'Container config should exist after start')
+      assert(
+        configAfter!.port !== testPorts[2],
+        `Port should be auto-reassigned from ${testPorts[2]} (got ${configAfter!.port})`,
+      )
+
+      console.log(
+        `   ✓ Port auto-reassigned from ${testPorts[2]} to ${configAfter!.port}`,
+      )
+
+      // Stop before cleanup
+      await engine.stop(configAfter!)
+      await waitForStopped(portConflictContainerName, ENGINE)
+    } catch (error) {
+      // Port conflict error is also acceptable behavior
+      const err = error as Error
+      console.log(`   ✓ Port conflict detected: ${err.message}`)
+    } finally {
+      // Clean up this test container
+      await containerManager.delete(portConflictContainerName, { force: true })
+    }
   })
 
   it('should show warning when starting already running container', async () => {

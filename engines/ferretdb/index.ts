@@ -64,6 +64,18 @@ const BACKEND_PORT_END = 54400
 
 /**
  * Allocate a port for the PostgreSQL backend
+ *
+ * KNOWN LIMITATION (TOCTOU): There is a race condition between checking port
+ * availability and PostgreSQL actually binding to the port. Another process
+ * could claim the port in between. This is acceptable for SpinDB's use case:
+ *
+ * 1. The backend port range (54320-54400) is unlikely to be used by other apps
+ * 2. SpinDB is a local development tool, not a production server
+ * 3. If a collision occurs, PostgreSQL will fail to start with a clear error
+ * 4. The CLI layer uses startWithRetry() which can re-attempt with a new port
+ *
+ * A more robust solution would use SO_REUSEPORT or hold the socket until
+ * PostgreSQL starts, but this adds complexity for minimal real-world benefit.
  */
 async function allocateBackendPort(): Promise<number> {
   for (let port = BACKEND_PORT_START; port < BACKEND_PORT_END; port++) {
@@ -755,7 +767,12 @@ export class FerretDBEngine extends BaseEngine {
   // Get PostgreSQL backend connection string (for debugging)
   getBackendConnectionString(container: ContainerConfig): string {
     const { backendPort } = container
-    return `postgresql://postgres@127.0.0.1:${backendPort || 54320}/ferretdb`
+    if (!backendPort) {
+      throw new Error(
+        'Backend port not available - start the container first to allocate a port',
+      )
+    }
+    return `postgresql://postgres@127.0.0.1:${backendPort}/ferretdb`
   }
 
   /**

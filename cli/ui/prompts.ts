@@ -118,27 +118,25 @@ export async function escapeablePrompt<T extends Record<string, unknown>>(
       'Cannot prompt in non-interactive mode. Use appropriate flags (--force, --yes, --json) or provide required arguments.',
     )
   }
+
   // Create a promise that rejects when escape is pressed
   const escapePromise = new Promise<never>((_, reject) => {
     escapeReject = reject
   })
 
-  const p = inquirer.prompt(questions)
-  // Register the prompt UI so we can close it on escape
-  // Use type assertion to access the ui property (inquirer's close is protected but accessible)
-  const promptWithUi = p as unknown as { ui?: { close?: () => void } }
-  currentPromptUi = promptWithUi.ui ?? null
-
   try {
+    const p = inquirer.prompt(questions)
+    // Register the prompt UI so we can close it on escape
+    // Use type assertion to access the ui property (inquirer's close is protected but accessible)
+    const promptWithUi = p as unknown as { ui?: { close?: () => void } }
+    currentPromptUi = promptWithUi.ui ?? null
+
     // Race the prompt against the escape promise
     const result = (await Promise.race([p, escapePromise])) as T
-    escapeReject = null
-    currentPromptUi = null
     return result
-  } catch (error) {
+  } finally {
     escapeReject = null
     currentPromptUi = null
-    throw error
   }
 }
 
@@ -168,7 +166,6 @@ export function wasEscapePressed(result: unknown): boolean {
  */
 export async function promptWithEscape<T extends Record<string, unknown>>(
   promptPromise: Promise<T>,
-  _fieldName = 'action',
 ): Promise<T> {
   // Detect non-interactive mode (piped input, scripts, CI environments)
   if (!process.stdin.isTTY) {
@@ -176,6 +173,7 @@ export async function promptWithEscape<T extends Record<string, unknown>>(
       'Cannot prompt in non-interactive mode. Use appropriate flags (--force, --yes, --json) or provide required arguments.',
     )
   }
+
   // Create a promise that rejects when escape is pressed
   const escapePromise = new Promise<never>((_, reject) => {
     escapeReject = reject
@@ -189,13 +187,10 @@ export async function promptWithEscape<T extends Record<string, unknown>>(
   try {
     // Race the prompt against the escape promise
     const result = await Promise.race([promptPromise, escapePromise])
-    escapeReject = null
-    currentPromptUi = null
     return result
-  } catch (error) {
+  } finally {
     escapeReject = null
     currentPromptUi = null
-    throw error // Re-throw to be caught by menu loop
   }
 }
 
@@ -276,7 +271,6 @@ export async function promptEngine(options?: {
         pageSize: 15,
       },
     ]),
-    'engine',
   )
 
   // Escape returns to main menu
@@ -365,7 +359,6 @@ export async function promptVersion(
         default: engineDefs.latestVersion, // Default to latest major
       },
     ]),
-    'majorVersion',
   )
 
   // Handle navigation (including escape)
@@ -413,7 +406,6 @@ export async function promptVersion(
         default: minorVersions[0], // Default to latest
       },
     ]),
-    'version',
   )
 
   // Handle navigation from minor version selection (including escape)

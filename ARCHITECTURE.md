@@ -318,7 +318,7 @@ type FerretDBContainerConfig = ContainerConfig & {
 }
 ```
 
-### Platform Limitations
+### Platform Support
 
 | Platform | FerretDB | PostgreSQL+DocumentDB | Notes |
 |----------|----------|----------------------|-------|
@@ -326,9 +326,7 @@ type FerretDBContainerConfig = ContainerConfig & {
 | darwin-x64 | ✅ | ✅ | Full support |
 | linux-x64 | ✅ | ✅ | Full support |
 | linux-arm64 | ✅ | ✅ | Full support |
-| win32-x64 | ✅ | ❌ | Backend blocked by PostGIS/rum build complexity |
-
-Windows users can run FerretDB via WSL2.
+| win32-x64 | ✅ | ✅ | Full support |
 
 ---
 
@@ -774,13 +772,11 @@ All database binaries are downloaded from [hostdb](https://github.com/robertjbas
 | macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
 | Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
 | Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Windows (x64) | EDB* | hostdb | hostdb | hostdb | ❌** | hostdb | hostdb | ❌*** | hostdb | hostdb | hostdb | hostdb |
+| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | ❌** | hostdb | hostdb | hostdb | hostdb |
 
 *PostgreSQL on Windows uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries.
 
-**FerretDB requires postgresql-documentdb backend, which is blocked on Windows by PostGIS/rum build complexity. Use WSL2.
-
-***ClickHouse binaries not available for Windows in hostdb. Use WSL2.
+**ClickHouse binaries not available for Windows in hostdb. Use WSL2.
 
 **Binary source:**
 - **hostdb**: https://github.com/robertjbass/hostdb - Pre-built database binaries for all platforms

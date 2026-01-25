@@ -6,6 +6,7 @@
 
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, statSync } from 'fs'
+import { open } from 'fs/promises'
 import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { platformService } from '../../core/platform-service'
@@ -77,7 +78,7 @@ export async function detectBackupFormat(
   // Check file header to determine format
   try {
     const buffer = Buffer.alloc(256)
-    const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
+    const fd = await open(filePath, 'r')
     let bytesRead = 0
     try {
       const result = await fd.read(buffer, 0, 256, 0)

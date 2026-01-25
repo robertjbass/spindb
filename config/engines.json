@@ -181,7 +181,7 @@
       "queryLanguage": "javascript",
       "connectionScheme": "mongodb",
       "superuser": null,
-      "clientTools": ["ferretdb"],
+      "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
       "licensing": "Apache-2.0",
       "notes": "MongoDB-compatible proxy using PostgreSQL as backend. Requires postgresql-documentdb."
     }

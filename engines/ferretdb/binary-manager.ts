@@ -113,18 +113,23 @@ class FerretDBCompositeBinaryManager {
   /**
    * Get the path where FerretDB binaries would be installed
    */
-  getFerretDBBinaryPath(version: string, platform: Platform, arch: Arch): string {
+  getFerretDBBinaryPath(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+  ): string {
     const fullVersion = this.getFullVersion(version)
-    return join(
-      paths.bin,
-      `ferretdb-${fullVersion}-${platform}-${arch}`,
-    )
+    return join(paths.bin, `ferretdb-${fullVersion}-${platform}-${arch}`)
   }
 
   /**
    * Get the path where postgresql-documentdb binaries would be installed
    */
-  getDocumentDBBinaryPath(version: string, platform: Platform, arch: Arch): string {
+  getDocumentDBBinaryPath(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+  ): string {
     const fullVersion = this.getFullDocumentDBVersion(version)
     return join(
       paths.bin,
@@ -156,9 +161,7 @@ class FerretDBCompositeBinaryManager {
 
     // Prepend our lib path to any existing LD_LIBRARY_PATH
     const existingLdPath = process.env['LD_LIBRARY_PATH'] || ''
-    const newLdPath = existingLdPath
-      ? `${libPath}:${existingLdPath}`
-      : libPath
+    const newLdPath = existingLdPath ? `${libPath}:${existingLdPath}` : libPath
 
     return {
       LD_LIBRARY_PATH: newLdPath,
@@ -226,9 +229,7 @@ class FerretDBCompositeBinaryManager {
     const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
 
     // Check if already installed
-    if (
-      await this.isInstalled(version, platform, arch, backendVersion)
-    ) {
+    if (await this.isInstalled(version, platform, arch, backendVersion)) {
       onProgress?.({
         stage: 'cached',
         message: 'Using cached FerretDB binaries',
@@ -245,7 +246,11 @@ class FerretDBCompositeBinaryManager {
 
     // Check if FerretDB is already installed (DocumentDB might be missing)
     const ext = platform === Platform.Win32 ? '.exe' : ''
-    const ferretdbBinaryPath = this.getFerretDBBinaryPath(fullVersion, platform, arch)
+    const ferretdbBinaryPath = this.getFerretDBBinaryPath(
+      fullVersion,
+      platform,
+      arch,
+    )
     const ferretdbBinary = join(ferretdbBinaryPath, 'bin', `ferretdb${ext}`)
     const ferretdbAlreadyInstalled = existsSync(ferretdbBinary)
 
@@ -271,7 +276,8 @@ class FerretDBCompositeBinaryManager {
       if (!ferretdbAlreadyInstalled) {
         onProgress?.({
           stage: 'error',
-          message: 'postgresql-documentdb download failed, cleaning up FerretDB...',
+          message:
+            'postgresql-documentdb download failed, cleaning up FerretDB...',
         })
         await rm(ferretdbPath, { recursive: true, force: true }).catch(() => {})
       }
@@ -305,7 +311,10 @@ class FerretDBCompositeBinaryManager {
     }
 
     const url = getFerretDBBinaryUrl(version, platform, arch)
-    const tempDir = join(paths.bin, `temp-ferretdb-${fullVersion}-${platform}-${arch}`)
+    const tempDir = join(
+      paths.bin,
+      `temp-ferretdb-${fullVersion}-${platform}-${arch}`,
+    )
     const archiveExt = platform === Platform.Win32 ? 'zip' : 'tar.gz'
     const archiveFile = join(tempDir, `ferretdb.${archiveExt}`)
 
@@ -329,9 +338,19 @@ class FerretDBCompositeBinaryManager {
       await this.downloadArchive(url, archiveFile, 'FerretDB')
 
       if (platform === Platform.Win32) {
-        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       } else {
-        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       }
 
       // Make binaries executable (Unix only)
@@ -631,9 +650,13 @@ class FerretDBCompositeBinaryManager {
 
     try {
       const { stdout } = await spawnAsync(ferretdbBinary, ['--version'])
-      const match = stdout.match(/(?:ferretdb\s+)?(?:version\s+)?v?(\d+\.\d+\.\d+)/)
+      const match = stdout.match(
+        /(?:ferretdb\s+)?(?:version\s+)?v?(\d+\.\d+\.\d+)/,
+      )
       if (!match) {
-        throw new Error(`Could not parse FerretDB version from: ${stdout.trim()}`)
+        throw new Error(
+          `Could not parse FerretDB version from: ${stdout.trim()}`,
+        )
       }
 
       const reportedVersion = match[1]
@@ -666,11 +689,15 @@ class FerretDBCompositeBinaryManager {
     const initdb = join(binPath, 'bin', `initdb${ext}`)
 
     if (!existsSync(pgCtl)) {
-      throw new Error(`postgresql-documentdb binary not found at ${binPath}/bin/`)
+      throw new Error(
+        `postgresql-documentdb binary not found at ${binPath}/bin/`,
+      )
     }
 
     if (!existsSync(initdb)) {
-      throw new Error(`initdb not found at ${binPath}/bin/ - required for container initialization`)
+      throw new Error(
+        `initdb not found at ${binPath}/bin/ - required for container initialization`,
+      )
     }
 
     // Get spawn env for Linux (LD_LIBRARY_PATH)
@@ -678,7 +705,9 @@ class FerretDBCompositeBinaryManager {
 
     // Verify pg_ctl works
     try {
-      const { stdout } = await spawnAsync(pgCtl, ['--version'], { env: spawnEnv })
+      const { stdout } = await spawnAsync(pgCtl, ['--version'], {
+        env: spawnEnv,
+      })
       // Expected output: "pg_ctl (PostgreSQL) 17.x.x"
       const match = stdout.match(/PostgreSQL[)\s]+(\d+)/)
       if (!match) {
@@ -700,12 +729,17 @@ class FerretDBCompositeBinaryManager {
       const err = error as Error & { code?: string | number | null }
 
       // Check for library loading issues (common on macOS/Linux with hostdb binaries)
-      if (err.code === null || err.code === 'ENOENT' || err.message.includes('dyld') || err.message.includes('GLIBC')) {
+      if (
+        !err.code ||
+        err.code === 'ENOENT' ||
+        err.message.includes('dyld') ||
+        err.message.includes('GLIBC')
+      ) {
         throw new Error(
           `postgresql-documentdb pg_ctl failed to execute. This is likely due to missing or incompatible libraries.\n` +
-          `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
-          `See: https://github.com/robertjbass/hostdb/issues\n` +
-          `Original error: ${err.message || 'Process killed (library loading failed)'}`,
+            `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
+            `See: https://github.com/robertjbass/hostdb/issues\n` +
+            `Original error: ${err.message || 'Process killed (library loading failed)'}`,
         )
       }
 
@@ -716,26 +750,31 @@ class FerretDBCompositeBinaryManager {
 
     // Verify initdb works (critical for container creation)
     try {
-      const { stdout } = await spawnAsync(initdb, ['--version'], { env: spawnEnv })
+      const { stdout } = await spawnAsync(initdb, ['--version'], {
+        env: spawnEnv,
+      })
       // Expected output: "initdb (PostgreSQL) 17.x.x"
       const match = stdout.match(/PostgreSQL[)\s]+(\d+)/)
       if (!match) {
-        throw new Error(
-          `Could not parse initdb version from: ${stdout.trim()}`,
-        )
+        throw new Error(`Could not parse initdb version from: ${stdout.trim()}`)
       }
       logDebug(`initdb verified: ${stdout.trim()}`)
     } catch (error) {
       const err = error as Error & { code?: string | number | null }
 
       // Check for library loading issues
-      if (err.code === null || err.code === 'ENOENT' || err.message.includes('dyld') || err.message.includes('GLIBC')) {
+      if (
+        !err.code ||
+        err.code === 'ENOENT' ||
+        err.message.includes('dyld') ||
+        err.message.includes('GLIBC')
+      ) {
         throw new Error(
           `postgresql-documentdb initdb failed to execute. This is likely due to missing or incompatible libraries.\n` +
-          `initdb is required for FerretDB container initialization.\n` +
-          `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
-          `See: https://github.com/robertjbass/hostdb/issues\n` +
-          `Original error: ${err.message || 'Process killed (library loading failed)'}`,
+            `initdb is required for FerretDB container initialization.\n` +
+            `The hostdb binaries may need to be rebuilt with proper rpath settings.\n` +
+            `See: https://github.com/robertjbass/hostdb/issues\n` +
+            `Original error: ${err.message || 'Process killed (library loading failed)'}`,
         )
       }
 
@@ -787,7 +826,13 @@ class FerretDBCompositeBinaryManager {
         if (lib.endsWith('.dylib')) {
           const libPath = join(libDir, lib)
           try {
-            await spawnAsync('codesign', ['--force', '--deep', '-s', '-', libPath])
+            await spawnAsync('codesign', [
+              '--force',
+              '--deep',
+              '-s',
+              '-',
+              libPath,
+            ])
           } catch {
             // Ignore signing errors for individual libs
             logDebug(`Failed to sign ${lib}, continuing...`)
@@ -803,7 +848,13 @@ class FerretDBCompositeBinaryManager {
           if (lib.endsWith('.dylib')) {
             const libPath = join(pgLibDir, lib)
             try {
-              await spawnAsync('codesign', ['--force', '--deep', '-s', '-', libPath])
+              await spawnAsync('codesign', [
+                '--force',
+                '--deep',
+                '-s',
+                '-',
+                libPath,
+              ])
             } catch {
               logDebug(`Failed to sign ${lib}, continuing...`)
             }
@@ -819,7 +870,13 @@ class FerretDBCompositeBinaryManager {
       for (const binary of binaries) {
         const binaryPath = join(binDir, binary)
         try {
-          await spawnAsync('codesign', ['--force', '--deep', '-s', '-', binaryPath])
+          await spawnAsync('codesign', [
+            '--force',
+            '--deep',
+            '-s',
+            '-',
+            binaryPath,
+          ])
         } catch {
           // Ignore signing errors for individual binaries
           logDebug(`Failed to sign ${binary}, continuing...`)

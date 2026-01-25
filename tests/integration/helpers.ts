@@ -490,27 +490,13 @@ export async function waitForReady(
           .getMysqladminPath()
           .catch(() => 'mysqladmin')
         await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
-      } else if (engine === Engine.MongoDB) {
-        // Use mongosh to ping MongoDB
+      } else if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+        // Use mongosh to ping MongoDB/FerretDB (both use MongoDB wire protocol)
         const engineImpl = getEngine(engine)
         const mongoshPath = await engineImpl
           .getMongoshPath()
           .catch(() => 'mongosh')
         // Windows uses double quotes, Unix uses single quotes for shell escaping
-        const pingScript = 'db.runCommand({ping:1})'
-        let cmd: string
-        if (isWindows()) {
-          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval "${pingScript}" --quiet`
-        } else {
-          cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} --eval '${pingScript}' --quiet`
-        }
-        await execAsync(cmd, { timeout: 5000 })
-      } else if (engine === Engine.FerretDB) {
-        // Use mongosh to ping FerretDB (no auth required - runs with --no-auth)
-        const engineImpl = getEngine(Engine.FerretDB)
-        const mongoshPath = await engineImpl
-          .getMongoshPath()
-          .catch(() => 'mongosh')
         const pingScript = 'db.runCommand({ping:1})'
         let cmd: string
         if (isWindows()) {
