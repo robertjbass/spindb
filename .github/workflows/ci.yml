@@ -1050,7 +1050,6 @@ jobs:
   # NOTE: CouchDB is a REST API engine (no CLI shell like psql/redis-cli)
   #       Tests use HTTP requests to interact with the database
   #       Docker E2E tests use curl for connectivity/data operations
-  # NOTE: Windows/macOS skipped - CouchDB's Erlang VM has startup issues on these platforms
   # ============================================
   test-couchdb:
     name: CouchDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -1065,7 +1064,15 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Ubuntu 24
-          # Windows/macOS not supported - CouchDB's Erlang VM fails to start
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
