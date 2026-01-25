@@ -540,12 +540,30 @@ export class CouchDBEngine extends BaseEngine {
       const releasesVmArgs = join(binDir, 'releases', 'vm.args')
       await writeFile(releasesVmArgs, vmArgsContent)
 
+      // AGGRESSIVE FIX: Modify the os_mon.app file directly to disable features
+      // This sets the default env values in the application spec itself
+      const osMonAppPath = join(binDir, 'lib', 'os_mon-2.9.1', 'ebin', 'os_mon.app')
+      try {
+        const osMonApp = await readFile(osMonAppPath, 'utf8')
+        // Replace the default env settings to disable all features
+        const modifiedApp = osMonApp
+          .replace('{start_cpu_sup, true}', '{start_cpu_sup, false}')
+          .replace('{start_disksup, true}', '{start_disksup, false}')
+          .replace('{start_memsup, true}', '{start_memsup, false}')
+        await writeFile(osMonAppPath, modifiedApp)
+        if (process.env.DEBUG === 'spindb') {
+          console.error(`[CouchDB Debug] Modified os_mon.app to disable features`)
+        }
+      } catch (err) {
+        if (process.env.DEBUG === 'spindb') {
+          console.error(`[CouchDB Debug] Failed to modify os_mon.app: ${err}`)
+        }
+      }
+
       // Add os_mon priv/bin to PATH so win32sysinfo.exe can be found
-      // Also add ERTS bin for any other port programs
       const osMonPrivBin = join(binDir, 'lib', 'os_mon-2.9.1', 'priv', 'bin')
-      const ertsBin = join(binDir, 'erts-14.2.5.12', 'bin')
       const existingPath = env.PATH || process.env.PATH || ''
-      env.PATH = `${osMonPrivBin};${ertsBin};${existingPath}`
+      env.PATH = `${osMonPrivBin};${existingPath}`
 
       if (process.env.DEBUG === 'spindb') {
         console.error(`[CouchDB Debug] Wrote sys.config to ${releasesSysConfig}`)
