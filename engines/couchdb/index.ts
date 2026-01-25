@@ -126,11 +126,10 @@ function generateVmArgs(port: number, _containerDir: string): string {
 # Set maximum SSL session lifetime
 -ssl session_lifetime 300
 
-# OS Mon Settings
+# OS Mon Settings - disable all monitoring on Windows to avoid win32sysinfo issues
 -os_mon start_cpu_sup false
 -os_mon start_memsup false
--os_mon disk_space_check_interval 5
--os_mon disk_almost_full_threshold 1.0
+-os_mon start_disksup false
 `
 }
 
