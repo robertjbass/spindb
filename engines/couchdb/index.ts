@@ -501,10 +501,14 @@ export class CouchDBEngine extends BaseEngine {
 
     // CouchDB uses COUCHDB_INI_FILES to load config files in order
     // COUCHDB_ARGS_FILE specifies custom vm.args with unique node name
+    // On Windows, CouchDB may need additional paths set
     const env = {
       ...process.env,
       COUCHDB_INI_FILES: `${defaultIni} ${configPath}`,
       COUCHDB_ARGS_FILE: vmArgsPath,
+      // Set CouchDB binary directory for Windows
+      COUCHDB_BINDIR: join(binDir, 'bin'),
+      COUCHDB_QUERY_SERVER_JAVASCRIPT: join(binDir, 'bin', 'couchjs'),
     }
 
     // Temporary debug output for CI troubleshooting
@@ -520,8 +524,10 @@ export class CouchDBEngine extends BaseEngine {
     // Spawn CouchDB process
     if (isWindows()) {
       return new Promise((resolve, reject) => {
+        // On Windows, run from the CouchDB installation directory
+        // The Erlang VM expects to find files relative to its installation
         const spawnOpts: SpawnOptions = {
-          cwd: containerDir,
+          cwd: binDir,
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
           windowsHide: true,
@@ -530,6 +536,7 @@ export class CouchDBEngine extends BaseEngine {
 
         // On Windows, .cmd files must be executed via cmd.exe
         console.error(`[CouchDB Debug] Spawning: cmd.exe /c ${couchdbServer}`)
+        console.error(`[CouchDB Debug] CWD changed to: ${binDir}`)
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
