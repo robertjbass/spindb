@@ -436,7 +436,7 @@ export const createCommand = new Command('create')
 
           if (locationInfo.type === 'not_found') {
             return exitWithError({
-              message: `Location not found: ${options.from}. Provide a valid file path or connection string (postgresql://, mysql://, mongodb://, redis://, sqlite://, duckdb://)`,
+              message: `Location not found: ${options.from}. Provide a valid file path or connection string (postgresql://, mysql://, redis://, sqlite://, duckdb://)`,
               json: options.json,
             })
           }
@@ -891,6 +891,10 @@ export const createCommand = new Command('create')
                   e.message.includes('pg_dump not found') ||
                   e.message.includes('ENOENT')
                 ) {
+                  // In JSON mode, don't prompt - just exit with error
+                  if (options.json) {
+                    return exitWithError({ message: 'pg_dump not installed', json: true })
+                  }
                   const installed = await promptInstallDependencies('pg_dump')
                   if (!installed) {
                     return exitWithError({ message: 'pg_dump not installed', json: options.json })
