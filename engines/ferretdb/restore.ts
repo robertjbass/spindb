@@ -207,6 +207,12 @@ export async function restoreBackup(
   if (isSqlFormat) {
     // psql: use -f flag for file input
     args.push('-f', backupPath)
+    if (drop) {
+      logWarning(
+        'SQL format restore: --clean is not supported. ' +
+          'If you need to drop existing objects, ensure the SQL dump was created with pg_dump --clean.',
+      )
+    }
   } else {
     // pg_restore: add options for custom/directory format
     if (drop) {

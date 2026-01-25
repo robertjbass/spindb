@@ -152,49 +152,6 @@ export function wasEscapePressed(result: unknown): boolean {
 }
 
 /**
- * Wrap an inquirer prompt to register it with the global escape handler.
- * When escape is pressed globally, an EscapeError is thrown,
- * which is caught by the main menu loop to restart the menu.
- *
- * Automatically detects non-interactive mode (piped input, scripts, CI) and throws
- * a clear error instead of hanging on user input that can never come.
- *
- * @example
- * const { action } = await promptWithEscape(
- *   inquirer.prompt([{ type: 'list', name: 'action', choices: [...] }])
- * )
- */
-export async function promptWithEscape<T extends Record<string, unknown>>(
-  promptPromise: Promise<T>,
-): Promise<T> {
-  // Detect non-interactive mode (piped input, scripts, CI environments)
-  if (!process.stdin.isTTY) {
-    throw new Error(
-      'Cannot prompt in non-interactive mode. Use appropriate flags (--force, --yes, --json) or provide required arguments.',
-    )
-  }
-
-  // Create a promise that rejects when escape is pressed
-  const escapePromise = new Promise<never>((_, reject) => {
-    escapeReject = reject
-  })
-
-  // Register the prompt UI so we can close it on escape
-  // Use type assertion to access the ui property (inquirer's close is protected but accessible)
-  const promptWithUi = promptPromise as unknown as { ui?: { close?: () => void } }
-  currentPromptUi = promptWithUi.ui ?? null
-
-  try {
-    // Race the prompt against the escape promise
-    const result = await Promise.race([promptPromise, escapePromise])
-    return result
-  } finally {
-    escapeReject = null
-    currentPromptUi = null
-  }
-}
-
-/**
  * Prompt for container name
  * @param defaultName - Default value for the container name
  * @param options.allowBack - Allow empty input to go back (returns null)
@@ -261,17 +218,15 @@ export async function promptEngine(options?: {
     })
   }
 
-  const { engine } = await promptWithEscape(
-    inquirer.prompt<{ engine: string }>([
-      {
-        type: 'list',
-        name: 'engine',
-        message: 'Select database engine:',
-        choices,
-        pageSize: 15,
-      },
-    ]),
-  )
+  const { engine } = await escapeablePrompt<{ engine: string }>([
+    {
+      type: 'list',
+      name: 'engine',
+      message: 'Select database engine:',
+      choices,
+      pageSize: 15,
+    },
+  ])
 
   // Escape returns to main menu
   if (engine === ESCAPE_VALUE) {
@@ -349,17 +304,15 @@ export async function promptVersion(
     })
   }
 
-  const { majorVersion } = await promptWithEscape(
-    inquirer.prompt<{ majorVersion: string }>([
-      {
-        type: 'list',
-        name: 'majorVersion',
-        message: 'Select major version:',
-        choices: majorChoices,
-        default: engineDefs.latestVersion, // Default to latest major
-      },
-    ]),
-  )
+  const { majorVersion } = await escapeablePrompt<{ majorVersion: string }>([
+    {
+      type: 'list',
+      name: 'majorVersion',
+      message: 'Select major version:',
+      choices: majorChoices,
+      default: engineDefs.latestVersion, // Default to latest major
+    },
+  ])
 
   // Handle navigation (including escape)
   if (
@@ -396,17 +349,15 @@ export async function promptVersion(
     })
   }
 
-  const { version } = await promptWithEscape(
-    inquirer.prompt<{ version: string }>([
-      {
-        type: 'list',
-        name: 'version',
-        message: `Select ${engine.displayName} ${majorVersion} version:`,
-        choices: minorChoices,
-        default: minorVersions[0], // Default to latest
-      },
-    ]),
-  )
+  const { version } = await escapeablePrompt<{ version: string }>([
+    {
+      type: 'list',
+      name: 'version',
+      message: `Select ${engine.displayName} ${majorVersion} version:`,
+      choices: minorChoices,
+      default: minorVersions[0], // Default to latest
+    },
+  ])
 
   // Handle navigation from minor version selection (including escape)
   if (version === ESCAPE_VALUE) {

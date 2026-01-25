@@ -173,7 +173,11 @@ export const menuCommand = new Command('menu')
         const e = error as Error
 
         // If escape was pressed, just restart the menu
-        if (error instanceof EscapeError || checkAndResetEscape() || !e.message || e.message.includes('prompt was closed')) {
+        if (
+          error instanceof EscapeError ||
+          checkAndResetEscape() ||
+          e.message?.includes('prompt was closed')
+        ) {
           continue
         }
 

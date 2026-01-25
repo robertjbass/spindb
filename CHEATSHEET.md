@@ -151,6 +151,8 @@ spindb deps install                     # Install missing tools
 | SQLite      | N/A     | File-based    |
 | DuckDB      | N/A     | File-based    |
 
+> **Note:** FerretDB and MongoDB share the default port 27017 (and range 27017–27100); use different ports if running both concurrently. Similarly, Redis and Valkey share port 6379.
+
 ## Connection String Formats
 
 ```
