@@ -113,6 +113,7 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Connection scheme**: `http://` (e.g., `http://127.0.0.1:5984/mydb`)
 - **Database creation**: Explicit via PUT request to database endpoint
 - **No --version flag**: CouchDB is an Erlang application that tries to start when run with any arguments. Binary verification only checks file existence, not version output.
+- **Windows/macOS not supported**: CouchDB's Erlang VM has startup issues on Windows and macOS in CI environments. Linux is the only supported platform for now.
 - **Windows binary**: CouchDB on Windows uses `couchdb.cmd` (batch file), not `couchdb.exe`. The binary manager and engine use `getCouchDBExtension()` helper to return `.cmd` on Windows.
 - **Fauxton authentication**: CouchDB 3.x requires an admin account. Even with `require_valid_user = false` in the config, Fauxton's session-based auth still shows a login screen. Default credentials are `admin`/`admin`. The shell handler shows these credentials before opening the browser.
 
