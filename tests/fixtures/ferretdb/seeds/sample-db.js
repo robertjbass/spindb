@@ -2,7 +2,8 @@
  * FerretDB seed script for integration tests
  * Creates test_user collection with 5 documents
  *
- * Usage: mongosh "mongodb://spindb:spindb@localhost:27017/testdb" --file sample-db.js
+ * Usage: mongosh "mongodb://localhost:27017/testdb" --file sample-db.js
+ * Note: SpinDB runs FerretDB with --no-auth, so no credentials are needed.
  */
 
 // Switch to the test database (creates it if it doesn't exist)

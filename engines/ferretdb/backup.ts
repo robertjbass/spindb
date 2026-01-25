@@ -106,14 +106,22 @@ export async function createBackup(
     const proc = spawn(pgDump, args, spawnOptions)
 
     let stderr = ''
+    let finished = false
 
     proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
 
-    proc.on('error', reject)
+    proc.on('error', (err) => {
+      if (finished) return
+      finished = true
+      reject(err)
+    })
 
     proc.on('close', async (code) => {
+      if (finished) return
+      finished = true
+
       if (code === 0) {
         // Get backup size
         let size = 0

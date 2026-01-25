@@ -383,7 +383,8 @@ class FerretDBCompositeBinaryManager {
     const binPath = this.getDocumentDBBinaryPath(fullVersion, platform, arch)
 
     // Check if postgresql-documentdb is already installed
-    const pgCtl = join(binPath, 'bin', 'pg_ctl')
+    const ext = platform === Platform.Win32 ? '.exe' : ''
+    const pgCtl = join(binPath, 'bin', `pg_ctl${ext}`)
     if (existsSync(pgCtl)) {
       onProgress?.({
         stage: 'cached',

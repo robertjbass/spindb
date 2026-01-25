@@ -229,6 +229,8 @@ export async function restoreBackup(
 
     let stdout = ''
     let stderr = ''
+    let finished = false
+    let spawnError: Error | null = null
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -237,9 +239,20 @@ export async function restoreBackup(
       stderr += data.toString()
     })
 
-    proc.on('error', reject)
+    proc.on('error', (err) => {
+      spawnError = err
+    })
 
     proc.on('close', (code) => {
+      if (finished) return
+      finished = true
+
+      // If spawn itself failed, reject with that error
+      if (spawnError) {
+        reject(spawnError)
+        return
+      }
+
       if (code === 0) {
         resolve({
           format: format.format,
@@ -249,7 +262,13 @@ export async function restoreBackup(
         })
       } else {
         // pg_restore may exit with non-zero but still restore some data
-        if (stderr.includes('already exists') || stderr.includes('WARNING')) {
+        // Check for specific warning patterns (not just any occurrence of these words)
+        const isWarningOnly =
+          /\balready exists\b/.test(stderr) ||
+          /^WARNING:/m.test(stderr) ||
+          /^pg_restore: warning:/im.test(stderr)
+
+        if (isWarningOnly) {
           logWarning(`Restore completed with warnings: ${stderr}`)
           resolve({
             format: format.format,
