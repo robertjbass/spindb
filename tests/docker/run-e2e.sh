@@ -111,7 +111,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Expected counts and backup formats
 # Format names are engine-specific semantic names (no longer sql|dump for all)
 declare -A EXPECTED_COUNTS=(
-  [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
+  [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5 [ferretdb]=5
   [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3
 )
 declare -A BACKUP_FORMATS=(
@@ -119,6 +119,7 @@ declare -A BACKUP_FORMATS=(
   [mysql]="sql|compressed"
   [mariadb]="sql|compressed"
   [mongodb]="bson|archive"
+  [ferretdb]="sql|custom"
   [redis]="text|rdb"
   [valkey]="text|rdb"
   [clickhouse]="sql"
@@ -299,6 +300,9 @@ insert_seed_data() {
     mongodb)
       seed_file="$FIXTURES_DIR/mongodb/seeds/sample-db.js"
       ;;
+    ferretdb)
+      seed_file="$FIXTURES_DIR/ferretdb/seeds/sample-db.js"
+      ;;
     redis)
       seed_file="$FIXTURES_DIR/redis/seeds/sample-db.redis"
       ;;
@@ -421,7 +425,7 @@ get_data_count() {
       fi
       echo "$count"
       ;;
-    mongodb)
+    mongodb|ferretdb)
       output=$(spindb run "$container_name" -c "db.test_user.countDocuments()" -d "$database" 2>/dev/null)
       echo "$output" | grep -oE '[0-9]+' | head -1
       ;;
@@ -1583,17 +1587,6 @@ fi
 # Run engine tests
 for engine in postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch; do
   if should_run_test "$engine"; then
-    # Skip FerretDB on Linux: hostdb postgresql-documentdb bundle is missing libpq.so.5 and
-    # requires ICU 72 (Ubuntu 22.04 has ICU 70). The hostdb linux-arm64/x64 builds need to
-    # bundle these libraries like the macOS build does. Tracked at:
-    # https://github.com/robertjbass/hostdb/issues
-    if [ "$engine" = "ferretdb" ]; then
-      log_header "$engine"
-      echo "  ${YELLOW}Skipped: postgresql-documentdb bundle missing libpq.so.5 on Linux${RESET}"
-      echo "  ${GRAY}  The hostdb linux builds need to bundle libpq and ICU libraries.${RESET}"
-      continue
-    fi
-
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then
       run_test "$engine" "$version"

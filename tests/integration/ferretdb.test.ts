@@ -19,7 +19,6 @@ import {
   waitForReady,
   waitForStopped,
   containerDataExists,
-  getConnectionString,
   runScriptFile,
   runScriptSQL,
 } from './helpers'
@@ -157,12 +156,8 @@ describe('FerretDB Integration Tests', () => {
       `\n📋 Creating container "${clonedContainerName}" from connection string...`,
     )
 
-    // Note: FerretDB uses PostgreSQL backend for backup/restore, not MongoDB connection strings
-    const _sourceConnectionString = getConnectionString(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
-    )
+    // Note: FerretDB uses PostgreSQL backend for backup/restore, not MongoDB connection strings.
+    // We don't use the MongoDB connection string directly since pg_dump/pg_restore works on the backend.
 
     // Create container
     await containerManager.create(clonedContainerName, {

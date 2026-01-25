@@ -316,13 +316,19 @@ async function waitForEnter(): Promise<void> {
 
   return new Promise((resolve) => {
     process.stdout.write(chalk.gray('\nPress Enter to continue...'))
-    // Disable raw mode so Enter key works normally (not just any keypress)
-    process.stdin.setRawMode?.(false)
-    process.stdin.resume()
-    process.stdin.once('data', () => {
-      process.stdin.pause()
+    try {
+      // Disable raw mode so Enter key works normally (not just any keypress)
+      // setRawMode may fail if stdin is not a TTY (already checked above, but guard anyway)
+      process.stdin.setRawMode?.(false)
+      process.stdin.resume()
+      process.stdin.once('data', () => {
+        process.stdin.pause()
+        resolve()
+      })
+    } catch {
+      // If stdin operations fail (e.g., stdin closed), just resolve immediately
       resolve()
-    })
+    }
   })
 }
 

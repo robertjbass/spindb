@@ -692,7 +692,7 @@ export function containerDataExists(
     return false
   }
   // FerretDB containers are stored under 'ferretdb' engine directory
-  const effectiveEngine = engine === Engine.FerretDB ? 'ferretdb' : engine
+  const effectiveEngine = engine === Engine.FerretDB ? Engine.FerretDB : engine
   const containerPath = paths.getContainerPath(containerName, { engine: effectiveEngine })
   return existsSync(containerPath)
 }
