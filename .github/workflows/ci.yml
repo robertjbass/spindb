@@ -1129,10 +1129,22 @@ jobs:
           Write-Host "=== CouchDB container directories ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\couchdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
           Write-Host ""
-          Write-Host "=== CouchDB binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "couchdb*" } | Select-Object FullName
+          Write-Host "=== CouchDB binary var/log directory ==="
+          $binLogFile = "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64\var\log\couchdb.log"
+          if (Test-Path $binLogFile) {
+            Write-Host "--- $binLogFile ---"
+            Get-Content $binLogFile -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Log file not found: $binLogFile"
+          }
           Write-Host ""
-          Write-Host "=== CouchDB log files ==="
+          Write-Host "=== Erlang crash dump (if any) ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64" -Filter "erl_crash.dump" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -Tail 100 -ErrorAction SilentlyContinue
+          }
+          Write-Host ""
+          Write-Host "=== Container log files ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\couchdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "--- $($_.FullName) ---"
             Get-Content $_.FullName -ErrorAction SilentlyContinue
