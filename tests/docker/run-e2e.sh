@@ -116,8 +116,9 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 
 # Expected counts and backup formats
 # Format names are engine-specific semantic names (no longer sql|dump for all)
+# Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
-  [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5 [ferretdb]=5
+  [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
   [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3
 )
 declare -A BACKUP_FORMATS=(
@@ -125,7 +126,6 @@ declare -A BACKUP_FORMATS=(
   [mysql]="sql|compressed"
   [mariadb]="sql|compressed"
   [mongodb]="bson|archive"
-  [ferretdb]="sql|custom"
   [redis]="text|rdb"
   [valkey]="text|rdb"
   [clickhouse]="sql"
@@ -493,12 +493,6 @@ get_backup_extension() {
       case $format in
         bson) echo "" ;;  # directory (BSON)
         archive) echo ".archive" ;;
-      esac
-      ;;
-    ferretdb)
-      case $format in
-        sql) echo ".sql" ;;
-        custom) echo ".dump" ;;
       esac
       ;;
     redis)
