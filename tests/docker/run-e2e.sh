@@ -46,6 +46,12 @@ if [ -n "$ENGINE_FILTER" ]; then
     echo "Valid utility tests: $VALID_UTILITY_TESTS"
     exit 1
   fi
+  # FerretDB is skipped in Docker E2E due to timeout/signal issues
+  if [ "$ENGINE_FILTER" = "ferretdb" ]; then
+    echo "FerretDB is skipped in Docker E2E tests due to timeout/signal handling issues."
+    echo "FerretDB tests run on GitHub Actions macOS/Linux runners via: pnpm test:engine ferretdb"
+    exit 0
+  fi
 fi
 
 # Timeouts
@@ -1591,7 +1597,10 @@ else
 fi
 
 # Run engine tests
-for engine in postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch; do
+# Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
+# composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
+# tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then
