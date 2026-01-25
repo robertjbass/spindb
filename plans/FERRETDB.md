@@ -801,7 +801,7 @@ This section documents the fix for the DocumentDB extension loading issue.
 ### The Problem
 
 FerretDB containers were failing to load the documentdb extension with errors like:
-```
+```bash
 ERROR: could not open extension control file "/opt/homebrew/share/postgresql@17/extension/documentdb.control": No such file or directory
 ```
 
