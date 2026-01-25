@@ -515,6 +515,7 @@ export class CouchDBEngine extends BaseEngine {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
           windowsHide: true,
+          shell: true, // Required for .cmd batch files on Windows
           env,
         }
 
