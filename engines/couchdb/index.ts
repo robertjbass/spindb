@@ -41,6 +41,14 @@ const ENGINE = 'couchdb'
 const engineDef = getEngineDefaults(ENGINE)
 
 /**
+ * Get the correct extension for CouchDB binary.
+ * On Windows, CouchDB uses a .cmd batch file, not .exe
+ */
+function getCouchDBExtension(): string {
+  return isWindows() ? '.cmd' : ''
+}
+
+/**
  * Generate CouchDB local.ini configuration content
  * CouchDB 3.x requires at least one admin account to start
  */
@@ -275,9 +283,9 @@ export class CouchDBEngine extends BaseEngine {
 
   // Verify that CouchDB binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
-    const ext = platformService.getExecutableExtension()
     // CouchDB has a startup script rather than a direct binary
-    const serverPath = join(binPath, 'bin', `couchdb${ext}`)
+    // On Windows it's .cmd, on Unix it's just 'couchdb'
+    const serverPath = join(binPath, 'bin', `couchdb${getCouchDBExtension()}`)
     return existsSync(serverPath)
   }
 
@@ -304,8 +312,7 @@ export class CouchDBEngine extends BaseEngine {
     )
 
     // Register binaries in config
-    const ext = platformService.getExecutableExtension()
-    const toolPath = join(binPath, 'bin', `couchdb${ext}`)
+    const toolPath = join(binPath, 'bin', `couchdb${getCouchDBExtension()}`)
     if (existsSync(toolPath)) {
       await configManager.setBinaryPath('couchdb', toolPath, 'bundled')
     }
@@ -369,8 +376,7 @@ export class CouchDBEngine extends BaseEngine {
       platform,
       arch,
     })
-    const ext = platformService.getExecutableExtension()
-    const serverPath = join(binPath, 'bin', `couchdb${ext}`)
+    const serverPath = join(binPath, 'bin', `couchdb${getCouchDBExtension()}`)
     if (existsSync(serverPath)) {
       return serverPath
     }
@@ -395,8 +401,7 @@ export class CouchDBEngine extends BaseEngine {
         platform,
         arch,
       })
-      const ext = platformService.getExecutableExtension()
-      const couchdbPath = join(binPath, 'bin', `couchdb${ext}`)
+      const couchdbPath = join(binPath, 'bin', `couchdb${getCouchDBExtension()}`)
       if (existsSync(couchdbPath)) {
         return couchdbPath
       }
@@ -431,8 +436,7 @@ export class CouchDBEngine extends BaseEngine {
     let couchdbServer: string | null = null
 
     if (binaryPath && existsSync(binaryPath)) {
-      const ext = platformService.getExecutableExtension()
-      const serverPath = join(binaryPath, 'bin', `couchdb${ext}`)
+      const serverPath = join(binaryPath, 'bin', `couchdb${getCouchDBExtension()}`)
       if (existsSync(serverPath)) {
         couchdbServer = serverPath
         logDebug(`Using stored binary path: ${couchdbServer}`)

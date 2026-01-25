@@ -50,6 +50,8 @@ class CouchDBBinaryManager extends BaseBinaryManager {
    * Override verify to just check binary existence.
    * CouchDB doesn't support --version flag - it's an Erlang application that
    * tries to start the server when run with any arguments.
+   *
+   * Note: On Windows, CouchDB uses a .cmd batch file, not .exe
    */
   async verify(
     version: string,
@@ -64,7 +66,8 @@ class CouchDBBinaryManager extends BaseBinaryManager {
       arch,
     })
 
-    const ext = platform === Platform.Win32 ? '.exe' : ''
+    // CouchDB on Windows uses .cmd batch file, not .exe
+    const ext = platform === Platform.Win32 ? '.cmd' : ''
     const serverPath = join(binPath, 'bin', `${this.config.serverBinary}${ext}`)
 
     if (!existsSync(serverPath)) {
