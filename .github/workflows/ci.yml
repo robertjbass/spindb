@@ -1095,7 +1095,7 @@ jobs:
         id: couchdb-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-couchdb-3-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-couchdb-3-v2-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download CouchDB binaries
       - name: Install CouchDB via SpinDB
