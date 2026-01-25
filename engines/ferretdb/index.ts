@@ -23,7 +23,7 @@ import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import { containerManager } from '../../core/container-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import { logDebug, logWarning, assertValidDatabaseName } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
 import { ferretdbBinaryManager } from './binary-manager'
@@ -813,6 +813,7 @@ export class FerretDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
 
     try {
@@ -837,6 +838,7 @@ export class FerretDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
 
     try {
