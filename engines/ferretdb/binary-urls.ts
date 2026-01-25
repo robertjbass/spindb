@@ -3,8 +3,11 @@
  *
  * Generates download URLs for FerretDB binaries from the hostdb GitHub releases.
  * FerretDB requires two binaries:
- * - ferretdb: MongoDB-compatible proxy (all platforms)
- * - postgresql-documentdb: PostgreSQL 17 + DocumentDB extension (all platforms)
+ * - ferretdb: MongoDB-compatible proxy
+ * - postgresql-documentdb: PostgreSQL 17 + DocumentDB extension
+ *
+ * Note: Windows is not currently supported due to postgresql-documentdb startup issues.
+ * The binaries exist on hostdb but fail to start properly on Windows.
  */
 
 import { normalizeVersion, normalizeDocumentDBVersion } from './version-maps'
@@ -12,12 +15,12 @@ import { buildHostdbUrl } from '../../core/hostdb-client'
 import { Engine, Platform, type Arch } from '../../types'
 
 // Supported platforms for FerretDB (both proxy and backend)
+// Note: Windows (win32-x64) is excluded due to postgresql-documentdb startup issues
 export const FERRETDB_SUPPORTED_PLATFORMS = new Set([
   'darwin-arm64',
   'darwin-x64',
   'linux-arm64',
   'linux-x64',
-  'win32-x64',
 ])
 
 // Supported platforms for postgresql-documentdb backend
@@ -60,7 +63,7 @@ export function getFerretDBBinaryUrl(
 
   if (!hostdbPlatform) {
     throw new Error(
-      `Unsupported platform: ${platform}-${arch}. FerretDB hostdb binaries are available for: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64`,
+      `Unsupported platform: ${platform}-${arch}. FerretDB is only supported on macOS and Linux.`,
     )
   }
 
@@ -91,7 +94,7 @@ export function getDocumentDBBinaryUrl(
 
   if (!DOCUMENTDB_SUPPORTED_PLATFORMS.has(key)) {
     throw new Error(
-      `Unsupported platform: ${platform}-${arch}. postgresql-documentdb binaries are available for: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64`,
+      `Unsupported platform: ${platform}-${arch}. FerretDB is only supported on macOS and Linux.`,
     )
   }
 
@@ -124,7 +127,7 @@ export function getBinaryUrls(
   if (!isPlatformSupported(platform, arch)) {
     throw new Error(
       `FerretDB is not available on ${platform}-${arch}.\n` +
-        'Supported platforms: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64',
+        'FerretDB is only supported on macOS and Linux.',
     )
   }
 

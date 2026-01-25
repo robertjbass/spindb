@@ -80,14 +80,14 @@ SpinDB works across **12 database engines** and **5 platform architectures** wit
 | 🪶 **SQLite** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🦆 **DuckDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🍃 **MongoDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🦔 **FerretDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦔 **FerretDB** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🔴 **Redis** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔍 **Meilisearch** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**59 combinations. One CLI. Zero configuration.**
+**58 combinations. One CLI. Zero configuration.**
 
 ---
 
@@ -500,7 +500,7 @@ spindb connect docs
 ```
 
 **Version:** 2 (2.7.0)
-**Platforms:** macOS, Linux, Windows
+**Platforms:** macOS, Linux (no Windows support)
 **Architecture:** FerretDB proxy + PostgreSQL with DocumentDB extension
 **Query language:** JavaScript (via `mongosh`)
 **Backups:** Uses `pg_dump` on embedded PostgreSQL backend
@@ -830,6 +830,7 @@ The following engines may be added based on community interest:
 
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
+- **FerretDB Windows** - Not supported (postgresql-documentdb has startup issues on Windows).
 - **Qdrant & Meilisearch** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---

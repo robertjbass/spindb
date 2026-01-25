@@ -1533,6 +1533,20 @@ enginesCommand
       }
 
       if (['ferretdb', 'ferret'].includes(normalizedEngine)) {
+        // Check platform support
+        const { platform } = platformService.getPlatformInfo()
+        if (platform === Platform.Win32) {
+          console.error(
+            uiError('FerretDB is not supported on Windows via hostdb'),
+          )
+          console.log(
+            chalk.gray(
+              '  FerretDB binaries are only available for macOS and Linux.',
+            ),
+          )
+          process.exit(1)
+        }
+
         if (!version) {
           console.error(uiError('FerretDB requires a version (e.g., 2)'))
           process.exit(1)

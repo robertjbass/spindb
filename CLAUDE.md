@@ -156,6 +156,7 @@ Engines can be referenced by aliases in CLI commands:
 All engines download binaries from [hostdb](https://github.com/robertjbass/hostdb) except:
 - **PostgreSQL on Windows**: Uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries. File IDs in `engines/postgresql/edb-binary-urls.ts`.
 - **ClickHouse**: macOS/Linux only (no Windows support in hostdb)
+- **FerretDB**: macOS/Linux only (postgresql-documentdb has Windows startup issues)
 
 ### FerretDB (Composite Engine)
 
@@ -444,8 +445,9 @@ Menu navigation patterns:
 
 1. **Local only** - Binds to 127.0.0.1 (remote planned for v1.1)
 2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
-3. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
-4. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
+3. **FerretDB Windows** - Not supported (postgresql-documentdb startup issues, works in WSL)
+4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
+5. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
 
 ## Publishing
 

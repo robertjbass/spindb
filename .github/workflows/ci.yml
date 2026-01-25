@@ -522,6 +522,7 @@ jobs:
   # FerretDB Integration Tests
   # Uses SpinDB to download FerretDB + postgresql-documentdb (composite engine)
   # FerretDB requires TWO binaries: ferretdb (proxy) + postgresql-documentdb (backend)
+  # Note: Windows is not supported due to postgresql-documentdb startup issues
   # ============================================
   test-ferretdb:
     name: FerretDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -542,9 +543,7 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
-          - os: windows-latest
-            icon: 🔷
-            label: Windows
+          # Windows not supported - postgresql-documentdb has startup issues
     steps:
       - name: Checkout
         uses: actions/checkout@v4

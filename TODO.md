@@ -154,6 +154,14 @@ Combine common multi-step workflows into single commands. These should remain in
   - linux-arm64: Requires `ubuntu-24.04-arm` or self-hosted runner
   - Use GitHub Actions matrix strategy to parallelize
   - Trade-off: macOS runners cost 10x Linux minutes
+- [ ] **Windows support for ClickHouse and FerretDB** - Currently not supported due to binary issues
+  - **ClickHouse**: hostdb doesn't have Windows builds. Investigate building with MinGW/MSYS2 or providing WSL2 fallback
+  - **FerretDB**: hostdb has Windows binaries but postgresql-documentdb fails to start. Debug startup issues or provide WSL2 fallback
+  - **WSL2 fallback strategy**: For Windows users who need these engines, consider adding WSL2 detection and proxy mode:
+    1. Detect if WSL2 is available on Windows
+    2. If user tries to create ClickHouse/FerretDB on Windows, offer to run in WSL2
+    3. Proxy connections from Windows host to WSL2 container
+    4. Trade-off: Adds complexity, requires WSL2 setup, but provides Windows compatibility
 
 ### Distribution
 

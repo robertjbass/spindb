@@ -15,7 +15,7 @@ import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { paths } from '../../config/paths'
-import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
+import { spawnAsync } from '../../core/spawn-utils'
 import { isRenameFallbackError } from '../../core/fs-error-utils'
 import { logDebug } from '../../core/error-handler'
 import {
@@ -584,20 +584,20 @@ class FerretDBCompositeBinaryManager {
 
   /**
    * Extract Windows binaries from ZIP file
+   *
+   * FerretDB does not support Windows due to postgresql-documentdb startup issues.
+   * Override to throw a clear error.
    */
   private async extractWindowsBinaries(
-    zipFile: string,
-    binPath: string,
-    tempDir: string,
-    onProgress?: ProgressCallback,
+    _zipFile: string,
+    _binPath: string,
+    _tempDir: string,
+    _onProgress?: ProgressCallback,
   ): Promise<void> {
-    onProgress?.({
-      stage: 'extracting',
-      message: 'Extracting binaries...',
-    })
-
-    await extractWindowsArchive(zipFile, tempDir)
-    await this.moveExtractedEntries(tempDir, binPath)
+    throw new Error(
+      'FerretDB binaries are not available for Windows. ' +
+        'FerretDB is only supported on macOS and Linux.',
+    )
   }
 
   /**
