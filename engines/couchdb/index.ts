@@ -530,30 +530,29 @@ export class CouchDBEngine extends BaseEngine {
 
     // On Windows, use sys.config to disable os_mon before it starts
     // The vm.args settings are too late - os_mon crashes during init
+    // Erlang reads releases/sys.config at startup, so we modify that file
     if (isWindows()) {
-      // Create sys.config in the container directory
-      const sysConfigPath = join(containerDir, 'sys.config')
       const sysConfigContent = generateSysConfig()
-      await writeFile(sysConfigPath, sysConfigContent)
 
-      // Also write to binary's etc directory (CouchDB may look there)
-      const binSysConfigPath = join(binDir, 'etc', 'sys.config')
-      await writeFile(binSysConfigPath, sysConfigContent)
+      // The CRITICAL location - Erlang release reads from releases/sys.config
+      const releasesSysConfig = join(binDir, 'releases', 'sys.config')
+      await writeFile(releasesSysConfig, sysConfigContent)
+
+      // Also write to etc directory for good measure
+      const etcSysConfig = join(binDir, 'etc', 'sys.config')
+      await writeFile(etcSysConfig, sysConfigContent)
 
       // Copy vm.args to where Windows CouchDB expects it
       const expectedVmArgs = join(binDir, 'etc', 'vm.args')
       await writeFile(expectedVmArgs, vmArgsContent)
 
-      // ERL_FLAGS to point to our sys.config
-      // -config must be the base name without .config extension
-      const configBase = sysConfigPath.replace(/\.config$/, '')
-      env.ERL_FLAGS = `-config "${configBase}"`
+      // Also update releases/vm.args
+      const releasesVmArgs = join(binDir, 'releases', 'vm.args')
+      await writeFile(releasesVmArgs, vmArgsContent)
 
       if (process.env.DEBUG === 'spindb') {
-        console.error(`[CouchDB Debug] Wrote sys.config to ${sysConfigPath}`)
-        console.error(`[CouchDB Debug] Wrote sys.config to ${binSysConfigPath}`)
-        console.error(`[CouchDB Debug] Wrote vm.args to ${expectedVmArgs}`)
-        console.error(`[CouchDB Debug] ERL_FLAGS: ${env.ERL_FLAGS}`)
+        console.error(`[CouchDB Debug] Wrote sys.config to ${releasesSysConfig}`)
+        console.error(`[CouchDB Debug] Wrote vm.args to ${releasesVmArgs}`)
       }
     }
 
