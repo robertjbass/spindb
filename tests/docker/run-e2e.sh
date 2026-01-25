@@ -895,8 +895,16 @@ run_test() {
   log_section "Download Binaries"
 
   log_step "Download $engine $version from hostdb"
-  if ! spindb engines download "$engine" "$version" &>/dev/null; then
+  local download_output
+  if ! download_output=$(spindb engines download "$engine" "$version" 2>&1); then
     log_step_fail
+    # Show the actual error for debugging
+    if [ -n "$download_output" ]; then
+      echo ""
+      echo "  ${RED}Download error output:${RESET}"
+      echo "$download_output" | sed 's/^/    /'
+      echo ""
+    fi
     failure_reason="Binary download failed"
     record_result "$engine" "$version" "FAILED" "$failure_reason"
     print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
@@ -911,8 +919,16 @@ run_test() {
   log_section "Container Lifecycle"
 
   log_step "Create container"
-  if ! spindb create "$container_name" --engine "$engine" --db-version "$version" --no-start &>/dev/null; then
+  local create_output
+  if ! create_output=$(spindb create "$container_name" --engine "$engine" --db-version "$version" --no-start 2>&1); then
     log_step_fail
+    # Show the actual error for debugging
+    if [ -n "$create_output" ]; then
+      echo ""
+      echo "  ${RED}Create error output:${RESET}"
+      echo "$create_output" | sed 's/^/    /'
+      echo ""
+    fi
     failure_reason="Container creation failed"
     record_result "$engine" "$version" "FAILED" "$failure_reason"
     print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
@@ -923,8 +939,16 @@ run_test() {
 
   if [ "$is_file_based" = "false" ]; then
     log_step "Start container"
-    if ! spindb start "$container_name" &>/dev/null; then
+    local start_output
+    if ! start_output=$(spindb start "$container_name" 2>&1); then
       log_step_fail
+      # Show the actual error for debugging
+      if [ -n "$start_output" ]; then
+        echo ""
+        echo "  ${RED}Start error output:${RESET}"
+        echo "$start_output" | sed 's/^/    /'
+        echo ""
+      fi
       spindb delete "$container_name" --yes &>/dev/null || true
       failure_reason="Container start failed"
       record_result "$engine" "$version" "FAILED" "$failure_reason"
@@ -1559,6 +1583,17 @@ fi
 # Run engine tests
 for engine in postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch; do
   if should_run_test "$engine"; then
+    # Skip FerretDB on Linux: hostdb postgresql-documentdb bundle is missing libpq.so.5 and
+    # requires ICU 72 (Ubuntu 22.04 has ICU 70). The hostdb linux-arm64/x64 builds need to
+    # bundle these libraries like the macOS build does. Tracked at:
+    # https://github.com/robertjbass/hostdb/issues
+    if [ "$engine" = "ferretdb" ]; then
+      log_header "$engine"
+      echo "  ${YELLOW}Skipped: postgresql-documentdb bundle missing libpq.so.5 on Linux${RESET}"
+      echo "  ${GRAY}  The hostdb linux builds need to bundle libpq and ICU libraries.${RESET}"
+      continue
+    fi
+
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then
       run_test "$engine" "$version"
