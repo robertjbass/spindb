@@ -515,11 +515,11 @@ export class CouchDBEngine extends BaseEngine {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
           windowsHide: true,
-          shell: true, // Required for .cmd batch files on Windows
           env,
         }
 
-        const proc = spawn(couchdbServer!, [], spawnOpts)
+        // On Windows, .cmd files must be executed via cmd.exe
+        const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
         let stdoutOutput = ''
