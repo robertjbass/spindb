@@ -1,4 +1,4 @@
-import { spawn, execSync, type SpawnOptions } from 'child_process'
+import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join, dirname } from 'path'
@@ -511,15 +511,18 @@ export class CouchDBEngine extends BaseEngine {
       COUCHDB_QUERY_SERVER_JAVASCRIPT: join(binDir, 'bin', 'couchjs'),
     }
 
-    // Temporary debug output for CI troubleshooting
-    console.error(`[CouchDB Debug] Environment:`)
-    console.error(`  COUCHDB_INI_FILES: ${env.COUCHDB_INI_FILES}`)
-    console.error(`  COUCHDB_ARGS_FILE: ${env.COUCHDB_ARGS_FILE}`)
-    console.error(`  Binary: ${couchdbServer}`)
-    console.error(`  CWD: ${containerDir}`)
-    console.error(`  Default ini exists: ${existsSync(defaultIni)}`)
-    console.error(`  Config path exists: ${existsSync(configPath)}`)
-    console.error(`  VM args exists: ${existsSync(vmArgsPath)}`)
+    // On Windows, CouchDB ignores COUCHDB_ARGS_FILE and looks for etc/vm.args
+    // Copy our custom vm.args to the expected location
+    if (isWindows()) {
+      const expectedVmArgs = join(binDir, 'etc', 'vm.args')
+      try {
+        await writeFile(expectedVmArgs, vmArgsContent)
+        logDebug(`Copied vm.args to ${expectedVmArgs}`)
+      } catch (err) {
+        logDebug(`Failed to copy vm.args: ${err}`)
+      }
+    }
+
 
     // Spawn CouchDB process
     if (isWindows()) {
@@ -535,25 +538,6 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
-        console.error(`[CouchDB Debug] Spawning: cmd.exe /c ${couchdbServer}`)
-        console.error(`[CouchDB Debug] CWD: ${binDir}`)
-
-        // Try to get more info about why CouchDB fails to start
-        try {
-          const testResult = execSync(`"${couchdbServer}" -help 2>&1`, {
-            cwd: binDir,
-            env,
-            timeout: 5000,
-            encoding: 'utf8',
-          })
-          console.error(`[CouchDB Debug] Help output: ${testResult}`)
-        } catch (helpErr) {
-          const err = helpErr as { message?: string; stderr?: string; stdout?: string }
-          console.error(`[CouchDB Debug] Help failed: ${err.message}`)
-          console.error(`[CouchDB Debug] stdout: ${err.stdout}`)
-          console.error(`[CouchDB Debug] stderr: ${err.stderr}`)
-        }
-
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
