@@ -13,7 +13,7 @@ import { getSupportedEngines } from '../config/engine-defaults'
 
 // Test container detection patterns
 // These match the naming conventions used by integration tests
-const TEST_CONTAINER_PATTERNS = [
+export const TEST_CONTAINER_PATTERNS = [
   // Pattern: name-test_<8-char-hex> (e.g., duckdb-test_04b0613f)
   /^.+-test_[0-9a-f]{6,}$/i,
   // Pattern: name-test-suffix_<8-char-hex> (e.g., ferretdb-test-conflict_21e4d447)
@@ -89,17 +89,20 @@ export async function deleteTestContainer(
 }
 
 /**
- * Delete all orphaned test containers.
+ * Delete all orphaned test containers in parallel.
  * Useful for cleanup after integration tests.
  *
- * @returns Number of containers deleted
+ * @returns Number of containers successfully deleted
  */
 export async function cleanupTestContainers(): Promise<number> {
   const orphaned = await findOrphanedTestContainers()
 
-  for (const container of orphaned) {
-    await deleteTestContainer(container)
-  }
+  const results = await Promise.allSettled(
+    orphaned.map((container) => deleteTestContainer(container)),
+  )
 
-  return orphaned.length
+  // Count successful deletions
+  const successCount = results.filter((r) => r.status === 'fulfilled').length
+
+  return successCount
 }

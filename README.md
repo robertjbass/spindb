@@ -504,7 +504,7 @@ spindb connect docs
 **Architecture:** FerretDB proxy + PostgreSQL with DocumentDB extension
 **Query language:** JavaScript (via `mongosh`)
 **Backups:** Uses `pg_dump` on embedded PostgreSQL backend
-**Tools:** `ferretdb`, `mongosh` (for client connections)
+**Tools:** `ferretdb`, `mongosh` (for client connections), `pg_dump`/`pg_restore` (bundled with embedded PostgreSQL)
 
 FerretDB is a MongoDB-compatible database that stores data in PostgreSQL. It's useful when you want MongoDB's API but PostgreSQL's reliability and SQL access to your data.
 

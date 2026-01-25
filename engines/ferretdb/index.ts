@@ -670,10 +670,23 @@ export class FerretDBEngine extends BaseEngine {
         if (!isNaN(pid) && platformService.isProcessRunning(pid)) {
           logDebug(`Killing FerretDB process ${pid}`)
           await platformService.terminateProcess(pid, false)
-          await new Promise((resolve) => setTimeout(resolve, 2000))
 
+          // Poll until process exits or timeout (10 seconds)
+          const maxWaitMs = 10000
+          const pollIntervalMs = 200
+          const startTime = Date.now()
+
+          while (Date.now() - startTime < maxWaitMs) {
+            if (!platformService.isProcessRunning(pid)) {
+              logDebug(`FerretDB process ${pid} terminated gracefully`)
+              break
+            }
+            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+          }
+
+          // Force kill if still running after timeout
           if (platformService.isProcessRunning(pid)) {
-            logWarning(`Graceful termination failed, force killing ${pid}`)
+            logWarning(`Graceful termination timed out, force killing ${pid}`)
             await platformService.terminateProcess(pid, true)
           }
         }
@@ -772,6 +785,9 @@ export class FerretDBEngine extends BaseEngine {
     if (!backendPort) {
       throw new Error('Backend port not set - start the container first')
     }
+
+    // Validate database name before restore (defense-in-depth)
+    assertValidDatabaseName(database)
 
     return restoreBackup(container, backupPath, {
       database,

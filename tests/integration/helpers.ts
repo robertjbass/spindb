@@ -873,6 +873,19 @@ export async function runScriptSQL(
   })
 }
 
+/**
+ * Execute inline JavaScript using engine.runScript for MongoDB-compatible engines.
+ * Alias for runScriptSQL - MongoDB/FerretDB use JavaScript instead of SQL.
+ * Named separately for clarity when testing document databases.
+ */
+export async function runScriptJS(
+  containerName: string,
+  script: string,
+  database?: string,
+): Promise<void> {
+  return runScriptSQL(containerName, script, database)
+}
+
 // Meilisearch helper functions
 
 /**

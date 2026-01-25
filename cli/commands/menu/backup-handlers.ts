@@ -1153,7 +1153,7 @@ export async function handleRestoreForContainer(
     // Handle file restore
     console.log(
       chalk.gray(
-        '  Drag and drop the backup file here, or type the path (press Enter to cancel)',
+        '  Drag & drop, enter path (abs or rel), or press Enter to go back (esc - main menu)',
       ),
     )
     const { backupPath: rawBackupPath } = await escapeablePrompt<{

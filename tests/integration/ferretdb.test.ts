@@ -20,7 +20,7 @@ import {
   waitForStopped,
   containerDataExists,
   runScriptFile,
-  runScriptSQL,
+  runScriptJS,
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
@@ -288,9 +288,9 @@ describe('FerretDB Integration Tests', () => {
       `\n✏️  Deleting one document using engine.runScript with inline JS...`,
     )
 
-    // Use runScriptSQL which internally calls engine.runScript with --sql option
-    // For FerretDB (MongoDB-compatible), the "sql" is actually JavaScript
-    await runScriptSQL(
+    // Use runScriptJS for MongoDB-compatible engines (FerretDB)
+    // This is an alias for runScriptSQL that makes the intent clearer
+    await runScriptJS(
       containerName,
       "db.test_user.deleteOne({email: 'eve@example.com'})",
       DATABASE,

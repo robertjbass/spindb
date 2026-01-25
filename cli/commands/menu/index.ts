@@ -187,17 +187,13 @@ export const menuCommand = new Command('menu')
 
         if (error instanceof MissingToolError) {
           missingTool = error.tool
-        } else if (
+        } else if (e.message) {
           // Fallback for older callers that may throw plain Error with message
-          e.message.includes('pg_restore not found') ||
-          e.message.includes('psql not found') ||
-          e.message.includes('pg_dump not found')
-        ) {
-          missingTool = e.message.includes('pg_restore')
-            ? 'pg_restore'
-            : e.message.includes('pg_dump')
-              ? 'pg_dump'
-              : 'psql'
+          // Use regex to extract tool name from "<tool> not found" pattern
+          const toolMatch = e.message.match(/(\w+(?:-\w+)*)\s+not found/i)
+          if (toolMatch) {
+            missingTool = toolMatch[1]
+          }
         }
 
         if (missingTool) {

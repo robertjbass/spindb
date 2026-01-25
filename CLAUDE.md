@@ -191,6 +191,8 @@ MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)
 - [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) - linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
 - [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) - All platforms including win32-x64
 
+**Note on FerretDB platform support:** While the FerretDB proxy binary is available on all platforms, the full FerretDB stack requires both binaries (ferretdb + postgresql-documentdb). SpinDB automatically downloads both binaries for supported platforms. Check the postgresql-documentdb release for the actual platforms where FerretDB can run.
+
 **postgresql-documentdb bundle contents:**
 The hostdb binary is a complete PostgreSQL 17 installation with:
 - PostgreSQL server and client tools (psql, pg_dump, pg_restore)

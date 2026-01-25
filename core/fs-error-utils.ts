@@ -37,7 +37,7 @@ export async function moveEntry(
     await rename(sourcePath, destPath)
   } catch (error) {
     if (isRenameFallbackError(error)) {
-      await cp(sourcePath, destPath, { recursive: true })
+      await cp(sourcePath, destPath, { recursive: true, force: true })
       // Attempt cleanup of source, but don't fail if it doesn't work
       // (the destination was successfully created)
       try {

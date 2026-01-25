@@ -537,10 +537,30 @@ export const doctorCommand = new Command('doctor')
     // Auto-fix mode: run all actions without prompting
     if (autoFix && actionsAvailable.length > 0) {
       console.log()
+      const failures: Array<{ name: string; error: Error }> = []
+
       for (const check of actionsAvailable) {
-        await check.action!.handler()
+        try {
+          await check.action!.handler()
+        } catch (error) {
+          const err = error as Error
+          failures.push({ name: check.name, error: err })
+          console.error(
+            chalk.red(`  ✕ Auto-fix failed for "${check.name}": ${err.message}`),
+          )
+        }
       }
+
       console.log()
+
+      if (failures.length > 0) {
+        console.error(
+          chalk.yellow(
+            `  ⚠ ${failures.length} auto-fix action(s) failed. See errors above.`,
+          ),
+        )
+        process.exit(1)
+      }
       return
     }
 

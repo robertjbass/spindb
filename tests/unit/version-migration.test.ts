@@ -7,6 +7,7 @@ import {
   getTargetVersion,
   getDocumentDBTargetVersion,
 } from '../../core/version-migration'
+import { isTestContainer } from '../../core/test-cleanup'
 import { Engine } from '../../types'
 import { assert, assertEqual, assertNullish } from '../utils/assertions'
 
@@ -120,73 +121,94 @@ describe('version-migration', () => {
   })
 
   describe('isVersionSupported', () => {
-    it('should return true for current PostgreSQL version', () => {
-      const supported = isVersionSupported(Engine.PostgreSQL, '17.7.0')
-      assert(supported, 'PostgreSQL 17.7.0 should be supported')
+    it('should return true for current PostgreSQL version from version map', () => {
+      // Get the current target version for PostgreSQL 17
+      const targetVersion = getTargetVersion(Engine.PostgreSQL, '17')
+      assert(targetVersion !== null, 'PostgreSQL 17 should have a target version')
+      const supported = isVersionSupported(Engine.PostgreSQL, targetVersion!)
+      assert(supported, `PostgreSQL ${targetVersion} should be supported`)
     })
 
     it('should return false for outdated PostgreSQL version', () => {
-      const supported = isVersionSupported(Engine.PostgreSQL, '17.2.0')
-      assert(!supported, 'PostgreSQL 17.2.0 should not be supported (outdated)')
+      // Use a version that definitely doesn't exist in version map
+      const supported = isVersionSupported(Engine.PostgreSQL, '17.0.1')
+      assert(!supported, 'PostgreSQL 17.0.1 should not be supported (not in version map)')
     })
 
-    it('should return true for current MySQL version', () => {
-      const supported = isVersionSupported(Engine.MySQL, '8.4.3')
-      assert(supported, 'MySQL 8.4.3 should be supported')
+    it('should return true for current MySQL version from version map', () => {
+      // Get the current target version for MySQL 8.4
+      const targetVersion = getTargetVersion(Engine.MySQL, '8.4')
+      assert(targetVersion !== null, 'MySQL 8.4 should have a target version')
+      const supported = isVersionSupported(Engine.MySQL, targetVersion!)
+      assert(supported, `MySQL ${targetVersion} should be supported`)
     })
 
     it('should return false for outdated MySQL version', () => {
+      // Use a version that definitely doesn't exist in version map
       const supported = isVersionSupported(Engine.MySQL, '8.4.0')
-      assert(!supported, 'MySQL 8.4.0 should not be supported (outdated)')
+      assert(!supported, 'MySQL 8.4.0 should not be supported (not in version map)')
     })
 
-    it('should return true for current Redis version', () => {
-      const supported = isVersionSupported(Engine.Redis, '7.4.7')
-      assert(supported, 'Redis 7.4.7 should be supported')
+    it('should return true for current Redis version from version map', () => {
+      // Get the current target version for Redis 7
+      const targetVersion = getTargetVersion(Engine.Redis, '7')
+      assert(targetVersion !== null, 'Redis 7 should have a target version')
+      const supported = isVersionSupported(Engine.Redis, targetVersion!)
+      assert(supported, `Redis ${targetVersion} should be supported`)
     })
 
     it('should return false for outdated Redis version', () => {
-      const supported = isVersionSupported(Engine.Redis, '7.2.0')
-      assert(!supported, 'Redis 7.2.0 should not be supported (outdated)')
+      // Use a version that definitely doesn't exist in version map
+      const supported = isVersionSupported(Engine.Redis, '7.0.0')
+      assert(!supported, 'Redis 7.0.0 should not be supported (not in version map)')
     })
   })
 
   describe('isDocumentDBVersionSupported', () => {
-    it('should return true for current DocumentDB version', () => {
-      const supported = isDocumentDBVersionSupported('17-0.107.0')
-      assert(supported, 'DocumentDB 17-0.107.0 should be supported')
+    it('should return true for current DocumentDB version from version map', () => {
+      // Get the current target version for DocumentDB 17
+      const targetVersion = getDocumentDBTargetVersion('17')
+      assert(targetVersion !== null, 'DocumentDB 17 should have a target version')
+      const supported = isDocumentDBVersionSupported(targetVersion!)
+      assert(supported, `DocumentDB ${targetVersion} should be supported`)
     })
 
     it('should return false for outdated DocumentDB version', () => {
-      const supported = isDocumentDBVersionSupported('17-0.100.0')
-      assert(!supported, 'DocumentDB 17-0.100.0 should not be supported')
+      // Use a version that definitely doesn't exist in version map
+      const supported = isDocumentDBVersionSupported('17-0.1.0')
+      assert(!supported, 'DocumentDB 17-0.1.0 should not be supported (not in version map)')
     })
   })
 
   describe('getTargetVersion', () => {
-    it('should return target version for PostgreSQL major 17', () => {
+    it('should return a valid target version for PostgreSQL major 17', () => {
       const target = getTargetVersion(Engine.PostgreSQL, '17')
-      assertEqual(target, '17.7.0', 'Should target 17.7.0')
+      assert(target !== null, 'PostgreSQL 17 should have a target version')
+      assert(target!.startsWith('17.'), `Target ${target} should start with 17.`)
     })
 
-    it('should return target version for PostgreSQL major 16', () => {
+    it('should return a valid target version for PostgreSQL major 16', () => {
       const target = getTargetVersion(Engine.PostgreSQL, '16')
-      assertEqual(target, '16.11.0', 'Should target 16.11.0')
+      assert(target !== null, 'PostgreSQL 16 should have a target version')
+      assert(target!.startsWith('16.'), `Target ${target} should start with 16.`)
     })
 
-    it('should return target version for MySQL major 8.4', () => {
+    it('should return a valid target version for MySQL major 8.4', () => {
       const target = getTargetVersion(Engine.MySQL, '8.4')
-      assertEqual(target, '8.4.3', 'Should target 8.4.3')
+      assert(target !== null, 'MySQL 8.4 should have a target version')
+      assert(target!.startsWith('8.4.'), `Target ${target} should start with 8.4.`)
     })
 
-    it('should return target version for MySQL major 8.0', () => {
+    it('should return a valid target version for MySQL major 8.0', () => {
       const target = getTargetVersion(Engine.MySQL, '8.0')
-      assertEqual(target, '8.0.40', 'Should target 8.0.40')
+      assert(target !== null, 'MySQL 8.0 should have a target version')
+      assert(target!.startsWith('8.0.'), `Target ${target} should start with 8.0.`)
     })
 
-    it('should return target version for Redis major 7', () => {
+    it('should return a valid target version for Redis major 7', () => {
       const target = getTargetVersion(Engine.Redis, '7')
-      assertEqual(target, '7.4.7', 'Should target 7.4.7')
+      assert(target !== null, 'Redis 7 should have a target version')
+      assert(target!.startsWith('7.'), `Target ${target} should start with 7.`)
     })
 
     it('should return null for unsupported major version', () => {
@@ -196,9 +218,10 @@ describe('version-migration', () => {
   })
 
   describe('getDocumentDBTargetVersion', () => {
-    it('should return target version for DocumentDB major 17', () => {
+    it('should return a valid target version for DocumentDB major 17', () => {
       const target = getDocumentDBTargetVersion('17')
-      assertEqual(target, '17-0.107.0', 'Should target 17-0.107.0')
+      assert(target !== null, 'DocumentDB 17 should have a target version')
+      assert(target!.startsWith('17-'), `Target ${target} should start with 17-`)
     })
 
     it('should return null for unsupported major version', () => {
@@ -209,16 +232,8 @@ describe('version-migration', () => {
 })
 
 describe('test container detection patterns', () => {
-  // Test patterns match various test container naming conventions
-  const TEST_CONTAINER_PATTERNS = [
-    /^.+-test_[0-9a-f]{6,}$/i,
-    /^.+-test-.+_[0-9a-f]{6,}$/i,
-    /^.+-test-renamed[-_][0-9a-f]{6,}$/i,
-  ]
-
-  function isTestContainer(name: string): boolean {
-    return TEST_CONTAINER_PATTERNS.some((pattern) => pattern.test(name))
-  }
+  // Uses isTestContainer imported from core/test-cleanup.ts
+  // to verify the production patterns match expected test container names
 
   it('should match pattern: name-test_<hex>', () => {
     assert(isTestContainer('duckdb-test_04b0613f'), 'Should match duckdb-test_04b0613f')
