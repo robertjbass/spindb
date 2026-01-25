@@ -322,11 +322,13 @@ type FerretDBContainerConfig = ContainerConfig & {
 
 | Platform | FerretDB | PostgreSQL+DocumentDB | Notes |
 |----------|----------|----------------------|-------|
-| darwin-arm64 | ✅ | ✅ | Full support |
-| darwin-x64 | ✅ | ✅ | Full support |
+| darwin-arm64 | ✅ | ❌ | FerretDB only (no backend) |
+| darwin-x64 | ✅ | ❌ | FerretDB only (no backend) |
 | linux-x64 | ✅ | ✅ | Full support |
-| linux-arm64 | ✅ | ✅ | Full support |
-| win32-x64 | ✅ | ✅ | Full support |
+| linux-arm64 | ✅ | ❌ | FerretDB only (no backend) |
+| win32-x64 | ✅ | ❌ | FerretDB only (no backend) |
+
+> **Note:** `postgresql-documentdb-17-0.107.0` is currently only available for linux-x64 on hostdb. FerretDB requires both the proxy binary and the PostgreSQL+DocumentDB backend to function. Until hostdb adds more architectures, FerretDB is effectively linux-x64-only. Update this table when additional platforms become available.
 
 ---
 

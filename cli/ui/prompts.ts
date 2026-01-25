@@ -127,9 +127,19 @@ export async function escapeablePrompt<T extends Record<string, unknown>>(
   try {
     const p = inquirer.prompt(questions)
     // Register the prompt UI so we can close it on escape
-    // Use type assertion to access the ui property (inquirer's close is protected but accessible)
-    const promptWithUi = p as unknown as { ui?: { close?: () => void } }
-    currentPromptUi = promptWithUi.ui ?? null
+    // Use runtime guard to safely access inquirer's internal ui property
+    // which may change between versions
+    const promptWithUi = p as unknown as Record<string, unknown>
+    if (
+      promptWithUi.ui &&
+      typeof promptWithUi.ui === 'object' &&
+      promptWithUi.ui !== null &&
+      typeof (promptWithUi.ui as Record<string, unknown>).close === 'function'
+    ) {
+      currentPromptUi = promptWithUi.ui as { close: () => void }
+    } else {
+      currentPromptUi = null
+    }
 
     // Race the prompt against the escape promise
     const result = (await Promise.race([p, escapePromise])) as T

@@ -235,7 +235,6 @@ export async function restoreBackup(
     let stdout = ''
     let stderr = ''
     let finished = false
-    let spawnError: Error | null = null
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -245,18 +244,15 @@ export async function restoreBackup(
     })
 
     proc.on('error', (err) => {
-      spawnError = err
+      // Immediately reject and mark finished to prevent race with close handler
+      if (finished) return
+      finished = true
+      reject(err)
     })
 
     proc.on('close', (code) => {
       if (finished) return
       finished = true
-
-      // If spawn itself failed, reject with that error
-      if (spawnError) {
-        reject(spawnError)
-        return
-      }
 
       if (code === 0) {
         resolve({

@@ -837,7 +837,9 @@ export class FerretDBEngine extends BaseEngine {
       const mongosh = await this.getMongoshPath()
       // Create a temp collection then immediately drop it to force database creation
       // without leaving any visible marker collections.
-      const script = 'db.createCollection("_spindb_init"); db._spindb_init.drop();'
+      // Pre-drop in case a previous run was interrupted and left a stale collection.
+      const script =
+        'try { db._spindb_init.drop(); } catch(e) {} db.createCollection("_spindb_init"); db._spindb_init.drop();'
       const cmd = isWindows()
         ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval "${script}"`
         : `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval '${script}'`

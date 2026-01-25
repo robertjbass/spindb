@@ -54,9 +54,12 @@ export const DEFAULT_DOCUMENTDB_VERSION = '17-0.107.0'
 
 /**
  * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
+ * Used when hostdb repository is unreachable.
+ * Spread into a new object so it can diverge from FERRETDB_VERSION_MAP if needed.
  */
-export const FALLBACK_VERSION_MAP: Record<string, string> = FERRETDB_VERSION_MAP
+export const FALLBACK_VERSION_MAP: Record<string, string> = {
+  ...FERRETDB_VERSION_MAP,
+}
 
 /**
  * Get the full version for a FerretDB version string

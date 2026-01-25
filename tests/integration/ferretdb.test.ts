@@ -217,13 +217,20 @@ describe('FerretDB Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
 
-    // Note: FerretDB backup/restore through PostgreSQL has limitations due to
+    // TODO: Replace pg_dump/pg_restore with mongodump/mongorestore for FerretDB backup/restore
+    //
+    // Current limitation: FerretDB backup/restore through PostgreSQL has issues due to
     // DocumentDB extension internal state. The restore may fail to fully restore
     // MongoDB collections because DocumentDB creates internal metadata tables
     // that conflict during restore.
     //
-    // For production use, consider using mongodump/mongorestore on the MongoDB
-    // protocol side instead of pg_dump/pg_restore on the PostgreSQL backend.
+    // Proposed fix:
+    // 1. Use mongodump/mongorestore on the MongoDB protocol side (port 27017)
+    //    instead of pg_dump/pg_restore on the PostgreSQL backend
+    // 2. Or add a direct MongoDB client verification using mongosh to query
+    //    the restored data through the FerretDB MongoDB protocol
+    //
+    // Until fixed, the test accepts rowCount === 0 as a known limitation.
     const rowCount = await getRowCount(
       ENGINE,
       testPorts[1],
@@ -232,6 +239,7 @@ describe('FerretDB Integration Tests', () => {
     )
 
     // Accept 0 or EXPECTED_ROW_COUNT as success due to DocumentDB restore limitations
+    // See TODO above for tracking this technical debt
     if (rowCount === 0) {
       console.log(
         `   ⚠ Restore has known limitations with DocumentDB extension (got ${rowCount} documents)`,

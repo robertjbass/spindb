@@ -20,14 +20,8 @@ export const FERRETDB_SUPPORTED_PLATFORMS = new Set([
   'win32-x64',
 ])
 
-// Supported platforms for postgresql-documentdb backend
-export const DOCUMENTDB_SUPPORTED_PLATFORMS = new Set([
-  'darwin-arm64',
-  'darwin-x64',
-  'linux-arm64',
-  'linux-x64',
-  'win32-x64',
-])
+// Supported platforms for postgresql-documentdb backe
+export const DOCUMENTDB_SUPPORTED_PLATFORMS = FERRETDB_SUPPORTED_PLATFORMS
 
 /**
  * Map Node.js platform/arch to hostdb platform key
