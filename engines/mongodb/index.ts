@@ -720,22 +720,16 @@ export class MongoDBEngine extends BaseEngine {
     // MongoDB creates databases implicitly when you write to them.
     // Create a temp collection then immediately drop it to force database creation
     // without leaving any visible marker collections.
+    // First drop any existing _spindb_init collection (ignore errors), then create and drop.
+    // This ensures cleanup even if a previous createDatabase was interrupted.
     const cmd = buildMongoshCommand(
       mongosh,
       port,
       database,
-      'db.createCollection("_spindb_init"); db._spindb_init.drop();',
+      'try { db._spindb_init.drop(); } catch(e) {} db.createCollection("_spindb_init"); db._spindb_init.drop();',
     )
 
-    try {
-      await execAsync(cmd, { timeout: 10000 })
-    } catch (error) {
-      const err = error as Error
-      // Ignore errors if collection doesn't exist (already cleaned up)
-      if (!err.message.includes('already exists') && !err.message.includes('not found')) {
-        throw error
-      }
-    }
+    await execAsync(cmd, { timeout: 10000 })
   }
 
   // Drop a database

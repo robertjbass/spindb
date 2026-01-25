@@ -17,9 +17,13 @@ import {
 import type { ContainerConfig, BackupFormat, RestoreResult } from '../../types'
 
 /**
- * Get the path to pg_restore from the postgresql-documentdb installation
+ * Resolve the path to a postgresql-documentdb binary
+ * Shared helper to avoid duplication between getPgRestorePath and getPsqlPath
  */
-function getPgRestorePath(container: ContainerConfig): string {
+function getDocumentDBBinaryPath(
+  container: ContainerConfig,
+  binaryName: string,
+): string {
   const { backendVersion } = container
   const { platform, arch } = platformService.getPlatformInfo()
 
@@ -33,27 +37,21 @@ function getPgRestorePath(container: ContainerConfig): string {
   )
 
   const ext = platformService.getExecutableExtension()
-  return join(documentdbPath, 'bin', `pg_restore${ext}`)
+  return join(documentdbPath, 'bin', `${binaryName}${ext}`)
+}
+
+/**
+ * Get the path to pg_restore from the postgresql-documentdb installation
+ */
+function getPgRestorePath(container: ContainerConfig): string {
+  return getDocumentDBBinaryPath(container, 'pg_restore')
 }
 
 /**
  * Get the path to psql from the postgresql-documentdb installation
  */
 function getPsqlPath(container: ContainerConfig): string {
-  const { backendVersion } = container
-  const { platform, arch } = platformService.getPlatformInfo()
-
-  const fullBackendVersion = normalizeDocumentDBVersion(
-    backendVersion || DEFAULT_DOCUMENTDB_VERSION,
-  )
-  const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-    fullBackendVersion,
-    platform,
-    arch,
-  )
-
-  const ext = platformService.getExecutableExtension()
-  return join(documentdbPath, 'bin', `psql${ext}`)
+  return getDocumentDBBinaryPath(container, 'psql')
 }
 
 /**
@@ -262,11 +260,31 @@ export async function restoreBackup(
         })
       } else {
         // pg_restore may exit with non-zero but still restore some data
-        // Check for specific warning patterns (not just any occurrence of these words)
-        const isWarningOnly =
-          /\balready exists\b/.test(stderr) ||
-          /^WARNING:/m.test(stderr) ||
-          /^pg_restore: warning:/im.test(stderr)
+        // Only treat as warning-only if ALL non-empty lines match warning patterns
+        // This prevents real errors mixed with warnings from being suppressed
+        const stderrLines = stderr
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+
+        const warningPatterns = [
+          /\balready exists\b/,
+          /^WARNING:/i,
+          /^pg_restore: warning:/i,
+        ]
+
+        const allLinesAreWarnings =
+          stderrLines.length > 0 &&
+          stderrLines.every((line) =>
+            warningPatterns.some((pattern) => pattern.test(line)),
+          )
+
+        // pg_restore outputs "errors ignored on restore: N" when it completes
+        // despite encountering errors - this means the restore finished
+        const pgRestoreCompletedWithIgnoredErrors =
+          /pg_restore: warning: errors ignored on restore: \d+/i.test(stderr)
+
+        const isWarningOnly = allLinesAreWarnings || pgRestoreCompletedWithIgnoredErrors
 
         if (isWarningOnly) {
           logWarning(`Restore completed with warnings: ${stderr}`)

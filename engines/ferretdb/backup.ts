@@ -118,25 +118,28 @@ export async function createBackup(
       reject(err)
     })
 
-    proc.on('close', async (code) => {
+    proc.on('close', (code) => {
       if (finished) return
       finished = true
 
       if (code === 0) {
         // Get backup size
-        let size = 0
-        try {
-          const stats = await stat(outputPath)
-          size = stats.size
-        } catch {
-          // Size calculation failed, use 0
-        }
-
-        resolve({
-          path: outputPath,
-          format: format === 'custom' ? 'custom' : 'sql',
-          size,
-        })
+        stat(outputPath)
+          .then((stats) => {
+            resolve({
+              path: outputPath,
+              format,
+              size: stats.size,
+            })
+          })
+          .catch(() => {
+            // Size calculation failed, use 0
+            resolve({
+              path: outputPath,
+              format,
+              size: 0,
+            })
+          })
       } else {
         reject(new Error(stderr || `pg_dump exited with code ${code}`))
       }

@@ -101,17 +101,14 @@ export function getDocumentDBBinaryUrl(
     )
   }
 
-  // postgresql-documentdb uses a specific tag format: postgresql-documentdb-{version}
-  // e.g., postgresql-documentdb-17-0.107.0
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
-  // Build URL manually since it's a different engine name format
-  // Format: https://github.com/robertjbass/hostdb/releases/download/postgresql-documentdb-{version}/postgresql-documentdb-{version}-{platform}-{arch}.{ext}
-  const baseUrl = 'https://github.com/robertjbass/hostdb/releases/download'
-  const tag = `postgresql-documentdb-${fullVersion}`
-  const filename = `postgresql-documentdb-${fullVersion}-${key}.${ext}`
-
-  return `${baseUrl}/${tag}/${filename}`
+  // Use shared buildHostdbUrl with 'postgresql-documentdb' as the engine
+  return buildHostdbUrl('postgresql-documentdb', {
+    version: fullVersion,
+    hostdbPlatform: key,
+    extension: ext,
+  })
 }
 
 /**

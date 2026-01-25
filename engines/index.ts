@@ -36,6 +36,7 @@ export const engines: Record<string, BaseEngine> = {
   // FerretDB and aliases
   ferretdb: ferretdbEngine,
   ferret: ferretdbEngine,
+  fdb: ferretdbEngine,
   // Redis and aliases
   redis: redisEngine,
   // Valkey and aliases

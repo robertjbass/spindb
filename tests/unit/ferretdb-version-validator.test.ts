@@ -76,10 +76,10 @@ describe('FerretDB Version Maps', () => {
       assertEqual(result, '2.7.0', 'Should return same version')
     })
 
-    it('should handle unknown versions gracefully', () => {
+    it('should return unknown versions unchanged', () => {
       const result = normalizeVersion('99')
-      // Should not throw, but return something
-      assert(result !== '', 'Should return something for unknown version')
+      // Unknown versions are returned as-is (may cause download failures)
+      assertEqual(result, '99', 'Should return input unchanged for unknown version')
     })
   })
 

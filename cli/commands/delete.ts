@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { containerManager } from '../../core/container-manager'
+import { isInteractiveMode } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
@@ -30,7 +31,7 @@ export const deleteCommand = new Command('delete')
           }
 
           // Non-interactive mode requires container name argument
-          if (!process.stdin.isTTY) {
+          if (!isInteractiveMode()) {
             console.error(uiError('Container name is required in non-interactive mode'))
             console.error(chalk.gray('  Usage: spindb delete <name> --force'))
             process.exit(1)
@@ -63,7 +64,7 @@ export const deleteCommand = new Command('delete')
 
         if (!options.yes && !options.force && !options.json) {
           // Detect non-interactive mode (piped input, scripts, CI)
-          if (!process.stdin.isTTY) {
+          if (!isInteractiveMode()) {
             console.error(
               uiError('Cannot prompt for confirmation in non-interactive mode'),
             )

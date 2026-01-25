@@ -16,6 +16,45 @@ import { compareVersions } from '../../core/version-utils'
 
 const execAsync = promisify(exec)
 
+/**
+ * Build and execute a mongosh command for MongoDB-compatible engines (MongoDB, FerretDB)
+ * Handles platform-specific shell escaping
+ */
+async function runMongoshCommand(
+  engine: Engine,
+  port: number,
+  database: string,
+  script: string,
+): Promise<{ stdout: string; stderr: string }> {
+  const engineImpl = getEngine(engine)
+  const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
+
+  let cmd: string
+  if (isWindows()) {
+    const escaped = script.replace(/"/g, '\\"')
+    cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
+  } else {
+    const escaped = script.replace(/'/g, "'\\''")
+    cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
+  }
+  return execAsync(cmd)
+}
+
+/**
+ * Execute a JavaScript file via mongosh for MongoDB-compatible engines (MongoDB, FerretDB)
+ */
+async function runMongoshFile(
+  engine: Engine,
+  port: number,
+  database: string,
+  filePath: string,
+): Promise<{ stdout: string; stderr: string }> {
+  const engineImpl = getEngine(engine)
+  const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
+  const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
+  return execAsync(cmd)
+}
+
 // Default test port configuration
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
@@ -196,33 +235,9 @@ export async function executeSQL(
       .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} -e "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MongoDB) {
-    const engineImpl = getEngine(engine)
-    // Use configured/bundled mongosh if available
-    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    // Windows uses double quotes, Unix uses single quotes for shell escaping
-    let cmd: string
-    if (isWindows()) {
-      const escaped = sql.replace(/"/g, '\\"')
-      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
-    } else {
-      const escaped = sql.replace(/'/g, "'\\''")
-      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
-    }
-    return execAsync(cmd)
-  } else if (engine === Engine.FerretDB) {
-    // FerretDB runs with --no-auth for local development
-    const engineImpl = getEngine(Engine.FerretDB)
-    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    let cmd: string
-    if (isWindows()) {
-      const escaped = sql.replace(/"/g, '\\"')
-      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval "${escaped}" --quiet`
-    } else {
-      const escaped = sql.replace(/'/g, "'\\''")
-      cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --eval '${escaped}' --quiet`
-    }
-    return execAsync(cmd)
+  } else if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+    // MongoDB and FerretDB use mongosh (FerretDB runs with --no-auth for local development)
+    return runMongoshCommand(engine, port, database, sql)
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
     // Use configured/bundled redis-cli if available
@@ -293,17 +308,9 @@ export async function executeSQLFile(
       .catch(() => 'mariadb')
     const cmd = `"${mariadbPath}" -h 127.0.0.1 -P ${port} -u root ${database} < "${filePath}"`
     return execAsync(cmd)
-  } else if (engine === Engine.MongoDB) {
-    const engineImpl = getEngine(engine)
-    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
-    return execAsync(cmd)
-  } else if (engine === Engine.FerretDB) {
-    // FerretDB runs with --no-auth for local development
-    const engineImpl = getEngine(Engine.FerretDB)
-    const mongoshPath = await engineImpl.getMongoshPath().catch(() => 'mongosh')
-    const cmd = `"${mongoshPath}" --host 127.0.0.1 --port ${port} ${database} --file "${filePath}"`
-    return execAsync(cmd)
+  } else if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
+    // MongoDB and FerretDB use mongosh (FerretDB runs with --no-auth for local development)
+    return runMongoshFile(engine, port, database, filePath)
   } else if (engine === Engine.Redis) {
     const engineImpl = getEngine(engine)
     const redisCliPath = await engineImpl

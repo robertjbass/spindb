@@ -37,6 +37,36 @@ export class EscapeError extends Error {
   }
 }
 
+// Module-scoped stdin data handler for escape key detection
+// Defined at module scope so disableGlobalEscape() can remove it
+function onEscapeData(data: Buffer): void {
+  // Ctrl+C is byte 3 - handle graceful exit
+  if (data.length === 1 && data[0] === 3) {
+    console.log(chalk.gray('\n  Goodbye!\n'))
+    process.exit(0)
+  }
+
+  // Escape key is byte 27 (0x1b) by itself
+  // Arrow keys and other sequences start with 27 but have more bytes
+  if (data.length === 1 && data[0] === 27) {
+    escapeTriggered = true
+    // First reject the escape promise to interrupt the prompt
+    if (escapeReject) {
+      const reject = escapeReject
+      escapeReject = null
+      reject(new EscapeError())
+    }
+    // Then close the prompt UI to stop it from rendering
+    // Do this after rejecting so the error propagates first
+    if (currentPromptUi?.close) {
+      currentPromptUi.close()
+      currentPromptUi = null
+    }
+    // Clear the screen
+    console.clear()
+  }
+}
+
 /**
  * Enable global escape key handling for the interactive menu.
  * When escape is pressed, the current prompt is closed and escapeTriggered flag is set.
@@ -45,36 +75,20 @@ export class EscapeError extends Error {
 export function enableGlobalEscape(): void {
   if (globalEscapeEnabled) return
   globalEscapeEnabled = true
+  process.stdin.on('data', onEscapeData)
+}
 
-  const onData = (data: Buffer) => {
-    // Ctrl+C is byte 3 - handle graceful exit
-    if (data.length === 1 && data[0] === 3) {
-      console.log(chalk.gray('\n  Goodbye!\n'))
-      process.exit(0)
-    }
-
-    // Escape key is byte 27 (0x1b) by itself
-    // Arrow keys and other sequences start with 27 but have more bytes
-    if (data.length === 1 && data[0] === 27) {
-      escapeTriggered = true
-      // First reject the escape promise to interrupt the prompt
-      if (escapeReject) {
-        const reject = escapeReject
-        escapeReject = null
-        reject(new EscapeError())
-      }
-      // Then close the prompt UI to stop it from rendering
-      // Do this after rejecting so the error propagates first
-      if (currentPromptUi?.close) {
-        currentPromptUi.close()
-        currentPromptUi = null
-      }
-      // Clear the screen
-      console.clear()
-    }
-  }
-
-  process.stdin.on('data', onData)
+/**
+ * Disable global escape key handling and clean up state.
+ * Call this when exiting interactive mode or in tests to remove the stdin listener.
+ */
+export function disableGlobalEscape(): void {
+  if (!globalEscapeEnabled) return
+  process.stdin.off('data', onEscapeData)
+  globalEscapeEnabled = false
+  escapeTriggered = false
+  escapeReject = null
+  currentPromptUi = null
 }
 
 /**

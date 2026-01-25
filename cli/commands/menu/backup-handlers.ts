@@ -80,6 +80,64 @@ function maskConnectionStringPassword(connectionString: string): string {
   }
 }
 
+/**
+ * Validate a connection string for the given engine.
+ * Returns true if valid, or an error message string if invalid.
+ */
+function validateConnectionString(input: string, engine: string): true | string {
+  if (!input) return true
+
+  switch (engine) {
+    case 'mysql':
+      if (!input.startsWith('mysql://')) {
+        return 'Connection string must start with mysql://'
+      }
+      break
+    case 'mariadb':
+      if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
+        return 'Connection string must start with mysql:// or mariadb://'
+      }
+      break
+    case 'mongodb':
+    case 'ferretdb':
+      if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
+        return 'Connection string must start with mongodb:// or mongodb+srv://'
+      }
+      break
+    case 'redis':
+      if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
+        return 'Connection string must start with redis:// or rediss://'
+      }
+      break
+    case 'valkey':
+      if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
+        return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
+      }
+      break
+    case 'clickhouse':
+      if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+        return 'Connection string must start with clickhouse://, http://, or https://'
+      }
+      break
+    case 'qdrant':
+      if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+        return 'Connection string must start with qdrant://, http://, or https://'
+      }
+      break
+    case 'meilisearch':
+      if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
+        return 'Connection string must start with meilisearch://, http://, or https://'
+      }
+      break
+    default:
+      // PostgreSQL and others
+      if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
+        return 'Connection string must start with postgresql:// or postgres://'
+      }
+  }
+  return true
+}
+
 export async function handleCreateForRestore(): Promise<{
   name: string
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>
@@ -322,57 +380,7 @@ export async function handleRestore(): Promise<void> {
           name: 'connectionString',
           message: 'Connection string:',
           transformer: (input: string) => maskConnectionStringPassword(input),
-          validate: (input: string) => {
-            if (!input) return true
-            switch (config.engine) {
-              case 'mysql':
-                if (!input.startsWith('mysql://')) {
-                  return 'Connection string must start with mysql://'
-                }
-                break
-              case 'mariadb':
-                if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
-                  return 'Connection string must start with mysql:// or mariadb://'
-                }
-                break
-              case 'mongodb':
-                if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
-                  return 'Connection string must start with mongodb:// or mongodb+srv://'
-                }
-                break
-              case 'redis':
-                if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
-                  return 'Connection string must start with redis:// or rediss://'
-                }
-                break
-              case 'valkey':
-                if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
-                  return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
-                }
-                break
-              case 'clickhouse':
-                if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                  return 'Connection string must start with clickhouse://, http://, or https://'
-                }
-                break
-              case 'qdrant':
-                if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                  return 'Connection string must start with qdrant://, http://, or https://'
-                }
-                break
-              case 'meilisearch':
-                if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                  return 'Connection string must start with meilisearch://, http://, or https://'
-                }
-                break
-              default:
-                // PostgreSQL and others
-                if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
-                  return 'Connection string must start with postgresql:// or postgres://'
-                }
-            }
-            return true
-          },
+          validate: (input: string) => validateConnectionString(input, config.engine),
         },
       ])
 
@@ -1059,57 +1067,7 @@ export async function handleRestoreForContainer(
         name: 'connectionString',
         message: 'Connection string:',
         transformer: (input: string) => maskConnectionStringPassword(input),
-        validate: (input: string) => {
-          if (!input) return true
-          switch (config.engine) {
-            case 'mysql':
-              if (!input.startsWith('mysql://')) {
-                return 'Connection string must start with mysql://'
-              }
-              break
-            case 'mariadb':
-              if (!input.startsWith('mysql://') && !input.startsWith('mariadb://')) {
-                return 'Connection string must start with mysql:// or mariadb://'
-              }
-              break
-            case 'mongodb':
-              if (!input.startsWith('mongodb://') && !input.startsWith('mongodb+srv://')) {
-                return 'Connection string must start with mongodb:// or mongodb+srv://'
-              }
-              break
-            case 'redis':
-              if (!input.startsWith('redis://') && !input.startsWith('rediss://')) {
-                return 'Connection string must start with redis:// or rediss://'
-              }
-              break
-            case 'valkey':
-              if (!input.startsWith('redis://') && !input.startsWith('rediss://') && !input.startsWith('valkey://') && !input.startsWith('valkeys://')) {
-                return 'Connection string must start with redis://, rediss://, valkey://, or valkeys://'
-              }
-              break
-            case 'clickhouse':
-              if (!input.startsWith('clickhouse://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                return 'Connection string must start with clickhouse://, http://, or https://'
-              }
-              break
-            case 'qdrant':
-              if (!input.startsWith('qdrant://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                return 'Connection string must start with qdrant://, http://, or https://'
-              }
-              break
-            case 'meilisearch':
-              if (!input.startsWith('meilisearch://') && !input.startsWith('http://') && !input.startsWith('https://')) {
-                return 'Connection string must start with meilisearch://, http://, or https://'
-              }
-              break
-            default:
-              // PostgreSQL and others
-              if (!input.startsWith('postgresql://') && !input.startsWith('postgres://')) {
-                return 'Connection string must start with postgresql:// or postgres://'
-              }
-          }
-          return true
-        },
+        validate: (input: string) => validateConnectionString(input, config.engine),
       },
     ])
 

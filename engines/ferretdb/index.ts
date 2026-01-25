@@ -981,13 +981,46 @@ export class FerretDBEngine extends BaseEngine {
     } else if (options.sql) {
       // sql field is actually JS for MongoDB-compatible databases
       const script = options.sql
-      const cmd = isWindows()
-        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --eval "${script.replace(/"/g, '\\"')}"`
-        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --eval '${script.replace(/'/g, "'\\''")}'`
 
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
-      if (stdout) process.stdout.write(stdout)
-      if (stderr) process.stderr.write(stderr)
+      return new Promise((resolve, reject) => {
+        const proc = spawn(
+          mongosh,
+          ['--host', '127.0.0.1', '--port', String(port), db, '--eval', script],
+          { stdio: ['pipe', 'pipe', 'pipe'] },
+        )
+
+        let stdout = ''
+        let stderr = ''
+
+        proc.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        // 60 second timeout
+        const timeout = setTimeout(() => {
+          proc.kill('SIGTERM')
+          reject(new Error('mongosh timed out after 60 seconds'))
+        }, 60000)
+
+        proc.on('error', (err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          clearTimeout(timeout)
+          if (stdout) process.stdout.write(stdout)
+          if (stderr) process.stderr.write(stderr)
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`mongosh exited with code ${code}`))
+          }
+        })
+      })
     } else {
       throw new Error('Either file or sql option must be provided')
     }
