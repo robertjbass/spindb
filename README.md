@@ -339,8 +339,10 @@ spindb config show                              # Show current config
 spindb config detect                            # Re-detect tool paths
 spindb config update-check on                   # Enable update notifications
 
-# System health
+# Doctor
 spindb doctor                                   # Interactive health check
+spindb doctor --fix                             # Auto-fix all issues
+spindb doctor --dry-run                         # Preview fixes without applying
 spindb doctor --json                            # JSON output
 
 # Version management

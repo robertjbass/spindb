@@ -134,6 +134,23 @@ spindb deps check                       # Check required tools
 spindb deps install                     # Install missing tools
 ```
 
+## Doctor
+
+```bash
+spindb doctor                           # Interactive health check
+spindb doctor --fix                     # Auto-fix all issues
+spindb doctor --dry-run                 # Preview fixes without applying
+spindb doctor --json                    # JSON output for scripting
+```
+
+**Checks performed:**
+- Configuration validity and stale binary cache
+- Container status across all engines
+- SQLite/DuckDB registry orphaned entries
+- Database tool availability
+- Outdated container versions (updates config, removes unused binaries)
+- Orphaned test container directories
+
 ## Default Ports
 
 | Engine      | Default | Range         |

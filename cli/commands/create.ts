@@ -765,8 +765,14 @@ export const createCommand = new Command('create')
         } else if (options.start === false) {
           shouldStart = false
         } else {
-          console.log()
-          shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
+          // In non-interactive mode (no TTY), default to not starting
+          // This allows scripts/CI to run without --no-start flag
+          if (!process.stdin.isTTY) {
+            shouldStart = false
+          } else {
+            console.log()
+            shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
+          }
         }
 
         const config = await containerManager.getConfig(containerName)
