@@ -192,13 +192,24 @@ export const menuCommand = new Command('menu')
             : e.message.includes('pg_dump')
               ? 'pg_dump'
               : 'psql'
-          const installed = await promptInstallDependencies(missingTool)
-          if (installed) {
-            // Installation succeeded, continue the menu loop so user can retry
-            continue
+          try {
+            const installed = await promptInstallDependencies(missingTool)
+            if (installed) {
+              // Installation succeeded, continue the menu loop so user can retry
+              continue
+            }
+            // Installation failed or was declined
+            process.exit(1)
+          } catch (installError) {
+            // User pressed Escape during install prompt - treat as declined
+            if (
+              installError instanceof EscapeError ||
+              (installError as Error).message?.includes('prompt was closed')
+            ) {
+              continue
+            }
+            throw installError
           }
-          // Installation failed or was declined
-          process.exit(1)
         }
 
         console.error(uiError(e.message))
