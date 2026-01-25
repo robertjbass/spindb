@@ -1104,6 +1104,48 @@ jobs:
       - name: Show installed engines
         run: pnpm start engines list
 
+      # Debug: Try running CouchDB directly on Windows to see startup error
+      - name: Test CouchDB startup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $couchdb = "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64\bin\couchdb.cmd"
+          Write-Host "=== Testing CouchDB startup ==="
+          Write-Host "Binary: $couchdb"
+          if (Test-Path $couchdb) {
+            Write-Host "=== Running couchdb.cmd with timeout ==="
+            $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+            $pinfo.FileName = "cmd.exe"
+            $pinfo.Arguments = "/c `"$couchdb`""
+            $pinfo.RedirectStandardOutput = $true
+            $pinfo.RedirectStandardError = $true
+            $pinfo.UseShellExecute = $false
+            $pinfo.WorkingDirectory = "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64"
+            $p = New-Object System.Diagnostics.Process
+            $p.StartInfo = $pinfo
+            $p.Start() | Out-Null
+            Start-Sleep -Seconds 10
+            if (!$p.HasExited) {
+              Write-Host "CouchDB is still running after 10s - checking HTTP..."
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:5984/" -TimeoutSec 5 -ErrorAction Stop
+                Write-Host "HTTP Response: $($response.StatusCode)"
+                Write-Host $response.Content
+              } catch {
+                Write-Host "HTTP request failed: $_"
+              }
+              $p.Kill()
+            } else {
+              Write-Host "CouchDB exited with code: $($p.ExitCode)"
+              Write-Host "=== stdout ==="
+              Write-Host $p.StandardOutput.ReadToEnd()
+              Write-Host "=== stderr ==="
+              Write-Host $p.StandardError.ReadToEnd()
+            }
+          } else {
+            Write-Host "couchdb.cmd NOT FOUND"
+          }
+
       - name: Run CouchDB integration tests
         run: pnpm test:engine couchdb
         timeout-minutes: 15
