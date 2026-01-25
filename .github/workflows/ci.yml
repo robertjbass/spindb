@@ -1104,6 +1104,37 @@ jobs:
       - name: Show installed engines
         run: pnpm start engines list
 
+      # Diagnostic: Test win32sysinfo.exe directly on Windows to debug crash
+      - name: Test win32sysinfo.exe (Windows diagnostic)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $win32sysinfo = "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64\lib\os_mon-2.9.1\priv\bin\win32sysinfo.exe"
+          Write-Host "=== Testing win32sysinfo.exe directly ==="
+          Write-Host "Path: $win32sysinfo"
+          if (Test-Path $win32sysinfo) {
+            Write-Host "File exists, checking dependencies..."
+            # Check DLL dependencies using dumpbin if available
+            $dumpbin = Get-Command dumpbin -ErrorAction SilentlyContinue
+            if ($dumpbin) {
+              Write-Host "=== DLL Dependencies ==="
+              dumpbin /dependents $win32sysinfo
+            }
+            Write-Host "=== Attempting to run win32sysinfo.exe ==="
+            try {
+              $proc = Start-Process -FilePath $win32sysinfo -Wait -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
+              Write-Host "Exit code: $($proc.ExitCode)"
+              Write-Host "=== stdout ==="
+              Get-Content stdout.txt -ErrorAction SilentlyContinue
+              Write-Host "=== stderr ==="
+              Get-Content stderr.txt -ErrorAction SilentlyContinue
+            } catch {
+              Write-Host "Error running win32sysinfo.exe: $_"
+            }
+          } else {
+            Write-Host "win32sysinfo.exe NOT FOUND at expected path"
+          }
+
       - name: Run CouchDB integration tests
         run: pnpm test:engine couchdb
         timeout-minutes: 15
