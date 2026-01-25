@@ -20,7 +20,7 @@ export const FERRETDB_SUPPORTED_PLATFORMS = new Set([
   'win32-x64',
 ])
 
-// Supported platforms for postgresql-documentdb backe
+// Supported platforms for postgresql-documentdb backend
 export const DOCUMENTDB_SUPPORTED_PLATFORMS = FERRETDB_SUPPORTED_PLATFORMS
 
 /**

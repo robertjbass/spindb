@@ -112,28 +112,32 @@ class FerretDBCompositeBinaryManager {
 
   /**
    * Get the path where FerretDB binaries would be installed
+   * @param version - Full normalized version (e.g., "2.7.0", not "2" or "2.7")
+   * @param platform - Operating system
+   * @param arch - Architecture
    */
   getFerretDBBinaryPath(
     version: string,
     platform: Platform,
     arch: Arch,
   ): string {
-    const fullVersion = this.getFullVersion(version)
-    return join(paths.bin, `ferretdb-${fullVersion}-${platform}-${arch}`)
+    return join(paths.bin, `ferretdb-${version}-${platform}-${arch}`)
   }
 
   /**
    * Get the path where postgresql-documentdb binaries would be installed
+   * @param version - Full normalized version (e.g., "17-0.107.0", not "17")
+   * @param platform - Operating system
+   * @param arch - Architecture
    */
   getDocumentDBBinaryPath(
     version: string,
     platform: Platform,
     arch: Arch,
   ): string {
-    const fullVersion = this.getFullDocumentDBVersion(version)
     return join(
       paths.bin,
-      `postgresql-documentdb-${fullVersion}-${platform}-${arch}`,
+      `postgresql-documentdb-${version}-${platform}-${arch}`,
     )
   }
 
@@ -145,6 +149,10 @@ class FerretDBCompositeBinaryManager {
    *
    * On macOS, the binaries use @loader_path which doesn't need env vars.
    * On Windows, DLLs are found via PATH or same directory.
+   *
+   * @param version - Full normalized version (e.g., "17-0.107.0", not "17")
+   * @param platform - Operating system
+   * @param arch - Architecture
    */
   getDocumentDBSpawnEnv(
     version: string,

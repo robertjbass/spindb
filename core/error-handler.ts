@@ -121,6 +121,21 @@ export class SpinDBError extends Error {
   }
 }
 
+/**
+ * Error thrown when a required CLI tool is missing (e.g., psql, pg_dump, mysql).
+ * Used to trigger installation prompts in the interactive menu.
+ */
+export class MissingToolError extends Error {
+  public readonly tool: string
+
+  constructor(tool: string, message?: string) {
+    super(message ?? `${tool} not found`)
+    this.name = 'MissingToolError'
+    this.tool = tool
+    Error.captureStackTrace(this, MissingToolError)
+  }
+}
+
 function getLogPath(): string {
   return join(getSpinDBRoot(), 'spindb.log')
 }

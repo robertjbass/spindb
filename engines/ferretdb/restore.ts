@@ -254,7 +254,15 @@ export async function restoreBackup(
     timeoutId = setTimeout(() => {
       if (finished) return
       cleanup()
-      proc.kill('SIGTERM')
+      // Defensively kill the process - it may have already exited between
+      // the finished check and this call, so wrap in try-catch
+      try {
+        if (proc.exitCode === null && !proc.killed) {
+          proc.kill('SIGTERM')
+        }
+      } catch {
+        // Process already exited or otherwise not killable - ignore
+      }
       reject(
         new Error(
           `Restore timed out after ${timeoutMs}ms. The ${isSqlFormat ? 'psql' : 'pg_restore'} process was killed.`,

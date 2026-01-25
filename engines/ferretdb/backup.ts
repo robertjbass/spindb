@@ -155,6 +155,9 @@ export async function createCloneBackup(
   container: ContainerConfig,
   outputPath: string,
 ): Promise<BackupResult> {
+  // FerretDB stores all MongoDB-compatible document data in a PostgreSQL database
+  // named 'ferretdb'. This is the backend database that pg_dump targets.
+  // See CLAUDE.md "FerretDB (Composite Engine)" section for architecture details.
   return createBackup(container, outputPath, {
     database: 'ferretdb',
     format: 'custom',

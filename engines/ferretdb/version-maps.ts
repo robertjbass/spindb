@@ -76,7 +76,7 @@ export function getFullVersion(version: string): string | null {
   const majorOnly = version.split('.')[0]
   const matchingVersions = Object.entries(FERRETDB_VERSION_MAP)
     .filter(([key]) => key.split('.')[0] === majorOnly)
-    .sort(([a], [b]) => compareVersions(b, a)) // Sort descending
+    .sort(([, aValue], [, bValue]) => compareVersions(bValue, aValue)) // Sort descending by full semver value
 
   if (matchingVersions.length > 0) {
     return matchingVersions[0][1]

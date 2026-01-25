@@ -58,8 +58,13 @@ function onEscapeData(data: Buffer): void {
     }
     // Then close the prompt UI to stop it from rendering
     // Do this after rejecting so the error propagates first
+    // Wrap in try/catch as inquirer internals may change between versions
     if (currentPromptUi?.close) {
-      currentPromptUi.close()
+      try {
+        currentPromptUi.close()
+      } catch {
+        // Swallow errors from inquirer internals - close() behavior may vary
+      }
       currentPromptUi = null
     }
     // Clear the screen
@@ -128,7 +133,9 @@ export async function escapeablePrompt<T extends Record<string, unknown>>(
     const p = inquirer.prompt(questions)
     // Register the prompt UI so we can close it on escape
     // Use runtime guard to safely access inquirer's internal ui property
-    // which may change between versions
+    // which may change between versions.
+    // Validated against inquirer@9.3.7 - the prompt object exposes a .ui
+    // property with a .close() method for programmatic prompt termination.
     const promptWithUi = p as unknown as Record<string, unknown>
     if (
       promptWithUi.ui &&

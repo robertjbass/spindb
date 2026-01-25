@@ -489,6 +489,12 @@ get_backup_extension() {
         archive) echo ".archive" ;;
       esac
       ;;
+    ferretdb)
+      case $format in
+        sql) echo ".sql" ;;
+        custom) echo ".dump" ;;
+      esac
+      ;;
     redis)
       case $format in
         text) echo ".redis" ;;

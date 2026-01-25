@@ -217,7 +217,9 @@ describe('FerretDB Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
 
-    // TODO: Replace pg_dump/pg_restore with mongodump/mongorestore for FerretDB backup/restore
+    // TODO(backlog): Replace pg_dump/pg_restore with mongodump/mongorestore for FerretDB
+    // Tracked: https://github.com/anthropics/spindb/issues/TBD (update when ticket created)
+    // Status: known-limitation
     //
     // Current limitation: FerretDB backup/restore through PostgreSQL has issues due to
     // DocumentDB extension internal state. The restore may fail to fully restore
@@ -393,7 +395,6 @@ describe('FerretDB Integration Tests', () => {
     await engine.initDataDir(portConflictContainerName, TEST_VERSION, {})
 
     // The container should be created but when we try to start, it should detect conflict
-    // In real usage, the start command would auto-assign a new port
     const config = await containerManager.getConfig(portConflictContainerName)
     assert(config !== null, 'Container should be created')
     assertEqual(
@@ -402,12 +403,50 @@ describe('FerretDB Integration Tests', () => {
       'Port should be set to conflicting port initially',
     )
 
-    // Clean up this test container
-    await containerManager.delete(portConflictContainerName, { force: true })
+    try {
+      // Attempt to start the container - this should either:
+      // 1. Fail with a port conflict error, or
+      // 2. Succeed if the engine auto-detects and handles the conflict
+      await engine.start(config!)
+      await containerManager.updateConfig(portConflictContainerName, {
+        status: 'running',
+      })
 
-    console.log(
-      '   ✓ Container created with conflicting port (would auto-reassign on start)',
-    )
+      // If start succeeded, verify the container is running
+      const running = await processManager.isRunning(portConflictContainerName, {
+        engine: ENGINE,
+      })
+
+      if (running) {
+        // Check if the port was auto-reassigned (behavior varies by engine)
+        const updatedConfig = await containerManager.getConfig(portConflictContainerName)
+        console.log(
+          `   ✓ Container started (port: ${updatedConfig?.port}, conflict handling succeeded)`,
+        )
+
+        // Stop the container before cleanup
+        await engine.stop(updatedConfig!)
+        await waitForStopped(portConflictContainerName, ENGINE)
+      } else {
+        console.log(
+          '   ✓ Container start attempted but not running (port conflict detected)',
+        )
+      }
+    } catch (error) {
+      // Port conflict error is expected behavior
+      const e = error as Error
+      assert(
+        e.message.includes('port') ||
+          e.message.includes('address') ||
+          e.message.includes('EADDRINUSE') ||
+          e.message.includes('in use'),
+        `Expected port conflict error, got: ${e.message}`,
+      )
+      console.log(`   ✓ Port conflict detected with error: ${e.message}`)
+    } finally {
+      // Clean up this test container regardless of pass/fail
+      await containerManager.delete(portConflictContainerName, { force: true })
+    }
   })
 
   it('should show warning when starting already running container', async () => {

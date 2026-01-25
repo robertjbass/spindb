@@ -10,6 +10,7 @@ import {
   EscapeError,
 } from '../../ui/prompts'
 import { header, uiError } from '../../ui/theme'
+import { MissingToolError } from '../../../core/error-handler'
 import { hasAnyInstalledEngines } from '../../helpers'
 import {
   handleCreate,
@@ -181,17 +182,25 @@ export const menuCommand = new Command('menu')
           continue
         }
 
-        // Check if this is a missing tool error
-        if (
+        // Check if this is a missing tool error (prefer typed error, fallback to string matching)
+        let missingTool: string | null = null
+
+        if (error instanceof MissingToolError) {
+          missingTool = error.tool
+        } else if (
+          // Fallback for older callers that may throw plain Error with message
           e.message.includes('pg_restore not found') ||
           e.message.includes('psql not found') ||
           e.message.includes('pg_dump not found')
         ) {
-          const missingTool = e.message.includes('pg_restore')
+          missingTool = e.message.includes('pg_restore')
             ? 'pg_restore'
             : e.message.includes('pg_dump')
               ? 'pg_dump'
               : 'psql'
+        }
+
+        if (missingTool) {
           try {
             const installed = await promptInstallDependencies(missingTool)
             if (installed) {

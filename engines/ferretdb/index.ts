@@ -518,7 +518,30 @@ export class FerretDBEngine extends BaseEngine {
       // FerretDB 2.x has auth enabled by default, but for local dev we disable it
       // Use a unique debug port to avoid conflicts when running multiple FerretDB containers
       const FERRETDB_DEBUG_PORT_OFFSET = 10000
-      const debugPort = port + FERRETDB_DEBUG_PORT_OFFSET
+      const FERRETDB_DEBUG_PORT_MAX_ATTEMPTS = 10
+      let debugPort = port + FERRETDB_DEBUG_PORT_OFFSET
+
+      // Probe for an available debug port, incrementing if the computed one is occupied
+      let debugPortFound = false
+      for (let attempt = 0; attempt < FERRETDB_DEBUG_PORT_MAX_ATTEMPTS; attempt++) {
+        const candidatePort = debugPort + attempt
+        if (await isPortAvailable(candidatePort)) {
+          debugPort = candidatePort
+          debugPortFound = true
+          break
+        }
+        logDebug(`Debug port ${candidatePort} is occupied, trying next...`)
+      }
+
+      if (!debugPortFound) {
+        logWarning(
+          `Could not find available debug port in range ${debugPort}-${debugPort + FERRETDB_DEBUG_PORT_MAX_ATTEMPTS - 1}, using computed port ${port + FERRETDB_DEBUG_PORT_OFFSET} anyway`,
+        )
+        debugPort = port + FERRETDB_DEBUG_PORT_OFFSET
+      }
+
+      logDebug(`Using debug port ${debugPort} for FerretDB HTTP debug handler`)
+
       const ferretArgs = [
         '--listen-addr',
         `127.0.0.1:${port}`,
