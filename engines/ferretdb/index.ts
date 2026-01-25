@@ -880,7 +880,7 @@ export class FerretDBEngine extends BaseEngine {
       const script =
         'try { db._spindb_init.drop(); } catch(e) {} db.createCollection("_spindb_init"); db._spindb_init.drop();'
       const cmd = isWindows()
-        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval "${script}"`
+        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval "${script.replace(/"/g, '\\"')}"`
         : `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval '${script}'`
 
       await execAsync(cmd, { timeout: 10000 })

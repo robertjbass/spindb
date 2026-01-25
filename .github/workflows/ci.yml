@@ -573,6 +573,11 @@ jobs:
       - name: Download FerretDB binaries
         run: pnpm start engines download ferretdb 2
 
+      # FerretDB uses mongosh (MongoDB shell) for connect/run commands
+      # Download MongoDB binaries to get bundled mongosh
+      - name: Download MongoDB binaries (for mongosh)
+        run: pnpm start engines download mongodb 8.0
+
       - name: Show installed engines
         run: pnpm start engines list
 
