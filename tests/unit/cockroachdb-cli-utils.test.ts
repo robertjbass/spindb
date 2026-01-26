@@ -30,12 +30,15 @@ describe('CockroachDB CLI Utils', () => {
       assert.strictEqual(escapeSqlValue('', true), "''")
     })
 
-    it('should return NULL for literal NULL string', () => {
-      assert.strictEqual(escapeSqlValue('NULL'), 'NULL')
+    it('should treat literal NULL string as a string value', () => {
+      // Literal "NULL" is a string, not SQL NULL - prevents data corruption
+      // CockroachDB CSV uses empty unquoted fields for NULL, not string sentinels
+      assert.strictEqual(escapeSqlValue('NULL'), "'NULL'")
     })
 
-    it('should return NULL for \\N (common CSV null marker)', () => {
-      assert.strictEqual(escapeSqlValue('\\N'), 'NULL')
+    it('should treat \\N as a string value', () => {
+      // Literal "\\N" is a string, not SQL NULL - prevents data corruption
+      assert.strictEqual(escapeSqlValue('\\N'), "'\\N'")
     })
 
     it('should return TRUE for boolean true values', () => {

@@ -57,19 +57,25 @@ export async function getCockroachPathForVersion(
 
 /**
  * Require the cockroach binary path, throwing if not found
+ *
+ * If a version is provided, only that specific version is checked.
+ * If no version is provided, falls back to the config cache.
  */
 export async function requireCockroachPath(
   version?: string,
 ): Promise<string> {
-  // If version provided, look for that specific version
+  // If version provided, require that specific version (no fallback)
   if (version) {
     const path = await getCockroachPathForVersion(version)
     if (path) {
       return path
     }
+    throw new Error(
+      `CockroachDB ${version} binary not found. Run: spindb engines download cockroachdb ${version}`,
+    )
   }
 
-  // Try config cache
+  // No version specified - try config cache
   const cached = await getCockroachPath()
   if (cached) {
     return cached
@@ -224,12 +230,8 @@ export function escapeSqlValue(
 
   // Empty string: only treat as NULL if it was NOT quoted in CSV
   // Quoted empty strings ("") should be preserved as empty strings
+  // CockroachDB CSV output uses empty unquoted fields for NULL values
   if (value === '' && !wasQuoted) {
-    return 'NULL'
-  }
-
-  // Check for explicit NULL string (from CSV output)
-  if (value === 'NULL' || value === '\\N') {
     return 'NULL'
   }
 

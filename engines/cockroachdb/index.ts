@@ -823,9 +823,14 @@ export class CockroachDBEngine extends BaseEngine {
         const escapedTableForString = table.replace(/'/g, "''")
         const columnsQuery = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${escapedTableForString}' ORDER BY ordinal_position`
         const columnsResult = await this.execRemoteQuery(cockroach, connArgs, columnsQuery)
-        // Column names are simple strings, use record-aware parser for consistency
+        // Parse each CSV record properly to handle quoted column names
         const columnRecords = parseCsvRecords(columnsResult, true) // Skip header
-        const columns = columnRecords.map((c) => c.trim()).filter((c) => c)
+        const columns = columnRecords
+          .map((record) => {
+            const fields = parseCsvLine(record)
+            return fields.length > 0 ? fields[0].value.trim() : ''
+          })
+          .filter((c) => c)
 
         if (columns.length === 0) {
           logDebug(`No columns found for table ${table}, skipping data export`)
