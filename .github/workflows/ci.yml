@@ -1782,38 +1782,40 @@ jobs:
 
       # Download all Windows-compatible engines
       # Note: ClickHouse and FerretDB are not available on Windows
+      # TEMPORARILY COMMENTED OUT - Only downloading engines needed for failing tests
       - name: Download PostgreSQL
         run: pnpm start engines download postgresql 18
 
-      - name: Download MySQL
-        run: pnpm start engines download mysql 8.0
+      # - name: Download MySQL
+      #   run: pnpm start engines download mysql 8.0
 
-      - name: Download MariaDB
-        run: pnpm start engines download mariadb 11.8
+      # - name: Download MariaDB
+      #   run: pnpm start engines download mariadb 11.8
 
       - name: Download SQLite
         run: pnpm start engines download sqlite 3
 
-      - name: Download DuckDB
-        run: pnpm start engines download duckdb 1
+      # - name: Download DuckDB
+      #   run: pnpm start engines download duckdb 1
 
-      - name: Download MongoDB
-        run: pnpm start engines download mongodb 8.0
+      # - name: Download MongoDB
+      #   run: pnpm start engines download mongodb 8.0
 
-      - name: Download Redis
-        run: pnpm start engines download redis 8
+      # - name: Download Redis
+      #   run: pnpm start engines download redis 8
 
-      - name: Download Valkey
-        run: pnpm start engines download valkey 9
+      # - name: Download Valkey
+      #   run: pnpm start engines download valkey 9
 
-      - name: Download Qdrant
-        run: pnpm start engines download qdrant 1
+      # - name: Download Qdrant
+      #   run: pnpm start engines download qdrant 1
 
-      - name: Download Meilisearch
-        run: pnpm start engines download meilisearch 1
+      # - name: Download Meilisearch
+      #   run: pnpm start engines download meilisearch 1
 
-      - name: Download CouchDB
-        run: pnpm start engines download couchdb 3
+      # - name: Download CouchDB
+      #   run: pnpm start engines download couchdb 3
+      # END TEMPORARILY COMMENTED OUT
 
       - name: Download CockroachDB
         run: pnpm start engines download cockroachdb 25
@@ -1824,80 +1826,82 @@ jobs:
       - name: Show installed engines
         run: pnpm start engines list
 
+      # TEMPORARILY COMMENTED OUT - Testing only failing tests (CockroachDB, SurrealDB, CLI E2E)
       # Run unit tests first
       # Each test has continue-on-error so we can see ALL failures, not just the first
-      - name: Run unit tests
-        id: unit
-        run: pnpm test:unit
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Run unit tests
+      #   id: unit
+      #   run: pnpm test:unit
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
       # Run integration tests sequentially for each engine
-      - name: Test PostgreSQL
-        id: postgresql
-        run: pnpm test:engine postgresql
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test PostgreSQL
+      #   id: postgresql
+      #   run: pnpm test:engine postgresql
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test MySQL
-        id: mysql
-        run: pnpm test:engine mysql
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test MySQL
+      #   id: mysql
+      #   run: pnpm test:engine mysql
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test MariaDB
-        id: mariadb
-        run: pnpm test:engine mariadb
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test MariaDB
+      #   id: mariadb
+      #   run: pnpm test:engine mariadb
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test SQLite
-        id: sqlite
-        run: pnpm test:engine sqlite
-        timeout-minutes: 10
-        continue-on-error: true
+      # - name: Test SQLite
+      #   id: sqlite
+      #   run: pnpm test:engine sqlite
+      #   timeout-minutes: 10
+      #   continue-on-error: true
 
-      - name: Test DuckDB
-        id: duckdb
-        run: pnpm test:engine duckdb
-        timeout-minutes: 10
-        continue-on-error: true
+      # - name: Test DuckDB
+      #   id: duckdb
+      #   run: pnpm test:engine duckdb
+      #   timeout-minutes: 10
+      #   continue-on-error: true
 
-      - name: Test MongoDB
-        id: mongodb
-        run: pnpm test:engine mongodb
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test MongoDB
+      #   id: mongodb
+      #   run: pnpm test:engine mongodb
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test Redis
-        id: redis
-        run: pnpm test:engine redis
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test Redis
+      #   id: redis
+      #   run: pnpm test:engine redis
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test Valkey
-        id: valkey
-        run: pnpm test:engine valkey
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test Valkey
+      #   id: valkey
+      #   run: pnpm test:engine valkey
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test Qdrant
-        id: qdrant
-        run: pnpm test:engine qdrant
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test Qdrant
+      #   id: qdrant
+      #   run: pnpm test:engine qdrant
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test Meilisearch
-        id: meilisearch
-        run: pnpm test:engine meilisearch
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test Meilisearch
+      #   id: meilisearch
+      #   run: pnpm test:engine meilisearch
+      #   timeout-minutes: 15
+      #   continue-on-error: true
 
-      - name: Test CouchDB
-        id: couchdb
-        run: pnpm test:engine couchdb
-        timeout-minutes: 15
-        continue-on-error: true
+      # - name: Test CouchDB
+      #   id: couchdb
+      #   run: pnpm test:engine couchdb
+      #   timeout-minutes: 15
+      #   continue-on-error: true
+      # END TEMPORARILY COMMENTED OUT
 
       - name: Test CockroachDB
         id: cockroachdb
@@ -1919,83 +1923,86 @@ jobs:
         continue-on-error: true
 
       # Check if any tests failed and report all failures
+      # TEMPORARILY SIMPLIFIED - Only checking the 3 failing tests
       - name: Check test results
         if: always()
         run: |
-          echo "=== Windows Test Results ==="
+          echo "=== Windows Test Results (TEMPORARY - 3 tests only) ==="
           failed=""
-          if [ "${{ steps.unit.outcome }}" != "success" ]; then
-            echo "❌ Unit tests: FAILED"
-            failed="$failed unit"
-          else
-            echo "✅ Unit tests: passed"
-          fi
-          if [ "${{ steps.postgresql.outcome }}" != "success" ]; then
-            echo "❌ PostgreSQL: FAILED"
-            failed="$failed postgresql"
-          else
-            echo "✅ PostgreSQL: passed"
-          fi
-          if [ "${{ steps.mysql.outcome }}" != "success" ]; then
-            echo "❌ MySQL: FAILED"
-            failed="$failed mysql"
-          else
-            echo "✅ MySQL: passed"
-          fi
-          if [ "${{ steps.mariadb.outcome }}" != "success" ]; then
-            echo "❌ MariaDB: FAILED"
-            failed="$failed mariadb"
-          else
-            echo "✅ MariaDB: passed"
-          fi
-          if [ "${{ steps.sqlite.outcome }}" != "success" ]; then
-            echo "❌ SQLite: FAILED"
-            failed="$failed sqlite"
-          else
-            echo "✅ SQLite: passed"
-          fi
-          if [ "${{ steps.duckdb.outcome }}" != "success" ]; then
-            echo "❌ DuckDB: FAILED"
-            failed="$failed duckdb"
-          else
-            echo "✅ DuckDB: passed"
-          fi
-          if [ "${{ steps.mongodb.outcome }}" != "success" ]; then
-            echo "❌ MongoDB: FAILED"
-            failed="$failed mongodb"
-          else
-            echo "✅ MongoDB: passed"
-          fi
-          if [ "${{ steps.redis.outcome }}" != "success" ]; then
-            echo "❌ Redis: FAILED"
-            failed="$failed redis"
-          else
-            echo "✅ Redis: passed"
-          fi
-          if [ "${{ steps.valkey.outcome }}" != "success" ]; then
-            echo "❌ Valkey: FAILED"
-            failed="$failed valkey"
-          else
-            echo "✅ Valkey: passed"
-          fi
-          if [ "${{ steps.qdrant.outcome }}" != "success" ]; then
-            echo "❌ Qdrant: FAILED"
-            failed="$failed qdrant"
-          else
-            echo "✅ Qdrant: passed"
-          fi
-          if [ "${{ steps.meilisearch.outcome }}" != "success" ]; then
-            echo "❌ Meilisearch: FAILED"
-            failed="$failed meilisearch"
-          else
-            echo "✅ Meilisearch: passed"
-          fi
-          if [ "${{ steps.couchdb.outcome }}" != "success" ]; then
-            echo "❌ CouchDB: FAILED"
-            failed="$failed couchdb"
-          else
-            echo "✅ CouchDB: passed"
-          fi
+          # TEMPORARILY COMMENTED OUT
+          # if [ "${{ steps.unit.outcome }}" != "success" ]; then
+          #   echo "❌ Unit tests: FAILED"
+          #   failed="$failed unit"
+          # else
+          #   echo "✅ Unit tests: passed"
+          # fi
+          # if [ "${{ steps.postgresql.outcome }}" != "success" ]; then
+          #   echo "❌ PostgreSQL: FAILED"
+          #   failed="$failed postgresql"
+          # else
+          #   echo "✅ PostgreSQL: passed"
+          # fi
+          # if [ "${{ steps.mysql.outcome }}" != "success" ]; then
+          #   echo "❌ MySQL: FAILED"
+          #   failed="$failed mysql"
+          # else
+          #   echo "✅ MySQL: passed"
+          # fi
+          # if [ "${{ steps.mariadb.outcome }}" != "success" ]; then
+          #   echo "❌ MariaDB: FAILED"
+          #   failed="$failed mariadb"
+          # else
+          #   echo "✅ MariaDB: passed"
+          # fi
+          # if [ "${{ steps.sqlite.outcome }}" != "success" ]; then
+          #   echo "❌ SQLite: FAILED"
+          #   failed="$failed sqlite"
+          # else
+          #   echo "✅ SQLite: passed"
+          # fi
+          # if [ "${{ steps.duckdb.outcome }}" != "success" ]; then
+          #   echo "❌ DuckDB: FAILED"
+          #   failed="$failed duckdb"
+          # else
+          #   echo "✅ DuckDB: passed"
+          # fi
+          # if [ "${{ steps.mongodb.outcome }}" != "success" ]; then
+          #   echo "❌ MongoDB: FAILED"
+          #   failed="$failed mongodb"
+          # else
+          #   echo "✅ MongoDB: passed"
+          # fi
+          # if [ "${{ steps.redis.outcome }}" != "success" ]; then
+          #   echo "❌ Redis: FAILED"
+          #   failed="$failed redis"
+          # else
+          #   echo "✅ Redis: passed"
+          # fi
+          # if [ "${{ steps.valkey.outcome }}" != "success" ]; then
+          #   echo "❌ Valkey: FAILED"
+          #   failed="$failed valkey"
+          # else
+          #   echo "✅ Valkey: passed"
+          # fi
+          # if [ "${{ steps.qdrant.outcome }}" != "success" ]; then
+          #   echo "❌ Qdrant: FAILED"
+          #   failed="$failed qdrant"
+          # else
+          #   echo "✅ Qdrant: passed"
+          # fi
+          # if [ "${{ steps.meilisearch.outcome }}" != "success" ]; then
+          #   echo "❌ Meilisearch: FAILED"
+          #   failed="$failed meilisearch"
+          # else
+          #   echo "✅ Meilisearch: passed"
+          # fi
+          # if [ "${{ steps.couchdb.outcome }}" != "success" ]; then
+          #   echo "❌ CouchDB: FAILED"
+          #   failed="$failed couchdb"
+          # else
+          #   echo "✅ CouchDB: passed"
+          # fi
+          # END TEMPORARILY COMMENTED OUT
           if [ "${{ steps.cockroachdb.outcome }}" != "success" ]; then
             echo "❌ CockroachDB: FAILED"
             failed="$failed cockroachdb"
