@@ -131,6 +131,7 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **CLI shell**: `surreal sql --endpoint ws://127.0.0.1:${port}` for interactive queries
 - **Scripting flag**: Use `--hide-welcome` with `surreal sql` to suppress the welcome banner for scriptable/parseable output. The engine uses this automatically for non-interactive commands.
 - **History file**: SurrealDB writes `history.txt` to cwd. The engine sets `cwd` to the container directory so history is stored in `~/.spindb/containers/surrealdb/<name>/history.txt` rather than polluting the user's working directory.
+- **Background process stdio**: MUST use `stdio: ['ignore', 'ignore', 'ignore']` when spawning the detached server process. Using `'pipe'` for stdout/stderr keeps file descriptors open that prevent Node.js from exiting even after `proc.unref()`. This caused `spindb start` to hang indefinitely in Docker/CI environments. See CockroachDB for the same pattern.
 
 ### Binary Manager Base Classes
 
@@ -484,6 +485,17 @@ Menu navigation patterns:
 3. **FerretDB Windows** - Not supported (postgresql-documentdb startup issues, works in WSL)
 4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
 5. **Qdrant, Meilisearch & CouchDB** - Use REST API instead of CLI shell; `spindb run` is not applicable
+
+## Development Gotchas
+
+**Spawning background server processes:**
+When spawning a detached database server process, MUST use `stdio: ['ignore', 'ignore', 'ignore']`. Using `'pipe'` for stdout/stderr keeps file descriptors open that prevent Node.js from exiting, even after calling `proc.unref()`. This causes CLI commands like `spindb start` to hang indefinitely, especially visible in Docker/CI environments where output is captured. Symptoms: command completes successfully (server starts) but never returns to shell. See CockroachDB and SurrealDB engines for correct implementation.
+
+**Commander.js async actions:**
+Use `await program.parseAsync()` instead of `program.parse()` in the CLI entry point. `program.parse()` returns immediately without waiting for async command actions to complete, which can cause race conditions with exit codes.
+
+**CI failures with no logs:**
+If GitHub Actions jobs fail with generic "This job failed" messages and no detailed logs (especially Windows runners), check [GitHub Status](https://www.githubstatus.com/) for infrastructure issues. Common causes: runner quota exhausted, runner provisioning failures, or transient GitHub infrastructure problems. Try re-running failed jobs before investigating code issues.
 
 ## Publishing
 
