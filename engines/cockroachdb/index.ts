@@ -746,12 +746,20 @@ export class CockroachDBEngine extends BaseEngine {
     logDebug(`Found ${tables.length} tables in database ${database}`)
 
     for (const table of tables) {
+      // Validate table name to prevent SQL injection
+      // Table names from information_schema should be safe, but validate defensively
+      const validIdentifierPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+      if (!validIdentifierPattern.test(table)) {
+        logWarning(`Skipping table with invalid name: ${table}`)
+        continue
+      }
+
       lines.push(`-- Table: ${table}`)
       lines.push('')
 
-      // Get CREATE TABLE
+      // Get CREATE TABLE - use proper identifier escaping
       try {
-        const createQuery = `SHOW CREATE TABLE "${table}"`
+        const createQuery = `SHOW CREATE TABLE ${escapeCockroachIdentifier(table)}`
         const createResult = await this.execRemoteQuery(cockroach, connArgs, createQuery)
         // Parse CSV output safely - format is: table_name,create_statement
         // The create statement often contains commas, so use parseCsvLine
@@ -775,7 +783,9 @@ export class CockroachDBEngine extends BaseEngine {
       // Export table data
       try {
         // Get column names first
-        const columnsQuery = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table}' ORDER BY ordinal_position`
+        // Escape single quotes in table name for string literal comparison
+        const escapedTableForString = table.replace(/'/g, "''")
+        const columnsQuery = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${escapedTableForString}' ORDER BY ordinal_position`
         const columnsResult = await this.execRemoteQuery(cockroach, connArgs, columnsQuery)
         const columns = columnsResult
           .split('\n')
@@ -788,8 +798,8 @@ export class CockroachDBEngine extends BaseEngine {
           continue
         }
 
-        // Get all rows
-        const dataQuery = `SELECT * FROM "${table}"`
+        // Get all rows - use proper identifier escaping
+        const dataQuery = `SELECT * FROM ${escapeCockroachIdentifier(table)}`
         const dataResult = await this.execRemoteQuery(cockroach, connArgs, dataQuery)
         const dataLines = dataResult.split('\n').slice(1).filter((line) => line.trim())
 
