@@ -43,6 +43,7 @@ import {
   type InstalledValkeyEngine,
   type InstalledQdrantEngine,
   type InstalledMeilisearchEngine,
+  type InstalledCouchDBEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -60,6 +61,7 @@ import { clickhouseBinaryManager } from '../../engines/clickhouse/binary-manager
 import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
 import { meilisearchBinaryManager } from '../../engines/meilisearch/binary-manager'
 import { ferretdbBinaryManager } from '../../engines/ferretdb/binary-manager'
+import { couchdbBinaryManager } from '../../engines/couchdb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
@@ -457,6 +459,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const meilisearchEngines = engines.filter(
     (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
   )
+  const couchdbEngines = engines.filter(
+    (e): e is InstalledCouchDBEngine => e.engine === 'couchdb',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -621,6 +626,21 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // CouchDB rows
+  for (const engine of couchdbEngines) {
+    const icon = ENGINE_ICONS.couchdb
+    const platformInfo = `${engine.platform}-${engine.arch}`
+    const engineDisplay = `${icon} couchdb`
+
+    console.log(
+      chalk.gray('  ') +
+        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(55)))
 
   // Summary
@@ -713,6 +733,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  Meilisearch: ${meilisearchEngines.length} version(s), ${formatBytes(totalMeilisearchSize)}`,
+      ),
+    )
+  }
+  if (couchdbEngines.length > 0) {
+    const totalCouchDBSize = couchdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  CouchDB: ${couchdbEngines.length} version(s), ${formatBytes(totalCouchDBSize)}`,
       ),
     )
   }
@@ -1601,9 +1632,53 @@ enginesCommand
         return
       }
 
+      if (['couchdb', 'couch'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('CouchDB requires a version (e.g., 3)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.CouchDB)
+
+        const spinner = createSpinner(`Checking CouchDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `CouchDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`CouchDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`CouchDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: couchdbPlatform, arch: couchdbArch } =
+          platformService.getPlatformInfo()
+        const couchdbFullVersion = couchdbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'couchdb',
+          version: couchdbFullVersion,
+          platform: couchdbPlatform,
+          arch: couchdbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for CouchDB - it's a REST API server
+        // with no CLI client tools (uses HTTP protocols instead)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb`,
         ),
       )
       process.exit(1)

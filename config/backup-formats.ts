@@ -22,6 +22,7 @@ import {
   type ClickHouseFormat,
   type QdrantFormat,
   type MeilisearchFormat,
+  type CouchDBFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -53,6 +54,7 @@ export const BACKUP_FORMATS: {
   [Engine.ClickHouse]: EngineBackupFormats<ClickHouseFormat>
   [Engine.Qdrant]: EngineBackupFormats<QdrantFormat>
   [Engine.Meilisearch]: EngineBackupFormats<MeilisearchFormat>
+  [Engine.CouchDB]: EngineBackupFormats<CouchDBFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -251,6 +253,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only snapshot format supported
     defaultFormat: 'snapshot',
+  },
+  [Engine.CouchDB]: {
+    formats: {
+      json: {
+        extension: '.json',
+        label: '.json',
+        description: 'JSON backup - all documents exported as JSON',
+        spinnerLabel: 'JSON',
+      },
+    },
+    supportsFormatChoice: false, // Only JSON format supported
+    defaultFormat: 'json',
   },
 }
 

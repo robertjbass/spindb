@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.23.5",
+  "version": "0.24.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -41,6 +41,7 @@
     "clickhouse",
     "qdrant",
     "meilisearch",
+    "couchdb",
     "ferretdb",
     "sqlite",
     "duckdb",

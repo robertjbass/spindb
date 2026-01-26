@@ -67,6 +67,7 @@ export const TEST_PORTS = {
   clickhouse: { base: 9050, clone: 9052, renamed: 9051 },
   qdrant: { base: 6350, clone: 6352, renamed: 6351 },
   meilisearch: { base: 7710, clone: 7712, renamed: 7711 },
+  couchdb: { base: 5990, clone: 5992, renamed: 5991 },
 }
 
 /**
@@ -573,6 +574,22 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('Meilisearch health check failed or timed out')
         }
+      } else if (engine === Engine.CouchDB) {
+        // Use fetch to ping CouchDB REST API with timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('CouchDB health check failed or timed out')
+        }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -719,6 +736,9 @@ export function getConnectionString(
   }
   if (engine === Engine.Meilisearch) {
     return `http://127.0.0.1:${port}`
+  }
+  if (engine === Engine.CouchDB) {
+    return `http://127.0.0.1:${port}/${database}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }
@@ -1017,5 +1037,137 @@ export async function insertMeilisearchDocuments(
     return { success: false }
   } catch {
     return { success: false }
+  }
+}
+
+// CouchDB helper functions
+// CouchDB 3.x requires admin authentication for most operations
+const COUCHDB_AUTH_HEADER = `Basic ${Buffer.from('admin:admin').toString('base64')}`
+
+/**
+ * Get the number of databases in CouchDB (excluding system databases)
+ */
+export async function getCouchDBDatabaseCount(port: number): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/_all_dbs`, {
+      headers: { Authorization: COUCHDB_AUTH_HEADER },
+    })
+    const data = (await response.json()) as string[]
+    // Filter out system databases (starting with _)
+    return data.filter((db) => !db.startsWith('_')).length
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Create a database in CouchDB
+ */
+export async function createCouchDBDatabase(
+  port: number,
+  name: string,
+): Promise<boolean> {
+  try {
+    const encodedName = encodeURIComponent(name)
+    const response = await fetch(`http://127.0.0.1:${port}/${encodedName}`, {
+      method: 'PUT',
+      headers: { Authorization: COUCHDB_AUTH_HEADER },
+    })
+    // 201 = created, 412 = already exists (both are acceptable)
+    return response.status === 201 || response.status === 412
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Delete a database in CouchDB
+ */
+export async function deleteCouchDBDatabase(
+  port: number,
+  name: string,
+): Promise<boolean> {
+  try {
+    const encodedName = encodeURIComponent(name)
+    const response = await fetch(`http://127.0.0.1:${port}/${encodedName}`, {
+      method: 'DELETE',
+      headers: { Authorization: COUCHDB_AUTH_HEADER },
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the document count in a CouchDB database
+ */
+export async function getCouchDBDocumentCount(
+  port: number,
+  database: string,
+): Promise<number> {
+  try {
+    const encodedDb = encodeURIComponent(database)
+    const response = await fetch(`http://127.0.0.1:${port}/${encodedDb}`, {
+      headers: { Authorization: COUCHDB_AUTH_HEADER },
+    })
+    const data = (await response.json()) as { doc_count?: number }
+    return data.doc_count || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Insert documents into a CouchDB database using _bulk_docs
+ */
+export async function insertCouchDBDocuments(
+  port: number,
+  database: string,
+  documents: Array<Record<string, unknown>>,
+): Promise<boolean> {
+  try {
+    const encodedDb = encodeURIComponent(database)
+    const response = await fetch(
+      `http://127.0.0.1:${port}/${encodedDb}/_bulk_docs`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: COUCHDB_AUTH_HEADER,
+        },
+        body: JSON.stringify({ docs: documents }),
+      },
+    )
+    return response.status === 201
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get all documents from a CouchDB database
+ */
+export async function getCouchDBDocuments(
+  port: number,
+  database: string,
+): Promise<Array<Record<string, unknown>>> {
+  try {
+    const encodedDb = encodeURIComponent(database)
+    const response = await fetch(
+      `http://127.0.0.1:${port}/${encodedDb}/_all_docs?include_docs=true`,
+      { headers: { Authorization: COUCHDB_AUTH_HEADER } },
+    )
+    const data = (await response.json()) as {
+      rows?: Array<{ doc?: Record<string, unknown> }>
+    }
+    return (
+      data.rows
+        ?.map((row) => row.doc)
+        .filter((doc): doc is Record<string, unknown> => doc !== undefined) ||
+      []
+    )
+  } catch {
+    return []
   }
 }

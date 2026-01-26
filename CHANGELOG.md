@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-01-25
+
+### Added
+- **CouchDB engine support** - Full integration for CouchDB document database:
+  - REST API-based engine (like Qdrant and Meilisearch)
+  - Default port 5984, version 3.5.1 from hostdb
+  - JSON-based backup/restore via `_all_docs` and `_bulk_docs` REST API endpoints
+  - Fauxton dashboard opens at `/_utils` in browser via `spindb connect`
+  - Uses "databases" for data organization
+  - Health check at `/` endpoint (returns welcome JSON with version)
+  - Aliases: `couchdb`, `couch`
+  - Full cross-platform support (macOS, Linux, Windows)
+
 ## [0.23.5] - 2026-01-24
 
 ### Fixed

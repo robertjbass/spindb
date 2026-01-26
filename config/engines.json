@@ -184,6 +184,22 @@
       "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
       "licensing": "Apache-2.0",
       "notes": "MongoDB-compatible proxy using PostgreSQL as backend. Requires postgresql-documentdb."
+    },
+    "couchdb": {
+      "displayName": "CouchDB",
+      "icon": "🛋",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["3.5.1"],
+      "defaultVersion": "3.5.1",
+      "defaultPort": 5984,
+      "runtime": "server",
+      "queryLanguage": "rest",
+      "connectionScheme": "http",
+      "superuser": null,
+      "clientTools": ["couchdb"],
+      "licensing": "Apache-2.0",
+      "notes": "Document database with REST API. Fauxton web UI at /_utils. Uses JSON documents."
     }
   }
 }

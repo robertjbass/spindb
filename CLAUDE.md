@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, and Meilisearch.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, and CouchDB.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -58,7 +58,7 @@ tests/
 
 Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for full method list.
 
-**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch):
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB):
 - Data in `~/.spindb/containers/{engine}/{name}/`
 - Port management, start/stop lifecycle
 
@@ -69,17 +69,18 @@ Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for ful
 - Registry in `~/.spindb/config.json` tracks files by name
 - Use `spindb attach <path>` / `spindb detach <name>` to manage registry
 
-**REST API engines** (Qdrant, Meilisearch):
+**REST API engines** (Qdrant, Meilisearch, CouchDB):
 - Server-based but interact via HTTP REST API instead of CLI tools
 - `spindb run` is not applicable (no CLI shell)
 - `spindb connect` opens the web dashboard in browser
-- Backup/restore uses snapshot endpoints via REST API
+- Backup/restore uses REST API endpoints (snapshots for Qdrant/Meilisearch, `_all_docs`/`_bulk_docs` for CouchDB)
 - Docker E2E tests use `curl` for connectivity and data operations
 
 **Engines with built-in web UIs**:
 - **Qdrant**: Dashboard at `http://localhost:{port}/dashboard`
 - **Meilisearch**: Dashboard at `http://localhost:{port}/`
 - **ClickHouse**: Play UI at `http://localhost:8123/play`
+- **CouchDB**: Fauxton dashboard at `http://localhost:{port}/_utils`
 
 For these engines, the "Connect/Shell" menu option opens the web UI in the system's default browser using `openInBrowser()` in `cli/commands/menu/shell-handlers.ts`. Use platform-specific commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 
@@ -103,13 +104,25 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Connection via mongosh**: Both engines use MongoDB's `mongosh` shell for connections and script execution
 - **Database validation**: Database names must be alphanumeric + underscores (same as SQL engines)
 
+**CouchDB:**
+- **REST API only**: Uses HTTP REST API for all operations (no CLI shell)
+- **Health endpoint**: `/` returns welcome JSON with version info
+- **Dashboard URL**: Fauxton at `/_utils`
+- **Default port**: 5984
+- **Backup/restore**: Uses `_all_docs?include_docs=true` for backup, `_bulk_docs` for restore
+- **Connection scheme**: `http://` (e.g., `http://127.0.0.1:5984/mydb`)
+- **Database creation**: Explicit via PUT request to database endpoint
+- **No --version flag**: CouchDB is an Erlang application that tries to start when run with any arguments. Binary verification only checks file existence, not version output.
+- **Windows binary**: CouchDB on Windows uses `couchdb.cmd` (batch file), not `couchdb.exe`. The binary manager and engine use `getCouchDBExtension()` helper to return `.cmd` on Windows.
+- **Fauxton authentication**: CouchDB 3.x requires an admin account. Even with `require_valid_user = false` in the config, Fauxton's session-based auth still shows a login screen. Default credentials are `admin`/`admin`. The shell handler shows these credentials before opening the browser.
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
 
 | Base Class | Location | Used By | Use Case |
 |------------|----------|---------|----------|
-| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch | Key-value/vector/search stores with `bin/` layout |
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB | Key-value/vector/search/document stores with `bin/` layout |
 | `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
 | `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
 | `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
@@ -133,6 +146,7 @@ Engines can be referenced by aliases in CLI commands:
 - `sqlite`, `lite` → SQLite
 - `qdrant`, `qd` → Qdrant
 - `meilisearch`, `meili`, `ms` → Meilisearch
+- `couchdb`, `couch` → CouchDB
 
 ### Supported Versions & Query Languages
 
@@ -150,6 +164,7 @@ Engines can be referenced by aliases in CLI commands:
 | DuckDB 🦆 | 1.4.3 | SQL | File-based, OLAP |
 | Qdrant 🧭 | 1 | REST API | Vector search, HTTP port 6333 |
 | Meilisearch 🔍 | 1.33.1 | REST API | Full-text search, HTTP port 7700 |
+| CouchDB 🛋 | 3 | REST API | Document database, HTTP port 5984 |
 
 ### Binary Sources
 
@@ -283,6 +298,7 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | ClickHouse | `sql` (.sql) | _(none)_ | `sql` |
 | Qdrant | `snapshot` (.snapshot) | _(none)_ | `snapshot` |
 | Meilisearch | `snapshot` (.snapshot) | _(none)_ | `snapshot` |
+| CouchDB | `json` (.json) | _(none)_ | `json` |
 
 See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
 
@@ -300,7 +316,7 @@ See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant' | 'meilisearch'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'duckdb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'qdrant' | 'meilisearch' | 'couchdb'
   version: string
   port: number              // 0 for file-based engines
   database: string          // Primary database name
@@ -364,8 +380,8 @@ pnpm test:docker -- meilisearch # Meilisearch (uses curl for REST API tests)
 ```
 
 **Docker E2E Notes:**
-- REST API engines (Qdrant, Meilisearch) use `curl` instead of `spindb run` for connectivity/data tests
-- Qdrant/Meilisearch backup/restore tests are skipped in Docker E2E (covered by integration tests)
+- REST API engines (Qdrant, Meilisearch, CouchDB) use `curl` instead of `spindb run` for connectivity/data tests
+- Qdrant/Meilisearch/CouchDB backup/restore tests are skipped in Docker E2E (covered by integration tests)
 - See `tests/docker/run-e2e.sh` for engine-specific handling
 
 **Test Port Allocation**: Integration tests use reserved ports to avoid conflicts:
@@ -414,7 +430,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 ## Implementation Details
 
 ### Port Management
-PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700 | CouchDB: 5984
 
 Auto-increments on conflict (e.g., 5432 → 5433).
 
@@ -447,7 +463,7 @@ Menu navigation patterns:
 2. **ClickHouse Windows** - Not supported (no hostdb binaries, works in WSL)
 3. **FerretDB Windows** - Not supported (postgresql-documentdb startup issues, works in WSL)
 4. **Meilisearch Windows backup/restore** - Snapshot creation fails due to upstream Meilisearch bug (page size alignment)
-5. **Qdrant & Meilisearch** - Use REST API instead of CLI shell; `spindb run` is not applicable
+5. **Qdrant, Meilisearch & CouchDB** - Use REST API instead of CLI shell; `spindb run` is not applicable
 
 ## Publishing
 

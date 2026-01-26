@@ -27,6 +27,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   clickhouse: 'clickhouse.test.ts',
   qdrant: 'qdrant.test.ts',
   meilisearch: 'meilisearch.test.ts',
+  couchdb: 'couchdb.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
@@ -48,6 +49,8 @@ const ENGINE_ALIASES: Record<string, string> = {
   // Meilisearch aliases
   meili: 'meilisearch',
   ms: 'meilisearch',
+  // CouchDB aliases
+  couch: 'couchdb',
 }
 
 // Test run order (matches test:integration script order)
@@ -64,6 +67,7 @@ const TEST_ORDER = [
   'clickhouse',
   'qdrant',
   'meilisearch',
+  'couchdb',
 ]
 
 function resolveEngine(input: string): string | null {
@@ -103,6 +107,7 @@ function printUsage(): void {
   console.log('  clickhouse')
   console.log('  qdrant        (aliases: qd)')
   console.log('  meilisearch   (aliases: meili, ms)')
+  console.log('  couchdb       (aliases: couch)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')

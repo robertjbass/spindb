@@ -15,6 +15,7 @@
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
 | 🧭 **Qdrant** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (vector similarity search) |
 | 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (full-text search) |
+| 🛋 **CouchDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | Version 3 (document database) |
 
 ## Planned
 
@@ -171,6 +172,28 @@
   - Health check at /health
   - MIT license
 
+### 🛋 CouchDB
+
+- **Status:** ✅ Complete
+- **Versions:** 3
+- **Data location:** `~/.spindb/containers/couchdb/{name}/`
+- **Process:** Server process (`couchdb`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** REST API (no traditional shell, use curl or API clients)
+- **Backup format:** `.json` (all documents via `_all_docs?include_docs=true`)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `couchdb` binary
+- **Default credentials:** `admin` / `admin` (CouchDB 3.x requires an admin account)
+- **Implementation notes:**
+  - Document-oriented NoSQL database
+  - Uses REST API only (port 5984)
+  - Databases instead of collections
+  - Fauxton web dashboard at `/_utils`
+  - Health check at `/` (returns welcome JSON with version)
+  - Backup via `_all_docs` API, restore via `_bulk_docs` API
+  - Change default credentials in non-local/production environments
+  - Apache-2.0 license
+
 ---
 
 ## Backup Format Summary
@@ -187,6 +210,7 @@
 | ClickHouse | `.sql` (DDL + INSERT) | N/A | SQL for portability |
 | Qdrant | N/A | `.snapshot` (native) | Snapshot for backups |
 | Meilisearch | N/A | `.snapshot` (native) | Snapshot for backups |
+| CouchDB | `.json` (all docs) | N/A | JSON for backups |
 
 ---
 
@@ -204,6 +228,7 @@
 | Universal | - | `usql` | Works with all SQL databases |
 | Qdrant | REST API | - | Use curl or HTTP clients |
 | Meilisearch | REST API | - | Use curl or HTTP clients |
+| CouchDB | REST API | - | Use curl or HTTP clients |
 
 ---
 
@@ -232,6 +257,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🏠 | ClickHouse |
 | 🧭 | Qdrant |
 | 🔍 | Meilisearch |
+| 🛋 | CouchDB |
 
 ---
 

@@ -151,19 +151,29 @@ export async function handleCreate(): Promise<'main' | void> {
     )
     binarySpinner.start()
 
-    const isInstalled = await dbEngine.isBinaryInstalled(version)
-    if (isInstalled) {
-      binarySpinner.succeed(
-        `${dbEngine.displayName} ${version} binaries ready (cached)`,
-      )
-    } else {
-      binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
-      await dbEngine.ensureBinaries(version, ({ message }) => {
-        binarySpinner.text = message
-      })
-      binarySpinner.succeed(
-        `${dbEngine.displayName} ${version} binaries downloaded`,
-      )
+    try {
+      const isInstalled = await dbEngine.isBinaryInstalled(version)
+      if (isInstalled) {
+        binarySpinner.succeed(
+          `${dbEngine.displayName} ${version} binaries ready (cached)`,
+        )
+      } else {
+        binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
+        await dbEngine.ensureBinaries(version, ({ message }) => {
+          binarySpinner.text = message
+        })
+        binarySpinner.succeed(
+          `${dbEngine.displayName} ${version} binaries downloaded`,
+        )
+      }
+    } catch (error) {
+      binarySpinner.fail(`Failed to download ${dbEngine.displayName} binaries`)
+      const e = error as Error
+      console.log()
+      console.log(uiError(e.message))
+      console.log()
+      await pressEnterToContinue()
+      return
     }
   }
 
@@ -221,19 +231,29 @@ export async function handleCreate(): Promise<'main' | void> {
     )
     binarySpinner.start()
 
-    const isInstalled = await dbEngine.isBinaryInstalled(version)
-    if (isInstalled) {
-      binarySpinner.succeed(
-        `${dbEngine.displayName} ${version} binaries ready (cached)`,
-      )
-    } else {
-      binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
-      await dbEngine.ensureBinaries(version, ({ message }) => {
-        binarySpinner.text = message
-      })
-      binarySpinner.succeed(
-        `${dbEngine.displayName} ${version} binaries downloaded`,
-      )
+    try {
+      const isInstalled = await dbEngine.isBinaryInstalled(version)
+      if (isInstalled) {
+        binarySpinner.succeed(
+          `${dbEngine.displayName} ${version} binaries ready (cached)`,
+        )
+      } else {
+        binarySpinner.text = `Downloading ${dbEngine.displayName} ${version} binaries...`
+        await dbEngine.ensureBinaries(version, ({ message }) => {
+          binarySpinner.text = message
+        })
+        binarySpinner.succeed(
+          `${dbEngine.displayName} ${version} binaries downloaded`,
+        )
+      }
+    } catch (error) {
+      binarySpinner.fail(`Failed to download ${dbEngine.displayName} binaries`)
+      const e = error as Error
+      console.log()
+      console.log(uiError(e.message))
+      console.log()
+      await pressEnterToContinue()
+      return
     }
   }
 
@@ -335,7 +355,7 @@ export async function handleCreate(): Promise<'main' | void> {
     // For other engines (MySQL, SQLite), allow creating a database named 'postgres'
     if (
       config &&
-      !(config.engine === 'postgresql' && database === 'postgres')
+      !(config.engine === Engine.PostgreSQL && database === 'postgres')
     ) {
       const dbSpinner = createSpinner(`Creating database "${database}"...`)
       dbSpinner.start()
@@ -625,14 +645,14 @@ export async function showContainerSubmenu(
   })
 
   // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
-  // Qdrant and Meilisearch use REST API and don't support script files - hide the option entirely
-  if (config.engine !== 'qdrant' && config.engine !== 'meilisearch') {
+  // REST API engines (Qdrant, Meilisearch, CouchDB) don't support script files - hide the option entirely
+  if (config.engine !== Engine.Qdrant && config.engine !== Engine.Meilisearch && config.engine !== Engine.CouchDB) {
     const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
-    // Engine-specific terminology: Redis/Valkey use commands, MongoDB uses scripts, others use SQL
+    // Engine-specific terminology: Redis/Valkey use commands, MongoDB/FerretDB use scripts, others use SQL
     const runScriptLabel =
-      config.engine === 'redis' || config.engine === 'valkey'
+      config.engine === Engine.Redis || config.engine === Engine.Valkey
         ? 'Run command file'
-        : config.engine === 'mongodb'
+        : config.engine === Engine.MongoDB || config.engine === Engine.FerretDB
           ? 'Run script file'
           : 'Run SQL file'
     actionChoices.push({

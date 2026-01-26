@@ -208,6 +208,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'couchdb') {
+    // CouchDB uses REST API, open Fauxton dashboard in browser
+    defaultShellName = 'Fauxton Dashboard'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -259,8 +266,19 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       name: `ℹ Show API info`,
       value: 'api-info',
     })
+  } else if (config.engine === 'couchdb') {
+    // CouchDB: Fauxton dashboard is built-in at /_utils
+    choices.push({
+      name: `◎ Open Fauxton Dashboard in browser`,
+      value: 'default',
+    })
+    // Always show API info option for CouchDB
+    choices.push({
+      name: `ℹ Show API info`,
+      value: 'api-info',
+    })
   } else {
-    // Non-Qdrant/Meilisearch engines: show default shell option
+    // Non-Qdrant/Meilisearch/CouchDB engines: show default shell option
     choices.push({
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
@@ -291,14 +309,15 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, FerretDB, Qdrant, and Meilisearch
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, FerretDB, Qdrant, Meilisearch, and CouchDB
   const isNonSqlEngine =
     config.engine === 'redis' ||
     config.engine === 'valkey' ||
     config.engine === 'mongodb' ||
     config.engine === 'ferretdb' ||
     config.engine === 'qdrant' ||
-    config.engine === 'meilisearch'
+    config.engine === 'meilisearch' ||
+    config.engine === 'couchdb'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -368,6 +387,19 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/indexes`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/stats`))
+    } else if (config.engine === 'couchdb') {
+      console.log(chalk.cyan('CouchDB REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log(chalk.white(`  Fauxton: http://127.0.0.1:${config.port}/_utils`))
+      console.log()
+      console.log(chalk.cyan('Credentials:'))
+      console.log(chalk.white(`  Username: admin`))
+      console.log(chalk.white(`  Password: admin`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}`))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/_all_dbs`))
+      console.log(chalk.gray(`  curl -X PUT http://127.0.0.1:${config.port}/mydb`))
     }
     console.log()
     await pressEnterToContinue()
@@ -813,6 +845,29 @@ async function launchShell(
     console.log()
     openInBrowser(dashboardUrl)
     await pressEnterToContinue()
+    return
+  } else if (config.engine === 'couchdb') {
+    // CouchDB: Open Fauxton dashboard in browser (served at /_utils)
+    const dashboardUrl = `http://127.0.0.1:${config.port}/_utils`
+    console.log()
+    console.log(chalk.cyan('CouchDB Fauxton Dashboard'))
+    console.log(chalk.gray(`  ${dashboardUrl}`))
+    console.log()
+    console.log(chalk.cyan('Credentials (if prompted):'))
+    console.log(chalk.white(`  Username: admin`))
+    console.log(chalk.white(`  Password: admin`))
+    console.log()
+
+    // Prompt before opening so user can see credentials
+    await escapeablePrompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to open in browser...'),
+      },
+    ])
+
+    openInBrowser(dashboardUrl)
     return
   } else {
     shellCmd = 'psql'
