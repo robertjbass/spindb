@@ -1047,8 +1047,26 @@ run_test() {
   if [ "$is_file_based" = "false" ]; then
     log_step "Start container"
     local start_output
-    if ! start_output=$(spindb start "$container_name" 2>&1); then
+    local start_exit_code
+    local start_timeout=120  # 2 minute timeout for start command
+    # Use timeout command if available (Linux), otherwise run without timeout (macOS for local testing)
+    if command -v timeout &>/dev/null; then
+      start_output=$(timeout "$start_timeout" spindb start "$container_name" 2>&1)
+      start_exit_code=$?
+    else
+      # macOS doesn't have timeout command by default
+      start_output=$(spindb start "$container_name" 2>&1)
+      start_exit_code=$?
+    fi
+
+    if [ $start_exit_code -ne 0 ]; then
       log_step_fail
+      # Check if it was a timeout (exit code 124)
+      if [ $start_exit_code -eq 124 ]; then
+        echo ""
+        echo "  ${RED}Start command timed out after ${start_timeout}s${RESET}"
+      fi
+      echo "  ${RED}Exit code: ${start_exit_code}${RESET}"
       # Show the actual error for debugging
       if [ -n "$start_output" ]; then
         echo ""
@@ -1057,7 +1075,7 @@ run_test() {
         echo ""
       fi
       spindb delete "$container_name" --yes &>/dev/null || true
-      failure_reason="Container start failed"
+      failure_reason="Container start failed (exit code: $start_exit_code)"
       record_result "$engine" "$version" "FAILED" "$failure_reason"
       print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
       FAILED=$((FAILED+1))

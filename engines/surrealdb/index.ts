@@ -251,29 +251,56 @@ export class SurrealDBEngine extends BaseEngine {
 
     // Spawn the server process
     // SurrealDB doesn't have a --background flag, so we detach it manually
+    // Set cwd to container directory so history.txt goes there instead of user's cwd
+    // Use 'ignore' for all stdio to prevent pipes from keeping the event loop alive
     const proc = spawn(surrealBinary!, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'ignore', 'ignore'],
       detached: true,
+      cwd: containerDir,
+      // On Windows, hide the console window to prevent it from blocking
+      windowsHide: true,
     })
 
-    // Write PID file
-    if (proc.pid) {
-      await writeFile(pidFile, proc.pid.toString(), 'utf-8')
-    }
+    // Wait for spawn event with timeout to handle Docker/slow filesystems
+    const spawnTimeout = 30000
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`SurrealDB process failed to spawn within ${spawnTimeout}ms`))
+      }, spawnTimeout)
 
-    // Capture output for debugging
-    let stderr = ''
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-      logDebug(`SurrealDB stderr: ${data.toString().trim()}`)
+      proc.on('error', (err) => {
+        clearTimeout(timeoutId)
+        logDebug(`SurrealDB spawn error: ${err.message}`)
+        reject(new Error(`Failed to spawn SurrealDB: ${err.message}`))
+      })
+
+      // Capture early exit (process dies before spawn event)
+      proc.on('close', (code, signal) => {
+        clearTimeout(timeoutId)
+        const errMsg = `SurrealDB process exited early (code: ${code}, signal: ${signal})`
+        logDebug(errMsg)
+        reject(new Error(errMsg))
+      })
+
+      proc.on('spawn', async () => {
+        clearTimeout(timeoutId)
+        logDebug(`SurrealDB process spawned (pid: ${proc.pid})`)
+
+        // Remove the early exit handler since we spawned successfully
+        proc.removeAllListeners('close')
+
+        // Write PID file after successful spawn
+        if (proc.pid) {
+          await writeFile(pidFile, proc.pid.toString(), 'utf-8')
+        }
+
+        // Unref the process so it can run independently
+        proc.unref()
+
+        // Give the server a moment to initialize
+        setTimeout(resolve, 500)
+      })
     })
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      logDebug(`SurrealDB stdout: ${data.toString().trim()}`)
-    })
-
-    // Unref the process so it can run independently
-    proc.unref()
 
     // Wait for server to be ready
     logDebug(`Waiting for SurrealDB server to be ready on port ${port}...`)
@@ -282,7 +309,7 @@ export class SurrealDBEngine extends BaseEngine {
 
     if (!ready) {
       throw new Error(
-        `SurrealDB failed to start within timeout. Check logs at: ${logFile}\nStderr: ${stderr}`,
+        `SurrealDB failed to start within timeout. Check logs at: ${logFile}`,
       )
     }
 
@@ -317,6 +344,7 @@ export class SurrealDBEngine extends BaseEngine {
 
     logDebug(`Starting connection loop, timeout: ${timeoutMs}ms`)
     let attempt = 0
+    const perAttemptTimeout = 5000 // 5 second timeout per isready attempt
     while (Date.now() - startTime < timeoutMs) {
       attempt++
       logDebug(`Connection attempt ${attempt}...`)
@@ -326,16 +354,37 @@ export class SurrealDBEngine extends BaseEngine {
           '--endpoint', `http://127.0.0.1:${port}`,
         ]
         await new Promise<void>((resolve, reject) => {
+          let stderrOutput = ''
           const proc = spawn(surreal, args, {
             stdio: ['ignore', 'pipe', 'pipe'],
           })
+
+          proc.stderr?.on('data', (data: Buffer) => {
+            stderrOutput += data.toString()
+          })
+
+          // Timeout for this specific attempt - kill process if it hangs
+          const attemptTimer = setTimeout(() => {
+            logDebug(`isready attempt ${attempt} timed out after ${perAttemptTimeout}ms`)
+            proc.kill('SIGKILL')
+            reject(new Error('isready timeout'))
+          }, perAttemptTimeout)
+
           proc.on('close', (code) => {
+            clearTimeout(attemptTimer)
             logDebug(`isready process closed with code ${code}`)
             if (code === 0) resolve()
-            else reject(new Error(`Exit code ${code}`))
+            else {
+              // Log non-zero exit for debugging
+              if (attempt <= 3 || attempt % 10 === 0) {
+                logDebug(`isready attempt ${attempt} failed (code: ${code})${stderrOutput ? `: ${stderrOutput.trim()}` : ''}`)
+              }
+              reject(new Error(`Exit code ${code}`))
+            }
           })
           proc.on('error', (err) => {
-            logDebug(`isready process error: ${err}`)
+            clearTimeout(attemptTimer)
+            logDebug(`isready error: ${err}`)
             reject(err)
           })
         })
