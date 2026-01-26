@@ -868,8 +868,9 @@ export class SurrealDBEngine extends BaseEngine {
         })
 
         proc.on('error', reject)
-        proc.on('close', (code) => {
-          if (code === 0 || code === null) resolve()
+        proc.on('close', (code, signal) => {
+          if (code === 0) resolve()
+          else if (code === null) reject(new Error(`surreal import was killed by signal ${signal}`))
           else reject(new Error(`surreal import exited with code ${code}`))
         })
       })
@@ -892,8 +893,9 @@ export class SurrealDBEngine extends BaseEngine {
         })
 
         proc.on('error', reject)
-        proc.on('close', (code) => {
-          if (code === 0 || code === null) resolve()
+        proc.on('close', (code, signal) => {
+          if (code === 0) resolve()
+          else if (code === null) reject(new Error(`surreal sql was killed by signal ${signal}`))
           else reject(new Error(`surreal sql exited with code ${code}`))
         })
 

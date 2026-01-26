@@ -15,7 +15,7 @@
 
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, unlink } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -318,6 +318,20 @@ export class CockroachDBEngine extends BaseEngine {
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
+      // Clean up the spawned process and PID file before throwing
+      try {
+        const pidStr = await readFile(pidFile, 'utf-8').catch(() => null)
+        if (pidStr) {
+          const pid = parseInt(pidStr.trim(), 10)
+          if (!isNaN(pid)) {
+            logDebug(`Cleaning up failed CockroachDB process (pid: ${pid})`)
+            await platformService.terminateProcess(pid, true)
+          }
+        }
+        await unlink(pidFile).catch(() => {})
+      } catch {
+        // Ignore cleanup errors
+      }
       throw new Error(
         `CockroachDB failed to start within timeout. Check logs at: ${logFile}`,
       )
@@ -713,8 +727,10 @@ export class CockroachDBEngine extends BaseEngine {
     try {
       url = new URL(connectionString)
     } catch {
+      // Redact credentials before including in error message
+      const sanitized = connectionString.replace(/\/\/([^@]+)@/, '//***@')
       throw new Error(
-        `Invalid connection string: ${connectionString}\n` +
+        `Invalid connection string: ${sanitized}\n` +
           'Expected format: postgresql://[user[:password]@]host[:port][/database][?sslmode=...]',
       )
     }

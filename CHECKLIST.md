@@ -539,7 +539,7 @@ Run this to verify all files are created:
 
 ```bash
 # Engine files (should be 8)
-ls -la engines/{engine}/ | wc -l
+ls -1 engines/{engine}/ | wc -l
 
 # Fixture files
 ls -la tests/fixtures/{engine}/seeds/
