@@ -1156,6 +1156,7 @@ export async function getCouchDBDocuments(
     const encodedDb = encodeURIComponent(database)
     const response = await fetch(
       `http://127.0.0.1:${port}/${encodedDb}/_all_docs?include_docs=true`,
+      { headers: { Authorization: COUCHDB_AUTH_HEADER } },
     )
     const data = (await response.json()) as {
       rows?: Array<{ doc?: Record<string, unknown> }>

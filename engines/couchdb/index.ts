@@ -277,7 +277,15 @@ export class CouchDBEngine extends BaseEngine {
     if (/^\d+\.\d+\.\d+$/.test(version)) {
       return version
     }
-    return COUCHDB_VERSION_MAP[version] || `${version}.0.0`
+    if (COUCHDB_VERSION_MAP[version]) {
+      return COUCHDB_VERSION_MAP[version]
+    }
+    // Normalize to exactly 3 segments (e.g., "3" -> "3.0.0", "3.5" -> "3.5.0")
+    const segments = version.split('.').slice(0, 3)
+    while (segments.length < 3) {
+      segments.push('0')
+    }
+    return segments.join('.')
   }
 
   // Get the path where binaries for a version would be installed

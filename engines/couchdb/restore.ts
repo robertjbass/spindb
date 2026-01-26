@@ -158,8 +158,11 @@ export async function restoreBackup(
           'DELETE',
           `/${encodeURIComponent(dbName)}`,
         )
-        if (deleteResponse.status !== 200) {
-          errors.push(`Failed to delete existing database ${dbName}`)
+        // Accept 200 (OK) or 202 (Accepted) for async deletes
+        if (deleteResponse.status !== 200 && deleteResponse.status !== 202) {
+          errors.push(
+            `Failed to delete existing database ${dbName}: ${JSON.stringify(deleteResponse.data)}`,
+          )
           continue
         }
       } else {

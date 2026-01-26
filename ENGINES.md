@@ -183,6 +183,7 @@
 - **Backup format:** `.json` (all documents via `_all_docs?include_docs=true`)
 - **Multi-version support:** Yes (all platforms)
 - **Bundled tools:** `couchdb` binary
+- **Default credentials:** `admin` / `admin` (CouchDB 3.x requires an admin account)
 - **Implementation notes:**
   - Document-oriented NoSQL database
   - Uses REST API only (port 5984)
@@ -190,6 +191,7 @@
   - Fauxton web dashboard at `/_utils`
   - Health check at `/` (returns welcome JSON with version)
   - Backup via `_all_docs` API, restore via `_bulk_docs` API
+  - Change default credentials in non-local/production environments
   - Apache-2.0 license
 
 ---

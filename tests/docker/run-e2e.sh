@@ -400,13 +400,13 @@ insert_seed_data() {
       LAST_ERROR="Could not get CouchDB port"
       return 1
     fi
-    # Create database
-    if ! curl -sf -X PUT "http://127.0.0.1:${couchdb_port}/testdb" &>/dev/null; then
+    # Create database (CouchDB 3.x requires admin auth)
+    if ! curl -sf -u "admin:admin" -X PUT "http://127.0.0.1:${couchdb_port}/testdb" &>/dev/null; then
       LAST_ERROR="Failed to create CouchDB database"
       return 1
     fi
     # Insert test documents (5 documents to match EXPECTED_COUNTS[couchdb]=5)
-    if ! curl -sf -X POST "http://127.0.0.1:${couchdb_port}/testdb/_bulk_docs" \
+    if ! curl -sf -u "admin:admin" -X POST "http://127.0.0.1:${couchdb_port}/testdb/_bulk_docs" \
       -H 'Content-Type: application/json' \
       -d '{
         "docs": [
@@ -494,11 +494,11 @@ get_data_count() {
       fi
       ;;
     couchdb)
-      # CouchDB uses REST API - get document count via curl
+      # CouchDB uses REST API - get document count via curl (requires admin auth)
       local couchdb_port
       couchdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
       if [ -n "$couchdb_port" ]; then
-        output=$(curl -sf "http://127.0.0.1:${couchdb_port}/${database}" 2>/dev/null)
+        output=$(curl -sf -u "admin:admin" "http://127.0.0.1:${couchdb_port}/${database}" 2>/dev/null)
         echo "$output" | jq -r '.doc_count' 2>/dev/null
       fi
       ;;
