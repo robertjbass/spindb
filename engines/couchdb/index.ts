@@ -949,13 +949,14 @@ export class CouchDBEngine extends BaseEngine {
       `/${encodeURIComponent(database)}`,
     )
 
-    if (response.status !== 200) {
+    // Accept 200 (OK) or 202 (Accepted) for async deletes
+    if (response.status !== 200 && response.status !== 202) {
       throw new Error(
         `Failed to delete database: ${JSON.stringify(response.data)}`,
       )
     }
 
-    logDebug(`Deleted CouchDB database: ${database}`)
+    logDebug(`Deleted CouchDB database: ${database} (status: ${response.status})`)
   }
 
   /**
