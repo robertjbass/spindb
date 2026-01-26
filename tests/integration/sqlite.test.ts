@@ -66,6 +66,13 @@ describe('SQLite Integration Tests', () => {
   let backupDbPath: string
 
   before(async () => {
+    // Ensure SQLite binaries are downloaded first
+    const engine = getEngine(ENGINE)
+    console.log('   Ensuring SQLite binaries are available...')
+    await engine.ensureBinaries('3', ({ message }) => {
+      console.log(`   ${message}`)
+    })
+
     // Verify we're using downloaded binaries, not system ones
     // This ensures tests actually validate the binary extraction pipeline
     await verifyUsingDownloadedBinaries()
