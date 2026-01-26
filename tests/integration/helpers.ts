@@ -144,7 +144,16 @@ export async function cleanupTestContainers(): Promise<string[]> {
   // Examples: pg-test_12345678, mysql-test-clone_abcd1234, redis-test-renamed_12345678
   // Also matches legacy patterns: clipg_12345678, test_abcd1234
   const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
-  const testContainers = containers.filter((c) => testPattern.test(c.name))
+  let testContainers = containers.filter((c) => testPattern.test(c.name))
+
+  // On Windows, skip CockroachDB and SurrealDB containers during cleanup
+  // These engines use memory-mapped files (RocksDB/SurrealKV) that Windows holds
+  // handles to for extended periods (100+ seconds), causing cleanup to hang
+  if (isWindows()) {
+    testContainers = testContainers.filter(
+      (c) => c.engine !== Engine.CockroachDB && c.engine !== Engine.SurrealDB,
+    )
+  }
 
   const deleted: string[] = []
   for (const container of testContainers) {
