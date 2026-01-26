@@ -1098,8 +1098,12 @@ run_test() {
   log_step "Basic query test"
   local query_ok=false
   case $engine in
-    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb|surrealdb)
+    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb)
       spindb run "$container_name" -c "SELECT 1;" &>/dev/null && query_ok=true
+      ;;
+    surrealdb)
+      # SurrealDB uses SurrealQL, not SQL - RETURN is the equivalent of SELECT for simple values
+      spindb run "$container_name" -c "RETURN 1;" &>/dev/null && query_ok=true
       ;;
     mongodb|ferretdb)
       spindb run "$container_name" -c "db.runCommand({ping: 1})" &>/dev/null && query_ok=true
@@ -1357,6 +1361,10 @@ run_test() {
       redis|valkey)
         renamed_count=$(get_data_count "$engine" "$renamed_container" "0")
         ;;
+      surrealdb)
+        # SurrealDB seeds to database "test" (not "testdb")
+        renamed_count=$(get_data_count "$engine" "$renamed_container" "test")
+        ;;
       *)
         renamed_count=$(get_data_count "$engine" "$renamed_container" "testdb")
         ;;
@@ -1461,6 +1469,10 @@ run_test() {
     case $engine in
       redis|valkey)
         cloned_count=$(get_data_count "$engine" "$cloned_container" "0")
+        ;;
+      surrealdb)
+        # SurrealDB seeds to database "test" (not "testdb")
+        cloned_count=$(get_data_count "$engine" "$cloned_container" "test")
         ;;
       *)
         cloned_count=$(get_data_count "$engine" "$cloned_container" "testdb")

@@ -211,15 +211,37 @@ export function escapeCockroachIdentifier(identifier: string): string {
 /**
  * Escape a SQL value for use in INSERT statements
  * Handles strings, numbers, booleans, nulls, and special values
+ * @param value - The value to escape
+ * @param wasQuoted - Whether the value was quoted in the original CSV (preserves empty strings)
  */
-export function escapeSqlValue(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === '') {
+export function escapeSqlValue(
+  value: string | null | undefined,
+  wasQuoted = false,
+): string {
+  if (value === null || value === undefined) {
+    return 'NULL'
+  }
+
+  // Empty string: only treat as NULL if it was NOT quoted in CSV
+  // Quoted empty strings ("") should be preserved as empty strings
+  if (value === '' && !wasQuoted) {
     return 'NULL'
   }
 
   // Check for explicit NULL string (from CSV output)
   if (value === 'NULL' || value === '\\N') {
     return 'NULL'
+  }
+
+  // If the value was quoted, treat it as a string (skip boolean/number detection)
+  if (wasQuoted) {
+    // Empty quoted string becomes empty SQL string
+    if (value === '') {
+      return "''"
+    }
+    // For strings: escape single quotes by doubling them
+    const escaped = value.replace(/'/g, "''")
+    return `'${escaped}'`
   }
 
   // Check for boolean values
@@ -242,13 +264,23 @@ export function escapeSqlValue(value: string | null | undefined): string {
 }
 
 /**
+ * Represents a parsed CSV field with its value and quoting information
+ */
+export type CsvField = {
+  value: string
+  wasQuoted: boolean
+}
+
+/**
  * Parse a CSV line respecting quoted fields
  * Handles fields that contain commas, quotes, and newlines
+ * Returns both the value and whether it was quoted (to preserve empty string semantics)
  */
-export function parseCsvLine(line: string): string[] {
-  const result: string[] = []
+export function parseCsvLine(line: string): CsvField[] {
+  const result: CsvField[] = []
   let current = ''
   let inQuotes = false
+  let fieldWasQuoted = false
 
   for (let i = 0; i < line.length; i++) {
     const char = line[i]
@@ -268,16 +300,18 @@ export function parseCsvLine(line: string): string[] {
     } else {
       if (char === '"') {
         inQuotes = true
+        fieldWasQuoted = true
       } else if (char === ',') {
-        result.push(current)
+        result.push({ value: current, wasQuoted: fieldWasQuoted })
         current = ''
+        fieldWasQuoted = false
       } else {
         current += char
       }
     }
   }
 
-  result.push(current)
+  result.push({ value: current, wasQuoted: fieldWasQuoted })
   return result
 }
 

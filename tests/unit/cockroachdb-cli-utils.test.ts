@@ -21,8 +21,13 @@ describe('CockroachDB CLI Utils', () => {
       assert.strictEqual(escapeSqlValue(undefined), 'NULL')
     })
 
-    it('should return NULL for empty strings', () => {
+    it('should return NULL for unquoted empty strings', () => {
       assert.strictEqual(escapeSqlValue(''), 'NULL')
+      assert.strictEqual(escapeSqlValue('', false), 'NULL')
+    })
+
+    it('should return empty string for quoted empty strings', () => {
+      assert.strictEqual(escapeSqlValue('', true), "''")
     })
 
     it('should return NULL for literal NULL string', () => {
@@ -72,37 +77,67 @@ describe('CockroachDB CLI Utils', () => {
   describe('parseCsvLine', () => {
     it('should parse simple CSV with no quotes', () => {
       const result = parseCsvLine('a,b,c')
-      assert.deepStrictEqual(result, ['a', 'b', 'c'])
+      assert.deepStrictEqual(result, [
+        { value: 'a', wasQuoted: false },
+        { value: 'b', wasQuoted: false },
+        { value: 'c', wasQuoted: false },
+      ])
     })
 
     it('should parse CSV with quoted fields', () => {
       const result = parseCsvLine('"hello","world"')
-      assert.deepStrictEqual(result, ['hello', 'world'])
+      assert.deepStrictEqual(result, [
+        { value: 'hello', wasQuoted: true },
+        { value: 'world', wasQuoted: true },
+      ])
     })
 
     it('should handle commas inside quoted fields', () => {
       const result = parseCsvLine('"hello, world",test')
-      assert.deepStrictEqual(result, ['hello, world', 'test'])
+      assert.deepStrictEqual(result, [
+        { value: 'hello, world', wasQuoted: true },
+        { value: 'test', wasQuoted: false },
+      ])
     })
 
     it('should handle escaped quotes (double quotes)', () => {
       const result = parseCsvLine('"say ""hello""",test')
-      assert.deepStrictEqual(result, ['say "hello"', 'test'])
+      assert.deepStrictEqual(result, [
+        { value: 'say "hello"', wasQuoted: true },
+        { value: 'test', wasQuoted: false },
+      ])
     })
 
     it('should handle mixed quoted and unquoted fields', () => {
       const result = parseCsvLine('1,"hello",3')
-      assert.deepStrictEqual(result, ['1', 'hello', '3'])
+      assert.deepStrictEqual(result, [
+        { value: '1', wasQuoted: false },
+        { value: 'hello', wasQuoted: true },
+        { value: '3', wasQuoted: false },
+      ])
     })
 
-    it('should handle empty fields', () => {
+    it('should handle empty fields (unquoted - should become NULL)', () => {
       const result = parseCsvLine('a,,c')
-      assert.deepStrictEqual(result, ['a', '', 'c'])
+      assert.deepStrictEqual(result, [
+        { value: 'a', wasQuoted: false },
+        { value: '', wasQuoted: false },
+        { value: 'c', wasQuoted: false },
+      ])
+      // Verify unquoted empty becomes NULL
+      assert.strictEqual(escapeSqlValue(result[1].value, result[1].wasQuoted), 'NULL')
     })
 
-    it('should handle empty quoted fields', () => {
+    it('should handle empty quoted fields (should preserve as empty string)', () => {
       const result = parseCsvLine('"",b,""')
-      assert.deepStrictEqual(result, ['', 'b', ''])
+      assert.deepStrictEqual(result, [
+        { value: '', wasQuoted: true },
+        { value: 'b', wasQuoted: false },
+        { value: '', wasQuoted: true },
+      ])
+      // Verify quoted empty becomes empty string, not NULL
+      assert.strictEqual(escapeSqlValue(result[0].value, result[0].wasQuoted), "''")
+      assert.strictEqual(escapeSqlValue(result[2].value, result[2].wasQuoted), "''")
     })
   })
 

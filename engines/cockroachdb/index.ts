@@ -792,16 +792,18 @@ export class CockroachDBEngine extends BaseEngine {
           lines.push(`-- Data for ${table}`)
 
           for (const dataLine of dataLines) {
-            const values = parseCsvLine(dataLine)
-            if (values.length !== columns.length) {
+            const fields = parseCsvLine(dataLine)
+            if (fields.length !== columns.length) {
               logWarning(
-                `Column count mismatch for table ${table}: expected ${columns.length}, got ${values.length}`,
+                `Column count mismatch for table ${table}: expected ${columns.length}, got ${fields.length}`,
               )
               continue
             }
 
             const escapedCols = columns.map((c) => escapeCockroachIdentifier(c)).join(', ')
-            const escapedVals = values.map((v) => escapeSqlValue(v)).join(', ')
+            const escapedVals = fields
+              .map((f) => escapeSqlValue(f.value, f.wasQuoted))
+              .join(', ')
             lines.push(
               `INSERT INTO ${escapeCockroachIdentifier(table)} (${escapedCols}) VALUES (${escapedVals});`,
             )
@@ -899,8 +901,13 @@ export class CockroachDBEngine extends BaseEngine {
 
         proc.on('error', reject)
         proc.on('close', (code) => {
-          if (code === 0 || code === null) resolve()
-          else reject(new Error(`cockroach sql exited with code ${code}`))
+          if (code === 0) {
+            resolve()
+          } else if (code === null) {
+            reject(new Error('cockroach sql was terminated by a signal'))
+          } else {
+            reject(new Error(`cockroach sql exited with code ${code}`))
+          }
         })
       })
     } else if (options.sql) {
@@ -921,8 +928,13 @@ export class CockroachDBEngine extends BaseEngine {
 
         proc.on('error', reject)
         proc.on('close', (code) => {
-          if (code === 0 || code === null) resolve()
-          else reject(new Error(`cockroach sql exited with code ${code}`))
+          if (code === 0) {
+            resolve()
+          } else if (code === null) {
+            reject(new Error('cockroach sql was terminated by a signal'))
+          } else {
+            reject(new Error(`cockroach sql exited with code ${code}`))
+          }
         })
 
         proc.stdin?.write(options.sql)

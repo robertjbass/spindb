@@ -415,19 +415,31 @@ describe('CockroachDB Integration Tests', () => {
   it('should show warning when starting already running container', async () => {
     console.log(`\n Testing start on already running container...`)
 
-    // Container should already be running from earlier test
-    const running = await processManager.isRunning(renamedContainerName, {
-      engine: ENGINE,
-    })
-    assert(running, 'Container should already be running')
-
-    // Attempting to start again should not throw
     const config = await containerManager.getConfig(renamedContainerName)
     assert(config !== null, 'Container config should exist')
 
     const engine = getEngine(ENGINE)
 
-    // This should complete without throwing (idempotent behavior)
+    // Check if container is running - if not (e.g., after port conflict on Windows), start it first
+    const initiallyRunning = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+
+    if (!initiallyRunning) {
+      console.log('   Container not running (likely due to port conflict test), starting it first...')
+      await engine.start(config!)
+      const ready = await waitForReady(ENGINE, testPorts[2], 90000)
+      assert(ready, 'Container should be ready after starting')
+      await containerManager.updateConfig(renamedContainerName, { status: 'running' })
+    }
+
+    // Now the container should be running
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(running, 'Container should be running')
+
+    // Attempting to start again should not throw (idempotent behavior)
     await engine.start(config!)
 
     // Should still be running

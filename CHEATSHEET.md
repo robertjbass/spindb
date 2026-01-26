@@ -178,7 +178,7 @@ spindb doctor --json                    # JSON output for scripting
 | ClickHouse  | 9000    | 9000-9100     | HTTP UI on 8123 |
 | Qdrant      | 6333    | 6333-6400     | gRPC on port+1 |
 | Meilisearch | 7700    | 7700-7800     | |
-| CouchDB     | 5984    | 5984-6000     | Fauxton UI included |
+| CouchDB     | 5984    | 5984-6084     | Fauxton UI included |
 | CockroachDB | 26257   | 26257-26357   | HTTP UI on port+1 |
 | SurrealDB   | 8000    | 8000-8100     | HTTP/WebSocket |
 | SQLite      | N/A     | File-based    | |

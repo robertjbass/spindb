@@ -621,13 +621,18 @@ For engines without CLI tools (Qdrant, Meilisearch, CouchDB):
 | `core/config-manager.ts` | Add tools constant and mappings |
 | `cli/constants.ts` | Add icon and width |
 | `cli/helpers.ts` | Add type, detection, ENGINE_PREFIXES |
+| `cli/commands/create.ts` | Add engine case for creation options |
 | `cli/commands/engines.ts` | Add download and list cases |
 | `cli/commands/menu/*.ts` | Update handlers (5 files) |
 | `scripts/test-engine.ts` | Add engine support |
 | `tests/integration/helpers.ts` | Add helper functions |
 | `tests/integration/{engine}.test.ts` | Create test file |
+| `tests/unit/{engine}-version-validator.test.ts` | Create version validator tests |
+| `tests/unit/{engine}-restore.test.ts` | Create restore tests |
+| `tests/unit/config-manager.test.ts` | Update with engine tools |
 | `tests/fixtures/{engine}/seeds/*` | Create seed file |
 | `tests/docker/run-e2e.sh` | Add E2E tests |
+| `tests/docker/Dockerfile` | Add engine binaries and dependencies |
 | `.github/workflows/ci.yml` | Add CI job |
 | `README.md` | Update documentation |
 | `ENGINES.md` | Add engine details |
@@ -636,7 +641,7 @@ For engines without CLI tools (Qdrant, Meilisearch, CouchDB):
 | `CHANGELOG.md` | Add entry |
 | `package.json` | Add keyword, bump version |
 
-Total: ~30 files modified or created
+Total: ~35 files modified or created
 
 ---
 
