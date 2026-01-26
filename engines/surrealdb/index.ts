@@ -451,11 +451,19 @@ export class SurrealDBEngine extends BaseEngine {
       logDebug(`Killing SurrealDB process ${pid}`)
       try {
         await platformService.terminateProcess(pid, false)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+        // Wait for graceful termination
+        // On Windows, SurrealDB's SurrealKV uses memory-mapped files that
+        // take longer to release, so we wait longer to avoid EBUSY errors
+        const gracefulWait = process.platform === 'win32' ? 5000 : 2000
+        await new Promise((resolve) => setTimeout(resolve, gracefulWait))
 
         if (platformService.isProcessRunning(pid)) {
           logWarning(`Graceful termination failed, force killing ${pid}`)
           await platformService.terminateProcess(pid, true)
+          // Additional wait after force kill on Windows for file handle release
+          if (process.platform === 'win32') {
+            await new Promise((resolve) => setTimeout(resolve, 3000))
+          }
         }
       } catch (error) {
         logDebug(`Process termination error: ${error}`)

@@ -263,11 +263,11 @@ export class CockroachDBEngine extends BaseEngine {
       args.push('--background')
     }
 
-    // Spawn options differ by platform:
-    // - Unix with --background: Use 'ignore' for stdio as the forked daemon inherits descriptors
-    // - Windows without --background: Keep pipes for debugging, detach manually
+    // IMPORTANT: Use 'ignore' for all stdio on all platforms.
+    // Using 'pipe' keeps file descriptors open which prevents proc.unref() from
+    // allowing Node.js to exit, causing spawn timeouts even when the process starts successfully.
     const proc = spawn(cockroachBinary!, args, {
-      stdio: isWindows ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'ignore', 'ignore'],
+      stdio: ['ignore', 'ignore', 'ignore'],
       detached: true,
       // On Windows, set cwd to container directory to ensure proper file handle behavior
       cwd: isWindows ? containerDir : undefined,
@@ -275,22 +275,15 @@ export class CockroachDBEngine extends BaseEngine {
       windowsHide: true,
     })
 
-    // Capture stderr on Windows for debugging
-    let stderr = ''
-    if (isWindows) {
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString()
-        logDebug(`CockroachDB stderr: ${data.toString().trim()}`)
-      })
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`CockroachDB stdout: ${data.toString().trim()}`)
-      })
-
-      // On Windows without --background, write PID file ourselves
-      // (On Unix, --background makes CockroachDB write the daemon PID)
-      if (proc.pid) {
+    // On Windows without --background, write PID file ourselves
+    // (On Unix, --background makes CockroachDB write the daemon PID)
+    if (isWindows && proc.pid) {
+      try {
         await writeFile(pidFile, proc.pid.toString(), 'utf-8')
         logDebug(`Wrote PID file: ${pidFile} (pid: ${proc.pid})`)
+      } catch (err) {
+        logDebug(`Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`)
+        // Continue anyway - the process is running
       }
     }
 
@@ -325,9 +318,8 @@ export class CockroachDBEngine extends BaseEngine {
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
-      const stderrInfo = stderr ? `\nStderr: ${stderr}` : ''
       throw new Error(
-        `CockroachDB failed to start within timeout. Check logs at: ${logFile}${stderrInfo}`,
+        `CockroachDB failed to start within timeout. Check logs at: ${logFile}`,
       )
     }
 
@@ -429,11 +421,19 @@ export class CockroachDBEngine extends BaseEngine {
       logDebug(`Killing CockroachDB process ${pid}`)
       try {
         await platformService.terminateProcess(pid, false)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+        // Wait for graceful termination
+        // On Windows, CockroachDB's RocksDB uses memory-mapped files that
+        // take longer to release, so we wait longer to avoid EBUSY errors
+        const gracefulWait = process.platform === 'win32' ? 5000 : 2000
+        await new Promise((resolve) => setTimeout(resolve, gracefulWait))
 
         if (platformService.isProcessRunning(pid)) {
           logWarning(`Graceful termination failed, force killing ${pid}`)
           await platformService.terminateProcess(pid, true)
+          // Additional wait after force kill on Windows for file handle release
+          if (process.platform === 'win32') {
+            await new Promise((resolve) => setTimeout(resolve, 3000))
+          }
         }
       } catch (error) {
         logDebug(`Process termination error: ${error}`)
