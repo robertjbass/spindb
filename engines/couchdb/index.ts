@@ -540,18 +540,13 @@ export class CouchDBEngine extends BaseEngine {
       const releasesVmArgs = join(binDir, 'releases', 'vm.args')
       await writeFile(releasesVmArgs, vmArgsContent)
 
-      // CRITICAL: Copy local.ini to binary's etc/local.d/ directory
-      // Windows CouchDB doesn't respect COUCHDB_INI_FILES env var - it only reads
-      // from fixed locations: etc/default.ini, etc/local.ini, etc/local.d/*.ini
-      // We use local.d/ to avoid overwriting the default local.ini
-      const localDDir = join(binDir, 'etc', 'local.d')
-      if (!existsSync(localDDir)) {
-        await mkdir(localDDir, { recursive: true })
-      }
-      // Use container name in filename to support multiple containers
-      const containerConfigPath = join(localDDir, `spindb-${name}.ini`)
-      await writeFile(containerConfigPath, configContent)
-      logDebug(`Copied config to ${containerConfigPath}`)
+      // CRITICAL: Write config to binary's etc/local.ini
+      // Windows CouchDB doesn't respect COUCHDB_INI_FILES env var and may not scan local.d/
+      // Write directly to etc/local.ini which CouchDB definitely reads
+      // Note: This means only one container can run per binary install (typical for local dev)
+      const localIniPath = join(binDir, 'etc', 'local.ini')
+      await writeFile(localIniPath, configContent)
+      logDebug(`Wrote config to ${localIniPath}`)
 
       // Modify the os_mon.app file directly to disable features
       // This sets the default env values in the application spec itself
@@ -594,11 +589,11 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
-        const containerConfigPath = join(binDir, 'etc', 'local.d', `spindb-${name}.ini`)
+        const localIniPath = join(binDir, 'etc', 'local.ini')
         console.error(`[CouchDB Windows] Starting: cmd.exe /c ${couchdbServer}`)
         console.error(`[CouchDB Windows] CWD: ${binDir}`)
-        console.error(`[CouchDB Windows] Container config at: ${containerConfigPath}`)
-        console.error(`[CouchDB Windows] Config exists: ${existsSync(containerConfigPath)}`)
+        console.error(`[CouchDB Windows] Config at: ${localIniPath}`)
+        console.error(`[CouchDB Windows] Config exists: ${existsSync(localIniPath)}`)
         console.error(`[CouchDB Windows] PATH includes: ${env.PATH?.substring(0, 200)}...`)
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
@@ -813,26 +808,8 @@ export class CouchDBEngine extends BaseEngine {
       }
     }
 
-    // On Windows, clean up container-specific config from binary's local.d/
-    if (isWindows()) {
-      try {
-        const { platform, arch } = this.getPlatformInfo()
-        const fullVersion = normalizeVersion(container.version)
-        const binPath = paths.getBinaryPath({
-          engine: 'couchdb',
-          version: fullVersion,
-          platform,
-          arch,
-        })
-        const containerConfigPath = join(binPath, 'etc', 'local.d', `spindb-${name}.ini`)
-        if (existsSync(containerConfigPath)) {
-          await unlink(containerConfigPath)
-          logDebug(`Cleaned up Windows config: ${containerConfigPath}`)
-        }
-      } catch (err) {
-        logDebug(`Failed to clean up Windows config: ${err}`)
-      }
-    }
+    // Note: On Windows, we write to etc/local.ini which gets overwritten on each start
+    // No cleanup needed as the file is shared and will be updated on next container start
 
     // Wait for port to be released on Windows
     if (isWindows()) {
