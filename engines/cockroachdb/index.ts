@@ -271,6 +271,8 @@ export class CockroachDBEngine extends BaseEngine {
       detached: true,
       // On Windows, set cwd to container directory to ensure proper file handle behavior
       cwd: isWindows ? containerDir : undefined,
+      // On Windows, hide the console window to prevent it from blocking
+      windowsHide: true,
     })
 
     // Capture stderr on Windows for debugging
@@ -292,13 +294,21 @@ export class CockroachDBEngine extends BaseEngine {
       }
     }
 
-    // Wait a moment for the process to start
+    // Wait a moment for the process to start (with timeout to prevent hanging)
+    const spawnTimeout = 30000 // 30 seconds to spawn
     await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`CockroachDB process failed to spawn within ${spawnTimeout}ms`))
+      }, spawnTimeout)
+
       proc.on('error', (err) => {
+        clearTimeout(timeoutId)
         logDebug(`CockroachDB spawn error: ${err}`)
         reject(err)
       })
       proc.on('spawn', () => {
+        clearTimeout(timeoutId)
+        logDebug(`CockroachDB process spawned (pid: ${proc.pid})`)
         proc.unref()
         // On Windows, give CockroachDB more time to initialize
         // On Unix with --background, just wait for the fork
