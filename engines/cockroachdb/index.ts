@@ -287,28 +287,34 @@ export class CockroachDBEngine extends BaseEngine {
       }
     }
 
-    // Wait a moment for the process to start (with timeout to prevent hanging)
-    const spawnTimeout = 30000 // 30 seconds to spawn
-    await new Promise<void>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        reject(new Error(`CockroachDB process failed to spawn within ${spawnTimeout}ms`))
-      }, spawnTimeout)
+    // Wait for the process to spawn
+    // On Windows, the 'spawn' event doesn't fire reliably with detached processes,
+    // so we use a simple delay and let waitForReady() handle detection.
+    // On Unix with --background, we wait for the spawn event.
+    if (isWindows) {
+      proc.unref()
+      logDebug(`Windows: waiting fixed delay for CockroachDB to start (pid: ${proc.pid})`)
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    } else {
+      const spawnTimeout = 30000 // 30 seconds to spawn
+      await new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error(`CockroachDB process failed to spawn within ${spawnTimeout}ms`))
+        }, spawnTimeout)
 
-      proc.on('error', (err) => {
-        clearTimeout(timeoutId)
-        logDebug(`CockroachDB spawn error: ${err}`)
-        reject(err)
+        proc.on('error', (err) => {
+          clearTimeout(timeoutId)
+          logDebug(`CockroachDB spawn error: ${err}`)
+          reject(err)
+        })
+        proc.on('spawn', () => {
+          clearTimeout(timeoutId)
+          logDebug(`CockroachDB process spawned (pid: ${proc.pid})`)
+          proc.unref()
+          setTimeout(resolve, 500)
+        })
       })
-      proc.on('spawn', () => {
-        clearTimeout(timeoutId)
-        logDebug(`CockroachDB process spawned (pid: ${proc.pid})`)
-        proc.unref()
-        // On Windows, give CockroachDB more time to initialize
-        // On Unix with --background, just wait for the fork
-        const delay = isWindows ? 2000 : 500
-        setTimeout(resolve, delay)
-      })
-    })
+    }
 
     // Wait for server to be ready
     // Windows needs a longer timeout since CockroachDB initialization takes more time

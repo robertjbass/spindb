@@ -261,69 +261,88 @@ export class SurrealDBEngine extends BaseEngine {
       windowsHide: true,
     })
 
-    // Wait for spawn event with timeout to handle Docker/slow filesystems
-    const spawnTimeout = 30000
-    await new Promise<void>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        reject(new Error(`SurrealDB process failed to spawn within ${spawnTimeout}ms`))
-      }, spawnTimeout)
-
-      proc.on('error', (err) => {
-        clearTimeout(timeoutId)
-        logDebug(`SurrealDB spawn error: ${err.message}`)
-        reject(new Error(`Failed to spawn SurrealDB: ${err.message}`))
-      })
-
-      // Capture early exit (process dies before spawn event)
-      proc.on('close', (code, signal) => {
-        clearTimeout(timeoutId)
-        const errMsg = `SurrealDB process exited early (code: ${code}, signal: ${signal})`
-        logDebug(errMsg)
-        reject(new Error(errMsg))
-      })
-
-      proc.on('spawn', async () => {
-        clearTimeout(timeoutId)
-        logDebug(`SurrealDB process spawned (pid: ${proc.pid})`)
-
-        // Remove the early exit handler since we spawned successfully
-        proc.removeAllListeners('close')
-
-        // Write PID file after successful spawn
-        if (proc.pid) {
-          try {
-            await writeFile(pidFile, proc.pid.toString(), 'utf-8')
-          } catch (err) {
-            // PID file write failed - clean up and reject
-            const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
-            logDebug(errMsg)
-
-            // Kill the spawned process since we can't track it
-            try {
-              process.kill(proc.pid, 'SIGTERM')
-            } catch {
-              // Process may have already exited, ignore
-            }
-
-            // Remove partial PID file if it exists
-            try {
-              await unlink(pidFile)
-            } catch {
-              // Ignore cleanup errors (file may not exist)
-            }
-
-            reject(new Error(errMsg))
-            return
-          }
+    // Wait for the process to spawn
+    // On Windows, the 'spawn' event doesn't fire reliably with detached processes,
+    // so we write the PID file immediately and use a fixed delay.
+    // On Unix, we wait for the spawn event for more reliable startup detection.
+    const isWindows = process.platform === 'win32'
+    if (isWindows) {
+      // Write PID file immediately on Windows
+      if (proc.pid) {
+        try {
+          await writeFile(pidFile, proc.pid.toString(), 'utf-8')
+          logDebug(`Windows: wrote PID file ${pidFile} (pid: ${proc.pid})`)
+        } catch (err) {
+          logDebug(`Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`)
         }
+      }
+      proc.unref()
+      logDebug(`Windows: waiting fixed delay for SurrealDB to start (pid: ${proc.pid})`)
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    } else {
+      const spawnTimeout = 30000
+      await new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error(`SurrealDB process failed to spawn within ${spawnTimeout}ms`))
+        }, spawnTimeout)
 
-        // Unref the process so it can run independently
-        proc.unref()
+        proc.on('error', (err) => {
+          clearTimeout(timeoutId)
+          logDebug(`SurrealDB spawn error: ${err.message}`)
+          reject(new Error(`Failed to spawn SurrealDB: ${err.message}`))
+        })
 
-        // Give the server a moment to initialize
-        setTimeout(resolve, 500)
+        // Capture early exit (process dies before spawn event)
+        proc.on('close', (code, signal) => {
+          clearTimeout(timeoutId)
+          const errMsg = `SurrealDB process exited early (code: ${code}, signal: ${signal})`
+          logDebug(errMsg)
+          reject(new Error(errMsg))
+        })
+
+        proc.on('spawn', async () => {
+          clearTimeout(timeoutId)
+          logDebug(`SurrealDB process spawned (pid: ${proc.pid})`)
+
+          // Remove the early exit handler since we spawned successfully
+          proc.removeAllListeners('close')
+
+          // Write PID file after successful spawn
+          if (proc.pid) {
+            try {
+              await writeFile(pidFile, proc.pid.toString(), 'utf-8')
+            } catch (err) {
+              // PID file write failed - clean up and reject
+              const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
+              logDebug(errMsg)
+
+              // Kill the spawned process since we can't track it
+              try {
+                process.kill(proc.pid, 'SIGTERM')
+              } catch {
+                // Process may have already exited, ignore
+              }
+
+              // Remove partial PID file if it exists
+              try {
+                await unlink(pidFile)
+              } catch {
+                // Ignore cleanup errors (file may not exist)
+              }
+
+              reject(new Error(errMsg))
+              return
+            }
+          }
+
+          // Unref the process so it can run independently
+          proc.unref()
+
+          // Give the server a moment to initialize
+          setTimeout(resolve, 500)
+        })
       })
-    })
+    }
 
     // Wait for server to be ready
     logDebug(`Waiting for SurrealDB server to be ready on port ${port}...`)
