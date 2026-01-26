@@ -62,6 +62,8 @@ import { qdrantBinaryManager } from '../../engines/qdrant/binary-manager'
 import { meilisearchBinaryManager } from '../../engines/meilisearch/binary-manager'
 import { ferretdbBinaryManager } from '../../engines/ferretdb/binary-manager'
 import { couchdbBinaryManager } from '../../engines/couchdb/binary-manager'
+import { cockroachdbBinaryManager } from '../../engines/cockroachdb/binary-manager'
+import { surrealdbBinaryManager } from '../../engines/surrealdb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
@@ -1676,9 +1678,95 @@ enginesCommand
         return
       }
 
+      if (['cockroachdb', 'crdb'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('CockroachDB requires a version (e.g., 25)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.CockroachDB)
+
+        const spinner = createSpinner(`Checking CockroachDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `CockroachDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`CockroachDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`CockroachDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: cockroachdbPlatform, arch: cockroachdbArch } =
+          platformService.getPlatformInfo()
+        const cockroachdbFullVersion = cockroachdbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'cockroachdb',
+          version: cockroachdbFullVersion,
+          platform: cockroachdbPlatform,
+          arch: cockroachdbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for CockroachDB - the cockroach binary is both server and client
+        return
+      }
+
+      if (['surrealdb', 'surreal'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('SurrealDB requires a version (e.g., 2)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.SurrealDB)
+
+        const spinner = createSpinner(`Checking SurrealDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `SurrealDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`SurrealDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`SurrealDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: surrealdbPlatform, arch: surrealdbArch } =
+          platformService.getPlatformInfo()
+        const surrealdbFullVersion = surrealdbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'surrealdb',
+          version: surrealdbFullVersion,
+          platform: surrealdbPlatform,
+          arch: surrealdbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for SurrealDB - the surreal binary is both server and client
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb`,
         ),
       )
       process.exit(1)

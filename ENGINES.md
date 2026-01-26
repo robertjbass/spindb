@@ -17,6 +17,7 @@
 | 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (full-text search) |
 | 🛋 **CouchDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | Version 3 (document database) |
 | 🪳 **CockroachDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 25 (distributed SQL) |
+| 🌀 **SurrealDB** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 2 (multi-model database) |
 
 ---
 
@@ -212,6 +213,32 @@
   - Business Source License (BSL) - free for non-production use
   - Automatic data replication in distributed mode
 
+### 🌀 SurrealDB
+
+- **Status:** ✅ Complete
+- **Versions:** 2
+- **Data location:** `~/.spindb/containers/surrealdb/{name}/`
+- **Process:** Server process (`surreal start`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** `surreal sql` (bundled)
+- **Backup format:** `.surql` (SurrealQL script)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `surreal` unified binary
+- **Default user:** `root`
+- **Default password:** `root`
+- **Default namespace:** `test`
+- **Default database:** `test`
+- **Implementation notes:**
+  - Multi-model database (document, graph, relational)
+  - Uses SurrealQL (SQL-like query language with graph traversal)
+  - Default port 8000 (HTTP/WebSocket)
+  - Storage backend: SurrealKV (`surrealkv://` path-based storage)
+  - Hierarchy: Root > Namespace > Database
+  - Uses `surreal export` for backups, `surreal import` for restore
+  - Connection scheme: `ws://` (WebSocket) or `http://`
+  - Health check via `surreal isready --endpoint http://localhost:8000`
+  - Business Source License (BSL)
+
 ---
 
 ## Backup Format Summary
@@ -230,6 +257,7 @@
 | Meilisearch | N/A | `.snapshot` (native) | Snapshot for backups |
 | CouchDB | `.json` (all docs) | N/A | JSON for backups |
 | CockroachDB | `.sql` (cockroach dump) | N/A | SQL for backups |
+| SurrealDB | `.surql` (surreal export) | N/A | SurrealQL for backups |
 
 ---
 
@@ -249,6 +277,7 @@
 | Meilisearch | REST API | - | Use curl or HTTP clients |
 | CouchDB | REST API | - | Use curl or HTTP clients |
 | CockroachDB | `cockroach sql` | - | Built-in shell is full-featured |
+| SurrealDB | `surreal sql` | - | Built-in shell is full-featured |
 
 ---
 
@@ -279,6 +308,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🔍 | Meilisearch |
 | 🛋 | CouchDB |
 | 🪳 | CockroachDB |
+| 🌀 | SurrealDB |
 
 ---
 

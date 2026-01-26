@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, and CouchDB.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, and SurrealDB.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -58,7 +58,7 @@ tests/
 
 Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for full method list.
 
-**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB):
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB):
 - Data in `~/.spindb/containers/{engine}/{name}/`
 - Port management, start/stop lifecycle
 
@@ -116,13 +116,26 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Windows binary**: CouchDB on Windows uses `couchdb.cmd` (batch file), not `couchdb.exe`. The binary manager and engine use `getCouchDBExtension()` helper to return `.cmd` on Windows.
 - **Fauxton authentication**: CouchDB 3.x requires an admin account. Even with `require_valid_user = false` in the config, Fauxton's session-based auth still shows a login screen. Default credentials are `admin`/`admin`. The shell handler shows these credentials before opening the browser.
 
+**SurrealDB:**
+- **Multi-model database**: Supports document, graph, and relational paradigms
+- **Query language**: SurrealQL (SQL-like with graph traversal capabilities)
+- **Default port**: 8000 (HTTP/WebSocket)
+- **Storage backend**: SurrealKV (`surrealkv://path`)
+- **Hierarchy**: Root > Namespace > Database
+- **Default credentials**: `root`/`root`
+- **Default namespace/database**: `test`/`test`
+- **Connection scheme**: `ws://` for WebSocket, `http://` for HTTP
+- **Health check**: `surreal isready --endpoint http://127.0.0.1:${port}`
+- **Backup/restore**: Uses `surreal export` (SurrealQL script) and `surreal import`
+- **CLI shell**: `surreal sql --endpoint ws://127.0.0.1:${port}` for interactive queries
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
 
 | Base Class | Location | Used By | Use Case |
 |------------|----------|---------|----------|
-| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB | Key-value/vector/search/document stores with `bin/` layout |
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB | Key-value/vector/search/document stores with `bin/` layout |
 | `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
 | `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
 | `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
@@ -148,6 +161,7 @@ Engines can be referenced by aliases in CLI commands:
 - `meilisearch`, `meili`, `ms` → Meilisearch
 - `couchdb`, `couch` → CouchDB
 - `cockroachdb`, `crdb` → CockroachDB
+- `surrealdb`, `surreal` → SurrealDB
 
 ### Supported Versions & Query Languages
 
@@ -167,6 +181,7 @@ Engines can be referenced by aliases in CLI commands:
 | Meilisearch 🔍 | 1.33.1 | REST API | Full-text search, HTTP port 7700 |
 | CouchDB 🛋 | 3 | REST API | Document database, HTTP port 5984 |
 | CockroachDB 🪳 | 25 | SQL | Distributed SQL, PostgreSQL-compatible |
+| SurrealDB 🌀 | 2 | SurrealQL | Multi-model, HTTP port 8000 |
 
 ### Binary Sources
 

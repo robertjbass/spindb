@@ -193,16 +193,19 @@ async function getTableData(
     if (!line.trim()) continue
 
     // Simple CSV parsing (handles basic cases)
-    const values = parseCSVLine(line)
-    if (values.length !== columns.length) {
-      logWarning(`Column count mismatch for table ${table}: expected ${columns.length}, got ${values.length}`)
+    const fields = parseCSVLine(line)
+    if (fields.length !== columns.length) {
+      logWarning(`Column count mismatch for table ${table}: expected ${columns.length}, got ${fields.length}`)
       continue
     }
 
-    const escapedValues = values.map((v) => {
-      if (v === '' || v === 'NULL') return 'NULL'
-      // Escape single quotes and wrap in quotes
-      return `'${v.replace(/'/g, "''")}'`
+    const escapedValues = fields.map((field) => {
+      // Unquoted empty string or unquoted literal 'NULL' becomes SQL NULL
+      if (!field.wasQuoted && (field.value === '' || field.value === 'NULL')) {
+        return 'NULL'
+      }
+      // Quoted empty string stays as empty string, all other values get escaped
+      return `'${field.value.replace(/'/g, "''")}'`
     })
 
     const columnList = columns.map((c) => escapeCockroachIdentifier(c)).join(', ')
@@ -213,12 +216,23 @@ async function getTableData(
 }
 
 /**
- * Parse a CSV line (basic implementation)
+ * Parsed CSV field with value and whether it was quoted
  */
-function parseCSVLine(line: string): string[] {
-  const values: string[] = []
+type CSVField = {
+  value: string
+  wasQuoted: boolean
+}
+
+/**
+ * Parse a CSV line (basic implementation)
+ * Returns both the value and whether the field was quoted,
+ * which is important for distinguishing empty strings from NULL
+ */
+function parseCSVLine(line: string): CSVField[] {
+  const fields: CSVField[] = []
   let current = ''
   let inQuotes = false
+  let fieldWasQuoted = false
 
   for (let i = 0; i < line.length; i++) {
     const char = line[i]
@@ -230,18 +244,22 @@ function parseCSVLine(line: string): string[] {
         i++
       } else {
         // Toggle quote state
+        if (!inQuotes) {
+          fieldWasQuoted = true
+        }
         inQuotes = !inQuotes
       }
     } else if (char === ',' && !inQuotes) {
-      values.push(current)
+      fields.push({ value: current, wasQuoted: fieldWasQuoted })
       current = ''
+      fieldWasQuoted = false
     } else {
       current += char
     }
   }
 
-  values.push(current)
-  return values
+  fields.push({ value: current, wasQuoted: fieldWasQuoted })
+  return fields
 }
 
 /**

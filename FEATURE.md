@@ -210,6 +210,7 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
   - REST API engines (e.g., Qdrant): `README.md` explaining the API-based approach
 - [ ] `tests/integration/{engine}.test.ts` - Integration tests (14+ tests minimum)
 - [ ] `tests/integration/helpers.ts` - Add engine to helper functions
+- [ ] `scripts/test-engine.ts` - Add engine to ENGINE_TEST_FILES, ENGINE_ALIASES, TEST_ORDER, and printUsage()
 - [ ] `tests/unit/{engine}-version-validator.test.ts` - Version validator unit tests
 - [ ] `tests/unit/{engine}-restore.test.ts` - Restore/backup format unit tests
 - [ ] `package.json` - Add `test:{engine}` script
@@ -230,7 +231,7 @@ pnpm test:docker              # Run all engine tests
 pnpm test:docker -- {engine}  # Run single engine test (faster for debugging)
 ```
 
-Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `redis`, `valkey`, `clickhouse`, `duckdb`, `qdrant`
+Valid engines: `postgresql`, `mysql`, `mariadb`, `sqlite`, `mongodb`, `ferretdb`, `redis`, `valkey`, `clickhouse`, `duckdb`, `qdrant`, `meilisearch`, `couchdb`, `cockroachdb`, `surrealdb`
 
 - [ ] `tests/docker/Dockerfile` - Add engine to comments listing downloaded engines
 - [ ] `tests/docker/Dockerfile` - Add any required library dependencies (e.g., `libaio1` for MySQL, `libncurses6` for MariaDB)

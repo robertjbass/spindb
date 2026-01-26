@@ -216,6 +216,22 @@
       "clientTools": ["cockroach"],
       "licensing": ["BSL", "Apache-2.0"],
       "notes": "Distributed SQL database with PostgreSQL compatibility. HTTP admin UI at port+1 (default 8080). Single binary handles server and client."
+    },
+    "surrealdb": {
+      "displayName": "SurrealDB",
+      "icon": "🌀",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["2.3.2"],
+      "defaultVersion": "2.3.2",
+      "defaultPort": 8000,
+      "runtime": "server",
+      "queryLanguage": "surrealql",
+      "connectionScheme": "ws",
+      "superuser": "root",
+      "clientTools": ["surreal"],
+      "licensing": ["BSL", "Apache-2.0"],
+      "notes": "Multi-model database supporting document, graph, and relational data. SurrealQL query language. Uses namespace/database hierarchy."
     }
   }
 }

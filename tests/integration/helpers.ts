@@ -69,6 +69,14 @@ export const TEST_PORTS = {
   meilisearch: { base: 7710, clone: 7712, renamed: 7711 },
   couchdb: { base: 5990, clone: 5992, renamed: 5991 },
   cockroachdb: { base: 26260, clone: 26262, renamed: 26261 },
+  surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
+}
+
+// Default test versions for each engine
+// Used by helper functions that need to call engine methods with a version
+export const TEST_VERSIONS = {
+  cockroachdb: '25',
+  surrealdb: '2',
 }
 
 /**
@@ -271,10 +279,21 @@ export async function executeSQL(
     const engineImpl = getEngine(engine)
     // Use configured/bundled cockroach if available
     const cockroachPath = await engineImpl
-      .getCockroachPath('25')
+      .getCockroachPath(TEST_VERSIONS.cockroachdb)
       .catch(() => 'cockroach')
     // For CockroachDB, use cockroach sql --insecure
     const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --execute "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.SurrealDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled surreal if available
+    const surrealPath = await engineImpl
+      .getSurrealPath(TEST_VERSIONS.surrealdb)
+      .catch(() => 'surreal')
+    // For SurrealDB, use surreal sql with piped input
+    // SurrealDB needs namespace which we derive from container name pattern
+    const namespace = 'test'
+    const cmd = `echo "${sql.replace(/"/g, '\\"')}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --user root --pass root --ns ${namespace} --db ${database} --hide-welcome`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -349,10 +368,19 @@ export async function executeSQLFile(
   } else if (engine === Engine.CockroachDB) {
     const engineImpl = getEngine(engine)
     const cockroachPath = await engineImpl
-      .getCockroachPath('25')
+      .getCockroachPath(TEST_VERSIONS.cockroachdb)
       .catch(() => 'cockroach')
     // CockroachDB uses --file flag for SQL files
     const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --file "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.SurrealDB) {
+    const engineImpl = getEngine(engine)
+    const surrealPath = await engineImpl
+      .getSurrealPath(TEST_VERSIONS.surrealdb)
+      .catch(() => 'surreal')
+    // SurrealDB uses surreal import for file input
+    const namespace = 'test'
+    const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${namespace} --db ${database} "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -564,7 +592,7 @@ export async function waitForReady(
         // Use cockroach sql to ping CockroachDB
         const engineImpl = getEngine(engine)
         const cockroachPath = await engineImpl
-          .getCockroachPath('25')
+          .getCockroachPath(TEST_VERSIONS.cockroachdb)
           .catch(() => 'cockroach')
         await execAsync(
           `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --execute "SELECT 1"`,
@@ -618,6 +646,16 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('CouchDB health check failed or timed out')
         }
+      } else if (engine === Engine.SurrealDB) {
+        // Use surreal isready to ping SurrealDB
+        const engineImpl = getEngine(engine)
+        const surrealPath = await engineImpl
+          .getSurrealPath(TEST_VERSIONS.surrealdb)
+          .catch(() => 'surreal')
+        await execAsync(
+          `"${surrealPath}" isready --endpoint http://127.0.0.1:${port}`,
+          { timeout: 5000 },
+        )
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -770,6 +808,9 @@ export function getConnectionString(
   }
   if (engine === Engine.CockroachDB) {
     return `postgresql://root@127.0.0.1:${port}/${database}?sslmode=disable`
+  }
+  if (engine === Engine.SurrealDB) {
+    return `ws://127.0.0.1:${port}/rpc`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

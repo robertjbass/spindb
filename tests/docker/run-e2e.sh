@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -119,7 +119,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -135,6 +135,7 @@ declare -A BACKUP_FORMATS=(
   [meilisearch]="snapshot"
   [couchdb]="json"
   [cockroachdb]="sql"
+  [surrealdb]="surql"
 )
 
 # Results tracking
@@ -333,6 +334,9 @@ insert_seed_data() {
       # CouchDB uses REST API - seed data via curl (no seed file needed)
       seed_file=""
       ;;
+    surrealdb)
+      seed_file="$FIXTURES_DIR/surrealdb/seeds/sample-db.surql"
+      ;;
   esac
 
   # Qdrant uses REST API for seeding, not a file
@@ -437,6 +441,10 @@ insert_seed_data() {
     sqlite|duckdb|redis|valkey)
       run_cmd spindb run "$container_name" "$seed_file"
       ;;
+    surrealdb)
+      # SurrealDB uses namespace 'test' and database 'test'
+      run_cmd spindb run "$container_name" "$seed_file" -d test
+      ;;
     *)
       run_cmd spindb run "$container_name" "$seed_file" -d testdb
       ;;
@@ -507,6 +515,12 @@ get_data_count() {
         echo "$output" | jq -r '.doc_count' 2>/dev/null
       fi
       ;;
+    surrealdb)
+      # SurrealDB uses surreal sql to query
+      output=$(spindb run "$container_name" -c "SELECT count() FROM test_user GROUP ALL" -d "$database" 2>/dev/null)
+      # Parse JSON output: [[{"result":[{"count":5}],...}]]
+      echo "$output" | grep -oE '"count":[0-9]+' | grep -oE '[0-9]+' | head -1
+      ;;
   esac
 }
 
@@ -568,6 +582,9 @@ get_backup_extension() {
     couchdb)
       # CouchDB uses JSON format for backups
       echo ".json" ;;
+    surrealdb)
+      # SurrealDB uses SurrealQL format for backups
+      echo ".surql" ;;
     *)
       echo ".$format" ;;
   esac
@@ -595,6 +612,9 @@ create_backup() {
     sqlite|duckdb)
       run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    surrealdb)
+      run_cmd spindb backup "$container_name" -d test --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -617,6 +637,11 @@ create_restore_target() {
       local restored_container="restored_${container_name}"
       local restored_path="$BACKUP_DIR/restored_${engine}.db"
       run_cmd spindb create "$restored_container" --engine "$engine" --path "$restored_path" --no-start
+      ;;
+    surrealdb)
+      # SurrealDB: data goes into same namespace/database, but we could use a different database
+      # For simplicity, we'll restore to the same database (which will overwrite)
+      return 0
       ;;
     *)
       # MongoDB, Redis, Valkey don't need explicit target creation
@@ -676,6 +701,9 @@ restore_backup() {
       local restored_container="restored_${container_name}"
       run_cmd spindb restore "$restored_container" "$backup_file" --force
       ;;
+    surrealdb)
+      run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
+      ;;
   esac
 }
 
@@ -698,6 +726,9 @@ verify_restored_data() {
       ;;
     sqlite|duckdb)
       actual=$(get_data_count "$engine" "restored_${container_name}")
+      ;;
+    surrealdb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
   esac
 
@@ -726,6 +757,9 @@ verify_restored_data_with_count() {
     sqlite|duckdb)
       actual=$(get_data_count "$engine" "restored_${container_name}")
       ;;
+    surrealdb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
   esac
 
   actual=$(echo "$actual" | tr -d '[:space:]')
@@ -750,6 +784,10 @@ cleanup_restore_target() {
       ;;
     sqlite|duckdb)
       spindb delete "restored_${container_name}" --yes &>/dev/null || true
+      ;;
+    surrealdb)
+      # SurrealDB: remove the restored database
+      spindb run "$container_name" -c "REMOVE DATABASE restored_db;" -d test &>/dev/null || true
       ;;
   esac
 }
@@ -1060,7 +1098,7 @@ run_test() {
   log_step "Basic query test"
   local query_ok=false
   case $engine in
-    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb)
+    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb|surrealdb)
       spindb run "$container_name" -c "SELECT 1;" &>/dev/null && query_ok=true
       ;;
     mongodb|ferretdb)
@@ -1663,7 +1701,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

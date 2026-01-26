@@ -213,6 +213,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['cockroach'],
     maxConnections: 0, // Not applicable - managed internally
   },
+  [Engine.SurrealDB]: {
+    defaultVersion: '2',
+    defaultPort: 8000, // SurrealDB default HTTP/WS port
+    portRange: { start: 8000, end: 8100 },
+    latestVersion: '2',
+    superuser: 'root', // Default user with password 'root'
+    connectionScheme: 'ws', // WebSocket for real-time connections
+    logFileName: 'surrealdb.log',
+    pidFileName: 'surrealdb.pid',
+    dataSubdir: 'data',
+    clientTools: ['surreal'],
+    maxConnections: 0, // Not applicable - managed internally
+  },
 }
 
 /**

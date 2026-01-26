@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-01-26
+
+### Added
+- **SurrealDB engine support** - Full integration for SurrealDB multi-model database:
+  - Multi-model database supporting documents, graphs, and relational data
+  - Default port 8000, version 2.2.2 from hostdb
+  - SurrealQL-based backup/restore via `surreal export` and `surreal import`
+  - Default user `root` with password `root`, namespace/database structure
+  - WebSocket connection scheme (`ws://`)
+  - Single binary: `surreal`
+  - Aliases: `surrealdb`, `surreal`
+  - Full cross-platform support (macOS, Linux, Windows)
+
+### Fixed
+- **CockroachDB CSV backup parsing** - Fixed empty string vs NULL handling in SQL backups. Quoted empty strings are now preserved as empty strings, while unquoted empty strings become SQL NULL
+- **CockroachDB health check** - `waitForReady` now properly returns false when binary is not found instead of incorrectly assuming success
+- **CockroachDB binary lookup** - `dumpFromConnectionString` now tries multiple methods to locate the cockroach binary (config keys, dependency manager, downloaded versions)
+- **CockroachDB port conflict test** - Integration test now actually starts the container to verify port conflict behavior
+- Added CockroachDB and SurrealDB to `spindb engines download` command
+
+### Changed
+- Centralized test version constants in `tests/integration/helpers.ts` (`TEST_VERSIONS.cockroachdb`, `TEST_VERSIONS.surrealdb`)
+
 ## [0.25.0] - 2026-01-25
 
 ### Added

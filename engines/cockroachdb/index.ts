@@ -23,6 +23,7 @@ import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { findBinary } from '../../core/dependency-manager'
 import { processManager } from '../../core/process-manager'
 import { cockroachdbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -303,12 +304,12 @@ export class CockroachDBEngine extends BaseEngine {
       cockroach = await this.getCockroachPath(version)
       logDebug(`Got cockroach binary path: ${cockroach}`)
     } catch (err) {
-      logDebug(`Error getting cockroach binary path: ${err}`)
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      logDebug(`Error getting cockroach binary path: ${errorMessage}`)
       logWarning(
-        'CockroachDB binary not found, cannot verify server is ready. Assuming ready after delay.',
+        `CockroachDB binary not found, cannot verify server is ready: ${errorMessage}`,
       )
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      return true
+      return false
     }
 
     logDebug(`Starting connection loop, timeout: ${timeoutMs}ms`)
@@ -673,11 +674,36 @@ export class CockroachDBEngine extends BaseEngine {
     logDebug(`Connecting to remote CockroachDB at ${host}:${port} (db: ${database})`)
 
     // For remote dump, we need a local cockroach binary
-    // Try to find any installed version
+    // Try multiple methods to find an installed version
     let cockroach: string | null = null
-    const cached = await configManager.getBinaryPath('cockroach')
-    if (cached && existsSync(cached)) {
-      cockroach = cached
+
+    // 1. Try 'cockroach' key in config
+    const cachedCockroach = await configManager.getBinaryPath('cockroach')
+    if (cachedCockroach && existsSync(cachedCockroach)) {
+      cockroach = cachedCockroach
+      logDebug(`Found cockroach binary via 'cockroach' config key: ${cockroach}`)
+    }
+
+    // 2. Try to find via dependency manager (checks config + system PATH)
+    if (!cockroach) {
+      const binaryResult = await findBinary('cockroach')
+      if (binaryResult?.path && existsSync(binaryResult.path)) {
+        cockroach = binaryResult.path
+        logDebug(`Found cockroach binary via dependency manager: ${cockroach}`)
+      }
+    }
+
+    // 3. Try to use any downloaded version via getCockroachPath
+    if (!cockroach) {
+      for (const version of SUPPORTED_MAJOR_VERSIONS) {
+        try {
+          cockroach = await this.getCockroachPath(version)
+          logDebug(`Found cockroach binary for version ${version}: ${cockroach}`)
+          break
+        } catch {
+          // Version not installed, try next
+        }
+      }
     }
 
     if (!cockroach) {

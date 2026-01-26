@@ -1241,6 +1241,96 @@ jobs:
           }
 
   # ============================================
+  # SurrealDB Integration Tests
+  # Uses SpinDB to download and manage SurrealDB binaries from hostdb
+  # SurrealDB is a multi-model database with SQL-like query language (SurrealQL)
+  # ============================================
+  test-surrealdb:
+    name: SurrealDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache SurrealDB binaries - these are downloaded from hostdb
+      - name: Cache SurrealDB binaries
+        uses: actions/cache@v4
+        id: surrealdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-surrealdb-2-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download SurrealDB binaries
+      - name: Install SurrealDB via SpinDB
+        run: pnpm start engines download surrealdb 2
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run SurrealDB integration tests
+        run: pnpm test:engine surrealdb
+        timeout-minutes: 15
+
+      - name: Show SurrealDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== SurrealDB container directories ==="
+          ls -la ~/.spindb/containers/surrealdb/ 2>/dev/null || echo "No SurrealDB containers directory"
+          echo ""
+          echo "=== SurrealDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i surreal || echo "No SurrealDB binaries found"
+          echo ""
+          echo "=== SurrealDB log files ==="
+          find ~/.spindb/containers/surrealdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show SurrealDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== SurrealDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== SurrealDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "surreal*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== SurrealDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -1998,6 +2088,7 @@ jobs:
         test-meilisearch,
         test-couchdb,
         test-cockroachdb,
+        test-surrealdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -2070,6 +2161,10 @@ jobs:
           fi
           if [ "${{ needs.test-cockroachdb.result }}" != "success" ]; then
             echo "CockroachDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-surrealdb.result }}" != "success" ]; then
+            echo "SurrealDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

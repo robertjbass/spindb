@@ -648,13 +648,15 @@ export async function showContainerSubmenu(
   // REST API engines (Qdrant, Meilisearch, CouchDB) don't support script files - hide the option entirely
   if (config.engine !== Engine.Qdrant && config.engine !== Engine.Meilisearch && config.engine !== Engine.CouchDB) {
     const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
-    // Engine-specific terminology: Redis/Valkey use commands, MongoDB/FerretDB use scripts, others use SQL
+    // Engine-specific terminology: Redis/Valkey use commands, MongoDB/FerretDB use scripts, SurrealDB uses SurrealQL, others use SQL
     const runScriptLabel =
       config.engine === Engine.Redis || config.engine === Engine.Valkey
         ? 'Run command file'
         : config.engine === Engine.MongoDB || config.engine === Engine.FerretDB
           ? 'Run script file'
-          : 'Run SQL file'
+          : config.engine === Engine.SurrealDB
+            ? 'Run SurrealQL file'
+            : 'Run SQL file'
     actionChoices.push({
       name: canRunSql
         ? `${chalk.yellow('▷')} ${runScriptLabel}`

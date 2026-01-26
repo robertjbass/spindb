@@ -35,6 +35,7 @@ export enum Engine {
   Meilisearch = 'meilisearch',
   CouchDB = 'couchdb',
   CockroachDB = 'cockroachdb',
+  SurrealDB = 'surrealdb',
 }
 
 // Supported operating systems (matches Node.js process.platform)
@@ -69,6 +70,7 @@ export const ALL_ENGINES = [
   Engine.Meilisearch,
   Engine.CouchDB,
   Engine.CockroachDB,
+  Engine.SurrealDB,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -196,6 +198,7 @@ export type MeilisearchFormat = 'snapshot'
 export type FerretDBFormat = 'sql' | 'custom'
 export type CouchDBFormat = 'json'
 export type CockroachDBFormat = 'sql'
+export type SurrealDBFormat = 'surql'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -213,6 +216,7 @@ export type BackupFormatType =
   | MeilisearchFormat
   | CouchDBFormat
   | CockroachDBFormat
+  | SurrealDBFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -230,6 +234,7 @@ type EngineFormatMap = {
   [Engine.Meilisearch]: MeilisearchFormat
   [Engine.CouchDB]: CouchDBFormat
   [Engine.CockroachDB]: CockroachDBFormat
+  [Engine.SurrealDB]: SurrealDBFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -337,6 +342,8 @@ export type BinaryTool =
   | 'couchdb'
   // CockroachDB tools
   | 'cockroach'
+  // SurrealDB tools
+  | 'surreal'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -414,6 +421,8 @@ export type SpinDBConfig = {
     couchdb?: BinaryConfig
     // CockroachDB tools
     cockroach?: BinaryConfig
+    // SurrealDB tools
+    surreal?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig
