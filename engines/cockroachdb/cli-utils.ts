@@ -216,7 +216,11 @@ export function escapeCockroachIdentifier(identifier: string): string {
 
 /**
  * Escape a SQL value for use in INSERT statements
- * Handles strings, numbers, booleans, nulls, and special values
+ *
+ * Always outputs string literals for non-NULL values to avoid type inference
+ * issues (e.g., "001" becoming 1, or "true" becoming a boolean). The database
+ * will handle implicit type coercion when inserting strings into typed columns.
+ *
  * @param value - The value to escape
  * @param wasQuoted - Whether the value was quoted in the original CSV (preserves empty strings)
  */
@@ -235,32 +239,7 @@ export function escapeSqlValue(
     return 'NULL'
   }
 
-  // If the value was quoted, treat it as a string (skip boolean/number detection)
-  if (wasQuoted) {
-    // Empty quoted string becomes empty SQL string
-    if (value === '') {
-      return "''"
-    }
-    // For strings: escape single quotes by doubling them
-    const escaped = value.replace(/'/g, "''")
-    return `'${escaped}'`
-  }
-
-  // Check for boolean values
-  const lowerValue = value.toLowerCase()
-  if (lowerValue === 'true' || lowerValue === 't') {
-    return 'TRUE'
-  }
-  if (lowerValue === 'false' || lowerValue === 'f') {
-    return 'FALSE'
-  }
-
-  // Check if it's a number (integer or decimal)
-  if (/^-?\d+(\.\d+)?$/.test(value)) {
-    return value
-  }
-
-  // For strings: escape single quotes by doubling them
+  // Always output as string literal - escape single quotes by doubling them
   const escaped = value.replace(/'/g, "''")
   return `'${escaped}'`
 }

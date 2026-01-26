@@ -41,26 +41,27 @@ describe('CockroachDB CLI Utils', () => {
       assert.strictEqual(escapeSqlValue('\\N'), "'\\N'")
     })
 
-    it('should return TRUE for boolean true values', () => {
-      assert.strictEqual(escapeSqlValue('true'), 'TRUE')
-      assert.strictEqual(escapeSqlValue('TRUE'), 'TRUE')
-      assert.strictEqual(escapeSqlValue('t'), 'TRUE')
+    it('should quote boolean-like values as strings (no type inference)', () => {
+      // All values are quoted to avoid data corruption - DB handles type coercion
+      assert.strictEqual(escapeSqlValue('true'), "'true'")
+      assert.strictEqual(escapeSqlValue('TRUE'), "'TRUE'")
+      assert.strictEqual(escapeSqlValue('t'), "'t'")
+      assert.strictEqual(escapeSqlValue('false'), "'false'")
+      assert.strictEqual(escapeSqlValue('FALSE'), "'FALSE'")
+      assert.strictEqual(escapeSqlValue('f'), "'f'")
     })
 
-    it('should return FALSE for boolean false values', () => {
-      assert.strictEqual(escapeSqlValue('false'), 'FALSE')
-      assert.strictEqual(escapeSqlValue('FALSE'), 'FALSE')
-      assert.strictEqual(escapeSqlValue('f'), 'FALSE')
+    it('should quote numeric values as strings (no type inference)', () => {
+      // All values are quoted to preserve leading zeros (e.g., "001")
+      // and avoid data corruption - DB handles type coercion
+      assert.strictEqual(escapeSqlValue('42'), "'42'")
+      assert.strictEqual(escapeSqlValue('-123'), "'-123'")
+      assert.strictEqual(escapeSqlValue('3.14'), "'3.14'")
+      assert.strictEqual(escapeSqlValue('-0.5'), "'-0.5'")
+      assert.strictEqual(escapeSqlValue('001'), "'001'") // Preserves leading zeros
     })
 
-    it('should return numbers unquoted', () => {
-      assert.strictEqual(escapeSqlValue('42'), '42')
-      assert.strictEqual(escapeSqlValue('-123'), '-123')
-      assert.strictEqual(escapeSqlValue('3.14'), '3.14')
-      assert.strictEqual(escapeSqlValue('-0.5'), '-0.5')
-    })
-
-    it('should quote strings', () => {
+    it('should quote all string values', () => {
       assert.strictEqual(escapeSqlValue('hello'), "'hello'")
       assert.strictEqual(escapeSqlValue('world'), "'world'")
     })
@@ -71,9 +72,11 @@ describe('CockroachDB CLI Utils', () => {
       assert.strictEqual(escapeSqlValue("'quoted'"), "'''quoted'''")
     })
 
-    it('should handle strings that look like numbers but are not', () => {
+    it('should handle various string formats consistently', () => {
+      // All non-NULL values are quoted strings
       assert.strictEqual(escapeSqlValue('42abc'), "'42abc'")
       assert.strictEqual(escapeSqlValue('3.14.15'), "'3.14.15'")
+      assert.strictEqual(escapeSqlValue('hello world'), "'hello world'")
     })
   })
 
