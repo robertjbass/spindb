@@ -297,8 +297,31 @@ export async function executeSQL(
     if (!options?.namespace) {
       throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
     }
-    const cmd = `echo "${sql.replace(/"/g, '\\"')}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} --hide-welcome`
-    return execAsync(cmd)
+    // Use spawn with stdin instead of echo pipe for cross-platform compatibility
+    const { spawn } = await import('child_process')
+    return new Promise((resolve, reject) => {
+      const args = [
+        'sql',
+        '--endpoint', `ws://127.0.0.1:${port}`,
+        '--user', 'root',
+        '--pass', 'root',
+        '--ns', options.namespace!,
+        '--db', database,
+        '--hide-welcome',
+      ]
+      const proc = spawn(surrealPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+      let stdout = ''
+      let stderr = ''
+      proc.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
+      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+      proc.on('close', (code) => {
+        if (code === 0) resolve({ stdout, stderr })
+        else reject(new Error(stderr || `Exit code ${code}`))
+      })
+      proc.on('error', reject)
+      proc.stdin.write(sql)
+      proc.stdin.end()
+    })
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -753,10 +776,11 @@ export async function waitForStopped(
 
   // On Windows, add extra delay for file handle release
   // Memory-mapped files and Windows antivirus/indexing can hold handles
-  // This helps prevent EBUSY errors during rename/delete operations
-  // Qdrant uses memory-mapped files which can take a long time to release
+  // This helps prevent EBUSY/EPERM errors during rename/delete operations
   if (isWindows()) {
-    await new Promise((resolve) => setTimeout(resolve, 10000))
+    // SurrealDB and Qdrant use persistent storage that takes longer to release
+    const extraDelay = (engine === Engine.SurrealDB || engine === Engine.Qdrant) ? 15000 : 10000
+    await new Promise((resolve) => setTimeout(resolve, extraDelay))
   }
 
   return true

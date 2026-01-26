@@ -39,6 +39,7 @@ const TEST_VERSION = '2' // Major version
 
 /**
  * Get row count from SurrealDB using surreal sql
+ * Uses spawn with stdin for cross-platform compatibility (echo pipe doesn't work on Windows)
  */
 async function getSurrealDBRowCount(
   port: number,
@@ -46,9 +47,7 @@ async function getSurrealDBRowCount(
   database: string,
   table: string,
 ): Promise<number> {
-  const { promisify } = await import('util')
-  const { exec } = await import('child_process')
-  const execAsync = promisify(exec)
+  const { spawn } = await import('child_process')
 
   const engine = getEngine(ENGINE)
   const surrealPath = await engine.getSurrealPath(TEST_VERSION).catch(() => 'surreal')
@@ -61,10 +60,30 @@ async function getSurrealDBRowCount(
   const query = `SELECT count() FROM ${table} GROUP ALL`
 
   try {
-    const { stdout } = await execAsync(
-      `echo "${query}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --namespace ${namespace} --database ${database} --username root --password root --json --hide-welcome`,
-      { timeout: 10000 },
-    )
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const args = [
+        'sql',
+        '--endpoint', `ws://127.0.0.1:${port}`,
+        '--namespace', namespace,
+        '--database', database,
+        '--username', 'root',
+        '--password', 'root',
+        '--json',
+        '--hide-welcome',
+      ]
+      const proc = spawn(surrealPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+      let output = ''
+      let stderr = ''
+      proc.stdout.on('data', (data: Buffer) => { output += data.toString() })
+      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+      proc.on('close', (code) => {
+        if (code === 0) resolve(output)
+        else reject(new Error(stderr || `Exit code ${code}`))
+      })
+      proc.on('error', reject)
+      proc.stdin.write(query)
+      proc.stdin.end()
+    })
 
     // Parse JSON output - SurrealDB returns array of results
     // Format: [[{"count":5}]]
