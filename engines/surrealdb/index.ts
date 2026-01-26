@@ -291,7 +291,30 @@ export class SurrealDBEngine extends BaseEngine {
 
         // Write PID file after successful spawn
         if (proc.pid) {
-          await writeFile(pidFile, proc.pid.toString(), 'utf-8')
+          try {
+            await writeFile(pidFile, proc.pid.toString(), 'utf-8')
+          } catch (err) {
+            // PID file write failed - clean up and reject
+            const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
+            logDebug(errMsg)
+
+            // Kill the spawned process since we can't track it
+            try {
+              process.kill(proc.pid, 'SIGTERM')
+            } catch {
+              // Process may have already exited, ignore
+            }
+
+            // Remove partial PID file if it exists
+            try {
+              await unlink(pidFile)
+            } catch {
+              // Ignore cleanup errors (file may not exist)
+            }
+
+            reject(new Error(errMsg))
+            return
+          }
         }
 
         // Unref the process so it can run independently
