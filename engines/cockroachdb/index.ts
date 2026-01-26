@@ -753,13 +753,18 @@ export class CockroachDBEngine extends BaseEngine {
       try {
         const createQuery = `SHOW CREATE TABLE "${table}"`
         const createResult = await this.execRemoteQuery(cockroach, connArgs, createQuery)
-        // Parse output to get the create statement
-        const createLines = createResult.split('\n').slice(1).join('\n')
-        const commaIdx = createLines.indexOf(',')
-        if (commaIdx !== -1) {
-          lines.push(createLines.slice(commaIdx + 1).trim().replace(/^"|"$/g, '') + ';')
-        } else {
-          lines.push(createLines + ';')
+        // Parse CSV output safely - format is: table_name,create_statement
+        // The create statement often contains commas, so use parseCsvLine
+        const dataLines = createResult.split('\n').slice(1).filter((line) => line.trim())
+        if (dataLines.length > 0) {
+          const columns = parseCsvLine(dataLines[0])
+          if (columns.length >= 2) {
+            // Second column is the CREATE TABLE statement
+            const createStatement = columns[1].value.trim()
+            lines.push(createStatement + ';')
+          } else {
+            logWarning(`Unexpected SHOW CREATE TABLE output for ${table}`)
+          }
         }
         lines.push('')
       } catch (error) {
