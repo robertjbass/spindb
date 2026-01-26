@@ -39,8 +39,7 @@ concurrency:
 
 jobs:
   # ============================================
-  # Unit Tests - Linux and macOS only
-  # Windows unit tests run in the comprehensive test-windows-all job
+  # Unit Tests - All platforms including Windows
   # ============================================
   unit-tests:
     name: Unit ${{ matrix.icon }} ${{ matrix.label }}
@@ -61,6 +60,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,7 +137,6 @@ jobs:
   # ============================================
   # PostgreSQL Integration Tests
   # Uses SpinDB to download and manage PostgreSQL
-  # Windows tests run in test-windows-all job
   # ============================================
   test-postgresql:
     name: PostgreSQL ${{ matrix.icon }} ${{ matrix.label }}
@@ -156,6 +157,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -197,7 +201,6 @@ jobs:
   # ============================================
   # MariaDB Integration Tests
   # Uses SpinDB to download and manage MariaDB binaries (like PostgreSQL)
-  # Windows tests run in test-windows-all job
   # ============================================
   test-mariadb:
     name: MariaDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -218,6 +221,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -257,7 +263,6 @@ jobs:
   # ============================================
   # MySQL Integration Tests
   # Uses SpinDB to download and manage MySQL binaries (like PostgreSQL)
-  # Windows tests run in test-windows-all job
   # ============================================
   test-mysql:
     name: MySQL ${{ matrix.icon }} ${{ matrix.label }}
@@ -278,6 +283,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -335,7 +343,6 @@ jobs:
   # ============================================
   # SQLite Integration Tests
   # Uses SpinDB to download and manage SQLite binaries from hostdb
-  # Windows tests run in test-windows-all job
   # ============================================
   test-sqlite:
     name: SQLite ${{ matrix.icon }} ${{ matrix.label }}
@@ -356,6 +363,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -394,7 +404,6 @@ jobs:
   # ============================================
   # DuckDB Integration Tests
   # Uses SpinDB to download and manage DuckDB binaries from hostdb
-  # Windows tests run in test-windows-all job
   # ============================================
   test-duckdb:
     name: DuckDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -415,6 +424,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -453,7 +465,6 @@ jobs:
   # ============================================
   # MongoDB Integration Tests
   # Uses SpinDB to download and manage MongoDB binaries from hostdb
-  # Windows tests run in test-windows-all job
   # ============================================
   test-mongodb:
     name: MongoDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -474,6 +485,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -610,7 +624,6 @@ jobs:
   # ============================================
   # Redis Integration Tests
   # Uses SpinDB to download and manage Redis binaries from hostdb
-  # Windows tests run in test-windows-all job
   # ============================================
   test-redis:
     name: Redis ${{ matrix.icon }} ${{ matrix.label }}
@@ -631,6 +644,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -670,7 +686,6 @@ jobs:
   # ============================================
   # Valkey Integration Tests
   # Uses SpinDB to download and manage Valkey binaries from hostdb
-  # Windows tests run in test-windows-all job
   # ============================================
   test-valkey:
     name: Valkey ${{ matrix.icon }} ${{ matrix.label }}
@@ -691,6 +706,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -809,7 +827,6 @@ jobs:
   # NOTE: Qdrant is a REST API engine (no CLI shell like psql/redis-cli)
   #       Tests use HTTP requests to interact with the database
   #       Docker E2E tests use curl for connectivity/data operations
-  # Windows tests run in test-windows-all job
   # ============================================
   test-qdrant:
     name: Qdrant ${{ matrix.icon }} ${{ matrix.label }}
@@ -830,6 +847,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -883,8 +903,8 @@ jobs:
   # NOTE: Meilisearch is a REST API engine (no CLI shell like psql/redis-cli)
   #       Tests use HTTP requests to interact with the database
   #       Docker E2E tests use curl for connectivity/data operations
-  # Windows tests run in test-windows-all job (backup/restore skipped due to
-  # upstream Meilisearch bug with snapshot creation - page size alignment issue)
+  # Windows: backup/restore skipped due to upstream Meilisearch bug
+  # (snapshot creation fails with page size alignment issue)
   # ============================================
   test-meilisearch:
     name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
@@ -905,6 +925,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -958,7 +981,6 @@ jobs:
   # NOTE: CouchDB is a REST API engine (no CLI shell like psql/redis-cli)
   #       Tests use HTTP requests to interact with the database
   #       Docker E2E tests use curl for connectivity/data operations
-  # Windows tests run in test-windows-all job
   # ============================================
   test-couchdb:
     name: CouchDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -979,6 +1001,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1032,7 +1057,7 @@ jobs:
   # CockroachDB Integration Tests
   # Uses SpinDB to download and manage CockroachDB binaries from hostdb
   # CockroachDB uses PostgreSQL wire protocol for client connections
-  # Windows tests run in test-windows-all job
+  # Windows: delete tests skipped (RocksDB file handle locking)
   # ============================================
   test-cockroachdb:
     name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -1053,6 +1078,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1104,7 +1132,7 @@ jobs:
   # SurrealDB Integration Tests
   # Uses SpinDB to download and manage SurrealDB binaries from hostdb
   # SurrealDB is a multi-model database with SQL-like query language (SurrealQL)
-  # Windows tests run in test-windows-all job
+  # Windows: delete tests skipped (SurrealKV file handle locking)
   # ============================================
   test-surrealdb:
     name: SurrealDB ${{ matrix.icon }} ${{ matrix.label }}
@@ -1125,6 +1153,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1174,7 +1205,6 @@ jobs:
 
   # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
-  # Windows tests run in test-windows-all job
   # ============================================
   test-cli-e2e:
     name: CLI E2E ${{ matrix.icon }} ${{ matrix.label }}
@@ -1195,6 +1225,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1238,7 +1271,6 @@ jobs:
   # Rename and Clone Tests
   # Tests container rename and clone operations across platforms
   # Uses PostgreSQL as representative engine
-  # Windows tests run in test-windows-all job
   # ============================================
   test-rename-clone:
     name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
@@ -1253,6 +1285,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1508,7 +1543,6 @@ jobs:
   # ============================================
   # Fresh Install Test - Tests npm global install like real users
   # Simulates a user installing SpinDB for the first time
-  # Windows tests run in test-windows-all job
   # ============================================
   test-fresh-install:
     name: Fresh Install ${{ matrix.icon }} ${{ matrix.label }}
@@ -1523,6 +1557,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1603,7 +1640,6 @@ jobs:
   # ============================================
   # Upgrade Test - Tests that existing containers survive upgrades
   # Simulates a user upgrading SpinDB with existing data
-  # Windows tests run in test-windows-all job
   # ============================================
   test-upgrade:
     name: Upgrade ${{ matrix.icon }} ${{ matrix.label }}
@@ -1618,6 +1654,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1707,7 +1746,6 @@ jobs:
   # ============================================
   # Self-Update Test - Tests that spindb update works with pnpm
   # Installs a specific version and tries to update it
-  # Windows tests run in test-windows-all job
   # ============================================
   test-self-update:
     name: Self-Update ${{ matrix.icon }} ${{ matrix.label }}
@@ -1722,6 +1760,9 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
     steps:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -1749,286 +1790,281 @@ jobs:
         run: pnpm remove -g spindb
 
   # ============================================
-  # Comprehensive Windows Tests
-  # Runs all Windows-compatible tests sequentially on a single runner
-  # This avoids runner pool exhaustion from parallel Windows jobs
+  # Comprehensive Windows Tests (COMMENTED OUT)
+  # Now using parallel Windows tests in each engine matrix instead.
+  # Keeping this job commented out for reference in case parallel tests
+  # exhaust the runner pool again.
   # ============================================
-  test-windows-all:
-    name: 🔷 Windows All Tests
-    runs-on: windows-latest
-    timeout-minutes: 120
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # test-windows-all:
+  #   name: 🔷 Windows All Tests
+  #   runs-on: windows-latest
+  #   timeout-minutes: 120
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'pnpm'
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     # Cache all engine binaries together
+  #     - name: Cache all engine binaries
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.spindb/bin
+  #         key: spindb-windows-all-v1-${{ runner.os }}-${{ runner.arch }}
+  #
+  #     # Download all Windows-compatible engines
+  #     # Note: ClickHouse and FerretDB are not available on Windows
+  #     - name: Download PostgreSQL
+  #       run: pnpm start engines download postgresql 18
+  #
+  #     - name: Download MySQL
+  #       run: pnpm start engines download mysql 8.0
+  #
+  #     - name: Download MariaDB
+  #       run: pnpm start engines download mariadb 11.8
+  #
+  #     - name: Download SQLite
+  #       run: pnpm start engines download sqlite 3
+  #
+  #     - name: Download DuckDB
+  #       run: pnpm start engines download duckdb 1
+  #
+  #     - name: Download MongoDB
+  #       run: pnpm start engines download mongodb 8.0
+  #
+  #     - name: Download Redis
+  #       run: pnpm start engines download redis 8
+  #
+  #     - name: Download Valkey
+  #       run: pnpm start engines download valkey 9
+  #
+  #     - name: Download Qdrant
+  #       run: pnpm start engines download qdrant 1
+  #
+  #     - name: Download Meilisearch
+  #       run: pnpm start engines download meilisearch 1
+  #
+  #     - name: Download CouchDB
+  #       run: pnpm start engines download couchdb 3
+  #
+  #     - name: Download CockroachDB
+  #       run: pnpm start engines download cockroachdb 25
+  #
+  #     - name: Download SurrealDB
+  #       run: pnpm start engines download surrealdb 2
+  #
+  #     - name: Show installed engines
+  #       run: pnpm start engines list
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+  #
+  #     # Run unit tests first
+  #     - name: Run unit tests
+  #       id: unit
+  #       run: pnpm test:unit
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     # Run integration tests sequentially for each engine
+  #     - name: Test PostgreSQL
+  #       id: postgresql
+  #       run: pnpm test:engine postgresql
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test MySQL
+  #       id: mysql
+  #       run: pnpm test:engine mysql
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test MariaDB
+  #       id: mariadb
+  #       run: pnpm test:engine mariadb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test SQLite
+  #       id: sqlite
+  #       run: pnpm test:engine sqlite
+  #       timeout-minutes: 10
+  #       continue-on-error: true
+  #
+  #     - name: Test DuckDB
+  #       id: duckdb
+  #       run: pnpm test:engine duckdb
+  #       timeout-minutes: 10
+  #       continue-on-error: true
+  #
+  #     - name: Test MongoDB
+  #       id: mongodb
+  #       run: pnpm test:engine mongodb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Redis
+  #       id: redis
+  #       run: pnpm test:engine redis
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Valkey
+  #       id: valkey
+  #       run: pnpm test:engine valkey
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Qdrant
+  #       id: qdrant
+  #       run: pnpm test:engine qdrant
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Meilisearch
+  #       id: meilisearch
+  #       run: pnpm test:engine meilisearch
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test CouchDB
+  #       id: couchdb
+  #       run: pnpm test:engine couchdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test CockroachDB
+  #       id: cockroachdb
+  #       run: pnpm test:engine cockroachdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test SurrealDB
+  #       id: surrealdb
+  #       run: pnpm test:engine surrealdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     # Run CLI E2E tests
+  #     - name: Run CLI E2E tests
+  #       id: cli
+  #       run: pnpm test:cli
+  #       timeout-minutes: 15
+  #       continue-on-error: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Cache all engine binaries together
-      - name: Cache all engine binaries
-        uses: actions/cache@v4
-        with:
-          path: ~/.spindb/bin
-          key: spindb-windows-all-v1-${{ runner.os }}-${{ runner.arch }}
-
-      # Download all Windows-compatible engines
-      # Note: ClickHouse and FerretDB are not available on Windows
-      # TEMPORARILY COMMENTED OUT - Only downloading engines needed for failing tests
-      - name: Download PostgreSQL
-        run: pnpm start engines download postgresql 18
-
-      # - name: Download MySQL
-      #   run: pnpm start engines download mysql 8.0
-
-      # - name: Download MariaDB
-      #   run: pnpm start engines download mariadb 11.8
-
-      - name: Download SQLite
-        run: pnpm start engines download sqlite 3
-
-      # - name: Download DuckDB
-      #   run: pnpm start engines download duckdb 1
-
-      # - name: Download MongoDB
-      #   run: pnpm start engines download mongodb 8.0
-
-      # - name: Download Redis
-      #   run: pnpm start engines download redis 8
-
-      # - name: Download Valkey
-      #   run: pnpm start engines download valkey 9
-
-      # - name: Download Qdrant
-      #   run: pnpm start engines download qdrant 1
-
-      # - name: Download Meilisearch
-      #   run: pnpm start engines download meilisearch 1
-
-      # - name: Download CouchDB
-      #   run: pnpm start engines download couchdb 3
-      # END TEMPORARILY COMMENTED OUT
-
-      - name: Download CockroachDB
-        run: pnpm start engines download cockroachdb 25
-
-      - name: Download SurrealDB
-        run: pnpm start engines download surrealdb 2
-
-      - name: Show installed engines
-        run: pnpm start engines list
-
-      # TEMPORARILY COMMENTED OUT - Testing only failing tests (CockroachDB, SurrealDB, CLI E2E)
-      # Run unit tests first
-      # Each test has continue-on-error so we can see ALL failures, not just the first
-      # - name: Run unit tests
-      #   id: unit
-      #   run: pnpm test:unit
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # Run integration tests sequentially for each engine
-      # - name: Test PostgreSQL
-      #   id: postgresql
-      #   run: pnpm test:engine postgresql
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test MySQL
-      #   id: mysql
-      #   run: pnpm test:engine mysql
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test MariaDB
-      #   id: mariadb
-      #   run: pnpm test:engine mariadb
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test SQLite
-      #   id: sqlite
-      #   run: pnpm test:engine sqlite
-      #   timeout-minutes: 10
-      #   continue-on-error: true
-
-      # - name: Test DuckDB
-      #   id: duckdb
-      #   run: pnpm test:engine duckdb
-      #   timeout-minutes: 10
-      #   continue-on-error: true
-
-      # - name: Test MongoDB
-      #   id: mongodb
-      #   run: pnpm test:engine mongodb
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test Redis
-      #   id: redis
-      #   run: pnpm test:engine redis
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test Valkey
-      #   id: valkey
-      #   run: pnpm test:engine valkey
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test Qdrant
-      #   id: qdrant
-      #   run: pnpm test:engine qdrant
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test Meilisearch
-      #   id: meilisearch
-      #   run: pnpm test:engine meilisearch
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-
-      # - name: Test CouchDB
-      #   id: couchdb
-      #   run: pnpm test:engine couchdb
-      #   timeout-minutes: 15
-      #   continue-on-error: true
-      # END TEMPORARILY COMMENTED OUT
-
-      - name: Test CockroachDB
-        id: cockroachdb
-        run: pnpm test:engine cockroachdb
-        timeout-minutes: 15
-        continue-on-error: true
-
-      - name: Test SurrealDB
-        id: surrealdb
-        run: pnpm test:engine surrealdb
-        timeout-minutes: 15
-        continue-on-error: true
-
-      # Run CLI E2E tests
-      - name: Run CLI E2E tests
-        id: cli
-        run: pnpm test:cli
-        timeout-minutes: 15
-        continue-on-error: true
-
-      # Check if any tests failed and report all failures
-      # TEMPORARILY SIMPLIFIED - Only checking the 3 failing tests
-      - name: Check test results
-        if: always()
-        run: |
-          echo "=== Windows Test Results (TEMPORARY - 3 tests only) ==="
-          failed=""
-          # TEMPORARILY COMMENTED OUT
-          # if [ "${{ steps.unit.outcome }}" != "success" ]; then
-          #   echo "❌ Unit tests: FAILED"
-          #   failed="$failed unit"
-          # else
-          #   echo "✅ Unit tests: passed"
-          # fi
-          # if [ "${{ steps.postgresql.outcome }}" != "success" ]; then
-          #   echo "❌ PostgreSQL: FAILED"
-          #   failed="$failed postgresql"
-          # else
-          #   echo "✅ PostgreSQL: passed"
-          # fi
-          # if [ "${{ steps.mysql.outcome }}" != "success" ]; then
-          #   echo "❌ MySQL: FAILED"
-          #   failed="$failed mysql"
-          # else
-          #   echo "✅ MySQL: passed"
-          # fi
-          # if [ "${{ steps.mariadb.outcome }}" != "success" ]; then
-          #   echo "❌ MariaDB: FAILED"
-          #   failed="$failed mariadb"
-          # else
-          #   echo "✅ MariaDB: passed"
-          # fi
-          # if [ "${{ steps.sqlite.outcome }}" != "success" ]; then
-          #   echo "❌ SQLite: FAILED"
-          #   failed="$failed sqlite"
-          # else
-          #   echo "✅ SQLite: passed"
-          # fi
-          # if [ "${{ steps.duckdb.outcome }}" != "success" ]; then
-          #   echo "❌ DuckDB: FAILED"
-          #   failed="$failed duckdb"
-          # else
-          #   echo "✅ DuckDB: passed"
-          # fi
-          # if [ "${{ steps.mongodb.outcome }}" != "success" ]; then
-          #   echo "❌ MongoDB: FAILED"
-          #   failed="$failed mongodb"
-          # else
-          #   echo "✅ MongoDB: passed"
-          # fi
-          # if [ "${{ steps.redis.outcome }}" != "success" ]; then
-          #   echo "❌ Redis: FAILED"
-          #   failed="$failed redis"
-          # else
-          #   echo "✅ Redis: passed"
-          # fi
-          # if [ "${{ steps.valkey.outcome }}" != "success" ]; then
-          #   echo "❌ Valkey: FAILED"
-          #   failed="$failed valkey"
-          # else
-          #   echo "✅ Valkey: passed"
-          # fi
-          # if [ "${{ steps.qdrant.outcome }}" != "success" ]; then
-          #   echo "❌ Qdrant: FAILED"
-          #   failed="$failed qdrant"
-          # else
-          #   echo "✅ Qdrant: passed"
-          # fi
-          # if [ "${{ steps.meilisearch.outcome }}" != "success" ]; then
-          #   echo "❌ Meilisearch: FAILED"
-          #   failed="$failed meilisearch"
-          # else
-          #   echo "✅ Meilisearch: passed"
-          # fi
-          # if [ "${{ steps.couchdb.outcome }}" != "success" ]; then
-          #   echo "❌ CouchDB: FAILED"
-          #   failed="$failed couchdb"
-          # else
-          #   echo "✅ CouchDB: passed"
-          # fi
-          # END TEMPORARILY COMMENTED OUT
-          if [ "${{ steps.cockroachdb.outcome }}" != "success" ]; then
-            echo "❌ CockroachDB: FAILED"
-            failed="$failed cockroachdb"
-          else
-            echo "✅ CockroachDB: passed"
-          fi
-          if [ "${{ steps.surrealdb.outcome }}" != "success" ]; then
-            echo "❌ SurrealDB: FAILED"
-            failed="$failed surrealdb"
-          else
-            echo "✅ SurrealDB: passed"
-          fi
-          if [ "${{ steps.cli.outcome }}" != "success" ]; then
-            echo "❌ CLI E2E: FAILED"
-            failed="$failed cli"
-          else
-            echo "✅ CLI E2E: passed"
-          fi
-          echo ""
-          if [ -n "$failed" ]; then
-            echo "FAILED TESTS:$failed"
-            exit 1
-          else
-            echo "All Windows tests passed!"
-          fi
-        shell: bash
+  #
+  #     # Check if any tests failed and report all failures
+  #     - name: Check test results
+  #       if: always()
+  #       run: |
+  #         echo "=== Windows Test Results ==="
+  #         failed=""
+  #         if [ "${{ steps.unit.outcome }}" != "success" ]; then
+  #           echo "❌ Unit tests: FAILED"
+  #           failed="$failed unit"
+  #         else
+  #           echo "✅ Unit tests: passed"
+  #         fi
+  #         if [ "${{ steps.postgresql.outcome }}" != "success" ]; then
+  #           echo "❌ PostgreSQL: FAILED"
+  #           failed="$failed postgresql"
+  #         else
+  #           echo "✅ PostgreSQL: passed"
+  #         fi
+  #         if [ "${{ steps.mysql.outcome }}" != "success" ]; then
+  #           echo "❌ MySQL: FAILED"
+  #           failed="$failed mysql"
+  #         else
+  #           echo "✅ MySQL: passed"
+  #         fi
+  #         if [ "${{ steps.mariadb.outcome }}" != "success" ]; then
+  #           echo "❌ MariaDB: FAILED"
+  #           failed="$failed mariadb"
+  #         else
+  #           echo "✅ MariaDB: passed"
+  #         fi
+  #         if [ "${{ steps.sqlite.outcome }}" != "success" ]; then
+  #           echo "❌ SQLite: FAILED"
+  #           failed="$failed sqlite"
+  #         else
+  #           echo "✅ SQLite: passed"
+  #         fi
+  #         if [ "${{ steps.duckdb.outcome }}" != "success" ]; then
+  #           echo "❌ DuckDB: FAILED"
+  #           failed="$failed duckdb"
+  #         else
+  #           echo "✅ DuckDB: passed"
+  #         fi
+  #         if [ "${{ steps.mongodb.outcome }}" != "success" ]; then
+  #           echo "❌ MongoDB: FAILED"
+  #           failed="$failed mongodb"
+  #         else
+  #           echo "✅ MongoDB: passed"
+  #         fi
+  #         if [ "${{ steps.redis.outcome }}" != "success" ]; then
+  #           echo "❌ Redis: FAILED"
+  #           failed="$failed redis"
+  #         else
+  #           echo "✅ Redis: passed"
+  #         fi
+  #         if [ "${{ steps.valkey.outcome }}" != "success" ]; then
+  #           echo "❌ Valkey: FAILED"
+  #           failed="$failed valkey"
+  #         else
+  #           echo "✅ Valkey: passed"
+  #         fi
+  #         if [ "${{ steps.qdrant.outcome }}" != "success" ]; then
+  #           echo "❌ Qdrant: FAILED"
+  #           failed="$failed qdrant"
+  #         else
+  #           echo "✅ Qdrant: passed"
+  #         fi
+  #         if [ "${{ steps.meilisearch.outcome }}" != "success" ]; then
+  #           echo "❌ Meilisearch: FAILED"
+  #           failed="$failed meilisearch"
+  #         else
+  #           echo "✅ Meilisearch: passed"
+  #         fi
+  #         if [ "${{ steps.couchdb.outcome }}" != "success" ]; then
+  #           echo "❌ CouchDB: FAILED"
+  #           failed="$failed couchdb"
+  #         else
+  #           echo "✅ CouchDB: passed"
+  #         fi
+  #         if [ "${{ steps.cockroachdb.outcome }}" != "success" ]; then
+  #           echo "❌ CockroachDB: FAILED"
+  #           failed="$failed cockroachdb"
+  #         else
+  #           echo "✅ CockroachDB: passed"
+  #         fi
+  #         if [ "${{ steps.surrealdb.outcome }}" != "success" ]; then
+  #           echo "❌ SurrealDB: FAILED"
+  #           failed="$failed surrealdb"
+  #         else
+  #           echo "✅ SurrealDB: passed"
+  #         fi
+  #         if [ "${{ steps.cli.outcome }}" != "success" ]; then
+  #           echo "❌ CLI E2E: FAILED"
+  #           failed="$failed cli"
+  #         else
+  #           echo "✅ CLI E2E: passed"
+  #         fi
+  #         echo ""
+  #         if [ -n "$failed" ]; then
+  #           echo "FAILED TESTS:$failed"
+  #           exit 1
+  #         else
+  #           echo "All Windows tests passed!"
+  #         fi
+  #       shell: bash
 
   # ============================================
   # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
@@ -2210,7 +2246,7 @@ jobs:
         test-fresh-install,
         test-upgrade,
         test-self-update,
-        test-windows-all,
+        # test-windows-all,  # Commented out - using parallel Windows tests instead
         test-docker-linux,
         lint,
         hostdb-sync,
@@ -2307,10 +2343,7 @@ jobs:
             echo "Self-update tests failed"
             exit 1
           fi
-          if [ "${{ needs.test-windows-all.result }}" != "success" ]; then
-            echo "Windows comprehensive tests failed"
-            exit 1
-          fi
+          # test-windows-all check removed - using parallel Windows tests instead
           if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
             echo "Docker Linux edge case tests failed"
             exit 1
