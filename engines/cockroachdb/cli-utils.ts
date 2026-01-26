@@ -207,3 +207,105 @@ export function escapeCockroachIdentifier(identifier: string): string {
   // Double any existing double quotes and wrap in double quotes
   return `"${identifier.replace(/"/g, '""')}"`
 }
+
+/**
+ * Escape a SQL value for use in INSERT statements
+ * Handles strings, numbers, booleans, nulls, and special values
+ */
+export function escapeSqlValue(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') {
+    return 'NULL'
+  }
+
+  // Check for explicit NULL string (from CSV output)
+  if (value === 'NULL' || value === '\\N') {
+    return 'NULL'
+  }
+
+  // Check for boolean values
+  const lowerValue = value.toLowerCase()
+  if (lowerValue === 'true' || lowerValue === 't') {
+    return 'TRUE'
+  }
+  if (lowerValue === 'false' || lowerValue === 'f') {
+    return 'FALSE'
+  }
+
+  // Check if it's a number (integer or decimal)
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return value
+  }
+
+  // For strings: escape single quotes by doubling them
+  const escaped = value.replace(/'/g, "''")
+  return `'${escaped}'`
+}
+
+/**
+ * Parse a CSV line respecting quoted fields
+ * Handles fields that contain commas, quotes, and newlines
+ */
+export function parseCsvLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+
+    if (inQuotes) {
+      if (char === '"') {
+        // Check for escaped quote (double quote)
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"'
+          i++ // Skip next quote
+        } else {
+          inQuotes = false
+        }
+      } else {
+        current += char
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true
+      } else if (char === ',') {
+        result.push(current)
+        current = ''
+      } else {
+        current += char
+      }
+    }
+  }
+
+  result.push(current)
+  return result
+}
+
+/**
+ * Check if a connection string indicates an insecure (non-SSL) connection
+ */
+export function isInsecureConnection(connectionString: string): boolean {
+  try {
+    const url = new URL(connectionString)
+    const sslmode = url.searchParams.get('sslmode')
+    const host = url.hostname.toLowerCase()
+    // Handle both regular hostnames and bracketed IPv6 addresses
+    const isLocalhost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)
+
+    // Explicit disable means insecure
+    if (sslmode === 'disable') {
+      return true
+    }
+
+    // Localhost without explicit SSL settings defaults to insecure for local dev
+    if (isLocalhost && !sslmode) {
+      return true
+    }
+
+    // Any SSL mode other than 'disable' means secure
+    return false
+  } catch {
+    // If we can't parse it, assume secure (safer default)
+    return false
+  }
+}

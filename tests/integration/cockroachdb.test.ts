@@ -248,9 +248,10 @@ describe('CockroachDB Integration Tests', () => {
     )
 
     // Use runScriptSQL which internally calls engine.runScript with --sql option
+    // CockroachDB requires semicolon at end of statement
     await runScriptSQL(
       containerName,
-      "DELETE FROM test_user WHERE id = 5",
+      "DELETE FROM test_user WHERE id = 5;",
       DATABASE,
     )
 
@@ -388,6 +389,20 @@ describe('CockroachDB Integration Tests', () => {
         ? '   Port conflict detected (start failed or server not ready)'
         : '   Container started despite port conflict (unexpected but handled)',
     )
+
+    // If the port conflict container managed to start, it may have killed the original.
+    // Restart the renamed container to ensure consistent state for next test.
+    if (!startFailed) {
+      const renamedConfig = await containerManager.getConfig(renamedContainerName)
+      if (renamedConfig) {
+        const renamedRunning = await processManager.isRunning(renamedContainerName, { engine: ENGINE })
+        if (!renamedRunning) {
+          console.log('   Restarting renamed container after port conflict...')
+          await engine.start(renamedConfig)
+          await waitForReady(ENGINE, testPorts[2], 60000)
+        }
+      }
+    }
   })
 
   it('should show warning when starting already running container', async () => {

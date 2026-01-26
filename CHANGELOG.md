@@ -7,12 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-01-26
+
+### Fixed
+- **SurrealDB backup signal handling** - Backup close handler now properly treats `code === null` as signal termination error instead of success
+- **SurrealDB credential security** - Connection strings are now sanitized in error messages to prevent credential leaks
+- **SurrealDB health check** - `waitForReady` now returns false when binary is not found instead of incorrectly assuming success
+- **SurrealDB history file location** - `surreal sql` commands now use container directory as cwd so `history.txt` is stored in `~/.spindb/containers/surrealdb/<name>/` instead of polluting the user's working directory
+- **Docker E2E SurrealDB tests** - Fixed verify-seed to use correct database name ("test" not "testdb") and corrected misleading restore comment
+
+### Changed
+- Updated README engine count from 14 to 15 to reflect SurrealDB addition
+
 ## [0.26.0] - 2026-01-26
 
 ### Added
 - **SurrealDB engine support** - Full integration for SurrealDB multi-model database:
   - Multi-model database supporting documents, graphs, and relational data
-  - Default port 8000, version 2.2.2 from hostdb
+  - Default port 8000, version 2.3.2 from hostdb
   - SurrealQL-based backup/restore via `surreal export` and `surreal import`
   - Default user `root` with password `root`, namespace/database structure
   - WebSocket connection scheme (`ws://`)

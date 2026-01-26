@@ -42,6 +42,7 @@ const TEST_VERSION = '2' // Major version
  */
 async function getSurrealDBRowCount(
   port: number,
+  containerName: string,
   database: string,
   table: string,
 ): Promise<number> {
@@ -52,26 +53,29 @@ async function getSurrealDBRowCount(
   const engine = getEngine(ENGINE)
   const surrealPath = await engine.getSurrealPath(TEST_VERSION).catch(() => 'surreal')
 
+  // Derive namespace from container name (same as engine does)
+  const namespace = containerName.replace(/-/g, '_')
+
   // Query to count rows in SurrealDB
   // SurrealQL syntax: SELECT count() FROM table GROUP ALL
   const query = `SELECT count() FROM ${table} GROUP ALL`
 
   try {
     const { stdout } = await execAsync(
-      `echo "${query}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --namespace test --database ${database} --username root --password root --json`,
+      `echo "${query}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --namespace ${namespace} --database ${database} --username root --password root --json --hide-welcome`,
       { timeout: 10000 },
     )
 
     // Parse JSON output - SurrealDB returns array of results
-    // Format: [[{"result":[{"count":5}],"status":"OK","time":"..."}]]
+    // Format: [[{"count":5}]]
     const results = JSON.parse(stdout)
     if (
       Array.isArray(results) &&
       results[0] &&
       Array.isArray(results[0]) &&
-      results[0][0]?.result?.[0]?.count !== undefined
+      results[0][0]?.count !== undefined
     ) {
-      return results[0][0].result[0].count
+      return results[0][0].count
     }
     return 0
   } catch (error) {
@@ -178,7 +182,7 @@ describe('SurrealDB Integration Tests', () => {
     // This tests the `spindb run` command functionality
     await runScriptFile(containerName, SEED_FILE, DATABASE)
 
-    const rowCount = await getSurrealDBRowCount(testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(testPorts[0], containerName, DATABASE, 'test_user')
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -243,7 +247,7 @@ describe('SurrealDB Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n Verifying restored data...`)
 
-    const rowCount = await getSurrealDBRowCount(testPorts[1], DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(testPorts[1], clonedContainerName, DATABASE, 'test_user')
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -292,7 +296,7 @@ describe('SurrealDB Integration Tests', () => {
       DATABASE,
     )
 
-    const rowCount = await getSurrealDBRowCount(testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(testPorts[0], containerName, DATABASE, 'test_user')
     // Should have 4 rows now
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
@@ -353,7 +357,9 @@ describe('SurrealDB Integration Tests', () => {
     assert(ready, 'Renamed SurrealDB should be ready')
 
     // Verify row count reflects deletion
-    const rowCount = await getSurrealDBRowCount(testPorts[2], DATABASE, 'test_user')
+    // Note: The namespace is stored inside SurrealDB's data files, so after rename
+    // we still need to query using the ORIGINAL container name's namespace
+    const rowCount = await getSurrealDBRowCount(testPorts[2], containerName, DATABASE, 'test_user')
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT - 1,

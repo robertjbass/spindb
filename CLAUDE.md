@@ -123,11 +123,14 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Storage backend**: SurrealKV (`surrealkv://path`)
 - **Hierarchy**: Root > Namespace > Database
 - **Default credentials**: `root`/`root`
-- **Default namespace/database**: `test`/`test`
+- **Namespace derivation**: Namespace is derived from container name using `.replace(/-/g, '_')`. For container `my-app`, namespace is `my_app`.
+- **Default database**: `test` (or container's configured database)
 - **Connection scheme**: `ws://` for WebSocket, `http://` for HTTP
 - **Health check**: `surreal isready --endpoint http://127.0.0.1:${port}`
 - **Backup/restore**: Uses `surreal export` (SurrealQL script) and `surreal import`
 - **CLI shell**: `surreal sql --endpoint ws://127.0.0.1:${port}` for interactive queries
+- **Scripting flag**: Use `--hide-welcome` with `surreal sql` to suppress the welcome banner for scriptable/parseable output. The engine uses this automatically for non-interactive commands.
+- **History file**: SurrealDB writes `history.txt` to cwd. The engine sets `cwd` to the container directory so history is stored in `~/.spindb/containers/surrealdb/<name>/history.txt` rather than polluting the user's working directory.
 
 ### Binary Manager Base Classes
 

@@ -310,10 +310,9 @@ export class SurrealDBEngine extends BaseEngine {
     } catch (err) {
       logDebug(`Error getting surreal binary path: ${err}`)
       logWarning(
-        'SurrealDB binary not found, cannot verify server is ready. Assuming ready after delay.',
+        'SurrealDB binary not found, cannot verify server is ready.',
       )
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      return true
+      return false
     }
 
     logDebug(`Starting connection loop, timeout: ${timeoutMs}ms`)
@@ -471,8 +470,12 @@ export class SurrealDBEngine extends BaseEngine {
 
     const surreal = await this.getSurrealPath(version)
 
+    // Use container directory as cwd so history.txt is written there, not user's cwd
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
+      cwd: containerDir,
     }
 
     return new Promise((resolve, reject) => {
@@ -512,6 +515,9 @@ export class SurrealDBEngine extends BaseEngine {
 
     const surreal = await this.getSurrealPath(version)
 
+    // Use container directory as cwd so history.txt is written there, not user's cwd
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
     // SurrealDB creates databases implicitly, but we'll use USE to ensure it exists
     const args = [
       'sql',
@@ -526,6 +532,7 @@ export class SurrealDBEngine extends BaseEngine {
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(surreal, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: containerDir,
       })
 
       let stderr = ''
@@ -570,6 +577,9 @@ export class SurrealDBEngine extends BaseEngine {
 
     const surreal = await this.getSurrealPath(version)
 
+    // Use container directory as cwd so history.txt is written there, not user's cwd
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
     const args = [
       'sql',
       '--endpoint', `ws://127.0.0.1:${port}`,
@@ -582,6 +592,7 @@ export class SurrealDBEngine extends BaseEngine {
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(surreal, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: containerDir,
       })
 
       let stderr = ''
@@ -657,8 +668,13 @@ export class SurrealDBEngine extends BaseEngine {
     try {
       url = new URL(connectionString)
     } catch {
+      // Sanitize connection string to avoid leaking credentials in error messages
+      const sanitized = connectionString.replace(
+        /\/\/([^:]+):([^@]+)@/,
+        '//***:***@',
+      )
       throw new Error(
-        `Invalid connection string: ${connectionString}\n` +
+        `Invalid connection string: ${sanitized}\n` +
           'Expected format: surrealdb://[user:password@]host[:port][/namespace/database]',
       )
     }
@@ -750,6 +766,9 @@ export class SurrealDBEngine extends BaseEngine {
 
     const surreal = await this.getSurrealPath(version)
 
+    // Use container directory as cwd so history.txt is written there, not user's cwd
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
     if (options.file) {
       // Run SurrealQL file using import
       const args = [
@@ -765,6 +784,7 @@ export class SurrealDBEngine extends BaseEngine {
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(surreal, args, {
           stdio: 'inherit',
+          cwd: containerDir,
         })
 
         proc.on('error', reject)
@@ -788,6 +808,7 @@ export class SurrealDBEngine extends BaseEngine {
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(surreal, args, {
           stdio: ['pipe', 'inherit', 'inherit'],
+          cwd: containerDir,
         })
 
         proc.on('error', reject)

@@ -117,13 +117,12 @@ Create directory `engines/{engine}/` with these files:
 
 ### config/engine-defaults.ts
 
-- [ ] Add engine defaults:
+- [ ] Add engine defaults (see `EngineDefaults` type for required fields):
   ```ts
   {engine}: {
     defaultVersion: '25',
     defaultPort: 26257,
     portRange: { start: 26257, end: 26357 },
-    supportedVersions: ['25'],
     latestVersion: '25',
     superuser: 'root',
     connectionScheme: 'postgresql',  // or engine-specific scheme
@@ -131,8 +130,10 @@ Create directory `engines/{engine}/` with these files:
     pidFileName: '{engine}.pid',
     dataSubdir: 'data',
     clientTools: ['{engine}'],
+    maxConnections: 0,  // 0 if not applicable
   },
   ```
+  Note: `supportedVersions` belongs in `config/engines.json`, not here.
 
 ### config/engines.json
 

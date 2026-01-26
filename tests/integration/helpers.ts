@@ -214,12 +214,14 @@ export async function cleanupTestContainers(): Promise<string[]> {
  * Execute SQL against a database and return the result
  * For SQLite, the database parameter is the file path
  * For MongoDB, sql is JavaScript code
+ * For SurrealDB, options.namespace is required (derived from container name)
  */
 export async function executeSQL(
   engine: Engine,
   port: number,
   database: string,
   sql: string,
+  options?: { namespace?: string },
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
@@ -291,9 +293,11 @@ export async function executeSQL(
       .getSurrealPath(TEST_VERSIONS.surrealdb)
       .catch(() => 'surreal')
     // For SurrealDB, use surreal sql with piped input
-    // SurrealDB needs namespace which we derive from container name pattern
-    const namespace = 'test'
-    const cmd = `echo "${sql.replace(/"/g, '\\"')}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --user root --pass root --ns ${namespace} --db ${database} --hide-welcome`
+    // SurrealDB needs namespace - must be provided via options (derive from container name with .replace(/-/g, '_'))
+    if (!options?.namespace) {
+      throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
+    }
+    const cmd = `echo "${sql.replace(/"/g, '\\"')}" | "${surrealPath}" sql --endpoint ws://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} --hide-welcome`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -309,12 +313,14 @@ export async function executeSQL(
  * Execute a SQL file against a database
  * For SQLite, the database parameter is the file path
  * For MongoDB, the file should be a JavaScript file
+ * For SurrealDB, options.namespace is required (derived from container name)
  */
 export async function executeSQLFile(
   engine: Engine,
   port: number,
   database: string,
   filePath: string,
+  options?: { namespace?: string },
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
@@ -379,8 +385,11 @@ export async function executeSQLFile(
       .getSurrealPath(TEST_VERSIONS.surrealdb)
       .catch(() => 'surreal')
     // SurrealDB uses surreal import for file input
-    const namespace = 'test'
-    const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${namespace} --db ${database} "${filePath}"`
+    // Namespace must be provided via options (derive from container name with .replace(/-/g, '_'))
+    if (!options?.namespace) {
+      throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
+    }
+    const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`

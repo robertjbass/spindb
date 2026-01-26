@@ -202,7 +202,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
   },
   [Engine.CockroachDB]: {
     defaultVersion: '25',
-    defaultPort: 26257, // CockroachDB default SQL port (HTTP UI is 8080)
+    defaultPort: 26257, // CockroachDB default SQL port (HTTP UI at port + 1)
     portRange: { start: 26257, end: 26357 },
     latestVersion: '25',
     superuser: 'root', // Default user in insecure mode

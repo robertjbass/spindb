@@ -1,3 +1,2 @@
 #V2
-INFO FOR DB;
-select * from test_user;
+SELECT count() FROM test_user GROUP ALL

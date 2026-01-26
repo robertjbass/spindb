@@ -65,7 +65,7 @@ async function createSurqlBackup(
     proc.on('error', reject)
 
     proc.on('close', async (code) => {
-      if (code === 0 || code === null) {
+      if (code === 0) {
         try {
           const stats = await stat(outputPath)
           resolve({
@@ -76,6 +76,12 @@ async function createSurqlBackup(
         } catch (error) {
           reject(new Error(`Backup file not created: ${error}`))
         }
+      } else if (code === null) {
+        reject(
+          new Error(
+            `surreal export was terminated by signal${stderr ? `: ${stderr}` : ''}`,
+          ),
+        )
       } else {
         reject(
           new Error(

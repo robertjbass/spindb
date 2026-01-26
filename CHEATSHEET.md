@@ -7,16 +7,19 @@ Quick reference for all commands. For detailed examples, see [EXAMPLES.md](EXAMP
 ```bash
 spindb create mydb                      # Create PostgreSQL (default)
 spindb create mydb -e mysql             # Create MySQL
+spindb create mydb -e mariadb           # Create MariaDB
 spindb create mydb -e sqlite            # Create SQLite
+spindb create mydb -e duckdb            # Create DuckDB
 spindb create mydb -e mongodb           # Create MongoDB
+spindb create mydb -e ferretdb          # Create FerretDB
 spindb create mydb -e redis             # Create Redis
 spindb create mydb -e valkey            # Create Valkey
 spindb create mydb -e clickhouse        # Create ClickHouse
-spindb create mydb -e duckdb            # Create DuckDB
-spindb create mydb -e ferretdb          # Create FerretDB
 spindb create mydb -e qdrant            # Create Qdrant
 spindb create mydb -e meilisearch       # Create Meilisearch
 spindb create mydb -e couchdb           # Create CouchDB
+spindb create mydb -e cockroachdb       # Create CockroachDB
+spindb create mydb -e surrealdb         # Create SurrealDB
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -34,17 +37,22 @@ spindb info mydb                        # Show container details
 ```bash
 spindb connect mydb                     # Open database shell
 spindb connect mydb -d otherdb          # Connect to specific database
-spindb connect mydb --pgcli             # Use pgcli (PostgreSQL)
-spindb connect mydb --mycli             # Use mycli (MySQL)
+spindb connect mydb --pgcli             # Use pgcli (PostgreSQL/CockroachDB)
+spindb connect mydb --mycli             # Use mycli (MySQL/MariaDB)
 spindb connect mydb --litecli           # Use litecli (SQLite)
-spindb connect mydb --iredis            # Use iredis (Redis)
+spindb connect mydb --iredis            # Use iredis (Redis/Valkey)
 
 spindb run mydb -c "SELECT 1"           # Run inline SQL/JS/command
 spindb run mydb ./schema.sql            # Run SQL file
 spindb run mydb -d analytics ./init.sql # Run on specific database
 spindb run myredis -c "SET foo bar"     # Run Redis command
 spindb run mych -c "SELECT 1"           # Run ClickHouse SQL
+spindb run mycrdb -c "SELECT 1"         # Run CockroachDB SQL
+spindb run mysurreal -c "SELECT * FROM users"  # Run SurrealQL
 ```
+
+> **REST API Engines:** Qdrant, Meilisearch, and CouchDB use REST APIs instead of CLI shells.
+> `spindb connect` opens their web dashboards in your browser. `spindb run` is not available for these engines.
 
 ## Connection Strings
 
@@ -78,6 +86,10 @@ spindb restore mydb --from-url "mongodb://user:pass@host:27017/db"
 spindb restore mydb --from-url "redis://:password@host:6379/0"
 spindb restore mydb --from-url "clickhouse://default:pass@host:8123/db"
 spindb restore mydb --from-url "http://host:6333?api_key=KEY"  # Qdrant
+spindb restore mydb --from-url "http://host:7700?api_key=KEY"  # Meilisearch
+spindb restore mydb --from-url "http://user:pass@host:5984/db" # CouchDB
+spindb restore mydb --from-url "postgresql://root@host:26257/db?sslmode=disable"  # CockroachDB
+spindb restore mydb --from-url "ws://root:root@host:8000/ns/db"  # SurrealDB
 ```
 
 ## Clone
@@ -154,23 +166,25 @@ spindb doctor --json                    # JSON output for scripting
 
 ## Default Ports
 
-| Engine      | Default | Range         |
-|-------------|---------|---------------|
-| PostgreSQL  | 5432    | 5432-5500     |
-| MySQL       | 3306    | 3306-3400     |
-| MariaDB     | 3307    | 3307-3400     |
-| MongoDB     | 27017   | 27017-27100   |
-| FerretDB    | 27017   | 27017-27100   |
-| Redis       | 6379    | 6379-6400     |
-| Valkey      | 6379    | 6379-6479     |
-| ClickHouse  | 9000    | 9000-9100     |
-| Qdrant      | 6333    | 6333-6400     |
-| Meilisearch | 7700    | 7700-7800     |
-| CouchDB     | 5984    | 5984-6000     |
-| SQLite      | N/A     | File-based    |
-| DuckDB      | N/A     | File-based    |
+| Engine      | Default | Range         | Notes |
+|-------------|---------|---------------|-------|
+| PostgreSQL  | 5432    | 5432-5500     | |
+| MySQL       | 3306    | 3306-3400     | |
+| MariaDB     | 3307    | 3307-3400     | |
+| MongoDB     | 27017   | 27017-27100   | Shared with FerretDB |
+| FerretDB    | 27017   | 27017-27100   | Shared with MongoDB |
+| Redis       | 6379    | 6379-6400     | Shared with Valkey |
+| Valkey      | 6379    | 6379-6479     | Shared with Redis |
+| ClickHouse  | 9000    | 9000-9100     | HTTP UI on 8123 |
+| Qdrant      | 6333    | 6333-6400     | gRPC on port+1 |
+| Meilisearch | 7700    | 7700-7800     | |
+| CouchDB     | 5984    | 5984-6000     | Fauxton UI included |
+| CockroachDB | 26257   | 26257-26357   | HTTP UI on port+1 |
+| SurrealDB   | 8000    | 8000-8100     | HTTP/WebSocket |
+| SQLite      | N/A     | File-based    | |
+| DuckDB      | N/A     | File-based    | |
 
-> **Note:** FerretDB and MongoDB share the default port 27017 (and range 27017–27100); use different ports if running both concurrently. Similarly, Redis and Valkey share port 6379.
+> **Port Conflicts:** FerretDB/MongoDB and Redis/Valkey share default ports. Use different ports if running both concurrently.
 
 ## Connection String Formats
 
@@ -185,10 +199,16 @@ Valkey:      redis://127.0.0.1:6379/0
 ClickHouse:  clickhouse://default@127.0.0.1:9000/default
 Qdrant:      http://127.0.0.1:6333
 Meilisearch: http://127.0.0.1:7700
-CouchDB:     http://127.0.0.1:5984/mydb
+CouchDB:     http://admin:admin@127.0.0.1:5984/mydb
+CockroachDB: postgresql://root@127.0.0.1:26257/defaultdb?sslmode=disable
+SurrealDB:   ws://root:root@127.0.0.1:8000/test/test
 SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```
+
+> **CockroachDB:** Uses PostgreSQL wire protocol. Add `?sslmode=disable` for local insecure connections.
+> **SurrealDB:** Format is `ws://user:pass@host:port/namespace/database`. Defaults: root/root, test/test.
+> **CouchDB:** Default credentials are admin/admin.
 
 ## JSON Output (for scripting)
 

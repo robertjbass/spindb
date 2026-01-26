@@ -639,8 +639,8 @@ create_restore_target() {
       run_cmd spindb create "$restored_container" --engine "$engine" --path "$restored_path" --no-start
       ;;
     surrealdb)
-      # SurrealDB: data goes into same namespace/database, but we could use a different database
-      # For simplicity, we'll restore to the same database (which will overwrite)
+      # SurrealDB: restore goes to a separate database (restored_db) for verification
+      # No explicit target creation needed - SurrealDB creates databases on import
       return 0
       ;;
     *)
@@ -1175,6 +1175,10 @@ run_test() {
       ;;
     redis|valkey)
       initial_count=$(get_data_count "$engine" "$container_name" "0")
+      ;;
+    surrealdb)
+      # SurrealDB seeds to database "test" (not "testdb")
+      initial_count=$(get_data_count "$engine" "$container_name" "test")
       ;;
     *)
       initial_count=$(get_data_count "$engine" "$container_name" "testdb")

@@ -6,7 +6,7 @@
  *
  * Key characteristics:
  * - Default SQL port: 26257
- * - Default HTTP UI port: 8080
+ * - HTTP UI port: SQL port + 1 (default 26258)
  * - Uses PostgreSQL wire protocol for client connections
  * - Single binary: `cockroach` (handles server, sql client, and admin tasks)
  * - Default database: `defaultdb`
@@ -41,6 +41,9 @@ import { createBackup } from './backup'
 import {
   validateCockroachIdentifier,
   escapeCockroachIdentifier,
+  escapeSqlValue,
+  parseCsvLine,
+  isInsecureConnection,
 } from './cli-utils'
 import {
   type Platform,
@@ -649,7 +652,11 @@ export class CockroachDBEngine extends BaseEngine {
    * Dump from a remote CockroachDB connection
    * Uses cockroach sql to export schema and data
    *
-   * Connection string format: postgresql://[user[:password]@]host[:port][/database]
+   * Connection string format: postgresql://[user[:password]@]host[:port][/database][?sslmode=...]
+   *
+   * Supports both insecure (local dev) and secure (production) connections:
+   * - sslmode=disable or localhost without sslmode: uses --insecure flag
+   * - Other SSL modes: passes connection string directly (handles certs via URL params)
    */
   async dumpFromConnectionString(
     connectionString: string,
@@ -662,14 +669,13 @@ export class CockroachDBEngine extends BaseEngine {
     } catch {
       throw new Error(
         `Invalid connection string: ${connectionString}\n` +
-          'Expected format: postgresql://[user[:password]@]host[:port][/database]',
+          'Expected format: postgresql://[user[:password]@]host[:port][/database][?sslmode=...]',
       )
     }
 
     const host = url.hostname || '127.0.0.1'
     const port = parseInt(url.port, 10) || 26257
     const database = url.pathname.replace(/^\//, '') || 'defaultdb'
-    const user = url.username || 'root'
 
     logDebug(`Connecting to remote CockroachDB at ${host}:${port} (db: ${database})`)
 
@@ -720,17 +726,13 @@ export class CockroachDBEngine extends BaseEngine {
     lines.push(`-- Date: ${new Date().toISOString()}`)
     lines.push('')
 
-    // Build connection args
-    const connArgs = [
-      'sql',
-      '--insecure',
-      '--host',
-      `${host}:${port}`,
-      '--user',
-      user,
-      '--database',
-      database,
-    ]
+    // Build connection args using --url to preserve auth/SSL settings
+    const connArgs = ['sql', '--url', connectionString]
+
+    // Only add --insecure for local dev or explicit sslmode=disable
+    if (isInsecureConnection(connectionString)) {
+      connArgs.push('--insecure')
+    }
 
     // Get list of tables
     const tablesQuery = `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`
@@ -763,6 +765,51 @@ export class CockroachDBEngine extends BaseEngine {
       } catch (error) {
         logWarning(`Could not get CREATE TABLE for ${table}: ${error}`)
         continue
+      }
+
+      // Export table data
+      try {
+        // Get column names first
+        const columnsQuery = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table}' ORDER BY ordinal_position`
+        const columnsResult = await this.execRemoteQuery(cockroach, connArgs, columnsQuery)
+        const columns = columnsResult
+          .split('\n')
+          .slice(1) // Skip header
+          .map((c) => c.trim())
+          .filter((c) => c)
+
+        if (columns.length === 0) {
+          logDebug(`No columns found for table ${table}, skipping data export`)
+          continue
+        }
+
+        // Get all rows
+        const dataQuery = `SELECT * FROM "${table}"`
+        const dataResult = await this.execRemoteQuery(cockroach, connArgs, dataQuery)
+        const dataLines = dataResult.split('\n').slice(1).filter((line) => line.trim())
+
+        if (dataLines.length > 0) {
+          lines.push(`-- Data for ${table}`)
+
+          for (const dataLine of dataLines) {
+            const values = parseCsvLine(dataLine)
+            if (values.length !== columns.length) {
+              logWarning(
+                `Column count mismatch for table ${table}: expected ${columns.length}, got ${values.length}`,
+              )
+              continue
+            }
+
+            const escapedCols = columns.map((c) => escapeCockroachIdentifier(c)).join(', ')
+            const escapedVals = values.map((v) => escapeSqlValue(v)).join(', ')
+            lines.push(
+              `INSERT INTO ${escapeCockroachIdentifier(table)} (${escapedCols}) VALUES (${escapedVals});`,
+            )
+          }
+          lines.push('')
+        }
+      } catch (error) {
+        logWarning(`Could not export data for table ${table}: ${error}`)
       }
     }
 
