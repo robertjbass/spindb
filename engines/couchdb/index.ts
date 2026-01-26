@@ -589,12 +589,6 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         // On Windows, .cmd files must be executed via cmd.exe
-        const localIniPath = join(binDir, 'etc', 'local.ini')
-        console.error(`[CouchDB Windows] Starting: cmd.exe /c ${couchdbServer}`)
-        console.error(`[CouchDB Windows] CWD: ${binDir}`)
-        console.error(`[CouchDB Windows] Config at: ${localIniPath}`)
-        console.error(`[CouchDB Windows] Config exists: ${existsSync(localIniPath)}`)
-        console.error(`[CouchDB Windows] PATH includes: ${env.PATH?.substring(0, 200)}...`)
         const proc = spawn('cmd.exe', ['/c', couchdbServer!], spawnOpts)
         let settled = false
         let stderrOutput = ''
@@ -620,14 +614,10 @@ export class CouchDBEngine extends BaseEngine {
         })
 
         proc.stdout?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stdoutOutput += str
-          console.error(`[CouchDB Windows stdout] ${str}`)
+          stdoutOutput += data.toString()
         })
         proc.stderr?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stderrOutput += str
-          console.error(`[CouchDB Windows stderr] ${str}`)
+          stderrOutput += data.toString()
         })
 
         proc.unref()
