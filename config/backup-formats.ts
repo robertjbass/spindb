@@ -23,6 +23,7 @@ import {
   type QdrantFormat,
   type MeilisearchFormat,
   type CouchDBFormat,
+  type CockroachDBFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -55,6 +56,7 @@ export const BACKUP_FORMATS: {
   [Engine.Qdrant]: EngineBackupFormats<QdrantFormat>
   [Engine.Meilisearch]: EngineBackupFormats<MeilisearchFormat>
   [Engine.CouchDB]: EngineBackupFormats<CouchDBFormat>
+  [Engine.CockroachDB]: EngineBackupFormats<CockroachDBFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -265,6 +267,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only JSON format supported
     defaultFormat: 'json',
+  },
+  [Engine.CockroachDB]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - DDL + INSERT statements',
+        spinnerLabel: 'SQL',
+      },
+    },
+    supportsFormatChoice: false, // Only SQL format supported
+    defaultFormat: 'sql',
   },
 }
 

@@ -174,6 +174,14 @@ function validateConnectionString(
         return 'Connection string must start with couchdb://, http://, or https://'
       }
       break
+    case Engine.CockroachDB:
+      if (
+        !input.startsWith('postgresql://') &&
+        !input.startsWith('postgres://')
+      ) {
+        return 'Connection string must start with postgresql:// or postgres://'
+      }
+      break
     case Engine.SQLite:
     case Engine.DuckDB:
       return 'File-based engines do not support remote connection strings'

@@ -11,6 +11,7 @@ import { clickhouseEngine } from './clickhouse'
 import { qdrantEngine } from './qdrant'
 import { meilisearchEngine } from './meilisearch'
 import { couchdbEngine } from './couchdb'
+import { cockroachdbEngine } from './cockroachdb'
 import { platformService } from '../core/platform-service'
 import { Engine, Platform } from '../types'
 import type { BaseEngine } from './base-engine'
@@ -61,6 +62,9 @@ export const engines: Record<string, BaseEngine> = {
   // CouchDB and aliases
   [Engine.CouchDB]: couchdbEngine,
   couch: couchdbEngine,
+  // CockroachDB and aliases
+  [Engine.CockroachDB]: cockroachdbEngine,
+  crdb: cockroachdbEngine,
 }
 
 // Get an engine by name

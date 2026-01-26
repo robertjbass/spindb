@@ -86,6 +86,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
       case Engine.SQLite:
       case Engine.DuckDB:
       case Engine.ClickHouse:
+      case Engine.CockroachDB:
         return { type: 'SQL', lower: 'sql' }
 
       default:

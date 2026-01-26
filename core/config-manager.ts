@@ -72,6 +72,8 @@ const DUCKDB_TOOLS: BinaryTool[] = ['duckdb']
 
 const COUCHDB_TOOLS: BinaryTool[] = ['couchdb']
 
+const COCKROACHDB_TOOLS: BinaryTool[] = ['cockroach']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -91,6 +93,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...QDRANT_TOOLS,
   ...MEILISEARCH_TOOLS,
   ...COUCHDB_TOOLS,
+  ...COCKROACHDB_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -109,6 +112,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.Qdrant]: QDRANT_TOOLS,
   [Engine.Meilisearch]: MEILISEARCH_TOOLS,
   [Engine.CouchDB]: COUCHDB_TOOLS,
+  [Engine.CockroachDB]: COCKROACHDB_TOOLS,
 }
 
 export class ConfigManager {
@@ -586,6 +590,7 @@ export {
   QDRANT_TOOLS,
   MEILISEARCH_TOOLS,
   COUCHDB_TOOLS,
+  COCKROACHDB_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -119,7 +119,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -134,6 +134,7 @@ declare -A BACKUP_FORMATS=(
   [qdrant]="snapshot"
   [meilisearch]="snapshot"
   [couchdb]="json"
+  [cockroachdb]="sql"
 )
 
 # Results tracking
@@ -301,6 +302,10 @@ insert_seed_data() {
       spindb run "$container_name" -c "CREATE DATABASE IF NOT EXISTS testdb;" -d default &>/dev/null || true
       seed_file="$FIXTURES_DIR/$engine/seeds/sample-db.sql"
       ;;
+    cockroachdb)
+      spindb run "$container_name" -c "CREATE DATABASE IF NOT EXISTS testdb;" -d defaultdb &>/dev/null || true
+      seed_file="$FIXTURES_DIR/$engine/seeds/sample-db.sql"
+      ;;
     sqlite|duckdb)
       seed_file="$FIXTURES_DIR/$engine/seeds/sample-db.sql"
       ;;
@@ -443,7 +448,7 @@ get_data_count() {
   local output
   local error_output
   case $engine in
-    postgresql|mysql|mariadb|clickhouse)
+    postgresql|mysql|mariadb|clickhouse|cockroachdb)
       output=$(spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" -d "$database" 2>/dev/null)
       # Extract number from output (handles various formats with whitespace)
       echo "$output" | grep -oE '[0-9]+' | head -1
@@ -552,7 +557,7 @@ get_backup_extension() {
         rdb) echo ".rdb" ;;
       esac
       ;;
-    clickhouse)
+    clickhouse|cockroachdb)
       echo ".sql" ;;
     qdrant)
       # Qdrant uses snapshot format for backups
@@ -580,7 +585,7 @@ create_backup() {
   local backup_name="${container_name}_backup"
 
   case $engine in
-    postgresql|mysql|mariadb|clickhouse|mongodb)
+    postgresql|mysql|mariadb|clickhouse|mongodb|cockroachdb)
       run_cmd spindb backup "$container_name" -d testdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
     redis|valkey)
@@ -605,6 +610,9 @@ create_restore_target() {
     clickhouse)
       run_cmd spindb run "$container_name" -c "CREATE DATABASE IF NOT EXISTS restored_db;" -d default
       ;;
+    cockroachdb)
+      run_cmd spindb run "$container_name" -c "CREATE DATABASE IF NOT EXISTS restored_db;" -d defaultdb
+      ;;
     sqlite|duckdb)
       local restored_container="restored_${container_name}"
       local restored_path="$BACKUP_DIR/restored_${engine}.db"
@@ -622,7 +630,7 @@ restore_backup() {
   local backup_file=$(get_backup_path "$engine" "$container_name" "$format")
 
   case $engine in
-    postgresql|mysql|mariadb|clickhouse|mongodb)
+    postgresql|mysql|mariadb|clickhouse|mongodb|cockroachdb)
       run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
       ;;
     redis|valkey)
@@ -677,7 +685,7 @@ verify_restored_data() {
   local actual=""
 
   case $engine in
-    postgresql|mysql|mariadb|clickhouse|mongodb)
+    postgresql|mysql|mariadb|clickhouse|mongodb|cockroachdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
     redis|valkey)
@@ -704,7 +712,7 @@ verify_restored_data_with_count() {
   local actual=""
 
   case $engine in
-    postgresql|mysql|mariadb|clickhouse|mongodb)
+    postgresql|mysql|mariadb|clickhouse|mongodb|cockroachdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
     redis|valkey)
@@ -736,6 +744,9 @@ cleanup_restore_target() {
       ;;
     clickhouse)
       spindb run "$container_name" -c "DROP DATABASE IF EXISTS restored_db;" -d default &>/dev/null || true
+      ;;
+    cockroachdb)
+      spindb run "$container_name" -c "DROP DATABASE IF EXISTS restored_db;" -d defaultdb &>/dev/null || true
       ;;
     sqlite|duckdb)
       spindb delete "restored_${container_name}" --yes &>/dev/null || true
@@ -1049,7 +1060,7 @@ run_test() {
   log_step "Basic query test"
   local query_ok=false
   case $engine in
-    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse)
+    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb)
       spindb run "$container_name" -c "SELECT 1;" &>/dev/null && query_ok=true
       ;;
     mongodb|ferretdb)
@@ -1652,7 +1663,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

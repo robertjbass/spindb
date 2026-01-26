@@ -200,6 +200,22 @@
       "clientTools": ["couchdb"],
       "licensing": "Apache-2.0",
       "notes": "Document database with REST API. Fauxton web UI at /_utils. Uses JSON documents."
+    },
+    "cockroachdb": {
+      "displayName": "CockroachDB",
+      "icon": "🪳",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["25.4.2"],
+      "defaultVersion": "25.4.2",
+      "defaultPort": 26257,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "connectionScheme": "postgresql",
+      "superuser": "root",
+      "clientTools": ["cockroach"],
+      "licensing": ["BSL", "Apache-2.0"],
+      "notes": "Distributed SQL database with PostgreSQL compatibility. HTTP admin UI at port+1 (default 8080). Single binary handles server and client."
     }
   }
 }

@@ -34,6 +34,7 @@ export enum Engine {
   Qdrant = 'qdrant',
   Meilisearch = 'meilisearch',
   CouchDB = 'couchdb',
+  CockroachDB = 'cockroachdb',
 }
 
 // Supported operating systems (matches Node.js process.platform)
@@ -67,6 +68,7 @@ export const ALL_ENGINES = [
   Engine.Qdrant,
   Engine.Meilisearch,
   Engine.CouchDB,
+  Engine.CockroachDB,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -193,6 +195,7 @@ export type QdrantFormat = 'snapshot'
 export type MeilisearchFormat = 'snapshot'
 export type FerretDBFormat = 'sql' | 'custom'
 export type CouchDBFormat = 'json'
+export type CockroachDBFormat = 'sql'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -209,6 +212,7 @@ export type BackupFormatType =
   | QdrantFormat
   | MeilisearchFormat
   | CouchDBFormat
+  | CockroachDBFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -225,6 +229,7 @@ type EngineFormatMap = {
   [Engine.Qdrant]: QdrantFormat
   [Engine.Meilisearch]: MeilisearchFormat
   [Engine.CouchDB]: CouchDBFormat
+  [Engine.CockroachDB]: CockroachDBFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -330,6 +335,8 @@ export type BinaryTool =
   | 'ferretdb'
   // CouchDB tools
   | 'couchdb'
+  // CockroachDB tools
+  | 'cockroach'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -405,6 +412,8 @@ export type SpinDBConfig = {
     ferretdb?: BinaryConfig
     // CouchDB tools
     couchdb?: BinaryConfig
+    // CockroachDB tools
+    cockroach?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

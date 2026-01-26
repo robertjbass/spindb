@@ -147,6 +147,7 @@ Engines can be referenced by aliases in CLI commands:
 - `qdrant`, `qd` → Qdrant
 - `meilisearch`, `meili`, `ms` → Meilisearch
 - `couchdb`, `couch` → CouchDB
+- `cockroachdb`, `crdb` → CockroachDB
 
 ### Supported Versions & Query Languages
 
@@ -165,6 +166,7 @@ Engines can be referenced by aliases in CLI commands:
 | Qdrant 🧭 | 1 | REST API | Vector search, HTTP port 6333 |
 | Meilisearch 🔍 | 1.33.1 | REST API | Full-text search, HTTP port 7700 |
 | CouchDB 🛋 | 3 | REST API | Document database, HTTP port 5984 |
+| CockroachDB 🪳 | 25 | SQL | Distributed SQL, PostgreSQL-compatible |
 
 ### Binary Sources
 
@@ -430,7 +432,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 ## Implementation Details
 
 ### Port Management
-PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700 | CouchDB: 5984
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700 | CouchDB: 5984 | CockroachDB: 26257
 
 Auto-increments on conflict (e.g., 5432 → 5433).
 

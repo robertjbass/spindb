@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-01-25
+
+### Added
+- **CockroachDB engine support** - Full integration for CockroachDB distributed SQL database:
+  - PostgreSQL wire protocol compatible (uses `postgresql://` connection scheme)
+  - Default port 26257, HTTP admin UI on port+1
+  - SQL-based backup/restore via `cockroach sql` and `cockroach dump`
+  - Default user `root`, default database `defaultdb`
+  - Version 25.4.2 from hostdb
+  - Single binary: `cockroach`
+  - Aliases: `cockroachdb`, `crdb`
+  - Full cross-platform support (macOS, Linux, Windows)
+
 ## [0.24.0] - 2026-01-25
 
 ### Added

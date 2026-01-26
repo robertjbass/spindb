@@ -1151,6 +1151,96 @@ jobs:
           }
 
   # ============================================
+  # CockroachDB Integration Tests
+  # Uses SpinDB to download and manage CockroachDB binaries from hostdb
+  # CockroachDB uses PostgreSQL wire protocol for client connections
+  # ============================================
+  test-cockroachdb:
+    name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache CockroachDB binaries - these are downloaded from hostdb
+      - name: Cache CockroachDB binaries
+        uses: actions/cache@v4
+        id: cockroachdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-cockroachdb-25-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download CockroachDB binaries
+      - name: Install CockroachDB via SpinDB
+        run: pnpm start engines download cockroachdb 25
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run CockroachDB integration tests
+        run: pnpm test:engine cockroachdb
+        timeout-minutes: 15
+
+      - name: Show CockroachDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== CockroachDB container directories ==="
+          ls -la ~/.spindb/containers/cockroachdb/ 2>/dev/null || echo "No CockroachDB containers directory"
+          echo ""
+          echo "=== CockroachDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i cockroach || echo "No CockroachDB binaries found"
+          echo ""
+          echo "=== CockroachDB log files ==="
+          find ~/.spindb/containers/cockroachdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show CockroachDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== CockroachDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== CockroachDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "cockroach*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== CockroachDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -1907,6 +1997,7 @@ jobs:
         test-qdrant,
         test-meilisearch,
         test-couchdb,
+        test-cockroachdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -1975,6 +2066,10 @@ jobs:
           fi
           if [ "${{ needs.test-couchdb.result }}" != "success" ]; then
             echo "CouchDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-cockroachdb.result }}" != "success" ]; then
+            echo "CockroachDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

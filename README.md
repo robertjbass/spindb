@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 13 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 14 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -48,7 +48,7 @@ One consistent interface across SQL databases, document stores, key-value stores
 
 ```bash
 # Same commands work for ANY database
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -70,7 +70,7 @@ spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
 
 ## Platform Coverage
 
-SpinDB works across **13 database engines** and **5 platform architectures** with a **single, consistent API**.
+SpinDB works across **14 database engines** and **5 platform architectures** with a **single, consistent API**.
 
 | Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
 |----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
@@ -87,8 +87,9 @@ SpinDB works across **13 database engines** and **5 platform architectures** wit
 | 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔍 **Meilisearch** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🛋 **CouchDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🪳 **CockroachDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**63 combinations. One CLI. Zero configuration.**
+**68 combinations. One CLI. Zero configuration.**
 
 ---
 
@@ -167,7 +168,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 | Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
 |---------|--------|--------|--------|--------------|-------|
 | No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Multiple DB engines | ✅ 13 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
+| Multiple DB engines | ✅ 14 engines | ✅ Unlimited | ✅ 3 engines | ❌ PostgreSQL only | ⚠️ MySQL only |
 | CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
 | Multiple versions | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
@@ -181,7 +182,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 ## Supported Databases
 
-SpinDB supports **13 database engines** with **multiple versions** for each:
+SpinDB supports **14 database engines** with **multiple versions** for each:
 
 | Engine | Type | Versions | Default Port | Query Language |
 |--------|------|----------|--------------|----------------|
@@ -198,10 +199,11 @@ SpinDB supports **13 database engines** with **multiple versions** for each:
 | 🧭 **Qdrant** | Vector Search | 1 | 6333 (HTTP), 6334 (gRPC) | REST API |
 | 🔍 **Meilisearch** | Full-Text Search | 1 | 7700 | REST API |
 | 🛋 **CouchDB** | Document Store | 3 | 5984 | REST API |
+| 🪳 **CockroachDB** | Distributed SQL | 25 | 26257 | SQL (PostgreSQL-compatible) |
 
 ### Engine Categories
 
-**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB):
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB):
 - Start/stop server processes
 - Bind to localhost ports
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
@@ -427,6 +429,7 @@ Databases run as **native processes**, and **data persists across restarts**. Wh
 | Redis | RDB snapshots (periodic) | May lose ~60 seconds on unexpected crash |
 | Valkey | RDB snapshots (periodic) | May lose ~60 seconds on unexpected crash |
 | ClickHouse | MergeTree storage | Committed transactions survive crashes |
+| CockroachDB | Raft consensus | Strongly consistent, distributed replication |
 
 ---
 
@@ -583,6 +586,31 @@ curl http://127.0.0.1:6333/collections
 **Query interface:** REST API (no CLI shell - use curl or API clients)
 **Tools:** `qdrant` (included)
 
+### CockroachDB 🪳
+
+```bash
+# Create CockroachDB database (distributed SQL)
+spindb create cluster --engine cockroachdb
+spindb start cluster
+
+# PostgreSQL-compatible SQL
+spindb run cluster -c "CREATE TABLE users (id INT PRIMARY KEY, name STRING)"
+spindb run cluster -c "SELECT * FROM users"
+
+# Connect with cockroach sql shell
+spindb connect cluster
+```
+
+**Version:** 25 (25.4.2)
+**Platforms:** macOS, Linux, Windows (all platforms)
+**Ports:** 26257 (SQL), 8080 (HTTP Admin UI on port+1)
+**Query language:** SQL (PostgreSQL-compatible)
+**Tools:** `cockroach` (included)
+**Default user:** `root`
+**Default database:** `defaultdb`
+
+CockroachDB is a distributed SQL database with automatic replication and failover. Single-node mode is used for local development.
+
 ---
 
 ## Enhanced CLI Tools
@@ -604,6 +632,7 @@ SpinDB supports enhanced database shells with auto-completion, syntax highlighti
 | Qdrant | REST API | - | - |
 | Meilisearch | REST API | - | - |
 | CouchDB | REST API | - | - |
+| CockroachDB | `cockroach sql` | - | - |
 
 Install and use in one command:
 
@@ -713,6 +742,16 @@ spindb backup mydb --format snapshot    # Snapshot (only format)
 spindb backup mydb --format snapshot    # Snapshot (only format)
 ```
 
+### CockroachDB
+
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| sql | `.sql` | cockroach dump | Plain SQL dump |
+
+```bash
+spindb backup mydb --format sql         # SQL dump (only format)
+```
+
 ---
 
 ## Advanced Features
@@ -755,6 +794,7 @@ spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production
 | Qdrant | `qdrant://` or `http://` | `http://host:6333?api_key=KEY` |
 | Meilisearch | `meilisearch://` or `http://` | `http://host:7700?api_key=KEY` |
 | CouchDB | `couchdb://` or `http://` | `http://user:pass@host:5984/db` |
+| CockroachDB | `postgresql://` or `cockroachdb://` | `postgresql://root@host:26257/db?sslmode=disable` |
 
 ### Multi-Version Support
 
@@ -809,10 +849,7 @@ See [TODO.md](TODO.md) for the complete roadmap.
 - Environment variable support in connection strings
 - Secrets management with macOS Keychain integration
 
-### v1.2 - Additional Engines
-- **CockroachDB** - Distributed PostgreSQL-compatible database
-
-### v1.3 - Advanced Features
+### v1.2 - Advanced Features
 - Container templates for common configurations
 - Scheduled automated backups
 - Import databases from Docker containers

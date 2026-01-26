@@ -68,6 +68,7 @@ export const TEST_PORTS = {
   qdrant: { base: 6350, clone: 6352, renamed: 6351 },
   meilisearch: { base: 7710, clone: 7712, renamed: 7711 },
   couchdb: { base: 5990, clone: 5992, renamed: 5991 },
+  cockroachdb: { base: 26260, clone: 26262, renamed: 26261 },
 }
 
 /**
@@ -266,6 +267,15 @@ export async function executeSQL(
     // For ClickHouse, use clickhouse client
     const cmd = `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --database ${database} --query "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
+  } else if (engine === Engine.CockroachDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled cockroach if available
+    const cockroachPath = await engineImpl
+      .getCockroachPath('25')
+      .catch(() => 'cockroach')
+    // For CockroachDB, use cockroach sql --insecure
+    const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --execute "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -335,6 +345,14 @@ export async function executeSQLFile(
       .catch(() => 'clickhouse')
     // ClickHouse uses pipe for file input with --multiquery flag
     const cmd = `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --database ${database} --multiquery < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.CockroachDB) {
+    const engineImpl = getEngine(engine)
+    const cockroachPath = await engineImpl
+      .getCockroachPath('25')
+      .catch(() => 'cockroach')
+    // CockroachDB uses --file flag for SQL files
+    const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --file "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -542,6 +560,16 @@ export async function waitForReady(
           `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --query "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.CockroachDB) {
+        // Use cockroach sql to ping CockroachDB
+        const engineImpl = getEngine(engine)
+        const cockroachPath = await engineImpl
+          .getCockroachPath('25')
+          .catch(() => 'cockroach')
+        await execAsync(
+          `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --execute "SELECT 1"`,
+          { timeout: 5000 },
+        )
       } else if (engine === Engine.Qdrant) {
         // Use fetch to ping Qdrant REST API with timeout
         const controller = new AbortController()
@@ -739,6 +767,9 @@ export function getConnectionString(
   }
   if (engine === Engine.CouchDB) {
     return `http://127.0.0.1:${port}/${database}`
+  }
+  if (engine === Engine.CockroachDB) {
+    return `postgresql://root@127.0.0.1:${port}/${database}?sslmode=disable`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

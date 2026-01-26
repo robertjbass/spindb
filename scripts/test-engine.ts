@@ -28,6 +28,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   qdrant: 'qdrant.test.ts',
   meilisearch: 'meilisearch.test.ts',
   couchdb: 'couchdb.test.ts',
+  cockroachdb: 'cockroachdb.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
@@ -51,6 +52,8 @@ const ENGINE_ALIASES: Record<string, string> = {
   ms: 'meilisearch',
   // CouchDB aliases
   couch: 'couchdb',
+  // CockroachDB aliases
+  crdb: 'cockroachdb',
 }
 
 // Test run order (matches test:integration script order)
@@ -68,6 +71,7 @@ const TEST_ORDER = [
   'qdrant',
   'meilisearch',
   'couchdb',
+  'cockroachdb',
 ]
 
 function resolveEngine(input: string): string | null {
@@ -108,6 +112,7 @@ function printUsage(): void {
   console.log('  qdrant        (aliases: qd)')
   console.log('  meilisearch   (aliases: meili, ms)')
   console.log('  couchdb       (aliases: couch)')
+  console.log('  cockroachdb   (aliases: crdb)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')

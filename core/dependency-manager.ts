@@ -75,6 +75,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'meilisearch',
   // CouchDB
   'couchdb',
+  // CockroachDB
+  'cockroach',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

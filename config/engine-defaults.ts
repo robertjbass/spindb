@@ -200,6 +200,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // CouchDB uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable
   },
+  [Engine.CockroachDB]: {
+    defaultVersion: '25',
+    defaultPort: 26257, // CockroachDB default SQL port (HTTP UI is 8080)
+    portRange: { start: 26257, end: 26357 },
+    latestVersion: '25',
+    superuser: 'root', // Default user in insecure mode
+    connectionScheme: 'postgresql', // Uses PostgreSQL wire protocol
+    logFileName: 'cockroach.log',
+    pidFileName: 'cockroach.pid',
+    dataSubdir: 'data',
+    clientTools: ['cockroach'],
+    maxConnections: 0, // Not applicable - managed internally
+  },
 }
 
 /**

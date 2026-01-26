@@ -132,6 +132,14 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the cockroach binary if available
+   * Default implementation throws; CockroachDB engine overrides this method.
+   */
+  async getCockroachPath(_version?: string): Promise<string> {
+    throw new Error('cockroach not found')
+  }
+
+  /**
    * Get the path to the sqlite3 client if available
    * Default implementation returns null; SQLite engine overrides this method.
    */
