@@ -43,6 +43,7 @@ import {
   escapeCockroachIdentifier,
   escapeSqlValue,
   parseCsvLine,
+  parseCsvRecords,
   isInsecureConnection,
 } from './cli-utils'
 import {
@@ -761,11 +762,11 @@ export class CockroachDBEngine extends BaseEngine {
       try {
         const createQuery = `SHOW CREATE TABLE ${escapeCockroachIdentifier(table)}`
         const createResult = await this.execRemoteQuery(cockroach, connArgs, createQuery)
-        // Parse CSV output safely - format is: table_name,create_statement
-        // The create statement often contains commas, so use parseCsvLine
-        const dataLines = createResult.split('\n').slice(1).filter((line) => line.trim())
-        if (dataLines.length > 0) {
-          const columns = parseCsvLine(dataLines[0])
+        // Parse CSV output safely using record-aware parser
+        // Format is: table_name,create_statement (create statement may contain newlines)
+        const createRecords = parseCsvRecords(createResult, true) // Skip header
+        if (createRecords.length > 0) {
+          const columns = parseCsvLine(createRecords[0])
           if (columns.length >= 2) {
             // Second column is the CREATE TABLE statement
             const createStatement = columns[1].value.trim()
@@ -787,11 +788,9 @@ export class CockroachDBEngine extends BaseEngine {
         const escapedTableForString = table.replace(/'/g, "''")
         const columnsQuery = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${escapedTableForString}' ORDER BY ordinal_position`
         const columnsResult = await this.execRemoteQuery(cockroach, connArgs, columnsQuery)
-        const columns = columnsResult
-          .split('\n')
-          .slice(1) // Skip header
-          .map((c) => c.trim())
-          .filter((c) => c)
+        // Column names are simple strings, use record-aware parser for consistency
+        const columnRecords = parseCsvRecords(columnsResult, true) // Skip header
+        const columns = columnRecords.map((c) => c.trim()).filter((c) => c)
 
         if (columns.length === 0) {
           logDebug(`No columns found for table ${table}, skipping data export`)
@@ -801,13 +800,14 @@ export class CockroachDBEngine extends BaseEngine {
         // Get all rows - use proper identifier escaping
         const dataQuery = `SELECT * FROM ${escapeCockroachIdentifier(table)}`
         const dataResult = await this.execRemoteQuery(cockroach, connArgs, dataQuery)
-        const dataLines = dataResult.split('\n').slice(1).filter((line) => line.trim())
+        // Use record-aware parser to handle fields with embedded newlines
+        const dataRecords = parseCsvRecords(dataResult, true) // Skip header
 
-        if (dataLines.length > 0) {
+        if (dataRecords.length > 0) {
           lines.push(`-- Data for ${table}`)
 
-          for (const dataLine of dataLines) {
-            const fields = parseCsvLine(dataLine)
+          for (const dataRecord of dataRecords) {
+            const fields = parseCsvLine(dataRecord)
             if (fields.length !== columns.length) {
               logWarning(
                 `Column count mismatch for table ${table}: expected ${columns.length}, got ${fields.length}`,

@@ -272,6 +272,64 @@ export type CsvField = {
 }
 
 /**
+ * Parse multi-line CSV data into individual records (rows)
+ * Respects quoted fields that may contain embedded newlines
+ * Returns an array of complete CSV record strings (one per row)
+ *
+ * @param csvData - The raw CSV output from a query
+ * @param skipHeader - If true, skips the first record (header row)
+ * @returns Array of complete CSV record strings
+ */
+export function parseCsvRecords(csvData: string, skipHeader = false): string[] {
+  const records: string[] = []
+  let currentRecord = ''
+  let inQuotes = false
+
+  for (let i = 0; i < csvData.length; i++) {
+    const char = csvData[i]
+
+    if (inQuotes) {
+      currentRecord += char
+      if (char === '"') {
+        // Check for escaped quote (double quote)
+        if (i + 1 < csvData.length && csvData[i + 1] === '"') {
+          currentRecord += csvData[i + 1]
+          i++ // Skip next quote
+        } else {
+          inQuotes = false
+        }
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true
+        currentRecord += char
+      } else if (char === '\n') {
+        // End of record (unless we're in quotes, handled above)
+        const trimmed = currentRecord.trim()
+        if (trimmed) {
+          records.push(trimmed)
+        }
+        currentRecord = ''
+      } else if (char === '\r') {
+        // Skip carriage return (handle \r\n line endings)
+        continue
+      } else {
+        currentRecord += char
+      }
+    }
+  }
+
+  // Don't forget the last record if there's no trailing newline
+  const trimmed = currentRecord.trim()
+  if (trimmed) {
+    records.push(trimmed)
+  }
+
+  // Skip header if requested
+  return skipHeader ? records.slice(1) : records
+}
+
+/**
  * Parse a CSV line respecting quoted fields
  * Handles fields that contain commas, quotes, and newlines
  * Returns both the value and whether it was quoted (to preserve empty string semantics)
