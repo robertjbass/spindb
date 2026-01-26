@@ -2311,7 +2311,7 @@ Update:
 - File Structure diagram
 - Test commands section
 - CI Binary Caching list
-- Port Management section
+- Port Management section (add engine's default port in format `EngineName: port`)
 - Binary Sources by Engine section
 - Engine Icons list
 

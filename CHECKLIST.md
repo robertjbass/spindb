@@ -497,7 +497,7 @@ Create directory `engines/{engine}/` with these files:
 
 - [ ] Add engine alias to Engine Aliases section
 - [ ] Add row to Supported Versions & Query Languages table
-- [ ] Add to Port Management section
+- [ ] Add to Port Management section (format: `EngineName: port`)
 
 ### CHANGELOG.md
 
