@@ -245,7 +245,6 @@ export class CockroachDBEngine extends BaseEngine {
 
     // CockroachDB start command
     // Using --insecure for local development (no TLS)
-    // Using --background to run as daemon
     const args = [
       'start-single-node',
       '--insecure',
@@ -254,35 +253,71 @@ export class CockroachDBEngine extends BaseEngine {
       '--http-addr', `127.0.0.1:${httpPort}`,
       '--pid-file', pidFile,
       '--log-dir', containerDir,
-      '--background',
     ]
 
-    // Spawn the daemon process
-    // Use 'ignore' for stdio to prevent hanging - CockroachDB with --background
-    // forks a daemon that inherits file descriptors, so piped stdio would never close
+    // On Unix, use --background flag which forks a daemon process
+    // On Windows, don't use --background - Windows doesn't have the same fork model
+    // and CockroachDB's background mode can fail silently. Instead, we detach manually.
+    const isWindows = process.platform === 'win32'
+    if (!isWindows) {
+      args.push('--background')
+    }
+
+    // Spawn options differ by platform:
+    // - Unix with --background: Use 'ignore' for stdio as the forked daemon inherits descriptors
+    // - Windows without --background: Keep pipes for debugging, detach manually
     const proc = spawn(cockroachBinary!, args, {
-      stdio: ['ignore', 'ignore', 'ignore'],
+      stdio: isWindows ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'ignore', 'ignore'],
       detached: true,
+      // On Windows, set cwd to container directory to ensure proper file handle behavior
+      cwd: isWindows ? containerDir : undefined,
     })
 
-    // Wait a moment for the process to fork and the parent to exit
+    // Capture stderr on Windows for debugging
+    let stderr = ''
+    if (isWindows) {
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+        logDebug(`CockroachDB stderr: ${data.toString().trim()}`)
+      })
+      proc.stdout?.on('data', (data: Buffer) => {
+        logDebug(`CockroachDB stdout: ${data.toString().trim()}`)
+      })
+
+      // On Windows without --background, write PID file ourselves
+      // (On Unix, --background makes CockroachDB write the daemon PID)
+      if (proc.pid) {
+        await writeFile(pidFile, proc.pid.toString(), 'utf-8')
+        logDebug(`Wrote PID file: ${pidFile} (pid: ${proc.pid})`)
+      }
+    }
+
+    // Wait a moment for the process to start
     await new Promise<void>((resolve, reject) => {
-      proc.on('error', reject)
+      proc.on('error', (err) => {
+        logDebug(`CockroachDB spawn error: ${err}`)
+        reject(err)
+      })
       proc.on('spawn', () => {
         proc.unref()
-        // Give CockroachDB a moment to fork the background daemon
-        setTimeout(resolve, 500)
+        // On Windows, give CockroachDB more time to initialize
+        // On Unix with --background, just wait for the fork
+        const delay = isWindows ? 2000 : 500
+        setTimeout(resolve, delay)
       })
     })
 
     // Wait for server to be ready
-    logDebug(`Waiting for CockroachDB server to be ready on port ${port}...`)
-    const ready = await this.waitForReady(port, version)
+    // Windows needs a longer timeout since CockroachDB initialization takes more time
+    const timeout = isWindows ? 90000 : 60000
+    logDebug(`Waiting for CockroachDB server to be ready on port ${port}... (timeout: ${timeout}ms)`)
+    const ready = await this.waitForReady(port, version, timeout)
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
+      const stderrInfo = stderr ? `\nStderr: ${stderr}` : ''
       throw new Error(
-        `CockroachDB failed to start within timeout. Check logs at: ${logFile}`,
+        `CockroachDB failed to start within timeout. Check logs at: ${logFile}${stderrInfo}`,
       )
     }
 
