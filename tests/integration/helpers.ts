@@ -778,8 +778,17 @@ export async function waitForStopped(
   // Memory-mapped files and Windows antivirus/indexing can hold handles
   // This helps prevent EBUSY/EPERM errors during rename/delete operations
   if (isWindows()) {
-    // SurrealDB and Qdrant use persistent storage that takes longer to release
-    const extraDelay = (engine === Engine.SurrealDB || engine === Engine.Qdrant) ? 15000 : 10000
+    // SurrealDB uses memory-mapped files that take a very long time to release on Windows
+    // Even after the process exits, the OS may hold handles for 30+ seconds
+    // Qdrant also uses persistent storage but typically releases faster
+    let extraDelay: number
+    if (engine === Engine.SurrealDB) {
+      extraDelay = 30000 // 30 seconds for SurrealDB
+    } else if (engine === Engine.Qdrant) {
+      extraDelay = 15000 // 15 seconds for Qdrant
+    } else {
+      extraDelay = 10000 // 10 seconds for other engines
+    }
     await new Promise((resolve) => setTimeout(resolve, extraDelay))
   }
 

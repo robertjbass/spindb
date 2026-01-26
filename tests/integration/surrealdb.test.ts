@@ -340,7 +340,34 @@ describe('SurrealDB Integration Tests', () => {
     assert(stopped, 'Container should be fully stopped before rename')
 
     // Rename container and change port
-    await containerManager.rename(containerName, renamedContainerName)
+    // On Windows, SurrealDB may hold file handles for a long time even after process exit
+    // Use retry logic to handle EPERM errors
+    const isWindows = process.platform === 'win32'
+    let renameSuccess = false
+    let lastError: Error | null = null
+    const maxRetries = isWindows ? 5 : 1
+    const retryDelay = 10000 // 10 seconds between retries
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await containerManager.rename(containerName, renamedContainerName)
+        renameSuccess = true
+        break
+      } catch (error) {
+        lastError = error as Error
+        if (isWindows && attempt < maxRetries && (error as NodeJS.ErrnoException).code === 'EPERM') {
+          console.log(`   Rename attempt ${attempt}/${maxRetries} failed with EPERM, waiting ${retryDelay/1000}s...`)
+          await new Promise((resolve) => setTimeout(resolve, retryDelay))
+        } else {
+          throw error
+        }
+      }
+    }
+
+    if (!renameSuccess && lastError) {
+      throw lastError
+    }
+
     await containerManager.updateConfig(renamedContainerName, {
       port: testPorts[2],
     })
