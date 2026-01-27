@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-01-26
+
+### Fixed
+- **Windows spawn reliability** - CockroachDB and SurrealDB now use a fixed delay instead of unreliable `spawn` event on Windows, fixing 30-second spawn timeouts
+- **CockroachDB startup cleanup** - Failed startups now properly kill orphaned processes and remove PID files
+- **CockroachDB credential security** - Connection strings are sanitized in error messages to prevent credential exposure
+- **CockroachDB table discovery** - Now uses CSV parser to properly handle quoted table identifiers
+- **CockroachDB PID file handling** - PID file write failure on Windows is now fatal (kills process, throws error)
+- **SurrealDB error messages** - Removed misleading "Check logs at" reference since no logs are written
+- **SurrealDB PID file handling** - PID file write failure on Windows is now fatal (kills process, throws error)
+- **SurrealDB import signal handling** - Signal termination (code === null) now properly treated as error
+
+### Changed
+- Windows tests now run in parallel across engine matrices instead of sequentially
+- Removed redundant Windows tests from Fresh Install and Upgrade jobs
+
 ## [0.26.1] - 2026-01-26
 
 ### Fixed
