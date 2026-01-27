@@ -62,7 +62,9 @@ class QuestDBBinaryManager extends BaseBinaryManager {
 
   /**
    * Override isInstalled to check for questdb.sh (Unix) or questdb.exe (Windows)
-   * QuestDB doesn't follow the standard bin/ directory structure
+   * Note: Archive structure differs by platform:
+   * - macOS: questdb.sh at root (questdb/questdb.sh)
+   * - Linux: questdb.sh in bin/ subdirectory (questdb/bin/questdb.sh)
    */
   override async isInstalled(
     version: string,
@@ -77,13 +79,15 @@ class QuestDBBinaryManager extends BaseBinaryManager {
       arch,
     })
 
-    // Check for the startup script at the root of the extracted directory
+    // Check for the startup script - may be at root or in bin/ subdirectory
     if (platform === Platform.Win32) {
       const exePath = join(binPath, 'questdb.exe')
-      return existsSync(exePath)
+      const exePathBin = join(binPath, 'bin', 'questdb.exe')
+      return existsSync(exePath) || existsSync(exePathBin)
     } else {
       const shPath = join(binPath, 'questdb.sh')
-      return existsSync(shPath)
+      const shPathBin = join(binPath, 'bin', 'questdb.sh')
+      return existsSync(shPath) || existsSync(shPathBin)
     }
   }
 
@@ -98,7 +102,9 @@ class QuestDBBinaryManager extends BaseBinaryManager {
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
     // Use console.log for CI visibility (logDebug requires --debug flag)
-    console.log(`[QuestDB] Extraction: found ${entries.length} entries: ${entries.map(e => e.name).join(', ')}`)
+    console.log(
+      `[QuestDB] Extraction: found ${entries.length} entries: ${entries.map((e) => e.name).join(', ')}`,
+    )
 
     // Find the questdb directory - could be:
     // - "questdb" (simple name)
@@ -117,10 +123,14 @@ class QuestDBBinaryManager extends BaseBinaryManager {
       console.log(`[QuestDB] Found questdb directory: ${questdbDir.name}`)
       sourceDir = join(extractDir, questdbDir.name)
       sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      console.log(`[QuestDB] Contents: ${sourceEntries.map(e => e.name).join(', ')}`)
+      console.log(
+        `[QuestDB] Contents: ${sourceEntries.map((e) => e.name).join(', ')}`,
+      )
     } else {
       // Check if questdb.sh is directly in extractDir (no subdirectory)
-      const hasQuestdbSh = entries.some(e => e.name === 'questdb.sh' || e.name === 'questdb.exe')
+      const hasQuestdbSh = entries.some(
+        (e) => e.name === 'questdb.sh' || e.name === 'questdb.exe',
+      )
       if (hasQuestdbSh) {
         console.log(`[QuestDB] questdb.sh found directly in extractDir`)
       } else {
@@ -129,7 +139,9 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     }
 
     // Move all entries as-is, preserving QuestDB's structure:
-    console.log(`[QuestDB] Moving ${sourceEntries.length} entries to ${binPath}`)
+    console.log(
+      `[QuestDB] Moving ${sourceEntries.length} entries to ${binPath}`,
+    )
     for (const entry of sourceEntries) {
       const sourcePath = join(sourceDir, entry.name)
       const destPath = join(binPath, entry.name)
@@ -141,24 +153,38 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     if (existsSync(expectedScript)) {
       console.log(`[QuestDB] SUCCESS: questdb.sh found at ${expectedScript}`)
     } else {
-      const binContents = await readdir(binPath).catch(() => ['(failed to read)'])
-      console.log(`[QuestDB] ERROR: questdb.sh NOT found. binPath contents: ${binContents.join(', ')}`)
+      const binContents = await readdir(binPath).catch(() => [
+        '(failed to read)',
+      ])
+      console.log(
+        `[QuestDB] ERROR: questdb.sh NOT found. binPath contents: ${binContents.join(', ')}`,
+      )
     }
   }
 
   /**
    * After extraction, ensure the startup script is executable and java symlink exists
-   * QuestDB's questdb.sh expects 'java' at the base level, but it's in jre/bin/java
+   * Archive structure differs by platform:
+   * - macOS: questdb.sh at root, jre/bin/java
+   * - (intentional spaces on next line to prevent premature comment ending)
+   * - Linux: bin/questdb.sh, lib/jvm/ * /bin/java (standard JRE layout)
    */
   async postExtract(binPath: string, platform: Platform): Promise<void> {
     if (platform !== Platform.Win32) {
-      const shPath = join(binPath, 'questdb.sh')
-      if (existsSync(shPath)) {
-        await chmod(shPath, 0o755)
-        logDebug(`Made questdb.sh executable: ${shPath}`)
+      // Make startup script executable - check both locations
+      const shPathRoot = join(binPath, 'questdb.sh')
+      const shPathBin = join(binPath, 'bin', 'questdb.sh')
+
+      if (existsSync(shPathRoot)) {
+        await chmod(shPathRoot, 0o755)
+        logDebug(`Made questdb.sh executable: ${shPathRoot}`)
+      }
+      if (existsSync(shPathBin)) {
+        await chmod(shPathBin, 0o755)
+        logDebug(`Made questdb.sh executable: ${shPathBin}`)
       }
 
-      // Create symlink from 'java' to 'jre/bin/java' at base level
+      // For macOS structure: create symlink from 'java' to 'jre/bin/java' at base level
       // questdb.sh checks for $BASE/java to determine if JRE is bundled
       // Use relative path so symlink works if binPath is moved
       const javaSymlink = join(binPath, 'java')
@@ -177,7 +203,9 @@ class QuestDBBinaryManager extends BaseBinaryManager {
 
   /**
    * Override verify to check the correct path structure for QuestDB
-   * QuestDB has questdb.sh at root, not in bin/ subdirectory
+   * Archive structure differs by platform:
+   * - macOS: questdb.sh at root
+   * - Linux: questdb.sh in bin/ subdirectory
    * Also, QuestDB doesn't support --version flag (Java app)
    */
   override async verify(
@@ -193,13 +221,15 @@ class QuestDBBinaryManager extends BaseBinaryManager {
       arch,
     })
 
-    // QuestDB has questdb.sh/questdb.exe at root, not in bin/ subdirectory
-    const scriptName = platform === Platform.Win32 ? 'questdb.exe' : 'questdb.sh'
-    const scriptPath = join(binPath, scriptName)
+    // Check for startup script at root or in bin/ subdirectory
+    const scriptName =
+      platform === Platform.Win32 ? 'questdb.exe' : 'questdb.sh'
+    const scriptPathRoot = join(binPath, scriptName)
+    const scriptPathBin = join(binPath, 'bin', scriptName)
 
-    if (!existsSync(scriptPath)) {
+    if (!existsSync(scriptPathRoot) && !existsSync(scriptPathBin)) {
       throw new Error(
-        `${this.config.displayName} binary not found at ${scriptPath}`,
+        `${this.config.displayName} binary not found at ${scriptPathRoot} or ${scriptPathBin}`,
       )
     }
 
@@ -207,7 +237,9 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     // The jar may be in different locations depending on version, so we only warn
     const jarPath = join(binPath, 'questdb.jar')
     if (!existsSync(jarPath)) {
-      logDebug(`QuestDB jar not found at ${jarPath} (startup script found, proceeding)`)
+      logDebug(
+        `QuestDB jar not found at ${jarPath} (startup script found, proceeding)`,
+      )
     }
 
     logDebug(`QuestDB binaries verified at ${binPath}`)

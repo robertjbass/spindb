@@ -5,8 +5,8 @@
  * QuestDB is compatible with psql for executing SQL statements.
  */
 
-import { open } from 'fs/promises'
-import { spawn } from 'child_process'
+import { open, readFile } from 'fs/promises'
+import { spawn, spawnSync } from 'child_process'
 import { configManager } from '../../core/config-manager'
 import { logDebug } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
@@ -142,10 +142,51 @@ export async function restoreBackup(
     '-f', backupPath,
   ]
 
+  // For clean restore, drop existing tables before restoring
   if (clean) {
-    // For clean restore, drop and recreate tables
-    // Note: QuestDB doesn't support some PostgreSQL DROP commands
-    logDebug('Clean restore requested - tables will be dropped before restore')
+    logDebug('Clean restore requested - extracting table names from backup')
+
+    // Read the SQL file and extract table names from CREATE TABLE statements
+    const sqlContent = await readFile(backupPath, 'utf-8')
+    // Match CREATE TABLE "table_name" or CREATE TABLE table_name
+    const tableRegex = /CREATE\s+TABLE\s+(?:"([^"]+)"|(\w+))/gi
+    const tables: string[] = []
+    let match
+
+    while ((match = tableRegex.exec(sqlContent)) !== null) {
+      const tableName = match[1] || match[2]
+      if (tableName && !tables.includes(tableName)) {
+        tables.push(tableName)
+      }
+    }
+
+    if (tables.length > 0) {
+      logDebug(`Found ${tables.length} tables to drop: ${tables.join(', ')}`)
+
+      // Execute DROP TABLE IF EXISTS for each table
+      for (const table of tables) {
+        const dropQuery = `DROP TABLE IF EXISTS "${table}";`
+        logDebug(`Executing: ${dropQuery}`)
+
+        const dropResult = spawnSync(psqlPath!, [
+          '-h', '127.0.0.1',
+          '-p', String(port),
+          '-U', 'admin',
+          '-d', database,
+          '-c', dropQuery,
+        ], {
+          env: { ...process.env, PGPASSWORD: 'quest' },
+        })
+
+        if (dropResult.error) {
+          logDebug(`Warning: Failed to drop table ${table}: ${dropResult.error.message}`)
+        } else if (dropResult.status !== 0) {
+          logDebug(`Warning: DROP TABLE ${table} exited with code ${dropResult.status}`)
+        }
+      }
+    } else {
+      logDebug('No CREATE TABLE statements found in backup')
+    }
   }
 
   return new Promise((resolve, reject) => {

@@ -101,13 +101,16 @@ export class QuestDBEngine extends BaseEngine {
 
   // Verify that QuestDB binaries are available
   async verifyBinary(binPath: string): Promise<boolean> {
+    // Check both root and bin/ subdirectory (structure differs by platform)
     const { platform } = this.getPlatformInfo()
     if (platform === 'win32') {
-      const exePath = join(binPath, 'questdb.exe')
-      return existsSync(exePath)
+      const exePathRoot = join(binPath, 'questdb.exe')
+      const exePathBin = join(binPath, 'bin', 'questdb.exe')
+      return existsSync(exePathRoot) || existsSync(exePathBin)
     } else {
-      const shPath = join(binPath, 'questdb.sh')
-      return existsSync(shPath)
+      const shPathRoot = join(binPath, 'questdb.sh')
+      const shPathBin = join(binPath, 'bin', 'questdb.sh')
+      return existsSync(shPathRoot) || existsSync(shPathBin)
     }
   }
 
@@ -139,13 +142,18 @@ export class QuestDBEngine extends BaseEngine {
     await questdbBinaryManager.postExtract(binPath, platform)
 
     // Register the startup script in config
+    // Register the startup script in config - check both locations
     if (platform === 'win32') {
-      const exePath = join(binPath, 'questdb.exe')
+      const exePathRoot = join(binPath, 'questdb.exe')
+      const exePathBin = join(binPath, 'bin', 'questdb.exe')
+      const exePath = existsSync(exePathRoot) ? exePathRoot : exePathBin
       if (existsSync(exePath)) {
         await configManager.setBinaryPath('questdb', exePath, 'bundled')
       }
     } else {
-      const shPath = join(binPath, 'questdb.sh')
+      const shPathRoot = join(binPath, 'questdb.sh')
+      const shPathBin = join(binPath, 'bin', 'questdb.sh')
+      const shPath = existsSync(shPathRoot) ? shPathRoot : shPathBin
       if (existsSync(shPath)) {
         await configManager.setBinaryPath('questdb', shPath, 'bundled')
       }
@@ -186,16 +194,17 @@ export class QuestDBEngine extends BaseEngine {
       arch,
     })
 
+    // Check both root and bin/ subdirectory (structure differs by platform)
     if (platform === 'win32') {
-      const exePath = join(binPath, 'questdb.exe')
-      if (existsSync(exePath)) {
-        return exePath
-      }
+      const exePathRoot = join(binPath, 'questdb.exe')
+      const exePathBin = join(binPath, 'bin', 'questdb.exe')
+      if (existsSync(exePathRoot)) return exePathRoot
+      if (existsSync(exePathBin)) return exePathBin
     } else {
-      const shPath = join(binPath, 'questdb.sh')
-      if (existsSync(shPath)) {
-        return shPath
-      }
+      const shPathRoot = join(binPath, 'questdb.sh')
+      const shPathBin = join(binPath, 'bin', 'questdb.sh')
+      if (existsSync(shPathRoot)) return shPathRoot
+      if (existsSync(shPathBin)) return shPathBin
     }
 
     throw new Error(
@@ -223,22 +232,30 @@ export class QuestDBEngine extends BaseEngine {
       }
     }
 
-    // Get QuestDB binary path
+    // Get QuestDB binary path - check both root and bin/ subdirectory
     let questdbBinary: string | null = null
     const { platform } = this.getPlatformInfo()
 
     if (binaryPath && existsSync(binaryPath)) {
       if (platform === 'win32') {
-        const exePath = join(binaryPath, 'questdb.exe')
-        if (existsSync(exePath)) {
-          questdbBinary = exePath
+        const exePathRoot = join(binaryPath, 'questdb.exe')
+        const exePathBin = join(binaryPath, 'bin', 'questdb.exe')
+        if (existsSync(exePathRoot)) {
+          questdbBinary = exePathRoot
           logDebug(`Using stored binary path: ${questdbBinary}`)
+        } else if (existsSync(exePathBin)) {
+          questdbBinary = exePathBin
+          logDebug(`Using stored binary path (bin/): ${questdbBinary}`)
         }
       } else {
-        const shPath = join(binaryPath, 'questdb.sh')
-        if (existsSync(shPath)) {
-          questdbBinary = shPath
+        const shPathRoot = join(binaryPath, 'questdb.sh')
+        const shPathBin = join(binaryPath, 'bin', 'questdb.sh')
+        if (existsSync(shPathRoot)) {
+          questdbBinary = shPathRoot
           logDebug(`Using stored binary path: ${questdbBinary}`)
+        } else if (existsSync(shPathBin)) {
+          questdbBinary = shPathBin
+          logDebug(`Using stored binary path (bin/): ${questdbBinary}`)
         }
       }
     }
