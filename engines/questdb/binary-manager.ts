@@ -97,7 +97,8 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     binPath: string,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
-    logDebug(`QuestDB extraction: found ${entries.length} entries in extractDir: ${entries.map(e => e.name).join(', ')}`)
+    // Use console.log for CI visibility (logDebug requires --debug flag)
+    console.log(`[QuestDB] Extraction: found ${entries.length} entries: ${entries.map(e => e.name).join(', ')}`)
 
     // Find the questdb directory - could be:
     // - "questdb" (simple name)
@@ -113,34 +114,35 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     let sourceEntries = entries
 
     if (questdbDir) {
-      logDebug(`QuestDB extraction: found questdb directory: ${questdbDir.name}`)
+      console.log(`[QuestDB] Found questdb directory: ${questdbDir.name}`)
       sourceDir = join(extractDir, questdbDir.name)
       sourceEntries = await readdir(sourceDir, { withFileTypes: true })
-      logDebug(`QuestDB extraction: contents of ${questdbDir.name}: ${sourceEntries.map(e => e.name).join(', ')}`)
+      console.log(`[QuestDB] Contents: ${sourceEntries.map(e => e.name).join(', ')}`)
     } else {
       // Check if questdb.sh is directly in extractDir (no subdirectory)
       const hasQuestdbSh = entries.some(e => e.name === 'questdb.sh' || e.name === 'questdb.exe')
       if (hasQuestdbSh) {
-        logDebug(`QuestDB extraction: questdb.sh found directly in extractDir (no subdirectory)`)
+        console.log(`[QuestDB] questdb.sh found directly in extractDir`)
       } else {
-        logDebug(`QuestDB extraction: no questdb directory found, using extractDir as-is`)
+        console.log(`[QuestDB] WARNING: no questdb directory found`)
       }
     }
 
     // Move all entries as-is, preserving QuestDB's structure:
-    // questdb.sh, questdb.exe, questdb.jar, lib/, jre/
+    console.log(`[QuestDB] Moving ${sourceEntries.length} entries to ${binPath}`)
     for (const entry of sourceEntries) {
       const sourcePath = join(sourceDir, entry.name)
       const destPath = join(binPath, entry.name)
-      logDebug(`QuestDB extraction: moving ${entry.name} to ${destPath}`)
       await moveEntry(sourcePath, destPath)
     }
 
     // Verify questdb.sh was moved
     const expectedScript = join(binPath, 'questdb.sh')
-    if (!existsSync(expectedScript)) {
-      const binContents = await readdir(binPath)
-      logDebug(`QuestDB extraction: WARNING - questdb.sh not found at ${expectedScript}. binPath contents: ${binContents.join(', ')}`)
+    if (existsSync(expectedScript)) {
+      console.log(`[QuestDB] SUCCESS: questdb.sh found at ${expectedScript}`)
+    } else {
+      const binContents = await readdir(binPath).catch(() => ['(failed to read)'])
+      console.log(`[QuestDB] ERROR: questdb.sh NOT found. binPath contents: ${binContents.join(', ')}`)
     }
   }
 

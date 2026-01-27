@@ -1277,12 +1277,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache QuestDB binaries - these are downloaded from hostdb
+      # Cache key v2: bust cache after fixing extraction logic
       - name: Cache QuestDB binaries
         uses: actions/cache@v4
         id: questdb-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-questdb-9-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-questdb-9-${{ runner.os }}-${{ runner.arch }}-v2
 
       # Use SpinDB to download QuestDB binaries
       - name: Install QuestDB via SpinDB
