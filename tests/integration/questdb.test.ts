@@ -143,6 +143,9 @@ describe('QuestDB Integration Tests', () => {
     // Use runScriptFile which internally calls engine.runScript
     await runScriptFile(containerName, SEED_FILE, DATABASE)
 
+    // Give QuestDB time to commit data - time-series DBs use WAL buffering
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
     assertEqual(
       rowCount,
@@ -200,6 +203,9 @@ describe('QuestDB Integration Tests', () => {
       await engine.restore(clonedConfig!, backupPath, {
         database: DATABASE,
       })
+
+      // Give QuestDB time to commit restored data - time-series DBs use WAL buffering
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     } finally {
       // Clean up backup file even if restore fails
       await rm(backupPath, { force: true })
