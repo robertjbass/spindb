@@ -266,18 +266,38 @@ export class SurrealDBEngine extends BaseEngine {
     // On Unix, we wait for the spawn event for more reliable startup detection.
     const isWindows = process.platform === 'win32'
     if (isWindows) {
-      // Write PID file immediately on Windows
-      if (proc.pid) {
-        try {
-          await writeFile(pidFile, proc.pid.toString(), 'utf-8')
-          logDebug(`Windows: wrote PID file ${pidFile} (pid: ${proc.pid})`)
-        } catch (err) {
-          logDebug(`Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`)
+      // Add error handler and write PID file on Windows
+      await new Promise<void>((resolve, reject) => {
+        proc.on('error', (err) => {
+          logDebug(`SurrealDB spawn error on Windows: ${err.message}`)
+          reject(new Error(`Failed to spawn SurrealDB: ${err.message}`))
+        })
+
+        // Write PID file immediately on Windows
+        if (proc.pid) {
+          writeFile(pidFile, proc.pid.toString(), 'utf-8')
+            .then(() => {
+              logDebug(`Windows: wrote PID file ${pidFile} (pid: ${proc.pid})`)
+              proc.unref()
+              logDebug(`Windows: waiting fixed delay for SurrealDB to start (pid: ${proc.pid})`)
+              setTimeout(resolve, 3000)
+            })
+            .catch((err) => {
+              // PID file write failed - clean up and reject
+              const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
+              logDebug(errMsg)
+              // Kill the spawned process since we can't track it
+              try {
+                if (proc.pid) process.kill(proc.pid, 'SIGTERM')
+              } catch {
+                // Process may have already exited
+              }
+              reject(new Error(errMsg))
+            })
+        } else {
+          reject(new Error('Failed to spawn SurrealDB: no PID available'))
         }
-      }
-      proc.unref()
-      logDebug(`Windows: waiting fixed delay for SurrealDB to start (pid: ${proc.pid})`)
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      })
     } else {
       const spawnTimeout = 30000
       await new Promise<void>((resolve, reject) => {

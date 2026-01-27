@@ -292,9 +292,16 @@ export class CockroachDBEngine extends BaseEngine {
     // so we use a simple delay and let waitForReady() handle detection.
     // On Unix with --background, we wait for the spawn event.
     if (isWindows) {
-      proc.unref()
-      logDebug(`Windows: waiting fixed delay for CockroachDB to start (pid: ${proc.pid})`)
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      // Add error handler to catch spawn failures on Windows
+      await new Promise<void>((resolve, reject) => {
+        proc.on('error', (err) => {
+          logDebug(`CockroachDB spawn error on Windows: ${err}`)
+          reject(err)
+        })
+        proc.unref()
+        logDebug(`Windows: waiting fixed delay for CockroachDB to start (pid: ${proc.pid})`)
+        setTimeout(resolve, 3000)
+      })
     } else {
       const spawnTimeout = 30000 // 30 seconds to spawn
       await new Promise<void>((resolve, reject) => {
@@ -805,20 +812,21 @@ export class CockroachDBEngine extends BaseEngine {
     // Get list of tables
     const tablesQuery = `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`
     const tablesResult = await this.execRemoteQuery(cockroach, connArgs, tablesQuery)
-    const tables = tablesResult
-      .split('\n')
-      .slice(1) // Skip header
-      .map((t) => t.trim())
+    // Parse CSV output properly to handle quoted identifiers
+    const tableRecords = parseCsvRecords(tablesResult, true) // Skip header
+    const tables = tableRecords
+      .map((line) => {
+        const fields = parseCsvLine(line)
+        return fields.length > 0 ? fields[0].value : ''
+      })
       .filter((t) => t)
 
     logDebug(`Found ${tables.length} tables in database ${database}`)
 
     for (const table of tables) {
-      // Validate table name to prevent SQL injection
-      // Table names from information_schema should be safe, but validate defensively
-      const validIdentifierPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/
-      if (!validIdentifierPattern.test(table)) {
-        logWarning(`Skipping table with invalid name: ${table}`)
+      // Table names from information_schema are safe (already unquoted by CSV parser)
+      // Only validate that we got a non-empty name
+      if (!table) {
         continue
       }
 

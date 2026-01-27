@@ -26,10 +26,9 @@ on:
 #   5. A commented-out ARM64 job exists below if native runners become available
 #
 # Windows Strategy:
-# Instead of running 19+ parallel Windows jobs (which exhausts the runner pool),
-# we run ONE comprehensive Windows job (test-windows-all) that tests all engines
-# sequentially. This provides full Windows coverage while using only 1 runner.
-# Individual engine matrices only include Linux and macOS.
+# Windows tests run in parallel within each engine's matrix (windows-latest).
+# A sequential test-windows-all job is commented out below as a fallback if
+# parallel Windows jobs ever exhaust the runner pool again.
 # =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
