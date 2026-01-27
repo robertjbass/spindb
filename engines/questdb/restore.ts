@@ -150,8 +150,8 @@ export async function restoreBackup(
 
     // Read the SQL file and extract table names from CREATE TABLE statements
     const sqlContent = await readFile(backupPath, 'utf-8')
-    // Match CREATE TABLE "table_name" or CREATE TABLE table_name
-    const tableRegex = /CREATE\s+TABLE\s+(?:"([^"]+)"|(\w+))/gi
+    // Match CREATE TABLE [IF NOT EXISTS] "table_name" or CREATE TABLE [IF NOT EXISTS] table_name
+    const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"([^"]+)"|(\w+))/gi
     const tables: string[] = []
     let match
 
