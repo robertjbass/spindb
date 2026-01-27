@@ -230,7 +230,6 @@ export class SurrealDBEngine extends BaseEngine {
 
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
-    const logFile = join(containerDir, 'surrealdb.log')
     const pidFile = join(containerDir, 'surrealdb.pid')
 
     onProgress?.({ stage: 'starting', message: 'Starting SurrealDB...' })
@@ -351,7 +350,7 @@ export class SurrealDBEngine extends BaseEngine {
 
     if (!ready) {
       throw new Error(
-        `SurrealDB failed to start within timeout. Check logs at: ${logFile}`,
+        `SurrealDB failed to start within timeout. Container: ${name}`,
       )
     }
 
