@@ -811,12 +811,13 @@ export async function waitForStopped(
   // Memory-mapped files and Windows antivirus/indexing can hold handles
   // This helps prevent EBUSY/EPERM errors during rename/delete operations
   if (isWindows()) {
-    // SurrealDB uses memory-mapped files that take a very long time to release on Windows
+    // SurrealDB and QuestDB use memory-mapped files that take a very long time to release on Windows
     // Even after the process exits, the OS may hold handles for 30+ seconds
+    // QuestDB is Java-based with columnar storage using memory-mapped files
     // Qdrant also uses persistent storage but typically releases faster
     let extraDelay: number
-    if (engine === Engine.SurrealDB) {
-      extraDelay = 30000 // 30 seconds for SurrealDB
+    if (engine === Engine.SurrealDB || engine === Engine.QuestDB) {
+      extraDelay = 30000 // 30 seconds for memory-mapped file engines
     } else if (engine === Engine.Qdrant) {
       extraDelay = 15000 // 15 seconds for Qdrant
     } else {
