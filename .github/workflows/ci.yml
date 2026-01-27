@@ -1587,9 +1587,7 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
-          - os: windows-latest
-            icon: 🔷
-            label: Windows
+          # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1603,17 +1601,8 @@ jobs:
           node-version: '22'
 
       # Ensure clean state - no existing ~/.spindb
-      - name: Ensure clean state (Unix)
-        if: runner.os != 'Windows'
+      - name: Ensure clean state
         run: rm -rf ~/.spindb
-
-      - name: Ensure clean state (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path "$env:USERPROFILE\.spindb") {
-            Remove-Item -Recurse -Force "$env:USERPROFILE\.spindb"
-          }
 
       # Pack and install globally (simulates npm install -g spindb)
       - name: Install dependencies
@@ -1622,14 +1611,8 @@ jobs:
       - name: Pack package
         run: pnpm pack
 
-      - name: Install globally (Unix)
-        if: runner.os != 'Windows'
+      - name: Install globally
         run: npm install -g spindb-*.tgz
-
-      - name: Install globally (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: npm install -g (Get-Item spindb-*.tgz).FullName
 
       # Test CLI is accessible
       - name: Verify spindb command exists
@@ -1684,9 +1667,7 @@ jobs:
           - os: macos-14
             icon: 💻
             label: ARM
-          - os: windows-latest
-            icon: 🔷
-            label: Windows
+          # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1700,17 +1681,8 @@ jobs:
           node-version: '22'
 
       # Ensure clean state
-      - name: Ensure clean state (Unix)
-        if: runner.os != 'Windows'
+      - name: Ensure clean state
         run: rm -rf ~/.spindb
-
-      - name: Ensure clean state (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path "$env:USERPROFILE\.spindb") {
-            Remove-Item -Recurse -Force "$env:USERPROFILE\.spindb"
-          }
 
       # Install current version
       - name: Install dependencies
