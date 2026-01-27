@@ -282,8 +282,16 @@ export class CockroachDBEngine extends BaseEngine {
         await writeFile(pidFile, proc.pid.toString(), 'utf-8')
         logDebug(`Wrote PID file: ${pidFile} (pid: ${proc.pid})`)
       } catch (err) {
-        logDebug(`Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`)
-        // Continue anyway - the process is running
+        // PID file write failed - kill the process and fail fast
+        // Without the PID file, we can't stop the container later
+        const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
+        logDebug(errMsg)
+        try {
+          process.kill(proc.pid, 'SIGTERM')
+        } catch {
+          // Process may have already exited
+        }
+        throw new Error(errMsg)
       }
     }
 
