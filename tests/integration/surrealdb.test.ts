@@ -245,24 +245,26 @@ describe('SurrealDB Integration Tests', () => {
 
     // Create backup from source
     const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
     const backupPath = join(tmpdir(), `surrealdb-test-backup-${Date.now()}.surql`)
 
     const sourceConfig = await containerManager.getConfig(containerName)
     assert(sourceConfig !== null, 'Source container config should exist')
 
-    await engine.backup(sourceConfig!, backupPath, {
-      database: DATABASE,
-      format: 'surql',
-    })
+    try {
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'surql',
+      })
 
-    // Restore to cloned container
-    await engine.restore(clonedConfig!, backupPath, {
-      database: DATABASE,
-    })
-
-    // Clean up backup file
-    const { rm } = await import('fs/promises')
-    await rm(backupPath, { force: true })
+      // Restore to cloned container
+      await engine.restore(clonedConfig!, backupPath, {
+        database: DATABASE,
+      })
+    } finally {
+      // Clean up backup file even if restore fails
+      await rm(backupPath, { force: true })
+    }
 
     console.log('   Container cloned via backup/restore')
   })
