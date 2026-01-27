@@ -24,6 +24,11 @@ on:
 #   3. Two Ubuntu LTS versions catch real library compatibility issues
 #   4. macOS ARM64 validates ARM code paths
 #   5. A commented-out ARM64 job exists below if native runners become available
+#
+# Windows Strategy:
+# Windows tests run in parallel within each engine's matrix (windows-latest).
+# A sequential test-windows-all job is commented out below as a fallback if
+# parallel Windows jobs ever exhaust the runner pool again.
 # =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
@@ -33,8 +38,7 @@ concurrency:
 
 jobs:
   # ============================================
-  # Unit Tests - Expanded OS Matrix
-  # Tests on multiple OS versions to catch platform-specific issues
+  # Unit Tests - All platforms including Windows
   # ============================================
   unit-tests:
     name: Unit ${{ matrix.icon }} ${{ matrix.label }}
@@ -529,6 +533,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
+      max-parallel: 4  # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-22.04
@@ -677,28 +682,6 @@ jobs:
         run: pnpm test:engine redis
         timeout-minutes: 15
 
-      - name: Show Redis logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== Redis container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Redis binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "redis*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Redis log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-          Write-Host ""
-          Write-Host "=== Redis config files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\redis" -Filter "*.conf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
   # ============================================
   # Valkey Integration Tests
   # Uses SpinDB to download and manage Valkey binaries from hostdb
@@ -761,28 +744,6 @@ jobs:
         run: pnpm test:engine valkey
         timeout-minutes: 15
 
-      - name: Show Valkey logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== Valkey container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Valkey binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "valkey*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Valkey log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-          Write-Host ""
-          Write-Host "=== Valkey config files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\valkey" -Filter "*.conf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
   # ============================================
   # ClickHouse Integration Tests
   # Uses SpinDB to download and manage ClickHouse binaries from hostdb
@@ -793,6 +754,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
+      max-parallel: 4  # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-22.04
@@ -922,8 +884,8 @@ jobs:
         run: pnpm test:engine qdrant
         timeout-minutes: 15
 
-      - name: Show Qdrant logs on failure (Unix)
-        if: failure() && runner.os != 'Windows'
+      - name: Show Qdrant logs on failure
+        if: failure()
         run: |
           echo "=== Qdrant container directories ==="
           ls -la ~/.spindb/containers/qdrant/ 2>/dev/null || echo "No Qdrant containers directory"
@@ -934,30 +896,14 @@ jobs:
           echo "=== Qdrant log files ==="
           find ~/.spindb/containers/qdrant -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
 
-      - name: Show Qdrant logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== Qdrant container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\qdrant" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Qdrant binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "qdrant*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Qdrant log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\qdrant" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
   # ============================================
   # Meilisearch Integration Tests
   # Uses SpinDB to download and manage Meilisearch binaries from hostdb
   # NOTE: Meilisearch is a REST API engine (no CLI shell like psql/redis-cli)
   #       Tests use HTTP requests to interact with the database
   #       Docker E2E tests use curl for connectivity/data operations
-  # WINDOWS: Backup/restore tests are skipped due to upstream Meilisearch bug
-  #          with snapshot creation (page size alignment issue). Other tests pass.
+  # Windows: backup/restore skipped due to upstream Meilisearch bug
+  # (snapshot creation fails with page size alignment issue)
   # ============================================
   test-meilisearch:
     name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
@@ -1016,8 +962,8 @@ jobs:
         run: pnpm test:engine meilisearch
         timeout-minutes: 15
 
-      - name: Show Meilisearch logs on failure (Unix)
-        if: failure() && runner.os != 'Windows'
+      - name: Show Meilisearch logs on failure
+        if: failure()
         run: |
           echo "=== Meilisearch container directories ==="
           ls -la ~/.spindb/containers/meilisearch/ 2>/dev/null || echo "No Meilisearch containers directory"
@@ -1027,22 +973,6 @@ jobs:
           echo ""
           echo "=== Meilisearch log files ==="
           find ~/.spindb/containers/meilisearch -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
-
-      - name: Show Meilisearch logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== Meilisearch container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\meilisearch" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Meilisearch binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "meilisearch*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== Meilisearch log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\meilisearch" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
 
   # ============================================
   # CouchDB Integration Tests
@@ -1110,8 +1040,8 @@ jobs:
         env:
           DEBUG: spindb
 
-      - name: Show CouchDB logs on failure (Unix)
-        if: failure() && runner.os != 'Windows'
+      - name: Show CouchDB logs on failure
+        if: failure()
         run: |
           echo "=== CouchDB container directories ==="
           ls -la ~/.spindb/containers/couchdb/ 2>/dev/null || echo "No CouchDB containers directory"
@@ -1122,30 +1052,178 @@ jobs:
           echo "=== CouchDB log files ==="
           find ~/.spindb/containers/couchdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
 
-      - name: Show CouchDB logs on failure (Windows)
+  # ============================================
+  # CockroachDB Integration Tests
+  # Uses SpinDB to download and manage CockroachDB binaries from hostdb
+  # CockroachDB uses PostgreSQL wire protocol for client connections
+  # Windows: delete tests skipped (RocksDB file handle locking)
+  # ============================================
+  test-cockroachdb:
+    name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache CockroachDB binaries - these are downloaded from hostdb
+      - name: Cache CockroachDB binaries
+        uses: actions/cache@v4
+        id: cockroachdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-cockroachdb-25-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download CockroachDB binaries
+      - name: Install CockroachDB via SpinDB
+        run: pnpm start engines download cockroachdb 25
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run CockroachDB integration tests
+        run: pnpm test:engine cockroachdb
+        timeout-minutes: 15
+
+      - name: Show CockroachDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== CockroachDB container directories ==="
+          ls -la ~/.spindb/containers/cockroachdb/ 2>/dev/null || echo "No CockroachDB containers directory"
+          echo ""
+          echo "=== CockroachDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i cockroach || echo "No CockroachDB binaries found"
+          echo ""
+          echo "=== CockroachDB log files ==="
+          find ~/.spindb/containers/cockroachdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show CockroachDB logs on failure (Windows)
         if: failure() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "=== CouchDB container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\couchdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host "=== CockroachDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
           Write-Host ""
-          Write-Host "=== CouchDB binary var/log directory ==="
-          $binLogFile = "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64\var\log\couchdb.log"
-          if (Test-Path $binLogFile) {
-            Write-Host "--- $binLogFile ---"
-            Get-Content $binLogFile -ErrorAction SilentlyContinue
-          } else {
-            Write-Host "Log file not found: $binLogFile"
-          }
-          Write-Host ""
-          Write-Host "=== Erlang crash dump (if any) ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin\couchdb-3.5.1-win32-x64" -Filter "erl_crash.dump" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          Write-Host "=== CockroachDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -Tail 100 -ErrorAction SilentlyContinue
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
           }
+
+  # ============================================
+  # SurrealDB Integration Tests
+  # Uses SpinDB to download and manage SurrealDB binaries from hostdb
+  # SurrealDB is a multi-model database with SQL-like query language (SurrealQL)
+  # Windows: delete tests skipped (SurrealKV file handle locking)
+  # ============================================
+  test-surrealdb:
+    name: SurrealDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache SurrealDB binaries - these are downloaded from hostdb
+      - name: Cache SurrealDB binaries
+        uses: actions/cache@v4
+        id: surrealdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-surrealdb-2-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download SurrealDB binaries
+      - name: Install SurrealDB via SpinDB
+        run: pnpm start engines download surrealdb 2
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run SurrealDB integration tests
+        run: pnpm test:engine surrealdb
+        timeout-minutes: 15
+
+      - name: Show SurrealDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== SurrealDB container directories ==="
+          ls -la ~/.spindb/containers/surrealdb/ 2>/dev/null || echo "No SurrealDB containers directory"
+          echo ""
+          echo "=== SurrealDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i surreal || echo "No SurrealDB binaries found"
+          echo ""
+          echo "=== SurrealDB log files ==="
+          find ~/.spindb/containers/surrealdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show SurrealDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== SurrealDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
           Write-Host ""
-          Write-Host "=== Container log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\couchdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          Write-Host "=== SurrealDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "--- $($_.FullName) ---"
             Get-Content $_.FullName -ErrorAction SilentlyContinue
           }
@@ -1369,6 +1447,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
+      max-parallel: 4  # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-24.04
@@ -1736,6 +1815,283 @@ jobs:
         run: pnpm remove -g spindb
 
   # ============================================
+  # Comprehensive Windows Tests (COMMENTED OUT)
+  # Now using parallel Windows tests in each engine matrix instead.
+  # Keeping this job commented out for reference in case parallel tests
+  # exhaust the runner pool again.
+  # ============================================
+  # test-windows-all:
+  #   name: 🔷 Windows All Tests
+  #   runs-on: windows-latest
+  #   timeout-minutes: 120
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'pnpm'
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     # Cache all engine binaries together
+  #     - name: Cache all engine binaries
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.spindb/bin
+  #         key: spindb-windows-all-v1-${{ runner.os }}-${{ runner.arch }}
+  #
+  #     # Download all Windows-compatible engines
+  #     # Note: ClickHouse and FerretDB are not available on Windows
+  #     - name: Download PostgreSQL
+  #       run: pnpm start engines download postgresql 18
+  #
+  #     - name: Download MySQL
+  #       run: pnpm start engines download mysql 8.0
+  #
+  #     - name: Download MariaDB
+  #       run: pnpm start engines download mariadb 11.8
+  #
+  #     - name: Download SQLite
+  #       run: pnpm start engines download sqlite 3
+  #
+  #     - name: Download DuckDB
+  #       run: pnpm start engines download duckdb 1
+  #
+  #     - name: Download MongoDB
+  #       run: pnpm start engines download mongodb 8.0
+  #
+  #     - name: Download Redis
+  #       run: pnpm start engines download redis 8
+  #
+  #     - name: Download Valkey
+  #       run: pnpm start engines download valkey 9
+  #
+  #     - name: Download Qdrant
+  #       run: pnpm start engines download qdrant 1
+  #
+  #     - name: Download Meilisearch
+  #       run: pnpm start engines download meilisearch 1
+  #
+  #     - name: Download CouchDB
+  #       run: pnpm start engines download couchdb 3
+  #
+  #     - name: Download CockroachDB
+  #       run: pnpm start engines download cockroachdb 25
+  #
+  #     - name: Download SurrealDB
+  #       run: pnpm start engines download surrealdb 2
+  #
+  #     - name: Show installed engines
+  #       run: pnpm start engines list
+
+  #
+  #     # Run unit tests first
+  #     - name: Run unit tests
+  #       id: unit
+  #       run: pnpm test:unit
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     # Run integration tests sequentially for each engine
+  #     - name: Test PostgreSQL
+  #       id: postgresql
+  #       run: pnpm test:engine postgresql
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test MySQL
+  #       id: mysql
+  #       run: pnpm test:engine mysql
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test MariaDB
+  #       id: mariadb
+  #       run: pnpm test:engine mariadb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test SQLite
+  #       id: sqlite
+  #       run: pnpm test:engine sqlite
+  #       timeout-minutes: 10
+  #       continue-on-error: true
+  #
+  #     - name: Test DuckDB
+  #       id: duckdb
+  #       run: pnpm test:engine duckdb
+  #       timeout-minutes: 10
+  #       continue-on-error: true
+  #
+  #     - name: Test MongoDB
+  #       id: mongodb
+  #       run: pnpm test:engine mongodb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Redis
+  #       id: redis
+  #       run: pnpm test:engine redis
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Valkey
+  #       id: valkey
+  #       run: pnpm test:engine valkey
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Qdrant
+  #       id: qdrant
+  #       run: pnpm test:engine qdrant
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Meilisearch
+  #       id: meilisearch
+  #       run: pnpm test:engine meilisearch
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test CouchDB
+  #       id: couchdb
+  #       run: pnpm test:engine couchdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test CockroachDB
+  #       id: cockroachdb
+  #       run: pnpm test:engine cockroachdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test SurrealDB
+  #       id: surrealdb
+  #       run: pnpm test:engine surrealdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     # Run CLI E2E tests
+  #     - name: Run CLI E2E tests
+  #       id: cli
+  #       run: pnpm test:cli
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+
+  #
+  #     # Check if any tests failed and report all failures
+  #     - name: Check test results
+  #       if: always()
+  #       run: |
+  #         echo "=== Windows Test Results ==="
+  #         failed=""
+  #         if [ "${{ steps.unit.outcome }}" != "success" ]; then
+  #           echo "❌ Unit tests: FAILED"
+  #           failed="$failed unit"
+  #         else
+  #           echo "✅ Unit tests: passed"
+  #         fi
+  #         if [ "${{ steps.postgresql.outcome }}" != "success" ]; then
+  #           echo "❌ PostgreSQL: FAILED"
+  #           failed="$failed postgresql"
+  #         else
+  #           echo "✅ PostgreSQL: passed"
+  #         fi
+  #         if [ "${{ steps.mysql.outcome }}" != "success" ]; then
+  #           echo "❌ MySQL: FAILED"
+  #           failed="$failed mysql"
+  #         else
+  #           echo "✅ MySQL: passed"
+  #         fi
+  #         if [ "${{ steps.mariadb.outcome }}" != "success" ]; then
+  #           echo "❌ MariaDB: FAILED"
+  #           failed="$failed mariadb"
+  #         else
+  #           echo "✅ MariaDB: passed"
+  #         fi
+  #         if [ "${{ steps.sqlite.outcome }}" != "success" ]; then
+  #           echo "❌ SQLite: FAILED"
+  #           failed="$failed sqlite"
+  #         else
+  #           echo "✅ SQLite: passed"
+  #         fi
+  #         if [ "${{ steps.duckdb.outcome }}" != "success" ]; then
+  #           echo "❌ DuckDB: FAILED"
+  #           failed="$failed duckdb"
+  #         else
+  #           echo "✅ DuckDB: passed"
+  #         fi
+  #         if [ "${{ steps.mongodb.outcome }}" != "success" ]; then
+  #           echo "❌ MongoDB: FAILED"
+  #           failed="$failed mongodb"
+  #         else
+  #           echo "✅ MongoDB: passed"
+  #         fi
+  #         if [ "${{ steps.redis.outcome }}" != "success" ]; then
+  #           echo "❌ Redis: FAILED"
+  #           failed="$failed redis"
+  #         else
+  #           echo "✅ Redis: passed"
+  #         fi
+  #         if [ "${{ steps.valkey.outcome }}" != "success" ]; then
+  #           echo "❌ Valkey: FAILED"
+  #           failed="$failed valkey"
+  #         else
+  #           echo "✅ Valkey: passed"
+  #         fi
+  #         if [ "${{ steps.qdrant.outcome }}" != "success" ]; then
+  #           echo "❌ Qdrant: FAILED"
+  #           failed="$failed qdrant"
+  #         else
+  #           echo "✅ Qdrant: passed"
+  #         fi
+  #         if [ "${{ steps.meilisearch.outcome }}" != "success" ]; then
+  #           echo "❌ Meilisearch: FAILED"
+  #           failed="$failed meilisearch"
+  #         else
+  #           echo "✅ Meilisearch: passed"
+  #         fi
+  #         if [ "${{ steps.couchdb.outcome }}" != "success" ]; then
+  #           echo "❌ CouchDB: FAILED"
+  #           failed="$failed couchdb"
+  #         else
+  #           echo "✅ CouchDB: passed"
+  #         fi
+  #         if [ "${{ steps.cockroachdb.outcome }}" != "success" ]; then
+  #           echo "❌ CockroachDB: FAILED"
+  #           failed="$failed cockroachdb"
+  #         else
+  #           echo "✅ CockroachDB: passed"
+  #         fi
+  #         if [ "${{ steps.surrealdb.outcome }}" != "success" ]; then
+  #           echo "❌ SurrealDB: FAILED"
+  #           failed="$failed surrealdb"
+  #         else
+  #           echo "✅ SurrealDB: passed"
+  #         fi
+  #         if [ "${{ steps.cli.outcome }}" != "success" ]; then
+  #           echo "❌ CLI E2E: FAILED"
+  #           failed="$failed cli"
+  #         else
+  #           echo "✅ CLI E2E: passed"
+  #         fi
+  #         echo ""
+  #         if [ -n "$failed" ]; then
+  #           echo "FAILED TESTS:$failed"
+  #           exit 1
+  #         else
+  #           echo "All Windows tests passed!"
+  #         fi
+  #       shell: bash
+
+  # ============================================
   # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
   # Verifies hostdb binaries work on clean Ubuntu systems
   # ============================================
@@ -1907,12 +2263,15 @@ jobs:
         test-qdrant,
         test-meilisearch,
         test-couchdb,
+        test-cockroachdb,
+        test-surrealdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
         test-fresh-install,
         test-upgrade,
         test-self-update,
+        # test-windows-all,  # Commented out - using parallel Windows tests instead
         test-docker-linux,
         lint,
         hostdb-sync,
@@ -1977,6 +2336,14 @@ jobs:
             echo "CouchDB tests failed"
             exit 1
           fi
+          if [ "${{ needs.test-cockroachdb.result }}" != "success" ]; then
+            echo "CockroachDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-surrealdb.result }}" != "success" ]; then
+            echo "SurrealDB tests failed"
+            exit 1
+          fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
             echo "CLI E2E tests failed"
             exit 1
@@ -2001,6 +2368,7 @@ jobs:
             echo "Self-update tests failed"
             exit 1
           fi
+          # test-windows-all check removed - using parallel Windows tests instead
           if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
             echo "Docker Linux edge case tests failed"
             exit 1

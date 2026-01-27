@@ -200,6 +200,32 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // CouchDB uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable
   },
+  [Engine.CockroachDB]: {
+    defaultVersion: '25',
+    defaultPort: 26257, // CockroachDB default SQL port (HTTP UI at port + 1)
+    portRange: { start: 26257, end: 26357 },
+    latestVersion: '25',
+    superuser: 'root', // Default user in insecure mode
+    connectionScheme: 'postgresql', // Uses PostgreSQL wire protocol
+    logFileName: 'cockroach.log',
+    pidFileName: 'cockroach.pid',
+    dataSubdir: 'data',
+    clientTools: ['cockroach'],
+    maxConnections: 0, // Not applicable - managed internally
+  },
+  [Engine.SurrealDB]: {
+    defaultVersion: '2',
+    defaultPort: 8000, // SurrealDB default HTTP/WS port
+    portRange: { start: 8000, end: 8100 },
+    latestVersion: '2',
+    superuser: 'root', // Default user with password 'root'
+    connectionScheme: 'ws', // WebSocket for real-time connections
+    logFileName: 'surrealdb.log',
+    pidFileName: 'surrealdb.pid',
+    dataSubdir: 'data',
+    clientTools: ['surreal'],
+    maxConnections: 0, // Not applicable - managed internally
+  },
 }
 
 /**

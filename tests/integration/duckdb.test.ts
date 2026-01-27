@@ -83,6 +83,13 @@ describe('DuckDB Integration Tests', () => {
   let backupDbPath: string
 
   before(async () => {
+    // Ensure DuckDB binaries are downloaded first
+    const engine = getEngine(ENGINE)
+    console.log('   Ensuring DuckDB binaries are available...')
+    await engine.ensureBinaries('1', ({ message }) => {
+      console.log(`   ${message}`)
+    })
+
     // Verify we're using downloaded binaries, not system ones
     // This ensures tests actually validate the binary extraction pipeline
     await verifyUsingDownloadedBinaries()

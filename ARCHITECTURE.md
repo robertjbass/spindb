@@ -1,6 +1,6 @@
 # SpinDB Architecture
 
-This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, and Meilisearch.
+This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, and CockroachDB.
 
 ## Table of Contents
 
@@ -36,7 +36,8 @@ SpinDB follows a **three-tier layered architecture**:
 ┌─────────────────────────▼───────────────────────────────────┐
 │                   Engine Layer (engines/)                   │
 │  PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis,      │
-│  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch    │
+│  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch,   │
+│  CouchDB, CockroachDB                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,7 +211,7 @@ The core layer contains business logic independent of CLI concerns.
 The engine layer implements database-specific logic via the abstract `BaseEngine` class.
 
 **Engine Types:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch): Process management, port allocation
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB): Process management, port allocation
 - **File-based** (SQLite, DuckDB): No server, files in project directories
 - **Composite** (FerretDB): Multiple processes working together (see [FerretDB Architecture](#ferretdb-architecture))
 
@@ -391,6 +392,8 @@ getEngine('sqlite')      // or 'lite'
 getEngine('duckdb')      // or 'duck' - OLAP file-based
 getEngine('qdrant')      // or 'qd' - Vector database
 getEngine('meilisearch') // or 'meili', 'ms' - Full-text search
+getEngine('couchdb')     // or 'couch' - Document database
+getEngine('cockroachdb') // or 'crdb' - Distributed SQL
 ```
 
 ---
@@ -559,7 +562,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb'
   version: string
   port: number
   database: string        // Primary database
@@ -687,6 +690,8 @@ const engines = {
   duckdb: new DuckDBEngine(),
   qdrant: new QdrantEngine(),
   meilisearch: new MeilisearchEngine(),
+  couchdb: new CouchDBEngine(),
+  cockroachdb: new CockroachDBEngine(),
 }
 
 const aliases = {
@@ -699,6 +704,8 @@ const aliases = {
   qd: 'qdrant',
   meili: 'meilisearch',
   ms: 'meilisearch',
+  couch: 'couchdb',
+  crdb: 'cockroachdb',
 }
 ```
 
@@ -731,7 +738,7 @@ Core types are centralized in `types/index.ts`:
 | Type | Purpose |
 |------|---------|
 | `ContainerConfig` | Container state and metadata |
-| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch |
+| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB |
 | `BackupFormat` | Backup file format detection |
 | `BackupOptions` | Backup command options |
 | `BackupResult` | Backup operation result |
@@ -770,13 +777,13 @@ Error messages include actionable fix suggestions.
 
 All database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for all supported platforms.
 
-| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | FerretDB | Redis | Valkey | ClickHouse | SQLite | DuckDB | Qdrant | Meilisearch |
-|----------|------------|-------|---------|---------|----------|-------|--------|------------|--------|--------|--------|-------------|
-| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | ❌** | hostdb | hostdb | hostdb | hostdb |
+| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | FerretDB | Redis | Valkey | ClickHouse | SQLite | DuckDB | Qdrant | Meilisearch | CouchDB | CockroachDB |
+|----------|------------|-------|---------|---------|----------|-------|--------|------------|--------|--------|--------|-------------|---------|-------------|
+| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | ❌** | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
 
 *PostgreSQL on Windows uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries.
 

@@ -68,6 +68,15 @@ export const TEST_PORTS = {
   qdrant: { base: 6350, clone: 6352, renamed: 6351 },
   meilisearch: { base: 7710, clone: 7712, renamed: 7711 },
   couchdb: { base: 5990, clone: 5992, renamed: 5991 },
+  cockroachdb: { base: 26260, clone: 26262, renamed: 26261 },
+  surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
+}
+
+// Default test versions for each engine
+// Used by helper functions that need to call engine methods with a version
+export const TEST_VERSIONS = {
+  cockroachdb: '25',
+  surrealdb: '2',
 }
 
 /**
@@ -135,7 +144,16 @@ export async function cleanupTestContainers(): Promise<string[]> {
   // Examples: pg-test_12345678, mysql-test-clone_abcd1234, redis-test-renamed_12345678
   // Also matches legacy patterns: clipg_12345678, test_abcd1234
   const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
-  const testContainers = containers.filter((c) => testPattern.test(c.name))
+  let testContainers = containers.filter((c) => testPattern.test(c.name))
+
+  // On Windows, skip CockroachDB and SurrealDB containers during cleanup
+  // These engines use memory-mapped files (RocksDB/SurrealKV) that Windows holds
+  // handles to for extended periods (100+ seconds), causing cleanup to hang
+  if (isWindows()) {
+    testContainers = testContainers.filter(
+      (c) => c.engine !== Engine.CockroachDB && c.engine !== Engine.SurrealDB,
+    )
+  }
 
   const deleted: string[] = []
   for (const container of testContainers) {
@@ -205,12 +223,14 @@ export async function cleanupTestContainers(): Promise<string[]> {
  * Execute SQL against a database and return the result
  * For SQLite, the database parameter is the file path
  * For MongoDB, sql is JavaScript code
+ * For SurrealDB, options.namespace is required (derived from container name)
  */
 export async function executeSQL(
   engine: Engine,
   port: number,
   database: string,
   sql: string,
+  options?: { namespace?: string },
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
@@ -266,6 +286,51 @@ export async function executeSQL(
     // For ClickHouse, use clickhouse client
     const cmd = `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --database ${database} --query "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
+  } else if (engine === Engine.CockroachDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled cockroach if available
+    const cockroachPath = await engineImpl
+      .getCockroachPath(TEST_VERSIONS.cockroachdb)
+      .catch(() => 'cockroach')
+    // For CockroachDB, use cockroach sql --insecure
+    const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --execute "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.SurrealDB) {
+    const engineImpl = getEngine(engine)
+    // Use configured/bundled surreal if available
+    const surrealPath = await engineImpl
+      .getSurrealPath(TEST_VERSIONS.surrealdb)
+      .catch(() => 'surreal')
+    // For SurrealDB, use surreal sql with piped input
+    // SurrealDB needs namespace - must be provided via options (derive from container name with .replace(/-/g, '_'))
+    if (!options?.namespace) {
+      throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
+    }
+    // Use spawn with stdin instead of echo pipe for cross-platform compatibility
+    const { spawn } = await import('child_process')
+    return new Promise((resolve, reject) => {
+      const args = [
+        'sql',
+        '--endpoint', `ws://127.0.0.1:${port}`,
+        '--user', 'root',
+        '--pass', 'root',
+        '--ns', options.namespace!,
+        '--db', database,
+        '--hide-welcome',
+      ]
+      const proc = spawn(surrealPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+      let stdout = ''
+      let stderr = ''
+      proc.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
+      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+      proc.on('close', (code) => {
+        if (code === 0) resolve({ stdout, stderr })
+        else reject(new Error(stderr || `Exit code ${code}`))
+      })
+      proc.on('error', reject)
+      proc.stdin.write(sql)
+      proc.stdin.end()
+    })
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -280,12 +345,14 @@ export async function executeSQL(
  * Execute a SQL file against a database
  * For SQLite, the database parameter is the file path
  * For MongoDB, the file should be a JavaScript file
+ * For SurrealDB, options.namespace is required (derived from container name)
  */
 export async function executeSQLFile(
   engine: Engine,
   port: number,
   database: string,
   filePath: string,
+  options?: { namespace?: string },
 ): Promise<{ stdout: string; stderr: string }> {
   if (engine === Engine.SQLite) {
     // For SQLite, database is the file path
@@ -335,6 +402,26 @@ export async function executeSQLFile(
       .catch(() => 'clickhouse')
     // ClickHouse uses pipe for file input with --multiquery flag
     const cmd = `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --database ${database} --multiquery < "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.CockroachDB) {
+    const engineImpl = getEngine(engine)
+    const cockroachPath = await engineImpl
+      .getCockroachPath(TEST_VERSIONS.cockroachdb)
+      .catch(() => 'cockroach')
+    // CockroachDB uses --file flag for SQL files
+    const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --file "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.SurrealDB) {
+    const engineImpl = getEngine(engine)
+    const surrealPath = await engineImpl
+      .getSurrealPath(TEST_VERSIONS.surrealdb)
+      .catch(() => 'surreal')
+    // SurrealDB uses surreal import for file input
+    // Namespace must be provided via options (derive from container name with .replace(/-/g, '_'))
+    if (!options?.namespace) {
+      throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
+    }
+    const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -542,6 +629,16 @@ export async function waitForReady(
           `"${clickhousePath}" client --host 127.0.0.1 --port ${port} --query "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.CockroachDB) {
+        // Use cockroach sql to ping CockroachDB
+        const engineImpl = getEngine(engine)
+        const cockroachPath = await engineImpl
+          .getCockroachPath(TEST_VERSIONS.cockroachdb)
+          .catch(() => 'cockroach')
+        await execAsync(
+          `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --execute "SELECT 1"`,
+          { timeout: 5000 },
+        )
       } else if (engine === Engine.Qdrant) {
         // Use fetch to ping Qdrant REST API with timeout
         const controller = new AbortController()
@@ -590,6 +687,16 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('CouchDB health check failed or timed out')
         }
+      } else if (engine === Engine.SurrealDB) {
+        // Use surreal isready to ping SurrealDB
+        const engineImpl = getEngine(engine)
+        const surrealPath = await engineImpl
+          .getSurrealPath(TEST_VERSIONS.surrealdb)
+          .catch(() => 'surreal')
+        await execAsync(
+          `"${surrealPath}" isready --endpoint http://127.0.0.1:${port}`,
+          { timeout: 5000 },
+        )
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -678,10 +785,20 @@ export async function waitForStopped(
 
   // On Windows, add extra delay for file handle release
   // Memory-mapped files and Windows antivirus/indexing can hold handles
-  // This helps prevent EBUSY errors during rename/delete operations
-  // Qdrant uses memory-mapped files which can take a long time to release
+  // This helps prevent EBUSY/EPERM errors during rename/delete operations
   if (isWindows()) {
-    await new Promise((resolve) => setTimeout(resolve, 10000))
+    // SurrealDB uses memory-mapped files that take a very long time to release on Windows
+    // Even after the process exits, the OS may hold handles for 30+ seconds
+    // Qdrant also uses persistent storage but typically releases faster
+    let extraDelay: number
+    if (engine === Engine.SurrealDB) {
+      extraDelay = 30000 // 30 seconds for SurrealDB
+    } else if (engine === Engine.Qdrant) {
+      extraDelay = 15000 // 15 seconds for Qdrant
+    } else {
+      extraDelay = 10000 // 10 seconds for other engines
+    }
+    await new Promise((resolve) => setTimeout(resolve, extraDelay))
   }
 
   return true
@@ -739,6 +856,12 @@ export function getConnectionString(
   }
   if (engine === Engine.CouchDB) {
     return `http://127.0.0.1:${port}/${database}`
+  }
+  if (engine === Engine.CockroachDB) {
+    return `postgresql://root@127.0.0.1:${port}/${database}?sslmode=disable`
+  }
+  if (engine === Engine.SurrealDB) {
+    return `ws://127.0.0.1:${port}/rpc`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

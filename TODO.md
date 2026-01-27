@@ -261,6 +261,8 @@ Combine common multi-step workflows into single commands. These should remain in
 - [ ] **Test MySQL on Windows** - Verify TCP-only mode works (no Unix sockets)
 - [ ] **Test SQLite on Windows** - Verify binary detection with Chocolatey/winget/Scoop
 - [ ] **Test process termination** - Verify `taskkill` works for graceful and forced shutdown
+- [ ] **Create Windows CLI tool availability map** - Document which CLI tools are available on Windows (e.g., `psql` via EDB, `mysql` via hostdb, `sqlite3` via Chocolatey) vs which are not (e.g., `mongosh`, `redis-cli`). This map should be used to conditionally enable shell features.
+- [ ] **Hide "open shell" option on Windows for unavailable CLI tools** - Use the availability map to hide the "Connect/Shell" menu option for engines whose CLI tools can't be installed on Windows. Engines with built-in web UIs (Qdrant, Meilisearch, ClickHouse, CouchDB) always show the option since they open a browser.
 
 ### Critical: EDB Binary URLs Will Break
 

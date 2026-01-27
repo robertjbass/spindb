@@ -59,7 +59,8 @@ export async function handleRunSql(containerName: string): Promise<void> {
 
   // Get script type terminology based on engine
   // IMPORTANT: When adding a new engine, update this function and FEATURE.md
-  // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse
+  // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse, CockroachDB
+  // - SurrealQL: SurrealDB (SQL-like but distinct language)
   // - Script: MongoDB, FerretDB (JavaScript via mongosh), Qdrant, Meilisearch (REST API)
   // - Command: Redis, Valkey (Redis commands)
   const getScriptType = (engine: Engine): { type: string; lower: string } => {
@@ -79,6 +80,10 @@ export async function handleRunSql(containerName: string): Promise<void> {
       case Engine.CouchDB:
         return { type: 'Script', lower: 'script' }
 
+      // SurrealDB uses SurrealQL (distinct from SQL)
+      case Engine.SurrealDB:
+        return { type: 'SurrealQL', lower: 'SurrealQL' }
+
       // SQL engines use "SQL" terminology
       case Engine.PostgreSQL:
       case Engine.MySQL:
@@ -86,6 +91,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
       case Engine.SQLite:
       case Engine.DuckDB:
       case Engine.ClickHouse:
+      case Engine.CockroachDB:
         return { type: 'SQL', lower: 'sql' }
 
       default:

@@ -125,5 +125,5 @@ export async function run(): Promise<void> {
     return
   }
 
-  program.parse()
+  await program.parseAsync()
 }

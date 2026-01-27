@@ -194,6 +194,26 @@ export type InstalledCouchDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledCockroachDBEngine = {
+  engine: 'cockroachdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
+export type InstalledSurrealDBEngine = {
+  engine: 'surrealdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -208,6 +228,8 @@ export type InstalledEngine =
   | InstalledQdrantEngine
   | InstalledMeilisearchEngine
   | InstalledCouchDBEngine
+  | InstalledCockroachDBEngine
+  | InstalledSurrealDBEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -876,6 +898,118 @@ async function getInstalledCouchDBEngines(): Promise<InstalledCouchDBEngine[]> {
   return engines
 }
 
+// Get CockroachDB version from binary path
+async function getCockroachDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const cockroachPath = join(binPath, 'bin', `cockroach${ext}`)
+  if (!existsSync(cockroachPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(cockroachPath, ['version'])
+    // Parse output like "Build Tag:        v25.4.2" or "CockroachDB CCL v25.4.2"
+    const match = stdout.match(/v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed CockroachDB engines from downloaded binaries
+async function getInstalledCockroachDBEngines(): Promise<InstalledCockroachDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledCockroachDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('cockroachdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'cockroachdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getCockroachDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'cockroachdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
+// Get SurrealDB version from binary path
+async function getSurrealDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const surrealPath = join(binPath, 'bin', `surreal${ext}`)
+  if (!existsSync(surrealPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(surrealPath, ['version'])
+    // Parse output like "surreal 2.3.2 for linux on x86_64" or "2.3.2"
+    const match = stdout.match(/(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed SurrealDB engines from downloaded binaries
+async function getInstalledSurrealDBEngines(): Promise<InstalledSurrealDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledSurrealDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('surrealdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'surrealdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getSurrealDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'surrealdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 // Get FerretDB version from binary path
 async function getFerretDBVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -963,6 +1097,8 @@ const ENGINE_PREFIXES = [
   'qdrant-',
   'meilisearch-',
   'couchdb-',
+  'cockroachdb-',
+  'surrealdb-',
 ] as const
 
 /**
@@ -1006,6 +1142,8 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     qdrantEngines,
     meilisearchEngines,
     couchdbEngines,
+    cockroachdbEngines,
+    surrealdbEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1020,6 +1158,8 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledQdrantEngines(),
     getInstalledMeilisearchEngines(),
     getInstalledCouchDBEngines(),
+    getInstalledCockroachDBEngines(),
+    getInstalledSurrealDBEngines(),
   ])
 
   return [
@@ -1036,6 +1176,8 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...qdrantEngines,
     ...meilisearchEngines,
     ...couchdbEngines,
+    ...cockroachdbEngines,
+    ...surrealdbEngines,
   ]
 }
 
@@ -1052,4 +1194,6 @@ export {
   getInstalledQdrantEngines,
   getInstalledMeilisearchEngines,
   getInstalledCouchDBEngines,
+  getInstalledCockroachDBEngines,
+  getInstalledSurrealDBEngines,
 }

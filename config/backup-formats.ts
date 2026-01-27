@@ -23,6 +23,8 @@ import {
   type QdrantFormat,
   type MeilisearchFormat,
   type CouchDBFormat,
+  type CockroachDBFormat,
+  type SurrealDBFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -55,6 +57,8 @@ export const BACKUP_FORMATS: {
   [Engine.Qdrant]: EngineBackupFormats<QdrantFormat>
   [Engine.Meilisearch]: EngineBackupFormats<MeilisearchFormat>
   [Engine.CouchDB]: EngineBackupFormats<CouchDBFormat>
+  [Engine.CockroachDB]: EngineBackupFormats<CockroachDBFormat>
+  [Engine.SurrealDB]: EngineBackupFormats<SurrealDBFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -265,6 +269,30 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only JSON format supported
     defaultFormat: 'json',
+  },
+  [Engine.CockroachDB]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - DDL + INSERT statements',
+        spinnerLabel: 'SQL',
+      },
+    },
+    supportsFormatChoice: false, // Only SQL format supported
+    defaultFormat: 'sql',
+  },
+  [Engine.SurrealDB]: {
+    formats: {
+      surql: {
+        extension: '.surql',
+        label: '.surql',
+        description: 'SurrealQL dump - schema and data as SurrealQL statements',
+        spinnerLabel: 'SurrealQL',
+      },
+    },
+    supportsFormatChoice: false, // Only SurrealQL format supported
+    defaultFormat: 'surql',
   },
 }
 

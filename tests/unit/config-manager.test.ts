@@ -95,6 +95,7 @@ describe('ConfigManager', () => {
         QDRANT_TOOLS,
         MEILISEARCH_TOOLS,
         COUCHDB_TOOLS,
+        COCKROACHDB_TOOLS,
         SQLITE_TOOLS,
         DUCKDB_TOOLS,
         ENHANCED_SHELLS,
@@ -111,6 +112,7 @@ describe('ConfigManager', () => {
         QDRANT_TOOLS.length +
         MEILISEARCH_TOOLS.length +
         COUCHDB_TOOLS.length +
+        COCKROACHDB_TOOLS.length +
         SQLITE_TOOLS.length +
         DUCKDB_TOOLS.length +
         ENHANCED_SHELLS.length

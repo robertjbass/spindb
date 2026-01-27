@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-01-26
+
+### Fixed
+- **SurrealDB backup signal handling** - Backup close handler now properly treats `code === null` as signal termination error instead of success
+- **SurrealDB credential security** - Connection strings are now sanitized in error messages to prevent credential leaks
+- **SurrealDB health check** - `waitForReady` now returns false when binary is not found instead of incorrectly assuming success
+- **SurrealDB history file location** - `surreal sql` commands now use container directory as cwd so `history.txt` is stored in `~/.spindb/containers/surrealdb/<name>/` instead of polluting the user's working directory
+- **Docker E2E SurrealDB tests** - Fixed verify-seed to use correct database name ("test" not "testdb") and corrected misleading restore comment
+
+### Changed
+- Updated README engine count from 14 to 15 to reflect SurrealDB addition
+
+## [0.26.0] - 2026-01-26
+
+### Added
+- **SurrealDB engine support** - Full integration for SurrealDB multi-model database:
+  - Multi-model database supporting documents, graphs, and relational data
+  - Default port 8000, version 2.3.2 from hostdb
+  - SurrealQL-based backup/restore via `surreal export` and `surreal import`
+  - Default user `root` with password `root`, namespace/database structure
+  - WebSocket connection scheme (`ws://`)
+  - Single binary: `surreal`
+  - Aliases: `surrealdb`, `surreal`
+  - Full cross-platform support (macOS, Linux, Windows)
+
+### Fixed
+- **CockroachDB CSV backup parsing** - Fixed empty string vs NULL handling in SQL backups. Quoted empty strings are now preserved as empty strings, while unquoted empty strings become SQL NULL
+- **CockroachDB health check** - `waitForReady` now properly returns false when binary is not found instead of incorrectly assuming success
+- **CockroachDB binary lookup** - `dumpFromConnectionString` now tries multiple methods to locate the cockroach binary (config keys, dependency manager, downloaded versions)
+- **CockroachDB port conflict test** - Integration test now actually starts the container to verify port conflict behavior
+- Added CockroachDB and SurrealDB to `spindb engines download` command
+
+### Changed
+- Centralized test version constants in `tests/integration/helpers.ts` (`TEST_VERSIONS.cockroachdb`, `TEST_VERSIONS.surrealdb`)
+
+## [0.25.0] - 2026-01-25
+
+### Added
+- **CockroachDB engine support** - Full integration for CockroachDB distributed SQL database:
+  - PostgreSQL wire protocol compatible (uses `postgresql://` connection scheme)
+  - Default port 26257, HTTP admin UI on port+1
+  - SQL-based backup/restore via `cockroach sql` and `cockroach dump`
+  - Default user `root`, default database `defaultdb`
+  - Version 25.4.2 from hostdb
+  - Single binary: `cockroach`
+  - Aliases: `cockroachdb`, `crdb`
+  - Full cross-platform support (macOS, Linux, Windows)
+
 ## [0.24.0] - 2026-01-25
 
 ### Added

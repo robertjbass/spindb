@@ -16,12 +16,8 @@
 | 🧭 **Qdrant** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (vector similarity search) |
 | 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (full-text search) |
 | 🛋 **CouchDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | Version 3 (document database) |
-
-## Planned
-
-| Engine | Status | Type | Binary Size | Notes |
-|--------|--------|------|-------------|-------|
-| 🪳 **CockroachDB** | 🔜 Planned | Distributed SQL | ~100 MB | PostgreSQL-compatible distributed database |
+| 🪳 **CockroachDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 25 (distributed SQL) |
+| 🌀 **SurrealDB** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 2 (multi-model database) |
 
 ---
 
@@ -194,6 +190,55 @@
   - Change default credentials in non-local/production environments
   - Apache-2.0 license
 
+### 🪳 CockroachDB
+
+- **Status:** ✅ Complete
+- **Versions:** 25
+- **Data location:** `~/.spindb/containers/cockroachdb/{name}/`
+- **Process:** Server process (`cockroach start-single-node --insecure`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** `cockroach sql` (bundled)
+- **Backup format:** `.sql` (SQL dump)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `cockroach` unified binary
+- **Default user:** `root`
+- **Default database:** `defaultdb`
+- **Implementation notes:**
+  - Distributed SQL database with PostgreSQL wire protocol compatibility
+  - Runs in single-node mode for local development (--insecure flag)
+  - Default SQL port 26257, HTTP Admin UI on port+1 (e.g., 26258)
+  - PostgreSQL-compatible SQL syntax
+  - Uses `cockroach dump` for backups, `cockroach sql` for restore
+  - Connection string: `postgresql://root@localhost:26257/db?sslmode=disable`
+  - Business Source License (BSL) - free for non-production use
+  - Automatic data replication in distributed mode
+
+### 🌀 SurrealDB
+
+- **Status:** ✅ Complete
+- **Versions:** 2
+- **Data location:** `~/.spindb/containers/surrealdb/{name}/`
+- **Process:** Server process (`surreal start`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** `surreal sql` (bundled)
+- **Backup format:** `.surql` (SurrealQL script)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `surreal` unified binary
+- **Default user:** `root`
+- **Default password:** `root`
+- **Default namespace:** `test`
+- **Default database:** `test`
+- **Implementation notes:**
+  - Multi-model database (document, graph, relational)
+  - Uses SurrealQL (SQL-like query language with graph traversal)
+  - Default port 8000 (HTTP/WebSocket)
+  - Storage backend: SurrealKV (`surrealkv://` path-based storage)
+  - Hierarchy: Root > Namespace > Database
+  - Uses `surreal export` for backups, `surreal import` for restore
+  - Connection scheme: `ws://` (WebSocket) or `http://`
+  - Health check via `surreal isready --endpoint http://localhost:8000`
+  - Business Source License (BSL)
+
 ---
 
 ## Backup Format Summary
@@ -211,6 +256,8 @@
 | Qdrant | N/A | `.snapshot` (native) | Snapshot for backups |
 | Meilisearch | N/A | `.snapshot` (native) | Snapshot for backups |
 | CouchDB | `.json` (all docs) | N/A | JSON for backups |
+| CockroachDB | `.sql` (cockroach dump) | N/A | SQL for backups |
+| SurrealDB | `.surql` (surreal export) | N/A | SurrealQL for backups |
 
 ---
 
@@ -229,6 +276,8 @@
 | Qdrant | REST API | - | Use curl or HTTP clients |
 | Meilisearch | REST API | - | Use curl or HTTP clients |
 | CouchDB | REST API | - | Use curl or HTTP clients |
+| CockroachDB | `cockroach sql` | - | Built-in shell is full-featured |
+| SurrealDB | `surreal sql` | - | Built-in shell is full-featured |
 
 ---
 
@@ -258,6 +307,8 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🧭 | Qdrant |
 | 🔍 | Meilisearch |
 | 🛋 | CouchDB |
+| 🪳 | CockroachDB |
+| 🌀 | SurrealDB |
 
 ---
 

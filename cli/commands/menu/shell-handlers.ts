@@ -215,6 +215,20 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'surrealdb') {
+    // SurrealDB uses surreal sql command
+    defaultShellName = 'surreal sql'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
+  } else if (config.engine === 'cockroachdb') {
+    // CockroachDB uses cockroach sql command
+    defaultShellName = 'cockroach sql'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -309,7 +323,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, FerretDB, Qdrant, Meilisearch, and CouchDB
+  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, FerretDB, Qdrant, Meilisearch, CouchDB, and SurrealDB
   const isNonSqlEngine =
     config.engine === 'redis' ||
     config.engine === 'valkey' ||
@@ -317,7 +331,8 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     config.engine === 'ferretdb' ||
     config.engine === 'qdrant' ||
     config.engine === 'meilisearch' ||
-    config.engine === 'couchdb'
+    config.engine === 'couchdb' ||
+    config.engine === 'surrealdb'
   if (!isNonSqlEngine) {
     if (usqlInstalled) {
       choices.push({
@@ -869,6 +884,41 @@ async function launchShell(
 
     openInBrowser(dashboardUrl)
     return
+  } else if (config.engine === 'surrealdb') {
+    // SurrealDB uses surreal sql command
+    const engine = getEngine(config.engine)
+    const surrealPath = await engine.getSurrealPath(config.version).catch(() => 'surreal')
+    const namespace = config.name.replace(/-/g, '_')
+    const database = config.database || 'default'
+    shellCmd = surrealPath
+    shellArgs = [
+      'sql',
+      '--endpoint',
+      `ws://127.0.0.1:${config.port}`,
+      '--namespace',
+      namespace,
+      '--database',
+      database,
+      '--username',
+      'root',
+      '--password',
+      'root',
+    ]
+    installHint = 'spindb engines download surrealdb'
+  } else if (config.engine === 'cockroachdb') {
+    // CockroachDB uses cockroach sql command
+    const engine = getEngine(config.engine)
+    const cockroachPath = await engine.getCockroachPath(config.version).catch(() => 'cockroach')
+    shellCmd = cockroachPath
+    shellArgs = [
+      'sql',
+      '--insecure',
+      '--host',
+      `127.0.0.1:${config.port}`,
+      '--database',
+      config.database,
+    ]
+    installHint = 'spindb engines download cockroachdb'
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]
