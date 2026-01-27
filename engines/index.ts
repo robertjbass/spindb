@@ -13,6 +13,7 @@ import { meilisearchEngine } from './meilisearch'
 import { couchdbEngine } from './couchdb'
 import { cockroachdbEngine } from './cockroachdb'
 import { surrealdbEngine } from './surrealdb'
+import { questdbEngine } from './questdb'
 import { platformService } from '../core/platform-service'
 import { Engine, Platform } from '../types'
 import type { BaseEngine } from './base-engine'
@@ -69,6 +70,9 @@ export const engines: Record<string, BaseEngine> = {
   // SurrealDB and aliases
   [Engine.SurrealDB]: surrealdbEngine,
   surreal: surrealdbEngine,
+  // QuestDB and aliases
+  [Engine.QuestDB]: questdbEngine,
+  quest: questdbEngine,
 }
 
 // Get an engine by name

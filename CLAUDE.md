@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, and SurrealDB.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, and QuestDB.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -58,7 +58,7 @@ tests/
 
 Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for full method list.
 
-**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB):
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB):
 - Data in `~/.spindb/containers/{engine}/{name}/`
 - Port management, start/stop lifecycle
 
@@ -81,6 +81,7 @@ Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for ful
 - **Meilisearch**: Dashboard at `http://localhost:{port}/`
 - **ClickHouse**: Play UI at `http://localhost:8123/play`
 - **CouchDB**: Fauxton dashboard at `http://localhost:{port}/_utils`
+- **QuestDB**: Web Console at `http://localhost:{http_port}/` (default port 9000, or PG port + 188)
 
 For these engines, the "Connect/Shell" menu option opens the web UI in the system's default browser using `openInBrowser()` in `cli/commands/menu/shell-handlers.ts`. Use platform-specific commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 
@@ -133,13 +134,31 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **History file**: SurrealDB writes `history.txt` to cwd. The engine sets `cwd` to the container directory so history is stored in `~/.spindb/containers/surrealdb/<name>/history.txt` rather than polluting the user's working directory.
 - **Background process stdio**: MUST use `stdio: ['ignore', 'ignore', 'ignore']` when spawning the detached server process. Using `'pipe'` for stdout/stderr keeps file descriptors open that prevent Node.js from exiting even after `proc.unref()`. This caused `spindb start` to hang indefinitely in Docker/CI environments. See CockroachDB for the same pattern.
 
+**QuestDB:**
+- **Time-series database**: High-performance database optimized for fast ingestion and time-series analytics
+- **Query language**: SQL via PostgreSQL wire protocol
+- **Default port**: 8812 (PostgreSQL wire protocol)
+- **Secondary ports**: HTTP Web Console at PG port + 188 (default 9000), HTTP Min at PG port + 191, ILP at PG port + 197
+- **Java-based**: Bundled JRE (no Java installation required)
+- **Startup**: Uses `questdb.sh start` (Unix) or `questdb.exe start` (Windows)
+- **Default credentials**: `admin`/`quest`
+- **Single database**: Uses `qdb` database (no database creation needed)
+- **Backup/restore**: Requires PostgreSQL's psql binary (from SpinDB's PostgreSQL engine) to connect via wire protocol. **Cross-engine dependency**: Deleting PostgreSQL will break QuestDB backup/restore
+- **Connection scheme**: `postgresql://` (e.g., `postgresql://admin:quest@localhost:8812/qdb`)
+- **Health check**: HTTP GET to Web Console at `/`
+- **Log file**: `questdb.log` in container directory
+- **Config file**: `server.conf` in `conf/` subdirectory
+- **PID handling**: QuestDB's shell script forks and exits immediately - the spawned shell's PID is useless. QuestDB also doesn't create its own PID file. Solution: find the actual Java process by port after startup using `platformService.findProcessByPort()` and write that PID to our PID file. See "Shell Script / JRE Engines" gotcha below.
+- **Multi-port conflicts**: When running multiple QuestDB containers, must configure ALL ports uniquely via environment variables: `QDB_HTTP_BIND_TO`, `QDB_HTTP_MIN_NET_BIND_TO`, `QDB_PG_NET_BIND_TO`, `QDB_LINE_TCP_NET_BIND_TO`. The HTTP Min Server (health/metrics) defaults to port 9003 for all instances and will cause conflicts if not configured.
+- **Backup timestamp column**: QuestDB tables have a designated timestamp column that can have any name. Don't assume `timestamp` - query `tables()` for `designatedTimestamp` column name.
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
 
 | Base Class | Location | Used By | Use Case |
 |------------|----------|---------|----------|
-| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB | Key-value/vector/search/document stores with `bin/` layout |
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB | Key-value/vector/search/document/time-series stores with `bin/` layout |
 | `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
 | `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
 | `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
@@ -166,6 +185,7 @@ Engines can be referenced by aliases in CLI commands:
 - `couchdb`, `couch` → CouchDB
 - `cockroachdb`, `crdb` → CockroachDB
 - `surrealdb`, `surreal` → SurrealDB
+- `questdb`, `quest` → QuestDB
 
 ### Supported Versions & Query Languages
 
@@ -183,9 +203,10 @@ Engines can be referenced by aliases in CLI commands:
 | DuckDB 🦆 | 1.4.3 | SQL | File-based, OLAP |
 | Qdrant 🧭 | 1 | REST API | Vector search, HTTP port 6333 |
 | Meilisearch 🔍 | 1.33.1 | REST API | Full-text search, HTTP port 7700 |
-| CouchDB 🛋 | 3 | REST API | Document database, HTTP port 5984 |
+| CouchDB 🛋️ | 3 | REST API | Document database, HTTP port 5984 |
 | CockroachDB 🪳 | 25 | SQL | Distributed SQL, PostgreSQL-compatible |
 | SurrealDB 🌀 | 2 | SurrealQL | Multi-model, HTTP port 8000 |
+| QuestDB ⏱️ | 9 | SQL | Time-series, PG wire protocol port 8812 |
 
 ### Binary Sources
 
@@ -490,6 +511,28 @@ Menu navigation patterns:
 
 **Spawning background server processes:**
 When spawning a detached database server process, MUST use `stdio: ['ignore', 'ignore', 'ignore']`. Using `'pipe'` for stdout/stderr keeps file descriptors open that prevent Node.js from exiting, even after calling `proc.unref()`. This causes CLI commands like `spindb start` to hang indefinitely, especially visible in Docker/CI environments where output is captured. Symptoms: command completes successfully (server starts) but never returns to shell. See CockroachDB and SurrealDB engines for correct implementation.
+
+**Shell Script / JRE Engines (QuestDB pattern):**
+Engines that use shell scripts to launch Java (JRE) processes have special PID handling requirements:
+
+1. **Shell script PID is useless**: When you spawn `questdb.sh start`, the shell script forks the Java process and exits immediately. The PID from `proc.pid` is the shell's PID, which becomes invalid within milliseconds.
+
+2. **Engine may not create PID file**: Some Java-based databases don't create their own PID files when started via shell scripts in daemon mode. Don't assume a PID file exists at `{dataDir}/questdb.pid` or similar.
+
+3. **Solution - Find PID by port**: After startup, wait for the server to be ready (health check), then find the actual process by port using `platformService.findProcessByPort(port)`. Write THAT PID to the PID file:
+   ```typescript
+   // After waitForReady() succeeds:
+   const pids = await platformService.findProcessByPort(port)
+   if (pids.length > 0) {
+     await writeFile(pidFile, pids[0].toString(), 'utf-8')
+   }
+   ```
+
+4. **Stop also uses port lookup**: The stop method should find the process by port first (most reliable), then fall back to PID file as secondary lookup.
+
+5. **Multi-port configuration**: JRE engines often use multiple ports (main, HTTP, metrics, etc.). Each port must be uniquely configured via environment variables to avoid conflicts when running multiple containers. QuestDB uses 4 ports: PostgreSQL wire, HTTP Web Console, HTTP Min (metrics), and ILP (InfluxDB Line Protocol).
+
+See `engines/questdb/index.ts` for the reference implementation.
 
 **Commander.js async actions:**
 Use `await program.parseAsync()` instead of `program.parse()` in the CLI entry point. `program.parse()` returns immediately without waiting for async command actions to complete, which can cause race conditions with exit codes.

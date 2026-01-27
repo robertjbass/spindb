@@ -70,6 +70,7 @@ export const TEST_PORTS = {
   couchdb: { base: 5990, clone: 5992, renamed: 5991 },
   cockroachdb: { base: 26260, clone: 26262, renamed: 26261 },
   surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
+  questdb: { base: 8820, clone: 8822, renamed: 8821 },
 }
 
 // Default test versions for each engine
@@ -77,6 +78,7 @@ export const TEST_PORTS = {
 export const TEST_VERSIONS = {
   cockroachdb: '25',
   surrealdb: '2',
+  questdb: '9',
 }
 
 /**
@@ -146,12 +148,15 @@ export async function cleanupTestContainers(): Promise<string[]> {
   const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
   let testContainers = containers.filter((c) => testPattern.test(c.name))
 
-  // On Windows, skip CockroachDB and SurrealDB containers during cleanup
-  // These engines use memory-mapped files (RocksDB/SurrealKV) that Windows holds
+  // On Windows, skip CockroachDB, SurrealDB, and QuestDB containers during cleanup
+  // These engines use memory-mapped files (RocksDB/SurrealKV/QuestDB columnar) that Windows holds
   // handles to for extended periods (100+ seconds), causing cleanup to hang
   if (isWindows()) {
     testContainers = testContainers.filter(
-      (c) => c.engine !== Engine.CockroachDB && c.engine !== Engine.SurrealDB,
+      (c) =>
+        c.engine !== Engine.CockroachDB &&
+        c.engine !== Engine.SurrealDB &&
+        c.engine !== Engine.QuestDB,
     )
   }
 
@@ -331,6 +336,13 @@ export async function executeSQL(
       proc.stdin.write(sql)
       proc.stdin.end()
     })
+  } else if (engine === Engine.QuestDB) {
+    // QuestDB uses PostgreSQL wire protocol with different credentials
+    const connectionString = `postgresql://admin:quest@127.0.0.1:${port}/${database}`
+    const engineImpl = getEngine(Engine.PostgreSQL)
+    const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+    const cmd = `"${psqlPath}" "${connectionString}" -c "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -422,6 +434,13 @@ export async function executeSQLFile(
       throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
     }
     const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.QuestDB) {
+    // QuestDB uses PostgreSQL wire protocol with different credentials
+    const connectionString = `postgresql://admin:quest@127.0.0.1:${port}/${database}`
+    const engineImpl = getEngine(Engine.PostgreSQL)
+    const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+    const cmd = `"${psqlPath}" "${connectionString}" -f "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -697,6 +716,14 @@ export async function waitForReady(
           `"${surrealPath}" isready --endpoint http://127.0.0.1:${port}`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.QuestDB) {
+        // Use psql to ping QuestDB via PostgreSQL wire protocol
+        const engineImpl = getEngine(Engine.PostgreSQL)
+        const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+        await execAsync(
+          `"${psqlPath}" "postgresql://admin:quest@127.0.0.1:${port}/qdb" -c "SELECT 1"`,
+          { timeout: 5000 },
+        )
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -787,12 +814,13 @@ export async function waitForStopped(
   // Memory-mapped files and Windows antivirus/indexing can hold handles
   // This helps prevent EBUSY/EPERM errors during rename/delete operations
   if (isWindows()) {
-    // SurrealDB uses memory-mapped files that take a very long time to release on Windows
+    // SurrealDB and QuestDB use memory-mapped files that take a very long time to release on Windows
     // Even after the process exits, the OS may hold handles for 30+ seconds
+    // QuestDB is Java-based with columnar storage using memory-mapped files
     // Qdrant also uses persistent storage but typically releases faster
     let extraDelay: number
-    if (engine === Engine.SurrealDB) {
-      extraDelay = 30000 // 30 seconds for SurrealDB
+    if (engine === Engine.SurrealDB || engine === Engine.QuestDB) {
+      extraDelay = 30000 // 30 seconds for memory-mapped file engines
     } else if (engine === Engine.Qdrant) {
       extraDelay = 15000 // 15 seconds for Qdrant
     } else {

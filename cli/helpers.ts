@@ -214,6 +214,16 @@ export type InstalledSurrealDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledQuestDBEngine = {
+  engine: 'questdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -230,6 +240,7 @@ export type InstalledEngine =
   | InstalledCouchDBEngine
   | InstalledCockroachDBEngine
   | InstalledSurrealDBEngine
+  | InstalledQuestDBEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1010,6 +1021,62 @@ async function getInstalledSurrealDBEngines(): Promise<InstalledSurrealDBEngine[
   return engines
 }
 
+// Get QuestDB version from directory path
+// QuestDB doesn't have a simple --version flag, extract from directory name
+async function getQuestDBVersion(binPath: string): Promise<string | null> {
+  const platform = platformService.getPlatformInfo().platform
+  // Check for questdb startup script
+  if (platform === 'win32') {
+    if (!existsSync(join(binPath, 'questdb.exe'))) {
+      return null
+    }
+  } else {
+    if (!existsSync(join(binPath, 'questdb.sh'))) {
+      return null
+    }
+  }
+  // Version is embedded in directory name, return null to use directory-parsed version
+  return null
+}
+
+// Get installed QuestDB engines from downloaded binaries
+async function getInstalledQuestDBEngines(): Promise<InstalledQuestDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledQuestDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('questdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'questdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getQuestDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'questdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 // Get FerretDB version from binary path
 async function getFerretDBVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1099,6 +1166,7 @@ const ENGINE_PREFIXES = [
   'couchdb-',
   'cockroachdb-',
   'surrealdb-',
+  'questdb-',
 ] as const
 
 /**
@@ -1144,6 +1212,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     couchdbEngines,
     cockroachdbEngines,
     surrealdbEngines,
+    questdbEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1160,6 +1229,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledCouchDBEngines(),
     getInstalledCockroachDBEngines(),
     getInstalledSurrealDBEngines(),
+    getInstalledQuestDBEngines(),
   ])
 
   return [
@@ -1178,6 +1248,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...couchdbEngines,
     ...cockroachdbEngines,
     ...surrealdbEngines,
+    ...questdbEngines,
   ]
 }
 
@@ -1196,4 +1267,5 @@ export {
   getInstalledCouchDBEngines,
   getInstalledCockroachDBEngines,
   getInstalledSurrealDBEngines,
+  getInstalledQuestDBEngines,
 }

@@ -64,6 +64,7 @@ import { ferretdbBinaryManager } from '../../engines/ferretdb/binary-manager'
 import { couchdbBinaryManager } from '../../engines/couchdb/binary-manager'
 import { cockroachdbBinaryManager } from '../../engines/cockroachdb/binary-manager'
 import { surrealdbBinaryManager } from '../../engines/surrealdb/binary-manager'
+import { questdbBinaryManager } from '../../engines/questdb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
@@ -845,6 +846,31 @@ async function deleteEngine(
         ),
       )
       console.log()
+    }
+
+    // Check for cross-engine dependencies (QuestDB depends on PostgreSQL's psql)
+    if (engineName === Engine.PostgreSQL) {
+      const questdbContainers = containers.filter(
+        (c) => c.engine === Engine.QuestDB,
+      )
+      if (questdbContainers.length > 0) {
+        console.log(
+          uiWarning(
+            `${questdbContainers.length} QuestDB container(s) depend on PostgreSQL's psql for backup/restore:`,
+          ),
+        )
+        console.log(
+          chalk.gray(
+            `  ${questdbContainers.map((c) => c.name).join(', ')}`,
+          ),
+        )
+        console.log(
+          chalk.gray(
+            '  Deleting PostgreSQL will break backup/restore for these containers.',
+          ),
+        )
+        console.log()
+      }
     }
 
     const confirmed = await promptConfirm(
@@ -1764,9 +1790,52 @@ enginesCommand
         return
       }
 
+      if (['questdb', 'quest'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('QuestDB requires a version (e.g., 9)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.QuestDB)
+
+        const spinner = createSpinner(`Checking QuestDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `QuestDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`QuestDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`QuestDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: questdbPlatform, arch: questdbArch } =
+          platformService.getPlatformInfo()
+        const questdbFullVersion = questdbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'questdb',
+          version: questdbFullVersion,
+          platform: questdbPlatform,
+          arch: questdbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for QuestDB - uses psql or Web Console
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb`,
         ),
       )
       process.exit(1)

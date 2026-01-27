@@ -92,6 +92,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
       case Engine.DuckDB:
       case Engine.ClickHouse:
       case Engine.CockroachDB:
+      case Engine.QuestDB:
         return { type: 'SQL', lower: 'sql' }
 
       default:

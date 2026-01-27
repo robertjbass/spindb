@@ -637,7 +637,7 @@ export const ENGINE_ICON_WIDTHS: Record<string, number> = {
   // Some emojis render narrower (width 1) - these need padding
   mariadb: 1,   // 🦭 seal renders narrow
   sqlite: 1,    // 🪶 feather renders narrow
-  couchdb: 1,   // 🛋 couch renders narrow
+  couchdb: 1,   // 🛋️ couch renders narrow
   yourengine: 2,  // Add your engine - test and adjust if needed
 }
 ```
@@ -2002,6 +2002,100 @@ export async function fetchAvailableVersions(): Promise<Record<string, string[]>
 // Handle download, extraction, verification
 // Register binary paths with configManager after installation
 ```
+
+### JRE / Shell Script Engines (QuestDB Pattern)
+
+Some engines (like QuestDB) are Java-based and use shell scripts to launch the JVM. These require special PID handling because the shell script forks and exits immediately.
+
+**The Problem:**
+1. You spawn `questdb.sh start` with `detached: true`
+2. The shell script starts Java and exits
+3. `proc.pid` contains the shell's PID, which is now invalid
+4. The engine may not create its own PID file
+5. `processManager.isRunning()` checks the (invalid) PID and returns `false`
+6. But the Java process IS running - queries work fine
+
+**The Solution:**
+
+Don't write the PID immediately after spawn. Instead:
+
+```typescript
+async start(container: ContainerConfig): Promise<StartResult> {
+  // ... spawn the process ...
+  const proc = spawn(shellScript, args, spawnOptions)
+
+  // DON'T write proc.pid - it's the shell's PID which will be invalid
+  proc.unref()
+
+  // Wait for the server to be ready
+  const ready = await this.waitForReady(port, timeout)
+  if (!ready) {
+    throw new Error('Failed to start within timeout')
+  }
+
+  // AFTER server is ready, find the actual process by port
+  try {
+    const pids = await platformService.findProcessByPort(port)
+    if (pids.length > 0) {
+      await writeFile(pidFile, pids[0].toString(), 'utf-8')
+    }
+  } catch {
+    // Log but don't fail - server is running, we just can't track PID
+  }
+
+  return { port, connectionString: this.getConnectionString(container) }
+}
+```
+
+**Multi-Port Configuration:**
+
+JRE engines often use multiple ports. Each must be uniquely configured:
+
+```typescript
+// QuestDB uses 4 ports - all must be unique per container
+const env = {
+  ...process.env,
+  QDB_PG_NET_BIND_TO: `0.0.0.0:${port}`,           // PostgreSQL wire (main)
+  QDB_HTTP_BIND_TO: `0.0.0.0:${port + 188}`,       // Web Console
+  QDB_HTTP_MIN_NET_BIND_TO: `0.0.0.0:${port + 191}`, // Health/Metrics
+  QDB_LINE_TCP_NET_BIND_TO: `0.0.0.0:${port + 197}`, // ILP (InfluxDB)
+}
+```
+
+**Stop Method:**
+
+Also use port-based lookup for stop:
+
+```typescript
+async stop(container: ContainerConfig): Promise<void> {
+  // Find by port first (most reliable for JRE engines)
+  let pid: number | null = null
+  try {
+    const pids = await platformService.findProcessByPort(port)
+    if (pids.length > 0) pid = pids[0]
+  } catch {
+    // Fall back to PID file
+    const pidStr = await readFile(pidFile, 'utf-8').catch(() => null)
+    if (pidStr) pid = parseInt(pidStr.trim(), 10)
+  }
+
+  if (pid && platformService.isProcessRunning(pid)) {
+    await platformService.terminateProcess(pid, false)
+    // ... graceful shutdown logic ...
+  }
+}
+```
+
+See `engines/questdb/index.ts` for the complete reference implementation.
+
+**Cross-Engine Dependencies:**
+
+QuestDB uses PostgreSQL wire protocol for backup/restore and shell access. It requires the PostgreSQL engine's `psql` binary:
+- Backup: Uses `psql` to query table schemas and export data
+- Restore: Uses `psql` to execute SQL dump files
+- Shell: Uses `psql` (or `pgcli`) for interactive access
+
+SpinDB warns users when deleting PostgreSQL if QuestDB containers exist.
 
 ---
 

@@ -21,6 +21,10 @@ import {
   type InstalledClickHouseEngine,
   type InstalledQdrantEngine,
   type InstalledMeilisearchEngine,
+  type InstalledCouchDBEngine,
+  type InstalledCockroachDBEngine,
+  type InstalledSurrealDBEngine,
+  type InstalledQuestDBEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -68,6 +72,14 @@ export async function handleEngines(): Promise<void> {
     ...engines.filter(
       (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
     ),
+    ...engines.filter((e): e is InstalledCouchDBEngine => e.engine === 'couchdb'),
+    ...engines.filter(
+      (e): e is InstalledCockroachDBEngine => e.engine === 'cockroachdb',
+    ),
+    ...engines.filter(
+      (e): e is InstalledSurrealDBEngine => e.engine === 'surrealdb',
+    ),
+    ...engines.filter((e): e is InstalledQuestDBEngine => e.engine === 'questdb'),
   ]
 
   // Calculate total size

@@ -691,7 +691,7 @@ export async function showContainerSubmenu(
   })
 
   actionChoices.push({
-    name: `${chalk.magenta('⎘')} Copy connection string`,
+    name: `${chalk.magenta('⊕')} Copy connection string`,
     value: 'copy',
   })
 

@@ -92,8 +92,8 @@ async function showMainMenu(): Promise<void> {
     },
     {
       name: canClone
-        ? `${chalk.cyan('⧉')} Clone a container`
-        : chalk.gray('⧉ Clone a container'),
+        ? `${chalk.cyan('◇')} Clone a container`
+        : chalk.gray('◇ Clone a container'),
       value: 'clone',
       disabled: canClone ? false : 'No containers',
     },
@@ -105,7 +105,7 @@ async function showMainMenu(): Promise<void> {
       value: 'engines',
       disabled: hasEngines ? false : 'No engines installed',
     },
-    { name: `${chalk.bgRed.white('+')} System health check`, value: 'doctor' },
+    { name: `${chalk.red.bold('+')} System health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
     { name: `${chalk.gray('⏻')} Exit ${chalk.gray('(ctrl+c)')}`, value: 'exit' },
   ]

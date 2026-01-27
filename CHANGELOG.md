@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-01-27
+
+### Fixed
+- **QuestDB PID handling** - Fixed process tracking for JRE-based engines where shell script forks and exits immediately; now finds actual Java process by port after startup
+- **QuestDB multi-port conflicts** - All 4 QuestDB ports (PG, HTTP, HTTP Min, ILP) now configured uniquely per container via environment variables, fixing "could not bind socket" errors when running multiple containers
+- **QuestDB backup format** - Fixed SQL export: use double quotes for identifiers, avoid double semicolons, don't quote numeric values, detect designated timestamp column dynamically
+- **QuestDB binary extraction** - Preserve QuestDB's unique directory structure (questdb.sh at root) instead of incorrectly moving it to bin/ subdirectory
+
+### Added
+- **Cross-engine dependency warning** - Deleting PostgreSQL now warns if QuestDB containers exist (psql required for backup/restore/shell)
+
+### Changed
+- Updated documentation (CLAUDE.md, FEATURE.md, CHECKLIST.md, ENGINES.md, README.md) with JRE/shell script engine patterns and cross-engine dependency notes
+
+## [0.27.0] - 2026-01-26
+
+### Added
+- **QuestDB engine support** - Full integration for QuestDB time-series database:
+  - High-performance time-series database optimized for fast ingestion
+  - PostgreSQL wire protocol on port 8812, Web Console at port 9000
+  - Default credentials: `admin`/`quest`
+  - Single database model (`qdb`)
+  - SQL-based backup/restore via bundled PostgreSQL tools (psql, pg_dump)
+  - Java-based with bundled JRE (no Java installation required)
+  - Version 9 from hostdb
+  - Aliases: `questdb`, `quest`
+  - Full cross-platform support (macOS, Linux, Windows)
+
+### Fixed
+- **QuestDB emoji** - Use stopwatch emoji (⏱️) with variation selector for consistent terminal width rendering
+
 ## [0.26.2] - 2026-01-26
 
 ### Fixed

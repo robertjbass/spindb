@@ -1234,6 +1234,101 @@ jobs:
           }
 
   # ============================================
+  # QuestDB Integration Tests
+  # Uses SpinDB to download and manage QuestDB binaries from hostdb
+  # QuestDB is a high-performance time-series database with PostgreSQL wire protocol
+  # ============================================
+  test-questdb:
+    name: QuestDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Ubuntu 22
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Ubuntu 24
+          - os: macos-15
+            icon: 💻
+            label: Intel
+          - os: macos-14
+            icon: 💻
+            label: ARM
+          - os: windows-latest
+            icon: 🔷
+            label: Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache QuestDB binaries - these are downloaded from hostdb
+      # Cache key v2: bust cache after fixing extraction logic
+      - name: Cache QuestDB binaries
+        uses: actions/cache@v4
+        id: questdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-questdb-9-${{ runner.os }}-${{ runner.arch }}-v2
+
+      # Use SpinDB to download QuestDB binaries
+      - name: Install QuestDB via SpinDB
+        run: pnpm start engines download questdb 9
+
+      # Download PostgreSQL for psql (used for QuestDB connectivity)
+      - name: Install PostgreSQL via SpinDB (for psql)
+        run: pnpm start engines download postgresql 17
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run QuestDB integration tests
+        run: pnpm test:engine questdb
+        timeout-minutes: 15
+
+      - name: Show QuestDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== QuestDB container directories ==="
+          ls -la ~/.spindb/containers/questdb/ 2>/dev/null || echo "No QuestDB containers directory"
+          echo ""
+          echo "=== QuestDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i quest || echo "No QuestDB binaries found"
+          echo ""
+          echo "=== QuestDB log files ==="
+          find ~/.spindb/containers/questdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show QuestDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== QuestDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== QuestDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'quest' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== QuestDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -2252,6 +2347,7 @@ jobs:
         test-couchdb,
         test-cockroachdb,
         test-surrealdb,
+        test-questdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -2329,6 +2425,10 @@ jobs:
           fi
           if [ "${{ needs.test-surrealdb.result }}" != "success" ]; then
             echo "SurrealDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-questdb.result }}" != "success" ]; then
+            echo "QuestDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
