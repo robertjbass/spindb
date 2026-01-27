@@ -533,7 +533,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
-      max-parallel: 4  # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-22.04
@@ -1134,6 +1133,9 @@ jobs:
           Write-Host "=== CockroachDB container directories ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
           Write-Host ""
+          Write-Host "=== CockroachDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'cockroach' } | Format-Table -AutoSize
+          Write-Host ""
           Write-Host "=== CockroachDB log files ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "--- $($_.FullName) ---"
@@ -1221,6 +1223,9 @@ jobs:
         run: |
           Write-Host "=== SurrealDB container directories ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== SurrealDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'surreal' } | Format-Table -AutoSize
           Write-Host ""
           Write-Host "=== SurrealDB log files ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
@@ -1815,10 +1820,20 @@ jobs:
         run: pnpm remove -g spindb
 
   # ============================================
-  # Comprehensive Windows Tests (COMMENTED OUT)
-  # Now using parallel Windows tests in each engine matrix instead.
-  # Keeping this job commented out for reference in case parallel tests
-  # exhaust the runner pool again.
+  # Comprehensive Windows Tests (COMMENTED OUT - January 2026)
+  #
+  # RATIONALE: Originally used to run all Windows tests sequentially on a
+  # single runner to avoid exhausting GitHub's Windows runner pool. Now
+  # disabled because:
+  #   1. Windows tests run in parallel within each engine's matrix
+  #   2. Parallel execution is faster and catches issues earlier
+  #   3. GitHub runner pool has been stable with parallel Windows jobs
+  #
+  # WHEN TO RE-ENABLE: If parallel Windows jobs start timing out or failing
+  # due to runner pool exhaustion, uncomment this job and remove
+  # windows-latest from individual engine matrices.
+  #
+  # See also: CI workflow header comment about Windows Strategy
   # ============================================
   # test-windows-all:
   #   name: 🔷 Windows All Tests
