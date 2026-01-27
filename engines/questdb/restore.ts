@@ -134,11 +134,13 @@ export async function restoreBackup(
   }
 
   // Build restore command args
+  // Use ON_ERROR_STOP to fail fast on any SQL error (otherwise psql continues silently)
   const args = [
     '-h', '127.0.0.1',
     '-p', String(port),
     '-U', 'admin',
     '-d', database,
+    '-v', 'ON_ERROR_STOP=1',
     '-f', backupPath,
   ]
 
