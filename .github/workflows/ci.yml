@@ -1116,8 +1116,8 @@ jobs:
         run: pnpm test:engine cockroachdb
         timeout-minutes: 15
 
-      - name: Show CockroachDB logs on failure
-        if: failure()
+      - name: Show CockroachDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
         run: |
           echo "=== CockroachDB container directories ==="
           ls -la ~/.spindb/containers/cockroachdb/ 2>/dev/null || echo "No CockroachDB containers directory"
@@ -1127,6 +1127,19 @@ jobs:
           echo ""
           echo "=== CockroachDB log files ==="
           find ~/.spindb/containers/cockroachdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show CockroachDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== CockroachDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== CockroachDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
 
   # ============================================
   # SurrealDB Integration Tests
@@ -1191,8 +1204,8 @@ jobs:
         run: pnpm test:engine surrealdb
         timeout-minutes: 15
 
-      - name: Show SurrealDB logs on failure
-        if: failure()
+      - name: Show SurrealDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
         run: |
           echo "=== SurrealDB container directories ==="
           ls -la ~/.spindb/containers/surrealdb/ 2>/dev/null || echo "No SurrealDB containers directory"
@@ -1202,6 +1215,19 @@ jobs:
           echo ""
           echo "=== SurrealDB log files ==="
           find ~/.spindb/containers/surrealdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show SurrealDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== SurrealDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== SurrealDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
 
   # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
