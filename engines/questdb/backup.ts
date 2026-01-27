@@ -169,14 +169,16 @@ export async function createBackup(
           // Generate INSERT statements
           for (const row of rows) {
             // Parse the pipe-delimited output and convert to INSERT
+            // Trim each value to handle Windows CRLF line endings
             const values = row.split('|').map((v) => {
-              if (v === '' || v === 'null') return 'NULL'
+              const trimmed = v.trim()
+              if (trimmed === '' || trimmed === 'null') return 'NULL'
               // Check if value looks like a number (int or float)
-              if (/^-?\d+(\.\d+)?$/.test(v)) {
-                return v // Don't quote numbers
+              if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+                return trimmed // Don't quote numbers
               }
               // Escape single quotes and wrap strings
-              return `'${v.replace(/'/g, "''")}'`
+              return `'${trimmed.replace(/'/g, "''")}'`
             })
 
             // Use explicit column names if available, otherwise positional VALUES

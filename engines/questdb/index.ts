@@ -504,14 +504,22 @@ export class QuestDBEngine extends BaseEngine {
     // Kill process if found
     if (pid && platformService.isProcessRunning(pid)) {
       logDebug(`Killing QuestDB process ${pid}`)
+      const { platform } = this.getPlatformInfo()
+      const isWindows = platform === 'win32'
+
       try {
         await platformService.terminateProcess(pid, false)
-        // Wait for graceful termination
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+        // Wait for graceful termination - Windows needs more time for Java to release file locks
+        const gracefulWait = isWindows ? 5000 : 2000
+        await new Promise((resolve) => setTimeout(resolve, gracefulWait))
 
         if (platformService.isProcessRunning(pid)) {
           logWarning(`Graceful termination failed, force killing ${pid}`)
           await platformService.terminateProcess(pid, true)
+          // Additional wait after force kill on Windows
+          if (isWindows) {
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+          }
         }
       } catch (error) {
         logDebug(`Process termination error: ${error}`)
