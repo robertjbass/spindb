@@ -284,16 +284,17 @@ export class QuestDBEngine extends BaseEngine {
 
     logDebug(`Starting QuestDB with data dir: ${dataDir}`)
 
+    const isWindows = platform === 'win32'
+
     // QuestDB startup command
-    // Using 'start' subcommand with configuration options
+    // Windows: questdb.exe doesn't support 'start' subcommand reliably (GitHub #1222)
+    //          Run without 'start' command - it starts in interactive/foreground mode
+    // Unix: questdb.sh start -d ... -t ... -n daemonizes properly
     // -t tag: Unique process tag allows multiple QuestDB instances to run simultaneously
     //         Without this, QuestDB detects other instances by process label and refuses to start
-    const args = [
-      'start',
-      '-d', dataDir,
-      '-t', name, // Unique tag per container (allows multiple instances)
-      '-n', // Non-interactive mode
-    ]
+    const args = isWindows
+      ? ['-d', dataDir, '-t', name] // Windows: no 'start' command, no '-n' flag
+      : ['start', '-d', dataDir, '-t', name, '-n'] // Unix: full daemon mode
 
     // Environment variables for QuestDB configuration
     // Note: Don't set QDB_LOG_W_FILE_LOCATION - QuestDB expects rolling log patterns with $
@@ -310,8 +311,6 @@ export class QuestDBEngine extends BaseEngine {
       QDB_PG_NET_BIND_TO: `0.0.0.0:${port}`,
       QDB_LINE_TCP_NET_BIND_TO: `0.0.0.0:${port + 197}`, // ILP port
     }
-
-    const isWindows = platform === 'win32'
 
     // IMPORTANT: Use 'ignore' for all stdio to prevent hanging
     // QuestDB runs as a daemon and we don't want to keep file descriptors open
