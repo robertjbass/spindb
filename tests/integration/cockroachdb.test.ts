@@ -272,7 +272,13 @@ describe('CockroachDB Integration Tests', () => {
     )
   })
 
-  it('should stop, rename container, and change port', async () => {
+  it('should stop, rename container, and change port', async (t) => {
+    // Skip on Windows - RocksDB holds file handles preventing rename
+    if (process.platform === 'win32') {
+      t.skip('Rename test skipped on Windows (RocksDB file handle locking)')
+      return
+    }
+
     console.log(`\n Renaming container and changing port...`)
 
     const config = await containerManager.getConfig(containerName)
@@ -306,7 +312,13 @@ describe('CockroachDB Integration Tests', () => {
     )
   })
 
-  it('should verify data persists after rename', async () => {
+  it('should verify data persists after rename', async (t) => {
+    // Skip on Windows - depends on rename test which is skipped
+    if (process.platform === 'win32') {
+      t.skip('Verify after rename skipped on Windows (rename test skipped)')
+      return
+    }
+
     console.log(`\n Verifying data persists after rename...`)
 
     const config = await containerManager.getConfig(renamedContainerName)
