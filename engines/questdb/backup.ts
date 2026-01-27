@@ -127,6 +127,17 @@ export async function createBackup(
 
       // Export table data
       try {
+        // Get column names using table_columns() function
+        // This ensures INSERT statements have explicit column names for reliability
+        const columnsQuery = `SELECT column FROM table_columns('${table}')`
+        const columnsResult = await executeQuery(port, database, columnsQuery)
+        const columns = columnsResult.split('\n').filter((c) => c.trim())
+
+        if (columns.length === 0) {
+          logWarning(`No columns found for table ${table}`)
+          continue
+        }
+
         // Get the designated timestamp column (if any) for ordering
         // QuestDB tables have a designated timestamp column that can have any name
         let orderClause = ''
@@ -140,15 +151,17 @@ export async function createBackup(
           // No designated timestamp or query failed - export without ordering
         }
 
-        const dataQuery = `SELECT * FROM "${table}"${orderClause}`
+        // Select columns in explicit order to match INSERT column list
+        const columnList = columns.map((c) => `"${c}"`).join(', ')
+        const dataQuery = `SELECT ${columnList} FROM "${table}"${orderClause}`
         const dataResult = await executeQuery(port, database, dataQuery)
 
         if (dataResult) {
           const rows = dataResult.split('\n').filter((r) => r.trim())
           lines.push(`-- Data for ${table}: ${rows.length} rows`)
 
-          // Note: This is a simplified export. For production use,
-          // QuestDB's native backup/restore would be preferred.
+          // Generate INSERT statements with explicit column names
+          // This is more reliable than positional VALUES as column order is guaranteed
           for (const row of rows) {
             // Parse the pipe-delimited output and convert to INSERT
             const values = row.split('|').map((v) => {
@@ -160,7 +173,9 @@ export async function createBackup(
               // Escape single quotes and wrap strings
               return `'${v.replace(/'/g, "''")}'`
             })
-            lines.push(`INSERT INTO "${table}" VALUES (${values.join(', ')});`)
+            lines.push(
+              `INSERT INTO "${table}" (${columnList}) VALUES (${values.join(', ')});`,
+            )
           }
           lines.push('')
         }
