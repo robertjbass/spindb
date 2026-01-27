@@ -12,19 +12,20 @@ export const ENGINE_ICONS: Record<string, string> = {
   clickhouse: '🏠',
   qdrant: '🧭',
   meilisearch: '🔍',
-  couchdb: '🛋',
+  couchdb: '🛋️',
   cockroachdb: '🪳',
   surrealdb: '🌀',
+  questdb: '⏰️',
 }
 
 // Visual width of each icon in terminal columns
-// Most emojis render at width 2, but some render narrower (width 1)
+// Most emojis render at width 2 in modern terminals
 // This map allows us to pad icons correctly for column alignment
 export const ENGINE_ICON_WIDTHS: Record<string, number> = {
   postgresql: 2,
   mysql: 2,
-  mariadb: 1, // 🦭 seal renders narrow
-  sqlite: 1, // 🪶 feather renders narrow
+  mariadb: 2,
+  sqlite: 2,
   duckdb: 2,
   mongodb: 2,
   ferretdb: 2,
@@ -33,9 +34,10 @@ export const ENGINE_ICON_WIDTHS: Record<string, number> = {
   clickhouse: 2,
   qdrant: 2,
   meilisearch: 2,
-  couchdb: 1, // 🛋 couch renders narrow
-  cockroachdb: 1, // 🪳 cockroach renders narrow
-  surrealdb: 2, // 🌀 cyclone renders at standard width
+  couchdb: 2,
+  cockroachdb: 2,
+  surrealdb: 2,
+  questdb: 2,
 }
 
 export const DEFAULT_ENGINE_ICON = '▣'

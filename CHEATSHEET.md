@@ -20,6 +20,7 @@ spindb create mydb -e meilisearch       # Create Meilisearch
 spindb create mydb -e couchdb           # Create CouchDB
 spindb create mydb -e cockroachdb       # Create CockroachDB
 spindb create mydb -e surrealdb         # Create SurrealDB
+spindb create mydb -e questdb           # Create QuestDB
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -49,6 +50,7 @@ spindb run myredis -c "SET foo bar"     # Run Redis command
 spindb run mych -c "SELECT 1"           # Run ClickHouse SQL
 spindb run mycrdb -c "SELECT 1"         # Run CockroachDB SQL
 spindb run mysurreal -c "SELECT * FROM users"  # Run SurrealQL
+spindb run myquest -c "SELECT * FROM sensors"  # Run QuestDB SQL
 ```
 
 > **REST API Engines:** Qdrant, Meilisearch, and CouchDB use REST APIs instead of CLI shells.
@@ -90,6 +92,7 @@ spindb restore mydb --from-url "http://host:7700?api_key=KEY"  # Meilisearch
 spindb restore mydb --from-url "http://user:pass@host:5984/db" # CouchDB
 spindb restore mydb --from-url "postgresql://root@host:26257/db?sslmode=disable"  # CockroachDB
 spindb restore mydb --from-url "ws://root:root@host:8000/ns/db"  # SurrealDB
+spindb restore mydb --from-url "postgresql://admin:quest@host:8812/qdb"  # QuestDB
 ```
 
 ## Clone
@@ -181,6 +184,7 @@ spindb doctor --json                    # JSON output for scripting
 | CouchDB     | 5984    | 5984-6084     | Fauxton UI included |
 | CockroachDB | 26257   | 26257-26357   | HTTP UI on port+1 |
 | SurrealDB   | 8000    | 8000-8100     | HTTP/WebSocket |
+| QuestDB     | 8812    | 8812-8912     | Web Console at PG+188 |
 | SQLite      | N/A     | File-based    | |
 | DuckDB      | N/A     | File-based    | |
 
@@ -202,6 +206,7 @@ Meilisearch: http://127.0.0.1:7700
 CouchDB:     http://admin:admin@127.0.0.1:5984/mydb
 CockroachDB: postgresql://root@127.0.0.1:26257/defaultdb?sslmode=disable
 SurrealDB:   ws://root:root@127.0.0.1:8000/test/test
+QuestDB:     postgresql://admin:quest@127.0.0.1:8812/qdb
 SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```
@@ -209,6 +214,7 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **CockroachDB:** Uses PostgreSQL wire protocol. Add `?sslmode=disable` for local insecure connections.
 > **SurrealDB:** Format is `ws://user:pass@host:port/namespace/database`. Defaults: root/root, test/test.
 > **CouchDB:** Default credentials are admin/admin.
+> **QuestDB:** Uses PostgreSQL wire protocol. Default credentials are admin/quest. Single database `qdb`.
 
 ## JSON Output (for scripting)
 

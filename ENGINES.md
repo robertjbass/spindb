@@ -15,9 +15,10 @@
 | 🏠 **ClickHouse** | ✅ Complete | hostdb (macOS/Linux) | ~300 MB | Version 25.12 (column-oriented OLAP) |
 | 🧭 **Qdrant** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (vector similarity search) |
 | 🔍 **Meilisearch** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 1 (full-text search) |
-| 🛋 **CouchDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | Version 3 (document database) |
+| 🛋️ **CouchDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | Version 3 (document database) |
 | 🪳 **CockroachDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 25 (distributed SQL) |
 | 🌀 **SurrealDB** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 2 (multi-model database) |
+| ⏰ **QuestDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 9 (time-series SQL database) |
 
 ---
 
@@ -168,7 +169,7 @@
   - Health check at /health
   - MIT license
 
-### 🛋 CouchDB
+### 🛋️ CouchDB
 
 - **Status:** ✅ Complete
 - **Versions:** 3
@@ -239,6 +240,33 @@
   - Health check via `surreal isready --endpoint http://localhost:8000`
   - Business Source License (BSL)
 
+### ⏰ QuestDB
+
+- **Status:** ✅ Complete
+- **Versions:** 9
+- **Data location:** `~/.spindb/containers/questdb/{name}/`
+- **Process:** Server process (`questdb.sh` / `questdb.exe`)
+- **Binary source:** hostdb downloads (all platforms)
+- **CLI:** PostgreSQL wire protocol (`psql` bundled)
+- **Backup format:** `.sql` (SQL dump via psql)
+- **Multi-version support:** Yes (all platforms)
+- **Bundled tools:** `questdb.sh`/`questdb.exe`, `psql`, `pg_dump`, `pg_restore`
+- **Default user:** `admin`
+- **Default password:** `quest`
+- **Default database:** `qdb`
+- **Implementation notes:**
+  - High-performance time-series database optimized for fast ingestion
+  - Uses PostgreSQL wire protocol (port 8812)
+  - Web console at HTTP port (port 9000 by default, or PG port + 188)
+  - ILP (InfluxDB Line Protocol) port at PG port + 197
+  - Java-based with bundled JRE (no Java installation required)
+  - Startup via `questdb.sh start` (Unix) or `questdb.exe start` (Windows)
+  - Single database model (`qdb` - no database creation needed)
+  - Backup/restore uses PostgreSQL tools over wire protocol
+  - Connection scheme: `postgresql://` (e.g., `postgresql://admin:quest@localhost:8812/qdb`)
+  - Health check via HTTP endpoint at `/` (Web Console)
+  - Apache-2.0 license
+
 ---
 
 ## Backup Format Summary
@@ -258,6 +286,7 @@
 | CouchDB | `.json` (all docs) | N/A | JSON for backups |
 | CockroachDB | `.sql` (cockroach dump) | N/A | SQL for backups |
 | SurrealDB | `.surql` (surreal export) | N/A | SurrealQL for backups |
+| QuestDB | `.sql` (psql) | N/A | SQL for backups |
 
 ---
 
@@ -278,6 +307,7 @@
 | CouchDB | REST API | - | Use curl or HTTP clients |
 | CockroachDB | `cockroach sql` | - | Built-in shell is full-featured |
 | SurrealDB | `surreal sql` | - | Built-in shell is full-featured |
+| QuestDB | `psql` | `pgcli` | PostgreSQL wire protocol |
 
 ---
 
@@ -306,9 +336,10 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🏠 | ClickHouse |
 | 🧭 | Qdrant |
 | 🔍 | Meilisearch |
-| 🛋 | CouchDB |
+| 🛋️ | CouchDB |
 | 🪳 | CockroachDB |
 | 🌀 | SurrealDB |
+| ⏰ | QuestDB |
 
 ---
 

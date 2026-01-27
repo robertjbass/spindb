@@ -70,6 +70,7 @@ export const TEST_PORTS = {
   couchdb: { base: 5990, clone: 5992, renamed: 5991 },
   cockroachdb: { base: 26260, clone: 26262, renamed: 26261 },
   surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
+  questdb: { base: 8820, clone: 8822, renamed: 8821 },
 }
 
 // Default test versions for each engine
@@ -77,6 +78,7 @@ export const TEST_PORTS = {
 export const TEST_VERSIONS = {
   cockroachdb: '25',
   surrealdb: '2',
+  questdb: '9',
 }
 
 /**
@@ -331,6 +333,13 @@ export async function executeSQL(
       proc.stdin.write(sql)
       proc.stdin.end()
     })
+  } else if (engine === Engine.QuestDB) {
+    // QuestDB uses PostgreSQL wire protocol with different credentials
+    const connectionString = `postgresql://admin:quest@127.0.0.1:${port}/${database}`
+    const engineImpl = getEngine(Engine.PostgreSQL)
+    const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+    const cmd = `"${psqlPath}" "${connectionString}" -c "${sql.replace(/"/g, '\\"')}"`
+    return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -422,6 +431,13 @@ export async function executeSQLFile(
       throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
     }
     const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.QuestDB) {
+    // QuestDB uses PostgreSQL wire protocol with different credentials
+    const connectionString = `postgresql://admin:quest@127.0.0.1:${port}/${database}`
+    const engineImpl = getEngine(Engine.PostgreSQL)
+    const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+    const cmd = `"${psqlPath}" "${connectionString}" -f "${filePath}"`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -695,6 +711,14 @@ export async function waitForReady(
           .catch(() => 'surreal')
         await execAsync(
           `"${surrealPath}" isready --endpoint http://127.0.0.1:${port}`,
+          { timeout: 5000 },
+        )
+      } else if (engine === Engine.QuestDB) {
+        // Use psql to ping QuestDB via PostgreSQL wire protocol
+        const engineImpl = getEngine(Engine.PostgreSQL)
+        const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
+        await execAsync(
+          `"${psqlPath}" "postgresql://admin:quest@127.0.0.1:${port}/qdb" -c "SELECT 1"`,
           { timeout: 5000 },
         )
       } else {

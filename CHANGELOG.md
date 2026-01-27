@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-01-26
+
+### Added
+- **QuestDB engine support** - Full integration for QuestDB time-series database:
+  - High-performance time-series database optimized for fast ingestion
+  - PostgreSQL wire protocol on port 8812, Web Console at port 9000
+  - Default credentials: `admin`/`quest`
+  - Single database model (`qdb`)
+  - SQL-based backup/restore via bundled PostgreSQL tools (psql, pg_dump)
+  - Java-based with bundled JRE (no Java installation required)
+  - Version 9 from hostdb
+  - Aliases: `questdb`, `quest`
+  - Full cross-platform support (macOS, Linux, Windows)
+
+### Fixed
+- **QuestDB emoji alignment** - Added variation selector to alarm clock emoji (⏰️) to ensure consistent terminal width rendering in container list
+
 ## [0.26.2] - 2026-01-26
 
 ### Fixed

@@ -226,6 +226,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['surreal'],
     maxConnections: 0, // Not applicable - managed internally
   },
+  [Engine.QuestDB]: {
+    defaultVersion: '9',
+    defaultPort: 8812, // QuestDB PostgreSQL wire protocol port
+    portRange: { start: 8812, end: 8912 },
+    latestVersion: '9',
+    superuser: 'admin', // Default user with password 'quest'
+    connectionScheme: 'postgresql', // Uses PostgreSQL wire protocol
+    logFileName: 'questdb.log',
+    pidFileName: 'questdb.pid',
+    dataSubdir: 'db',
+    clientTools: ['questdb'],
+    maxConnections: 0, // Not applicable - managed internally
+  },
 }
 
 /**

@@ -30,6 +30,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   couchdb: 'couchdb.test.ts',
   cockroachdb: 'cockroachdb.test.ts',
   surrealdb: 'surrealdb.test.ts',
+  questdb: 'questdb.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
@@ -57,6 +58,8 @@ const ENGINE_ALIASES: Record<string, string> = {
   crdb: 'cockroachdb',
   // SurrealDB aliases
   surreal: 'surrealdb',
+  // QuestDB aliases
+  quest: 'questdb',
 }
 
 // Test run order (matches test:integration script order)
@@ -76,6 +79,7 @@ const TEST_ORDER = [
   'couchdb',
   'cockroachdb',
   'surrealdb',
+  'questdb',
 ]
 
 function resolveEngine(input: string): string | null {
@@ -118,6 +122,7 @@ function printUsage(): void {
   console.log('  couchdb       (aliases: couch)')
   console.log('  cockroachdb   (aliases: crdb)')
   console.log('  surrealdb     (aliases: surreal)')
+  console.log('  questdb       (aliases: quest)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')

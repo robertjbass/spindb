@@ -193,6 +193,15 @@ function validateConnectionString(
         return 'Connection string must start with surrealdb://, ws://, wss://, http://, or https://'
       }
       break
+    case Engine.QuestDB:
+      // QuestDB uses PostgreSQL wire protocol
+      if (
+        !input.startsWith('postgresql://') &&
+        !input.startsWith('postgres://')
+      ) {
+        return 'Connection string must start with postgresql:// or postgres://'
+      }
+      break
     case Engine.SQLite:
     case Engine.DuckDB:
       return 'File-based engines do not support remote connection strings'

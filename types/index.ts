@@ -36,6 +36,7 @@ export enum Engine {
   CouchDB = 'couchdb',
   CockroachDB = 'cockroachdb',
   SurrealDB = 'surrealdb',
+  QuestDB = 'questdb',
 }
 
 // Supported operating systems (matches Node.js process.platform)
@@ -71,6 +72,7 @@ export const ALL_ENGINES = [
   Engine.CouchDB,
   Engine.CockroachDB,
   Engine.SurrealDB,
+  Engine.QuestDB,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -199,6 +201,7 @@ export type FerretDBFormat = 'sql' | 'custom'
 export type CouchDBFormat = 'json'
 export type CockroachDBFormat = 'sql'
 export type SurrealDBFormat = 'surql'
+export type QuestDBFormat = 'sql'
 
 // Union of all backup formats
 export type BackupFormatType =
@@ -217,6 +220,7 @@ export type BackupFormatType =
   | CouchDBFormat
   | CockroachDBFormat
   | SurrealDBFormat
+  | QuestDBFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -235,6 +239,7 @@ type EngineFormatMap = {
   [Engine.CouchDB]: CouchDBFormat
   [Engine.CockroachDB]: CockroachDBFormat
   [Engine.SurrealDB]: SurrealDBFormat
+  [Engine.QuestDB]: QuestDBFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -344,6 +349,8 @@ export type BinaryTool =
   | 'cockroach'
   // SurrealDB tools
   | 'surreal'
+  // QuestDB tools
+  | 'questdb'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -423,6 +430,8 @@ export type SpinDBConfig = {
     cockroach?: BinaryConfig
     // SurrealDB tools
     surreal?: BinaryConfig
+    // QuestDB tools
+    questdb?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

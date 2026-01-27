@@ -232,6 +232,22 @@
       "clientTools": ["surreal"],
       "licensing": ["BSL", "Apache-2.0"],
       "notes": "Multi-model database supporting document, graph, and relational data. SurrealQL query language. Uses namespace/database hierarchy."
+    },
+    "questdb": {
+      "displayName": "QuestDB",
+      "icon": "⏱️",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["9.2.3"],
+      "defaultVersion": "9.2.3",
+      "defaultPort": 8812,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "connectionScheme": "postgresql",
+      "superuser": "admin",
+      "clientTools": ["questdb"],
+      "licensing": "Apache-2.0",
+      "notes": "High-performance time-series database. PostgreSQL wire protocol on port 8812. Web Console at port+188. Bundled JRE (no Java required)."
     }
   }
 }

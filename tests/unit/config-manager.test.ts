@@ -96,6 +96,8 @@ describe('ConfigManager', () => {
         MEILISEARCH_TOOLS,
         COUCHDB_TOOLS,
         COCKROACHDB_TOOLS,
+        SURREALDB_TOOLS,
+        QUESTDB_TOOLS,
         SQLITE_TOOLS,
         DUCKDB_TOOLS,
         ENHANCED_SHELLS,
@@ -113,6 +115,8 @@ describe('ConfigManager', () => {
         MEILISEARCH_TOOLS.length +
         COUCHDB_TOOLS.length +
         COCKROACHDB_TOOLS.length +
+        SURREALDB_TOOLS.length +
+        QUESTDB_TOOLS.length +
         SQLITE_TOOLS.length +
         DUCKDB_TOOLS.length +
         ENHANCED_SHELLS.length

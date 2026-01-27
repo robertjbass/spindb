@@ -560,7 +560,7 @@ git diff --stat README.md ENGINES.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md
 
 Some emojis render narrower in terminals. If your engine icon appears too close to the engine name:
 - Set width to `1` in `ENGINE_ICON_WIDTHS`
-- Examples: 🦭 (seal), 🪶 (feather), 🛋 (couch), 🪳 (cockroach)
+- Examples: 🦭 (seal), 🪶 (feather), 🛋️ (couch), 🪳 (cockroach)
 
 ### Process Spawning with --background Flag
 

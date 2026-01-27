@@ -637,7 +637,7 @@ export const ENGINE_ICON_WIDTHS: Record<string, number> = {
   // Some emojis render narrower (width 1) - these need padding
   mariadb: 1,   // 🦭 seal renders narrow
   sqlite: 1,    // 🪶 feather renders narrow
-  couchdb: 1,   // 🛋 couch renders narrow
+  couchdb: 1,   // 🛋️ couch renders narrow
   yourengine: 2,  // Add your engine - test and adjust if needed
 }
 ```

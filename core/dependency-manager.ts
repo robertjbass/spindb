@@ -79,6 +79,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'cockroach',
   // SurrealDB
   'surreal',
+  // QuestDB
+  'questdb',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

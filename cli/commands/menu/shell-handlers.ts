@@ -222,6 +222,15 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'questdb') {
+    // QuestDB uses PostgreSQL wire protocol, can use psql or Web Console
+    // Note: Don't recommend pgcli for QuestDB - pgcli uses PostgreSQL functions
+    // like unnest() that QuestDB doesn't support, causing autocompletion errors
+    defaultShellName = 'psql'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else if (config.engine === 'cockroachdb') {
     // CockroachDB uses cockroach sql command
     defaultShellName = 'cockroach sql'
@@ -919,6 +928,15 @@ async function launchShell(
       config.database,
     ]
     installHint = 'spindb engines download cockroachdb'
+  } else if (config.engine === 'questdb') {
+    // QuestDB uses PostgreSQL wire protocol on port 8812
+    // Default credentials: admin/quest
+    shellCmd = 'psql'
+    const db = config.database || 'qdb'
+    // QuestDB connection string with explicit password
+    const questDbConnStr = `postgresql://admin:quest@127.0.0.1:${config.port}/${db}`
+    shellArgs = [questDbConnStr]
+    installHint = 'brew install libpq && brew link --force libpq'
   } else {
     shellCmd = 'psql'
     shellArgs = [connectionString]

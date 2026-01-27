@@ -34,7 +34,7 @@ VERBOSE="${VERBOSE:-false}"
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb"
 VALID_UTILITY_TESTS="self-update"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
@@ -119,7 +119,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -136,6 +136,7 @@ declare -A BACKUP_FORMATS=(
   [couchdb]="json"
   [cockroachdb]="sql"
   [surrealdb]="surql"
+  [questdb]="sql"
 )
 
 # Results tracking
@@ -337,6 +338,9 @@ insert_seed_data() {
     surrealdb)
       seed_file="$FIXTURES_DIR/surrealdb/seeds/sample-db.surql"
       ;;
+    questdb)
+      seed_file="$FIXTURES_DIR/questdb/seeds/sample-db.sql"
+      ;;
   esac
 
   # Qdrant uses REST API for seeding, not a file
@@ -445,6 +449,10 @@ insert_seed_data() {
       # SurrealDB uses namespace 'test' and database 'test'
       run_cmd spindb run "$container_name" "$seed_file" -d test
       ;;
+    questdb)
+      # QuestDB uses 'qdb' as the default database
+      run_cmd spindb run "$container_name" "$seed_file" -d qdb
+      ;;
     *)
       run_cmd spindb run "$container_name" "$seed_file" -d testdb
       ;;
@@ -521,6 +529,11 @@ get_data_count() {
       # Parse JSON output: [[{"result":[{"count":5}],...}]]
       echo "$output" | grep -oE '"count":[0-9]+' | grep -oE '[0-9]+' | head -1
       ;;
+    questdb)
+      # QuestDB uses PostgreSQL wire protocol, query via psql
+      output=$(spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" -d "$database" 2>/dev/null)
+      echo "$output" | grep -oE '[0-9]+' | head -1
+      ;;
   esac
 }
 
@@ -571,7 +584,7 @@ get_backup_extension() {
         rdb) echo ".rdb" ;;
       esac
       ;;
-    clickhouse|cockroachdb)
+    clickhouse|cockroachdb|questdb)
       echo ".sql" ;;
     qdrant)
       # Qdrant uses snapshot format for backups
@@ -615,6 +628,10 @@ create_backup() {
     surrealdb)
       run_cmd spindb backup "$container_name" -d test --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    questdb)
+      # QuestDB uses 'qdb' as the default database
+      run_cmd spindb backup "$container_name" -d qdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -641,6 +658,10 @@ create_restore_target() {
     surrealdb)
       # SurrealDB: restore goes to a separate database (restored_db) for verification
       # No explicit target creation needed - SurrealDB creates databases on import
+      return 0
+      ;;
+    questdb)
+      # QuestDB: Tables are created in the same qdb database, no explicit target needed
       return 0
       ;;
     *)
@@ -704,6 +725,9 @@ restore_backup() {
     surrealdb)
       run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
       ;;
+    questdb)
+      run_cmd spindb restore "$container_name" "$backup_file" -d qdb --force
+      ;;
   esac
 }
 
@@ -729,6 +753,9 @@ verify_restored_data() {
       ;;
     surrealdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
+    questdb)
+      actual=$(get_data_count "$engine" "$container_name" "qdb")
       ;;
   esac
 
@@ -760,6 +787,9 @@ verify_restored_data_with_count() {
     surrealdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
+    questdb)
+      actual=$(get_data_count "$engine" "$container_name" "qdb")
+      ;;
   esac
 
   actual=$(echo "$actual" | tr -d '[:space:]')
@@ -788,6 +818,10 @@ cleanup_restore_target() {
     surrealdb)
       # SurrealDB: remove the restored database
       spindb run "$container_name" -c "REMOVE DATABASE restored_db;" -d test &>/dev/null || true
+      ;;
+    questdb)
+      # QuestDB: tables are stored in qdb, cleanup would drop the table but we skip it
+      # since the container will be deleted anyway
       ;;
   esac
 }
@@ -1020,6 +1054,20 @@ run_test() {
   fi
   log_step_ok
 
+  # QuestDB requires psql for connectivity tests (PostgreSQL wire protocol)
+  if [ "$engine" = "questdb" ]; then
+    log_step "Download postgresql 17 for psql (QuestDB dependency)"
+    if ! spindb engines download postgresql 17 &>/dev/null; then
+      log_step_fail
+      failure_reason="PostgreSQL download failed (needed for psql)"
+      record_result "$engine" "$version" "FAILED" "$failure_reason"
+      print_engine_result "$engine" "$version" "FAILED" "$failure_reason"
+      FAILED=$((FAILED+1))
+      return 1
+    fi
+    log_step_ok
+  fi
+
   # ─────────────────────────────────────────────────────────────────────────
   # Phase 2: Container Lifecycle
   # ─────────────────────────────────────────────────────────────────────────
@@ -1116,7 +1164,7 @@ run_test() {
   log_step "Basic query test"
   local query_ok=false
   case $engine in
-    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb)
+    postgresql|mysql|mariadb|sqlite|duckdb|clickhouse|cockroachdb|questdb)
       spindb run "$container_name" -c "SELECT 1;" &>/dev/null && query_ok=true
       ;;
     surrealdb)
@@ -1201,6 +1249,10 @@ run_test() {
     surrealdb)
       # SurrealDB seeds to database "test" (not "testdb")
       initial_count=$(get_data_count "$engine" "$container_name" "test")
+      ;;
+    questdb)
+      # QuestDB uses "qdb" as the default database
+      initial_count=$(get_data_count "$engine" "$container_name" "qdb")
       ;;
     *)
       initial_count=$(get_data_count "$engine" "$container_name" "testdb")
@@ -1383,6 +1435,10 @@ run_test() {
         # SurrealDB seeds to database "test" (not "testdb")
         renamed_count=$(get_data_count "$engine" "$renamed_container" "test")
         ;;
+      questdb)
+        # QuestDB uses "qdb" as the default database
+        renamed_count=$(get_data_count "$engine" "$renamed_container" "qdb")
+        ;;
       *)
         renamed_count=$(get_data_count "$engine" "$renamed_container" "testdb")
         ;;
@@ -1491,6 +1547,10 @@ run_test() {
       surrealdb)
         # SurrealDB seeds to database "test" (not "testdb")
         cloned_count=$(get_data_count "$engine" "$cloned_container" "test")
+        ;;
+      questdb)
+        # QuestDB uses single database 'qdb'
+        cloned_count=$(get_data_count "$engine" "$cloned_container" "qdb")
         ;;
       *)
         cloned_count=$(get_data_count "$engine" "$cloned_container" "testdb")
@@ -1735,7 +1795,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then
