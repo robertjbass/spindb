@@ -22,8 +22,9 @@ import { normalizeVersion } from './version-maps'
 import { Engine, Platform, type Arch, type ProgressCallback } from '../../types'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { chmod, symlink } from 'fs/promises'
+import { chmod, symlink, readdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
+import { moveEntry } from '../../core/fs-error-utils'
 import { paths } from '../../config/paths'
 
 const RELEASES_URL =
@@ -83,6 +84,38 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     } else {
       const shPath = join(binPath, 'questdb.sh')
       return existsSync(shPath)
+    }
+  }
+
+  /**
+   * Override moveExtractedEntries to preserve QuestDB's unique directory structure.
+   * QuestDB has questdb.sh/exe at root level (not in bin/) alongside lib/ and jre/.
+   * The base class would try to move questdb.sh to bin/, which breaks our structure.
+   */
+  protected override async moveExtractedEntries(
+    extractDir: string,
+    binPath: string,
+  ): Promise<void> {
+    const entries = await readdir(extractDir, { withFileTypes: true })
+
+    // Find the questdb directory (e.g., "questdb" or "questdb-9.2.3")
+    const questdbDir = entries.find(
+      (e) =>
+        e.isDirectory() &&
+        (e.name === 'questdb' || e.name.startsWith('questdb-')),
+    )
+
+    const sourceDir = questdbDir ? join(extractDir, questdbDir.name) : extractDir
+    const sourceEntries = questdbDir
+      ? await readdir(sourceDir, { withFileTypes: true })
+      : entries
+
+    // Move all entries as-is, preserving QuestDB's structure:
+    // questdb.sh, questdb.exe, questdb.jar, lib/, jre/
+    for (const entry of sourceEntries) {
+      const sourcePath = join(sourceDir, entry.name)
+      const destPath = join(binPath, entry.name)
+      await moveEntry(sourcePath, destPath)
     }
   }
 
@@ -173,7 +206,7 @@ class QuestDBBinaryManager extends BaseBinaryManager {
   }
 
   /**
-   * Override download to check hostdb availability first and provide a helpful error
+   * Override download to check hostdb availability first, then call postExtract
    */
   override async download(
     version: string,
@@ -195,7 +228,12 @@ class QuestDBBinaryManager extends BaseBinaryManager {
       )
     }
 
-    return super.download(version, platform, arch, onProgress)
+    const binPath = await super.download(version, platform, arch, onProgress)
+
+    // Run post-extraction setup (chmod, java symlink)
+    await this.postExtract(binPath, platform)
+
+    return binPath
   }
 }
 
