@@ -394,12 +394,13 @@ export class ContainerManager {
 
   // Removes a directory with retry logic for Windows EBUSY errors.
   // Windows may hold file handles after process termination.
-  // Windows can hold file locks for 60+ seconds due to:
+  // Windows can hold file locks for 120+ seconds due to:
   // - Antivirus software scanning
   // - Windows Search indexer
-  // - Memory-mapped files (especially SurrealDB's SurrealKV)
+  // - Memory-mapped files (SurrealDB's SurrealKV, QuestDB's columnar storage)
+  // - Java JVM file handle cleanup (QuestDB)
   private async safeRemoveDirectory(dirPath: string): Promise<void> {
-    const maxRetries = isWindows() ? 45 : 1 // 45 retries × 2s = 90 seconds max
+    const maxRetries = isWindows() ? 90 : 1 // 90 retries × 2s = 180 seconds max
     const retryDelay = 2000 // 2 seconds between retries
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -619,15 +620,16 @@ export class ContainerManager {
   // Moves a directory atomically when possible (same filesystem).
   // Falls back to copy+delete for cross-filesystem moves.
   // On Windows, retries on EBUSY errors (file handles held after process termination).
-  // Windows can hold file locks for 60+ seconds due to:
+  // Windows can hold file locks for 120+ seconds due to:
   // - Antivirus software scanning
   // - Windows Search indexer
-  // - Memory-mapped files (especially SurrealDB's SurrealKV)
+  // - Memory-mapped files (SurrealDB's SurrealKV, QuestDB's columnar storage)
+  // - Java JVM file handle cleanup (QuestDB)
   private async atomicMoveDirectory(
     sourcePath: string,
     targetPath: string,
   ): Promise<void> {
-    const maxRetries = isWindows() ? 45 : 1 // 45 retries × 2s = 90 seconds max
+    const maxRetries = isWindows() ? 90 : 1 // 90 retries × 2s = 180 seconds max
     const retryDelay = 2000 // 2 seconds between retries
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
