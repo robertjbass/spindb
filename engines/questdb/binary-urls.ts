@@ -27,8 +27,8 @@ export function getBinaryUrl(
   // Construct platform key (e.g., 'darwin-arm64', 'linux-x64', 'win32-x64')
   const platformKey = `${platform}-${arch}`
 
-  // QuestDB uses .tar.gz for all platforms (including Windows)
-  const ext = 'tar.gz'
+  // Windows uses .zip, Unix uses .tar.gz
+  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
 
   return `${HOSTDB_BASE_URL}/questdb-${fullVersion}/questdb-${fullVersion}-${platformKey}.${ext}`
 }
