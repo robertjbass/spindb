@@ -89,7 +89,7 @@ SpinDB works across **16 database engines** and **5 platform architectures** wit
 | 🛋️ **CouchDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🪳 **CockroachDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🌀 **SurrealDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ⏰ **QuestDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ⏱️ **QuestDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 **78 combinations. One CLI. Zero configuration.**
 
@@ -203,7 +203,7 @@ SpinDB supports **16 database engines** with **multiple versions** for each:
 | 🛋️ **CouchDB** | Document Store | 3 | 5984 | REST API |
 | 🪳 **CockroachDB** | Distributed SQL | 25 | 26257 | SQL (PostgreSQL-compatible) |
 | 🌀 **SurrealDB** | Multi-Model | 2 | 8000 | SurrealQL |
-| ⏰ **QuestDB** | Time-Series SQL | 9 | 8812 (PG), 9000 (HTTP) | SQL |
+| ⏱️ **QuestDB** | Time-Series SQL | 9 | 8812 (PG), 9000 (HTTP) | SQL |
 
 ### Engine Categories
 

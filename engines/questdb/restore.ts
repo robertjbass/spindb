@@ -172,18 +172,16 @@ export async function restoreBackup(
           stderr,
           code: 0,
         })
+      } else if (stderr.includes('already exists')) {
+        // Treat "already exists" as non-fatal (table recreation during restore)
+        resolve({
+          format: format.format,
+          stdout,
+          stderr,
+          code: code ?? 1,
+        })
       } else {
-        // Check for non-fatal warnings vs actual errors
-        if (stderr.includes('already exists') && code === 0) {
-          resolve({
-            format: format.format,
-            stdout,
-            stderr,
-            code: 0,
-          })
-        } else {
-          reject(new Error(`Restore failed: ${stderr || `exit code ${code}`}`))
-        }
+        reject(new Error(`Restore failed: ${stderr || `exit code ${code}`}`))
       }
     })
 

@@ -15,7 +15,7 @@ export const ENGINE_ICONS: Record<string, string> = {
   couchdb: '🛋️',
   cockroachdb: '🪳',
   surrealdb: '🌀',
-  questdb: '⏰️',
+  questdb: '⏱️',
 }
 
 // Visual width of each icon in terminal columns

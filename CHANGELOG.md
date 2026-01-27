@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full cross-platform support (macOS, Linux, Windows)
 
 ### Fixed
-- **QuestDB emoji alignment** - Added variation selector to alarm clock emoji (⏰️) to ensure consistent terminal width rendering in container list
+- **QuestDB emoji** - Use stopwatch emoji (⏱️) with variation selector for consistent terminal width rendering
 
 ## [0.26.2] - 2026-01-26
 

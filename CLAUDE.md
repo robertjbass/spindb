@@ -206,7 +206,7 @@ Engines can be referenced by aliases in CLI commands:
 | CouchDB 🛋️ | 3 | REST API | Document database, HTTP port 5984 |
 | CockroachDB 🪳 | 25 | SQL | Distributed SQL, PostgreSQL-compatible |
 | SurrealDB 🌀 | 2 | SurrealQL | Multi-model, HTTP port 8000 |
-| QuestDB ⏰ | 9 | SQL | Time-series, PG wire protocol port 8812 |
+| QuestDB ⏱️ | 9 | SQL | Time-series, PG wire protocol port 8812 |
 
 ### Binary Sources
 

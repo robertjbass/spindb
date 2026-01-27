@@ -21,7 +21,7 @@ import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, Platform, type Arch, type ProgressCallback } from '../../types'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, dirname, relative } from 'path'
 import { chmod, symlink, readdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import { moveEntry } from '../../core/fs-error-utils'
@@ -97,25 +97,50 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     binPath: string,
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
+    logDebug(`QuestDB extraction: found ${entries.length} entries in extractDir: ${entries.map(e => e.name).join(', ')}`)
 
-    // Find the questdb directory (e.g., "questdb" or "questdb-9.2.3")
+    // Find the questdb directory - could be:
+    // - "questdb" (simple name)
+    // - "questdb-9.2.3" (versioned)
+    // - "questdb-9.2.3-linux-x64" (full archive name)
     const questdbDir = entries.find(
       (e) =>
         e.isDirectory() &&
         (e.name === 'questdb' || e.name.startsWith('questdb-')),
     )
 
-    const sourceDir = questdbDir ? join(extractDir, questdbDir.name) : extractDir
-    const sourceEntries = questdbDir
-      ? await readdir(sourceDir, { withFileTypes: true })
-      : entries
+    let sourceDir = extractDir
+    let sourceEntries = entries
+
+    if (questdbDir) {
+      logDebug(`QuestDB extraction: found questdb directory: ${questdbDir.name}`)
+      sourceDir = join(extractDir, questdbDir.name)
+      sourceEntries = await readdir(sourceDir, { withFileTypes: true })
+      logDebug(`QuestDB extraction: contents of ${questdbDir.name}: ${sourceEntries.map(e => e.name).join(', ')}`)
+    } else {
+      // Check if questdb.sh is directly in extractDir (no subdirectory)
+      const hasQuestdbSh = entries.some(e => e.name === 'questdb.sh' || e.name === 'questdb.exe')
+      if (hasQuestdbSh) {
+        logDebug(`QuestDB extraction: questdb.sh found directly in extractDir (no subdirectory)`)
+      } else {
+        logDebug(`QuestDB extraction: no questdb directory found, using extractDir as-is`)
+      }
+    }
 
     // Move all entries as-is, preserving QuestDB's structure:
     // questdb.sh, questdb.exe, questdb.jar, lib/, jre/
     for (const entry of sourceEntries) {
       const sourcePath = join(sourceDir, entry.name)
       const destPath = join(binPath, entry.name)
+      logDebug(`QuestDB extraction: moving ${entry.name} to ${destPath}`)
       await moveEntry(sourcePath, destPath)
+    }
+
+    // Verify questdb.sh was moved
+    const expectedScript = join(binPath, 'questdb.sh')
+    if (!existsSync(expectedScript)) {
+      const binContents = await readdir(binPath)
+      logDebug(`QuestDB extraction: WARNING - questdb.sh not found at ${expectedScript}. binPath contents: ${binContents.join(', ')}`)
     }
   }
 
@@ -133,12 +158,14 @@ class QuestDBBinaryManager extends BaseBinaryManager {
 
       // Create symlink from 'java' to 'jre/bin/java' at base level
       // questdb.sh checks for $BASE/java to determine if JRE is bundled
+      // Use relative path so symlink works if binPath is moved
       const javaSymlink = join(binPath, 'java')
       const javaTarget = join(binPath, 'jre', 'bin', 'java')
       if (existsSync(javaTarget) && !existsSync(javaSymlink)) {
         try {
-          await symlink(javaTarget, javaSymlink)
-          logDebug(`Created java symlink: ${javaSymlink} -> ${javaTarget}`)
+          const relativeTarget = relative(dirname(javaSymlink), javaTarget)
+          await symlink(relativeTarget, javaSymlink)
+          logDebug(`Created java symlink: ${javaSymlink} -> ${relativeTarget}`)
         } catch (error) {
           logDebug(`Failed to create java symlink: ${error}`)
         }
@@ -174,12 +201,11 @@ class QuestDBBinaryManager extends BaseBinaryManager {
       )
     }
 
-    // QuestDB is a Java application - we verify by checking the startup script exists
-    // and optionally checking for questdb.jar
+    // QuestDB is a Java application - the startup script is the primary verification
+    // The jar may be in different locations depending on version, so we only warn
     const jarPath = join(binPath, 'questdb.jar')
     if (!existsSync(jarPath)) {
-      logDebug(`QuestDB jar not found at ${jarPath}, checking alternate locations`)
-      // Some versions may have it in a different location
+      logDebug(`QuestDB jar not found at ${jarPath} (startup script found, proceeding)`)
     }
 
     logDebug(`QuestDB binaries verified at ${binPath}`)
@@ -191,7 +217,10 @@ class QuestDBBinaryManager extends BaseBinaryManager {
    */
   private async checkHostdbAvailability(): Promise<boolean> {
     try {
-      const response = await fetch(RELEASES_URL)
+      // Use 10-second timeout to avoid hanging on slow/unresponsive networks
+      const response = await fetch(RELEASES_URL, {
+        signal: AbortSignal.timeout(10000),
+      })
       if (!response.ok) return false
 
       const releases = (await response.json()) as {
@@ -200,7 +229,7 @@ class QuestDBBinaryManager extends BaseBinaryManager {
       // releases.json has structure: { databases: { questdb: {...}, ... } }
       return Boolean(releases.databases?.questdb)
     } catch {
-      // Network error - let the download attempt proceed and fail with its own error
+      // Network error or timeout - let the download attempt proceed and fail with its own error
       return true
     }
   }

@@ -18,7 +18,7 @@
 | 🛋️ **CouchDB** | ✅ Complete | hostdb (all platforms) | ~100 MB | Version 3 (document database) |
 | 🪳 **CockroachDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 25 (distributed SQL) |
 | 🌀 **SurrealDB** | ✅ Complete | hostdb (all platforms) | ~50 MB | Version 2 (multi-model database) |
-| ⏰ **QuestDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 9 (time-series SQL database) |
+| ⏱️ **QuestDB** | ✅ Complete | hostdb (all platforms) | ~150 MB | Version 9 (time-series SQL database) |
 
 ---
 
@@ -240,7 +240,7 @@
   - Health check via `surreal isready --endpoint http://localhost:8000`
   - Business Source License (BSL)
 
-### ⏰ QuestDB
+### ⏱️ QuestDB
 
 - **Status:** ✅ Complete
 - **Versions:** 9
@@ -340,7 +340,7 @@ Both engines support multi-version side-by-side installations. Client tools are 
 | 🛋️ | CouchDB |
 | 🪳 | CockroachDB |
 | 🌀 | SurrealDB |
-| ⏰ | QuestDB |
+| ⏱️ | QuestDB |
 
 ---
 
