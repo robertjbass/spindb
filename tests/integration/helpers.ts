@@ -148,12 +148,15 @@ export async function cleanupTestContainers(): Promise<string[]> {
   const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
   let testContainers = containers.filter((c) => testPattern.test(c.name))
 
-  // On Windows, skip CockroachDB and SurrealDB containers during cleanup
-  // These engines use memory-mapped files (RocksDB/SurrealKV) that Windows holds
+  // On Windows, skip CockroachDB, SurrealDB, and QuestDB containers during cleanup
+  // These engines use memory-mapped files (RocksDB/SurrealKV/QuestDB columnar) that Windows holds
   // handles to for extended periods (100+ seconds), causing cleanup to hang
   if (isWindows()) {
     testContainers = testContainers.filter(
-      (c) => c.engine !== Engine.CockroachDB && c.engine !== Engine.SurrealDB,
+      (c) =>
+        c.engine !== Engine.CockroachDB &&
+        c.engine !== Engine.SurrealDB &&
+        c.engine !== Engine.QuestDB,
     )
   }
 
