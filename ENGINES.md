@@ -247,10 +247,11 @@
 - **Data location:** `~/.spindb/containers/questdb/{name}/`
 - **Process:** Server process (`questdb.sh` / `questdb.exe`)
 - **Binary source:** hostdb downloads (all platforms)
-- **CLI:** PostgreSQL wire protocol (`psql` bundled)
+- **CLI:** PostgreSQL wire protocol (uses `psql` from PostgreSQL engine)
 - **Backup format:** `.sql` (SQL dump via psql)
 - **Multi-version support:** Yes (all platforms)
-- **Bundled tools:** `questdb.sh`/`questdb.exe`, `psql`, `pg_dump`, `pg_restore`
+- **Bundled tools:** `questdb.sh`/`questdb.exe` (JRE bundled)
+- **Dependencies:** Requires PostgreSQL engine for `psql` (backup/restore/shell)
 - **Default user:** `admin`
 - **Default password:** `quest`
 - **Default database:** `qdb`
@@ -262,7 +263,7 @@
   - Java-based with bundled JRE (no Java installation required)
   - Startup via `questdb.sh start` (Unix) or `questdb.exe start` (Windows)
   - Single database model (`qdb` - no database creation needed)
-  - Backup/restore uses PostgreSQL tools over wire protocol
+  - Backup/restore uses PostgreSQL tools (`psql`) over wire protocol - **requires PostgreSQL engine**
   - Connection scheme: `postgresql://` (e.g., `postgresql://admin:quest@localhost:8812/qdb`)
   - Health check via HTTP endpoint at `/` (Web Console)
   - Apache-2.0 license

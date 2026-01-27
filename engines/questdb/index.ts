@@ -269,18 +269,27 @@ export class QuestDBEngine extends BaseEngine {
 
     // QuestDB startup command
     // Using 'start' subcommand with configuration options
+    // -t tag: Unique process tag allows multiple QuestDB instances to run simultaneously
+    //         Without this, QuestDB detects other instances by process label and refuses to start
     const args = [
       'start',
       '-d', dataDir,
+      '-t', name, // Unique tag per container (allows multiple instances)
       '-n', // Non-interactive mode
     ]
 
     // Environment variables for QuestDB configuration
     // Note: Don't set QDB_LOG_W_FILE_LOCATION - QuestDB expects rolling log patterns with $
     // Logs are written to dataDir/log/ by default
+    //
+    // Port offsets from base PostgreSQL port:
+    // - HTTP Server: +188 (default 9000)
+    // - HTTP Min Server: +191 (default 9003) - for health checks/metrics
+    // - ILP TCP: +197 (default 9009)
     const env = {
       ...process.env,
       QDB_HTTP_BIND_TO: `0.0.0.0:${httpPort}`,
+      QDB_HTTP_MIN_NET_BIND_TO: `0.0.0.0:${port + 191}`, // HTTP Min Server (health/metrics)
       QDB_PG_NET_BIND_TO: `0.0.0.0:${port}`,
       QDB_LINE_TCP_NET_BIND_TO: `0.0.0.0:${port + 197}`, // ILP port
     }
@@ -301,24 +310,11 @@ export class QuestDBEngine extends BaseEngine {
 
     const proc = spawn(questdbBinary, args, spawnOptions)
 
-    // Write PID file
-    if (proc.pid) {
-      try {
-        await writeFile(pidFile, proc.pid.toString(), 'utf-8')
-        logDebug(`Wrote PID file: ${pidFile} (pid: ${proc.pid})`)
-      } catch (err) {
-        const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
-        logDebug(errMsg)
-        try {
-          process.kill(proc.pid, 'SIGTERM')
-        } catch {
-          // Process may have already exited
-        }
-        throw new Error(errMsg)
-      }
-    }
-
-    // Allow the process to detach
+    // Allow the process to detach immediately
+    // Note: We don't write the PID file here because questdb.sh forks the Java
+    // process and exits. The shell's PID becomes invalid immediately.
+    // QuestDB writes its own PID file to {dataDir}/questdb.pid which we'll
+    // read after waiting for the server to be ready.
     proc.unref()
 
     // Wait for server to be ready
@@ -332,23 +328,35 @@ export class QuestDBEngine extends BaseEngine {
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
-      // Clean up on failure
+      // Clean up on failure - try to find and kill the QuestDB process by port
       try {
-        const pidStr = await readFile(pidFile, 'utf-8').catch(() => null)
-        if (pidStr) {
-          const pid = parseInt(pidStr.trim(), 10)
-          if (!isNaN(pid)) {
-            logDebug(`Cleaning up failed QuestDB process (pid: ${pid})`)
-            await platformService.terminateProcess(pid, true)
-          }
+        const pids = await platformService.findProcessByPort(port)
+        if (pids.length > 0) {
+          logDebug(`Cleaning up failed QuestDB process (pid: ${pids[0]})`)
+          await platformService.terminateProcess(pids[0], true)
         }
-        await unlink(pidFile).catch(() => {})
       } catch {
         // Ignore cleanup errors
       }
       throw new Error(
         `QuestDB failed to start within timeout. Check logs at: ${dataDir}/log/`,
       )
+    }
+
+    // QuestDB is ready - find the actual Java process PID by port
+    // QuestDB doesn't create a PID file in daemon mode, so we find the process by port
+    try {
+      const pids = await platformService.findProcessByPort(port)
+      if (pids.length > 0) {
+        const actualPid = pids[0]
+        await writeFile(pidFile, actualPid.toString(), 'utf-8')
+        logDebug(`Wrote PID file: ${pidFile} (pid: ${actualPid})`)
+      } else {
+        logDebug('Could not find QuestDB process by port - PID file not created')
+      }
+    } catch (err) {
+      logDebug(`Could not find QuestDB PID: ${err instanceof Error ? err.message : String(err)}`)
+      // Don't fail - QuestDB is running, we just can't track its PID
     }
 
     return {
@@ -456,7 +464,8 @@ export class QuestDBEngine extends BaseEngine {
 
     logDebug(`Stopping QuestDB container "${name}" on port ${port}`)
 
-    // Try to find process by port
+    // Try to find process by port first (most reliable)
+    // QuestDB doesn't create a PID file, so port lookup is primary
     let pid: number | null = null
     try {
       const pids = await platformService.findProcessByPort(port)
@@ -464,10 +473,13 @@ export class QuestDBEngine extends BaseEngine {
         pid = pids[0]
       }
     } catch {
-      // Try reading PID file
+      // Fall back to our PID file
       try {
         const pidStr = await readFile(pidFile, 'utf-8')
-        pid = parseInt(pidStr.trim(), 10)
+        const parsedPid = parseInt(pidStr.trim(), 10)
+        if (!isNaN(parsedPid)) {
+          pid = parsedPid
+        }
       } catch {
         // Ignore
       }
@@ -490,7 +502,7 @@ export class QuestDBEngine extends BaseEngine {
       }
     }
 
-    // Cleanup PID file
+    // Cleanup our PID file
     if (existsSync(pidFile)) {
       try {
         await unlink(pidFile)

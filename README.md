@@ -768,6 +768,8 @@ spindb backup mydb --format sql         # SQL dump (only format)
 spindb backup mydb --format sql         # SQL dump (only format)
 ```
 
+> **Note:** QuestDB backup/restore requires the PostgreSQL engine to be installed (for `psql`).
+
 ---
 
 ## Advanced Features

@@ -138,16 +138,19 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Time-series database**: High-performance database optimized for fast ingestion and time-series analytics
 - **Query language**: SQL via PostgreSQL wire protocol
 - **Default port**: 8812 (PostgreSQL wire protocol)
-- **Secondary ports**: HTTP Web Console at PG port + 188 (default 9000), ILP at PG port + 197
+- **Secondary ports**: HTTP Web Console at PG port + 188 (default 9000), HTTP Min at PG port + 191, ILP at PG port + 197
 - **Java-based**: Bundled JRE (no Java installation required)
 - **Startup**: Uses `questdb.sh start` (Unix) or `questdb.exe start` (Windows)
 - **Default credentials**: `admin`/`quest`
 - **Single database**: Uses `qdb` database (no database creation needed)
-- **Backup/restore**: Uses bundled PostgreSQL tools (psql, pg_dump) over wire protocol
+- **Backup/restore**: Requires PostgreSQL's psql binary (from SpinDB's PostgreSQL engine) to connect via wire protocol. **Cross-engine dependency**: Deleting PostgreSQL will break QuestDB backup/restore
 - **Connection scheme**: `postgresql://` (e.g., `postgresql://admin:quest@localhost:8812/qdb`)
 - **Health check**: HTTP GET to Web Console at `/`
 - **Log file**: `questdb.log` in container directory
 - **Config file**: `server.conf` in `conf/` subdirectory
+- **PID handling**: QuestDB's shell script forks and exits immediately - the spawned shell's PID is useless. QuestDB also doesn't create its own PID file. Solution: find the actual Java process by port after startup using `platformService.findProcessByPort()` and write that PID to our PID file. See "Shell Script / JRE Engines" gotcha below.
+- **Multi-port conflicts**: When running multiple QuestDB containers, must configure ALL ports uniquely via environment variables: `QDB_HTTP_BIND_TO`, `QDB_HTTP_MIN_NET_BIND_TO`, `QDB_PG_NET_BIND_TO`, `QDB_LINE_TCP_NET_BIND_TO`. The HTTP Min Server (health/metrics) defaults to port 9003 for all instances and will cause conflicts if not configured.
+- **Backup timestamp column**: QuestDB tables have a designated timestamp column that can have any name. Don't assume `timestamp` - query `tables()` for `designatedTimestamp` column name.
 
 ### Binary Manager Base Classes
 
@@ -508,6 +511,28 @@ Menu navigation patterns:
 
 **Spawning background server processes:**
 When spawning a detached database server process, MUST use `stdio: ['ignore', 'ignore', 'ignore']`. Using `'pipe'` for stdout/stderr keeps file descriptors open that prevent Node.js from exiting, even after calling `proc.unref()`. This causes CLI commands like `spindb start` to hang indefinitely, especially visible in Docker/CI environments where output is captured. Symptoms: command completes successfully (server starts) but never returns to shell. See CockroachDB and SurrealDB engines for correct implementation.
+
+**Shell Script / JRE Engines (QuestDB pattern):**
+Engines that use shell scripts to launch Java (JRE) processes have special PID handling requirements:
+
+1. **Shell script PID is useless**: When you spawn `questdb.sh start`, the shell script forks the Java process and exits immediately. The PID from `proc.pid` is the shell's PID, which becomes invalid within milliseconds.
+
+2. **Engine may not create PID file**: Some Java-based databases don't create their own PID files when started via shell scripts in daemon mode. Don't assume a PID file exists at `{dataDir}/questdb.pid` or similar.
+
+3. **Solution - Find PID by port**: After startup, wait for the server to be ready (health check), then find the actual process by port using `platformService.findProcessByPort(port)`. Write THAT PID to the PID file:
+   ```typescript
+   // After waitForReady() succeeds:
+   const pids = await platformService.findProcessByPort(port)
+   if (pids.length > 0) {
+     await writeFile(pidFile, pids[0].toString(), 'utf-8')
+   }
+   ```
+
+4. **Stop also uses port lookup**: The stop method should find the process by port first (most reliable), then fall back to PID file as secondary lookup.
+
+5. **Multi-port configuration**: JRE engines often use multiple ports (main, HTTP, metrics, etc.). Each port must be uniquely configured via environment variables to avoid conflicts when running multiple containers. QuestDB uses 4 ports: PostgreSQL wire, HTTP Web Console, HTTP Min (metrics), and ILP (InfluxDB Line Protocol).
+
+See `engines/questdb/index.ts` for the reference implementation.
 
 **Commander.js async actions:**
 Use `await program.parseAsync()` instead of `program.parse()` in the CLI entry point. `program.parse()` returns immediately without waiting for async command actions to complete, which can cause race conditions with exit codes.

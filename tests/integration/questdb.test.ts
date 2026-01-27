@@ -250,22 +250,27 @@ describe('QuestDB Integration Tests', () => {
 
   it('should modify data using runScript inline command', async () => {
     console.log(
-      `\n Deleting one row using engine.runScript with inline command...`,
+      `\n Inserting one row using engine.runScript with inline command...`,
     )
 
+    // QuestDB doesn't support DELETE - it's an append-only time-series database
+    // Instead, test INSERT which QuestDB does support
     // Use runScriptSQL which internally calls engine.runScript with --sql option
     await runScriptSQL(
       containerName,
-      "DELETE FROM test_user WHERE id = 5;",
+      "INSERT INTO test_user (id, name, email, created_at) VALUES (6, 'Test User 6', 'test6@example.com', now());",
       DATABASE,
     )
 
+    // Give QuestDB a moment to commit the data - time-series DBs use WAL buffering
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
-    // Should have 4 rows now
-    assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
+    // Should have 6 rows now (5 from seed + 1 from insert)
+    assertEqual(rowCount, EXPECTED_ROW_COUNT + 1, 'Should have one more row')
 
     console.log(
-      `   Row deleted using engine.runScript, now have ${rowCount} rows`,
+      `   Row inserted using engine.runScript, now have ${rowCount} rows`,
     )
   })
 
@@ -320,11 +325,11 @@ describe('QuestDB Integration Tests', () => {
     const ready = await waitForReady(ENGINE, testPorts[2], 90000)
     assert(ready, 'Renamed QuestDB should be ready')
 
-    // Verify row count reflects deletion
+    // Verify row count reflects insertion (5 + 1 = 6)
     const rowCount = await getRowCount(ENGINE, testPorts[2], DATABASE, 'test_user')
     assertEqual(
       rowCount,
-      EXPECTED_ROW_COUNT - 1,
+      EXPECTED_ROW_COUNT + 1,
       'Row count should persist after rename',
     )
 

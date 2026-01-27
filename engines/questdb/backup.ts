@@ -109,8 +109,14 @@ export async function createBackup(
       // Get CREATE TABLE statement
       try {
         const createQuery = `SHOW CREATE TABLE "${table}"`
-        const createResult = await executeQuery(port, database, createQuery)
+        let createResult = await executeQuery(port, database, createQuery)
         if (createResult) {
+          // QuestDB's SHOW CREATE TABLE uses single quotes for table names,
+          // but SQL requires double quotes for identifiers. Fix the quoting.
+          // Also, the output sometimes ends with ; already, avoid double ;;
+          createResult = createResult
+            .replace(/^CREATE TABLE '([^']+)'/, 'CREATE TABLE "$1"')
+            .replace(/;$/, '') // Remove trailing semicolon if present
           lines.push(createResult + ';')
           lines.push('')
         }
@@ -121,8 +127,20 @@ export async function createBackup(
 
       // Export table data
       try {
-        // For time-series tables, order by timestamp
-        const dataQuery = `SELECT * FROM "${table}" ORDER BY timestamp`
+        // Get the designated timestamp column (if any) for ordering
+        // QuestDB tables have a designated timestamp column that can have any name
+        let orderClause = ''
+        try {
+          const tsQuery = `SELECT designatedTimestamp FROM tables() WHERE table_name = '${table}'`
+          const tsResult = await executeQuery(port, database, tsQuery)
+          if (tsResult && tsResult.trim()) {
+            orderClause = ` ORDER BY "${tsResult.trim()}"`
+          }
+        } catch {
+          // No designated timestamp or query failed - export without ordering
+        }
+
+        const dataQuery = `SELECT * FROM "${table}"${orderClause}`
         const dataResult = await executeQuery(port, database, dataQuery)
 
         if (dataResult) {
@@ -135,6 +153,10 @@ export async function createBackup(
             // Parse the pipe-delimited output and convert to INSERT
             const values = row.split('|').map((v) => {
               if (v === '' || v === 'null') return 'NULL'
+              // Check if value looks like a number (int or float)
+              if (/^-?\d+(\.\d+)?$/.test(v)) {
+                return v // Don't quote numbers
+              }
               // Escape single quotes and wrap strings
               return `'${v.replace(/'/g, "''")}'`
             })

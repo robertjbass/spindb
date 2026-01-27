@@ -848,6 +848,31 @@ async function deleteEngine(
       console.log()
     }
 
+    // Check for cross-engine dependencies (QuestDB depends on PostgreSQL's psql)
+    if (engineName === Engine.PostgreSQL) {
+      const questdbContainers = containers.filter(
+        (c) => c.engine === Engine.QuestDB,
+      )
+      if (questdbContainers.length > 0) {
+        console.log(
+          uiWarning(
+            `${questdbContainers.length} QuestDB container(s) depend on PostgreSQL's psql for backup/restore:`,
+          ),
+        )
+        console.log(
+          chalk.gray(
+            `  ${questdbContainers.map((c) => c.name).join(', ')}`,
+          ),
+        )
+        console.log(
+          chalk.gray(
+            '  Deleting PostgreSQL will break backup/restore for these containers.',
+          ),
+        )
+        console.log()
+      }
+    }
+
     const confirmed = await promptConfirm(
       `Delete ${engineName} ${engineVersion}? This cannot be undone.`,
       false,

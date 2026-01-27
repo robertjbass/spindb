@@ -604,6 +604,24 @@ For engines without CLI tools (Qdrant, Meilisearch, CouchDB):
 - Tests use `curl` instead of CLI commands
 - Create `README.md` in fixtures instead of seed file
 
+### JRE / Shell Script Engines (QuestDB Pattern)
+
+For Java-based engines that use shell scripts to launch (like QuestDB):
+
+1. **Shell script PID is useless**: The shell forks Java and exits immediately. `proc.pid` is invalid within milliseconds.
+
+2. **Engine may not create PID file**: Don't assume the database creates `{dataDir}/engine.pid`.
+
+3. **Find PID by port after startup**: Wait for the server to be ready, then use `platformService.findProcessByPort(port)` to find the actual Java process. Write that PID to your PID file.
+
+4. **Multi-port conflicts**: JRE engines often use multiple ports (main, HTTP, metrics, etc.). ALL ports must be configured uniquely via environment variables. Example: QuestDB uses 4 ports that default to fixed values - without configuration, running multiple containers causes "could not bind socket" errors.
+
+5. **Stop uses port lookup too**: The stop method should find the process by port first, then fall back to PID file.
+
+6. **Cross-engine dependencies**: Some engines depend on binaries from other engines. For example, QuestDB uses PostgreSQL wire protocol and requires `psql` from the PostgreSQL engine for backup/restore/shell. SpinDB warns users when deleting PostgreSQL if QuestDB containers exist.
+
+See `engines/questdb/index.ts` and FEATURE.md "JRE / Shell Script Engines" section for details.
+
 ---
 
 ## Quick Reference: Files to Modify
