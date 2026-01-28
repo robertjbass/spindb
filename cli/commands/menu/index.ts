@@ -56,23 +56,23 @@ async function showMainMenu(): Promise<void> {
     ...(hasContainers
       ? [
           { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
-          { name: `${chalk.green('+')} Create new container`, value: 'create' },
+          { name: `${chalk.green('+')} Create container`, value: 'create' },
         ]
       : [
-          { name: `${chalk.green('+')} Create new container`, value: 'create' },
+          { name: `${chalk.green('+')} Create container`, value: 'create' },
           { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
         ]),
     {
       name: canStart
-        ? `${chalk.green('▶')} Start a container`
-        : chalk.gray('▶ Start a container'),
+        ? `${chalk.green('▶')} Start container`
+        : chalk.gray('▶ Start container'),
       value: 'start',
       disabled: canStart ? false : 'No stopped containers',
     },
     {
       name: canStop
-        ? `${chalk.red('■')} Stop a container`
-        : chalk.gray('■ Stop a container'),
+        ? `${chalk.red('■')} Stop container`
+        : chalk.gray('■ Stop container'),
       value: 'stop',
       disabled: canStop ? false : 'No running containers',
     },
@@ -92,22 +92,22 @@ async function showMainMenu(): Promise<void> {
     },
     {
       name: canClone
-        ? `${chalk.cyan('◇')} Clone a container`
-        : chalk.gray('◇ Clone a container'),
+        ? `${chalk.cyan('◇')} Clone container`
+        : chalk.gray('◇ Clone container'),
       value: 'clone',
       disabled: canClone ? false : 'No containers',
     },
     new inquirer.Separator(),
     {
       name: hasEngines
-        ? `${chalk.yellow('⚙')} Manage installed engines`
-        : chalk.gray('⚙ Manage installed engines'),
+        ? `${chalk.yellow('⚙')} Manage engines`
+        : chalk.gray('⚙ Manage engines'),
       value: 'engines',
       disabled: hasEngines ? false : 'No engines installed',
     },
-    { name: `${chalk.red.bold('+')} System health check`, value: 'doctor' },
+    { name: `${chalk.red.bold('+')} Health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
-    { name: `${chalk.gray('⏻')} Exit ${chalk.gray('(ctrl+c)')}`, value: 'exit' },
+    { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
   ]
 
   const { action } = await escapeablePrompt<{ action: string }>([
