@@ -5,7 +5,12 @@ import { join, dirname, basename } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import { createSpinner } from '../../ui/spinner'
 import { header, uiError, uiWarning, uiInfo, formatBytes } from '../../ui/theme'
-import { promptConfirm, escapeablePrompt } from '../../ui/prompts'
+import {
+  promptConfirm,
+  escapeablePrompt,
+  filterableListPrompt,
+  type FilterableChoice,
+} from '../../ui/prompts'
 import { getEngineIcon, getEngineIconPadded } from '../../constants'
 import {
   getInstalledEngines,
@@ -93,7 +98,7 @@ export async function handleEngines(): Promise<void> {
   const COL_SIZE = 10
 
   // Build selectable choices with formatted display
-  const choices: MenuChoice[] = allEnginesSorted.map((e) => {
+  const engineChoices: FilterableChoice[] = allEnginesSorted.map((e) => {
     // Use getEngineIconPadded to handle emoji width inconsistencies
     // Icons like 🦭 and 🪶 render at width 1, others at width 2
     const icon = getEngineIconPadded(e.engine)
@@ -114,25 +119,26 @@ export async function handleEngines(): Promise<void> {
     }
   })
 
-  choices.push(new inquirer.Separator(chalk.gray('─'.repeat(52))))
-  choices.push(
+  // Build full choice list with footer
+  const allChoices: (FilterableChoice | inquirer.Separator)[] = [
+    ...engineChoices,
+    new inquirer.Separator(chalk.gray('─'.repeat(52))),
     new inquirer.Separator(
-      chalk.gray(`Total: ${engines.length} engine(s), ${formatBytes(totalSize)}`),
+      `Total: ${engines.length} engine(s), ${formatBytes(totalSize)} ${chalk.gray('— type to filter')}`,
     ),
-  )
-  choices.push(new inquirer.Separator())
-  choices.push({ name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' })
-  choices.push(new inquirer.Separator()) // Separator for when list wraps around
+    new inquirer.Separator(),
+    { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+  ]
 
-  const { action } = await escapeablePrompt<{ action: string }>([
+  const action = await filterableListPrompt(
+    allChoices,
+    'Select an engine:',
     {
-      type: 'list',
-      name: 'action',
-      message: 'Select an engine:',
-      choices,
+      filterableCount: engineChoices.length,
       pageSize: 18,
+      emptyText: 'No engines match filter',
     },
-  ])
+  )
 
   // Back returns to main menu (escape is handled globally)
   if (action === 'back') {

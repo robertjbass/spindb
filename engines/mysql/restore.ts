@@ -199,6 +199,141 @@ async function getMysqlClientPath(binPath?: string): Promise<string> {
   )
 }
 
+// Compatibility SQL to handle large row sizes and other edge cases
+// - innodb_default_row_format=DYNAMIC: Store long columns off-page to avoid row size limits
+// - innodb_strict_mode=OFF: Allow tables that might exceed row size limits in strict mode
+// - foreign_key_checks=0: Defer FK checks until after all tables are created
+// - unique_checks=0: Speed up bulk inserts
+const COMPAT_INIT_SQL = [
+  "SET GLOBAL innodb_default_row_format='dynamic';",
+  'SET SESSION innodb_strict_mode=OFF;',
+  "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';",
+  'SET SESSION foreign_key_checks=0;',
+  'SET SESSION unique_checks=0;',
+  '',
+].join('\n')
+
+/**
+ * Internal restore function with optional compatibility mode
+ */
+function doRestore(
+  backupPath: string,
+  mysql: string,
+  port: number,
+  database: string,
+  user: string,
+  format: BackupFormat,
+  withCompatSettings: boolean,
+): Promise<RestoreResult & { rawStderr?: string }> {
+  const spawnOptions: SpawnOptions = {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  }
+
+  return new Promise((resolve, reject) => {
+    const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
+
+    logDebug('Restoring backup with mysql', {
+      mysql,
+      args,
+      withCompatSettings,
+    })
+
+    const proc = spawn(mysql, args, spawnOptions)
+
+    // Track whether we've already settled the promise to avoid duplicate rejections
+    let settled = false
+    const fileStream = createReadStream(backupPath)
+
+    const rejectOnce = (err: Error) => {
+      if (settled) return
+      settled = true
+      fileStream.destroy()
+      proc.stdin?.end()
+      reject(err)
+    }
+
+    // Handle file read errors
+    fileStream.on('error', (err) => {
+      rejectOnce(new Error(`Failed to read backup file: ${err.message}`))
+    })
+
+    if (!proc.stdin) {
+      rejectOnce(
+        new Error(
+          'MySQL process stdin is not available, cannot restore backup',
+        ),
+      )
+      return
+    }
+
+    // Handle EPIPE errors on stdin - this happens when mysql exits due to SQL errors
+    // while we're still piping data. The actual error will be in stderr.
+    proc.stdin.on('error', (err) => {
+      // EPIPE is expected when the process exits early - don't reject here,
+      // let the 'close' event handle it with the actual error from stderr
+      if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
+        rejectOnce(new Error(`Failed to write to MySQL process: ${err.message}`))
+      }
+    })
+
+    // Prepend compatibility settings if requested
+    if (withCompatSettings) {
+      proc.stdin.write(COMPAT_INIT_SQL)
+      logDebug('Prepended compatibility settings to restore')
+    }
+
+    if (format.format === 'compressed') {
+      // Decompress gzipped file before piping to mysql
+      const gunzip = createGunzip()
+      fileStream.pipe(gunzip).pipe(proc.stdin)
+
+      // Handle gunzip errors
+      gunzip.on('error', (err) => {
+        fileStream.unpipe(gunzip)
+        gunzip.unpipe(proc.stdin!)
+        rejectOnce(new Error(`Failed to decompress backup file: ${err.message}`))
+      })
+    } else {
+      fileStream.pipe(proc.stdin)
+    }
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (settled) return
+      settled = true
+
+      resolve({
+        format: format.format,
+        stdout,
+        stderr,
+        rawStderr: stderr,
+        code: code ?? undefined,
+      })
+    })
+
+    proc.on('error', (err) => {
+      rejectOnce(err)
+    })
+  })
+}
+
+/**
+ * Restore a MySQL backup to a database
+ *
+ * CLI equivalent: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
+ *
+ * Uses retry logic: if restore fails with ERROR 1118 (row size too large),
+ * automatically retries with compatibility settings that enable DYNAMIC row format.
+ */
 export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
@@ -233,77 +368,42 @@ export async function restoreBackup(
   logDebug('Detected backup format', { format: format.format })
   assertCompatibleFormat(format)
 
-  // Restore using mysql client
-  // CLI: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
-  // For compressed files: gunzip -c {file} | mysql ...
+  // First attempt: try without compatibility settings
+  const result = await doRestore(backupPath, mysql, port, database, user, format, false)
 
-  // Use plain spawn (no shell) so the executable path can be quoted when
-  // it contains spaces (e.g., 'C:\Program Files\...'). Using shell:true
-  // previously caused quoting issues on Windows.
-  const spawnOptions: SpawnOptions = {
-    stdio: ['pipe', 'pipe', 'pipe'],
+  // Check if restore succeeded
+  if (result.code === 0) {
+    return result
   }
 
-  return new Promise((resolve, reject) => {
-    const args = ['-h', '127.0.0.1', '-P', String(port), '-u', user, database]
+  // Check if it failed with row size error (ERROR 1118)
+  // This happens when tables have too many VARCHAR columns for the default row format
+  const isRowSizeError = result.rawStderr?.includes('ERROR 1118') ||
+    result.rawStderr?.includes('Row size too large')
 
-    logDebug('Restoring backup with mysql', { mysql, args, spawnOptions })
+  if (isRowSizeError) {
+    logDebug('Detected row size error, retrying with compatibility settings')
 
-    const proc = spawn(mysql, args, spawnOptions)
+    // Retry with compatibility settings
+    const retryResult = await doRestore(backupPath, mysql, port, database, user, format, true)
 
-    // Pipe backup file to stdin, decompressing if necessary
-    const fileStream = createReadStream(backupPath)
-
-    if (format.format === 'compressed') {
-      // Decompress gzipped file before piping to mysql
-      const gunzip = createGunzip()
-      if (!proc.stdin) {
-        reject(
-          new Error(
-            'MySQL process stdin is not available, cannot restore backup',
-          ),
-        )
-        return
+    if (retryResult.code === 0) {
+      return {
+        ...retryResult,
+        stdout: retryResult.stdout || 'Restore succeeded with compatibility mode (DYNAMIC row format)',
       }
-      fileStream.pipe(gunzip).pipe(proc.stdin)
-
-      // Handle gunzip errors
-      gunzip.on('error', (err) => {
-        reject(new Error(`Failed to decompress backup file: ${err.message}`))
-      })
-    } else {
-      if (!proc.stdin) {
-        reject(
-          new Error(
-            'MySQL process stdin is not available, cannot restore backup',
-          ),
-        )
-        return
-      }
-      fileStream.pipe(proc.stdin)
     }
 
-    let stdout = ''
-    let stderr = ''
+    // Still failed - report the retry error
+    const errorMatch = retryResult.rawStderr?.match(/^ERROR\s+\d+.*$/m)
+    const errorMessage = errorMatch ? errorMatch[0] : retryResult.rawStderr?.trim() || 'Unknown error'
+    throw new Error(`MySQL restore failed: ${errorMessage}`)
+  }
 
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    proc.on('close', (code) => {
-      resolve({
-        format: format.format,
-        stdout,
-        stderr,
-        code: code ?? undefined,
-      })
-    })
-
-    proc.on('error', reject)
-  })
+  // Failed with a different error - report it
+  const errorMatch = result.rawStderr?.match(/^ERROR\s+\d+.*$/m)
+  const errorMessage = errorMatch ? errorMatch[0] : result.rawStderr?.trim() || 'Unknown error'
+  throw new Error(`MySQL restore failed: ${errorMessage}`)
 }
 
 /**

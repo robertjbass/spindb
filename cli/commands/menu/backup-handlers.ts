@@ -442,7 +442,7 @@ export async function handleRestore(): Promise<void> {
     ]
 
     restoreChoices.push({
-      name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+      name: `${chalk.cyan('↗')} Connection string ${chalk.gray('(pull from remote database)')}`,
       value: 'connection',
     })
 
@@ -1118,7 +1118,7 @@ export async function handleRestoreForContainer(
       value: 'file',
     },
     {
-      name: `${chalk.cyan('🔗')} Connection string (pull from remote database)`,
+      name: `${chalk.cyan('↗')} Connection string ${chalk.gray('(pull from remote database)')}`,
       value: 'connection',
     },
   ]

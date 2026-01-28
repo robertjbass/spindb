@@ -31,6 +31,8 @@ import {
   promptDatabaseName,
   promptFileDatabasePath,
   escapeablePrompt,
+  filterableListPrompt,
+  type FilterableChoice,
   BACK_VALUE,
   MAIN_MENU_VALUE,
 } from '../../ui/prompts'
@@ -468,7 +470,7 @@ export async function handleList(
   const COL_SIZE = 9
 
   // Build selectable choices with formatted display (like engines menu)
-  const containerChoices: MenuChoice[] = containers.map((c, i) => {
+  const containerChoices: FilterableChoice[] = containers.map((c, i) => {
     const size = sizes[i]
     const isFileBased = isFileBasedEngine(c.engine)
 
@@ -532,26 +534,27 @@ export async function handleList(
     )
   }
 
-  // Add separator with summary and actions
-  containerChoices.push(new inquirer.Separator(chalk.gray('─'.repeat(60))))
-  containerChoices.push(
+  // Build the full choice list with footer items
+  const allChoices: (FilterableChoice | inquirer.Separator)[] = [
+    ...containerChoices,
+    new inquirer.Separator(chalk.gray('─'.repeat(60))),
     new inquirer.Separator(
-      chalk.gray(`${containers.length} container(s): ${parts.join('; ')}`),
+      `${containers.length} container(s): ${parts.join('; ')} ${chalk.gray('— type to filter')}`,
     ),
-  )
-  containerChoices.push(new inquirer.Separator())
-  containerChoices.push({ name: `${chalk.green('+')} Create new`, value: 'create' })
-  containerChoices.push({ name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' })
+    new inquirer.Separator(),
+    { name: `${chalk.green('+')} Create new`, value: 'create' },
+    { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+  ]
 
-  const { selectedContainer } = await escapeablePrompt<{ selectedContainer: string }>([
+  const selectedContainer = await filterableListPrompt(
+    allChoices,
+    'Select a container:',
     {
-      type: 'list',
-      name: 'selectedContainer',
-      message: 'Select a container:',
-      choices: containerChoices,
+      filterableCount: containerChoices.length,
       pageSize: 15,
+      emptyText: 'No containers match filter',
     },
-  ])
+  )
 
   // Back returns to main menu (escape is handled globally)
   if (selectedContainer === 'back') {
@@ -630,19 +633,21 @@ export async function showContainerSubmenu(
     }
   }
 
+  // Helper for disabled menu items - includes grayed hint in the name
+  const disabledItem = (icon: string, label: string, hint: string) => ({
+    name: chalk.gray(`${icon} ${label}`) + chalk.gray(` (${hint})`),
+    value: '_disabled_',
+    disabled: true, // true hides inquirer's default reason text
+  })
+
   // Open shell - always enabled for file-based DBs (if file exists), server databases need to be running
   const canOpenShell = isFileBasedDB ? existsSync(config.database) : isRunning
-  actionChoices.push({
-    name: canOpenShell
-      ? `${chalk.blue('⌘')} Open shell`
-      : chalk.gray('⌘ Open shell'),
-    value: 'shell',
-    disabled: canOpenShell
-      ? false
-      : isFileBasedDB
-        ? 'Database file missing'
-        : 'Start container first',
-  })
+  const shellHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  actionChoices.push(
+    canOpenShell
+      ? { name: `${chalk.blue('>')} Open shell`, value: 'shell' }
+      : disabledItem('>', 'Open shell', shellHint),
+  )
 
   // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
   // REST API engines (Qdrant, Meilisearch, CouchDB) don't support script files - hide the option entirely
@@ -657,38 +662,29 @@ export async function showContainerSubmenu(
           : config.engine === Engine.SurrealDB
             ? 'Run SurrealQL file'
             : 'Run SQL file'
-    actionChoices.push({
-      name: canRunSql
-        ? `${chalk.yellow('▷')} ${runScriptLabel}`
-        : chalk.gray(`▷ ${runScriptLabel}`),
-      value: 'run-sql',
-      disabled: canRunSql
-        ? false
-        : isFileBasedDB
-          ? 'Database file missing'
-          : 'Start container first',
-    })
+    const runSqlHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+    actionChoices.push(
+      canRunSql
+        ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
+        : disabledItem('▷', runScriptLabel, runSqlHint),
+    )
   }
 
   // Edit container - file-based DBs can always edit (no running state), server databases must be stopped
   const canEdit = isFileBasedDB ? true : !isRunning
-  actionChoices.push({
-    name: canEdit
-      ? `${chalk.white('⚙')} Edit container`
-      : chalk.gray('⚙ Edit container'),
-    value: 'edit',
-    disabled: canEdit ? false : 'Stop container first',
-  })
+  actionChoices.push(
+    canEdit
+      ? { name: `${chalk.yellow('⚙')} Edit container`, value: 'edit' }
+      : disabledItem('⚙', 'Edit container', 'Stop container first'),
+  )
 
   // Clone container - file-based DBs can always clone, server databases must be stopped
   const canClone = isFileBasedDB ? true : !isRunning
-  actionChoices.push({
-    name: canClone
-      ? `${chalk.cyan('⧉')} Clone container`
-      : chalk.gray('⧉ Clone container'),
-    value: 'clone',
-    disabled: canClone ? false : 'Stop container first',
-  })
+  actionChoices.push(
+    canClone
+      ? { name: `${chalk.cyan('◇')} Clone container`, value: 'clone' }
+      : disabledItem('◇', 'Clone container', 'Stop container first'),
+  )
 
   actionChoices.push({
     name: `${chalk.magenta('⊕')} Copy connection string`,
@@ -697,31 +693,21 @@ export async function showContainerSubmenu(
 
   // Backup - requires running for server databases, file exists for file-based DBs
   const canBackup = isFileBasedDB ? existsSync(config.database) : isRunning
-  actionChoices.push({
-    name: canBackup
-      ? `${chalk.magenta('↓')} Backup database`
-      : chalk.gray('↓ Backup database'),
-    value: 'backup',
-    disabled: canBackup
-      ? false
-      : isFileBasedDB
-        ? 'Database file missing'
-        : 'Start container first',
-  })
+  const backupHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  actionChoices.push(
+    canBackup
+      ? { name: `${chalk.magenta('↓')} Backup database`, value: 'backup' }
+      : disabledItem('↓', 'Backup database', backupHint),
+  )
 
   // Restore - requires running for server databases, file exists for file-based DBs
   const canRestore = isFileBasedDB ? existsSync(config.database) : isRunning
-  actionChoices.push({
-    name: canRestore
-      ? `${chalk.magenta('↑')} Restore from backup`
-      : chalk.gray('↑ Restore from backup'),
-    value: 'restore',
-    disabled: canRestore
-      ? false
-      : isFileBasedDB
-        ? 'Database file missing'
-        : 'Start container first',
-  })
+  const restoreHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  actionChoices.push(
+    canRestore
+      ? { name: `${chalk.magenta('↑')} Restore from backup`, value: 'restore' }
+      : disabledItem('↑', 'Restore from backup', restoreHint),
+  )
 
   // View logs - not available for file-based DBs (no log file)
   if (!isFileBasedDB) {
@@ -741,13 +727,11 @@ export async function showContainerSubmenu(
 
   // Delete container - file-based DBs can always delete, server databases must be stopped
   const canDelete = isFileBasedDB ? true : !isRunning
-  actionChoices.push({
-    name: canDelete
-      ? `${chalk.red('✕')} Delete container`
-      : chalk.gray('✕ Delete container'),
-    value: 'delete',
-    disabled: canDelete ? false : 'Stop container first',
-  })
+  actionChoices.push(
+    canDelete
+      ? { name: `${chalk.red('✕')} Delete container`, value: 'delete' }
+      : disabledItem('✕', 'Delete container', 'Stop container first'),
+  )
 
   actionChoices.push(
     new inquirer.Separator(),

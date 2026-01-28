@@ -972,6 +972,11 @@ async function launchShell(
       settle()
     })
 
-    shellProcess.on('close', settle)
+    shellProcess.on('close', () => {
+      // Clear terminal to remove any residual graphics from shells (e.g., usql logo)
+      // Use aggressive ANSI sequences: clear screen + scrollback + reset cursor
+      process.stdout.write('\x1b[2J\x1b[3J\x1b[H')
+      settle()
+    })
   })
 }

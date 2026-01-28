@@ -1,5 +1,9 @@
 import inquirer from 'inquirer'
+import inquirerAutocomplete from 'inquirer-autocomplete-prompt'
 import chalk from 'chalk'
+
+// Register the autocomplete prompt type
+inquirer.registerPrompt('autocomplete', inquirerAutocomplete)
 import ora from 'ora'
 import { existsSync, statSync } from 'fs'
 import { resolve, join } from 'path'
@@ -151,6 +155,113 @@ export async function escapeablePrompt<T extends Record<string, unknown>>(
     // Race the prompt against the escape promise
     const result = (await Promise.race([p, escapePromise])) as T
     return result
+  } finally {
+    escapeReject = null
+    currentPromptUi = null
+  }
+}
+
+/**
+ * Type for autocomplete choices - must have name and value
+ */
+export type FilterableChoice = {
+  name: string
+  value: string
+  short?: string
+}
+
+/**
+ * Filterable list prompt using inquirer-autocomplete-prompt.
+ * Allows typing to filter items while still using arrow keys to navigate.
+ *
+ * @param choices - Array of choices (items to filter + navigation items)
+ * @param message - Prompt message
+ * @param options.filterableCount - Number of items at the start that should be filterable
+ *                                  (remaining items like Back/separators are always shown)
+ * @param options.pageSize - Number of items to show at once
+ * @param options.emptyText - Text to show when filter matches nothing
+ */
+export async function filterableListPrompt(
+  choices: (FilterableChoice | inquirer.Separator)[],
+  message: string,
+  options: {
+    filterableCount: number
+    pageSize?: number
+    emptyText?: string
+  },
+): Promise<string> {
+  // Split choices into filterable items and static footer (separators, back buttons, etc.)
+  const filterableItems = choices.slice(0, options.filterableCount) as FilterableChoice[]
+  const footerItems = choices.slice(options.filterableCount)
+
+  // Source function for autocomplete - filters items based on input
+  async function source(
+    _answers: Record<string, unknown>,
+    input: string | undefined,
+  ): Promise<(FilterableChoice | inquirer.Separator)[]> {
+    const searchTerm = (input || '').toLowerCase().trim()
+
+    if (!searchTerm) {
+      // No filter - show all items
+      return [...filterableItems, ...footerItems]
+    }
+
+    // Filter items by matching search term against the display name
+    // Strip ANSI codes for matching but keep them for display
+    // eslint-disable-next-line no-control-regex
+    const ansiPattern = /\x1b\[[0-9;]*m/g
+    const filtered = filterableItems.filter((item) => {
+      // Strip ANSI escape codes for matching
+      const plainName = item.name.replace(ansiPattern, '')
+      return plainName.toLowerCase().includes(searchTerm)
+    })
+
+    if (filtered.length === 0) {
+      // No matches - show empty message and footer
+      return [
+        new inquirer.Separator(
+          chalk.gray(options.emptyText || `No matches for "${input}"`),
+        ),
+        ...footerItems,
+      ]
+    }
+
+    return [...filtered, ...footerItems]
+  }
+
+  // Create escape promise for escape key handling
+  const escapePromise = new Promise<never>((_, reject) => {
+    escapeReject = reject
+  })
+
+  try {
+    const p = inquirer.prompt([
+      {
+        type: 'autocomplete',
+        name: 'selection',
+        message,
+        source,
+        pageSize: options.pageSize || 15,
+        emptyText: options.emptyText || 'No matches',
+        suggestOnly: false,
+      },
+    ])
+
+    // Register the prompt UI for escape handling
+    const promptWithUi = p as unknown as Record<string, unknown>
+    if (
+      promptWithUi.ui &&
+      typeof promptWithUi.ui === 'object' &&
+      promptWithUi.ui !== null &&
+      typeof (promptWithUi.ui as Record<string, unknown>).close === 'function'
+    ) {
+      currentPromptUi = promptWithUi.ui as { close: () => void }
+    } else {
+      currentPromptUi = null
+    }
+
+    const result = (await Promise.race([p, escapePromise])) as { selection: string }
+    return result.selection
   } finally {
     escapeReject = null
     currentPromptUi = null
