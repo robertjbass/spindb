@@ -11,7 +11,7 @@ import {
   filterableListPrompt,
   type FilterableChoice,
 } from '../../ui/prompts'
-import { getEngineIcon, getEngineIconPadded } from '../../constants'
+import { getEngineIcon } from '../../constants'
 import {
   getInstalledEngines,
   type InstalledPostgresEngine,
@@ -62,12 +62,18 @@ export async function handleEngines(): Promise<void> {
     ...engines.filter(
       (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
     ),
-    ...engines.filter((e): e is InstalledMariadbEngine => e.engine === 'mariadb'),
+    ...engines.filter(
+      (e): e is InstalledMariadbEngine => e.engine === 'mariadb',
+    ),
     ...engines.filter((e): e is InstalledMysqlEngine => e.engine === 'mysql'),
     ...engines.filter((e): e is InstalledSqliteEngine => e.engine === 'sqlite'),
     ...engines.filter((e): e is InstalledDuckDBEngine => e.engine === 'duckdb'),
-    ...engines.filter((e): e is InstalledMongodbEngine => e.engine === 'mongodb'),
-    ...engines.filter((e): e is InstalledFerretDBEngine => e.engine === 'ferretdb'),
+    ...engines.filter(
+      (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
+    ),
+    ...engines.filter(
+      (e): e is InstalledFerretDBEngine => e.engine === 'ferretdb',
+    ),
     ...engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
     ...engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),
     ...engines.filter(
@@ -77,14 +83,18 @@ export async function handleEngines(): Promise<void> {
     ...engines.filter(
       (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
     ),
-    ...engines.filter((e): e is InstalledCouchDBEngine => e.engine === 'couchdb'),
+    ...engines.filter(
+      (e): e is InstalledCouchDBEngine => e.engine === 'couchdb',
+    ),
     ...engines.filter(
       (e): e is InstalledCockroachDBEngine => e.engine === 'cockroachdb',
     ),
     ...engines.filter(
       (e): e is InstalledSurrealDBEngine => e.engine === 'surrealdb',
     ),
-    ...engines.filter((e): e is InstalledQuestDBEngine => e.engine === 'questdb'),
+    ...engines.filter(
+      (e): e is InstalledQuestDBEngine => e.engine === 'questdb',
+    ),
   ]
 
   // Calculate total size
@@ -99,9 +109,7 @@ export async function handleEngines(): Promise<void> {
 
   // Build selectable choices with formatted display
   const engineChoices: FilterableChoice[] = allEnginesSorted.map((e) => {
-    // Use getEngineIconPadded to handle emoji width inconsistencies
-    // Icons like 🦭 and 🪶 render at width 1, others at width 2
-    const icon = getEngineIconPadded(e.engine)
+    const icon = getEngineIcon(e.engine)
     const engineName = e.engine.padEnd(COL_ENGINE_NAME)
     const engineDisplay = `${icon}${engineName}`
     const versionDisplay = e.version.padEnd(COL_VERSION)
@@ -194,7 +202,10 @@ async function showEngineSubmenu(
     },
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back`, value: 'back' },
-    { name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`, value: 'main' },
+    {
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
+      value: 'main',
+    },
   ]
 
   const { action } = await escapeablePrompt<{ action: string }>([

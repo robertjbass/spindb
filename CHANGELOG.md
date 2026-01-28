@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.4] - 2026-01-28
+
+### Changed
+- **Removed deprecated function** - Removed `getEngineIconPadded()` alias; use `getEngineIcon()` directly
+
 ## [0.27.3] - 2026-01-28
 
 ### Fixed

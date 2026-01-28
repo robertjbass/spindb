@@ -19,8 +19,12 @@ import {
   installEngineDependencies,
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
-import { getEngineIcon, getEngineIconPadded } from '../constants'
-import { type ContainerConfig, type Engine, type BackupFormatType } from '../../types'
+import { getEngineIcon } from '../constants'
+import {
+  type ContainerConfig,
+  type Engine,
+  type BackupFormatType,
+} from '../../types'
 
 // Navigation sentinel values for menu navigation
 export const BACK_VALUE = '__back__'
@@ -109,7 +113,6 @@ export function checkAndResetEscape(): boolean {
   escapeTriggered = false
   return wasTriggered
 }
-
 
 /**
  * Wrapper around inquirer.prompt that registers/unregisters with global escape handler.
@@ -332,7 +335,7 @@ export async function promptEngine(options?: {
     | inquirer.Separator
 
   const choices: Choice[] = engines.map((e) => ({
-    name: `${getEngineIconPadded(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
@@ -1287,9 +1290,13 @@ export async function promptInstallDependencies(
   // PostgreSQL client tools are bundled with hostdb binaries
   if (engine === 'postgresql') {
     console.log(
-      chalk.cyan('  PostgreSQL client tools are bundled with the engine binaries.'),
+      chalk.cyan(
+        '  PostgreSQL client tools are bundled with the engine binaries.',
+      ),
     )
-    console.log(chalk.cyan('  Download them with: spindb engines download postgresql'))
+    console.log(
+      chalk.cyan('  Download them with: spindb engines download postgresql'),
+    )
     console.log()
     return false
   }

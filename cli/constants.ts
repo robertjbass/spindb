@@ -29,9 +29,9 @@ const NARROW_IN_VSCODE = new Set(['🪶', '🦭', '🪳', '🛋', '⏱'])
 const NARROW_IN_GHOSTTY = new Set(['🛋', '⏱'])
 
 // Detect terminal
-const isVSCodeTerminal =
-  process.env.TERM_PROGRAM === 'vscode' ||
-  process.env.TERM_PROGRAM === 'VSCodium'
+const isVSCodeTerminal = ['vscode', 'VSCodium'].includes(
+  process.env.TERM_PROGRAM || '',
+)
 const isGhosttyTerminal = process.env.TERM_PROGRAM === 'ghostty'
 
 /**
@@ -52,11 +52,4 @@ export function getEngineIcon(engine: string): string {
   // Other terminals (iTerm2, Terminal.app) seem to render all emojis as 2 cells
 
   return icon + (isNarrow ? '  ' : ' ')
-}
-
-/**
- * @deprecated Use getEngineIcon() instead - it now includes consistent spacing
- */
-export function getEngineIconPadded(engine: string): string {
-  return getEngineIcon(engine)
 }
