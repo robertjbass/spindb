@@ -176,7 +176,7 @@ async function showEngineSubmenu(
   console.log()
   console.log(
     chalk.cyan(
-      `  ${getEngineIcon(engineName)} ${engineName} ${engineVersion} ${chalk.gray(`(${formatBytes(sizeBytes)})`)}`,
+      `  ${getEngineIcon(engineName)}${engineName} ${engineVersion} ${chalk.gray(`(${formatBytes(sizeBytes)})`)}`,
     ),
   )
   console.log()

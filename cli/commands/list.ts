@@ -14,12 +14,6 @@ import {
   deriveContainerName,
 } from '../../engines/sqlite/scanner'
 
-// Pad string to width, accounting for emoji taking 2 display columns
-function padWithEmoji(str: string, width: number): string {
-  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
-  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
-  return str.padEnd(width + emojiCount)
-}
 
 /**
  * Prompt user about unregistered SQLite files in CWD
@@ -194,8 +188,8 @@ export const listCommand = new Command('list')
               : chalk.gray('○ stopped')
         }
 
-        const engineIcon = getEngineIcon(container.engine)
-        const engineDisplay = `${engineIcon} ${container.engine}`
+        // getEngineIcon() includes trailing space for consistent alignment
+        const engineDisplay = `${getEngineIcon(container.engine)}${container.engine}`
 
         const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
 
@@ -213,7 +207,7 @@ export const listCommand = new Command('list')
         console.log(
           chalk.gray('  ') +
             chalk.cyan(container.name.padEnd(20)) +
-            chalk.white(padWithEmoji(engineDisplay, 14)) +
+            chalk.white(engineDisplay.padEnd(15)) +
             chalk.yellow(container.version.padEnd(10)) +
             chalk.green(portOrPath.padEnd(8)) +
             chalk.magenta(sizeDisplay.padEnd(10)) +

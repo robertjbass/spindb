@@ -10,6 +10,7 @@ import {
 } from '../../core/config-manager'
 import { updateManager } from '../../core/update-manager'
 import { uiError, uiSuccess, header, uiInfo } from '../ui/theme'
+import { getEngineIcon } from '../constants'
 import { createSpinner } from '../ui/spinner'
 import type { BinaryTool } from '../../types'
 
@@ -58,7 +59,7 @@ export const configCommand = new Command('config')
           console.log()
 
           // PostgreSQL tools
-          console.log(chalk.bold('  🐘 PostgreSQL Tools:'))
+          console.log(chalk.bold(`  ${getEngineIcon('postgresql')}PostgreSQL Tools:`))
           console.log(chalk.gray('  ' + '─'.repeat(60)))
           for (const tool of POSTGRESQL_TOOLS) {
             displayToolConfig(tool, config.binaries[tool])
@@ -66,7 +67,7 @@ export const configCommand = new Command('config')
           console.log()
 
           // MySQL tools
-          console.log(chalk.bold('  🐬 MySQL Tools:'))
+          console.log(chalk.bold(`  ${getEngineIcon('mysql')}MySQL Tools:`))
           console.log(chalk.gray('  ' + '─'.repeat(60)))
           for (const tool of MYSQL_TOOLS) {
             displayToolConfig(tool, config.binaries[tool])
@@ -156,13 +157,13 @@ export const configCommand = new Command('config')
 
           await displayCategory(
             'PostgreSQL Tools',
-            '🐘',
+            getEngineIcon('postgresql'),
             result.postgresql.found,
             result.postgresql.missing,
           )
           await displayCategory(
             'MySQL Tools',
-            '🐬',
+            getEngineIcon('mysql'),
             result.mysql.found,
             result.mysql.missing,
           )

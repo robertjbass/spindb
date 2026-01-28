@@ -347,7 +347,7 @@ export async function handleRestore(): Promise<void> {
 
     const choices = [
       ...running.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
         value: c.name,
         short: c.name,
       })),

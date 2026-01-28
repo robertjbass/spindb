@@ -11,6 +11,7 @@ import { join, extname } from 'path'
 import { homedir } from 'os'
 import chalk from 'chalk'
 import { formatBytes } from '../ui/theme'
+import { getEngineIcon } from '../constants'
 
 type BackupInfo = {
   filename: string
@@ -132,22 +133,10 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString()
 }
 
-// Get engine icon
-function getEngineIcon(engine: string | null): string {
-  switch (engine) {
-    case 'postgresql':
-      return '🐘'
-    case 'mysql':
-      return '🐬'
-    case 'sqlite':
-      return '🗄️'
-    case 'mongodb':
-      return '🍃'
-    case 'redis':
-      return '🔴'
-    default:
-      return '📦'
-  }
+// Get engine icon - wraps the shared function with fallback for null/unknown engines
+function getBackupEngineIcon(engine: string | null): string {
+  if (!engine) return '📦 '
+  return getEngineIcon(engine)
 }
 
 export const backupsCommand = new Command('backups')
@@ -230,7 +219,7 @@ export const backupsCommand = new Command('backups')
       )
 
       for (const backup of limitedBackups) {
-        const icon = getEngineIcon(backup.engine)
+        const icon = getBackupEngineIcon(backup.engine)
         const filename =
           backup.filename.length > maxFilename
             ? backup.filename.slice(0, maxFilename - 3) + '...'

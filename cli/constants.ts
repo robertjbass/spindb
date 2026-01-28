@@ -1,5 +1,7 @@
-// Engine icons - do NOT add trailing spaces here
-export const ENGINE_ICONS: Record<string, string> = {
+// Engine icons - raw emojis without trailing spaces
+// Use getEngineIcon() to get the icon with consistent spacing
+// NOTE: Avoid variation selectors (U+FE0F) - they cause inconsistent width rendering
+const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
   mariadb: '🦭',
@@ -12,51 +14,49 @@ export const ENGINE_ICONS: Record<string, string> = {
   clickhouse: '🏠',
   qdrant: '🧭',
   meilisearch: '🔍',
-  couchdb: '🛋️',
+  couchdb: '🛋',
   cockroachdb: '🪳',
   surrealdb: '🌀',
-  questdb: '⏱️',
+  questdb: '⏱',
 }
 
-// Visual width of each icon in terminal columns
-// Most emojis render at width 2 in modern terminals
-// This map allows us to pad icons correctly for column alignment
-export const ENGINE_ICON_WIDTHS: Record<string, number> = {
-  postgresql: 2,
-  mysql: 2,
-  mariadb: 2,
-  sqlite: 2,
-  duckdb: 2,
-  mongodb: 2,
-  ferretdb: 2,
-  redis: 2,
-  valkey: 2,
-  clickhouse: 2,
-  qdrant: 2,
-  meilisearch: 2,
-  couchdb: 2,
-  cockroachdb: 2,
-  surrealdb: 2,
-  questdb: 2,
-}
+const DEFAULT_ENGINE_ICON = '▣'
 
-export const DEFAULT_ENGINE_ICON = '▣'
-export const DEFAULT_ICON_WIDTH = 2
+// Emojis that render as 1 cell (narrow) in specific terminals
+// These need extra padding to maintain alignment
+// Based on testing in actual terminals:
+const NARROW_IN_VSCODE = new Set(['🪶', '🦭', '🪳', '🛋', '⏱'])
+const NARROW_IN_GHOSTTY = new Set(['🛋', '⏱'])
 
+// Detect terminal
+const isVSCodeTerminal =
+  process.env.TERM_PROGRAM === 'vscode' ||
+  process.env.TERM_PROGRAM === 'VSCodium'
+const isGhosttyTerminal = process.env.TERM_PROGRAM === 'ghostty'
+
+/**
+ * Returns engine icon with trailing spaces for consistent alignment.
+ *
+ * Terminal emulators render emoji widths inconsistently.
+ * We maintain per-terminal lists of narrow emojis that need extra padding.
+ */
 export function getEngineIcon(engine: string): string {
-  return ENGINE_ICONS[engine] || DEFAULT_ENGINE_ICON
-}
-
-// Returns icon width for alignment calculations
-export function getEngineIconWidth(engine: string): number {
-  return ENGINE_ICON_WIDTHS[engine] ?? DEFAULT_ICON_WIDTH
-}
-
-// Returns icon padded to consistent width (2 columns)
-// Use this when displaying icons in aligned columns
-export function getEngineIconPadded(engine: string, targetWidth = 2): string {
   const icon = ENGINE_ICONS[engine] || DEFAULT_ENGINE_ICON
-  const width = ENGINE_ICON_WIDTHS[engine] ?? DEFAULT_ICON_WIDTH
-  const padding = Math.max(0, targetWidth - width)
-  return icon + ' '.repeat(padding)
+
+  let isNarrow = false
+  if (isVSCodeTerminal) {
+    isNarrow = NARROW_IN_VSCODE.has(icon)
+  } else if (isGhosttyTerminal) {
+    isNarrow = NARROW_IN_GHOSTTY.has(icon)
+  }
+  // Other terminals (iTerm2, Terminal.app) seem to render all emojis as 2 cells
+
+  return icon + (isNarrow ? '  ' : ' ')
+}
+
+/**
+ * @deprecated Use getEngineIcon() instead - it now includes consistent spacing
+ */
+export function getEngineIconPadded(engine: string): string {
+  return getEngineIcon(engine)
 }

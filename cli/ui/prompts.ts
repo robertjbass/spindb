@@ -557,7 +557,7 @@ export async function promptContainerSelect(
 
   type Choice = { name: string; value: string; short?: string }
   const choices: Choice[] = containers.map((c) => ({
-    name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine} ${c.version}, port ${c.port})`)} ${
+    name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${
       c.status === 'running'
         ? chalk.green('● running')
         : chalk.gray('○ stopped')

@@ -181,7 +181,7 @@ Use this checklist to track implementation progress. **Reference: Valkey impleme
 - [ ] `config/os-dependencies.ts` - Add system dependencies
 - [ ] `core/dependency-manager.ts` - Add binary tools to `KNOWN_BINARY_TOOLS` array
 - [ ] `core/config-manager.ts` - Add `XXX_TOOLS` constant and to `ENGINE_BINARY_MAP`
-- [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS` and width to `ENGINE_ICON_WIDTHS` (verify spacing in "Create new container" menu)
+- [ ] `cli/constants.ts` - Add engine icon to `ENGINE_ICONS` (and to `NARROW_IN_VSCODE`/`NARROW_IN_GHOSTTY` if needed for alignment)
 - [ ] `cli/helpers.ts` - Add `InstalledXxxEngine` type, detection function, and engine prefix to `ENGINE_PREFIXES`
 - [ ] `cli/commands/engines.ts` - Add download case and list display for the engine
 
@@ -615,10 +615,10 @@ export {
 
 ### 8. Engine Icon (`cli/constants.ts`)
 
-Add your engine's icon and configure its display width:
+Add your engine's icon to `ENGINE_ICONS`:
 
 ```ts
-export const ENGINE_ICONS: Record<string, string> = {
+const ENGINE_ICONS: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
   mariadb: '🦭',
@@ -628,30 +628,25 @@ export const ENGINE_ICONS: Record<string, string> = {
   valkey: '🔷',
   yourengine: '🔶',  // Add your engine icon
 }
-
-// Configure icon width for proper menu alignment
-export const ENGINE_ICON_WIDTHS: Record<string, number> = {
-  // Most emojis render at width 2
-  postgresql: 2,
-  mysql: 2,
-  // Some emojis render narrower (width 1) - these need padding
-  mariadb: 1,   // 🦭 seal renders narrow
-  sqlite: 1,    // 🪶 feather renders narrow
-  couchdb: 1,   // 🛋️ couch renders narrow
-  yourengine: 2,  // Add your engine - test and adjust if needed
-}
 ```
 
 **Important: Verify icon spacing after adding a new engine!**
 
-Different emojis render at different widths in terminals. After adding a new engine:
+Terminal emulators render emoji widths inconsistently. After adding your icon:
 
-1. Run `spindb` and navigate to "Create new container"
-2. Check if your engine's icon aligns with others in the list
-3. If the text appears too close to the icon (no space), set width to `1`
-4. If there's extra space before the text, set width to `2`
+1. Test in **both VS Code terminal and Ghostty/iTerm2**
+2. Run `spindb` and check "Create new container" menu alignment
+3. If your icon causes misalignment, add it to the appropriate narrow set:
 
-The `getEngineIconPadded()` function adds padding based on these widths to ensure consistent alignment in menus.
+```ts
+// Emojis that render as 1 cell (narrow) in specific terminals
+const NARROW_IN_VSCODE = new Set(['🪶', '🦭', '🪳', '🛋', '⏱'])
+const NARROW_IN_GHOSTTY = new Set(['🛋', '⏱'])
+```
+
+**Tip**: Avoid emojis with variation selectors (e.g., `🛋️` → use `🛋` instead) - they cause inconsistent rendering.
+
+Always use `getEngineIcon(engine)` to get properly padded icons - never use raw emojis directly.
 
 ### 9. CLI Helpers (`cli/helpers.ts`)
 
@@ -798,13 +793,13 @@ const yourengineEngines = engines.filter(
 
 // Display rows (after Redis rows)
 for (const engine of yourengineEngines) {
-  const icon = ENGINE_ICONS.yourengine
   const platformInfo = `${engine.platform}-${engine.arch}`
-  const engineDisplay = `${icon} yourengine`
+  // getEngineIcon() includes trailing space for consistent alignment
+  const engineDisplay = `${getEngineIcon('yourengine')}yourengine`
 
   console.log(
     chalk.gray('  ') +
-      chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+      chalk.cyan(engineDisplay.padEnd(14)) +
       chalk.yellow(engine.version.padEnd(12)) +
       chalk.gray(platformInfo.padEnd(18)) +
       chalk.white(formatBytes(engine.sizeBytes)),
