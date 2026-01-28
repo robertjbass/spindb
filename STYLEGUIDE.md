@@ -238,6 +238,28 @@ spindb → Create container → mydb → 5433 # Interactive
   - Back: `${chalk.blue('←')} Back`
   - Main menu: `${chalk.blue('⌂')} Back to main menu`
 
+### Engine Icons
+
+Engine emoji icons are managed in `cli/constants.ts`. Always use `getEngineIcon(engine)` to get properly padded icons - never use raw emojis directly.
+
+```ts
+import { getEngineIcon } from '../constants'
+
+// Good - uses terminal-aware padding
+const display = `${getEngineIcon('postgresql')}PostgreSQL`
+
+// Bad - raw emoji causes alignment issues
+const display = `🐘 PostgreSQL`
+```
+
+**Why this matters**: Terminal emulators render emoji widths inconsistently:
+- Ghostty, iTerm2: Most emojis = 2 cells, but 🛋 ⏱ = 1 cell
+- VS Code: 🪶 🦭 🪳 🛋 ⏱ = 1 cell, others = 2 cells
+
+`getEngineIcon()` detects the terminal and adds appropriate padding for consistent alignment.
+
+**Note**: `config/engines.json` also has `icon` fields for metadata purposes, but `cli/constants.ts` is the source of truth for CLI rendering.
+
 ### Transactional Operations
 
 If a multi-step operation fails partway through, clean up and don't leave partial state behind. Use `TransactionManager` for rollback support.

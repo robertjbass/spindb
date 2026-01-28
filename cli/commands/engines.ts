@@ -29,7 +29,7 @@ import type { BinaryTool } from '../../types'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
-import { getEngineIcon, ENGINE_ICONS } from '../constants'
+import { getEngineIcon } from '../constants'
 import {
   getInstalledEngines,
   getInstalledPostgresEngines,
@@ -69,13 +69,6 @@ import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
 } from '../../engines/ferretdb/version-maps'
-
-// Pad string to width, accounting for emoji taking 2 display columns
-function padWithEmoji(str: string, width: number): string {
-  // Count emojis using Extended_Pictographic (excludes digits/symbols that \p{Emoji} matches)
-  const emojiCount = (str.match(/\p{Extended_Pictographic}/gu) || []).length
-  return str.padEnd(width + emojiCount)
-}
 
 // Display manual installation instructions for missing dependencies
 function displayManualInstallInstructions(
@@ -482,13 +475,13 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // PostgreSQL rows
   for (const engine of pgEngines) {
-    const icon = getEngineIcon(engine.engine)
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ${engine.engine}`
+    // getEngineIcon() includes trailing space for consistent alignment
+    const engineDisplay = `${getEngineIcon(engine.engine)}${engine.engine}`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -497,13 +490,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // MySQL rows
   for (const mysqlEngine of mysqlEngines) {
-    const icon = ENGINE_ICONS.mysql
     const platformInfo = `${mysqlEngine.platform}-${mysqlEngine.arch}`
-    const engineDisplay = `${icon} mysql`
+    const engineDisplay = `${getEngineIcon('mysql')}mysql`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(mysqlEngine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(mysqlEngine.sizeBytes)),
@@ -512,12 +504,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // SQLite row
   if (sqliteEngine) {
-    const icon = ENGINE_ICONS.sqlite
-    const engineDisplay = `${icon}  sqlite`
+    const engineDisplay = `${getEngineIcon('sqlite')}sqlite`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(sqliteEngine.version.padEnd(12)) +
         chalk.gray('system'.padEnd(18)) +
         chalk.gray('(system-installed)'),
@@ -526,13 +517,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // DuckDB rows
   for (const engine of duckdbEngines) {
-    const icon = ENGINE_ICONS.duckdb
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} duckdb`
+    const engineDisplay = `${getEngineIcon('duckdb')}duckdb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -541,13 +531,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // MongoDB rows
   for (const engine of mongodbEngines) {
-    const icon = ENGINE_ICONS.mongodb
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} mongodb`
+    const engineDisplay = `${getEngineIcon('mongodb')}mongodb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -556,13 +545,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // FerretDB rows
   for (const engine of ferretdbEngines) {
-    const icon = ENGINE_ICONS.ferretdb
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} ferretdb`
+    const engineDisplay = `${getEngineIcon('ferretdb')}ferretdb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -571,13 +559,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // Redis rows
   for (const engine of redisEngines) {
-    const icon = ENGINE_ICONS.redis
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} redis`
+    const engineDisplay = `${getEngineIcon('redis')}redis`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -586,13 +573,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // Valkey rows
   for (const engine of valkeyEngines) {
-    const icon = ENGINE_ICONS.valkey
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} valkey`
+    const engineDisplay = `${getEngineIcon('valkey')}valkey`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -601,13 +587,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // Qdrant rows
   for (const engine of qdrantEngines) {
-    const icon = ENGINE_ICONS.qdrant
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} qdrant`
+    const engineDisplay = `${getEngineIcon('qdrant')}qdrant`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -616,13 +601,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // Meilisearch rows
   for (const engine of meilisearchEngines) {
-    const icon = ENGINE_ICONS.meilisearch
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} meilisearch`
+    const engineDisplay = `${getEngineIcon('meilisearch')}meilisearch`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -631,13 +615,12 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // CouchDB rows
   for (const engine of couchdbEngines) {
-    const icon = ENGINE_ICONS.couchdb
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${icon} couchdb`
+    const engineDisplay = `${getEngineIcon('couchdb')}couchdb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(padWithEmoji(engineDisplay, 13)) +
+        chalk.cyan(engineDisplay.padEnd(14)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -778,7 +761,7 @@ async function deleteEngine(
   // Interactive selection if not provided
   if (!engineName || !engineVersion) {
     const choices = pgEngines.map((e) => ({
-      name: `${getEngineIcon(e.engine)} ${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
+      name: `${getEngineIcon(e.engine)}${e.engine} ${e.version} ${chalk.gray(`(${formatBytes(e.sizeBytes)})`)}`,
       value: `${e.engine}:${e.version}:${e.path}`,
     }))
 

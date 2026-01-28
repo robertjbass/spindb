@@ -81,7 +81,7 @@ async function displayContainerInfo(
   console.log(
     chalk.gray('  ') +
       chalk.white('Engine:'.padEnd(14)) +
-      chalk.cyan(`${icon} ${config.engine} ${config.version}`),
+      chalk.cyan(`${icon}${config.engine} ${config.version}`),
   )
   console.log(
     chalk.gray('  ') + chalk.white('Status:'.padEnd(14)) + statusDisplay,
@@ -192,8 +192,8 @@ async function displayAllContainersInfo(
           : chalk.gray('○ stopped')
     }
 
-    const icon = getEngineIcon(container.engine)
-    const engineDisplay = `${icon} ${container.engine}`
+    // getEngineIcon() includes trailing space for consistent alignment
+    const engineDisplay = `${getEngineIcon(container.engine)}${container.engine}`
 
     // Show truncated file path for SQLite instead of port
     let portOrPath: string
@@ -290,7 +290,7 @@ export const infoCommand = new Command('info')
             choices: [
               { name: 'All containers', value: 'all' },
               ...containers.map((c) => ({
-                name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)} ${c.engine})`)}`,
+                name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine})`)}`,
                 value: c.name,
               })),
             ],
