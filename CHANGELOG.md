@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-01-27
+
+### Fixed
+- **Emoji alignment in CLI** - Fixed inconsistent emoji widths across terminals (VS Code, Ghostty, iTerm2) by detecting terminal and applying appropriate padding
+- **Removed variation selectors** - Stripped U+FE0F from couchdb (🛋) and questdb (⏱) emojis that caused rendering inconsistencies
+
+### Changed
+- **Centralized emoji handling** - All engine icons now use `getEngineIcon()` from `cli/constants.ts` with terminal-aware padding
+- **Removed duplicate code** - Eliminated `padWithEmoji()` functions and hardcoded emojis across CLI commands
+- **Documentation** - Added engine icon guidelines to STYLEGUIDE.md and updated FEATURE.md
+
 ## [0.27.1] - 2026-01-27
 
 ### Fixed
