@@ -18,7 +18,7 @@ Please run all commands before opening a PR.
 
 If adding a new engine, do the following:
 1. git checkout dev && git pull && git checkout -b feature/<engine-name>
-2. ensure the engine binaries are available for all supported platforms (macOS, Linux, Windows) using all architectures (X64 and ARM64) for darwin and linux
+2. ensure the engine binaries are available for all supported platforms (macOS, Linux, Windows) using all architectures (X64 and ARM64) for darwin and linux and hosted on hostdb
 3. Add unit and integration tests for the new engine
 4. Add CI.yml tests for each architecture and platform following the established patterns
 
