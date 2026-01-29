@@ -19,7 +19,7 @@ import {
   installEngineDependencies,
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
-import { getEngineIcon } from '../constants'
+import { getEngineIcon, getPageSize } from '../constants'
 import {
   type ContainerConfig,
   type Engine,
@@ -247,7 +247,7 @@ export async function filterableListPrompt(
         name: 'selection',
         message,
         source,
-        pageSize: options.pageSize || 15,
+        pageSize: options.pageSize || getPageSize(),
         emptyText: options.emptyText || 'No matches',
         suggestOnly: false,
       },
@@ -361,7 +361,7 @@ export async function promptEngine(options?: {
       name: 'engine',
       message: 'Select database engine:',
       choices,
-      pageSize: 15,
+      pageSize: getPageSize(),
     },
   ])
 
