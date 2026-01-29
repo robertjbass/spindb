@@ -1,10 +1,10 @@
-# SpinDB TODO
+# TODO
 
-## Maintenance
+## Triage
 
-- [ ] Review and update `EVALUATION.md` periodically (last updated: 2025-12-06, v0.9.0)
+Quick capture for ideas that need review and prioritization:
 
-- [ ] Add examples for each database in `CHEATSHEET.md`
+-
 
 ---
 
@@ -25,50 +25,7 @@
   - `spindb secrets get mydb-password`
   - Reference secrets in connection strings: `postgresql://user:${secret:mydb-password}@host/db`
 
-### v1.2 - Additional Engines
-
-See [ENGINES.md](ENGINES.md) for full engine status and details.
-
-- [x] Redis (in-memory key-value)
-- [x] Valkey (Redis fork with BSD-3 license)
-- [x] MongoDB (document database)
-- [x] MariaDB as standalone engine (using hostdb binaries)
-- [x] ClickHouse (column-oriented OLAP database)
-- [x] Qdrant (vector similarity search engine)
-- [x] Meilisearch (full-text search engine)
-- [x] CouchDB (document database with REST API)
-
-### Engine Binary Migration (hostdb)
-
-Migrate system-installed engines to downloadable hostdb binaries for multi-version support. Reference: MariaDB engine migration.
-
-**Detailed Plan:** `~/.claude/plans/declarative-toasting-quail.md` (MongoDB & Redis migration plan)
-
-- [x] **MySQL migration to hostdb** - Completed in v0.15.0
-- [x] **MongoDB migration to hostdb** - Completed
-  - [x] Add `engines/mongodb/version-maps.ts` synced with hostdb releases.json
-  - [x] Add `engines/mongodb/binary-urls.ts` for hostdb download URLs
-  - [x] Add `engines/mongodb/binary-manager.ts` for download/extraction
-  - [x] Update MongoDB engine to use `getMongoshPath()` from downloaded binaries
-  - [x] Register MongoDB binary names (`mongod`, `mongosh`, `mongodump`, `mongorestore`)
-  - [x] Update backup.ts and restore.ts to use configManager
-  - [x] Update shell handlers for MongoDB with hostdb binaries
-  - [x] Add MongoDB to "Manage Engines" menu with delete option
-  - [x] Update CI to download MongoDB binaries via SpinDB (macOS/Linux)
-
-- [x] **Redis migration to hostdb** - Completed
-  - [x] Add `engines/redis/version-maps.ts` synced with hostdb releases.json
-  - [x] Add `engines/redis/binary-urls.ts` for hostdb download URLs
-  - [x] Add `engines/redis/binary-manager.ts` for download/extraction
-  - [x] Update Redis engine to use downloaded binaries on macOS/Linux
-  - [x] Register Redis binary names (`redis-server`, `redis-cli`)
-  - [x] Update backup.ts and restore.ts to use configManager
-  - [x] Add Redis to "Manage Engines" menu with delete option
-  - [x] Update CI to download Redis binaries via SpinDB (macOS/Linux)
-
-**Reference implementation:** See `engines/mariadb/` for hostdb migration pattern.
-
-### v1.3 - Advanced Features
+### v1.2 - Advanced Features
 
 - [ ] **Database rename** - Rename databases within containers
 - [ ] **Container templates** - Save/load container configurations
@@ -79,47 +36,16 @@ Migrate system-installed engines to downloadable hostdb binaries for multi-versi
 
 ## Backlog
 
-### Remote Dump/Restore Enhancements
-
-- [x] **Redis/Valkey remote dump** - Implemented using `redis-cli`/`valkey-cli` with SCAN to iterate keys
-  - Supports all data types: strings, hashes, lists, sets, sorted sets
-  - Preserves TTLs for keys with expiration
-  - Exports as text format commands for restore
-
-- [x] **ClickHouse remote dump** - Implemented using HTTP API
-  - Fetches schema with `SHOW CREATE TABLE`
-  - Exports data as SQL INSERT statements
-
-- [x] **Qdrant remote dump** - Implemented using REST API snapshots
-  - Creates snapshot on remote server
-  - Downloads and cleans up snapshot file
-
-- [ ] **Integration tests for dumpFromConnectionString** - Requires remote database instances
-  - Currently unit tests cover connection string parsing
-  - Integration tests for actual remote dumps need a test environment with running remote databases
-  - Consider using Docker Compose for CI remote database testing
-
-- [ ] **Browser/Web UI tests for Qdrant and ClickHouse**
-  - Test Qdrant Web UI download functionality (`downloadQdrantWebUI`)
-  - Test ClickHouse Play UI browser opening
-  - Verify `openInBrowser()` works cross-platform (macOS, Windows, Linux)
-  - Test Qdrant dashboard availability check before opening
-
-- [x] **Redis CI/CD tests** - Redis integration tests added to CI matrix
-  - All platforms: macOS (Intel/ARM), Linux (Ubuntu 22.04/24.04), Windows
-  - Uses hostdb binaries for all platforms
-
 ### CLI Improvements
 
 - [ ] **Export query results** - `spindb run <container> query.sql --format csv/json --output file`
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
-- [x] **Overwrite existing databases on restore** - Add `--force` or `--drop-existing` flag to restore/create commands to drop and recreate tables that already exist (currently fails if tables exist)
-- [x] **Update doctor tool** - Add checks for database file permissions, container health, and engines
+- [ ] **Add `--json` to remaining commands** - clone, connect, logs, run, edit, attach, detach
 
-### Chained Command Ideas
+### Chained Commands
 
-Combine common multi-step workflows into single commands. These should remain intuitive and not bloat the CLI.
+Combine common multi-step workflows into single commands:
 
 | Proposed Command | Steps Combined | Example |
 |------------------|----------------|---------|
@@ -127,12 +53,6 @@ Combine common multi-step workflows into single commands. These should remain in
 | `spindb clone <container> <new-name> --start` | Clone container + start it | `spindb clone prod-backup local-test --start` |
 | `spindb restore <container> <backup> --start` | Restore backup + start container | `spindb restore mydb backup.dump --start` |
 | `spindb backup <container> --stop` | Stop container + create backup | `spindb backup mydb --stop` (for consistent backups) |
-
-**Guidelines:**
-- Flags should be additive (each flag adds one step)
-- Order of operations should be intuitive (create → seed → start → connect)
-- Don't combine conflicting operations
-- Keep documentation clear about what each flag does
 
 ### Security (Pro)
 
@@ -148,202 +68,163 @@ Combine common multi-step workflows into single commands. These should remain in
 
 ### Platform Support
 
-- [x] **Windows support** - Added in v0.9.4 using EDB binaries for PostgreSQL
 - [ ] **Offline mode** - Bundle binaries for air-gapped environments
-- [ ] **Expand GitHub Actions coverage** - Add CI tests that validate major features across macOS, Linux, and Windows (not just unit tests), so cross-platform regressions are caught early
-- [ ] **Parallel CI matrix for all 5 platforms** - Run engine tests in parallel across all supported OS/arch combinations for faster CI and better platform bug detection
+- [ ] **Parallel CI matrix for all 5 platforms** - Run engine tests in parallel across all supported OS/arch combinations
   - Runners: `macos-14` (ARM64), `macos-13` (Intel), `ubuntu-latest` (x64), `windows-latest` (x64)
   - linux-arm64: Requires `ubuntu-24.04-arm` or self-hosted runner
-  - Use GitHub Actions matrix strategy to parallelize
   - Trade-off: macOS runners cost 10x Linux minutes
 - [ ] **Windows support for ClickHouse and FerretDB** - Currently not supported due to binary issues
-  - **ClickHouse**: hostdb doesn't have Windows builds. Investigate building with MinGW/MSYS2 or providing WSL2 fallback
-  - **FerretDB**: hostdb has Windows binaries but postgresql-documentdb fails to start. Debug startup issues or provide WSL2 fallback
-  - **WSL2 fallback strategy**: For Windows users who need these engines, consider adding WSL2 detection and proxy mode:
-    1. Detect if WSL2 is available on Windows
-    2. If user tries to create ClickHouse/FerretDB on Windows, offer to run in WSL2
-    3. Proxy connections from Windows host to WSL2 container
-    4. Trade-off: Adds complexity, requires WSL2 setup, but provides Windows compatibility
+  - **ClickHouse**: hostdb doesn't have Windows builds. Investigate MinGW/MSYS2 or WSL2 fallback
+  - **FerretDB**: postgresql-documentdb fails to start on Windows. Debug or WSL2 fallback
 
 ### Distribution
 
-- [ ] **Add build step** - Currently using `tsx` to run TypeScript directly in production. Works well but adds ~100-200ms startup overhead per invocation. Consider adding a build step that compiles to JavaScript before publishing to npm. This would:
-  - Reduce startup latency
-  - Remove tsx as a runtime dependency
-  - Shrink installed package size
-  - Enable tree-shaking and other optimizations
-- [ ] **Homebrew binary** - Distribute as standalone binary (no Node.js dependency) via Homebrew tap
+- [ ] **Add build step** - Compile TypeScript to JavaScript before npm publish to reduce ~100-200ms startup overhead
+- [ ] **Homebrew binary** - Distribute as standalone binary via Homebrew tap
   - Build: `bun build ./cli/bin.ts --compile --outfile dist/spindb`
   - Platforms: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64
-- [ ] **Bun-based packaging** - Consider Bun for creating smaller, faster distribution packages (faster startup and smaller downloads)
-- [x] **Fix package-manager mismatch for tests** - ~~`npm test` currently shells out to `pnpm` and fails if `pnpm` isn't installed~~ Fixed: now using `npm-run-all` so scripts work with any package manager
-- [ ] **Self-host compiled engine binaries** - Compile and host database engine binaries instead of relying on external sources (zonky.io for PostgreSQL). This would:
-  - Reduce dependency on third-party binary hosts
-  - Provide control over version availability and timing
-  - Enable adding platforms/versions not available upstream
-  - **Trade-offs:** Significant infrastructure (cross-platform builds, hosting costs, security responsibility). Only pursue if external sources become unreliable or project gains significant adoption. Consider intermediate step of mirroring/caching known-good binaries first.
+- [ ] **Self-host compiled engine binaries** - Reduce dependency on external binary hosts (significant infrastructure investment)
 
 ---
 
-## Known Issues & Technical Debt
+## Technical Debt
 
-### Migrate Tests to Vitest
+### Critical
 
-**Context:** Currently using Node.js built-in test runner which lacks features needed for robust CI:
+#### Version Containerization Uses Wrong Binary
 
-- [ ] **No bail-on-failure support** - Node.js test runner continues running all tests even after failures, wasting CI time
-- [ ] **Limited configuration** - No easy way to set timeouts, retries, or platform-specific behavior
-- [ ] **No watch mode** - Development iteration is slower without file watching
+When multiple versions of an engine are installed, containers may use the wrong binary version (e.g., Redis 6 container running with Redis 7 binary).
 
-**Benefits of Vitest:**
-- `--bail` flag to stop on first failure
-- Built-in retry support for flaky tests
-- Better TypeScript support
-- Watch mode for development
-- Compatible with existing test structure (minimal migration effort)
+- [ ] Audit version resolution - verify each engine maps container version to binary path correctly
+- [ ] Add version validation on start - check binary version matches container config
+- [ ] Consider version-specific binary caching for system-installed engines
 
-**Migration plan:**
-- [ ] Install vitest as dev dependency
-- [ ] Update test scripts in package.json
-- [ ] Migrate test files (should be mostly compatible)
-- [ ] Add vitest.config.ts with platform-specific settings
-- [ ] Consider separate configs for unit vs integration tests
-
-### Design Review: Database Tracking (`databases` array)
-
-**Context:** Container configs store a `databases` array to track which databases exist within each container. This was added to show users what databases they have without querying the server. However, it creates a sync problem when databases are created/dropped/renamed outside of SpinDB (via SQL, scripts, etc.).
-
-**Current solution:** Added `spindb databases` CLI command to manually sync tracking after external changes.
-
-**Problems with current approach:**
-- [ ] **Cache invalidation** - The `databases` array is essentially a cache that can get stale
-- [ ] **Manual sync required** - Users must remember to run `spindb databases sync` after SQL renames
-- [ ] **Complexity** - Added a whole CLI command just to maintain a cache
-- [ ] **Duplication** - Information already exists in the database server
-
-**What CAN be determined from filesystem (no server needed):**
-| Engine | Method | Notes |
-|--------|--------|-------|
-| MySQL/MariaDB | `ls data/` | Each database is a directory |
-| ClickHouse | `ls data/` | Each database is a directory |
-| SQLite/DuckDB | N/A | File IS the database |
-| Redis/Valkey | N/A | Numbered 0-15, nothing to track |
-
-**What CANNOT be determined from filesystem:**
-| Engine | Why | Alternative |
-|--------|-----|-------------|
-| PostgreSQL | Data stored by OID, not name | Query `pg_database` (requires running server) |
-| MongoDB | WiredTiger doesn't expose DB names cleanly | Query `show dbs` (requires running server) |
-
-**Alternative approaches to evaluate:**
-- [ ] **Query on demand** - When running, query server. When stopped, show "start to list databases"
-- [ ] **Filesystem inference** - For MySQL/MariaDB/ClickHouse, read directories. For PG/Mongo, require server
-- [ ] **Keep only `database` (singular)** - Track just the primary database (user intent), not full list
-- [ ] **Hybrid** - Auto-populate from server when running, cache on stop, clear cache on start
-
-**Decision:** Evaluate whether the maintenance burden of `databases` array is worth the benefit. The `database` (singular) field for primary/default database is still useful for user intent.
-
-### Critical: Version Containerization Uses Wrong Binary
-
-**Bug:** When multiple versions of an engine are installed on the system, containers may use the wrong binary version. A container created for Redis 6 was found to be running with the Redis 7 binary.
-
-**Impact:** Containers don't properly isolate to their specified version. While this may not cause immediate failures (Redis 6 container ran fine on Redis 7), it defeats the purpose of version-specific containers and could cause subtle compatibility issues.
-
-**Root cause:** System binary detection finds whichever version is in PATH rather than respecting the container's configured version.
-
-- [ ] **Audit version resolution** - Verify each engine correctly maps container version to binary path
-- [ ] **Add version validation on start** - Check that the binary version matches the container's configured version
-- [ ] **Consider version-specific binary caching** - For system-installed engines, cache the path to each detected version
-
-### Windows Support (Added v0.9.4) - Needs Testing
-
-- [ ] **Test Windows binary download and extraction** - Verify EDB binaries download and extract correctly
-- [ ] **Test MySQL on Windows** - Verify TCP-only mode works (no Unix sockets)
-- [ ] **Test SQLite on Windows** - Verify binary detection with Chocolatey/winget/Scoop
-- [ ] **Test process termination** - Verify `taskkill` works for graceful and forced shutdown
-- [ ] **Create Windows CLI tool availability map** - Document which CLI tools are available on Windows (e.g., `psql` via EDB, `mysql` via hostdb, `sqlite3` via Chocolatey) vs which are not (e.g., `mongosh`, `redis-cli`). This map should be used to conditionally enable shell features.
-- [ ] **Hide "open shell" option on Windows for unavailable CLI tools** - Use the availability map to hide the "Connect/Shell" menu option for engines whose CLI tools can't be installed on Windows. Engines with built-in web UIs (Qdrant, Meilisearch, ClickHouse, CouchDB) always show the option since they open a browser.
-
-### Critical: EDB Binary URLs Will Break
+#### EDB Binary URLs Will Break
 
 **File:** `engines/postgresql/edb-binary-urls.ts`
 
-The hardcoded file IDs (`'17.7.0': '1259911'`) will become stale when EDB updates their download system or releases new PostgreSQL versions.
+Hardcoded file IDs will become stale when EDB updates their download system.
 
-- [ ] **Add dynamic version discovery** - Scrape EDB download page or use their API
-- [ ] **Add remote config fallback** - Fetch version mappings from a remote JSON file
-- [ ] **Add download validation** - Verify HTTP 200 before proceeding, fail fast on 404
-- [ ] **Add version update monitoring** - CI job to detect new PostgreSQL releases
+- [ ] Add dynamic version discovery - scrape EDB download page or use API
+- [ ] Add remote config fallback - fetch version mappings from remote JSON
+- [ ] Add download validation - verify HTTP 200 before proceeding
+- [ ] Add version update monitoring - CI job to detect new PostgreSQL releases
 
-### Critical: Shell Injection in Windows Extraction
+#### Shell Injection in Windows Extraction
 
 **File:** `core/binary-manager.ts` lines 243-250
 
-```ts
-// UNSAFE: paths with special characters could execute arbitrary commands
-await execAsync(`mv "${sourcePath}" "${destPath}"`)
-await execAsync(`xcopy /E /I /H /Y "${sourcePath}" "${destPath}"`)
-```
+- [ ] Replace shell commands with Node.js APIs - use `fs.rename()` and `fs.cp()` instead of `mv`/`xcopy`
+- [ ] Validate paths are within expected directories before operations
 
-- [ ] **Replace shell commands with Node.js APIs** - Use `fs.rename()` and `fs.cp()` instead
-- [ ] **Validate paths** - Ensure paths are within expected directories before operations
+### Medium
 
-### Medium: SQLite Container Creation Doesn't Validate Path
+#### SQLite Container Creation Doesn't Validate Path
 
-**File:** `engines/sqlite/index.ts`
+Creating SQLite container with non-existent path succeeds without rollback.
 
-Creating an SQLite container with a non-existent path succeeds without error, and the container is not rolled back on failure.
+- [ ] Validate parent directory exists before container creation
+- [ ] Add rollback on failure using `TransactionManager`
+- [ ] Add `--create-path` flag to optionally create parent directories
 
-```bash
-spindb create mydb --engine sqlite --path /nonexistent/path/db.sqlite
-# Container is created but unusable, no rollback occurs
-```
-
-- [ ] **Validate path exists** - Check that parent directory exists before container creation
-- [ ] **Add rollback on failure** - Use `TransactionManager` to clean up container if path validation fails
-- [ ] **Add `--create-path` flag** - Optionally create parent directories if they don't exist
-
-### Medium: No File Locking for Concurrent Access
+#### No File Locking for Concurrent Access
 
 Multiple CLI instances can corrupt `container.json` or SQLite registry.
 
-- [ ] **Add file locking** - Use `proper-lockfile` or similar for config file access
-- [ ] **Consider SQLite for config** - Atomic operations, better concurrency
+- [ ] Add file locking with `proper-lockfile` or similar
+- [ ] Consider SQLite for config storage (atomic operations, better concurrency)
 
-### Medium: Frontend Integration Gaps
+#### Version Validation at Wrong Layer
 
-For potential Electron/web frontend integration:
+**Files:** Engine `resolveFullVersion()` methods
 
-- [ ] **Wire up progress callbacks** - `ProgressCallback` exists but CLI uses spinners instead
-- [x] **Standardize JSON error output** - Core commands (info, create, list, start, stop, delete, backup, restore) now output `{ error: "..." }` for errors in JSON mode
-- [ ] **Add `--json` to remaining commands** - clone, connect, logs, run, edit, attach, detach
-- [ ] **Structured error format** - Standard `{ success, error, code, suggestion }` for all JSON errors (currently just `{ error }`)
-- [ ] **Add timestamps to JSON output** - For audit trails and debugging
-- [ ] **Add event streaming mode** - WebSocket or SSE for real-time progress updates
-- [x] **Block interactive prompts in JSON mode** - Commands now error with `{ error: "Container name is required" }` JSON when required args are missing instead of prompting
-- [x] **Suppress spinners in JSON mode** - Commands using `--json` now skip spinners using `options.json ? null : createSpinner(...)`
+Invalid versions like `"foo"` become `"foo.0.0"` and fail later with confusing 404 errors.
 
-### Medium: Version Validation at Wrong Layer
+- [ ] Add CLI-layer version validation against `supportedVersions` array
+- [ ] Standardize error messages across all engines
+- [ ] Remove engine fallbacks once CLI validates
 
-**Files:** `engines/redis/index.ts`, `engines/valkey/index.ts`, and other engines
+### Low
 
-The `resolveFullVersion()` method in each engine silently falls back to `${version}.0.0` for invalid version inputs instead of validating. This means invalid versions like `"foo"` become `"foo.0.0"` and proceed to fail later in the download step with a confusing 404 error.
+#### Progress Reporting
 
-**Problem:** Each engine independently handles (or doesn't handle) invalid versions, leading to inconsistent error messages.
+- [ ] Define progress stages enum - downloading, extracting, verifying, initializing, starting
+- [ ] Add percentage progress for downloads and large file operations
+- [ ] Stream backup/restore progress (currently no feedback during long operations)
 
-**Solution:** Add version validation at the CLI layer (`cli/commands/create.ts`, etc.) before reaching engine code. Validate against `supportedVersions` array and fail fast with a clear message like "Invalid version 'foo'. Supported versions: 7, 8, 9".
+#### MongoDB Restore Format Gaps
 
-- [ ] **Add CLI-layer version validation** - Validate version against engine's `supportedVersions` before calling engine methods
-- [ ] **Standardize error messages** - Consistent "Invalid version" message across all engines
-- [ ] **Consider removing engine fallbacks** - Once CLI validates, engines can throw on invalid versions instead of guessing
+- [ ] Single .bson file restore - detection exists but restore logic doesn't derive collection name from filename
 
-### Low: Progress Reporting
+---
 
-- [ ] **Define progress stages enum** - Standardize stages: downloading, extracting, verifying, initializing, starting
-- [ ] **Add percentage progress** - For downloads and large file operations
-- [ ] **Stream backup/restore progress** - Currently no feedback during long operations
+## Testing
 
-### Low: MongoDB Restore Format Gaps
+### Pull Command Testing
 
-- [ ] **Single .bson file restore incomplete** - Detection exists in `engines/mongodb/restore.ts` but restore logic doesn't derive collection name from filename or add `--collection` flag. Low priority unless users request it.
-- [ ] **JSON import not supported** - `mongorestore` doesn't accept JSON files (requires `mongoimport`). Not planned for `spindb restore` since it's a different use case (data import vs backup restore). Users can use `spindb run` with mongoimport if needed.
+The `spindb pull` command is implemented but needs comprehensive testing across all engines. See `plans/CLONE_FEATURE.md` for detailed status.
+
+- [ ] **End-to-end pull tests** - Test full `spindb pull` workflow for each engine (replace mode, clone mode)
+- [ ] **Post-script integration** - Verify `SPINDB_CONTEXT` JSON and legacy env vars work correctly
+- [ ] **Error handling** - Test network timeouts, invalid credentials, disk space, transaction rollback
+- [ ] **terminateConnections audit** - Verify engines that need connection termination have proper implementations
+
+### Integration Tests Needed
+
+- [ ] **dumpFromConnectionString tests** - Requires remote database instances. Consider Docker Compose for CI
+- [ ] **Browser/Web UI tests** - Test `openInBrowser()` cross-platform for Qdrant, ClickHouse, Meilisearch, CouchDB
+
+### Windows Testing
+
+- [ ] Test EDB binary download and extraction
+- [ ] Test MySQL TCP-only mode (no Unix sockets)
+- [ ] Test SQLite binary detection with Chocolatey/winget/Scoop
+- [ ] Test process termination with `taskkill`
+- [ ] Create Windows CLI tool availability map
+- [ ] Hide "open shell" option for engines without Windows CLI tools
+
+### Migrate to Vitest
+
+Node.js test runner lacks features needed for robust CI:
+
+- [ ] Install vitest as dev dependency
+- [ ] Update test scripts in package.json
+- [ ] Add vitest.config.ts with platform-specific settings
+- [ ] Enable `--bail` flag to stop on first failure
+
+---
+
+## Code TODOs
+
+Items noted in source code that need attention:
+
+- [ ] **ClickHouse native backup format** (`engines/clickhouse/backup.ts:227`) - Enable when restore support is implemented
+- [ ] **Redis/Valkey SCAN iterator** (`engines/redis/index.ts:1140`, `engines/valkey/index.ts:1157`) - Replace KEYS with SCAN for large dataset support
+- [ ] **Redis/Valkey pipelining** (`engines/valkey/index.ts:1175`) - Optimize with pipelining or Lua script to batch TYPE/TTL/value fetches
+- [ ] **Redis Streams support** (`engines/redis/index.ts:1274`) - Add XRANGE/XADD commands for Streams data type
+- [ ] **FerretDB backup method** (`tests/integration/ferretdb.test.ts:223`) - Replace pg_dump/pg_restore with mongodump/mongorestore
+- [ ] **SQLite version source of truth** (`tests/unit/sqlite-binary-manager.test.ts:18`) - Derive test versions from single source
+
+---
+
+## Maintenance
+
+- [ ] Add examples for each database in `CHEATSHEET.md`
+
+---
+
+## Design Decisions to Revisit
+
+### Database Tracking (`databases` array)
+
+Container configs store a `databases` array that can get stale when databases are created/dropped/renamed outside SpinDB.
+
+**Current solution:** `spindb databases` CLI command for manual sync.
+
+**Alternative approaches:**
+- Query on demand when server is running
+- Filesystem inference for MySQL/MariaDB/ClickHouse (directories)
+- Keep only `database` (singular) for primary database
+- Hybrid: auto-populate from server, cache on stop
+
+**Decision needed:** Is the maintenance burden worth the benefit?
