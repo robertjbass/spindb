@@ -2,6 +2,7 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { spawn } from 'child_process'
 import { escapeablePrompt } from '../../ui/prompts'
+import { getPageSize } from '../../constants'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname, resolve, sep } from 'path'
@@ -57,6 +58,7 @@ function openInBrowser(url: string): void {
 
 export async function handleCopyConnectionString(
   containerName: string,
+  database?: string,
 ): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
@@ -65,7 +67,8 @@ export async function handleCopyConnectionString(
   }
 
   const engine = getEngine(config.engine)
-  const connectionString = engine.getConnectionString(config)
+  // Use provided database or fall back to container's default
+  const connectionString = engine.getConnectionString(config, database)
 
   const copied = await platformService.copyToClipboard(connectionString)
 
@@ -88,7 +91,10 @@ export async function handleCopyConnectionString(
   ])
 }
 
-export async function handleOpenShell(containerName: string): Promise<void> {
+export async function handleOpenShell(
+  containerName: string,
+  database?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.error(uiError(`Container "${containerName}" not found`))
@@ -96,7 +102,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   }
 
   const engine = getEngine(config.engine)
-  const connectionString = engine.getConnectionString(config)
+  // Use provided database or fall back to container's default
+  const activeDatabase = database || config.database
+  const connectionString = engine.getConnectionString(config, activeDatabase)
 
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
@@ -370,7 +378,7 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       name: 'shellChoice',
       message: 'Select shell option:',
       choices,
-      pageSize: 10,
+      pageSize: getPageSize(),
     },
   ])
 
@@ -447,7 +455,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       if (result.success) {
         console.log(uiSuccess('pgcli installed successfully!'))
         console.log()
-        await launchShell(containerName, config, connectionString, 'pgcli')
+        await launchShell(
+          containerName,
+          config,
+          connectionString,
+          'pgcli',
+          activeDatabase,
+        )
       } else {
         console.error(uiError(`Failed to install pgcli: ${result.error}`))
         console.log()
@@ -480,7 +494,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       if (result.success) {
         console.log(uiSuccess('mycli installed successfully!'))
         console.log()
-        await launchShell(containerName, config, connectionString, 'mycli')
+        await launchShell(
+          containerName,
+          config,
+          connectionString,
+          'mycli',
+          activeDatabase,
+        )
       } else {
         console.error(uiError(`Failed to install mycli: ${result.error}`))
         console.log()
@@ -513,7 +533,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       if (result.success) {
         console.log(uiSuccess('usql installed successfully!'))
         console.log()
-        await launchShell(containerName, config, connectionString, 'usql')
+        await launchShell(
+          containerName,
+          config,
+          connectionString,
+          'usql',
+          activeDatabase,
+        )
       } else {
         console.error(uiError(`Failed to install usql: ${result.error}`))
         console.log()
@@ -546,7 +572,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       if (result.success) {
         console.log(uiSuccess('litecli installed successfully!'))
         console.log()
-        await launchShell(containerName, config, connectionString, 'litecli')
+        await launchShell(
+          containerName,
+          config,
+          connectionString,
+          'litecli',
+          activeDatabase,
+        )
       } else {
         console.error(uiError(`Failed to install litecli: ${result.error}`))
         console.log()
@@ -579,7 +611,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       if (result.success) {
         console.log(uiSuccess('iredis installed successfully!'))
         console.log()
-        await launchShell(containerName, config, connectionString, 'iredis')
+        await launchShell(
+          containerName,
+          config,
+          connectionString,
+          'iredis',
+          activeDatabase,
+        )
       } else {
         console.error(uiError(`Failed to install iredis: ${result.error}`))
         console.log()
@@ -615,7 +653,13 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     return
   }
 
-  await launchShell(containerName, config, connectionString, shellChoice)
+  await launchShell(
+    containerName,
+    config,
+    connectionString,
+    shellChoice,
+    activeDatabase,
+  )
 }
 
 /**
@@ -745,6 +789,7 @@ async function launchShell(
   config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
   connectionString: string,
   shellType: 'default' | 'usql' | 'pgcli' | 'mycli' | 'litecli' | 'iredis',
+  database: string,
 ): Promise<void> {
   console.log(uiInfo(`Connecting to ${containerName}...`))
   console.log()
@@ -752,6 +797,7 @@ async function launchShell(
   let shellCmd: string
   let shellArgs: string[]
   let installHint: string
+  let spawnCwd: string | undefined
 
   if (shellType === 'pgcli') {
     // pgcli accepts connection strings
@@ -768,7 +814,7 @@ async function launchShell(
       String(config.port),
       '-u',
       'root',
-      config.database,
+      database,
     ]
     installHint = 'brew install mycli'
   } else if (shellType === 'litecli') {
@@ -803,7 +849,7 @@ async function launchShell(
       '127.0.0.1',
       '-P',
       String(config.port),
-      config.database,
+      database,
     ]
     installHint = 'spindb engines download mysql'
   } else if (config.engine === 'mariadb') {
@@ -817,7 +863,7 @@ async function launchShell(
       '127.0.0.1',
       '-P',
       String(config.port),
-      config.database,
+      database,
     ]
     installHint = 'spindb engines download mariadb'
   } else if (config.engine === 'mongodb' || config.engine === 'ferretdb') {
@@ -872,7 +918,7 @@ async function launchShell(
       '--port',
       String(config.port),
       '--database',
-      config.database,
+      database,
     ]
     installHint = 'spindb engines download clickhouse'
   } else if (config.engine === 'qdrant') {
@@ -923,7 +969,6 @@ async function launchShell(
       .getSurrealPath(config.version)
       .catch(() => 'surreal')
     const namespace = config.name.replace(/-/g, '_')
-    const database = config.database || 'default'
     shellCmd = surrealPath
     shellArgs = [
       'sql',
@@ -932,13 +977,15 @@ async function launchShell(
       '--namespace',
       namespace,
       '--database',
-      database,
+      database || 'default',
       '--username',
       'root',
       '--password',
       'root',
     ]
     installHint = 'spindb engines download surrealdb'
+    // SurrealDB writes history.txt to cwd - use container directory
+    spawnCwd = join(paths.containers, 'surrealdb', config.name)
   } else if (config.engine === 'cockroachdb') {
     // CockroachDB uses cockroach sql command
     const engine = getEngine(config.engine)
@@ -952,14 +999,14 @@ async function launchShell(
       '--host',
       `127.0.0.1:${config.port}`,
       '--database',
-      config.database,
+      database,
     ]
     installHint = 'spindb engines download cockroachdb'
   } else if (config.engine === 'questdb') {
     // QuestDB uses PostgreSQL wire protocol on port 8812
     // Default credentials: admin/quest
     shellCmd = 'psql'
-    const db = config.database || 'qdb'
+    const db = database || 'qdb'
     // QuestDB connection string with explicit password
     const questDbConnStr = `postgresql://admin:quest@127.0.0.1:${config.port}/${db}`
     shellArgs = [questDbConnStr]
@@ -972,6 +1019,7 @@ async function launchShell(
 
   const shellProcess = spawn(shellCmd, shellArgs, {
     stdio: 'inherit',
+    cwd: spawnCwd,
   })
 
   await new Promise<void>((resolve) => {

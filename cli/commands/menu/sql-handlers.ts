@@ -6,17 +6,16 @@ import { containerManager } from '../../../core/container-manager'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { getEngine } from '../../../engines'
 import { paths } from '../../../config/paths'
-import {
-  promptInstallDependencies,
-  promptDatabaseSelect,
-  escapeablePrompt,
-} from '../../ui/prompts'
+import { promptInstallDependencies, escapeablePrompt } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { followFile, getLastNLines } from '../../utils/file-follower'
 import { Engine, assertExhaustive } from '../../../types'
 
-export async function handleRunSql(containerName: string): Promise<void> {
+export async function handleRunSql(
+  containerName: string,
+  database?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.error(uiError(`Container "${containerName}" not found`))
@@ -58,7 +57,7 @@ export async function handleRunSql(containerName: string): Promise<void> {
   const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
   // Get script type terminology based on engine
-  // IMPORTANT: When adding a new engine, update this function and FEATURE.md
+  // IMPORTANT: When adding a new engine, update this function and ENGINE_CHECKLIST.md
   // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse, CockroachDB
   // - SurrealQL: SurrealDB (SQL-like but distinct language)
   // - Script: MongoDB, FerretDB (JavaScript via mongosh), Qdrant, Meilisearch (REST API)
@@ -132,17 +131,8 @@ export async function handleRunSql(containerName: string): Promise<void> {
 
   const filePath = stripQuotes(rawFilePath)
 
-  const databases = config.databases || [config.database]
-  let databaseName: string
-
-  if (databases.length > 1) {
-    databaseName = await promptDatabaseSelect(
-      databases,
-      `Select database to run ${scriptTypeLower} against:`,
-    )
-  } else {
-    databaseName = databases[0]
-  }
+  // Use provided database or fall back to container's default
+  const databaseName = database || config.database
 
   console.log()
   console.log(

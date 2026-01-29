@@ -42,7 +42,7 @@ import {
   connectionBox,
   formatBytes,
 } from '../../ui/theme'
-import { getEngineIcon } from '../../constants'
+import { getEngineIcon, getPageSize } from '../../constants'
 import { Engine, assertExhaustive } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
@@ -374,7 +374,7 @@ export async function handleRestore(): Promise<void> {
         name: 'selectedContainer',
         message: 'Select container to restore to:',
         choices,
-        pageSize: 15,
+        pageSize: getPageSize(),
       },
     ])
 
@@ -911,8 +911,14 @@ export async function handleRestore(): Promise<void> {
 /**
  * Shared backup flow for both main menu and container submenu
  * Reduces code duplication between handleBackup and handleBackupForContainer
+ *
+ * @param containerName - The container to backup
+ * @param database - Optional database name (skips database selection if provided)
  */
-async function performBackupFlow(containerName: string): Promise<void> {
+async function performBackupFlow(
+  containerName: string,
+  database?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
@@ -956,11 +962,14 @@ async function performBackupFlow(containerName: string): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  // Select database (auto-select if only one)
+  // Use provided database or select from available databases
   const databases = config.databases || [config.database]
   let databaseName: string
 
-  if (databases.length > 1) {
+  if (database) {
+    // Use the pre-selected database from the container submenu
+    databaseName = database
+  } else if (databases.length > 1) {
     databaseName = await promptDatabaseSelect(
       databases,
       'Select database to backup:',
@@ -1054,17 +1063,22 @@ export async function handleBackup(): Promise<void> {
  */
 export async function handleBackupForContainer(
   containerName: string,
+  database?: string,
 ): Promise<void> {
-  await performBackupFlow(containerName)
+  await performBackupFlow(containerName, database)
   await pressEnterToContinue()
 }
 
 /**
  * Handle restore for a specific container (used from container submenu)
  * Skips container selection since we already know which container
+ *
+ * @param containerName - The container to restore to
+ * @param database - Optional database name (pre-selects target database if provided)
  */
 export async function handleRestoreForContainer(
   containerName: string,
+  database?: string,
 ): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
@@ -1343,12 +1357,18 @@ export async function handleRestoreForContainer(
       return
     }
   } else {
-    // Replace existing database - auto-select if only one
-    if (existingDatabases.length === 1) {
+    // Replace existing database - use pre-selected or auto-select if only one
+    if (database) {
+      // Use the pre-selected database from the container submenu
+      databaseName = database
+      console.log(chalk.gray(`  Target database: ${databaseName}`))
+    } else if (existingDatabases.length === 1) {
       databaseName = existingDatabases[0]
       console.log(chalk.gray(`  Using database: ${databaseName}`))
     } else {
-      const { database } = await escapeablePrompt<{ database: string }>([
+      const { database: selectedDb } = await escapeablePrompt<{
+        database: string
+      }>([
         {
           type: 'list',
           name: 'database',
@@ -1356,7 +1376,7 @@ export async function handleRestoreForContainer(
           choices: existingDatabases.map((db) => ({ name: db, value: db })),
         },
       ])
-      databaseName = database
+      databaseName = selectedDb
     }
   }
 
