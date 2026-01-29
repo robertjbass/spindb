@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.5] - 2026-01-28
+
+### Added
+- **Configurable icon modes** - Engine icons now support three display modes via `SPINDB_ICONS` environment variable or `spindb config icons`:
+  - `ascii` (default): `[PG]`, `[MY]`, etc. - works in any terminal
+  - `nerd`: Nerd Font glyphs - requires a [patched font](https://nerdfonts.com)
+  - `emoji`: Original emoji icons
+- **Settings menu** - New "Settings" option in main menu for configuring icon mode preference
+- **Doctor preferences check** - `spindb doctor` now verifies icon mode is configured and offers auto-fix
+- **JSON output tests** - Added tests to ensure all `--json` commands output valid parseable JSON
+
+### Fixed
+- **--json flag on engine subcommands** - Fixed `spindb engines supported --json` and other subcommands not outputting JSON (flags were consumed by parent command)
+
+### Changed
+- **Consolidated documentation** - Combined FEATURE.md and CHECKLIST.md into single ENGINE_CHECKLIST.md (~2,600 lines)
+- **Removed obsolete docs** - Deleted evaluations/ directory and plans/FERRETDB.md (content moved to ENGINE_CHECKLIST.md or obsolete)
+
 ## [0.27.4] - 2026-01-28
 
 ### Changed

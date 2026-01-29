@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.27.4",
+  "version": "0.27.5",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "tsx cli/bin.ts",
-    "dev": "tsx cli/bin.ts",
+    "dev": "tsx --env-file-if-exists=.env cli/bin.ts",
     "test": "run-s test:all",
     "test:engine": "tsx scripts/test-engine.ts",
     "test:unit": "node --import tsx --test --experimental-test-isolation=none tests/unit/*.test.ts",

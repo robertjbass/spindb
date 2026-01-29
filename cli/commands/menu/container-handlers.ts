@@ -546,13 +546,14 @@ export async function handleList(
   // Build the full choice list with footer items
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
     ...containerChoices,
-    new inquirer.Separator(chalk.gray('─'.repeat(60))),
+    new inquirer.Separator(),
     new inquirer.Separator(
       `${containers.length} container(s): ${parts.join('; ')} ${chalk.gray('— type to filter')}`,
     ),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
     { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+    new inquirer.Separator(),
   ]
 
   const selectedContainer = await filterableListPrompt(

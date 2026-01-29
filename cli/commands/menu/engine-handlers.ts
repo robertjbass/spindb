@@ -130,12 +130,13 @@ export async function handleEngines(): Promise<void> {
   // Build full choice list with footer
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
     ...engineChoices,
-    new inquirer.Separator(chalk.gray('─'.repeat(52))),
+    new inquirer.Separator(),
     new inquirer.Separator(
       `Total: ${engines.length} engine(s), ${formatBytes(totalSize)} ${chalk.gray('— type to filter')}`,
     ),
     new inquirer.Separator(),
     { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+    new inquirer.Separator(),
   ]
 
   const action = await filterableListPrompt(

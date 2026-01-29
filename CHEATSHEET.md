@@ -143,7 +143,8 @@ spindb logs mydb --editor               # Open in $EDITOR
 ## Engine Management
 
 ```bash
-spindb engines list                     # List downloaded engines
+spindb engines                          # List downloaded engines
+spindb engines --json                   # List engines as JSON
 spindb engines download postgresql 18   # Download specific version
 spindb engines delete postgresql 17     # Delete engine version
 spindb deps check                       # Check required tools
@@ -222,6 +223,7 @@ Most commands support `--json` / `-j` for machine-readable output:
 
 ```bash
 spindb list --json
+spindb engines --json
 spindb create mydb --json
 spindb url mydb --json
 spindb backup mydb --json

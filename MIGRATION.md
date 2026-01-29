@@ -10,7 +10,7 @@ This document contains historical instructions for migrating a database engine f
 2. **Future engines** - If a new engine initially uses system binaries before hostdb support is added
 3. **Troubleshooting** - Understanding the binary registration system
 
-For adding **new engines**, see [FEATURE.md](FEATURE.md) which covers the complete process from scratch.
+For adding **new engines**, see [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) which covers the complete process from scratch.
 
 ---
 

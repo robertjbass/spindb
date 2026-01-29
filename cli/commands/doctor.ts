@@ -3,12 +3,13 @@
  *
  * Checks:
  * 1. Configuration file validity
- * 2. Container status across all engines
- * 3. SQLite registry orphaned entries
- * 4. DuckDB registry orphaned entries
- * 5. Binary/tool availability
- * 6. Version migration (outdated container versions)
- * 7. Orphaned test containers cleanup
+ * 2. User preferences (icon mode)
+ * 3. Container status across all engines
+ * 4. SQLite registry orphaned entries
+ * 5. DuckDB registry orphaned entries
+ * 6. Binary/tool availability
+ * 7. Version migration (outdated container versions)
+ * 8. Orphaned test containers cleanup
  */
 
 import { Command } from 'commander'
@@ -90,6 +91,58 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
       name: 'Configuration',
       status: 'error',
       message: 'Configuration file is corrupted',
+      details: [(error as Error).message],
+    }
+  }
+}
+
+// Check user preferences (icon mode, etc.)
+async function checkPreferences(): Promise<HealthCheckResult> {
+  const configPath = paths.config
+
+  if (!existsSync(configPath)) {
+    return {
+      name: 'Preferences',
+      status: 'ok',
+      message: 'No config file yet (preferences will use defaults)',
+    }
+  }
+
+  try {
+    const config = await configManager.load()
+
+    // Check if preferences.iconMode is set
+    if (!config.preferences?.iconMode) {
+      return {
+        name: 'Preferences',
+        status: 'warning',
+        message: 'Icon mode not configured (defaulting to ascii)',
+        details: ['Run: spindb config icons to set your preference'],
+        action: {
+          label: 'Set icon mode to ascii (default)',
+          handler: async () => {
+            const currentConfig = await configManager.load()
+            currentConfig.preferences = {
+              ...currentConfig.preferences,
+              iconMode: 'ascii',
+            }
+            await configManager.save()
+            console.log(uiSuccess('Icon mode set to ascii'))
+          },
+        },
+      }
+    }
+
+    return {
+      name: 'Preferences',
+      status: 'ok',
+      message: `Icon mode: ${config.preferences.iconMode}`,
+    }
+  } catch (error) {
+    return {
+      name: 'Preferences',
+      status: 'error',
+      message: 'Failed to check preferences',
       details: [(error as Error).message],
     }
   }
@@ -506,6 +559,7 @@ export const doctorCommand = new Command('doctor')
     // Run all checks in parallel for better performance
     const checks = await Promise.all([
       checkConfiguration(),
+      checkPreferences(),
       checkContainers(),
       checkSqliteRegistry(),
       checkDuckdbRegistry(),

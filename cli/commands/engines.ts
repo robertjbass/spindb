@@ -1034,6 +1034,7 @@ async function _installEngineViaPackageManager(
 export const enginesCommand = new Command('engines')
   .description('Manage installed database engines')
   .option('--json', 'Output as JSON')
+  .passThroughOptions()
   .action(async (options: { json?: boolean }) => {
     try {
       // Default action: list installed engines (same as 'engines list')

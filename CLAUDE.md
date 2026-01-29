@@ -5,7 +5,7 @@
 | File | Purpose |
 |------|---------|
 | [STYLEGUIDE.md](STYLEGUIDE.md) | Coding conventions and style guidelines |
-| [FEATURE.md](FEATURE.md) | **Authoritative guide** for adding new database engines |
+| [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) | **Authoritative guide & checklist** for adding new database engines |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | High-level design, layers, data flow |
 | [MIGRATION.md](MIGRATION.md) | Historical guide for migrating engines to hostdb |
 | [ENGINES.md](ENGINES.md) | Supported engines overview |
@@ -56,7 +56,7 @@ tests/
 
 ### Multi-Engine Support
 
-Engines extend `BaseEngine` abstract class. See [FEATURE.md](FEATURE.md) for full method list.
+Engines extend `BaseEngine` abstract class. See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for full method list.
 
 **Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB):
 - Data in `~/.spindb/containers/{engine}/{name}/`
@@ -171,7 +171,7 @@ When adding a new engine, choose the appropriate binary manager base class:
 
 **Note:** PostgreSQL uses `BaseServerBinaryManager` with a custom `verify()` override for its version output format. EDB binaries for Windows are uploaded to hostdb, so all platforms use the same download path.
 
-See [FEATURE.md](FEATURE.md) for detailed implementation guidance and code examples.
+See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for detailed implementation guidance and code examples.
 
 ### Engine Aliases
 
@@ -342,7 +342,7 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | Meilisearch | `snapshot` (.snapshot) | _(none)_ | `snapshot` |
 | CouchDB | `json` (.json) | _(none)_ | `json` |
 
-See [FEATURE.md](FEATURE.md) for complete documentation including Redis merge vs replace behavior.
+See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete documentation including Redis merge vs replace behavior.
 
 ### File Structure
 
@@ -435,7 +435,7 @@ pnpm test:docker -- meilisearch # Meilisearch (uses curl for REST API tests)
 
 ### Adding a New Engine
 
-See [FEATURE.md](FEATURE.md) for complete guide. Quick checklist:
+See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete guide. Quick checklist:
 1. Create `engines/{engine}/` with index.ts, backup.ts, restore.ts, version-maps.ts
 2. Add to `Engine` enum, `ALL_ENGINES`, and `config/engines.json`
 3. Add tools to `KNOWN_BINARY_TOOLS` in dependency-manager.ts

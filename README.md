@@ -958,7 +958,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture details.
 
 See [CLAUDE.md](CLAUDE.md) for AI-assisted development context.
 
-See [FEATURE.md](FEATURE.md) for adding new database engines.
+See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
 ---
 

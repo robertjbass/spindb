@@ -110,6 +110,7 @@ export async function run(): Promise<void> {
     .name('spindb')
     .description('Spin up local database containers without Docker')
     .version(pkg.version, '-v, --version', 'output the version number')
+    .enablePositionalOptions()
 
   program.addCommand(createCommand)
   program.addCommand(listCommand)
