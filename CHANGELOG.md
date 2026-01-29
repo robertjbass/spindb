@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-01-29
+
+### Added
+- **`databases set-default` command** - Change the default/primary database for a container: `spindb databases set-default mydb prod`
+- **`databases list --default` flag** - Show only the default database name: `spindb databases list mydb --default` outputs just `efficientdb`
+- **`databases list` all containers** - Running without a container argument now lists all containers with their databases
+- **Database selection menu options** - Added "Change default database" and "Home (esc)" options to the database selection submenu
+- **`spindb which` command** - Find containers by port or connection URL for scripting
+- **Dynamic menu page sizing** - Menu lists now adapt to terminal height (20 items for tall terminals, 15 for shorter)
+
+### Changed
+- **Menu UI improvements**:
+  - Container submenu now pre-selects the default database from config instead of requiring manual selection
+  - Header simplified to `🐘 container → database` format (no box, uses arrow, respects icon preference)
+  - "Set database" menu item now shows count: `Set database | Current: efficientdb (1 of 2)`
+  - Database selection shows `(default)` marker on the primary database
+- **JSON output** - All `--json` output is now pretty-printed with indentation for readability
+- **Documentation reorganization**:
+  - README: Platform matrix moved to top, comparison tables split by category (GUI tools, Docker, package managers)
+  - Deleted redundant ENGINES.md (content consolidated in README and engines.json)
+  - Moved MIGRATION.md to docs/historical-refactor-notes/BINARY-MANAGEMENT.md
+  - Updated ARCHITECTURE.md with SurrealDB, QuestDB, and corrected FerretDB platform support
+  - Added `spindb which` command to CHEATSHEET.md
+
+### Fixed
+- **Double parentheses in disabled menu items** - Fixed menu items showing "(Stop container first) (Disabled)" by passing hint to inquirer's disabled property directly
+- **SurrealDB history.txt pollution** - SurrealDB shell now writes history to container directory instead of user's working directory
+
 ## [0.27.6] - 2026-01-28
 
 ### Fixed
