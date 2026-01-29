@@ -274,13 +274,13 @@ In ASCII mode, icons display with database brand colors using `chalk.bgHex().hex
 ```ts
 // ENGINE_BRAND_COLORS in cli/constants.ts
 {
-  [Engine.PostgreSQL]: { primary: '#FFFFFF', secondary: '#336791' }, // White on blue
-  [Engine.MySQL]: { primary: '#F29111', secondary: '#00758F' },      // Orange on blue
+  [Engine.PostgreSQL]: { foreground: '#FFFFFF', background: '#336791' }, // White on blue
+  [Engine.MySQL]: { foreground: '#FFFFFF', background: '#00758F' },      // White on blue
   // ...
 }
 ```
 
-The `primary` color is the text color and `secondary` is the background color.
+The `foreground` color is the text color and `background` is the background color.
 
 #### Emoji Mode Caveats
 
