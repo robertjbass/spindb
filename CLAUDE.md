@@ -452,6 +452,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete guide. Quick checkli
 Always run these verification steps before considering a task complete:
 
 ```bash
+pnpm format        # Run Prettier to format code
 pnpm lint          # TypeScript compilation + ESLint
 pnpm test:unit     # Unit tests (740+ tests)
 ```
