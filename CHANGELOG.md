@@ -10,26 +10,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.28.0] - 2026-01-29
 
 ### Added
+- **`spindb pull` command** - Pull remote database data into a local container with automatic backup:
+  ```bash
+  # Replace mode: backup original, pull remote data (connection string unchanged)
+  spindb pull myapp --from postgresql://user:pass@prod.example.com/db
+
+  # Read URL from environment variable (keeps credentials out of shell history)
+  spindb pull myapp --from-env CLONE_FROM_DATABASE_URL
+
+  # Clone mode: create new database with remote data
+  spindb pull myapp --from-env PROD_DB_URL --as mydb_prod
+
+  # Preview changes without executing
+  spindb pull myapp --from-env PROD_DB_URL --dry-run
+
+  # Run post-pull script (e.g., credential sync)
+  spindb pull myapp --from-env PROD_DB_URL --post-script ./sync-credentials.ts
+  ```
+  - **Replace mode** (default): Backs up original database with timestamp, pulls remote data into original database name - your connection string never changes
+  - **Clone mode** (`--as`): Pulls remote data into a new database, leaves original untouched
+  - **JSON output** with `--json` returns `databaseUrl` and `backupUrl` for scripting
+  - **Post-pull scripts** receive context via `SPINDB_CONTEXT` JSON file (container, database, backupDatabase, port, engine)
+  - Supports PostgreSQL, MySQL, and MariaDB (more engines planned)
+- **`spindb which` command** - Find containers by port or connection URL for scripting:
+  ```bash
+  spindb which --port 5432              # Find container on port 5432
+  spindb which --url "$DATABASE_URL"    # Find container matching URL
+  CONTAINER=$(spindb which --port 5432) # Use in scripts
+  ```
+- **`terminateConnections()` engine method** - Safely disconnect clients before dropping databases (PostgreSQL, MySQL, MariaDB)
 - **`databases set-default` command** - Change the default/primary database for a container: `spindb databases set-default mydb prod`
 - **`databases list --default` flag** - Show only the default database name: `spindb databases list mydb --default` outputs just `efficientdb`
 - **`databases list` all containers** - Running without a container argument now lists all containers with their databases
-- **Database selection menu options** - Added "Change default database" and "Home (esc)" options to the database selection submenu
-- **`spindb which` command** - Find containers by port or connection URL for scripting
+- **Database selection in container menu** - Containers with multiple databases now show a "Set database" option to select which database to operate on
 - **Dynamic menu page sizing** - Menu lists now adapt to terminal height (20 items for tall terminals, 15 for shorter)
 
 ### Changed
 - **Menu UI improvements**:
-  - Container submenu now pre-selects the default database from config instead of requiring manual selection
-  - Header simplified to `🐘 container → database` format (no box, uses arrow, respects icon preference)
-  - "Set database" menu item now shows count: `Set database | Current: efficientdb (1 of 2)`
-  - Database selection shows `(default)` marker on the primary database
+  - Container submenu header simplified to `🐘 container → database` format (respects icon preference)
+  - Database-specific actions (shell, backup, restore, copy URL) now require database selection for multi-database containers
+  - "Set database" menu item shows current selection and count: `Set database | Current: efficientdb (1 of 2)`
+  - Disabled menu items show clear hints (e.g., "Select database first", "Start container first")
 - **JSON output** - All `--json` output is now pretty-printed with indentation for readability
 - **Documentation reorganization**:
-  - README: Platform matrix moved to top, comparison tables split by category (GUI tools, Docker, package managers)
+  - README: Platform matrix moved to top with cleaner "Type" column, comparison tables split by category
   - Deleted redundant ENGINES.md (content consolidated in README and engines.json)
-  - Moved MIGRATION.md to docs/historical-refactor-notes/BINARY-MANAGEMENT.md
-  - Updated ARCHITECTURE.md with SurrealDB, QuestDB, and corrected FerretDB platform support
-  - Added `spindb which` command to CHEATSHEET.md
+  - Moved MIGRATION.md to docs/historical-refactor-notes/ for historical reference
+  - Updated ARCHITECTURE.md with SurrealDB, QuestDB details
+  - Added `spindb pull` and `spindb which` commands to CHEATSHEET.md
+  - New plans/CLONE_FEATURE.md tracking engine support for pull command
 
 ### Fixed
 - **Double parentheses in disabled menu items** - Fixed menu items showing "(Stop container first) (Disabled)" by passing hint to inquirer's disabled property directly

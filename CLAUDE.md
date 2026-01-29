@@ -548,6 +548,10 @@ npm via GitHub Actions with OIDC. Bump version in `package.json`, update CHANGEL
 
 ESM imports, `async/await`, Ora spinners, conventional commits (`feat:`, `fix:`, `chore:`).
 
+### Commit Messages
+
+- Never mention AI tools as co-authors or contributors. This is a compliance requirement.
+
 ### Logging
 
 - **User-facing output**: Use Ora spinners and Chalk for CLI feedback
