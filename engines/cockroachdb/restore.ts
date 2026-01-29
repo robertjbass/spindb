@@ -102,9 +102,9 @@ export async function detectBackupFormat(
   if (stats.isDirectory()) {
     return {
       format: 'unknown',
-      description: 'Directory found - CockroachDB restore expects a single file',
-      restoreCommand:
-        'CockroachDB requires a single .sql file for restore',
+      description:
+        'Directory found - CockroachDB restore expects a single file',
+      restoreCommand: 'CockroachDB requires a single .sql file for restore',
     }
   }
 
@@ -219,7 +219,10 @@ async function getTablesInDatabase(
     return result
       .split('\n')
       .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('table_name') && !line.startsWith('-'))
+      .filter(
+        (line) =>
+          line && !line.startsWith('table_name') && !line.startsWith('-'),
+      )
   } catch (error) {
     logDebug(`Failed to get tables: ${error}`)
     return []
@@ -241,7 +244,9 @@ async function dropAllTables(
     return
   }
 
-  logDebug(`Dropping ${tables.length} existing table(s) in database "${database}"`)
+  logDebug(
+    `Dropping ${tables.length} existing table(s) in database "${database}"`,
+  )
 
   for (const table of tables) {
     try {
@@ -345,7 +350,9 @@ async function restoreSqlBackup(
           'CockroachDB closed connection early (likely SQL syntax error)',
         )
       } else {
-        streamError = new Error(`Failed to write to cockroach sql: ${error.message}`)
+        streamError = new Error(
+          `Failed to write to cockroach sql: ${error.message}`,
+        )
       }
       fileStream.destroy()
     })

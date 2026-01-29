@@ -38,11 +38,16 @@ async function createSurqlBackup(
     // surreal export command
     const args = [
       'export',
-      '--endpoint', `http://127.0.0.1:${port}`,
-      '--user', 'root',
-      '--pass', 'root',
-      '--ns', namespace,
-      '--db', database,
+      '--endpoint',
+      `http://127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--ns',
+      namespace,
+      '--db',
+      database,
       outputPath,
     ]
 
@@ -118,5 +123,9 @@ export async function createCloneBackup(
   container: ContainerConfig,
   outputPath: string,
 ): Promise<BackupResult> {
-  return createSurqlBackup(container, outputPath, container.database || 'default')
+  return createSurqlBackup(
+    container,
+    outputPath,
+    container.database || 'default',
+  )
 }

@@ -39,6 +39,9 @@ export enum Engine {
   QuestDB = 'questdb',
 }
 
+// Icon display mode for engine icons in CLI output
+export type IconMode = 'ascii' | 'nerd' | 'emoji'
+
 // Supported operating systems (matches Node.js process.platform)
 export enum Platform {
   Darwin = 'darwin',
@@ -369,6 +372,12 @@ export type BinaryConfig = {
   version?: string
 }
 
+// User preferences for CLI display and behavior
+export type SpinDBPreferences = {
+  // Icon display mode (undefined = show first-time setup)
+  iconMode?: IconMode
+}
+
 // Global spindb configuration stored in ~/.spindb/config.json
 export type SpinDBConfig = {
   // Binary paths for all engine tools (server and client)
@@ -455,6 +464,8 @@ export type SpinDBConfig = {
     latestVersion?: string // Latest version found from registry
     autoCheckEnabled?: boolean // Default true, user can disable
   }
+  // User preferences (icon mode, etc.)
+  preferences?: SpinDBPreferences
 }
 
 /**

@@ -224,7 +224,11 @@ describe('SQLiteBinaryManager', () => {
 
   describe('getDownloadUrl', () => {
     it('should generate valid hostdb URL', () => {
-      const url = sqliteBinaryManager.getDownloadUrl('3', Platform.Darwin, Arch.ARM64)
+      const url = sqliteBinaryManager.getDownloadUrl(
+        '3',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
 
       assert(
         url.includes('github.com/robertjbass/hostdb'),
@@ -235,8 +239,16 @@ describe('SQLiteBinaryManager', () => {
     })
 
     it('should use correct file extension for platform', () => {
-      const unixUrl = sqliteBinaryManager.getDownloadUrl('3', Platform.Darwin, Arch.ARM64)
-      const winUrl = sqliteBinaryManager.getDownloadUrl('3', Platform.Win32, Arch.X64)
+      const unixUrl = sqliteBinaryManager.getDownloadUrl(
+        '3',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
+      const winUrl = sqliteBinaryManager.getDownloadUrl(
+        '3',
+        Platform.Win32,
+        Arch.X64,
+      )
 
       assert(unixUrl.endsWith('.tar.gz'), 'Unix should use tar.gz')
       assert(winUrl.endsWith('.zip'), 'Windows should use zip')

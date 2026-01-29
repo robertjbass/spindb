@@ -60,7 +60,8 @@ async function looksLikeSurql(filePath: string): Promise<boolean> {
       const trimmed = line.trim().toUpperCase()
 
       // Skip empty lines and comments
-      if (!trimmed || trimmed.startsWith('--') || trimmed.startsWith('#')) continue
+      if (!trimmed || trimmed.startsWith('--') || trimmed.startsWith('#'))
+        continue
 
       checkedLines++
 
@@ -101,8 +102,7 @@ export async function detectBackupFormat(
     return {
       format: 'unknown',
       description: 'Directory found - SurrealDB restore expects a single file',
-      restoreCommand:
-        'SurrealDB requires a single .surql file for restore',
+      restoreCommand: 'SurrealDB requires a single .surql file for restore',
     }
   }
 
@@ -156,11 +156,16 @@ async function restoreSurqlBackup(
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = [
       'import',
-      '--endpoint', `http://127.0.0.1:${port}`,
-      '--user', 'root',
-      '--pass', 'root',
-      '--ns', namespace,
-      '--db', database,
+      '--endpoint',
+      `http://127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--ns',
+      namespace,
+      '--db',
+      database,
       backupPath,
     ]
 

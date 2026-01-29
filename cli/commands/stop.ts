@@ -25,7 +25,9 @@ export const stopCommand = new Command('stop')
 
           if (running.length === 0) {
             if (options.json) {
-              console.log(JSON.stringify({ error: 'No running containers found' }))
+              console.log(
+                JSON.stringify({ error: 'No running containers found' }),
+              )
               process.exit(1)
             }
             console.log(uiWarning('No running containers found'))
@@ -108,7 +110,9 @@ export const stopCommand = new Command('stop')
               }),
             )
           } else {
-            console.log(uiSuccess(`Stopped ${stoppedNames.length} container(s)`))
+            console.log(
+              uiSuccess(`Stopped ${stoppedNames.length} container(s)`),
+            )
           }
           return
         }
@@ -141,7 +145,11 @@ export const stopCommand = new Command('stop')
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           if (options.json) {
-            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+            console.log(
+              JSON.stringify({
+                error: `Container "${containerName}" not found`,
+              }),
+            )
           } else {
             console.error(uiError(`Container "${containerName}" not found`))
           }
@@ -153,7 +161,11 @@ export const stopCommand = new Command('stop')
         })
         if (!running) {
           if (options.json) {
-            console.log(JSON.stringify({ error: `Container "${containerName}" is not running` }))
+            console.log(
+              JSON.stringify({
+                error: `Container "${containerName}" is not running`,
+              }),
+            )
             process.exit(1)
           }
           console.log(uiWarning(`Container "${containerName}" is not running`))

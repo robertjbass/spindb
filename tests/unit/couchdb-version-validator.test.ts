@@ -55,12 +55,18 @@ describe('CouchDB Version Validator', () => {
     })
 
     it('should not support version 2.x', () => {
-      assert(!isVersionSupported('2.0.0'), 'Version 2.0.0 should not be supported')
+      assert(
+        !isVersionSupported('2.0.0'),
+        'Version 2.0.0 should not be supported',
+      )
       assert(!isVersionSupported('2'), 'Version 2 should not be supported')
     })
 
     it('should not support version 1.x', () => {
-      assert(!isVersionSupported('1.6.1'), 'Version 1.6.1 should not be supported')
+      assert(
+        !isVersionSupported('1.6.1'),
+        'Version 1.6.1 should not be supported',
+      )
     })
   })
 

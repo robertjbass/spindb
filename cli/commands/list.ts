@@ -14,7 +14,6 @@ import {
   deriveContainerName,
 } from '../../engines/sqlite/scanner'
 
-
 /**
  * Prompt user about unregistered SQLite files in CWD
  * Returns true if user registered any files (refresh needed)
@@ -162,13 +161,13 @@ export const listCommand = new Command('list')
       console.log(
         chalk.gray('  ') +
           chalk.bold.white('NAME'.padEnd(20)) +
-          chalk.bold.white('ENGINE'.padEnd(15)) +
+          chalk.bold.white('ENGINE'.padEnd(18)) +
           chalk.bold.white('VERSION'.padEnd(10)) +
           chalk.bold.white('PORT'.padEnd(8)) +
           chalk.bold.white('SIZE'.padEnd(10)) +
           chalk.bold.white('STATUS'),
       )
-      console.log(chalk.gray('  ' + '─'.repeat(73)))
+      console.log(chalk.gray('  ' + '─'.repeat(76)))
 
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
@@ -188,10 +187,11 @@ export const listCommand = new Command('list')
               : chalk.gray('○ stopped')
         }
 
-        // getEngineIcon() includes trailing space for consistent alignment
-        const engineDisplay = `${getEngineIcon(container.engine)}${container.engine}`
+        // getEngineIcon() includes trailing space - pad engine name separately to avoid ANSI code length issues
+        const engineIcon = getEngineIcon(container.engine)
+        const engineName = container.engine.padEnd(13)
 
-        const sizeDisplay = size !== null ? formatBytes(size) : chalk.gray('—')
+        const sizeDisplay = size !== null ? formatBytes(size) : '—'
 
         // SQLite shows truncated file name instead of port
         let portOrPath: string
@@ -207,7 +207,8 @@ export const listCommand = new Command('list')
         console.log(
           chalk.gray('  ') +
             chalk.cyan(container.name.padEnd(20)) +
-            chalk.white(engineDisplay.padEnd(15)) +
+            engineIcon +
+            chalk.white(engineName) +
             chalk.yellow(container.version.padEnd(10)) +
             chalk.green(portOrPath.padEnd(8)) +
             chalk.magenta(sizeDisplay.padEnd(10)) +

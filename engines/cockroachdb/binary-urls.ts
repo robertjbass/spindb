@@ -7,7 +7,8 @@
 import type { Platform, Arch } from '../../types'
 import { normalizeVersion } from './version-maps'
 
-const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
+const HOSTDB_BASE_URL =
+  'https://github.com/robertjbass/hostdb/releases/download'
 
 /**
  * Get the binary download URL for a specific version and platform

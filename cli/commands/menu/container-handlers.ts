@@ -55,7 +55,7 @@ import {
 } from './backup-handlers'
 import { Engine, isFileBasedEngine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
-import { getEngineIconPadded } from '../../constants'
+import { getEngineIcon } from '../../constants'
 
 export async function handleCreate(): Promise<'main' | void> {
   console.log()
@@ -284,7 +284,9 @@ export async function handleCreate(): Promise<'main' | void> {
   createSpinnerInstance.succeed('Container created')
 
   const initSpinner = createSpinner(
-    isFileBasedDB ? 'Creating database file...' : 'Initializing database cluster...',
+    isFileBasedDB
+      ? 'Creating database file...'
+      : 'Initializing database cluster...',
   )
   initSpinner.start()
 
@@ -485,7 +487,9 @@ export async function handleList(
 
     // Truncate name if too long
     const displayName =
-      c.name.length > COL_NAME - 1 ? c.name.slice(0, COL_NAME - 2) + '…' : c.name
+      c.name.length > COL_NAME - 1
+        ? c.name.slice(0, COL_NAME - 2) + '…'
+        : c.name
 
     // Port or dash for file-based
     const portDisplay = isFileBased ? '—' : String(c.port)
@@ -494,10 +498,13 @@ export async function handleList(
     const sizeDisplay = size !== null ? formatBytes(size) : '—'
 
     // Build formatted row
-    const icon = getEngineIconPadded(c.engine)
+    // Pad icon and engine name separately to avoid emoji width calculation issues
+    // (padEnd counts code points, not visual width)
+    const icon = getEngineIcon(c.engine)
+    const engineName = c.engine.padEnd(COL_ENGINE)
     const row =
       chalk.cyan(displayName.padEnd(COL_NAME)) +
-      chalk.white(`${icon}${c.engine}`.padEnd(COL_ENGINE + 2)) +
+      chalk.white(`${icon}${engineName}`) +
       chalk.yellow(c.version.padEnd(COL_VERSION)) +
       chalk.green(portDisplay.padEnd(COL_PORT)) +
       chalk.magenta(sizeDisplay.padEnd(COL_SIZE)) +
@@ -522,7 +529,9 @@ export async function handleList(
   const available = fileBasedContainers.filter(
     (c) => c.status === 'running',
   ).length
-  const missing = fileBasedContainers.filter((c) => c.status !== 'running').length
+  const missing = fileBasedContainers.filter(
+    (c) => c.status !== 'running',
+  ).length
 
   const parts: string[] = []
   if (serverContainers.length > 0) {
@@ -537,13 +546,17 @@ export async function handleList(
   // Build the full choice list with footer items
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
     ...containerChoices,
-    new inquirer.Separator(chalk.gray('─'.repeat(60))),
+    new inquirer.Separator(),
     new inquirer.Separator(
       `${containers.length} container(s): ${parts.join('; ')} ${chalk.gray('— type to filter')}`,
     ),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
-    { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+    {
+      name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`,
+      value: 'back',
+    },
+    new inquirer.Separator(),
   ]
 
   const selectedContainer = await filterableListPrompt(
@@ -642,7 +655,9 @@ export async function showContainerSubmenu(
 
   // Open shell - always enabled for file-based DBs (if file exists), server databases need to be running
   const canOpenShell = isFileBasedDB ? existsSync(config.database) : isRunning
-  const shellHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  const shellHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canOpenShell
       ? { name: `${chalk.blue('>')} Open shell`, value: 'shell' }
@@ -651,7 +666,11 @@ export async function showContainerSubmenu(
 
   // Run SQL/script - always enabled for file-based DBs (if file exists), server databases need to be running
   // REST API engines (Qdrant, Meilisearch, CouchDB) don't support script files - hide the option entirely
-  if (config.engine !== Engine.Qdrant && config.engine !== Engine.Meilisearch && config.engine !== Engine.CouchDB) {
+  if (
+    config.engine !== Engine.Qdrant &&
+    config.engine !== Engine.Meilisearch &&
+    config.engine !== Engine.CouchDB
+  ) {
     const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
     // Engine-specific terminology: Redis/Valkey use commands, MongoDB/FerretDB use scripts, SurrealDB uses SurrealQL, others use SQL
     const runScriptLabel =
@@ -662,7 +681,9 @@ export async function showContainerSubmenu(
           : config.engine === Engine.SurrealDB
             ? 'Run SurrealQL file'
             : 'Run SQL file'
-    const runSqlHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+    const runSqlHint = isFileBasedDB
+      ? 'Database file missing'
+      : 'Start container first'
     actionChoices.push(
       canRunSql
         ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
@@ -693,7 +714,9 @@ export async function showContainerSubmenu(
 
   // Backup - requires running for server databases, file exists for file-based DBs
   const canBackup = isFileBasedDB ? existsSync(config.database) : isRunning
-  const backupHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  const backupHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canBackup
       ? { name: `${chalk.magenta('↓')} Backup database`, value: 'backup' }
@@ -702,7 +725,9 @@ export async function showContainerSubmenu(
 
   // Restore - requires running for server databases, file exists for file-based DBs
   const canRestore = isFileBasedDB ? existsSync(config.database) : isRunning
-  const restoreHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  const restoreHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canRestore
       ? { name: `${chalk.magenta('↑')} Restore from backup`, value: 'restore' }

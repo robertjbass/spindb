@@ -15,11 +15,7 @@ import { writeFile, stat } from 'fs/promises'
 import { spawn } from 'child_process'
 import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
-import type {
-  ContainerConfig,
-  BackupOptions,
-  BackupResult,
-} from '../../types'
+import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 /**
  * Execute a query against QuestDB using psql (PostgreSQL protocol)
@@ -38,13 +34,18 @@ async function executeQuery(
 
   return new Promise((resolve, reject) => {
     const args = [
-      '-h', '127.0.0.1',
-      '-p', String(port),
-      '-U', 'admin',
-      '-d', database,
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      'admin',
+      '-d',
+      database,
       '-t', // Tuples only (no headers)
       '-A', // Unaligned output
-      '-c', query,
+      '-c',
+      query,
     ]
 
     const proc = spawn(psqlPath!, args, {
@@ -187,7 +188,9 @@ export async function createBackup(
                 `INSERT INTO "${table}" (${columnList}) VALUES (${values.join(', ')});`,
               )
             } else {
-              lines.push(`INSERT INTO "${table}" VALUES (${values.join(', ')});`)
+              lines.push(
+                `INSERT INTO "${table}" VALUES (${values.join(', ')});`,
+              )
             }
           }
           lines.push('')

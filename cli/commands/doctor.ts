@@ -3,12 +3,13 @@
  *
  * Checks:
  * 1. Configuration file validity
- * 2. Container status across all engines
- * 3. SQLite registry orphaned entries
- * 4. DuckDB registry orphaned entries
- * 5. Binary/tool availability
- * 6. Version migration (outdated container versions)
- * 7. Orphaned test containers cleanup
+ * 2. User preferences (icon mode)
+ * 3. Container status across all engines
+ * 4. SQLite registry orphaned entries
+ * 5. DuckDB registry orphaned entries
+ * 6. Binary/tool availability
+ * 7. Version migration (outdated container versions)
+ * 8. Orphaned test containers cleanup
  */
 
 import { Command } from 'commander'
@@ -90,6 +91,60 @@ async function checkConfiguration(): Promise<HealthCheckResult> {
       name: 'Configuration',
       status: 'error',
       message: 'Configuration file is corrupted',
+      details: [(error as Error).message],
+    }
+  }
+}
+
+// Check user preferences (icon mode, etc.)
+async function checkPreferences(): Promise<HealthCheckResult> {
+  const configPath = paths.config
+
+  if (!existsSync(configPath)) {
+    return {
+      name: 'Preferences',
+      status: 'ok',
+      message: 'No config file yet (preferences will use defaults)',
+    }
+  }
+
+  try {
+    const config = await configManager.load()
+
+    // Check if preferences.iconMode is set
+    if (!config.preferences?.iconMode) {
+      return {
+        name: 'Preferences',
+        status: 'warning',
+        message: 'Icon mode not configured (defaulting to ascii)',
+        details: [
+          'Run: spindb config to set your preference in the Settings menu',
+        ],
+        action: {
+          label: 'Set icon mode to ascii (default)',
+          handler: async () => {
+            const currentConfig = await configManager.load()
+            currentConfig.preferences = {
+              ...currentConfig.preferences,
+              iconMode: 'ascii',
+            }
+            await configManager.save()
+            console.log(uiSuccess('Icon mode set to ascii'))
+          },
+        },
+      }
+    }
+
+    return {
+      name: 'Preferences',
+      status: 'ok',
+      message: `Icon mode: ${config.preferences.iconMode}`,
+    }
+  } catch (error) {
+    return {
+      name: 'Preferences',
+      status: 'error',
+      message: 'Failed to check preferences',
       details: [(error as Error).message],
     }
   }
@@ -341,8 +396,7 @@ async function checkVersionMigration(
 
     for (const [name, migrations] of containerMigrations) {
       for (const m of migrations) {
-        const fieldLabel =
-          m.field === 'backendVersion' ? ' (backend)' : ''
+        const fieldLabel = m.field === 'backendVersion' ? ' (backend)' : ''
         details.push(
           `${name}${fieldLabel}: ${m.currentVersion} → ${m.targetVersion}`,
         )
@@ -396,9 +450,7 @@ async function checkVersionMigration(
             }
           }
 
-          console.log(
-            uiSuccess(`Migrated ${outdated.length} version(s)`),
-          )
+          console.log(uiSuccess(`Migrated ${outdated.length} version(s)`))
           if (deletedBinaries.length > 0) {
             console.log(
               uiSuccess(
@@ -458,9 +510,7 @@ async function checkOrphanedTestContainers(
             await deleteTestContainer(d)
             console.log(uiSuccess(`Deleted ${d.engine}/${d.name}`))
           }
-          console.log(
-            uiSuccess(`Deleted ${testDirs.length} test containers`),
-          )
+          console.log(uiSuccess(`Deleted ${testDirs.length} test containers`))
         },
       },
     }
@@ -499,136 +549,141 @@ export const doctorCommand = new Command('doctor')
   .option('--json', 'Output as JSON')
   .option('--dry-run', 'Show what would be changed without making changes')
   .option('--fix', 'Automatically fix all issues without prompting')
-  .action(async (options: { json?: boolean; dryRun?: boolean; fix?: boolean }) => {
-    const dryRun = options.dryRun ?? false
-    const autoFix = options.fix ?? false
+  .action(
+    async (options: { json?: boolean; dryRun?: boolean; fix?: boolean }) => {
+      const dryRun = options.dryRun ?? false
+      const autoFix = options.fix ?? false
 
-    // Run all checks in parallel for better performance
-    const checks = await Promise.all([
-      checkConfiguration(),
-      checkContainers(),
-      checkSqliteRegistry(),
-      checkDuckdbRegistry(),
-      checkBinaries(),
-      checkVersionMigration(dryRun),
-      checkOrphanedTestContainers(dryRun),
-    ])
-
-    if (options.json) {
-      // Strip action handlers for JSON output
-      const jsonChecks = checks.map(({ action: _action, ...rest }) => rest)
-      console.log(JSON.stringify(jsonChecks, null, 2))
-      return
-    }
-
-    // Human-readable output - print header first
-    console.log()
-    console.log(header('SpinDB Health Check'))
-    console.log()
-
-    // Display results
-    for (const check of checks) {
-      displayResult(check)
-    }
-
-    // Collect actions for warnings (skip in dry-run mode)
-    const actionsAvailable = dryRun ? [] : checks.filter((c) => c.action)
-
-    // Auto-fix mode: run all actions without prompting
-    if (autoFix && actionsAvailable.length > 0) {
-      console.log()
-      const failures: Array<{ name: string; error: Error }> = []
-
-      for (const check of actionsAvailable) {
-        try {
-          await check.action!.handler()
-        } catch (error) {
-          const err = error as Error
-          failures.push({ name: check.name, error: err })
-          console.error(
-            chalk.red(`  ✕ Auto-fix failed for "${check.name}": ${err.message}`),
-          )
-        }
-      }
-
-      console.log()
-
-      if (failures.length > 0) {
-        console.error(
-          chalk.yellow(
-            `  ⚠ ${failures.length} auto-fix action(s) failed. See errors above.`,
-          ),
-        )
-        process.exit(1)
-      }
-      return
-    }
-
-    // Detect non-interactive environment (CI, no TTY)
-    const isNonInteractive = !!(
-      process.env.CI ||
-      process.env.GITHUB_ACTIONS ||
-      !process.stdin.isTTY
-    )
-
-    if (actionsAvailable.length > 0 && !isNonInteractive) {
-      type ActionChoice = {
-        name: string
-        value: string
-      }
-
-      const choices: ActionChoice[] = [
-        ...actionsAvailable.map((c) => ({
-          name: c.action!.label,
-          value: c.name,
-        })),
-        { name: chalk.gray('Skip (do nothing)'), value: 'skip' },
-      ]
-
-      const { selectedAction } = await inquirer.prompt<{
-        selectedAction: string
-      }>([
-        {
-          type: 'list',
-          name: 'selectedAction',
-          message: 'What would you like to do?',
-          choices,
-        },
+      // Run all checks in parallel for better performance
+      const checks = await Promise.all([
+        checkConfiguration(),
+        checkPreferences(),
+        checkContainers(),
+        checkSqliteRegistry(),
+        checkDuckdbRegistry(),
+        checkBinaries(),
+        checkVersionMigration(dryRun),
+        checkOrphanedTestContainers(dryRun),
       ])
 
-      if (selectedAction === 'skip') {
+      if (options.json) {
+        // Strip action handlers for JSON output
+        const jsonChecks = checks.map(({ action: _action, ...rest }) => rest)
+        console.log(JSON.stringify(jsonChecks, null, 2))
         return
       }
 
-      // Execute the selected action
-      const check = checks.find((c) => c.name === selectedAction)
-      if (check?.action) {
+      // Human-readable output - print header first
+      console.log()
+      console.log(header('SpinDB Health Check'))
+      console.log()
+
+      // Display results
+      for (const check of checks) {
+        displayResult(check)
+      }
+
+      // Collect actions for warnings (skip in dry-run mode)
+      const actionsAvailable = dryRun ? [] : checks.filter((c) => c.action)
+
+      // Auto-fix mode: run all actions without prompting
+      if (autoFix && actionsAvailable.length > 0) {
         console.log()
-        await check.action.handler()
-      }
-    } else {
-      const hasIssues = checks.some((c) => c.status !== 'ok')
-      if (!hasIssues) {
-        console.log(chalk.green('All systems healthy! ✓'))
-      } else if (isNonInteractive) {
-        // In CI/non-interactive mode, print summary and exit with non-zero code
-        const issues = checks.filter((c) => c.status !== 'ok')
-        const errors = issues.filter((c) => c.status === 'error')
-        const warnings = issues.filter((c) => c.status === 'warning')
+        const failures: Array<{ name: string; error: Error }> = []
 
-        const summary = []
-        if (errors.length > 0) {
-          summary.push(`${errors.length} error(s)`)
-        }
-        if (warnings.length > 0) {
-          summary.push(`${warnings.length} warning(s)`)
+        for (const check of actionsAvailable) {
+          try {
+            await check.action!.handler()
+          } catch (error) {
+            const err = error as Error
+            failures.push({ name: check.name, error: err })
+            console.error(
+              chalk.red(
+                `  ✕ Auto-fix failed for "${check.name}": ${err.message}`,
+              ),
+            )
+          }
         }
 
-        console.log(chalk.red(`Health check failed: ${summary.join(', ')}`))
-        console.log(chalk.yellow(`Run 'spindb doctor --fix' to repair`))
-        process.exit(1)
-      }
-    }
+        console.log()
 
-    console.log()
-  })
+        if (failures.length > 0) {
+          console.error(
+            chalk.yellow(
+              `  ⚠ ${failures.length} auto-fix action(s) failed. See errors above.`,
+            ),
+          )
+          process.exit(1)
+        }
+        return
+      }
+
+      // Detect non-interactive environment (CI, no TTY)
+      const isNonInteractive = !!(
+        process.env.CI ||
+        process.env.GITHUB_ACTIONS ||
+        !process.stdin.isTTY
+      )
+
+      if (actionsAvailable.length > 0 && !isNonInteractive) {
+        type ActionChoice = {
+          name: string
+          value: string
+        }
+
+        const choices: ActionChoice[] = [
+          ...actionsAvailable.map((c) => ({
+            name: c.action!.label,
+            value: c.name,
+          })),
+          { name: chalk.gray('Skip (do nothing)'), value: 'skip' },
+        ]
+
+        const { selectedAction } = await inquirer.prompt<{
+          selectedAction: string
+        }>([
+          {
+            type: 'list',
+            name: 'selectedAction',
+            message: 'What would you like to do?',
+            choices,
+          },
+        ])
+
+        if (selectedAction === 'skip') {
+          return
+        }
+
+        // Execute the selected action
+        const check = checks.find((c) => c.name === selectedAction)
+        if (check?.action) {
+          console.log()
+          await check.action.handler()
+        }
+      } else {
+        const hasIssues = checks.some((c) => c.status !== 'ok')
+        if (!hasIssues) {
+          console.log(chalk.green('All systems healthy! ✓'))
+        } else if (isNonInteractive) {
+          // In CI/non-interactive mode, print summary and exit with non-zero code
+          const issues = checks.filter((c) => c.status !== 'ok')
+          const errors = issues.filter((c) => c.status === 'error')
+          const warnings = issues.filter((c) => c.status === 'warning')
+
+          const summary = []
+          if (errors.length > 0) {
+            summary.push(`${errors.length} error(s)`)
+          }
+          if (warnings.length > 0) {
+            summary.push(`${warnings.length} warning(s)`)
+          }
+
+          console.log(chalk.red(`Health check failed: ${summary.join(', ')}`))
+          console.log(chalk.yellow(`Run 'spindb doctor --fix' to repair`))
+          process.exit(1)
+        }
+      }
+
+      console.log()
+    },
+  )

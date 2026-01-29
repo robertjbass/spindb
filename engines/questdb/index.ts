@@ -335,7 +335,9 @@ export class QuestDBEngine extends BaseEngine {
 
     // Wait for server to be ready
     const timeout = isWindows ? 90000 : 60000
-    logDebug(`Waiting for QuestDB to be ready on port ${port}... (timeout: ${timeout}ms)`)
+    logDebug(
+      `Waiting for QuestDB to be ready on port ${port}... (timeout: ${timeout}ms)`,
+    )
 
     // Give QuestDB a moment to start before checking
     await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -368,10 +370,14 @@ export class QuestDBEngine extends BaseEngine {
         await writeFile(pidFile, actualPid.toString(), 'utf-8')
         logDebug(`Wrote PID file: ${pidFile} (pid: ${actualPid})`)
       } else {
-        logDebug('Could not find QuestDB process by port - PID file not created')
+        logDebug(
+          'Could not find QuestDB process by port - PID file not created',
+        )
       }
     } catch (err) {
-      logDebug(`Could not find QuestDB PID: ${err instanceof Error ? err.message : String(err)}`)
+      logDebug(
+        `Could not find QuestDB PID: ${err instanceof Error ? err.message : String(err)}`,
+      )
       // Don't fail - QuestDB is running, we just can't track its PID
     }
 
@@ -417,16 +423,25 @@ export class QuestDBEngine extends BaseEngine {
       logDebug(`Connection attempt ${attempt}...`)
       try {
         await new Promise<void>((resolve, reject) => {
-          const proc = spawn(psqlPath!, [
-            '-h', '127.0.0.1',
-            '-p', String(port),
-            '-U', 'admin',
-            '-d', 'qdb',
-            '-c', 'SELECT 1;',
-          ], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env, PGPASSWORD: 'quest' },
-          })
+          const proc = spawn(
+            psqlPath!,
+            [
+              '-h',
+              '127.0.0.1',
+              '-p',
+              String(port),
+              '-U',
+              'admin',
+              '-d',
+              'qdb',
+              '-c',
+              'SELECT 1;',
+            ],
+            {
+              stdio: ['ignore', 'pipe', 'pipe'],
+              env: { ...process.env, PGPASSWORD: 'quest' },
+            },
+          )
 
           proc.on('close', (code) => {
             if (code === 0) resolve()
@@ -456,7 +471,9 @@ export class QuestDBEngine extends BaseEngine {
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const response = await fetch(`http://127.0.0.1:${httpPort}/exec?query=SELECT%201`)
+        const response = await fetch(
+          `http://127.0.0.1:${httpPort}/exec?query=SELECT%201`,
+        )
         if (response.ok) {
           logDebug(`QuestDB HTTP ready on port ${httpPort}`)
           return true
@@ -545,7 +562,9 @@ export class QuestDBEngine extends BaseEngine {
     // Try HTTP health check first
     const httpPort = port + 188
     try {
-      const response = await fetch(`http://127.0.0.1:${httpPort}/exec?query=SELECT%201`)
+      const response = await fetch(
+        `http://127.0.0.1:${httpPort}/exec?query=SELECT%201`,
+      )
       if (response.ok) {
         return { running: true, message: 'QuestDB is running' }
       }
@@ -634,7 +653,9 @@ export class QuestDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    logDebug(`QuestDB uses a single-database model. Database "${database}" will be a schema.`)
+    logDebug(
+      `QuestDB uses a single-database model. Database "${database}" will be a schema.`,
+    )
     // QuestDB doesn't have traditional CREATE DATABASE
     // All tables exist in the default database
   }
@@ -646,19 +667,26 @@ export class QuestDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    logDebug(`QuestDB uses a single-database model. Cannot drop database "${database}".`)
+    logDebug(
+      `QuestDB uses a single-database model. Cannot drop database "${database}".`,
+    )
   }
 
   /**
    * Get the database size
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const dataDir = paths.getContainerDataPath(container.name, { engine: ENGINE })
+    const dataDir = paths.getContainerDataPath(container.name, {
+      engine: ENGINE,
+    })
     if (!existsSync(dataDir)) return null
 
     try {
       let totalSize = 0
-      const entries = await readdir(dataDir, { withFileTypes: true, recursive: true })
+      const entries = await readdir(dataDir, {
+        withFileTypes: true,
+        recursive: true,
+      })
       for (const entry of entries) {
         if (entry.isFile()) {
           const { stat } = await import('fs/promises')
@@ -680,9 +708,12 @@ export class QuestDBEngine extends BaseEngine {
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult> {
-    const { host, port, database, user, password } = parseConnectionString(connectionString)
+    const { host, port, database, user, password } =
+      parseConnectionString(connectionString)
 
-    logDebug(`Connecting to remote QuestDB at ${host}:${port} (db: ${database})`)
+    logDebug(
+      `Connecting to remote QuestDB at ${host}:${port} (db: ${database})`,
+    )
 
     // Find psql for remote operations
     let psqlPath = await configManager.getBinaryPath('psql')
@@ -706,7 +737,15 @@ export class QuestDBEngine extends BaseEngine {
 
     // Get list of tables
     const tablesQuery = `SELECT table_name FROM tables() WHERE table_name NOT LIKE 'sys.%'`
-    const tablesResult = await this.execRemoteQuery(psqlPath, host, port, user, password ?? '', database, tablesQuery)
+    const tablesResult = await this.execRemoteQuery(
+      psqlPath,
+      host,
+      port,
+      user,
+      password ?? '',
+      database,
+      tablesQuery,
+    )
     const tables = tablesResult.split('\n').filter((t) => t.trim())
 
     logDebug(`Found ${tables.length} tables`)
@@ -719,7 +758,15 @@ export class QuestDBEngine extends BaseEngine {
 
       try {
         const createQuery = `SHOW CREATE TABLE "${table}"`
-        const createResult = await this.execRemoteQuery(psqlPath, host, port, user, password ?? '', database, createQuery)
+        const createResult = await this.execRemoteQuery(
+          psqlPath,
+          host,
+          port,
+          user,
+          password ?? '',
+          database,
+          createQuery,
+        )
         if (createResult) {
           lines.push(createResult + ';')
           lines.push('')
@@ -734,7 +781,8 @@ export class QuestDBEngine extends BaseEngine {
 
     return {
       filePath: outputPath,
-      warnings: tables.length === 0 ? ['No tables found in database'] : undefined,
+      warnings:
+        tables.length === 0 ? ['No tables found in database'] : undefined,
     }
   }
 
@@ -749,13 +797,18 @@ export class QuestDBEngine extends BaseEngine {
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const args = [
-        '-h', host,
-        '-p', String(port),
-        '-U', user,
-        '-d', database,
+        '-h',
+        host,
+        '-p',
+        String(port),
+        '-U',
+        user,
+        '-d',
+        database,
         '-t',
         '-A',
-        '-c', query,
+        '-c',
+        query,
       ]
 
       const proc = spawn(psqlPath, args, {
@@ -815,11 +868,16 @@ export class QuestDBEngine extends BaseEngine {
     if (options.file) {
       // Run SQL file
       const args = [
-        '-h', '127.0.0.1',
-        '-p', String(port),
-        '-U', 'admin',
-        '-d', db,
-        '-f', options.file,
+        '-h',
+        '127.0.0.1',
+        '-p',
+        String(port),
+        '-U',
+        'admin',
+        '-d',
+        db,
+        '-f',
+        options.file,
       ]
 
       await new Promise<void>((resolve, reject) => {
@@ -840,11 +898,16 @@ export class QuestDBEngine extends BaseEngine {
     } else if (options.sql) {
       // Run inline SQL
       const args = [
-        '-h', '127.0.0.1',
-        '-p', String(port),
-        '-U', 'admin',
-        '-d', db,
-        '-c', options.sql,
+        '-h',
+        '127.0.0.1',
+        '-p',
+        String(port),
+        '-U',
+        'admin',
+        '-d',
+        db,
+        '-c',
+        options.sql,
       ]
 
       await new Promise<void>((resolve, reject) => {

@@ -11,8 +11,16 @@ All PRs must:
 1. **Target the `dev` branch** (not `main`)
 2. **Pass the linter:** `pnpm lint`
 3. **Be formatted with Prettier:** `pnpm format`
+4. **Pass all unit/integration tests:** `pnpm test`
+5. **Pass all Docker integration tests:** `pnpm test:docker`
 
-Please run both commands before opening a PR.
+Please run all commands before opening a PR.
+
+If adding a new engine, do the following:
+1. git checkout dev && git pull && git checkout -b feature/<engine-name>
+2. ensure the engine binaries are available for all supported platforms (macOS, Linux, Windows) using all architectures (X64 and ARM64) for darwin and linux and hosted on hostdb
+3. Add unit and integration tests for the new engine
+4. Add CI.yml tests for each architecture and platform following the established patterns
 
 ## Running Tests
 

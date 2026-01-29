@@ -28,9 +28,26 @@ import { detachCommand } from './commands/detach'
 import { sqliteCommand } from './commands/sqlite'
 import { databasesCommand } from './commands/databases'
 import { updateManager } from '../core/update-manager'
+import { configManager } from '../core/config-manager'
+import { setCachedIconMode } from './constants'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../package.json') as { version: string }
+
+/**
+ * Load user preferences from config (icon mode, etc.)
+ * This runs before any command to ensure consistent behavior between CLI and TUI.
+ */
+async function loadUserPreferences(): Promise<void> {
+  try {
+    const config = await configManager.getConfig()
+    if (config.preferences?.iconMode) {
+      setCachedIconMode(config.preferences.iconMode)
+    }
+  } catch {
+    // Silently ignore - preferences are not critical for CLI functionality
+  }
+}
 
 /**
  * Show update notification banner if an update is available (from cached data)
@@ -58,9 +75,7 @@ async function showUpdateNotificationIfAvailable(): Promise<void> {
         chalk.gray(`${currentVersion} -> `) +
         chalk.green(latestVersion),
     )
-    console.log(
-      chalk.gray('  Run: ') + chalk.cyan('spindb self-update'),
-    )
+    console.log(chalk.gray('  Run: ') + chalk.cyan('spindb self-update'))
     console.log(
       chalk.gray('  To disable: ') +
         chalk.gray('spindb config update-check off'),
@@ -83,6 +98,9 @@ function triggerBackgroundUpdateCheck(): void {
 }
 
 export async function run(): Promise<void> {
+  // Load user preferences (icon mode, etc.) before any command runs
+  await loadUserPreferences()
+
   // Trigger background update check (non-blocking, updates cache for next run)
   triggerBackgroundUpdateCheck()
 
@@ -90,6 +108,7 @@ export async function run(): Promise<void> {
     .name('spindb')
     .description('Spin up local database containers without Docker')
     .version(pkg.version, '-v, --version', 'output the version number')
+    .enablePositionalOptions()
 
   program.addCommand(createCommand)
   program.addCommand(listCommand)

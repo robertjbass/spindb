@@ -48,11 +48,11 @@ const ENGINE = 'valkey'
  */
 function escapeKeyForCommand(key: string): string {
   return key
-    .replace(/\\/g, '\\\\')   // Backslashes first to prevent double-escaping
-    .replace(/"/g, '\\"')     // Double quotes
-    .replace(/\n/g, '\\n')    // Newline
-    .replace(/\r/g, '\\r')    // Carriage return
-    .replace(/\t/g, '\\t')    // Tab
+    .replace(/\\/g, '\\\\') // Backslashes first to prevent double-escaping
+    .replace(/"/g, '\\"') // Double quotes
+    .replace(/\n/g, '\\n') // Newline
+    .replace(/\r/g, '\\r') // Carriage return
+    .replace(/\t/g, '\\t') // Tab
 }
 const engineDef = getEngineDefaults(ENGINE)
 
@@ -1178,9 +1178,7 @@ export class ValkeyEngine extends BaseEngine {
 
     for (const key of keys) {
       // Get key type
-      const typeOutput = await execRemote(
-        `TYPE "${escapeKeyForCommand(key)}"`,
-      )
+      const typeOutput = await execRemote(`TYPE "${escapeKeyForCommand(key)}"`)
       const keyType = typeOutput.trim()
 
       // Get TTL
@@ -1207,12 +1205,15 @@ export class ValkeyEngine extends BaseEngine {
       }
 
       // Strip only trailing newline from execRemote output, preserving intentional whitespace
-      const stripTrailingNewline = (s: string): string => s.replace(/\r?\n$/, '')
+      const stripTrailingNewline = (s: string): string =>
+        s.replace(/\r?\n$/, '')
 
       switch (keyType) {
         case 'string': {
           const value = await execRemote(`GET "${escapeKeyForCommand(key)}"`)
-          commands.push(`SET ${quotedKey} ${escapeValue(stripTrailingNewline(value))}`)
+          commands.push(
+            `SET ${quotedKey} ${escapeValue(stripTrailingNewline(value))}`,
+          )
           break
         }
         case 'hash': {
@@ -1227,7 +1228,9 @@ export class ValkeyEngine extends BaseEngine {
             // Handle odd number of lines (incomplete field/value pair)
             const completeCount = lines.length - (lines.length % 2)
             if (lines.length % 2 !== 0) {
-              logWarning(`Hash ${quotedKey} has incomplete field/value pair, skipping last field`)
+              logWarning(
+                `Hash ${quotedKey} has incomplete field/value pair, skipping last field`,
+              )
             }
             for (let i = 0; i < completeCount; i += 2) {
               const field = lines[i]
@@ -1282,7 +1285,9 @@ export class ValkeyEngine extends BaseEngine {
             // Handle odd number of lines (incomplete member/score pair)
             const completeCount = lines.length - (lines.length % 2)
             if (lines.length % 2 !== 0) {
-              logWarning(`ZSet ${quotedKey} has odd line count, skipping incomplete entry: ${lines[lines.length - 1]}`)
+              logWarning(
+                `ZSet ${quotedKey} has odd line count, skipping incomplete entry: ${lines[lines.length - 1]}`,
+              )
             }
             for (let i = 0; i < completeCount; i += 2) {
               const member = lines[i]
@@ -1311,7 +1316,8 @@ export class ValkeyEngine extends BaseEngine {
 
     return {
       filePath: outputPath,
-      warnings: keys.length === 0 ? ['Remote Valkey database is empty'] : undefined,
+      warnings:
+        keys.length === 0 ? ['Remote Valkey database is empty'] : undefined,
     }
   }
 

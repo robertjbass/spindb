@@ -38,8 +38,7 @@ export async function detectBackupFormat(
     return {
       format: 'unknown',
       description: 'Directory found - CouchDB uses single JSON files',
-      restoreCommand:
-        'CouchDB requires a single .json file for restore',
+      restoreCommand: 'CouchDB requires a single .json file for restore',
     }
   }
 
@@ -141,7 +140,9 @@ export async function restoreBackup(
     }
 
     const dbName = dbBackup.name
-    logDebug(`Restoring database: ${dbName} (${dbBackup.docs.length} documents)`)
+    logDebug(
+      `Restoring database: ${dbName} (${dbBackup.docs.length} documents)`,
+    )
 
     // Check if database exists
     const checkResponse = await couchdbApiRequest(

@@ -79,18 +79,25 @@ describe('CLI End-to-End Tests', () => {
   })
 
   describe('Doctor Command', () => {
-    it('should run doctor check', { skip: IS_WINDOWS ? 'Doctor command too slow on Windows CI' : false }, async () => {
-      const { stdout, exitCode } = await runCLI('doctor')
-      // Doctor may exit with 1 if dependencies are missing, but should run
-      assert(exitCode === 0 || exitCode === 1, 'Doctor command should complete')
-      assert(
-        stdout.includes('Configuration') ||
-          stdout.includes('Health Check') ||
-          stdout.includes('Containers'),
-        'Doctor should show health check info',
-      )
-      console.log('   Doctor check completed')
-    })
+    it(
+      'should run doctor check',
+      { skip: IS_WINDOWS ? 'Doctor command too slow on Windows CI' : false },
+      async () => {
+        const { stdout, exitCode } = await runCLI('doctor')
+        // Doctor may exit with 1 if dependencies are missing, but should run
+        assert(
+          exitCode === 0 || exitCode === 1,
+          'Doctor command should complete',
+        )
+        assert(
+          stdout.includes('Configuration') ||
+            stdout.includes('Health Check') ||
+            stdout.includes('Containers'),
+          'Doctor should show health check info',
+        )
+        console.log('   Doctor check completed')
+      },
+    )
   })
 
   describe('Engines Command', () => {
@@ -789,15 +796,21 @@ describe('CLI Clone Workflow', () => {
   })
 
   it('should delete source and clone containers', async () => {
-    const { exitCode: deleteSource, stderr: srcErr, stdout: srcOut } =
-      await runCLI(`delete ${sourceContainer} --force --yes`)
+    const {
+      exitCode: deleteSource,
+      stderr: srcErr,
+      stdout: srcOut,
+    } = await runCLI(`delete ${sourceContainer} --force --yes`)
     assert(
       deleteSource === 0,
       `Delete source should succeed. stdout: ${srcOut}, stderr: ${srcErr}`,
     )
 
-    const { exitCode: deleteClone, stderr: cloneErr, stdout: cloneOut } =
-      await runCLI(`delete ${cloneContainer} --force --yes`)
+    const {
+      exitCode: deleteClone,
+      stderr: cloneErr,
+      stdout: cloneOut,
+    } = await runCLI(`delete ${cloneContainer} --force --yes`)
     assert(
       deleteClone === 0,
       `Delete clone should succeed. stdout: ${cloneOut}, stderr: ${cloneErr}`,

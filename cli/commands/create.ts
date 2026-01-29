@@ -77,7 +77,9 @@ async function createSqliteContainer(
       })
     }
     while (await containerManager.exists(containerName)) {
-      console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+      console.log(
+        chalk.yellow(`  Container "${containerName}" already exists.`),
+      )
       containerName = await promptContainerName()
     }
   }
@@ -94,7 +96,9 @@ async function createSqliteContainer(
     })
   }
 
-  const createSpinnerInstance = json ? null : createSpinner('Creating SQLite database...')
+  const createSpinnerInstance = json
+    ? null
+    : createSpinner('Creating SQLite database...')
   createSpinnerInstance?.start()
 
   try {
@@ -111,9 +115,9 @@ async function createSqliteContainer(
     const config = await containerManager.getConfig(containerName)
     if (config) {
       const format = await dbEngine.detectBackupFormat(restoreLocation)
-      const restoreSpinner = json ? null : createSpinner(
-        `Restoring from ${format.description}...`,
-      )
+      const restoreSpinner = json
+        ? null
+        : createSpinner(`Restoring from ${format.description}...`)
       restoreSpinner?.start()
 
       try {
@@ -226,7 +230,9 @@ async function createDuckDBContainer(
       })
     }
     while (await containerManager.exists(containerName)) {
-      console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+      console.log(
+        chalk.yellow(`  Container "${containerName}" already exists.`),
+      )
       containerName = await promptContainerName()
     }
   }
@@ -243,7 +249,9 @@ async function createDuckDBContainer(
     })
   }
 
-  const createSpinnerInstance = json ? null : createSpinner('Creating DuckDB database...')
+  const createSpinnerInstance = json
+    ? null
+    : createSpinner('Creating DuckDB database...')
   createSpinnerInstance?.start()
 
   try {
@@ -260,9 +268,9 @@ async function createDuckDBContainer(
     const config = await containerManager.getConfig(containerName)
     if (config) {
       const format = await dbEngine.detectBackupFormat(restoreLocation)
-      const restoreSpinner = json ? null : createSpinner(
-        `Restoring from ${format.description}...`,
-      )
+      const restoreSpinner = json
+        ? null
+        : createSpinner(`Restoring from ${format.description}...`)
       restoreSpinner?.start()
 
       try {
@@ -457,7 +465,8 @@ export const createCommand = new Command('create')
 
           if (options.start === false) {
             return exitWithError({
-              message: 'Cannot use --no-start with --from (restore requires running container)',
+              message:
+                'Cannot use --no-start with --from (restore requires running container)',
               json: options.json,
             })
           }
@@ -472,7 +481,10 @@ export const createCommand = new Command('create')
         if (!containerName) {
           // JSON mode requires container name argument
           if (options.json) {
-            return exitWithError({ message: 'Container name is required', json: true })
+            return exitWithError({
+              message: 'Container name is required',
+              json: true,
+            })
           }
 
           const answers = await promptCreateOptions()
@@ -490,14 +502,16 @@ export const createCommand = new Command('create')
           // Reject decimals ("1.5"), scientific notation ("1e2"), and trailing garbage ("5abc")
           if (!/^[0-9]+$/.test(database)) {
             return exitWithError({
-              message: 'Redis/Valkey database must be an integer between 0 and 15',
+              message:
+                'Redis/Valkey database must be an integer between 0 and 15',
               json: options.json,
             })
           }
           const dbIndex = parseInt(database, 10)
           if (dbIndex < 0 || dbIndex > 15) {
             return exitWithError({
-              message: 'Redis/Valkey database must be an integer between 0 and 15',
+              message:
+                'Redis/Valkey database must be an integer between 0 and 15',
               json: options.json,
             })
           }
@@ -506,7 +520,8 @@ export const createCommand = new Command('create')
           // Validate database name to prevent SQL injection
           if (!isValidDatabaseName(database)) {
             return exitWithError({
-              message: 'Database name must start with a letter and contain only letters, numbers, and underscores',
+              message:
+                'Database name must start with a letter and contain only letters, numbers, and underscores',
               json: options.json,
             })
           }
@@ -545,15 +560,22 @@ export const createCommand = new Command('create')
         // For server databases, validate --connect with --no-start
         if (options.connect && options.start === false) {
           return exitWithError({
-            message: 'Cannot use --no-start with --connect (connection requires running container)',
+            message:
+              'Cannot use --no-start with --connect (connection requires running container)',
             json: options.json,
           })
         }
 
         // In JSON mode, require explicit --start or --no-start flag to avoid interactive prompts
-        if (options.json && options.start === undefined && !restoreLocation && !options.connect) {
+        if (
+          options.json &&
+          options.start === undefined &&
+          !restoreLocation &&
+          !options.connect
+        ) {
           return exitWithError({
-            message: 'In JSON mode, you must specify --start or --no-start for server databases',
+            message:
+              'In JSON mode, you must specify --start or --no-start for server databases',
             json: true,
           })
         }
@@ -563,13 +585,16 @@ export const createCommand = new Command('create')
           const parsed = parseInt(options.maxConnections, 10)
           if (!Number.isFinite(parsed) || parsed <= 0) {
             return exitWithError({
-              message: 'Invalid --max-connections value: must be a positive integer',
+              message:
+                'Invalid --max-connections value: must be a positive integer',
               json: options.json,
             })
           }
         }
 
-        const portSpinner = options.json ? null : createSpinner('Finding available port...')
+        const portSpinner = options.json
+          ? null
+          : createSpinner('Finding available port...')
         portSpinner?.start()
 
         let port: number
@@ -605,7 +630,9 @@ export const createCommand = new Command('create')
         if (isPostgreSQL) {
           const binarySpinner = options.json
             ? null
-            : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+            : createSpinner(
+                `Checking ${dbEngine.displayName} ${version} binaries...`,
+              )
           binarySpinner?.start()
 
           // Always call ensureBinaries - it handles cached binaries gracefully
@@ -619,12 +646,16 @@ export const createCommand = new Command('create')
               }
             }
           })
-          binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
+          binarySpinner?.succeed(
+            `${dbEngine.displayName} ${version} binaries ready`,
+          )
         }
 
         // Check dependencies (all engines need this)
         // For PostgreSQL, this runs AFTER binary download so client tools are available
-        const depsSpinner = options.json ? null : createSpinner('Checking required tools...')
+        const depsSpinner = options.json
+          ? null
+          : createSpinner('Checking required tools...')
         depsSpinner?.start()
 
         let missingDeps = await getMissingDependencies(engine)
@@ -669,7 +700,9 @@ export const createCommand = new Command('create')
         if (!isPostgreSQL) {
           const binarySpinner = options.json
             ? null
-            : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+            : createSpinner(
+                `Checking ${dbEngine.displayName} ${version} binaries...`,
+              )
           binarySpinner?.start()
 
           try {
@@ -682,9 +715,13 @@ export const createCommand = new Command('create')
                 }
               },
             )
-            binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
+            binarySpinner?.succeed(
+              `${dbEngine.displayName} ${version} binaries ready`,
+            )
           } catch (error) {
-            binarySpinner?.fail(`${dbEngine.displayName} ${version} not available`)
+            binarySpinner?.fail(
+              `${dbEngine.displayName} ${version} not available`,
+            )
             if (options.json) {
               return exitWithError({
                 message: `${dbEngine.displayName} ${version} not available`,
@@ -771,7 +808,10 @@ export const createCommand = new Command('create')
             shouldStart = false
           } else {
             console.log()
-            shouldStart = await promptConfirm(`Start ${containerName} now?`, true)
+            shouldStart = await promptConfirm(
+              `Start ${containerName} now?`,
+              true,
+            )
           }
         }
 
@@ -893,11 +933,17 @@ export const createCommand = new Command('create')
                 ) {
                   // In JSON mode, don't prompt - just exit with error
                   if (options.json) {
-                    return exitWithError({ message: 'pg_dump not installed', json: true })
+                    return exitWithError({
+                      message: 'pg_dump not installed',
+                      json: true,
+                    })
                   }
                   const installed = await promptInstallDependencies('pg_dump')
                   if (!installed) {
-                    return exitWithError({ message: 'pg_dump not installed', json: options.json })
+                    return exitWithError({
+                      message: 'pg_dump not installed',
+                      json: options.json,
+                    })
                   }
                   continue
                 }
@@ -1037,7 +1083,10 @@ export const createCommand = new Command('create')
               chalk.yellow('  Please re-run your command to continue.'),
             )
           }
-          return exitWithError({ message: 'Missing required tools', json: options.json })
+          return exitWithError({
+            message: 'Missing required tools',
+            json: options.json,
+          })
         }
 
         return exitWithError({ message: e.message, json: options.json })

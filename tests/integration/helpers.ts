@@ -309,25 +309,36 @@ export async function executeSQL(
     // For SurrealDB, use surreal sql with piped input
     // SurrealDB needs namespace - must be provided via options (derive from container name with .replace(/-/g, '_'))
     if (!options?.namespace) {
-      throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
+      throw new Error(
+        'SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))',
+      )
     }
     // Use spawn with stdin instead of echo pipe for cross-platform compatibility
     const { spawn } = await import('child_process')
     return new Promise((resolve, reject) => {
       const args = [
         'sql',
-        '--endpoint', `ws://127.0.0.1:${port}`,
-        '--user', 'root',
-        '--pass', 'root',
-        '--ns', options.namespace!,
-        '--db', database,
+        '--endpoint',
+        `ws://127.0.0.1:${port}`,
+        '--user',
+        'root',
+        '--pass',
+        'root',
+        '--ns',
+        options.namespace!,
+        '--db',
+        database,
         '--hide-welcome',
       ]
       const proc = spawn(surrealPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
       let stdout = ''
       let stderr = ''
-      proc.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
-      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
       proc.on('close', (code) => {
         if (code === 0) resolve({ stdout, stderr })
         else reject(new Error(stderr || `Exit code ${code}`))
@@ -431,7 +442,9 @@ export async function executeSQLFile(
     // SurrealDB uses surreal import for file input
     // Namespace must be provided via options (derive from container name with .replace(/-/g, '_'))
     if (!options?.namespace) {
-      throw new Error('SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))')
+      throw new Error(
+        'SurrealDB requires options.namespace (derive from container name with .replace(/-/g, "_"))',
+      )
     }
     const cmd = `"${surrealPath}" import --endpoint http://127.0.0.1:${port} --user root --pass root --ns ${options.namespace} --db ${database} "${filePath}"`
     return execAsync(cmd)
@@ -785,7 +798,10 @@ export async function waitForStopped(
 
       // Wait for both HTTP and gRPC ports to be available
       // Use 60 seconds to match the engine's port wait timeout
-      const portTimeoutMs = Math.min(60000, timeoutMs - (Date.now() - startTime))
+      const portTimeoutMs = Math.min(
+        60000,
+        timeoutMs - (Date.now() - startTime),
+      )
       const portStartTime = Date.now()
 
       while (Date.now() - portStartTime < portTimeoutMs) {
@@ -902,7 +918,9 @@ export function getConnectionString(
 export async function getQdrantCollectionCount(port: number): Promise<number> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/collections`)
-    const data = await response.json() as { result?: { collections?: unknown[] } }
+    const data = (await response.json()) as {
+      result?: { collections?: unknown[] }
+    }
     return data.result?.collections?.length || 0
   } catch {
     return 0
@@ -919,16 +937,19 @@ export async function createQdrantCollection(
 ): Promise<boolean> {
   try {
     const encodedName = encodeURIComponent(name)
-    const response = await fetch(`http://127.0.0.1:${port}/collections/${encodedName}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        vectors: {
-          size: vectorSize,
-          distance: 'Cosine',
-        },
-      }),
-    })
+    const response = await fetch(
+      `http://127.0.0.1:${port}/collections/${encodedName}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vectors: {
+            size: vectorSize,
+            distance: 'Cosine',
+          },
+        }),
+      },
+    )
     return response.ok
   } catch {
     return false
@@ -943,9 +964,12 @@ export async function deleteQdrantCollection(
   name: string,
 ): Promise<boolean> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/collections/${name}`, {
-      method: 'DELETE',
-    })
+    const response = await fetch(
+      `http://127.0.0.1:${port}/collections/${name}`,
+      {
+        method: 'DELETE',
+      },
+    )
     return response.ok
   } catch {
     return false
@@ -960,8 +984,12 @@ export async function getQdrantPointCount(
   collection: string,
 ): Promise<number> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/collections/${collection}`)
-    const data = await response.json() as { result?: { points_count?: number } }
+    const response = await fetch(
+      `http://127.0.0.1:${port}/collections/${collection}`,
+    )
+    const data = (await response.json()) as {
+      result?: { points_count?: number }
+    }
     return data.result?.points_count || 0
   } catch {
     return 0
@@ -974,7 +1002,11 @@ export async function getQdrantPointCount(
 export async function insertQdrantPoints(
   port: number,
   collection: string,
-  points: Array<{ id: number; vector: number[]; payload?: Record<string, unknown> }>,
+  points: Array<{
+    id: number
+    vector: number[]
+    payload?: Record<string, unknown>
+  }>,
 ): Promise<boolean> {
   try {
     const response = await fetch(

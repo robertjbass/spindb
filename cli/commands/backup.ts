@@ -46,7 +46,10 @@ export const backupCommand = new Command('backup')
     '-o, --output <path>',
     'Output directory (defaults to current directory)',
   )
-  .option('--format <format>', 'Backup format (engine-specific, e.g., sql, custom, rdb, binary)')
+  .option(
+    '--format <format>',
+    'Backup format (engine-specific, e.g., sql, custom, rdb, binary)',
+  )
   .option('-j, --json', 'Output result as JSON')
   .action(
     async (
@@ -100,7 +103,11 @@ export const backupCommand = new Command('backup')
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           if (options.json) {
-            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+            console.log(
+              JSON.stringify({
+                error: `Container "${containerName}" not found`,
+              }),
+            )
           } else {
             console.error(uiError(`Container "${containerName}" not found`))
           }

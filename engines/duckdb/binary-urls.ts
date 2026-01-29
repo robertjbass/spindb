@@ -25,5 +25,9 @@ export function getBinaryUrl(
   arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
-  return buildDownloadUrl(Engine.DuckDB, { version: fullVersion, platform, arch })
+  return buildDownloadUrl(Engine.DuckDB, {
+    version: fullVersion,
+    platform,
+    arch,
+  })
 }

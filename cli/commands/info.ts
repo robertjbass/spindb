@@ -252,6 +252,24 @@ export const infoCommand = new Command('info')
   .option('--json', 'Output as JSON')
   .action(async (name: string | undefined, options: { json?: boolean }) => {
     try {
+      // If a specific container name is provided, check for it first
+      if (name) {
+        const config = await containerManager.getConfig(name)
+        if (!config) {
+          if (options.json) {
+            console.log(
+              JSON.stringify({ error: `Container "${name}" not found` }),
+            )
+          } else {
+            console.error(uiError(`Container "${name}" not found`))
+          }
+          process.exit(1)
+        }
+        await displayContainerInfo(config, options)
+        return
+      }
+
+      // No name provided - list all containers
       const containers = await containerManager.list()
 
       if (containers.length === 0) {
@@ -262,20 +280,6 @@ export const infoCommand = new Command('info')
             uiInfo('No containers found. Create one with: spindb create'),
           )
         }
-        return
-      }
-
-      if (name) {
-        const config = await containerManager.getConfig(name)
-        if (!config) {
-          if (options.json) {
-            console.error(JSON.stringify({ error: `Container "${name}" not found` }))
-            process.exit(1)
-          }
-          console.error(uiError(`Container "${name}" not found`))
-          process.exit(1)
-        }
-        await displayContainerInfo(config, options)
         return
       }
 

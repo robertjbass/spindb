@@ -420,7 +420,11 @@ export class CouchDBEngine extends BaseEngine {
         platform,
         arch,
       })
-      const couchdbPath = join(binPath, 'bin', `couchdb${getCouchDBExtension()}`)
+      const couchdbPath = join(
+        binPath,
+        'bin',
+        `couchdb${getCouchDBExtension()}`,
+      )
       if (existsSync(couchdbPath)) {
         return couchdbPath
       }
@@ -455,7 +459,11 @@ export class CouchDBEngine extends BaseEngine {
     let couchdbServer: string | null = null
 
     if (binaryPath && existsSync(binaryPath)) {
-      const serverPath = join(binaryPath, 'bin', `couchdb${getCouchDBExtension()}`)
+      const serverPath = join(
+        binaryPath,
+        'bin',
+        `couchdb${getCouchDBExtension()}`,
+      )
       if (existsSync(serverPath)) {
         couchdbServer = serverPath
         logDebug(`Using stored binary path: ${couchdbServer}`)
@@ -558,7 +566,13 @@ export class CouchDBEngine extends BaseEngine {
 
       // Modify the os_mon.app file directly to disable features
       // This sets the default env values in the application spec itself
-      const osMonAppPath = join(binDir, 'lib', 'os_mon-2.9.1', 'ebin', 'os_mon.app')
+      const osMonAppPath = join(
+        binDir,
+        'lib',
+        'os_mon-2.9.1',
+        'ebin',
+        'os_mon.app',
+      )
       try {
         const osMonApp = await readFile(osMonAppPath, 'utf8')
         // Replace the default env settings to disable all features
@@ -581,7 +595,6 @@ export class CouchDBEngine extends BaseEngine {
       logDebug(`Wrote vm.args to ${releasesVmArgs}`)
       logDebug(`Added to PATH: ${osMonPrivBin}`)
     }
-
 
     // Spawn CouchDB process
     if (isWindows()) {
@@ -715,7 +728,10 @@ export class CouchDBEngine extends BaseEngine {
   }
 
   // Wait for CouchDB to be ready
-  private async waitForReady(port: number, timeoutMs = 30000): Promise<boolean> {
+  private async waitForReady(
+    port: number,
+    timeoutMs = 30000,
+  ): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 500
 
@@ -956,7 +972,9 @@ export class CouchDBEngine extends BaseEngine {
       )
     }
 
-    logDebug(`Deleted CouchDB database: ${database} (status: ${response.status})`)
+    logDebug(
+      `Deleted CouchDB database: ${database} (status: ${response.status})`,
+    )
   }
 
   /**
@@ -1001,7 +1019,8 @@ export class CouchDBEngine extends BaseEngine {
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult> {
-    const { baseUrl, headers, database } = parseCouchDBConnectionString(connectionString)
+    const { baseUrl, headers, database } =
+      parseCouchDBConnectionString(connectionString)
 
     logDebug(`Connecting to remote CouchDB at ${baseUrl}`)
 

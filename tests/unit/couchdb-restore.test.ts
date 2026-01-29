@@ -7,7 +7,10 @@ import { join } from 'path'
 import { writeFile, rm, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
 import { assert, assertEqual } from '../utils/assertions'
-import { detectBackupFormat, parseConnectionString } from '../../engines/couchdb/restore'
+import {
+  detectBackupFormat,
+  parseConnectionString,
+} from '../../engines/couchdb/restore'
 
 describe('CouchDB Restore Module', () => {
   const testDir = join(tmpdir(), 'couchdb-test-' + Date.now())
@@ -39,7 +42,10 @@ describe('CouchDB Restore Module', () => {
     it('should detect .couchdb file by extension', async () => {
       await mkdir(testDir, { recursive: true })
       const couchdbPath = join(testDir, 'backup.couchdb')
-      await writeFile(couchdbPath, JSON.stringify({ version: '1', databases: [] }))
+      await writeFile(
+        couchdbPath,
+        JSON.stringify({ version: '1', databases: [] }),
+      )
 
       const format = await detectBackupFormat(couchdbPath)
       assertEqual(format.format, 'json', 'Should detect as json')
@@ -50,7 +56,10 @@ describe('CouchDB Restore Module', () => {
     it('should detect JSON content by structure', async () => {
       await mkdir(testDir, { recursive: true })
       const backupPath = join(testDir, 'backup.bak')
-      await writeFile(backupPath, JSON.stringify({ version: '1', databases: [] }))
+      await writeFile(
+        backupPath,
+        JSON.stringify({ version: '1', databases: [] }),
+      )
 
       const format = await detectBackupFormat(backupPath)
       assertEqual(format.format, 'json', 'Should detect JSON by content')
@@ -75,7 +84,11 @@ describe('CouchDB Restore Module', () => {
       await mkdir(dirPath, { recursive: true })
 
       const format = await detectBackupFormat(dirPath)
-      assertEqual(format.format, 'unknown', 'Should detect directory as unknown')
+      assertEqual(
+        format.format,
+        'unknown',
+        'Should detect directory as unknown',
+      )
       assert(
         format.description.includes('Directory'),
         'Description should mention directory',

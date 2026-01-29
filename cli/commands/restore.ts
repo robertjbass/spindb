@@ -90,7 +90,11 @@ export const restoreCommand = new Command('restore')
         const config = await containerManager.getConfig(containerName)
         if (!config) {
           if (options.json) {
-            console.log(JSON.stringify({ error: `Container "${containerName}" not found` }))
+            console.log(
+              JSON.stringify({
+                error: `Container "${containerName}" not found`,
+              }),
+            )
           } else {
             console.error(uiError(`Container "${containerName}" not found`))
           }

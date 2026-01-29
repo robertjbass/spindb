@@ -250,7 +250,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
   // (not just an empty static directory)
   let qdrantWebUiInstalled = false
   if (config.engine === 'qdrant') {
-    const containerDir = paths.getContainerPath(config.name, { engine: 'qdrant' })
+    const containerDir = paths.getContainerPath(config.name, {
+      engine: 'qdrant',
+    })
     const staticDir = join(containerDir, 'static')
     // Check for index.html which is always present in a valid Web UI install
     qdrantWebUiInstalled = existsSync(join(staticDir, 'index.html'))
@@ -401,7 +403,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
       console.log()
       console.log(chalk.gray('Example curl commands:'))
-      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`))
+      console.log(
+        chalk.gray(`  curl http://127.0.0.1:${config.port}/collections`),
+      )
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/healthz`))
     } else if (config.engine === 'meilisearch') {
       console.log(chalk.cyan('Meilisearch REST API:'))
@@ -414,7 +418,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
     } else if (config.engine === 'couchdb') {
       console.log(chalk.cyan('CouchDB REST API:'))
       console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
-      console.log(chalk.white(`  Fauxton: http://127.0.0.1:${config.port}/_utils`))
+      console.log(
+        chalk.white(`  Fauxton: http://127.0.0.1:${config.port}/_utils`),
+      )
       console.log()
       console.log(chalk.cyan('Credentials:'))
       console.log(chalk.white(`  Username: admin`))
@@ -423,7 +429,9 @@ export async function handleOpenShell(containerName: string): Promise<void> {
       console.log(chalk.gray('Example curl commands:'))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/_all_dbs`))
-      console.log(chalk.gray(`  curl -X PUT http://127.0.0.1:${config.port}/mydb`))
+      console.log(
+        chalk.gray(`  curl -X PUT http://127.0.0.1:${config.port}/mydb`),
+      )
     }
     console.log()
     await pressEnterToContinue()
@@ -620,7 +628,8 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
 
   try {
     // Get latest release info from GitHub
-    const releaseUrl = 'https://api.github.com/repos/qdrant/qdrant-web-ui/releases/latest'
+    const releaseUrl =
+      'https://api.github.com/repos/qdrant/qdrant-web-ui/releases/latest'
     const releaseResponse = await fetch(releaseUrl, {
       headers: { 'User-Agent': 'spindb' },
     })
@@ -629,13 +638,15 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
       throw new Error(`Failed to fetch release info: ${releaseResponse.status}`)
     }
 
-    const releaseData = await releaseResponse.json() as {
+    const releaseData = (await releaseResponse.json()) as {
       assets: Array<{ name: string; browser_download_url: string }>
       tag_name: string
     }
 
     // Find dist-qdrant.zip asset
-    const zipAsset = releaseData.assets.find(a => a.name === 'dist-qdrant.zip')
+    const zipAsset = releaseData.assets.find(
+      (a) => a.name === 'dist-qdrant.zip',
+    )
     if (!zipAsset) {
       throw new Error('Could not find dist-qdrant.zip in latest release')
     }
@@ -649,7 +660,9 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
     }
 
     // Get container directory and create static folder
-    const containerDir = paths.getContainerPath(containerName, { engine: 'qdrant' })
+    const containerDir = paths.getContainerPath(containerName, {
+      engine: 'qdrant',
+    })
     const staticDir = join(containerDir, 'static')
 
     // Remove existing static dir if present
@@ -701,16 +714,26 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
     spinner.succeed(`Qdrant Web UI ${releaseData.tag_name} installed`)
     console.log()
     console.log(uiWarning('Restart Qdrant for the Web UI to take effect:'))
-    console.log(chalk.gray(`  spindb stop ${containerName} && spindb start ${containerName}`))
+    console.log(
+      chalk.gray(
+        `  spindb stop ${containerName} && spindb start ${containerName}`,
+      ),
+    )
     console.log()
   } catch (error) {
     spinner.fail('Failed to download Qdrant Web UI')
     console.error(uiError((error as Error).message))
     console.log()
     console.log(chalk.gray('You can manually download from:'))
-    console.log(chalk.cyan('  https://github.com/qdrant/qdrant-web-ui/releases'))
+    console.log(
+      chalk.cyan('  https://github.com/qdrant/qdrant-web-ui/releases'),
+    )
     console.log(chalk.gray(`\nExtract dist-qdrant.zip contents to:`))
-    console.log(chalk.cyan(`  ${paths.getContainerPath(containerName, { engine: 'qdrant' })}/static/`))
+    console.log(
+      chalk.cyan(
+        `  ${paths.getContainerPath(containerName, { engine: 'qdrant' })}/static/`,
+      ),
+    )
     console.log()
   }
 
@@ -896,7 +919,9 @@ async function launchShell(
   } else if (config.engine === 'surrealdb') {
     // SurrealDB uses surreal sql command
     const engine = getEngine(config.engine)
-    const surrealPath = await engine.getSurrealPath(config.version).catch(() => 'surreal')
+    const surrealPath = await engine
+      .getSurrealPath(config.version)
+      .catch(() => 'surreal')
     const namespace = config.name.replace(/-/g, '_')
     const database = config.database || 'default'
     shellCmd = surrealPath
@@ -917,7 +942,9 @@ async function launchShell(
   } else if (config.engine === 'cockroachdb') {
     // CockroachDB uses cockroach sql command
     const engine = getEngine(config.engine)
-    const cockroachPath = await engine.getCockroachPath(config.version).catch(() => 'cockroach')
+    const cockroachPath = await engine
+      .getCockroachPath(config.version)
+      .catch(() => 'cockroach')
     shellCmd = cockroachPath
     shellArgs = [
       'sql',

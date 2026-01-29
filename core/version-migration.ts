@@ -67,7 +67,10 @@ const VERSION_MAPS: Partial<Record<Engine, VersionMapInfo>> = {
     versionMap: POSTGRESQL_VERSION_MAP,
     majorVersions: PG_MAJORS,
   },
-  [Engine.MySQL]: { versionMap: MYSQL_VERSION_MAP, majorVersions: MYSQL_MAJORS },
+  [Engine.MySQL]: {
+    versionMap: MYSQL_VERSION_MAP,
+    majorVersions: MYSQL_MAJORS,
+  },
   [Engine.MariaDB]: {
     versionMap: MARIADB_VERSION_MAP,
     majorVersions: MARIADB_MAJORS,
@@ -80,7 +83,10 @@ const VERSION_MAPS: Partial<Record<Engine, VersionMapInfo>> = {
     versionMap: FERRETDB_VERSION_MAP,
     majorVersions: FERRET_MAJORS,
   },
-  [Engine.Redis]: { versionMap: REDIS_VERSION_MAP, majorVersions: REDIS_MAJORS },
+  [Engine.Redis]: {
+    versionMap: REDIS_VERSION_MAP,
+    majorVersions: REDIS_MAJORS,
+  },
   [Engine.Valkey]: {
     versionMap: VALKEY_VERSION_MAP,
     majorVersions: VALKEY_MAJORS,
@@ -130,7 +136,10 @@ export type OutdatedContainer = {
  * @param version - Full version string (e.g., '17.2.0')
  * @returns Major version string or null if not found
  */
-export function getMajorVersion(engine: Engine, version: string): string | null {
+export function getMajorVersion(
+  engine: Engine,
+  version: string,
+): string | null {
   const info = VERSION_MAPS[engine]
   if (!info) return null
 
@@ -204,7 +213,9 @@ export function getTargetVersion(
 /**
  * Get the current full version for a DocumentDB major version.
  */
-export function getDocumentDBTargetVersion(majorVersion: string): string | null {
+export function getDocumentDBTargetVersion(
+  majorVersion: string,
+): string | null {
   return DOCUMENTDB_INFO.versionMap[majorVersion] || null
 }
 

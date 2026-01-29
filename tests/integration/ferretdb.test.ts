@@ -200,7 +200,10 @@ describe('FerretDB Integration Tests', () => {
 
     // Re-read config after start to get the backendPort
     const updatedConfig = await containerManager.getConfig(clonedContainerName)
-    assert(updatedConfig !== null, 'Updated cloned container config should exist')
+    assert(
+      updatedConfig !== null,
+      'Updated cloned container config should exist',
+    )
 
     try {
       await engine.restore(updatedConfig!, dumpPath, {
@@ -413,13 +416,18 @@ describe('FerretDB Integration Tests', () => {
       })
 
       // If start succeeded, verify the container is running
-      const running = await processManager.isRunning(portConflictContainerName, {
-        engine: ENGINE,
-      })
+      const running = await processManager.isRunning(
+        portConflictContainerName,
+        {
+          engine: ENGINE,
+        },
+      )
 
       if (running) {
         // Check if the port was auto-reassigned (behavior varies by engine)
-        const updatedConfig = await containerManager.getConfig(portConflictContainerName)
+        const updatedConfig = await containerManager.getConfig(
+          portConflictContainerName,
+        )
         console.log(
           `   ✓ Container started (port: ${updatedConfig?.port}, conflict handling succeeded)`,
         )
@@ -506,7 +514,9 @@ describe('FerretDB Integration Tests', () => {
 
     // Attempting to stop again should not throw (idempotent behavior)
     await engine.stop(config!)
-    console.log('   ✓ Container is already stopped (double-stop handled gracefully)')
+    console.log(
+      '   ✓ Container is already stopped (double-stop handled gracefully)',
+    )
   })
 
   it('should delete container with --force', async () => {

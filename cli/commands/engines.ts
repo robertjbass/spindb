@@ -463,25 +463,25 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   // Table header
+  // Icon is 5 chars, longest engine name is 11 (meilisearch/cockroachdb), so 18 total for ENGINE column
   console.log()
   console.log(
     chalk.gray('  ') +
-      chalk.bold.white('ENGINE'.padEnd(14)) +
+      chalk.bold.white('ENGINE'.padEnd(18)) +
       chalk.bold.white('VERSION'.padEnd(12)) +
       chalk.bold.white('SOURCE'.padEnd(18)) +
       chalk.bold.white('SIZE'),
   )
-  console.log(chalk.gray('  ' + '─'.repeat(55)))
+  console.log(chalk.gray('  ' + '─'.repeat(59)))
 
   // PostgreSQL rows
   for (const engine of pgEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    // getEngineIcon() includes trailing space for consistent alignment
-    const engineDisplay = `${getEngineIcon(engine.engine)}${engine.engine}`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon(engine.engine) +
+        chalk.cyan(engine.engine.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -491,11 +491,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // MySQL rows
   for (const mysqlEngine of mysqlEngines) {
     const platformInfo = `${mysqlEngine.platform}-${mysqlEngine.arch}`
-    const engineDisplay = `${getEngineIcon('mysql')}mysql`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('mysql') +
+        chalk.cyan('mysql'.padEnd(13)) +
         chalk.yellow(mysqlEngine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(mysqlEngine.sizeBytes)),
@@ -504,11 +504,10 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
 
   // SQLite row
   if (sqliteEngine) {
-    const engineDisplay = `${getEngineIcon('sqlite')}sqlite`
-
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('sqlite') +
+        chalk.cyan('sqlite'.padEnd(13)) +
         chalk.yellow(sqliteEngine.version.padEnd(12)) +
         chalk.gray('system'.padEnd(18)) +
         chalk.gray('(system-installed)'),
@@ -518,11 +517,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // DuckDB rows
   for (const engine of duckdbEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('duckdb')}duckdb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('duckdb') +
+        chalk.cyan('duckdb'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -532,11 +531,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // MongoDB rows
   for (const engine of mongodbEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('mongodb')}mongodb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('mongodb') +
+        chalk.cyan('mongodb'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -546,11 +545,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // FerretDB rows
   for (const engine of ferretdbEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('ferretdb')}ferretdb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('ferretdb') +
+        chalk.cyan('ferretdb'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -560,11 +559,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // Redis rows
   for (const engine of redisEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('redis')}redis`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('redis') +
+        chalk.cyan('redis'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -574,11 +573,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // Valkey rows
   for (const engine of valkeyEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('valkey')}valkey`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('valkey') +
+        chalk.cyan('valkey'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -588,11 +587,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // Qdrant rows
   for (const engine of qdrantEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('qdrant')}qdrant`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('qdrant') +
+        chalk.cyan('qdrant'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -602,11 +601,11 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // Meilisearch rows
   for (const engine of meilisearchEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('meilisearch')}meilisearch`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('meilisearch') +
+        chalk.cyan('meilisearch'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
@@ -616,18 +615,18 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   // CouchDB rows
   for (const engine of couchdbEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
-    const engineDisplay = `${getEngineIcon('couchdb')}couchdb`
 
     console.log(
       chalk.gray('  ') +
-        chalk.cyan(engineDisplay.padEnd(14)) +
+        getEngineIcon('couchdb') +
+        chalk.cyan('couchdb'.padEnd(13)) +
         chalk.yellow(engine.version.padEnd(12)) +
         chalk.gray(platformInfo.padEnd(18)) +
         chalk.white(formatBytes(engine.sizeBytes)),
     )
   }
 
-  console.log(chalk.gray('  ' + '─'.repeat(55)))
+  console.log(chalk.gray('  ' + '─'.repeat(59)))
 
   // Summary
   console.log()
@@ -652,7 +651,10 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
   if (duckdbEngines.length > 0) {
-    const totalDuckdbSize = duckdbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+    const totalDuckdbSize = duckdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
     console.log(
       chalk.gray(
         `  DuckDB: ${duckdbEngines.length} version(s), ${formatBytes(totalDuckdbSize)}`,
@@ -843,9 +845,7 @@ async function deleteEngine(
           ),
         )
         console.log(
-          chalk.gray(
-            `  ${questdbContainers.map((c) => c.name).join(', ')}`,
-          ),
+          chalk.gray(`  ${questdbContainers.map((c) => c.name).join(', ')}`),
         )
         console.log(
           chalk.gray(
@@ -1034,10 +1034,12 @@ async function _installEngineViaPackageManager(
 // Main engines command
 export const enginesCommand = new Command('engines')
   .description('Manage installed database engines')
-  .action(async () => {
+  .option('--json', 'Output as JSON')
+  .passThroughOptions()
+  .action(async (options: { json?: boolean }) => {
     try {
       // Default action: list installed engines (same as 'engines list')
-      await listEngines({})
+      await listEngines(options)
     } catch (error) {
       const e = error as Error
       console.error(uiError(e.message))
@@ -1538,7 +1540,9 @@ enginesCommand
 
         const engine = getEngine(Engine.Meilisearch)
 
-        const spinner = createSpinner(`Checking Meilisearch ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking Meilisearch ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1560,7 +1564,8 @@ enginesCommand
         // Show the path for reference
         const { platform: meilisearchPlatform, arch: meilisearchArch } =
           platformService.getPlatformInfo()
-        const meilisearchFullVersion = meilisearchBinaryManager.getFullVersion(version)
+        const meilisearchFullVersion =
+          meilisearchBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'meilisearch',
           version: meilisearchFullVersion,
@@ -1596,7 +1601,9 @@ enginesCommand
 
         const engine = getEngine(Engine.FerretDB)
 
-        const spinner = createSpinner(`Checking FerretDB ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking FerretDB ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1635,11 +1642,17 @@ enginesCommand
           ferretPlatform,
           ferretArch,
         )
-        console.log(chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`))
+        console.log(
+          chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`),
+        )
 
         // Skip client tools check - FerretDB uses MongoDB client tools (mongosh)
         // which are installed separately via: spindb engines download mongodb
-        console.log(chalk.gray('  Note: Use mongosh to connect (install via: spindb engines download mongodb)'))
+        console.log(
+          chalk.gray(
+            '  Note: Use mongosh to connect (install via: spindb engines download mongodb)',
+          ),
+        )
         return
       }
 
@@ -1695,7 +1708,9 @@ enginesCommand
 
         const engine = getEngine(Engine.CockroachDB)
 
-        const spinner = createSpinner(`Checking CockroachDB ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking CockroachDB ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1717,7 +1732,8 @@ enginesCommand
         // Show the path for reference
         const { platform: cockroachdbPlatform, arch: cockroachdbArch } =
           platformService.getPlatformInfo()
-        const cockroachdbFullVersion = cockroachdbBinaryManager.getFullVersion(version)
+        const cockroachdbFullVersion =
+          cockroachdbBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'cockroachdb',
           version: cockroachdbFullVersion,
@@ -1738,7 +1754,9 @@ enginesCommand
 
         const engine = getEngine(Engine.SurrealDB)
 
-        const spinner = createSpinner(`Checking SurrealDB ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking SurrealDB ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1760,7 +1778,8 @@ enginesCommand
         // Show the path for reference
         const { platform: surrealdbPlatform, arch: surrealdbArch } =
           platformService.getPlatformInfo()
-        const surrealdbFullVersion = surrealdbBinaryManager.getFullVersion(version)
+        const surrealdbFullVersion =
+          surrealdbBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'surrealdb',
           version: surrealdbFullVersion,

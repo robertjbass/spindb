@@ -753,7 +753,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
-      max-parallel: 4  # Limit parallel jobs to reduce Windows runner contention
+      max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-22.04
@@ -1547,7 +1547,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
-      max-parallel: 4  # Limit parallel jobs to reduce Windows runner contention
+      max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-24.04
@@ -2329,8 +2329,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs:
-      [
+    needs: [
         unit-tests,
         test-postgresql,
         test-mariadb,

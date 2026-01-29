@@ -638,7 +638,10 @@ export class QdrantEngine extends BaseEngine {
   }
 
   // Wait for Qdrant to be ready to accept connections
-  private async waitForReady(port: number, timeoutMs = 30000): Promise<boolean> {
+  private async waitForReady(
+    port: number,
+    timeoutMs = 30000,
+  ): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 500
 
@@ -882,7 +885,9 @@ export class QdrantEngine extends BaseEngine {
     )
 
     if (response.status !== 200) {
-      throw new Error(`Failed to create collection: ${JSON.stringify(response.data)}`)
+      throw new Error(
+        `Failed to create collection: ${JSON.stringify(response.data)}`,
+      )
     }
 
     logDebug(`Created Qdrant collection: ${database}`)
@@ -904,7 +909,9 @@ export class QdrantEngine extends BaseEngine {
     )
 
     if (response.status !== 200) {
-      throw new Error(`Failed to delete collection: ${JSON.stringify(response.data)}`)
+      throw new Error(
+        `Failed to delete collection: ${JSON.stringify(response.data)}`,
+      )
     }
 
     logDebug(`Deleted Qdrant collection: ${database}`)
@@ -959,8 +966,7 @@ export class QdrantEngine extends BaseEngine {
     const collectionsData = collectionsResponse.data as {
       result?: { collections?: Array<{ name: string }> }
     }
-    const collectionCount =
-      collectionsData.result?.collections?.length ?? 0
+    const collectionCount = collectionsData.result?.collections?.length ?? 0
 
     logDebug(`Found ${collectionCount} collections on remote server`)
 
@@ -1053,9 +1059,11 @@ export class QdrantEngine extends BaseEngine {
     logDebug(`Snapshot downloaded to ${outputPath}`)
 
     // Clean up snapshot on remote server (courtesy cleanup)
-    await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch((err) => {
-      logDebug(`Could not delete remote snapshot (non-fatal): ${err}`)
-    })
+    await fetch(`${snapshotUrl}`, { method: 'DELETE', headers }).catch(
+      (err) => {
+        logDebug(`Could not delete remote snapshot (non-fatal): ${err}`)
+      },
+    )
 
     return {
       filePath: outputPath,

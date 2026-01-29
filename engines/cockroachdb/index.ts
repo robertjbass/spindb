@@ -248,11 +248,16 @@ export class CockroachDBEngine extends BaseEngine {
     const args = [
       'start-single-node',
       '--insecure',
-      '--store', dataDir,
-      '--listen-addr', `127.0.0.1:${port}`,
-      '--http-addr', `127.0.0.1:${httpPort}`,
-      '--pid-file', pidFile,
-      '--log-dir', containerDir,
+      '--store',
+      dataDir,
+      '--listen-addr',
+      `127.0.0.1:${port}`,
+      '--http-addr',
+      `127.0.0.1:${httpPort}`,
+      '--pid-file',
+      pidFile,
+      '--log-dir',
+      containerDir,
     ]
 
     // On Unix, use --background flag which forks a daemon process
@@ -307,14 +312,20 @@ export class CockroachDBEngine extends BaseEngine {
           reject(err)
         })
         proc.unref()
-        logDebug(`Windows: waiting fixed delay for CockroachDB to start (pid: ${proc.pid})`)
+        logDebug(
+          `Windows: waiting fixed delay for CockroachDB to start (pid: ${proc.pid})`,
+        )
         setTimeout(resolve, 3000)
       })
     } else {
       const spawnTimeout = 30000 // 30 seconds to spawn
       await new Promise<void>((resolve, reject) => {
         const timeoutId = setTimeout(() => {
-          reject(new Error(`CockroachDB process failed to spawn within ${spawnTimeout}ms`))
+          reject(
+            new Error(
+              `CockroachDB process failed to spawn within ${spawnTimeout}ms`,
+            ),
+          )
         }, spawnTimeout)
 
         proc.on('error', (err) => {
@@ -334,7 +345,9 @@ export class CockroachDBEngine extends BaseEngine {
     // Wait for server to be ready
     // Windows needs a longer timeout since CockroachDB initialization takes more time
     const timeout = isWindows ? 90000 : 60000
-    logDebug(`Waiting for CockroachDB server to be ready on port ${port}... (timeout: ${timeout}ms)`)
+    logDebug(
+      `Waiting for CockroachDB server to be ready on port ${port}... (timeout: ${timeout}ms)`,
+    )
     const ready = await this.waitForReady(port, version, timeout)
     logDebug(`waitForReady returned: ${ready}`)
 
@@ -760,7 +773,9 @@ export class CockroachDBEngine extends BaseEngine {
     const port = parseInt(url.port, 10) || 26257
     const database = url.pathname.replace(/^\//, '') || 'defaultdb'
 
-    logDebug(`Connecting to remote CockroachDB at ${host}:${port} (db: ${database})`)
+    logDebug(
+      `Connecting to remote CockroachDB at ${host}:${port} (db: ${database})`,
+    )
 
     // For remote dump, we need a local cockroach binary
     // Try multiple methods to find an installed version
@@ -770,7 +785,9 @@ export class CockroachDBEngine extends BaseEngine {
     const cachedCockroach = await configManager.getBinaryPath('cockroach')
     if (cachedCockroach && existsSync(cachedCockroach)) {
       cockroach = cachedCockroach
-      logDebug(`Found cockroach binary via 'cockroach' config key: ${cockroach}`)
+      logDebug(
+        `Found cockroach binary via 'cockroach' config key: ${cockroach}`,
+      )
     }
 
     // 2. Try to find via dependency manager (checks config + system PATH)
@@ -787,7 +804,9 @@ export class CockroachDBEngine extends BaseEngine {
       for (const version of SUPPORTED_MAJOR_VERSIONS) {
         try {
           cockroach = await this.getCockroachPath(version)
-          logDebug(`Found cockroach binary for version ${version}: ${cockroach}`)
+          logDebug(
+            `Found cockroach binary for version ${version}: ${cockroach}`,
+          )
           break
         } catch {
           // Version not installed, try next
@@ -819,7 +838,11 @@ export class CockroachDBEngine extends BaseEngine {
 
     // Get list of tables
     const tablesQuery = `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`
-    const tablesResult = await this.execRemoteQuery(cockroach, connArgs, tablesQuery)
+    const tablesResult = await this.execRemoteQuery(
+      cockroach,
+      connArgs,
+      tablesQuery,
+    )
     // Parse CSV output properly to handle quoted identifiers
     const tableRecords = parseCsvRecords(tablesResult, true) // Skip header
     const tables = tableRecords
@@ -844,7 +867,11 @@ export class CockroachDBEngine extends BaseEngine {
       // Get CREATE TABLE - use proper identifier escaping
       try {
         const createQuery = `SHOW CREATE TABLE ${escapeCockroachIdentifier(table)}`
-        const createResult = await this.execRemoteQuery(cockroach, connArgs, createQuery)
+        const createResult = await this.execRemoteQuery(
+          cockroach,
+          connArgs,
+          createQuery,
+        )
         // Parse CSV output safely using record-aware parser
         // Format is: table_name,create_statement (create statement may contain newlines)
         const createRecords = parseCsvRecords(createResult, true) // Skip header
@@ -870,7 +897,11 @@ export class CockroachDBEngine extends BaseEngine {
         // Escape single quotes in table name for string literal comparison
         const escapedTableForString = table.replace(/'/g, "''")
         const columnsQuery = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${escapedTableForString}' ORDER BY ordinal_position`
-        const columnsResult = await this.execRemoteQuery(cockroach, connArgs, columnsQuery)
+        const columnsResult = await this.execRemoteQuery(
+          cockroach,
+          connArgs,
+          columnsQuery,
+        )
         // Parse each CSV record properly to handle quoted column names
         const columnRecords = parseCsvRecords(columnsResult, true) // Skip header
         const columns = columnRecords
@@ -887,7 +918,11 @@ export class CockroachDBEngine extends BaseEngine {
 
         // Get all rows - use proper identifier escaping
         const dataQuery = `SELECT * FROM ${escapeCockroachIdentifier(table)}`
-        const dataResult = await this.execRemoteQuery(cockroach, connArgs, dataQuery)
+        const dataResult = await this.execRemoteQuery(
+          cockroach,
+          connArgs,
+          dataQuery,
+        )
         // Use record-aware parser to handle fields with embedded newlines
         const dataRecords = parseCsvRecords(dataResult, true) // Skip header
 
@@ -903,7 +938,9 @@ export class CockroachDBEngine extends BaseEngine {
               continue
             }
 
-            const escapedCols = columns.map((c) => escapeCockroachIdentifier(c)).join(', ')
+            const escapedCols = columns
+              .map((c) => escapeCockroachIdentifier(c))
+              .join(', ')
             const escapedVals = fields
               .map((f) => escapeSqlValue(f.value, f.wasQuoted))
               .join(', ')

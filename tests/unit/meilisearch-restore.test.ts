@@ -7,7 +7,10 @@ import { join } from 'path'
 import { writeFile, rm, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
 import { assert, assertEqual } from '../utils/assertions'
-import { detectBackupFormat, parseConnectionString } from '../../engines/meilisearch/restore'
+import {
+  detectBackupFormat,
+  parseConnectionString,
+} from '../../engines/meilisearch/restore'
 
 describe('Meilisearch Restore Module', () => {
   const testDir = join(tmpdir(), 'meilisearch-test-' + Date.now())
@@ -21,7 +24,6 @@ describe('Meilisearch Restore Module', () => {
   })
 
   describe('detectBackupFormat', () => {
-
     it('should detect .snapshot file by extension', async () => {
       await mkdir(testDir, { recursive: true })
       const snapshotPath = join(testDir, 'test.snapshot')
@@ -84,8 +86,14 @@ describe('Meilisearch Restore Module', () => {
     })
 
     it('should parse https connection string', () => {
-      const result = parseConnectionString('https://meilisearch.example.com:7700')
-      assertEqual(result.host, 'meilisearch.example.com', 'Host should be correct')
+      const result = parseConnectionString(
+        'https://meilisearch.example.com:7700',
+      )
+      assertEqual(
+        result.host,
+        'meilisearch.example.com',
+        'Host should be correct',
+      )
       assertEqual(result.port, 7700, 'Port should be 7700')
       assertEqual(result.protocol, 'https', 'Protocol should preserve https')
     })

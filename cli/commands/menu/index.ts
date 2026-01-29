@@ -21,6 +21,8 @@ import {
 import { handleBackup, handleRestore, handleClone } from './backup-handlers'
 import { handleEngines } from './engine-handlers'
 import { handleCheckUpdate, handleDoctor } from './update-handlers'
+import { handleSettings } from './settings-handlers'
+import { configManager } from '../../../core/config-manager'
 import { type MenuChoice } from './shared'
 
 async function showMainMenu(): Promise<void> {
@@ -28,11 +30,15 @@ async function showMainMenu(): Promise<void> {
   console.log(header('SpinDB - Local Database Manager'))
   console.log()
 
-  // Parallelize container list and engine checks for faster startup
-  const [containers, hasEngines] = await Promise.all([
+  // Parallelize container list, engine checks, and config loading for faster startup
+  const [containers, hasEngines, config] = await Promise.all([
     containerManager.list(),
     hasAnyInstalledEngines(),
+    configManager.getConfig(),
   ])
+
+  // Check if icon mode preference is set
+  const iconModeSet = config.preferences?.iconMode !== undefined
 
   const running = containers.filter((c) => c.status === 'running').length
   const stopped = containers.filter((c) => c.status !== 'running').length
@@ -100,25 +106,47 @@ async function showMainMenu(): Promise<void> {
     new inquirer.Separator(),
     {
       name: hasEngines
-        ? `${chalk.yellow('⚙')} Manage engines`
-        : chalk.gray('⚙ Manage engines'),
+        ? `${chalk.magenta('⬢')} Manage engines`
+        : chalk.gray('⬢ Manage engines'),
       value: 'engines',
       disabled: hasEngines ? false : 'No engines installed',
     },
     { name: `${chalk.red.bold('+')} Health check`, value: 'doctor' },
     { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
+    { name: `${chalk.yellow('⚙')} Settings`, value: 'settings' },
     { name: `${chalk.gray('⏻')} Exit`, value: 'exit' },
+    new inquirer.Separator(),
   ]
 
-  const { action } = await escapeablePrompt<{ action: string }>([
-    {
-      type: 'list',
-      name: 'action',
-      message: 'What would you like to do?',
-      choices,
-      pageSize: 12,
-    },
-  ])
+  // Show persistent hint below the menu if icon mode is not set (or if PERSISTENT_HINT env var is set)
+  const showHint = process.env.PERSISTENT_HINT === 'true' || !iconModeSet
+  const hintText =
+    process.env.PERSISTENT_HINT_TEXT || 'Tip: Set icon style in Settings'
+
+  // Use BottomBar to show hint below the prompt (including below scroll indicator)
+  const bottomBar = showHint ? new inquirer.ui.BottomBar() : null
+  if (bottomBar) {
+    bottomBar.updateBottomBar(chalk.gray(`  ${hintText}\n`))
+  }
+
+  let action: string
+  try {
+    const result = await escapeablePrompt<{ action: string }>([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'What would you like to do?',
+        choices,
+        pageSize: 12,
+      },
+    ])
+    action = result.action
+  } finally {
+    // Clean up the bottom bar
+    if (bottomBar) {
+      bottomBar.updateBottomBar('')
+    }
+  }
 
   switch (action) {
     case 'create':
@@ -150,6 +178,9 @@ async function showMainMenu(): Promise<void> {
       break
     case 'check-update':
       await handleCheckUpdate()
+      break
+    case 'settings':
+      await handleSettings()
       break
     case 'exit':
       console.log(chalk.gray('\n  Goodbye!\n'))

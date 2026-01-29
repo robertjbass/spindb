@@ -12,6 +12,7 @@ import { updateManager } from '../../core/update-manager'
 import { uiError, uiSuccess, header, uiInfo } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { createSpinner } from '../ui/spinner'
+import { handleSettings } from './menu/settings-handlers'
 import type { BinaryTool } from '../../types'
 
 // Helper to display a tool's config
@@ -40,7 +41,18 @@ function displayToolConfig(
 }
 
 export const configCommand = new Command('config')
+  .alias('configure')
   .description('Manage spindb configuration')
+  .action(async () => {
+    // If run as bare command in TTY mode, open interactive settings
+    // Note: icon mode preference is loaded globally in cli/index.ts before any command runs
+    if (process.stdin.isTTY) {
+      await handleSettings()
+    } else {
+      // Non-interactive: show help
+      console.log(configCommand.helpInformation())
+    }
+  })
   .addCommand(
     new Command('show')
       .description('Show current configuration')
@@ -59,7 +71,9 @@ export const configCommand = new Command('config')
           console.log()
 
           // PostgreSQL tools
-          console.log(chalk.bold(`  ${getEngineIcon('postgresql')}PostgreSQL Tools:`))
+          console.log(
+            chalk.bold(`  ${getEngineIcon('postgresql')}PostgreSQL Tools:`),
+          )
           console.log(chalk.gray('  ' + '─'.repeat(60)))
           for (const tool of POSTGRESQL_TOOLS) {
             displayToolConfig(tool, config.binaries[tool])

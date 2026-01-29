@@ -7,7 +7,10 @@ import { join } from 'path'
 import { writeFile, rm, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
 import { assert, assertEqual } from '../utils/assertions'
-import { detectBackupFormat, parseConnectionString } from '../../engines/qdrant/restore'
+import {
+  detectBackupFormat,
+  parseConnectionString,
+} from '../../engines/qdrant/restore'
 
 describe('Qdrant Restore Module', () => {
   const testDir = join(tmpdir(), 'qdrant-test-' + Date.now())
@@ -21,7 +24,6 @@ describe('Qdrant Restore Module', () => {
   })
 
   describe('detectBackupFormat', () => {
-
     it('should detect .snapshot file by extension', async () => {
       await mkdir(testDir, { recursive: true })
       const snapshotPath = join(testDir, 'test.snapshot')

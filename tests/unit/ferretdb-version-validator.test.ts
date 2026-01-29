@@ -17,18 +17,12 @@ import {
 describe('FerretDB Version Maps', () => {
   describe('FERRETDB_VERSION_MAP', () => {
     it('should contain major version 2', () => {
-      assert(
-        FERRETDB_VERSION_MAP['2'] !== undefined,
-        'Should have version 2',
-      )
+      assert(FERRETDB_VERSION_MAP['2'] !== undefined, 'Should have version 2')
     })
 
     it('should map major version to full version', () => {
       const fullVersion = FERRETDB_VERSION_MAP['2']
-      assert(
-        fullVersion.startsWith('2.'),
-        'Full version should start with 2.',
-      )
+      assert(fullVersion.startsWith('2.'), 'Full version should start with 2.')
     })
 
     it('should have identity mapping for full versions', () => {
@@ -36,7 +30,10 @@ describe('FerretDB Version Maps', () => {
       const fullVersionKey = Object.keys(FERRETDB_VERSION_MAP).find((key) =>
         /^\d+\.\d+\.\d+$/.test(key),
       )
-      assert(fullVersionKey !== undefined, 'Should have at least one full version key')
+      assert(
+        fullVersionKey !== undefined,
+        'Should have at least one full version key',
+      )
       assertEqual(
         FERRETDB_VERSION_MAP[fullVersionKey!],
         fullVersionKey,
@@ -79,7 +76,11 @@ describe('FerretDB Version Maps', () => {
     it('should return unknown versions unchanged', () => {
       const result = normalizeVersion('99')
       // Unknown versions are returned as-is (may cause download failures)
-      assertEqual(result, '99', 'Should return input unchanged for unknown version')
+      assertEqual(
+        result,
+        '99',
+        'Should return input unchanged for unknown version',
+      )
     })
   })
 

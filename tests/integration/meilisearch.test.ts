@@ -93,7 +93,9 @@ describe('Meilisearch Integration Tests', () => {
     })
 
     // Initialize the data directory
-    await engine.initDataDir(containerName, TEST_VERSION, { port: testPorts[0] })
+    await engine.initDataDir(containerName, TEST_VERSION, {
+      port: testPorts[0],
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -138,7 +140,11 @@ describe('Meilisearch Integration Tests', () => {
     console.log(`\n Creating index and inserting test data...`)
 
     // Create a test index
-    const createResult = await createMeilisearchIndex(testPorts[0], TEST_INDEX, 'id')
+    const createResult = await createMeilisearchIndex(
+      testPorts[0],
+      TEST_INDEX,
+      'id',
+    )
     assert(createResult.success, 'Should create index')
 
     // Wait for the index to be created (async operation)
@@ -189,82 +195,95 @@ describe('Meilisearch Integration Tests', () => {
     console.log(`   Created index with ${docCount} documents`)
   })
 
-  it('should clone container using backup/restore', { skip: SKIP_BACKUP_ON_WINDOWS }, async () => {
-    console.log(
-      `\n Creating container "${clonedContainerName}" via backup/restore...`,
-    )
+  it(
+    'should clone container using backup/restore',
+    { skip: SKIP_BACKUP_ON_WINDOWS },
+    async () => {
+      console.log(
+        `\n Creating container "${clonedContainerName}" via backup/restore...`,
+      )
 
-    // Create and initialize cloned container
-    await containerManager.create(clonedContainerName, {
-      engine: ENGINE,
-      version: TEST_VERSION,
-      port: testPorts[1],
-      database: DATABASE,
-    })
+      // Create and initialize cloned container
+      await containerManager.create(clonedContainerName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: testPorts[1],
+        database: DATABASE,
+      })
 
-    const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, TEST_VERSION, {
-      port: testPorts[1],
-    })
+      const engine = getEngine(ENGINE)
+      await engine.initDataDir(clonedContainerName, TEST_VERSION, {
+        port: testPorts[1],
+      })
 
-    // Create backup from source
-    const { tmpdir } = await import('os')
-    const backupPath = `${tmpdir()}/meilisearch-test-backup-${Date.now()}.snapshot`
+      // Create backup from source
+      const { tmpdir } = await import('os')
+      const backupPath = `${tmpdir()}/meilisearch-test-backup-${Date.now()}.snapshot`
 
-    const sourceConfig = await containerManager.getConfig(containerName)
-    assert(sourceConfig !== null, 'Source container config should exist')
+      const sourceConfig = await containerManager.getConfig(containerName)
+      assert(sourceConfig !== null, 'Source container config should exist')
 
-    await engine.backup(sourceConfig!, backupPath, {
-      database: DATABASE,
-      format: 'snapshot',
-    })
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'snapshot',
+      })
 
-    // Stop source for restore (restore needs container stopped)
-    await engine.stop(sourceConfig!)
-    await containerManager.updateConfig(containerName, { status: 'stopped' })
+      // Stop source for restore (restore needs container stopped)
+      await engine.stop(sourceConfig!)
+      await containerManager.updateConfig(containerName, { status: 'stopped' })
 
-    // Wait for the container to be fully stopped
-    const stopped = await waitForStopped(containerName, ENGINE, 60000)
-    assert(stopped, 'Source container should be fully stopped before restore')
+      // Wait for the container to be fully stopped
+      const stopped = await waitForStopped(containerName, ENGINE, 60000)
+      assert(stopped, 'Source container should be fully stopped before restore')
 
-    // Restore to cloned container
-    const clonedConfig = await containerManager.getConfig(clonedContainerName)
-    assert(clonedConfig !== null, 'Cloned container config should exist')
+      // Restore to cloned container
+      const clonedConfig = await containerManager.getConfig(clonedContainerName)
+      assert(clonedConfig !== null, 'Cloned container config should exist')
 
-    await engine.restore(clonedConfig!, backupPath, {
-      database: DATABASE,
-    })
+      await engine.restore(clonedConfig!, backupPath, {
+        database: DATABASE,
+      })
 
-    // Start cloned container
-    await engine.start(clonedConfig!)
-    await containerManager.updateConfig(clonedContainerName, {
-      status: 'running',
-    })
+      // Start cloned container
+      await engine.start(clonedConfig!)
+      await containerManager.updateConfig(clonedContainerName, {
+        status: 'running',
+      })
 
-    // Wait for ready
-    const ready = await waitForReady(ENGINE, testPorts[1])
-    assert(ready, 'Cloned Meilisearch should be ready')
+      // Wait for ready
+      const ready = await waitForReady(ENGINE, testPorts[1])
+      assert(ready, 'Cloned Meilisearch should be ready')
 
-    // Clean up backup file
-    const { rm } = await import('fs/promises')
-    await rm(backupPath, { force: true })
+      // Clean up backup file
+      const { rm } = await import('fs/promises')
+      await rm(backupPath, { force: true })
 
-    console.log('   Container cloned via backup/restore')
-  })
+      console.log('   Container cloned via backup/restore')
+    },
+  )
 
-  it('should verify cloned data matches source', { skip: SKIP_BACKUP_ON_WINDOWS }, async () => {
-    console.log('\n Verifying cloned data matches source...')
+  it(
+    'should verify cloned data matches source',
+    { skip: SKIP_BACKUP_ON_WINDOWS },
+    async () => {
+      console.log('\n Verifying cloned data matches source...')
 
-    // Verify index count on cloned container
-    const indexCount = await getMeilisearchIndexCount(testPorts[1])
-    assertEqual(indexCount, 1, 'Cloned container should have 1 index')
+      // Verify index count on cloned container
+      const indexCount = await getMeilisearchIndexCount(testPorts[1])
+      assertEqual(indexCount, 1, 'Cloned container should have 1 index')
 
-    // Verify document count on cloned container
-    const docCount = await getMeilisearchDocumentCount(testPorts[1], TEST_INDEX)
-    assertEqual(docCount, 3, 'Cloned container should have 3 documents')
+      // Verify document count on cloned container
+      const docCount = await getMeilisearchDocumentCount(
+        testPorts[1],
+        TEST_INDEX,
+      )
+      assertEqual(docCount, 3, 'Cloned container should have 3 documents')
 
-    console.log(`   Cloned data verified: ${indexCount} index, ${docCount} documents`)
-  })
+      console.log(
+        `   Cloned data verified: ${indexCount} index, ${docCount} documents`,
+      )
+    },
+  )
 
   it('should stop and rename container', async () => {
     console.log(`\n Renaming container and changing port...`)
@@ -305,24 +324,28 @@ describe('Meilisearch Integration Tests', () => {
     )
   })
 
-  it('should delete cloned container', { skip: SKIP_BACKUP_ON_WINDOWS }, async () => {
-    console.log(`\n Deleting cloned container "${clonedContainerName}"...`)
+  it(
+    'should delete cloned container',
+    { skip: SKIP_BACKUP_ON_WINDOWS },
+    async () => {
+      console.log(`\n Deleting cloned container "${clonedContainerName}"...`)
 
-    const config = await containerManager.getConfig(clonedContainerName)
-    if (config) {
-      const engine = getEngine(ENGINE)
-      await engine.stop(config)
-      await waitForStopped(clonedContainerName, ENGINE, 60000)
-    }
+      const config = await containerManager.getConfig(clonedContainerName)
+      if (config) {
+        const engine = getEngine(ENGINE)
+        await engine.stop(config)
+        await waitForStopped(clonedContainerName, ENGINE, 60000)
+      }
 
-    await containerManager.delete(clonedContainerName, { force: true })
+      await containerManager.delete(clonedContainerName, { force: true })
 
-    // Verify filesystem is cleaned up
-    const exists = containerDataExists(clonedContainerName, ENGINE)
-    assert(!exists, 'Container data directory should be deleted')
+      // Verify filesystem is cleaned up
+      const exists = containerDataExists(clonedContainerName, ENGINE)
+      assert(!exists, 'Container data directory should be deleted')
 
-    console.log('   Cloned container deleted')
-  })
+      console.log('   Cloned container deleted')
+    },
+  )
 
   it('should delete renamed container with --force', async () => {
     console.log(`\n Force deleting container "${renamedContainerName}"...`)

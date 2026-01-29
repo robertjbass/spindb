@@ -53,7 +53,11 @@ describe('PostgreSQL BinaryManager', () => {
 
   describe('getDownloadUrl', () => {
     it('should generate valid hostdb GitHub releases URL for darwin-arm64', () => {
-      const url = postgresqlBinaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
+      const url = postgresqlBinaryManager.getDownloadUrl(
+        '17',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
 
       assert(
         url.includes('github.com/robertjbass/hostdb'),
@@ -71,7 +75,11 @@ describe('PostgreSQL BinaryManager', () => {
     })
 
     it('should generate valid URL for darwin-x64', () => {
-      const url = postgresqlBinaryManager.getDownloadUrl('16', Platform.Darwin, Arch.X64)
+      const url = postgresqlBinaryManager.getDownloadUrl(
+        '16',
+        Platform.Darwin,
+        Arch.X64,
+      )
 
       assert(
         url.includes('darwin-x64'),
@@ -80,7 +88,11 @@ describe('PostgreSQL BinaryManager', () => {
     })
 
     it('should generate valid URL for linux-x64', () => {
-      const url = postgresqlBinaryManager.getDownloadUrl('16', Platform.Linux, Arch.X64)
+      const url = postgresqlBinaryManager.getDownloadUrl(
+        '16',
+        Platform.Linux,
+        Arch.X64,
+      )
 
       assert(
         url.includes('linux-x64'),
@@ -89,7 +101,11 @@ describe('PostgreSQL BinaryManager', () => {
     })
 
     it('should generate valid URL for Windows platform', () => {
-      const url = postgresqlBinaryManager.getDownloadUrl('17', Platform.Win32, Arch.X64)
+      const url = postgresqlBinaryManager.getDownloadUrl(
+        '17',
+        Platform.Win32,
+        Arch.X64,
+      )
 
       // hostdb now hosts Windows binaries too
       assert(
@@ -104,7 +120,11 @@ describe('PostgreSQL BinaryManager', () => {
 
     it('should throw error for unsupported platform', () => {
       try {
-        postgresqlBinaryManager.getDownloadUrl('17', 'freebsd' as Platform, 'x64' as Arch)
+        postgresqlBinaryManager.getDownloadUrl(
+          '17',
+          'freebsd' as Platform,
+          'x64' as Arch,
+        )
         assert(false, 'Should have thrown an error')
       } catch (error) {
         assert(error instanceof Error, 'Should throw Error')
@@ -120,7 +140,11 @@ describe('PostgreSQL BinaryManager', () => {
     })
 
     it('should include full version in URL', () => {
-      const url = postgresqlBinaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
+      const url = postgresqlBinaryManager.getDownloadUrl(
+        '17',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
       const expectedVersion = POSTGRESQL_VERSION_MAP['17']
 
       assert(
@@ -144,7 +168,10 @@ describe('PostgreSQL BinaryManager', () => {
         path.includes('bin/postgres') || path.includes('bin\\postgres'),
         'Path should include bin/postgres',
       )
-      assert(path.includes(expectedVersion), `Path should use full version (${expectedVersion})`)
+      assert(
+        path.includes(expectedVersion),
+        `Path should use full version (${expectedVersion})`,
+      )
     })
 
     it('should return correct path for pg_ctl binary', () => {
@@ -193,7 +220,11 @@ describe('PostgreSQL BinaryManager', () => {
 
   describe('isInstalled', () => {
     it('should return boolean', async () => {
-      const result = await postgresqlBinaryManager.isInstalled('99', Platform.Darwin, Arch.ARM64)
+      const result = await postgresqlBinaryManager.isInstalled(
+        '99',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
 
       assert(typeof result === 'boolean', 'Should return boolean')
       // Version 99 shouldn't exist
@@ -202,7 +233,11 @@ describe('PostgreSQL BinaryManager', () => {
 
     it('should use full version for path checking', async () => {
       // This tests that isInstalled internally calls getFullVersion
-      const result = await postgresqlBinaryManager.isInstalled('17', Platform.Darwin, Arch.ARM64)
+      const result = await postgresqlBinaryManager.isInstalled(
+        '17',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
 
       assert(typeof result === 'boolean', 'Should handle major version input')
     })
@@ -229,11 +264,13 @@ describe('PostgreSQL BinaryManager', () => {
         { output: 'postgres (PostgreSQL) 15.4', expected: '15.4' },
         // Percona Server format (used by hostdb binaries)
         {
-          output: 'postgres (PostgreSQL) 18.1 - Percona Server for PostgreSQL 18.1.1',
+          output:
+            'postgres (PostgreSQL) 18.1 - Percona Server for PostgreSQL 18.1.1',
           expected: '18.1',
         },
         {
-          output: 'postgres (PostgreSQL) 17.7 - Percona Server for PostgreSQL 17.7.0',
+          output:
+            'postgres (PostgreSQL) 17.7 - Percona Server for PostgreSQL 17.7.0',
           expected: '17.7',
         },
       ]
@@ -296,7 +333,10 @@ describe('PostgreSQL BinaryManager', () => {
         const expectedVersion = POSTGRESQL_VERSION_MAP['17']
 
         assert(typeof binPath === 'string', 'Should return path string')
-        assert(binPath.includes(expectedVersion), `Path should include full version (${expectedVersion})`)
+        assert(
+          binPath.includes(expectedVersion),
+          `Path should include full version (${expectedVersion})`,
+        )
         assert(binPath.includes('darwin-arm64'), 'Path should include platform')
       }
     })
@@ -305,15 +345,27 @@ describe('PostgreSQL BinaryManager', () => {
   describe('platform mappings via getDownloadUrl', () => {
     it('should use correct hostdb platform identifiers in URLs', () => {
       // Test darwin-arm64 uses standard naming
-      const armUrl = postgresqlBinaryManager.getDownloadUrl('17', Platform.Darwin, Arch.ARM64)
+      const armUrl = postgresqlBinaryManager.getDownloadUrl(
+        '17',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
       assert(armUrl.includes('darwin-arm64'), 'ARM Mac should use darwin-arm64')
 
       // Test darwin-x64 uses standard naming
-      const intelUrl = postgresqlBinaryManager.getDownloadUrl('17', Platform.Darwin, Arch.X64)
+      const intelUrl = postgresqlBinaryManager.getDownloadUrl(
+        '17',
+        Platform.Darwin,
+        Arch.X64,
+      )
       assert(intelUrl.includes('darwin-x64'), 'Intel Mac should use darwin-x64')
 
       // Test linux-x64 uses standard naming
-      const linuxUrl = postgresqlBinaryManager.getDownloadUrl('17', Platform.Linux, Arch.X64)
+      const linuxUrl = postgresqlBinaryManager.getDownloadUrl(
+        '17',
+        Platform.Linux,
+        Arch.X64,
+      )
       assert(linuxUrl.includes('linux-x64'), 'Linux x64 should use linux-x64')
     })
   })

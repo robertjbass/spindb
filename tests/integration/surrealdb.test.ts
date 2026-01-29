@@ -50,7 +50,9 @@ async function getSurrealDBRowCount(
   const { spawn } = await import('child_process')
 
   const engine = getEngine(ENGINE)
-  const surrealPath = await engine.getSurrealPath(TEST_VERSION).catch(() => 'surreal')
+  const surrealPath = await engine
+    .getSurrealPath(TEST_VERSION)
+    .catch(() => 'surreal')
 
   // Derive namespace from container name (same as engine does)
   const namespace = containerName.replace(/-/g, '_')
@@ -63,19 +65,28 @@ async function getSurrealDBRowCount(
     const stdout = await new Promise<string>((resolve, reject) => {
       const args = [
         'sql',
-        '--endpoint', `ws://127.0.0.1:${port}`,
-        '--namespace', namespace,
-        '--database', database,
-        '--username', 'root',
-        '--password', 'root',
+        '--endpoint',
+        `ws://127.0.0.1:${port}`,
+        '--namespace',
+        namespace,
+        '--database',
+        database,
+        '--username',
+        'root',
+        '--password',
+        'root',
         '--json',
         '--hide-welcome',
       ]
       const proc = spawn(surrealPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
       let output = ''
       let stderr = ''
-      proc.stdout.on('data', (data: Buffer) => { output += data.toString() })
-      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+      proc.stdout.on('data', (data: Buffer) => {
+        output += data.toString()
+      })
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
       proc.on('close', (code) => {
         if (code === 0) resolve(output)
         else reject(new Error(stderr || `Exit code ${code}`))
@@ -205,7 +216,12 @@ describe('SurrealDB Integration Tests', () => {
     // This tests the `spindb run` command functionality
     await runScriptFile(containerName, SEED_FILE, DATABASE)
 
-    const rowCount = await getSurrealDBRowCount(testPorts[0], containerName, DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(
+      testPorts[0],
+      containerName,
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -246,7 +262,10 @@ describe('SurrealDB Integration Tests', () => {
     // Create backup from source
     const { tmpdir } = await import('os')
     const { rm } = await import('fs/promises')
-    const backupPath = join(tmpdir(), `surrealdb-test-backup-${Date.now()}.surql`)
+    const backupPath = join(
+      tmpdir(),
+      `surrealdb-test-backup-${Date.now()}.surql`,
+    )
 
     const sourceConfig = await containerManager.getConfig(containerName)
     assert(sourceConfig !== null, 'Source container config should exist')
@@ -272,7 +291,12 @@ describe('SurrealDB Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n Verifying restored data...`)
 
-    const rowCount = await getSurrealDBRowCount(testPorts[1], clonedContainerName, DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(
+      testPorts[1],
+      clonedContainerName,
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -322,13 +346,14 @@ describe('SurrealDB Integration Tests', () => {
     )
 
     // Use runScriptSQL which internally calls engine.runScript with --sql option
-    await runScriptSQL(
-      containerName,
-      'DELETE test_user:5',
-      DATABASE,
-    )
+    await runScriptSQL(containerName, 'DELETE test_user:5', DATABASE)
 
-    const rowCount = await getSurrealDBRowCount(testPorts[0], containerName, DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(
+      testPorts[0],
+      containerName,
+      DATABASE,
+      'test_user',
+    )
     // Should have 4 rows now
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
@@ -405,7 +430,12 @@ describe('SurrealDB Integration Tests', () => {
     // Verify row count reflects deletion
     // Note: The namespace is stored inside SurrealDB's data files, so after rename
     // we still need to query using the ORIGINAL container name's namespace
-    const rowCount = await getSurrealDBRowCount(testPorts[2], containerName, DATABASE, 'test_user')
+    const rowCount = await getSurrealDBRowCount(
+      testPorts[2],
+      containerName,
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT - 1,
@@ -470,7 +500,9 @@ describe('SurrealDB Integration Tests', () => {
         t.skip('Container failed to start - skipping duplicate start test')
         return
       }
-      await containerManager.updateConfig(activeContainer, { status: 'running' })
+      await containerManager.updateConfig(activeContainer, {
+        status: 'running',
+      })
     }
 
     // Now the container should be running
@@ -544,7 +576,9 @@ describe('SurrealDB Integration Tests', () => {
     // Skip on Windows - SurrealDB's SurrealKV uses memory-mapped files that
     // Windows holds handles to for 100+ seconds, causing EBUSY errors
     if (process.platform === 'win32') {
-      t.skip('Force delete test skipped on Windows (SurrealKV file handle locking)')
+      t.skip(
+        'Force delete test skipped on Windows (SurrealKV file handle locking)',
+      )
       return
     }
 

@@ -25,5 +25,9 @@ export function getBinaryUrl(
   arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
-  return buildDownloadUrl(Engine.SQLite, { version: fullVersion, platform, arch })
+  return buildDownloadUrl(Engine.SQLite, {
+    version: fullVersion,
+    platform,
+    arch,
+  })
 }

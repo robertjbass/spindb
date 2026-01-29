@@ -61,7 +61,9 @@ async function execClickHouseQuery(
       if (code === 0 || code === null) {
         resolve(stdout)
       } else {
-        reject(new Error(stderr || `clickhouse client exited with code ${code}`))
+        reject(
+          new Error(stderr || `clickhouse client exited with code ${code}`),
+        )
       }
     })
   })
@@ -189,7 +191,9 @@ async function createSqlBackup(
       if (data.trim()) {
         // SQLInsert format uses literal "table" as placeholder, replace ALL occurrences with actual table name
         // Use global flag to handle multi-statement output
-        const insertData = data.trim().replace(/INSERT INTO table \(/gi, `INSERT INTO ${escapedTable} (`)
+        const insertData = data
+          .trim()
+          .replace(/INSERT INTO table \(/gi, `INSERT INTO ${escapedTable} (`)
         lines.push(insertData)
         lines.push('')
       }
@@ -321,7 +325,9 @@ async function _createNativeBackup(
         if (code === 0 || code === null) {
           resolve()
         } else {
-          reject(new Error(stderr || `clickhouse client exited with code ${code}`))
+          reject(
+            new Error(stderr || `clickhouse client exited with code ${code}`),
+          )
         }
       })
     })

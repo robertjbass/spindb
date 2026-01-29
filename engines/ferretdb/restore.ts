@@ -172,7 +172,11 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const { backendPort } = container
-  const { database, drop = true, timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS } = options
+  const {
+    database,
+    drop = true,
+    timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS,
+  } = options
 
   if (!backendPort) {
     throw new Error(
@@ -321,7 +325,8 @@ export async function restoreBackup(
         const pgRestoreCompletedWithIgnoredErrors =
           /pg_restore: warning: errors ignored on restore: \d+/i.test(stderr)
 
-        const isWarningOnly = allLinesAreWarnings || pgRestoreCompletedWithIgnoredErrors
+        const isWarningOnly =
+          allLinesAreWarnings || pgRestoreCompletedWithIgnoredErrors
 
         if (isWarningOnly) {
           logWarning(`Restore completed with warnings: ${stderr}`)

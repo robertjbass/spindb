@@ -66,7 +66,7 @@ function defaultGetMajorVersion(
   }
   const parts = trimmed.split('.')
   if (strategy === 'xy-format') {
-    return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0] ?? ''
+    return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : (parts[0] ?? '')
   }
   return parts[0] ?? ''
 }

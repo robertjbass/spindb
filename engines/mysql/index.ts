@@ -26,14 +26,8 @@ import {
 } from '../../core/error-handler'
 import { mysqlBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
-import {
-  fetchAvailableVersions,
-  getLatestVersion,
-} from './hostdb-releases'
-import {
-  SUPPORTED_MAJOR_VERSIONS,
-  FALLBACK_VERSION_MAP,
-} from './version-maps'
+import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
+import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,

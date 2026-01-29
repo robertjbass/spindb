@@ -25,7 +25,9 @@ export const cloneCommand = new Command('clone')
         if (!sourceName) {
           // JSON mode requires source container name argument
           if (options.json) {
-            console.log(JSON.stringify({ error: 'Source container name is required' }))
+            console.log(
+              JSON.stringify({ error: 'Source container name is required' }),
+            )
             process.exit(1)
           }
 
@@ -64,7 +66,9 @@ export const cloneCommand = new Command('clone')
         const sourceConfig = await containerManager.getConfig(sourceName)
         if (!sourceConfig) {
           if (options.json) {
-            console.log(JSON.stringify({ error: `Container "${sourceName}" not found` }))
+            console.log(
+              JSON.stringify({ error: `Container "${sourceName}" not found` }),
+            )
           } else {
             console.error(uiError(`Container "${sourceName}" not found`))
           }
@@ -87,7 +91,9 @@ export const cloneCommand = new Command('clone')
         if (!targetName) {
           // JSON mode requires target container name argument
           if (options.json) {
-            console.log(JSON.stringify({ error: 'Target container name is required' }))
+            console.log(
+              JSON.stringify({ error: 'Target container name is required' }),
+            )
             process.exit(1)
           }
           targetName = await promptContainerName(`${sourceName}-copy`)

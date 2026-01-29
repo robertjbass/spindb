@@ -104,7 +104,9 @@ function printUsage(): void {
   console.log('Run integration tests for database engines.')
   console.log('')
   console.log('Arguments:')
-  console.log('  engine    Engine name or alias (optional, runs all if omitted)')
+  console.log(
+    '  engine    Engine name or alias (optional, runs all if omitted)',
+  )
   console.log('')
   console.log('Available engines:')
   console.log('  postgresql    (aliases: postgres, pg)')

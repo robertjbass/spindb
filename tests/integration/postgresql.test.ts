@@ -60,37 +60,65 @@ describe('PostgreSQL Integration Tests', () => {
   after(async () => {
     // Print diagnostic info to STDERR so it definitely appears
     process.stderr.write('\n')
-    process.stderr.write('╔══════════════════════════════════════════════════════════════╗\n')
-    process.stderr.write('║              TEST SUITE SUMMARY (after hook)                 ║\n')
-    process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+    process.stderr.write(
+      '╔══════════════════════════════════════════════════════════════╗\n',
+    )
+    process.stderr.write(
+      '║              TEST SUITE SUMMARY (after hook)                 ║\n',
+    )
+    process.stderr.write(
+      '╠══════════════════════════════════════════════════════════════╣\n',
+    )
 
     // Show test container names that were supposed to be used
     process.stderr.write(`║ containerName: ${containerName || 'UNDEFINED'}\n`)
-    process.stderr.write(`║ renamedContainerName: ${renamedContainerName || 'UNDEFINED'}\n`)
-    process.stderr.write(`║ clonedContainerName: ${clonedContainerName || 'UNDEFINED'}\n`)
-    process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
+    process.stderr.write(
+      `║ renamedContainerName: ${renamedContainerName || 'UNDEFINED'}\n`,
+    )
+    process.stderr.write(
+      `║ clonedContainerName: ${clonedContainerName || 'UNDEFINED'}\n`,
+    )
+    process.stderr.write(
+      '╠══════════════════════════════════════════════════════════════╣\n',
+    )
 
     try {
       const containers = await containerManager.list()
       const testContainers = containers.filter((c) => c.name.includes('-test'))
-      process.stderr.write(`║ All containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
-      process.stderr.write(`║ Test containers remaining: ${testContainers.length}\n`)
+      process.stderr.write(
+        `║ All containers: ${JSON.stringify(containers.map((c) => c.name))}\n`,
+      )
+      process.stderr.write(
+        `║ Test containers remaining: ${testContainers.length}\n`,
+      )
       for (const tc of testContainers) {
-        process.stderr.write(`║   - ${tc.name} (${tc.engine}, status: ${tc.status})\n`)
+        process.stderr.write(
+          `║   - ${tc.name} (${tc.engine}, status: ${tc.status})\n`,
+        )
       }
 
       // Check which expected containers exist
-      const hasOriginal = containers.some(c => c.name === containerName)
-      const hasRenamed = containers.some(c => c.name === renamedContainerName)
-      const hasClone = containers.some(c => c.name === clonedContainerName)
-      process.stderr.write('╠══════════════════════════════════════════════════════════════╣\n')
-      process.stderr.write(`║ Original (${containerName}): ${hasOriginal ? 'EXISTS' : 'missing'}\n`)
-      process.stderr.write(`║ Renamed (${renamedContainerName}): ${hasRenamed ? 'EXISTS' : 'missing'}\n`)
-      process.stderr.write(`║ Clone (${clonedContainerName}): ${hasClone ? 'EXISTS (should be deleted)' : 'deleted OK'}\n`)
+      const hasOriginal = containers.some((c) => c.name === containerName)
+      const hasRenamed = containers.some((c) => c.name === renamedContainerName)
+      const hasClone = containers.some((c) => c.name === clonedContainerName)
+      process.stderr.write(
+        '╠══════════════════════════════════════════════════════════════╣\n',
+      )
+      process.stderr.write(
+        `║ Original (${containerName}): ${hasOriginal ? 'EXISTS' : 'missing'}\n`,
+      )
+      process.stderr.write(
+        `║ Renamed (${renamedContainerName}): ${hasRenamed ? 'EXISTS' : 'missing'}\n`,
+      )
+      process.stderr.write(
+        `║ Clone (${clonedContainerName}): ${hasClone ? 'EXISTS (should be deleted)' : 'deleted OK'}\n`,
+      )
     } catch (error) {
       process.stderr.write(`║ Error listing containers: ${error}\n`)
     }
-    process.stderr.write('╚══════════════════════════════════════════════════════════════╝\n')
+    process.stderr.write(
+      '╚══════════════════════════════════════════════════════════════╝\n',
+    )
 
     console.log('\n🧹 Final cleanup...')
     const deleted = await cleanupTestContainers()
@@ -102,7 +130,9 @@ describe('PostgreSQL Integration Tests', () => {
   // DIAGNOSTIC TEST - this should always pass and shows environment info
   it('[DIAGNOSTIC] environment check', async () => {
     process.stdout.write('\n--- DIAGNOSTIC TEST START ---\n')
-    process.stdout.write(`HOME: ${process.env.HOME || process.env.USERPROFILE}\n`)
+    process.stdout.write(
+      `HOME: ${process.env.HOME || process.env.USERPROFILE}\n`,
+    )
     process.stdout.write(`CWD: ${process.cwd()}\n`)
     process.stdout.write(`testPorts: ${JSON.stringify(testPorts)}\n`)
     process.stdout.write(`containerName: ${containerName}\n`)
@@ -122,9 +152,13 @@ describe('PostgreSQL Integration Tests', () => {
     let containers: Awaited<ReturnType<typeof containerManager.list>> = []
     try {
       containers = await containerManager.list()
-      process.stdout.write(`Existing containers: ${JSON.stringify(containers.map(c => c.name))}\n`)
+      process.stdout.write(
+        `Existing containers: ${JSON.stringify(containers.map((c) => c.name))}\n`,
+      )
     } catch (error) {
-      process.stdout.write(`Existing containers: ERROR - ${error instanceof Error ? error.message : error}\n`)
+      process.stdout.write(
+        `Existing containers: ERROR - ${error instanceof Error ? error.message : error}\n`,
+      )
     }
     process.stdout.write('--- DIAGNOSTIC TEST END ---\n\n')
 
@@ -661,18 +695,20 @@ describe('PostgreSQL Integration Tests', () => {
 
     // Build detailed error message that appears in TAP output
     if (testContainers.length > 0) {
-      const hasOriginal = containers.some(c => c.name === containerName)
-      const hasRenamed = containers.some(c => c.name === renamedContainerName)
-      const hasClone = containers.some(c => c.name === clonedContainerName)
+      const hasOriginal = containers.some((c) => c.name === containerName)
+      const hasRenamed = containers.some((c) => c.name === renamedContainerName)
+      const hasClone = containers.some((c) => c.name === clonedContainerName)
 
       const details = [
-        `REMAINING CONTAINERS: ${testContainers.map(c => c.name).join(', ')}`,
+        `REMAINING CONTAINERS: ${testContainers.map((c) => c.name).join(', ')}`,
         `Expected containerName: ${containerName} - ${hasOriginal ? 'EXISTS (should be renamed)' : 'missing'}`,
         `Expected renamedContainerName: ${renamedContainerName} - ${hasRenamed ? 'EXISTS' : 'MISSING (rename failed!)'}`,
         `Expected clonedContainerName: ${clonedContainerName} - ${hasClone ? 'EXISTS (delete failed!)' : 'deleted OK'}`,
       ].join(' | ')
 
-      throw new Error(`No test containers should remain (found ${testContainers.length}). ${details}`)
+      throw new Error(
+        `No test containers should remain (found ${testContainers.length}). ${details}`,
+      )
     }
 
     console.log('   ✓ All test containers cleaned up')

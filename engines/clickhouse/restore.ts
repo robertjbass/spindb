@@ -104,8 +104,7 @@ export async function detectBackupFormat(
     return {
       format: 'unknown',
       description: 'Directory found - ClickHouse restore expects a single file',
-      restoreCommand:
-        'ClickHouse requires a single .sql file for restore',
+      restoreCommand: 'ClickHouse requires a single .sql file for restore',
     }
   }
 
@@ -244,7 +243,9 @@ async function dropAllTables(
     return
   }
 
-  logDebug(`Dropping ${tables.length} existing table(s) in database "${database}"`)
+  logDebug(
+    `Dropping ${tables.length} existing table(s) in database "${database}"`,
+  )
 
   for (const table of tables) {
     try {
@@ -356,7 +357,9 @@ async function restoreSqlBackup(
           'ClickHouse client closed connection early (likely SQL syntax error)',
         )
       } else {
-        streamError = new Error(`Failed to write to clickhouse client: ${error.message}`)
+        streamError = new Error(
+          `Failed to write to clickhouse client: ${error.message}`,
+        )
       }
       fileStream.destroy()
     })
@@ -433,7 +436,11 @@ export function parseConnectionString(connectionString: string): {
   }
 
   // Validate protocol
-  if (url.protocol !== 'clickhouse:' && url.protocol !== 'http:' && url.protocol !== 'https:') {
+  if (
+    url.protocol !== 'clickhouse:' &&
+    url.protocol !== 'http:' &&
+    url.protocol !== 'https:'
+  ) {
     throw new Error(
       `Invalid ClickHouse connection string: unsupported protocol "${url.protocol}". ` +
         `Expected "clickhouse://", "http://", or "https://"`,
@@ -442,7 +449,8 @@ export function parseConnectionString(connectionString: string): {
 
   const host = url.hostname || '127.0.0.1'
   // Default port depends on protocol - 9000 for native, 8123 for HTTP
-  const defaultPort = url.protocol === 'http:' || url.protocol === 'https:' ? 8123 : 9000
+  const defaultPort =
+    url.protocol === 'http:' || url.protocol === 'https:' ? 8123 : 9000
   const port = parseInt(url.port, 10) || defaultPort
 
   // Database is in pathname

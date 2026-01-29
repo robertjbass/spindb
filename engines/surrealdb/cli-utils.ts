@@ -58,9 +58,7 @@ export async function getSurrealPathForVersion(
 /**
  * Require the surreal binary path, throwing if not found
  */
-export async function requireSurrealPath(
-  version?: string,
-): Promise<string> {
+export async function requireSurrealPath(version?: string): Promise<string> {
   // If version provided, look for that specific version
   if (version) {
     const path = await getSurrealPathForVersion(version)

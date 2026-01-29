@@ -240,19 +240,51 @@ spindb → Create container → mydb → 5433 # Interactive
 
 ### Engine Icons
 
-Engine emoji icons are managed in `cli/constants.ts`. Always use `getEngineIcon(engine)` to get properly padded icons - never use raw emojis directly.
+Engine icons are managed in `cli/constants.ts`. Always use `getEngineIcon(engine)` to get properly padded icons - never use raw emojis directly.
 
 ```ts
 import { getEngineIcon } from '../constants'
 
-// Good - uses terminal-aware padding
+// Good - uses terminal-aware padding and respects user preferences
 const display = `${getEngineIcon('postgresql')}PostgreSQL`
 
 // Bad - raw emoji causes alignment issues
 const display = `🐘 PostgreSQL`
 ```
 
-**Why this matters**: Terminal emulators render emoji widths inconsistently:
+#### Icon Modes
+
+SpinDB supports three icon display modes, configurable via Settings menu or `SPINDB_ICONS` environment variable:
+
+| Mode | Description | Example |
+|------|-------------|---------|
+| `ascii` (default) | Colored ASCII badges (background + text colors) | `[PG]` with blue background |
+| `nerd` | Nerd Font glyphs with brand colors | PostgreSQL elephant in blue |
+| `emoji` | Original emoji icons (no coloring) | 🐘 |
+
+**Priority order for icon mode:**
+1. `SPINDB_ICONS` environment variable (overrides config for dev testing)
+2. Config value from `~/.spindb/config.json` (`preferences.iconMode`)
+3. Default: `ascii`
+
+#### ASCII Mode with Brand Colors
+
+In ASCII mode, icons display with database brand colors using `chalk.bgHex().hex()`:
+
+```ts
+// ENGINE_BRAND_COLORS in cli/constants.ts
+{
+  [Engine.PostgreSQL]: { foreground: '#FFFFFF', background: '#336791' }, // White on blue
+  [Engine.MySQL]: { foreground: '#FFFFFF', background: '#00758F' },      // White on blue
+  // ...
+}
+```
+
+The `foreground` color is the text color and `background` is the background color.
+
+#### Emoji Mode Caveats
+
+Terminal emulators render emoji widths inconsistently:
 - Ghostty, iTerm2: Most emojis = 2 cells, but 🛋 ⏱ = 1 cell
 - VS Code: 🪶 🦭 🪳 🛋 ⏱ = 1 cell, others = 2 cells
 

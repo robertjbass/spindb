@@ -90,7 +90,10 @@ async function qdrantRequest(
   return fetch(url, options)
 }
 
-async function findQdrantContainer(): Promise<{ name: string; port: number } | null> {
+async function findQdrantContainer(): Promise<{
+  name: string
+  port: number
+} | null> {
   try {
     // Containers are stored in ~/.spindb/containers/{engine}/{name}/container.json
     const homeDir = process.env.HOME || process.env.USERPROFILE || ''
@@ -171,7 +174,13 @@ async function getOutputPath(): Promise<string> {
 
       if (packageJson.name === 'spindb') {
         // Running from spindb project - save to fixtures
-        const fixturesDir = join(cwd, 'tests', 'fixtures', 'qdrant', 'snapshots')
+        const fixturesDir = join(
+          cwd,
+          'tests',
+          'fixtures',
+          'qdrant',
+          'snapshots',
+        )
         if (!existsSync(fixturesDir)) {
           mkdirSync(fixturesDir, { recursive: true })
         }

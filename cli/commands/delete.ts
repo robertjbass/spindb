@@ -25,13 +25,17 @@ export const deleteCommand = new Command('delete')
         if (!containerName) {
           // JSON mode requires container name argument
           if (options.json) {
-            return exitWithError({ message: 'Container name is required', json: true })
+            return exitWithError({
+              message: 'Container name is required',
+              json: true,
+            })
           }
 
           // Non-interactive mode requires container name argument
           if (!isInteractiveMode()) {
             return exitWithError({
-              message: 'Container name is required in non-interactive mode. Usage: spindb delete <name> --force',
+              message:
+                'Container name is required in non-interactive mode. Usage: spindb delete <name> --force',
             })
           }
 
@@ -62,7 +66,8 @@ export const deleteCommand = new Command('delete')
           // Detect non-interactive mode (piped input, scripts, CI)
           if (!isInteractiveMode()) {
             return exitWithError({
-              message: 'Cannot prompt for confirmation in non-interactive mode. Use --force or --yes to skip confirmation',
+              message:
+                'Cannot prompt for confirmation in non-interactive mode. Use --force or --yes to skip confirmation',
             })
           }
 

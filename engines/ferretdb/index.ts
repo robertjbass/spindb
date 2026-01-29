@@ -23,7 +23,11 @@ import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import { containerManager } from '../../core/container-manager'
-import { logDebug, logWarning, assertValidDatabaseName } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidDatabaseName,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
 import { ferretdbBinaryManager } from './binary-manager'
@@ -176,7 +180,12 @@ export class FerretDBEngine extends BaseEngine {
 
   // Get binary download URL from hostdb
   getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
-    const urls = getBinaryUrls(version, DEFAULT_DOCUMENTDB_VERSION, platform, arch)
+    const urls = getBinaryUrls(
+      version,
+      DEFAULT_DOCUMENTDB_VERSION,
+      platform,
+      arch,
+    )
     return urls.ferretdb
   }
 
@@ -250,14 +259,13 @@ export class FerretDBEngine extends BaseEngine {
     const { platform, arch } = this.getPlatformInfo()
 
     // Download both binaries
-    const { ferretdbPath } =
-      await ferretdbBinaryManager.ensureInstalled(
-        version,
-        platform,
-        arch,
-        onProgress,
-        DEFAULT_DOCUMENTDB_VERSION,
-      )
+    const { ferretdbPath } = await ferretdbBinaryManager.ensureInstalled(
+      version,
+      platform,
+      arch,
+      onProgress,
+      DEFAULT_DOCUMENTDB_VERSION,
+    )
 
     // Register ferretdb binary in config
     const ext = platformService.getExecutableExtension()
@@ -292,7 +300,9 @@ export class FerretDBEngine extends BaseEngine {
     )
 
     // Container directory structure
-    const containerDir = paths.getContainerPath(containerName, { engine: ENGINE })
+    const containerDir = paths.getContainerPath(containerName, {
+      engine: ENGINE,
+    })
     const pgDataDir = join(containerDir, 'pg_data')
     const logsDir = join(containerDir, 'logs')
 
@@ -321,14 +331,11 @@ export class FerretDBEngine extends BaseEngine {
 
       try {
         // Add timeout to prevent hanging on Windows
-        await spawnAsync(initdb, [
-          '-D',
-          pgDataDir,
-          '-U',
-          'postgres',
-          '--encoding=UTF8',
-          '--locale=C',
-        ], { env: spawnEnv, timeout: 60000 })
+        await spawnAsync(
+          initdb,
+          ['-D', pgDataDir, '-U', 'postgres', '--encoding=UTF8', '--locale=C'],
+          { env: spawnEnv, timeout: 60000 },
+        )
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
       } catch (error) {
         const err = error as Error
@@ -337,7 +344,11 @@ export class FerretDBEngine extends BaseEngine {
 
       // Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
       // This is critical for DocumentDB extension to load properly
-      const bundledConf = join(documentdbPath, 'share', 'postgresql.conf.sample')
+      const bundledConf = join(
+        documentdbPath,
+        'share',
+        'postgresql.conf.sample',
+      )
       const pgConf = join(pgDataDir, 'postgresql.conf')
 
       if (existsSync(bundledConf)) {
@@ -355,7 +366,9 @@ export class FerretDBEngine extends BaseEngine {
           await writeFile(pgConf, confContent)
           logDebug(`Copied and configured postgresql.conf to ${pgConf}`)
         } catch (copyError) {
-          logDebug(`Warning: Could not copy postgresql.conf.sample: ${copyError}`)
+          logDebug(
+            `Warning: Could not copy postgresql.conf.sample: ${copyError}`,
+          )
           // Continue anyway - initdb creates a default config
         }
       } else {
@@ -380,10 +393,18 @@ export class FerretDBEngine extends BaseEngine {
     container: ContainerConfig,
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
-    const { name, port, version, backendVersion, backendPort: existingBackendPort } = container
+    const {
+      name,
+      port,
+      version,
+      backendVersion,
+      backendPort: existingBackendPort,
+    } = container
 
     // Check if already running
-    const alreadyRunning = await processManager.isRunning(name, { engine: ENGINE })
+    const alreadyRunning = await processManager.isRunning(name, {
+      engine: ENGINE,
+    })
     if (alreadyRunning) {
       return {
         port,
@@ -441,28 +462,35 @@ export class FerretDBEngine extends BaseEngine {
     const ferretPidFile = join(containerDir, 'ferretdb.pid')
 
     // Allocate backend port
-    const backendPort = existingBackendPort || await allocateBackendPort()
+    const backendPort = existingBackendPort || (await allocateBackendPort())
 
     let pgStarted = false
     let ferretStarted = false
 
     try {
       // 1. Start PostgreSQL
-      onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL backend...' })
+      onProgress?.({
+        stage: 'starting',
+        message: 'Starting PostgreSQL backend...',
+      })
 
       // Use pg_ctl to start PostgreSQL
       // Add 60s timeout to prevent hanging if PostgreSQL fails to start (especially on Windows)
       try {
-        await spawnAsync(pgCtl, [
-          'start',
-          '-D',
-          pgDataDir,
-          '-l',
-          pgLogFile,
-          '-o',
-          `-p ${backendPort} -h 127.0.0.1`,
-          '-w', // Wait for startup
-        ], { env: pgSpawnEnv, timeout: 60000 })
+        await spawnAsync(
+          pgCtl,
+          [
+            'start',
+            '-D',
+            pgDataDir,
+            '-l',
+            pgLogFile,
+            '-o',
+            `-p ${backendPort} -h 127.0.0.1`,
+            '-w', // Wait for startup
+          ],
+          { env: pgSpawnEnv, timeout: 60000 },
+        )
       } catch (pgError) {
         // Read PostgreSQL log for debugging
         let pgLog = ''
@@ -473,7 +501,7 @@ export class FerretDBEngine extends BaseEngine {
         }
         throw new Error(
           `PostgreSQL backend failed to start: ${pgError instanceof Error ? pgError.message : pgError}\n` +
-          `PostgreSQL log:\n${pgLog.slice(-2000)}` // Last 2KB of log
+            `PostgreSQL log:\n${pgLog.slice(-2000)}`, // Last 2KB of log
         )
       }
 
@@ -488,37 +516,48 @@ export class FerretDBEngine extends BaseEngine {
       }
 
       // 3. Create ferretdb database and extension (first start)
-      onProgress?.({ stage: 'starting', message: 'Initializing FerretDB database...' })
+      onProgress?.({
+        stage: 'starting',
+        message: 'Initializing FerretDB database...',
+      })
       try {
         // Create ferretdb database if it doesn't exist
         // Add timeout to prevent hanging on Windows
-        await spawnAsync(psql, [
-          '-h',
-          '127.0.0.1',
-          '-p',
-          String(backendPort),
-          '-U',
-          'postgres',
-          '-c',
-          "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
-        ], { env: pgSpawnEnv, timeout: 30000 }).catch(() => {
+        await spawnAsync(
+          psql,
+          [
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String(backendPort),
+            '-U',
+            'postgres',
+            '-c',
+            "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
+          ],
+          { env: pgSpawnEnv, timeout: 30000 },
+        ).catch(() => {
           // Ignore error if database already exists (error code 42P04)
         })
 
         // Create DocumentDB extension
         // Add timeout to prevent hanging on Windows
-        await spawnAsync(psql, [
-          '-h',
-          '127.0.0.1',
-          '-p',
-          String(backendPort),
-          '-U',
-          'postgres',
-          '-d',
-          'ferretdb',
-          '-c',
-          'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;',
-        ], { env: pgSpawnEnv, timeout: 30000 }).catch((error) => {
+        await spawnAsync(
+          psql,
+          [
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String(backendPort),
+            '-U',
+            'postgres',
+            '-d',
+            'ferretdb',
+            '-c',
+            'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;',
+          ],
+          { env: pgSpawnEnv, timeout: 30000 },
+        ).catch((error) => {
           logWarning(`Failed to create documentdb extension: ${error}`)
           // Continue anyway - extension might already exist
         })
@@ -541,7 +580,11 @@ export class FerretDBEngine extends BaseEngine {
 
       // Probe for an available debug port, incrementing if the computed one is occupied
       let debugPortFound = false
-      for (let attempt = 0; attempt < FERRETDB_DEBUG_PORT_MAX_ATTEMPTS; attempt++) {
+      for (
+        let attempt = 0;
+        attempt < FERRETDB_DEBUG_PORT_MAX_ATTEMPTS;
+        attempt++
+      ) {
         const candidatePort = debugPort + attempt
         if (await isPortAvailable(candidatePort)) {
           debugPort = candidatePort
@@ -625,7 +668,9 @@ export class FerretDBEngine extends BaseEngine {
         await this.stopFerretDBProcess(containerDir).catch(() => {})
       }
       if (pgStarted) {
-        await this.stopPostgreSQLProcess(pgCtl, pgDataDir, pgSpawnEnv).catch(() => {})
+        await this.stopPostgreSQLProcess(pgCtl, pgDataDir, pgSpawnEnv).catch(
+          () => {},
+        )
       }
       throw error
     }
@@ -726,13 +771,20 @@ export class FerretDBEngine extends BaseEngine {
   ): Promise<void> {
     try {
       // Add timeout to prevent hanging on Windows
-      await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'fast', '-w'], { env: spawnEnv, timeout: 30000 })
+      await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'fast', '-w'], {
+        env: spawnEnv,
+        timeout: 30000,
+      })
       logDebug('PostgreSQL stopped')
     } catch (error) {
       logDebug(`pg_ctl stop error: ${error}`)
       // Try immediate mode if fast fails
       try {
-        await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'immediate', '-w'], { env: spawnEnv, timeout: 15000 })
+        await spawnAsync(
+          pgCtl,
+          ['stop', '-D', pgDataDir, '-m', 'immediate', '-w'],
+          { env: spawnEnv, timeout: 15000 },
+        )
       } catch {
         logWarning('Failed to stop PostgreSQL gracefully')
       }
@@ -972,7 +1024,12 @@ export class FerretDBEngine extends BaseEngine {
       )
     }
 
-    const args = ['--uri', connectionString, '--archive=' + outputPath, '--gzip']
+    const args = [
+      '--uri',
+      connectionString,
+      '--archive=' + outputPath,
+      '--gzip',
+    ]
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],

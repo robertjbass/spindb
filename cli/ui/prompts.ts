@@ -19,8 +19,12 @@ import {
   installEngineDependencies,
 } from '../../core/dependency-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
-import { getEngineIcon, getEngineIconPadded } from '../constants'
-import { type ContainerConfig, type Engine, type BackupFormatType } from '../../types'
+import { getEngineIcon } from '../constants'
+import {
+  type ContainerConfig,
+  type Engine,
+  type BackupFormatType,
+} from '../../types'
 
 // Navigation sentinel values for menu navigation
 export const BACK_VALUE = '__back__'
@@ -110,7 +114,6 @@ export function checkAndResetEscape(): boolean {
   return wasTriggered
 }
 
-
 /**
  * Wrapper around inquirer.prompt that registers/unregisters with global escape handler.
  * Use this instead of inquirer.prompt() directly for escape key support.
@@ -191,7 +194,10 @@ export async function filterableListPrompt(
   },
 ): Promise<string> {
   // Split choices into filterable items and static footer (separators, back buttons, etc.)
-  const filterableItems = choices.slice(0, options.filterableCount) as FilterableChoice[]
+  const filterableItems = choices.slice(
+    0,
+    options.filterableCount,
+  ) as FilterableChoice[]
   const footerItems = choices.slice(options.filterableCount)
 
   // Source function for autocomplete - filters items based on input
@@ -260,7 +266,9 @@ export async function filterableListPrompt(
       currentPromptUi = null
     }
 
-    const result = (await Promise.race([p, escapePromise])) as { selection: string }
+    const result = (await Promise.race([p, escapePromise])) as {
+      selection: string
+    }
     return result.selection
   } finally {
     escapeReject = null
@@ -332,7 +340,7 @@ export async function promptEngine(options?: {
     | inquirer.Separator
 
   const choices: Choice[] = engines.map((e) => ({
-    name: `${getEngineIconPadded(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
+    name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
@@ -1287,9 +1295,13 @@ export async function promptInstallDependencies(
   // PostgreSQL client tools are bundled with hostdb binaries
   if (engine === 'postgresql') {
     console.log(
-      chalk.cyan('  PostgreSQL client tools are bundled with the engine binaries.'),
+      chalk.cyan(
+        '  PostgreSQL client tools are bundled with the engine binaries.',
+      ),
     )
-    console.log(chalk.cyan('  Download them with: spindb engines download postgresql'))
+    console.log(
+      chalk.cyan('  Download them with: spindb engines download postgresql'),
+    )
     console.log()
     return false
   }
