@@ -21,6 +21,11 @@ export const urlCommand = new Command('url')
         let containerName = name
 
         if (!containerName) {
+          if (options.json) {
+            console.log(JSON.stringify({ error: 'Container name is required' }))
+            process.exit(1)
+          }
+
           const containers = await containerManager.list()
 
           if (containers.length === 0) {

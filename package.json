@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.27.5",
+  "version": "0.27.6",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
@@ -55,7 +55,7 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "packageManager": "pnpm@9.14.2",
   "engines": {
-    "node": ">=18",
+    "node": ">=22",
     "pnpm": ">=8"
   },
   "repository": {
