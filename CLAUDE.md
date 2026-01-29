@@ -7,8 +7,7 @@
 | [STYLEGUIDE.md](STYLEGUIDE.md) | Coding conventions and style guidelines |
 | [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) | **Authoritative guide & checklist** for adding new database engines |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | High-level design, layers, data flow |
-| [MIGRATION.md](MIGRATION.md) | Historical guide for migrating engines to hostdb |
-| [ENGINES.md](ENGINES.md) | Supported engines overview |
+| [docs/historical-refactor-notes/](docs/historical-refactor-notes/) | Historical migration guides (BINARY-MANAGEMENT.md) |
 | [TODO.md](TODO.md) | Roadmap and backlog |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 
