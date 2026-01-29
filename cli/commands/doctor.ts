@@ -117,7 +117,9 @@ async function checkPreferences(): Promise<HealthCheckResult> {
         name: 'Preferences',
         status: 'warning',
         message: 'Icon mode not configured (defaulting to ascii)',
-        details: ['Run: spindb config icons to set your preference'],
+        details: [
+          'Run: spindb config to set your preference in the Settings menu',
+        ],
         action: {
           label: 'Set icon mode to ascii (default)',
           handler: async () => {
