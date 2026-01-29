@@ -135,19 +135,18 @@ export async function handleEngines(): Promise<void> {
       `Total: ${engines.length} engine(s), ${formatBytes(totalSize)} ${chalk.gray('— type to filter')}`,
     ),
     new inquirer.Separator(),
-    { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+    {
+      name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`,
+      value: 'back',
+    },
     new inquirer.Separator(),
   ]
 
-  const action = await filterableListPrompt(
-    allChoices,
-    'Select an engine:',
-    {
-      filterableCount: engineChoices.length,
-      pageSize: 18,
-      emptyText: 'No engines match filter',
-    },
-  )
+  const action = await filterableListPrompt(allChoices, 'Select an engine:', {
+    filterableCount: engineChoices.length,
+    pageSize: 18,
+    emptyText: 'No engines match filter',
+  })
 
   // Back returns to main menu (escape is handled globally)
   if (action === 'back') {

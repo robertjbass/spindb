@@ -16,10 +16,7 @@ import {
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { getBinaryUrl } from './binary-urls'
-import {
-  fetchAvailableVersions,
-  getLatestVersion,
-} from './hostdb-releases'
+import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
 import {
   SUPPORTED_MAJOR_VERSIONS,
   POSTGRESQL_VERSION_MAP,
@@ -160,7 +157,11 @@ export class PostgreSQLEngine extends BaseEngine {
     const pgCtlPath = join(expectedPath, 'bin', `pg_ctl${ext}`)
 
     if (existsSync(pgCtlPath)) {
-      return { binPath: expectedPath, actualVersion: fullVersion, wasHealed: false }
+      return {
+        binPath: expectedPath,
+        actualVersion: fullVersion,
+        wasHealed: false,
+      }
     }
 
     // Binaries don't exist - try to find same major version
@@ -231,7 +232,9 @@ export class PostgreSQLEngine extends BaseEngine {
     // Extract version from path like "postgresql-17.7.0-darwin-arm64"
     const match = binPath.match(/postgresql-(\d+(?:\.\d+)*)/)
     if (!match) {
-      throw new Error(`Could not extract PostgreSQL version from path: ${binPath}`)
+      throw new Error(
+        `Could not extract PostgreSQL version from path: ${binPath}`,
+      )
     }
     const version = match[1]
     return postgresqlBinaryManager.verify(version, p, a)
@@ -308,7 +311,12 @@ export class PostgreSQLEngine extends BaseEngine {
 
     // Check if any same-major version exists
     const majorVersion = fullVersion.split('.')[0]
-    const installed = paths.findInstalledBinaryForMajor('postgresql', majorVersion, p, a)
+    const installed = paths.findInstalledBinaryForMajor(
+      'postgresql',
+      majorVersion,
+      p,
+      a,
+    )
 
     return installed !== null
   }

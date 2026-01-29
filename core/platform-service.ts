@@ -70,7 +70,9 @@ export function resolveHomeDir(options: ResolveHomeDirOptions): string {
   }
 
   // Fallback to platform-specific default
-  return platform === Platform.Darwin ? `/Users/${sudoUser}` : `/home/${sudoUser}`
+  return platform === Platform.Darwin
+    ? `/Users/${sudoUser}`
+    : `/home/${sudoUser}`
 }
 
 export type PlatformInfo = {
@@ -370,7 +372,9 @@ class DarwinPlatformService extends BasePlatformService {
 
   async findProcessByPort(port: number): Promise<number[]> {
     try {
-      const { stdout } = await execAsync(`lsof -ti tcp:${port} 2>/dev/null || true`)
+      const { stdout } = await execAsync(
+        `lsof -ti tcp:${port} 2>/dev/null || true`,
+      )
       const pids = stdout
         .trim()
         .split('\n')
@@ -585,7 +589,9 @@ class LinuxPlatformService extends BasePlatformService {
 
   async findProcessByPort(port: number): Promise<number[]> {
     try {
-      const { stdout } = await execAsync(`lsof -ti tcp:${port} 2>/dev/null || true`)
+      const { stdout } = await execAsync(
+        `lsof -ti tcp:${port} 2>/dev/null || true`,
+      )
       const pids = stdout
         .trim()
         .split('\n')

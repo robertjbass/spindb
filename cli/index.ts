@@ -75,9 +75,7 @@ async function showUpdateNotificationIfAvailable(): Promise<void> {
         chalk.gray(`${currentVersion} -> `) +
         chalk.green(latestVersion),
     )
-    console.log(
-      chalk.gray('  Run: ') + chalk.cyan('spindb self-update'),
-    )
+    console.log(chalk.gray('  Run: ') + chalk.cyan('spindb self-update'))
     console.log(
       chalk.gray('  To disable: ') +
         chalk.gray('spindb config update-check off'),

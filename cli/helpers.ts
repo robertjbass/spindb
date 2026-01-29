@@ -698,7 +698,10 @@ async function getClickHouseVersion(binPath: string): Promise<string | null> {
   }
 
   try {
-    const { stdout } = await execFileAsync(clickhousePath, ['client', '--version'])
+    const { stdout } = await execFileAsync(clickhousePath, [
+      'client',
+      '--version',
+    ])
     // Parse output like "ClickHouse client version 25.12.3.21 (official build)"
     const match = stdout.match(/version\s+([\d.]+)/)
     return match ? match[1] : null
@@ -708,7 +711,9 @@ async function getClickHouseVersion(binPath: string): Promise<string | null> {
 }
 
 // Get installed ClickHouse engines from downloaded binaries
-async function getInstalledClickHouseEngines(): Promise<InstalledClickHouseEngine[]> {
+async function getInstalledClickHouseEngines(): Promise<
+  InstalledClickHouseEngine[]
+> {
   const binDir = paths.bin
 
   if (!existsSync(binDir)) {
@@ -820,7 +825,9 @@ async function getMeilisearchVersion(binPath: string): Promise<string | null> {
 }
 
 // Get installed Meilisearch engines from downloaded binaries
-async function getInstalledMeilisearchEngines(): Promise<InstalledMeilisearchEngine[]> {
+async function getInstalledMeilisearchEngines(): Promise<
+  InstalledMeilisearchEngine[]
+> {
   const binDir = paths.bin
 
   if (!existsSync(binDir)) {
@@ -928,7 +935,9 @@ async function getCockroachDBVersion(binPath: string): Promise<string | null> {
 }
 
 // Get installed CockroachDB engines from downloaded binaries
-async function getInstalledCockroachDBEngines(): Promise<InstalledCockroachDBEngine[]> {
+async function getInstalledCockroachDBEngines(): Promise<
+  InstalledCockroachDBEngine[]
+> {
   const binDir = paths.bin
 
   if (!existsSync(binDir)) {
@@ -984,7 +993,9 @@ async function getSurrealDBVersion(binPath: string): Promise<string | null> {
 }
 
 // Get installed SurrealDB engines from downloaded binaries
-async function getInstalledSurrealDBEngines(): Promise<InstalledSurrealDBEngine[]> {
+async function getInstalledSurrealDBEngines(): Promise<
+  InstalledSurrealDBEngine[]
+> {
   const binDir = paths.bin
 
   if (!existsSync(binDir)) {
@@ -1088,7 +1099,9 @@ async function getFerretDBVersion(binPath: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(ferretdbPath, ['--version'])
     // Parse output like "ferretdb version 2.7.0" or "v2.7.0"
-    const match = stdout.match(/(?:ferretdb\s+)?(?:version\s+)?v?(\d+\.\d+\.\d+)/)
+    const match = stdout.match(
+      /(?:ferretdb\s+)?(?:version\s+)?v?(\d+\.\d+\.\d+)/,
+    )
     return match ? match[1] : null
   } catch {
     return null
@@ -1096,7 +1109,9 @@ async function getFerretDBVersion(binPath: string): Promise<string | null> {
 }
 
 // Get installed FerretDB engines from downloaded binaries
-async function getInstalledFerretDBEngines(): Promise<InstalledFerretDBEngine[]> {
+async function getInstalledFerretDBEngines(): Promise<
+  InstalledFerretDBEngine[]
+> {
   const binDir = paths.bin
 
   if (!existsSync(binDir)) {

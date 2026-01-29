@@ -11,7 +11,8 @@
 import { FALLBACK_VERSION_MAP } from './version-maps'
 import { type Platform, type Arch } from '../../types'
 
-const HOSTDB_BASE_URL = 'https://github.com/robertjbass/hostdb/releases/download'
+const HOSTDB_BASE_URL =
+  'https://github.com/robertjbass/hostdb/releases/download'
 
 /**
  * Get the binary download URL for a specific version and platform

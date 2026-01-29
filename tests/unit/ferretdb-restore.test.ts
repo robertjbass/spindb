@@ -93,11 +93,17 @@ describe('FerretDB Backup Format Detection', () => {
     it('should return unknown format for unrecognized file', async () => {
       const unknownFile = join(testDir, 'backup.xyz')
       // Write random binary content that doesn't match any known format
-      const randomContent = Buffer.from([0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0xfd])
+      const randomContent = Buffer.from([
+        0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0xfd,
+      ])
       await writeFile(unknownFile, randomContent)
 
       const format = await detectBackupFormat(unknownFile)
-      assertEqual(format.format, 'unknown', 'Should return unknown for unrecognized format')
+      assertEqual(
+        format.format,
+        'unknown',
+        'Should return unknown for unrecognized format',
+      )
       assert(
         format.description.toLowerCase().includes('unknown'),
         `Description should mention unknown: ${format.description}`,

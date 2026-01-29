@@ -24,7 +24,12 @@ import {
   BaseServerBinaryManager,
   type ServerBinaryManagerConfig,
 } from '../../core/base-server-binary-manager'
-import { Engine, type Platform, type Arch, type ProgressCallback } from '../../types'
+import {
+  Engine,
+  type Platform,
+  type Arch,
+  type ProgressCallback,
+} from '../../types'
 
 const execAsync = promisify(exec)
 

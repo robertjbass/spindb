@@ -194,7 +194,10 @@ export abstract class BaseEmbeddedBinaryManager {
       })
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        DOWNLOAD_TIMEOUT_MS,
+      )
 
       let response: Response
       try {
@@ -457,7 +460,10 @@ export abstract class BaseEmbeddedBinaryManager {
       // This allows for minor version differences in how the binary reports its version
       const expectedMajor = fullVersion.split('.')[0]
       const reportedMajor = reportedVersion.split('.')[0]
-      if (expectedMajor === reportedMajor && compareVersions(reportedVersion, fullVersion) >= 0) {
+      if (
+        expectedMajor === reportedMajor &&
+        compareVersions(reportedVersion, fullVersion) >= 0
+      ) {
         return true
       }
 

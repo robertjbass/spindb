@@ -120,7 +120,8 @@ async function showMainMenu(): Promise<void> {
 
   // Show persistent hint below the menu if icon mode is not set (or if PERSISTENT_HINT env var is set)
   const showHint = process.env.PERSISTENT_HINT === 'true' || !iconModeSet
-  const hintText = process.env.PERSISTENT_HINT_TEXT || 'Tip: Set icon style in Settings'
+  const hintText =
+    process.env.PERSISTENT_HINT_TEXT || 'Tip: Set icon style in Settings'
 
   // Use BottomBar to show hint below the prompt (including below scroll indicator)
   const bottomBar = showHint ? new inquirer.ui.BottomBar() : null

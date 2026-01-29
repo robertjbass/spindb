@@ -131,7 +131,10 @@ describe('CockroachDB CLI Utils', () => {
         { value: 'c', wasQuoted: false },
       ])
       // Verify unquoted empty becomes NULL
-      assert.strictEqual(escapeSqlValue(result[1].value, result[1].wasQuoted), 'NULL')
+      assert.strictEqual(
+        escapeSqlValue(result[1].value, result[1].wasQuoted),
+        'NULL',
+      )
     })
 
     it('should handle empty quoted fields (should preserve as empty string)', () => {
@@ -142,8 +145,14 @@ describe('CockroachDB CLI Utils', () => {
         { value: '', wasQuoted: true },
       ])
       // Verify quoted empty becomes empty string, not NULL
-      assert.strictEqual(escapeSqlValue(result[0].value, result[0].wasQuoted), "''")
-      assert.strictEqual(escapeSqlValue(result[2].value, result[2].wasQuoted), "''")
+      assert.strictEqual(
+        escapeSqlValue(result[0].value, result[0].wasQuoted),
+        "''",
+      )
+      assert.strictEqual(
+        escapeSqlValue(result[2].value, result[2].wasQuoted),
+        "''",
+      )
     })
   })
 
@@ -172,7 +181,9 @@ describe('CockroachDB CLI Utils', () => {
 
     it('should return false for localhost with sslmode=require', () => {
       assert.strictEqual(
-        isInsecureConnection('postgresql://root@localhost:26257/db?sslmode=require'),
+        isInsecureConnection(
+          'postgresql://root@localhost:26257/db?sslmode=require',
+        ),
         false,
       )
     })
@@ -186,7 +197,9 @@ describe('CockroachDB CLI Utils', () => {
 
     it('should return false for remote hosts with sslmode=require', () => {
       assert.strictEqual(
-        isInsecureConnection('postgresql://root@remote.example.com:26257/db?sslmode=require'),
+        isInsecureConnection(
+          'postgresql://root@remote.example.com:26257/db?sslmode=require',
+        ),
         false,
       )
     })

@@ -136,7 +136,10 @@ async function getCreateTableStatement(
   // Fallback: return everything after the first comma
   const commaIdx = dataLines.indexOf(',')
   if (commaIdx !== -1) {
-    return dataLines.slice(commaIdx + 1).trim().replace(/^"|"$/g, '')
+    return dataLines
+      .slice(commaIdx + 1)
+      .trim()
+      .replace(/^"|"$/g, '')
   }
 
   return dataLines
@@ -195,7 +198,9 @@ async function getTableData(
     // Simple CSV parsing (handles basic cases)
     const fields = parseCSVLine(line)
     if (fields.length !== columns.length) {
-      logWarning(`Column count mismatch for table ${table}: expected ${columns.length}, got ${fields.length}`)
+      logWarning(
+        `Column count mismatch for table ${table}: expected ${columns.length}, got ${fields.length}`,
+      )
       continue
     }
 
@@ -208,8 +213,12 @@ async function getTableData(
       return `'${field.value.replace(/'/g, "''")}'`
     })
 
-    const columnList = columns.map((c) => escapeCockroachIdentifier(c)).join(', ')
-    inserts.push(`INSERT INTO ${escapedTable} (${columnList}) VALUES (${escapedValues.join(', ')});`)
+    const columnList = columns
+      .map((c) => escapeCockroachIdentifier(c))
+      .join(', ')
+    inserts.push(
+      `INSERT INTO ${escapedTable} (${columnList}) VALUES (${escapedValues.join(', ')});`,
+    )
   }
 
   return inserts
@@ -359,5 +368,9 @@ export async function createCloneBackup(
   container: ContainerConfig,
   outputPath: string,
 ): Promise<BackupResult> {
-  return createSqlBackup(container, outputPath, container.database || 'defaultdb')
+  return createSqlBackup(
+    container,
+    outputPath,
+    container.database || 'defaultdb',
+  )
 }

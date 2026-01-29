@@ -56,9 +56,14 @@ describe('CockroachDB Integration Tests', () => {
     console.log('\n Finding available test ports...')
     // CockroachDB uses 2 ports per container (SQL + HTTP), so we need 6 consecutive ports
     // and use every other one for SQL: [0], [2], [4] to avoid HTTP port conflicts
-    const allPorts = await findConsecutiveFreePorts(6, TEST_PORTS.cockroachdb.base)
+    const allPorts = await findConsecutiveFreePorts(
+      6,
+      TEST_PORTS.cockroachdb.base,
+    )
     testPorts = [allPorts[0], allPorts[2], allPorts[4]]
-    console.log(`   Using ports: ${testPorts.join(', ')} (with HTTP on +1 each)`)
+    console.log(
+      `   Using ports: ${testPorts.join(', ')} (with HTTP on +1 each)`,
+    )
 
     containerName = generateTestName('cockroachdb-test')
     clonedContainerName = generateTestName('cockroachdb-test-clone')
@@ -92,7 +97,9 @@ describe('CockroachDB Integration Tests', () => {
     })
 
     // Initialize the data directory
-    await engine.initDataDir(containerName, TEST_VERSION, { port: testPorts[0] })
+    await engine.initDataDir(containerName, TEST_VERSION, {
+      port: testPorts[0],
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -140,7 +147,12 @@ describe('CockroachDB Integration Tests', () => {
     // This tests the `spindb run` command functionality
     await runScriptFile(containerName, SEED_FILE, DATABASE)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -164,7 +176,9 @@ describe('CockroachDB Integration Tests', () => {
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, TEST_VERSION, { port: testPorts[1] })
+    await engine.initDataDir(clonedContainerName, TEST_VERSION, {
+      port: testPorts[1],
+    })
 
     // Start cloned container first (needed for SQL restore)
     const clonedConfig = await containerManager.getConfig(clonedContainerName)
@@ -182,7 +196,10 @@ describe('CockroachDB Integration Tests', () => {
     // Create backup from source
     const { tmpdir } = await import('os')
     const { rm } = await import('fs/promises')
-    const backupPath = join(tmpdir(), `cockroachdb-test-backup-${Date.now()}.sql`)
+    const backupPath = join(
+      tmpdir(),
+      `cockroachdb-test-backup-${Date.now()}.sql`,
+    )
 
     const sourceConfig = await containerManager.getConfig(containerName)
     assert(sourceConfig !== null, 'Source container config should exist')
@@ -208,7 +225,12 @@ describe('CockroachDB Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n Verifying restored data...`)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[1], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -261,11 +283,16 @@ describe('CockroachDB Integration Tests', () => {
     // CockroachDB requires semicolon at end of statement
     await runScriptSQL(
       containerName,
-      "DELETE FROM test_user WHERE id = 5;",
+      'DELETE FROM test_user WHERE id = 5;',
       DATABASE,
     )
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
     // Should have 4 rows now
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
@@ -338,7 +365,12 @@ describe('CockroachDB Integration Tests', () => {
     assert(ready, 'Renamed CockroachDB should be ready')
 
     // Verify row count reflects deletion
-    const rowCount = await getRowCount(ENGINE, testPorts[2], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[2],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT - 1,
@@ -352,7 +384,9 @@ describe('CockroachDB Integration Tests', () => {
     // Skip on Windows - CockroachDB port conflicts cause unrecoverable state
     // where the original container cannot be restarted
     if (isWindows()) {
-      t.skip('Port conflict test skipped on Windows (causes unrecoverable state)')
+      t.skip(
+        'Port conflict test skipped on Windows (causes unrecoverable state)',
+      )
       return
     }
 
@@ -370,7 +404,9 @@ describe('CockroachDB Integration Tests', () => {
         database: 'test_db', // Different database to avoid confusion
       })
 
-      await engine.initDataDir(portConflictContainerName, TEST_VERSION, { port: testPorts[2] })
+      await engine.initDataDir(portConflictContainerName, TEST_VERSION, {
+        port: testPorts[2],
+      })
 
       // Verify container was created with the conflicting port
       const config = await containerManager.getConfig(portConflictContainerName)
@@ -397,7 +433,9 @@ describe('CockroachDB Integration Tests', () => {
       } catch (error) {
         // Start threw an error, which is also acceptable for port conflict
         startFailed = true
-        console.log(`   Start failed as expected: ${error instanceof Error ? error.message : error}`)
+        console.log(
+          `   Start failed as expected: ${error instanceof Error ? error.message : error}`,
+        )
       }
 
       console.log(
@@ -415,7 +453,9 @@ describe('CockroachDB Integration Tests', () => {
     } finally {
       // Always clean up the port conflict container
       try {
-        await containerManager.delete(portConflictContainerName, { force: true })
+        await containerManager.delete(portConflictContainerName, {
+          force: true,
+        })
         console.log(`   Cleaned up port conflict container`)
       } catch {
         // Ignore cleanup errors - will be caught in final cleanup
@@ -423,17 +463,25 @@ describe('CockroachDB Integration Tests', () => {
 
       // Always ensure the renamed container is running for the next test
       // On Windows, port conflicts can cause both containers to crash
-      const renamedConfig = await containerManager.getConfig(renamedContainerName)
+      const renamedConfig =
+        await containerManager.getConfig(renamedContainerName)
       if (renamedConfig) {
-        const renamedRunning = await processManager.isRunning(renamedContainerName, { engine: ENGINE })
+        const renamedRunning = await processManager.isRunning(
+          renamedContainerName,
+          { engine: ENGINE },
+        )
         if (!renamedRunning) {
-          console.log('   Restarting renamed container after port conflict test...')
+          console.log(
+            '   Restarting renamed container after port conflict test...',
+          )
           await engine.start(renamedConfig)
           const ready = await waitForReady(ENGINE, testPorts[2], 90000)
           if (!ready) {
             console.log('   Warning: renamed container failed to restart')
           } else {
-            await containerManager.updateConfig(renamedContainerName, { status: 'running' })
+            await containerManager.updateConfig(renamedContainerName, {
+              status: 'running',
+            })
             console.log('   Renamed container restarted successfully')
           }
         }
@@ -454,9 +502,12 @@ describe('CockroachDB Integration Tests', () => {
     const engine = getEngine(ENGINE)
 
     // Check if container is running - if not (e.g., after port conflict on Windows), start it first
-    const initiallyRunning = await processManager.isRunning(renamedContainerName, {
-      engine: ENGINE,
-    })
+    const initiallyRunning = await processManager.isRunning(
+      renamedContainerName,
+      {
+        engine: ENGINE,
+      },
+    )
 
     if (!initiallyRunning) {
       console.log('   Container not running, starting it first...')
@@ -466,7 +517,9 @@ describe('CockroachDB Integration Tests', () => {
         t.skip('Container failed to start - skipping duplicate start test')
         return
       }
-      await containerManager.updateConfig(renamedContainerName, { status: 'running' })
+      await containerManager.updateConfig(renamedContainerName, {
+        status: 'running',
+      })
     }
 
     // Now the container should be running
@@ -539,7 +592,9 @@ describe('CockroachDB Integration Tests', () => {
     // Skip on Windows - CockroachDB's RocksDB uses memory-mapped files that
     // Windows holds handles to for extended periods, causing EBUSY errors
     if (process.platform === 'win32') {
-      t.skip('Force delete test skipped on Windows (RocksDB file handle locking)')
+      t.skip(
+        'Force delete test skipped on Windows (RocksDB file handle locking)',
+      )
       return
     }
 

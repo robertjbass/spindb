@@ -73,7 +73,9 @@ describe('ClickHouse Restore', () => {
 
   describe('parseConnectionString', () => {
     it('should parse simple ClickHouse URL', () => {
-      const result = parseConnectionString('clickhouse://127.0.0.1:9000/default')
+      const result = parseConnectionString(
+        'clickhouse://127.0.0.1:9000/default',
+      )
       assertEqual(result.host, '127.0.0.1', 'Host should be 127.0.0.1')
       assertEqual(result.port, 9000, 'Port should be 9000')
       assertEqual(result.database, 'default', 'Database should be default')
@@ -89,7 +91,11 @@ describe('ClickHouse Restore', () => {
       assertEqual(result.port, 9000, 'Port should be 9000')
       assertEqual(result.database, 'analytics', 'Database should be analytics')
       assertEqual(result.user, 'admin', 'User should be admin')
-      assertEqual(result.password, 'secretpass', 'Password should be secretpass')
+      assertEqual(
+        result.password,
+        'secretpass',
+        'Password should be secretpass',
+      )
     })
 
     it('should use default port (9000) when not specified for clickhouse://', () => {
@@ -103,13 +109,19 @@ describe('ClickHouse Restore', () => {
     })
 
     it('should use default port (8123) when not specified for https://', () => {
-      const result = parseConnectionString('https://clickhouse.example.com/default')
+      const result = parseConnectionString(
+        'https://clickhouse.example.com/default',
+      )
       assertEqual(result.port, 8123, 'Port should default to 8123 for HTTPS')
     })
 
     it('should use default database when not specified', () => {
       const result = parseConnectionString('clickhouse://127.0.0.1:9000')
-      assertEqual(result.database, 'default', 'Database should default to "default"')
+      assertEqual(
+        result.database,
+        'default',
+        'Database should default to "default"',
+      )
     })
 
     it('should use default host when not specified', () => {
@@ -125,8 +137,14 @@ describe('ClickHouse Restore', () => {
     })
 
     it('should handle https:// protocol', () => {
-      const result = parseConnectionString('https://clickhouse.example.com:8443/mydb')
-      assertEqual(result.host, 'clickhouse.example.com', 'Host should be clickhouse.example.com')
+      const result = parseConnectionString(
+        'https://clickhouse.example.com:8443/mydb',
+      )
+      assertEqual(
+        result.host,
+        'clickhouse.example.com',
+        'Host should be clickhouse.example.com',
+      )
       assertEqual(result.port, 8443, 'Port should be 8443')
     })
 
@@ -151,7 +169,9 @@ describe('ClickHouse Restore', () => {
       } catch (error) {
         threw = true
         assert(
-          (error as Error).message.includes('Invalid ClickHouse connection string'),
+          (error as Error).message.includes(
+            'Invalid ClickHouse connection string',
+          ),
           'Error should mention invalid connection string',
         )
       }

@@ -231,8 +231,10 @@ async function promptConnectionString(engine: Engine): Promise<string | null> {
       type: 'input',
       name: 'connectionString',
       message: 'Connection string:',
-      transformer: (input: string) => maskConnectionStringPassword(input.trim()),
-      validate: (input: string) => validateConnectionString(input.trim(), engine),
+      transformer: (input: string) =>
+        maskConnectionStringPassword(input.trim()),
+      validate: (input: string) =>
+        validateConnectionString(input.trim(), engine),
     },
   ])
 

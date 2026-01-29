@@ -26,10 +26,7 @@ import {
 } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
-import {
-  fetchAvailableVersions,
-  getLatestVersion,
-} from './hostdb-releases'
+import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
 import { SUPPORTED_MAJOR_VERSIONS, MARIADB_VERSION_MAP } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,

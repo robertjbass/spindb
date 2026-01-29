@@ -23,7 +23,10 @@ export const startCommand = new Command('start')
       if (!containerName) {
         // JSON mode requires container name argument
         if (options.json) {
-          return exitWithError({ message: 'Container name is required', json: true })
+          return exitWithError({
+            message: 'Container name is required',
+            json: true,
+          })
         }
 
         const containers = await containerManager.list()
@@ -80,7 +83,9 @@ export const startCommand = new Command('start')
       // For PostgreSQL, check if compatible binaries are available
       // Self-healing logic in engine.start() will handle version resolution
       if (engineName === Engine.PostgreSQL) {
-        const hasCompatible = postgresqlEngine.hasCompatibleBinaries(config.version)
+        const hasCompatible = postgresqlEngine.hasCompatibleBinaries(
+          config.version,
+        )
         if (!hasCompatible) {
           // No compatible binaries found - get the current supported version for this major
           const majorVersion = config.version.split('.')[0]
@@ -108,16 +113,13 @@ export const startCommand = new Command('start')
           downloadSpinner.start()
 
           try {
-            await engine.ensureBinaries(
-              majorVersion,
-              ({ stage, message }) => {
-                if (stage === 'cached') {
-                  downloadSpinner.text = `PostgreSQL ${majorVersion} ready`
-                } else {
-                  downloadSpinner.text = message
-                }
-              },
-            )
+            await engine.ensureBinaries(majorVersion, ({ stage, message }) => {
+              if (stage === 'cached') {
+                downloadSpinner.text = `PostgreSQL ${majorVersion} ready`
+              } else {
+                downloadSpinner.text = message
+              }
+            })
             downloadSpinner.succeed(`PostgreSQL ${majorVersion} downloaded`)
           } catch (downloadError) {
             downloadSpinner.fail(

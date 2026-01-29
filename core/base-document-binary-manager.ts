@@ -191,7 +191,10 @@ export abstract class BaseDocumentBinaryManager {
       })
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        DOWNLOAD_TIMEOUT_MS,
+      )
 
       const timeoutErrorMessage =
         `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
@@ -240,9 +243,19 @@ export abstract class BaseDocumentBinaryManager {
       }
 
       if (platform === Platform.Win32) {
-        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       } else {
-        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       }
 
       // Make binaries executable (Unix only)
@@ -313,12 +326,15 @@ export abstract class BaseDocumentBinaryManager {
       // Files were extracted despite the error - log and continue
       // This handles tar warnings about truncated ._* files, permission issues on
       // metadata files, etc. that don't affect the actual binaries
-      logDebug(`${this.config.displayName} extraction recovered from tar error`, {
-        tarFile,
-        entriesExtracted: entries.length,
-        errorMessage: err.message,
-        errorCode: err.code,
-      })
+      logDebug(
+        `${this.config.displayName} extraction recovered from tar error`,
+        {
+          tarFile,
+          entriesExtracted: entries.length,
+          errorMessage: err.message,
+          errorCode: err.code,
+        },
+      )
     }
 
     await this.moveExtractedEntries(extractDir, binPath)

@@ -42,7 +42,9 @@ class CouchDBBinaryManager extends BaseBinaryManager {
 
   protected parseVersionFromOutput(stdout: string): string | null {
     // Extract version from output like "couchdb 3.5.1" or "Apache CouchDB 3.5.1"
-    const match = stdout.match(/(?:couchdb\s+)?(?:Apache CouchDB\s+)?v?(\d+\.\d+\.\d+)/i)
+    const match = stdout.match(
+      /(?:couchdb\s+)?(?:Apache CouchDB\s+)?v?(\d+\.\d+\.\d+)/i,
+    )
     return match?.[1] ?? null
   }
 

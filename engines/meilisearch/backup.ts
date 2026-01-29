@@ -163,7 +163,9 @@ async function waitForTask(
         return
       }
       if (task.status === 'failed') {
-        throw new Error(`Meilisearch task ${taskUid} failed: ${JSON.stringify(task)}`)
+        throw new Error(
+          `Meilisearch task ${taskUid} failed: ${JSON.stringify(task)}`,
+        )
       }
     }
 

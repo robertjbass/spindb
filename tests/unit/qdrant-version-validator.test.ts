@@ -66,7 +66,10 @@ describe('Qdrant Version Validator', () => {
     })
 
     it('should not support version 0.x', () => {
-      assert(!isVersionSupported('0.9.0'), 'Version 0.9.0 should not be supported')
+      assert(
+        !isVersionSupported('0.9.0'),
+        'Version 0.9.0 should not be supported',
+      )
     })
   })
 

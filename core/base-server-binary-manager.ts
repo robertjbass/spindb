@@ -198,7 +198,10 @@ export abstract class BaseServerBinaryManager {
       })
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        DOWNLOAD_TIMEOUT_MS,
+      )
 
       let response: Response
       try {
@@ -244,9 +247,19 @@ export abstract class BaseServerBinaryManager {
       binPathCreated = true
 
       if (platform === Platform.Win32) {
-        await this.extractWindowsBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractWindowsBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       } else {
-        await this.extractUnixBinaries(archiveFile, binPath, tempDir, onProgress)
+        await this.extractUnixBinaries(
+          archiveFile,
+          binPath,
+          tempDir,
+          onProgress,
+        )
       }
 
       // Make binaries executable (Unix only)

@@ -71,7 +71,9 @@ export const configCommand = new Command('config')
           console.log()
 
           // PostgreSQL tools
-          console.log(chalk.bold(`  ${getEngineIcon('postgresql')}PostgreSQL Tools:`))
+          console.log(
+            chalk.bold(`  ${getEngineIcon('postgresql')}PostgreSQL Tools:`),
+          )
           console.log(chalk.gray('  ' + '─'.repeat(60)))
           for (const tool of POSTGRESQL_TOOLS) {
             displayToolConfig(tool, config.binaries[tool])

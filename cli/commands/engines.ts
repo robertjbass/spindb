@@ -651,7 +651,10 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
   if (duckdbEngines.length > 0) {
-    const totalDuckdbSize = duckdbEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
+    const totalDuckdbSize = duckdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
     console.log(
       chalk.gray(
         `  DuckDB: ${duckdbEngines.length} version(s), ${formatBytes(totalDuckdbSize)}`,
@@ -842,9 +845,7 @@ async function deleteEngine(
           ),
         )
         console.log(
-          chalk.gray(
-            `  ${questdbContainers.map((c) => c.name).join(', ')}`,
-          ),
+          chalk.gray(`  ${questdbContainers.map((c) => c.name).join(', ')}`),
         )
         console.log(
           chalk.gray(
@@ -1539,7 +1540,9 @@ enginesCommand
 
         const engine = getEngine(Engine.Meilisearch)
 
-        const spinner = createSpinner(`Checking Meilisearch ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking Meilisearch ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1561,7 +1564,8 @@ enginesCommand
         // Show the path for reference
         const { platform: meilisearchPlatform, arch: meilisearchArch } =
           platformService.getPlatformInfo()
-        const meilisearchFullVersion = meilisearchBinaryManager.getFullVersion(version)
+        const meilisearchFullVersion =
+          meilisearchBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'meilisearch',
           version: meilisearchFullVersion,
@@ -1597,7 +1601,9 @@ enginesCommand
 
         const engine = getEngine(Engine.FerretDB)
 
-        const spinner = createSpinner(`Checking FerretDB ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking FerretDB ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1636,11 +1642,17 @@ enginesCommand
           ferretPlatform,
           ferretArch,
         )
-        console.log(chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`))
+        console.log(
+          chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`),
+        )
 
         // Skip client tools check - FerretDB uses MongoDB client tools (mongosh)
         // which are installed separately via: spindb engines download mongodb
-        console.log(chalk.gray('  Note: Use mongosh to connect (install via: spindb engines download mongodb)'))
+        console.log(
+          chalk.gray(
+            '  Note: Use mongosh to connect (install via: spindb engines download mongodb)',
+          ),
+        )
         return
       }
 
@@ -1696,7 +1708,9 @@ enginesCommand
 
         const engine = getEngine(Engine.CockroachDB)
 
-        const spinner = createSpinner(`Checking CockroachDB ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking CockroachDB ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1718,7 +1732,8 @@ enginesCommand
         // Show the path for reference
         const { platform: cockroachdbPlatform, arch: cockroachdbArch } =
           platformService.getPlatformInfo()
-        const cockroachdbFullVersion = cockroachdbBinaryManager.getFullVersion(version)
+        const cockroachdbFullVersion =
+          cockroachdbBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'cockroachdb',
           version: cockroachdbFullVersion,
@@ -1739,7 +1754,9 @@ enginesCommand
 
         const engine = getEngine(Engine.SurrealDB)
 
-        const spinner = createSpinner(`Checking SurrealDB ${version} binaries...`)
+        const spinner = createSpinner(
+          `Checking SurrealDB ${version} binaries...`,
+        )
         spinner.start()
 
         let wasCached = false
@@ -1761,7 +1778,8 @@ enginesCommand
         // Show the path for reference
         const { platform: surrealdbPlatform, arch: surrealdbArch } =
           platformService.getPlatformInfo()
-        const surrealdbFullVersion = surrealdbBinaryManager.getFullVersion(version)
+        const surrealdbFullVersion =
+          surrealdbBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'surrealdb',
           version: surrealdbFullVersion,

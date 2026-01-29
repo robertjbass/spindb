@@ -552,7 +552,10 @@ export async function handleList(
     ),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
-    { name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`, value: 'back' },
+    {
+      name: `${chalk.blue('←')} Back to main menu ${chalk.gray('(esc)')}`,
+      value: 'back',
+    },
     new inquirer.Separator(),
   ]
 
@@ -652,7 +655,9 @@ export async function showContainerSubmenu(
 
   // Open shell - always enabled for file-based DBs (if file exists), server databases need to be running
   const canOpenShell = isFileBasedDB ? existsSync(config.database) : isRunning
-  const shellHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  const shellHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canOpenShell
       ? { name: `${chalk.blue('>')} Open shell`, value: 'shell' }
@@ -676,7 +681,9 @@ export async function showContainerSubmenu(
           : config.engine === Engine.SurrealDB
             ? 'Run SurrealQL file'
             : 'Run SQL file'
-    const runSqlHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+    const runSqlHint = isFileBasedDB
+      ? 'Database file missing'
+      : 'Start container first'
     actionChoices.push(
       canRunSql
         ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
@@ -707,7 +714,9 @@ export async function showContainerSubmenu(
 
   // Backup - requires running for server databases, file exists for file-based DBs
   const canBackup = isFileBasedDB ? existsSync(config.database) : isRunning
-  const backupHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  const backupHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canBackup
       ? { name: `${chalk.magenta('↓')} Backup database`, value: 'backup' }
@@ -716,7 +725,9 @@ export async function showContainerSubmenu(
 
   // Restore - requires running for server databases, file exists for file-based DBs
   const canRestore = isFileBasedDB ? existsSync(config.database) : isRunning
-  const restoreHint = isFileBasedDB ? 'Database file missing' : 'Start container first'
+  const restoreHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canRestore
       ? { name: `${chalk.magenta('↑')} Restore from backup`, value: 'restore' }

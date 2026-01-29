@@ -83,7 +83,9 @@ describe('CouchDB Integration Tests', () => {
     })
 
     // Initialize the data directory
-    await engine.initDataDir(containerName, TEST_VERSION, { port: testPorts[0] })
+    await engine.initDataDir(containerName, TEST_VERSION, {
+      port: testPorts[0],
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -223,7 +225,9 @@ describe('CouchDB Integration Tests', () => {
     const docCount = await getCouchDBDocumentCount(testPorts[1], DATABASE)
     assertEqual(docCount, 5, 'Cloned container should have 5 documents')
 
-    console.log(`   Cloned data verified: ${dbCount} database(s), ${docCount} documents`)
+    console.log(
+      `   Cloned data verified: ${dbCount} database(s), ${docCount} documents`,
+    )
   })
 
   it('should stop and rename container', async () => {

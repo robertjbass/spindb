@@ -27,8 +27,7 @@ export async function detectBackupFormat(
     return {
       format: 'unknown',
       description: 'Directory found - Qdrant uses single snapshot files',
-      restoreCommand:
-        'Qdrant requires a single .snapshot file for restore',
+      restoreCommand: 'Qdrant requires a single .snapshot file for restore',
     }
   }
 
@@ -115,7 +114,8 @@ async function restoreSnapshotBackup(
 
   return {
     format: 'snapshot',
-    stdout: `Restored snapshot to ${targetPath}. Restart Qdrant to load the data.\n` +
+    stdout:
+      `Restored snapshot to ${targetPath}. Restart Qdrant to load the data.\n` +
       `Use: POST http://127.0.0.1:PORT/snapshots/recover to trigger recovery.`,
     code: 0,
   }

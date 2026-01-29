@@ -611,7 +611,15 @@ export class DuckDBEngine extends BaseEngine {
 
       // Check if file starts with common SQL text patterns (not a binary DuckDB file)
       const header = buffer.toString('utf8', 0, 16).toLowerCase()
-      const textPatterns = ['create', 'insert', 'select', 'drop', '--', '/*', 'pragma']
+      const textPatterns = [
+        'create',
+        'insert',
+        'select',
+        'drop',
+        '--',
+        '/*',
+        'pragma',
+      ]
       for (const pattern of textPatterns) {
         if (header.startsWith(pattern)) {
           return false // This is a SQL text file, not a DuckDB binary
@@ -633,9 +641,7 @@ export class DuckDBEngine extends BaseEngine {
 
       // If we can't run DuckDB, fall back to binary header check
       // DuckDB files should have non-printable bytes in the header
-      const hasNonPrintable = buffer.some(
-        (b) => b !== 0 && (b < 32 || b > 126),
-      )
+      const hasNonPrintable = buffer.some((b) => b !== 0 && (b < 32 || b > 126))
       return hasNonPrintable
     } catch {
       return false

@@ -449,7 +449,9 @@ export abstract class BaseBinaryManager {
       const { stdout, stderr } = await spawnAsync(serverPath, ['--version'])
       // Log stderr if present (may contain warnings)
       if (stderr && stderr.trim()) {
-        logDebug(`${this.config.serverBinary} stderr`, { stderr: stderr.trim() })
+        logDebug(`${this.config.serverBinary} stderr`, {
+          stderr: stderr.trim(),
+        })
       }
 
       const reportedVersion = this.parseVersionFromOutput(stdout)

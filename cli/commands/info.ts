@@ -269,7 +269,9 @@ export const infoCommand = new Command('info')
         const config = await containerManager.getConfig(name)
         if (!config) {
           if (options.json) {
-            console.error(JSON.stringify({ error: `Container "${name}" not found` }))
+            console.error(
+              JSON.stringify({ error: `Container "${name}" not found` }),
+            )
             process.exit(1)
           }
           console.error(uiError(`Container "${name}" not found`))

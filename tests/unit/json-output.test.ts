@@ -262,9 +262,7 @@ describe('JSON Output Validation', () => {
         // Each container should have required fields (if any exist)
         for (const container of parsed) {
           if (!container.name || !container.engine) {
-            throw new Error(
-              'Container missing required fields (name, engine)',
-            )
+            throw new Error('Container missing required fields (name, engine)')
           }
         }
       }

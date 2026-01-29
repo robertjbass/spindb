@@ -61,9 +61,7 @@ export async function getCockroachPathForVersion(
  * If a version is provided, only that specific version is checked.
  * If no version is provided, falls back to the config cache.
  */
-export async function requireCockroachPath(
-  version?: string,
-): Promise<string> {
+export async function requireCockroachPath(version?: string): Promise<string> {
   // If version provided, require that specific version (no fallback)
   if (version) {
     const path = await getCockroachPathForVersion(version)
@@ -363,7 +361,9 @@ export function isInsecureConnection(connectionString: string): boolean {
     const sslmode = url.searchParams.get('sslmode')
     const host = url.hostname.toLowerCase()
     // Handle both regular hostnames and bracketed IPv6 addresses
-    const isLocalhost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)
+    const isLocalhost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(
+      host,
+    )
 
     // Explicit disable means insecure
     if (sslmode === 'disable') {

@@ -64,10 +64,7 @@ function parseMeilisearchConnectionString(connectionString: string): {
   }
 
   // Ensure scheme is present
-  if (
-    !normalized.startsWith('http://') &&
-    !normalized.startsWith('https://')
-  ) {
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
     normalized = `http://${normalized}`
   }
 
@@ -410,7 +407,9 @@ export class MeilisearchEngine extends BaseEngine {
     let pendingSnapshotImport: string | null = null
     if (existsSync(importMarkerPath)) {
       try {
-        pendingSnapshotImport = (await readFile(importMarkerPath, 'utf-8')).trim()
+        pendingSnapshotImport = (
+          await readFile(importMarkerPath, 'utf-8')
+        ).trim()
         logDebug(`Found pending snapshot import: ${pendingSnapshotImport}`)
       } catch {
         logDebug('Failed to read pending snapshot import marker')
@@ -482,7 +481,9 @@ export class MeilisearchEngine extends BaseEngine {
         proc.on('error', (err) => {
           if (settled) return
           settled = true
-          reject(new Error(`Failed to spawn Meilisearch server: ${err.message}`))
+          reject(
+            new Error(`Failed to spawn Meilisearch server: ${err.message}`),
+          )
         })
 
         proc.on('exit', (code, signal) => {
@@ -949,7 +950,8 @@ export class MeilisearchEngine extends BaseEngine {
     outputPath: string,
   ): Promise<DumpResult> {
     // Parse connection string
-    const { baseUrl, headers } = parseMeilisearchConnectionString(connectionString)
+    const { baseUrl, headers } =
+      parseMeilisearchConnectionString(connectionString)
 
     logDebug(`Connecting to remote Meilisearch at ${baseUrl}`)
 

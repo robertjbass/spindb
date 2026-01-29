@@ -6,7 +6,10 @@
  */
 
 import { logDebug } from '../../core/error-handler'
-import { COCKROACHDB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+import {
+  COCKROACHDB_VERSION_MAP,
+  SUPPORTED_MAJOR_VERSIONS,
+} from './version-maps'
 
 const HOSTDB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'

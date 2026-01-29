@@ -324,10 +324,7 @@ export class ClickHouseEngine extends BaseEngine {
    * Regenerate config.xml with updated paths after container rename
    * Called by container-manager after moving the directory
    */
-  async regenerateConfig(
-    containerName: string,
-    port: number,
-  ): Promise<void> {
+  async regenerateConfig(containerName: string, port: number): Promise<void> {
     const dataDir = paths.getContainerDataPath(containerName, {
       engine: ENGINE,
     })
@@ -446,7 +443,11 @@ export class ClickHouseEngine extends BaseEngine {
 
     // Spawn the daemon process and wait for it to exit
     // ClickHouse with --daemon forks immediately and the parent exits
-    const spawnResult = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+    const spawnResult = await new Promise<{
+      code: number | null
+      stdout: string
+      stderr: string
+    }>((resolve, reject) => {
       const proc = spawn(clickhouseBinary!, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
@@ -477,7 +478,9 @@ export class ClickHouseEngine extends BaseEngine {
     // Check if spawn was successful
     if (spawnResult.code !== 0 && spawnResult.code !== null) {
       throw new Error(
-        spawnResult.stderr || spawnResult.stdout || `clickhouse server exited with code ${spawnResult.code}`,
+        spawnResult.stderr ||
+          spawnResult.stdout ||
+          `clickhouse server exited with code ${spawnResult.code}`,
       )
     }
 
@@ -714,7 +717,15 @@ export class ClickHouseEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(
         clickhouse,
-        ['client', '--host', '127.0.0.1', '--port', String(port), '--database', db],
+        [
+          'client',
+          '--host',
+          '127.0.0.1',
+          '--port',
+          String(port),
+          '--database',
+          db,
+        ],
         spawnOptions,
       )
 

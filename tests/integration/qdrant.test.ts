@@ -53,7 +53,9 @@ describe('Qdrant Integration Tests', () => {
     // Request 6 consecutive ports and use every other one to avoid gRPC conflicts
     const allPorts = await findConsecutiveFreePorts(6, TEST_PORTS.qdrant.base)
     testPorts = [allPorts[0], allPorts[2], allPorts[4]]
-    console.log(`   Using ports: ${testPorts.join(', ')} (with gRPC on +1 each)`)
+    console.log(
+      `   Using ports: ${testPorts.join(', ')} (with gRPC on +1 each)`,
+    )
 
     containerName = generateTestName('qdrant-test')
     clonedContainerName = generateTestName('qdrant-test-clone')
@@ -86,7 +88,9 @@ describe('Qdrant Integration Tests', () => {
     })
 
     // Initialize the data directory
-    await engine.initDataDir(containerName, TEST_VERSION, { port: testPorts[0] })
+    await engine.initDataDir(containerName, TEST_VERSION, {
+      port: testPorts[0],
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -144,7 +148,11 @@ describe('Qdrant Integration Tests', () => {
       { id: 2, vector: [0.2, 0.3, 0.4, 0.5], payload: { name: 'test2' } },
       { id: 3, vector: [0.3, 0.4, 0.5, 0.6], payload: { name: 'test3' } },
     ]
-    const inserted = await insertQdrantPoints(testPorts[0], TEST_COLLECTION, points)
+    const inserted = await insertQdrantPoints(
+      testPorts[0],
+      TEST_COLLECTION,
+      points,
+    )
     assert(inserted, 'Should insert points')
 
     // Verify collection count
@@ -235,7 +243,9 @@ describe('Qdrant Integration Tests', () => {
 
     // Stop the container if running (might already be stopped from previous test)
     const engine = getEngine(ENGINE)
-    const isRunning = await processManager.isRunning(containerName, { engine: ENGINE })
+    const isRunning = await processManager.isRunning(containerName, {
+      engine: ENGINE,
+    })
     if (isRunning) {
       await engine.stop(config!)
       await containerManager.updateConfig(containerName, { status: 'stopped' })

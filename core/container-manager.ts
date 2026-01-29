@@ -330,9 +330,7 @@ export class ContainerManager {
 
     // Execute all container checks in parallel
     const results = await Promise.all(containerChecks)
-    containers.push(
-      ...results.filter((c): c is ContainerConfig => c !== null),
-    )
+    containers.push(...results.filter((c): c is ContainerConfig => c !== null))
 
     return containers
   }
@@ -485,7 +483,9 @@ export class ContainerManager {
         const clickhouseEngine = getEngine(Engine.ClickHouse)
         if ('regenerateConfig' in clickhouseEngine) {
           await (
-            clickhouseEngine as { regenerateConfig: (name: string, port: number) => Promise<void> }
+            clickhouseEngine as {
+              regenerateConfig: (name: string, port: number) => Promise<void>
+            }
           ).regenerateConfig(targetName, config.port)
         }
       }
@@ -609,7 +609,9 @@ export class ContainerManager {
       const clickhouseEngine = getEngine(Engine.ClickHouse)
       if ('regenerateConfig' in clickhouseEngine) {
         await (
-          clickhouseEngine as { regenerateConfig: (name: string, port: number) => Promise<void> }
+          clickhouseEngine as {
+            regenerateConfig: (name: string, port: number) => Promise<void>
+          }
         ).regenerateConfig(newName, config.port)
       }
     }
@@ -647,7 +649,9 @@ export class ContainerManager {
           } catch {
             // If delete fails after copy, we have duplicates
             // Try to clean up the target to avoid inconsistency
-            await rm(targetPath, { recursive: true, force: true }).catch(() => {})
+            await rm(targetPath, { recursive: true, force: true }).catch(
+              () => {},
+            )
             throw new Error(
               `Failed to complete move: source and target may both exist. ` +
                 `Please manually remove one of: ${sourcePath} or ${targetPath}`,

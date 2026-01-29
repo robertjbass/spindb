@@ -97,7 +97,9 @@ describe('QuestDB Integration Tests', () => {
     })
 
     // Initialize the data directory
-    await engine.initDataDir(containerName, TEST_VERSION, { port: testPorts[0] })
+    await engine.initDataDir(containerName, TEST_VERSION, {
+      port: testPorts[0],
+    })
 
     // Verify container exists but is not running
     const config = await containerManager.getConfig(containerName)
@@ -147,7 +149,12 @@ describe('QuestDB Integration Tests', () => {
     // Give QuestDB time to commit data - time-series DBs use WAL buffering
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -171,7 +178,9 @@ describe('QuestDB Integration Tests', () => {
     })
 
     const engine = getEngine(ENGINE)
-    await engine.initDataDir(clonedContainerName, TEST_VERSION, { port: testPorts[1] })
+    await engine.initDataDir(clonedContainerName, TEST_VERSION, {
+      port: testPorts[1],
+    })
 
     // Start cloned container first (needed for SQL restore)
     const clonedConfig = await containerManager.getConfig(clonedContainerName)
@@ -218,7 +227,12 @@ describe('QuestDB Integration Tests', () => {
   it('should verify restored data matches source', async () => {
     console.log(`\n Verifying restored data...`)
 
-    const rowCount = await getRowCount(ENGINE, testPorts[1], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -234,7 +248,9 @@ describe('QuestDB Integration Tests', () => {
     // Skip on Windows - QuestDB's Java process holds file locks for extended periods
     // even after termination, causing EBUSY errors on delete operations
     if (isWindows()) {
-      console.log('   ⚠️  Skipping delete test on Windows (known file locking issue)')
+      console.log(
+        '   ⚠️  Skipping delete test on Windows (known file locking issue)',
+      )
 
       // Just stop the container, don't try to delete
       const config = await containerManager.getConfig(clonedContainerName)
@@ -287,7 +303,12 @@ describe('QuestDB Integration Tests', () => {
     // Give QuestDB a moment to commit the data - time-series DBs use WAL buffering
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    const rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
     // Should have 6 rows now (5 from seed + 1 from insert)
     assertEqual(rowCount, EXPECTED_ROW_COUNT + 1, 'Should have one more row')
 
@@ -302,7 +323,9 @@ describe('QuestDB Integration Tests', () => {
     // Skip on Windows - QuestDB's Java process holds file locks for extended periods
     // even after termination, causing EBUSY errors on rename operations
     if (isWindows()) {
-      console.log('   ⚠️  Skipping rename test on Windows (known file locking issue)')
+      console.log(
+        '   ⚠️  Skipping rename test on Windows (known file locking issue)',
+      )
 
       // Just stop the container, don't try to rename
       const config = await containerManager.getConfig(containerName)
@@ -469,7 +492,9 @@ describe('QuestDB Integration Tests', () => {
 
     // Skip delete on Windows - QuestDB's Java process holds file locks
     if (isWindows()) {
-      console.log('   ⚠️  Skipping delete test on Windows (known file locking issue)')
+      console.log(
+        '   ⚠️  Skipping delete test on Windows (known file locking issue)',
+      )
       return
     }
 
@@ -499,7 +524,9 @@ describe('QuestDB Integration Tests', () => {
     // On Windows, delete tests were skipped due to file locking issues
     // So we expect leftover containers
     if (isWindows()) {
-      console.log('   ⚠️  Skipping cleanup verification on Windows (delete tests were skipped)')
+      console.log(
+        '   ⚠️  Skipping cleanup verification on Windows (delete tests were skipped)',
+      )
       return
     }
 

@@ -17,7 +17,9 @@ const HEADER_SIZE = 8192
 /**
  * Detect the backup format from file content
  */
-export async function detectBackupFormat(filePath: string): Promise<BackupFormat> {
+export async function detectBackupFormat(
+  filePath: string,
+): Promise<BackupFormat> {
   // Check extension first
   const lowerPath = filePath.toLowerCase()
   if (lowerPath.endsWith('.sql')) {
@@ -81,7 +83,10 @@ export function parseConnectionString(connectionString: string): {
   let url: URL
   try {
     // Replace questdb:// with postgresql:// for URL parsing
-    const normalized = connectionString.replace(/^questdb:\/\//, 'postgresql://')
+    const normalized = connectionString.replace(
+      /^questdb:\/\//,
+      'postgresql://',
+    )
     url = new URL(normalized)
   } catch {
     throw new Error(
@@ -136,12 +141,18 @@ export async function restoreBackup(
   // Build restore command args
   // Use ON_ERROR_STOP to fail fast on any SQL error (otherwise psql continues silently)
   const args = [
-    '-h', '127.0.0.1',
-    '-p', String(port),
-    '-U', 'admin',
-    '-d', database,
-    '-v', 'ON_ERROR_STOP=1',
-    '-f', backupPath,
+    '-h',
+    '127.0.0.1',
+    '-p',
+    String(port),
+    '-U',
+    'admin',
+    '-d',
+    database,
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-f',
+    backupPath,
   ]
 
   // For clean restore, drop existing tables before restoring
@@ -151,7 +162,8 @@ export async function restoreBackup(
     // Read the SQL file and extract table names from CREATE TABLE statements
     const sqlContent = await readFile(backupPath, 'utf-8')
     // Match CREATE TABLE [IF NOT EXISTS] "table_name" or CREATE TABLE [IF NOT EXISTS] table_name
-    const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"([^"]+)"|(\w+))/gi
+    const tableRegex =
+      /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"([^"]+)"|(\w+))/gi
     const tables: string[] = []
     let match
 
@@ -170,20 +182,33 @@ export async function restoreBackup(
         const dropQuery = `DROP TABLE IF EXISTS "${table}";`
         logDebug(`Executing: ${dropQuery}`)
 
-        const dropResult = spawnSync(psqlPath!, [
-          '-h', '127.0.0.1',
-          '-p', String(port),
-          '-U', 'admin',
-          '-d', database,
-          '-c', dropQuery,
-        ], {
-          env: { ...process.env, PGPASSWORD: 'quest' },
-        })
+        const dropResult = spawnSync(
+          psqlPath!,
+          [
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String(port),
+            '-U',
+            'admin',
+            '-d',
+            database,
+            '-c',
+            dropQuery,
+          ],
+          {
+            env: { ...process.env, PGPASSWORD: 'quest' },
+          },
+        )
 
         if (dropResult.error) {
-          logDebug(`Warning: Failed to drop table ${table}: ${dropResult.error.message}`)
+          logDebug(
+            `Warning: Failed to drop table ${table}: ${dropResult.error.message}`,
+          )
         } else if (dropResult.status !== 0) {
-          logDebug(`Warning: DROP TABLE ${table} exited with code ${dropResult.status}`)
+          logDebug(
+            `Warning: DROP TABLE ${table} exited with code ${dropResult.status}`,
+          )
         }
       }
     } else {

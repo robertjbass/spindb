@@ -194,7 +194,10 @@ export async function filterableListPrompt(
   },
 ): Promise<string> {
   // Split choices into filterable items and static footer (separators, back buttons, etc.)
-  const filterableItems = choices.slice(0, options.filterableCount) as FilterableChoice[]
+  const filterableItems = choices.slice(
+    0,
+    options.filterableCount,
+  ) as FilterableChoice[]
   const footerItems = choices.slice(options.filterableCount)
 
   // Source function for autocomplete - filters items based on input
@@ -263,7 +266,9 @@ export async function filterableListPrompt(
       currentPromptUi = null
     }
 
-    const result = (await Promise.race([p, escapePromise])) as { selection: string }
+    const result = (await Promise.race([p, escapePromise])) as {
+      selection: string
+    }
     return result.selection
   } finally {
     escapeReject = null

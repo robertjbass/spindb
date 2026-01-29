@@ -61,12 +61,18 @@ describe('QuestDB Version Validator', () => {
     })
 
     it('should not support version 8.x', () => {
-      assert(!isVersionSupported('8.0.0'), 'Version 8.0.0 should not be supported')
+      assert(
+        !isVersionSupported('8.0.0'),
+        'Version 8.0.0 should not be supported',
+      )
       assert(!isVersionSupported('8'), 'Version 8 should not be supported')
     })
 
     it('should not support version 7.x', () => {
-      assert(!isVersionSupported('7.0.0'), 'Version 7.0.0 should not be supported')
+      assert(
+        !isVersionSupported('7.0.0'),
+        'Version 7.0.0 should not be supported',
+      )
     })
   })
 

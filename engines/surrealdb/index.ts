@@ -37,10 +37,7 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
-import {
-  validateSurrealIdentifier,
-  escapeSurrealIdentifier,
-} from './cli-utils'
+import { validateSurrealIdentifier, escapeSurrealIdentifier } from './cli-utils'
 import {
   type Platform,
   type Arch,
@@ -242,10 +239,14 @@ export class SurrealDBEngine extends BaseEngine {
     const args = [
       'start',
       `surrealkv://${dataDir}`,
-      '--bind', `127.0.0.1:${port}`,
-      '--user', 'root',
-      '--pass', 'root',
-      '--log', 'warn',
+      '--bind',
+      `127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--log',
+      'warn',
     ]
 
     // Spawn the server process
@@ -279,7 +280,9 @@ export class SurrealDBEngine extends BaseEngine {
             .then(() => {
               logDebug(`Windows: wrote PID file ${pidFile} (pid: ${proc.pid})`)
               proc.unref()
-              logDebug(`Windows: waiting fixed delay for SurrealDB to start (pid: ${proc.pid})`)
+              logDebug(
+                `Windows: waiting fixed delay for SurrealDB to start (pid: ${proc.pid})`,
+              )
               setTimeout(resolve, 3000)
             })
             .catch((err) => {
@@ -302,7 +305,11 @@ export class SurrealDBEngine extends BaseEngine {
       const spawnTimeout = 30000
       await new Promise<void>((resolve, reject) => {
         const timeoutId = setTimeout(() => {
-          reject(new Error(`SurrealDB process failed to spawn within ${spawnTimeout}ms`))
+          reject(
+            new Error(
+              `SurrealDB process failed to spawn within ${spawnTimeout}ms`,
+            ),
+          )
         }, spawnTimeout)
 
         proc.on('error', (err) => {
@@ -397,9 +404,7 @@ export class SurrealDBEngine extends BaseEngine {
       logDebug(`Got surreal binary path: ${surreal}`)
     } catch (err) {
       logDebug(`Error getting surreal binary path: ${err}`)
-      logWarning(
-        'SurrealDB binary not found, cannot verify server is ready.',
-      )
+      logWarning('SurrealDB binary not found, cannot verify server is ready.')
       return false
     }
 
@@ -410,10 +415,7 @@ export class SurrealDBEngine extends BaseEngine {
       attempt++
       logDebug(`Connection attempt ${attempt}...`)
       try {
-        const args = [
-          'isready',
-          '--endpoint', `http://127.0.0.1:${port}`,
-        ]
+        const args = ['isready', '--endpoint', `http://127.0.0.1:${port}`]
         await new Promise<void>((resolve, reject) => {
           let stderrOutput = ''
           const proc = spawn(surreal, args, {
@@ -426,7 +428,9 @@ export class SurrealDBEngine extends BaseEngine {
 
           // Timeout for this specific attempt - kill process if it hangs
           const attemptTimer = setTimeout(() => {
-            logDebug(`isready attempt ${attempt} timed out after ${perAttemptTimeout}ms`)
+            logDebug(
+              `isready attempt ${attempt} timed out after ${perAttemptTimeout}ms`,
+            )
             proc.kill('SIGKILL')
             reject(new Error('isready timeout'))
           }, perAttemptTimeout)
@@ -438,7 +442,9 @@ export class SurrealDBEngine extends BaseEngine {
             else {
               // Log non-zero exit for debugging
               if (attempt <= 3 || attempt % 10 === 0) {
-                logDebug(`isready attempt ${attempt} failed (code: ${code})${stderrOutput ? `: ${stderrOutput.trim()}` : ''}`)
+                logDebug(
+                  `isready attempt ${attempt} failed (code: ${code})${stderrOutput ? `: ${stderrOutput.trim()}` : ''}`,
+                )
               }
               reject(new Error(`Exit code ${code}`))
             }
@@ -527,10 +533,7 @@ export class SurrealDBEngine extends BaseEngine {
     // Try to connect using surreal isready
     try {
       const surreal = await this.getSurrealPath(version)
-      const args = [
-        'isready',
-        '--endpoint', `http://127.0.0.1:${port}`,
-      ]
+      const args = ['isready', '--endpoint', `http://127.0.0.1:${port}`]
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(surreal, args, {
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -601,11 +604,16 @@ export class SurrealDBEngine extends BaseEngine {
         surreal,
         [
           'sql',
-          '--endpoint', `ws://127.0.0.1:${port}`,
-          '--user', 'root',
-          '--pass', 'root',
-          '--ns', namespace,
-          '--db', db,
+          '--endpoint',
+          `ws://127.0.0.1:${port}`,
+          '--user',
+          'root',
+          '--pass',
+          'root',
+          '--ns',
+          namespace,
+          '--db',
+          db,
           '--pretty',
         ],
         spawnOptions,
@@ -639,11 +647,16 @@ export class SurrealDBEngine extends BaseEngine {
     // SurrealDB creates databases implicitly, but we'll use USE to ensure it exists
     const args = [
       'sql',
-      '--endpoint', `ws://127.0.0.1:${port}`,
-      '--user', 'root',
-      '--pass', 'root',
-      '--ns', namespace,
-      '--db', database,
+      '--endpoint',
+      `ws://127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--ns',
+      namespace,
+      '--db',
+      database,
       '--hide-welcome',
     ]
 
@@ -700,10 +713,14 @@ export class SurrealDBEngine extends BaseEngine {
 
     const args = [
       'sql',
-      '--endpoint', `ws://127.0.0.1:${port}`,
-      '--user', 'root',
-      '--pass', 'root',
-      '--ns', namespace,
+      '--endpoint',
+      `ws://127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--ns',
+      namespace,
       '--hide-welcome',
     ]
 
@@ -739,7 +756,9 @@ export class SurrealDBEngine extends BaseEngine {
    * SurrealDB doesn't have a direct size query, so we estimate from data directory
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const dataDir = paths.getContainerDataPath(container.name, { engine: ENGINE })
+    const dataDir = paths.getContainerDataPath(container.name, {
+      engine: ENGINE,
+    })
 
     try {
       const { stat, readdir } = await import('fs/promises')
@@ -807,7 +826,9 @@ export class SurrealDBEngine extends BaseEngine {
     const namespace = pathParts[0] || 'test'
     const database = pathParts[1] || 'test'
 
-    logDebug(`Connecting to remote SurrealDB at ${host}:${port} (ns: ${namespace}, db: ${database})`)
+    logDebug(
+      `Connecting to remote SurrealDB at ${host}:${port} (ns: ${namespace}, db: ${database})`,
+    )
 
     // For remote dump, we need a local surreal binary
     let surreal: string | null = null
@@ -826,11 +847,16 @@ export class SurrealDBEngine extends BaseEngine {
     return new Promise<DumpResult>((resolve, reject) => {
       const args = [
         'export',
-        '--endpoint', `http://${host}:${port}`,
-        '--user', user,
-        '--pass', password,
-        '--ns', namespace,
-        '--db', database,
+        '--endpoint',
+        `http://${host}:${port}`,
+        '--user',
+        user,
+        '--pass',
+        password,
+        '--ns',
+        namespace,
+        '--db',
+        database,
         outputPath,
       ]
 
@@ -891,11 +917,16 @@ export class SurrealDBEngine extends BaseEngine {
       // Run SurrealQL file using import
       const args = [
         'import',
-        '--endpoint', `http://127.0.0.1:${port}`,
-        '--user', 'root',
-        '--pass', 'root',
-        '--ns', namespace,
-        '--db', db,
+        '--endpoint',
+        `http://127.0.0.1:${port}`,
+        '--user',
+        'root',
+        '--pass',
+        'root',
+        '--ns',
+        namespace,
+        '--db',
+        db,
         options.file,
       ]
 
@@ -908,7 +939,8 @@ export class SurrealDBEngine extends BaseEngine {
         proc.on('error', reject)
         proc.on('close', (code, signal) => {
           if (code === 0) resolve()
-          else if (code === null) reject(new Error(`surreal import was killed by signal ${signal}`))
+          else if (code === null)
+            reject(new Error(`surreal import was killed by signal ${signal}`))
           else reject(new Error(`surreal import exited with code ${code}`))
         })
       })
@@ -916,11 +948,16 @@ export class SurrealDBEngine extends BaseEngine {
       // Run inline SurrealQL via stdin
       const args = [
         'sql',
-        '--endpoint', `ws://127.0.0.1:${port}`,
-        '--user', 'root',
-        '--pass', 'root',
-        '--ns', namespace,
-        '--db', db,
+        '--endpoint',
+        `ws://127.0.0.1:${port}`,
+        '--user',
+        'root',
+        '--pass',
+        'root',
+        '--ns',
+        namespace,
+        '--db',
+        db,
         '--hide-welcome',
       ]
 
@@ -933,7 +970,8 @@ export class SurrealDBEngine extends BaseEngine {
         proc.on('error', reject)
         proc.on('close', (code, signal) => {
           if (code === 0) resolve()
-          else if (code === null) reject(new Error(`surreal sql was killed by signal ${signal}`))
+          else if (code === null)
+            reject(new Error(`surreal sql was killed by signal ${signal}`))
           else reject(new Error(`surreal sql exited with code ${code}`))
         })
 

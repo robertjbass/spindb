@@ -14,7 +14,6 @@ import {
   deriveContainerName,
 } from '../../engines/sqlite/scanner'
 
-
 /**
  * Prompt user about unregistered SQLite files in CWD
  * Returns true if user registered any files (refresh needed)

@@ -111,7 +111,10 @@ function addNamespaceRemapArgs(
   targetDatabase: string,
 ): void {
   const nsFromDb = sourceDatabase ?? '$prefix$'
-  args.push(`--nsFrom=${nsFromDb}.$suffix$`, `--nsTo=${targetDatabase}.$suffix$`)
+  args.push(
+    `--nsFrom=${nsFromDb}.$suffix$`,
+    `--nsTo=${targetDatabase}.$suffix$`,
+  )
 }
 
 // Restore a MongoDB backup using mongorestore

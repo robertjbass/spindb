@@ -81,7 +81,9 @@ export class UpdateManager {
       const { stdout } = await execAsync('pnpm list -g spindb --json', {
         timeout: 5000,
       })
-      const data = JSON.parse(stdout) as Array<{ dependencies?: { spindb?: unknown } }>
+      const data = JSON.parse(stdout) as Array<{
+        dependencies?: { spindb?: unknown }
+      }>
       if (data[0]?.dependencies?.spindb) {
         return 'pnpm'
       }

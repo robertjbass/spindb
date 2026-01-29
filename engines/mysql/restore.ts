@@ -272,7 +272,9 @@ function doRestore(
       // EPIPE is expected when the process exits early - don't reject here,
       // let the 'close' event handle it with the actual error from stderr
       if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
-        rejectOnce(new Error(`Failed to write to MySQL process: ${err.message}`))
+        rejectOnce(
+          new Error(`Failed to write to MySQL process: ${err.message}`),
+        )
       }
     })
 
@@ -291,7 +293,9 @@ function doRestore(
       gunzip.on('error', (err) => {
         fileStream.unpipe(gunzip)
         gunzip.unpipe(proc.stdin!)
-        rejectOnce(new Error(`Failed to decompress backup file: ${err.message}`))
+        rejectOnce(
+          new Error(`Failed to decompress backup file: ${err.message}`),
+        )
       })
     } else {
       fileStream.pipe(proc.stdin)
@@ -369,7 +373,15 @@ export async function restoreBackup(
   assertCompatibleFormat(format)
 
   // First attempt: try without compatibility settings
-  const result = await doRestore(backupPath, mysql, port, database, user, format, false)
+  const result = await doRestore(
+    backupPath,
+    mysql,
+    port,
+    database,
+    user,
+    format,
+    false,
+  )
 
   // Check if restore succeeded
   if (result.code === 0) {
@@ -378,31 +390,46 @@ export async function restoreBackup(
 
   // Check if it failed with row size error (ERROR 1118)
   // This happens when tables have too many VARCHAR columns for the default row format
-  const isRowSizeError = result.rawStderr?.includes('ERROR 1118') ||
+  const isRowSizeError =
+    result.rawStderr?.includes('ERROR 1118') ||
     result.rawStderr?.includes('Row size too large')
 
   if (isRowSizeError) {
     logDebug('Detected row size error, retrying with compatibility settings')
 
     // Retry with compatibility settings
-    const retryResult = await doRestore(backupPath, mysql, port, database, user, format, true)
+    const retryResult = await doRestore(
+      backupPath,
+      mysql,
+      port,
+      database,
+      user,
+      format,
+      true,
+    )
 
     if (retryResult.code === 0) {
       return {
         ...retryResult,
-        stdout: retryResult.stdout || 'Restore succeeded with compatibility mode (DYNAMIC row format)',
+        stdout:
+          retryResult.stdout ||
+          'Restore succeeded with compatibility mode (DYNAMIC row format)',
       }
     }
 
     // Still failed - report the retry error
     const errorMatch = retryResult.rawStderr?.match(/^ERROR\s+\d+.*$/m)
-    const errorMessage = errorMatch ? errorMatch[0] : retryResult.rawStderr?.trim() || 'Unknown error'
+    const errorMessage = errorMatch
+      ? errorMatch[0]
+      : retryResult.rawStderr?.trim() || 'Unknown error'
     throw new Error(`MySQL restore failed: ${errorMessage}`)
   }
 
   // Failed with a different error - report it
   const errorMatch = result.rawStderr?.match(/^ERROR\s+\d+.*$/m)
-  const errorMessage = errorMatch ? errorMatch[0] : result.rawStderr?.trim() || 'Unknown error'
+  const errorMessage = errorMatch
+    ? errorMatch[0]
+    : result.rawStderr?.trim() || 'Unknown error'
   throw new Error(`MySQL restore failed: ${errorMessage}`)
 }
 
