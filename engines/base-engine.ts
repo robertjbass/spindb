@@ -234,4 +234,18 @@ export abstract class BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void>
+
+  /**
+   * Terminate all active connections to a database.
+   * Required before dropping a database that may have active connections.
+   * Default implementation is a no-op - engines that need it should override.
+   * @param container - The container configuration
+   * @param database - The database name to terminate connections for
+   */
+  async terminateConnections(
+    _container: ContainerConfig,
+    _database: string,
+  ): Promise<void> {
+    // Default: no-op. Override in engines that support connection termination.
+  }
 }
