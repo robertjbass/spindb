@@ -642,6 +642,32 @@ export async function showContainerSubmenu(
   // Build action choices based on engine type
   const actionChoices: MenuChoice[] = []
 
+  // Helper for disabled menu items - passes hint to inquirer's disabled property
+  const disabledItem = (icon: string, label: string, hint: string) => ({
+    name: chalk.gray(`${icon} ${label}`),
+    value: '_disabled_',
+    disabled: chalk.gray(hint), // String value shows as the reason instead of "(Disabled)"
+  })
+
+  // Determine if database-specific actions can be performed
+  // Requires: database selected + (running for server DBs OR file exists for file-based DBs)
+  const containerReady = isFileBasedDB ? existsSync(config.database) : isRunning
+  const hasMultipleDatabases = databases.length > 1
+  const canDoDbAction = !!activeDatabase && containerReady
+
+  // Hint for disabled database actions
+  const getDbActionHint = () => {
+    if (!activeDatabase && hasMultipleDatabases) return 'Select database first'
+    if (!containerReady) {
+      return isFileBasedDB ? 'Database file missing' : 'Start container first'
+    }
+    return 'Select database first'
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // SECTION 1: Container State
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Start/Stop buttons only for server databases (not file-based)
   if (!isFileBasedDB) {
     if (!isRunning) {
@@ -657,16 +683,8 @@ export async function showContainerSubmenu(
     }
   }
 
-  // Helper for disabled menu items - passes hint to inquirer's disabled property
-  const disabledItem = (icon: string, label: string, hint: string) => ({
-    name: chalk.gray(`${icon} ${label}`),
-    value: '_disabled_',
-    disabled: chalk.gray(hint), // String value shows as the reason instead of "(Disabled)"
-  })
-
   // Database selection - show current selection or prompt to select
   // Only show if there are multiple databases
-  const hasMultipleDatabases = databases.length > 1
   if (hasMultipleDatabases) {
     const dbIndex = activeDatabase ? databases.indexOf(activeDatabase) + 1 : 0
     const dbLabel = activeDatabase
@@ -676,22 +694,13 @@ export async function showContainerSubmenu(
       name: dbLabel,
       value: 'select-database',
     })
-    actionChoices.push(new inquirer.Separator())
   }
 
-  // Determine if database-specific actions can be performed
-  // Requires: database selected + (running for server DBs OR file exists for file-based DBs)
-  const containerReady = isFileBasedDB ? existsSync(config.database) : isRunning
-  const canDoDbAction = !!activeDatabase && containerReady
+  actionChoices.push(new inquirer.Separator())
 
-  // Hint for disabled database actions
-  const getDbActionHint = () => {
-    if (!activeDatabase && hasMultipleDatabases) return 'Select database first'
-    if (!containerReady) {
-      return isFileBasedDB ? 'Database file missing' : 'Start container first'
-    }
-    return 'Select database first'
-  }
+  // ─────────────────────────────────────────────────────────────────────────────
+  // SECTION 2: Data Operations
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Open shell - requires database selection for multi-db containers
   const shellHint = getDbActionHint()
@@ -725,22 +734,6 @@ export async function showContainerSubmenu(
     )
   }
 
-  // Edit container - file-based DBs can always edit (no running state), server databases must be stopped
-  const canEdit = isFileBasedDB ? true : !isRunning
-  actionChoices.push(
-    canEdit
-      ? { name: `${chalk.yellow('⚙')} Edit container`, value: 'edit' }
-      : disabledItem('⚙', 'Edit container', 'Stop container first'),
-  )
-
-  // Clone container - file-based DBs can always clone, server databases must be stopped
-  const canClone = isFileBasedDB ? true : !isRunning
-  actionChoices.push(
-    canClone
-      ? { name: `${chalk.cyan('◇')} Clone container`, value: 'clone' }
-      : disabledItem('◇', 'Clone container', 'Stop container first'),
-  )
-
   // Copy connection string - requires database selection for multi-db containers
   const copyHint = getDbActionHint()
   actionChoices.push(
@@ -773,6 +766,28 @@ export async function showContainerSubmenu(
     })
   }
 
+  actionChoices.push(new inquirer.Separator())
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // SECTION 3: Container Management (requires stopped)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // Edit container - file-based DBs can always edit (no running state), server databases must be stopped
+  const canEdit = isFileBasedDB ? true : !isRunning
+  actionChoices.push(
+    canEdit
+      ? { name: `${chalk.yellow('⚙')} Edit container`, value: 'edit' }
+      : disabledItem('⚙', 'Edit container', 'Stop container first'),
+  )
+
+  // Clone container - file-based DBs can always clone, server databases must be stopped
+  const canClone = isFileBasedDB ? true : !isRunning
+  actionChoices.push(
+    canClone
+      ? { name: `${chalk.cyan('◇')} Clone container`, value: 'clone' }
+      : disabledItem('◇', 'Clone container', 'Stop container first'),
+  )
+
   // Detach - only for file-based DBs (unregisters without deleting file)
   if (isFileBasedDB) {
     actionChoices.push({
@@ -789,8 +804,13 @@ export async function showContainerSubmenu(
       : disabledItem('✕', 'Delete container', 'Stop container first'),
   )
 
+  actionChoices.push(new inquirer.Separator())
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // SECTION 4: Navigation
+  // ─────────────────────────────────────────────────────────────────────────────
+
   actionChoices.push(
-    new inquirer.Separator(),
     {
       name: `${chalk.blue('←')} Back to containers`,
       value: 'back',
