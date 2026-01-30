@@ -659,7 +659,7 @@ export async function promptConfirm(
 }
 
 /**
- * Prompt for container selection from a list
+ * Prompt for container selection from a list with type-to-filter support
  * @param containers - List of containers to choose from
  * @param message - Prompt message
  * @param options - Optional settings
@@ -674,10 +674,8 @@ export async function promptContainerSelect(
     return null
   }
 
-  type Choice =
-    | { name: string; value: string; short?: string }
-    | inquirer.Separator
-  const choices: Choice[] = containers.map((c) => ({
+  // Build filterable container choices
+  const containerChoices: FilterableChoice[] = containers.map((c) => ({
     name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${
       c.status === 'running'
         ? chalk.green('● running')
@@ -687,25 +685,25 @@ export async function promptContainerSelect(
     short: c.name,
   }))
 
+  // Build footer with navigation options
+  const footerChoices: (FilterableChoice | inquirer.Separator)[] = []
   if (options.includeBack) {
-    choices.push(new inquirer.Separator())
-    choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
-    choices.push({
+    footerChoices.push(new inquirer.Separator())
+    footerChoices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
+    footerChoices.push({
       name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: MAIN_MENU_VALUE,
     })
-    choices.push(new inquirer.Separator())
+    footerChoices.push(new inquirer.Separator())
   }
 
-  const { container } = await escapeablePrompt<{ container: string }>([
-    {
-      type: 'list',
-      name: 'container',
-      message,
-      choices,
-      pageSize: getPageSize(),
-    },
-  ])
+  const allChoices = [...containerChoices, ...footerChoices]
+
+  const container = await filterableListPrompt(allChoices, message, {
+    filterableCount: containerChoices.length,
+    pageSize: getPageSize(),
+    emptyText: 'No containers match filter',
+  })
 
   // Handle navigation (including escape)
   if (
