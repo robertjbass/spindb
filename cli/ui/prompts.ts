@@ -663,7 +663,7 @@ export async function promptConfirm(
  * @param containers - List of containers to choose from
  * @param message - Prompt message
  * @param options - Optional settings
- * @param options.includeBack - Include a back option (returns null when selected)
+ * @param options.includeBack - Include back/main menu navigation options (returns null when selected)
  */
 export async function promptContainerSelect(
   containers: ContainerConfig[],
@@ -674,7 +674,9 @@ export async function promptContainerSelect(
     return null
   }
 
-  type Choice = { name: string; value: string; short?: string }
+  type Choice =
+    | { name: string; value: string; short?: string }
+    | inquirer.Separator
   const choices: Choice[] = containers.map((c) => ({
     name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${
       c.status === 'running'
@@ -686,7 +688,13 @@ export async function promptContainerSelect(
   }))
 
   if (options.includeBack) {
-    choices.push({ name: `${chalk.blue('←')} Back`, value: '__back__' })
+    choices.push(new inquirer.Separator())
+    choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
+    choices.push({
+      name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
+      value: MAIN_MENU_VALUE,
+    })
+    choices.push(new inquirer.Separator())
   }
 
   const { container } = await escapeablePrompt<{ container: string }>([
@@ -695,10 +703,16 @@ export async function promptContainerSelect(
       name: 'container',
       message,
       choices,
+      pageSize: getPageSize(),
     },
   ])
 
-  if (container === '__back__') {
+  // Handle navigation (including escape)
+  if (
+    container === ESCAPE_VALUE ||
+    container === BACK_VALUE ||
+    container === MAIN_MENU_VALUE
+  ) {
     return null
   }
 
