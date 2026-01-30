@@ -32,6 +32,11 @@ import {
   promptInstallDependencies,
   promptConfirm,
   escapeablePrompt,
+  filterableListPrompt,
+  type FilterableChoice,
+  BACK_VALUE,
+  MAIN_MENU_VALUE,
+  ESCAPE_VALUE,
 } from '../../ui/prompts'
 import { createSpinner } from '../../ui/spinner'
 import {
@@ -347,12 +352,15 @@ export async function handleRestore(): Promise<void> {
     const containers = await containerManager.list()
     const running = containers.filter((c) => c.status === 'running')
 
-    const choices = [
-      ...running.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
-        value: c.name,
-        short: c.name,
-      })),
+    // Build filterable container choices
+    const containerChoices: FilterableChoice[] = running.map((c) => ({
+      name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+      value: c.name,
+      short: c.name,
+    }))
+
+    // Build footer with action and navigation options
+    const footerChoices: (FilterableChoice | inquirer.Separator)[] = [
       new inquirer.Separator(),
       {
         name: `${chalk.green('➕')} Create new container`,
@@ -360,25 +368,32 @@ export async function handleRestore(): Promise<void> {
         short: 'Create new',
       },
       new inquirer.Separator(),
+      { name: `${chalk.blue('←')} Back`, value: BACK_VALUE },
       {
-        name: `${chalk.blue('←')} Back`,
-        value: '__back__',
+        name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
+        value: MAIN_MENU_VALUE,
       },
+      new inquirer.Separator(),
     ]
 
-    const { selectedContainer } = await escapeablePrompt<{
-      selectedContainer: string
-    }>([
-      {
-        type: 'list',
-        name: 'selectedContainer',
-        message: 'Select container to restore to:',
-        choices,
-        pageSize: getPageSize(),
-      },
-    ])
+    const allChoices = [...containerChoices, ...footerChoices]
 
-    if (selectedContainer === '__back__') {
+    const selectedContainer = await filterableListPrompt(
+      allChoices,
+      'Select container to restore to:',
+      {
+        filterableCount: containerChoices.length,
+        pageSize: getPageSize(),
+        emptyText: 'No containers match filter',
+      },
+    )
+
+    // Handle navigation (including escape)
+    if (
+      selectedContainer === ESCAPE_VALUE ||
+      selectedContainer === BACK_VALUE ||
+      selectedContainer === MAIN_MENU_VALUE
+    ) {
       return
     }
 
