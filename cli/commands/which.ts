@@ -18,22 +18,41 @@ import { uiError } from '../ui/theme'
 import { Engine } from '../../types'
 
 /**
- * Parse a database connection URL and extract host, port, and engine type
+ * Parse a database connection URL and extract host, port, and engine type.
+ * Returns null for invalid URLs or unrecognized protocols without explicit port.
  */
 function parseConnectionUrl(url: string): {
   host: string
   port: number
   engine?: Engine
+  unsupportedProtocol?: string
 } | null {
   try {
     const parsed = new URL(url)
-    const port = parsed.port
-      ? parseInt(parsed.port, 10)
-      : getDefaultPort(parsed.protocol)
+
+    // If URL has explicit port, use it
+    if (parsed.port) {
+      return {
+        host: parsed.hostname,
+        port: parseInt(parsed.port, 10),
+        engine: getEngineFromProtocol(parsed.protocol),
+      }
+    }
+
+    // No explicit port - need a recognized protocol to infer default
+    const defaultPort = getDefaultPort(parsed.protocol)
+    if (defaultPort === undefined) {
+      // Return with flag indicating unsupported protocol
+      return {
+        host: parsed.hostname,
+        port: 0, // Will be caught by caller
+        unsupportedProtocol: parsed.protocol.replace(/:$/, ''),
+      }
+    }
 
     return {
       host: parsed.hostname,
-      port,
+      port: defaultPort,
       engine: getEngineFromProtocol(parsed.protocol),
     }
   } catch {
@@ -42,9 +61,10 @@ function parseConnectionUrl(url: string): {
 }
 
 /**
- * Get default port for a database protocol
+ * Get default port for a database protocol.
+ * Returns undefined for unrecognized protocols.
  */
-function getDefaultPort(protocol: string): number {
+function getDefaultPort(protocol: string): number | undefined {
   const defaults: Record<string, number> = {
     'postgresql:': 5432,
     'postgres:': 5432,
@@ -52,7 +72,7 @@ function getDefaultPort(protocol: string): number {
     'mongodb:': 27017,
     'redis:': 6379,
   }
-  return defaults[protocol] || 5432
+  return defaults[protocol]
 }
 
 /**
@@ -92,7 +112,7 @@ export const whichCommand = new Command('which')
         if (!options.port && !options.url) {
           const errorMsg = 'Must specify either --port or --url'
           if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
+            console.log(JSON.stringify({ error: errorMsg }, null, 2))
           } else {
             console.error(uiError(errorMsg))
             console.log(chalk.dim('  Usage: spindb which --port 5432'))
@@ -112,7 +132,18 @@ export const whichCommand = new Command('which')
           if (!parsed) {
             const errorMsg = `Invalid connection URL: ${options.url}`
             if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
+              console.log(JSON.stringify({ error: errorMsg }, null, 2))
+            } else {
+              console.error(uiError(errorMsg))
+            }
+            process.exit(1)
+          }
+
+          // Check for unsupported protocol
+          if (parsed.unsupportedProtocol) {
+            const errorMsg = `Unsupported protocol "${parsed.unsupportedProtocol}". Supported: postgresql, mysql, mongodb, redis (or specify port explicitly)`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }, null, 2))
             } else {
               console.error(uiError(errorMsg))
             }
@@ -123,7 +154,7 @@ export const whichCommand = new Command('which')
           if (parsed.host !== 'localhost' && parsed.host !== '127.0.0.1') {
             const errorMsg = `URL must point to localhost, got: ${parsed.host}`
             if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
+              console.log(JSON.stringify({ error: errorMsg }, null, 2))
             } else {
               console.error(uiError(errorMsg))
             }
@@ -137,7 +168,7 @@ export const whichCommand = new Command('which')
           if (isNaN(targetPort)) {
             const errorMsg = `Invalid port number: ${options.port}`
             if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
+              console.log(JSON.stringify({ error: errorMsg }, null, 2))
             } else {
               console.error(uiError(errorMsg))
             }
@@ -172,6 +203,18 @@ export const whichCommand = new Command('which')
             ferret: Engine.FerretDB,
           }
           targetEngine = engineMap[engineLower]
+          if (!targetEngine) {
+            const validEngines = [
+              ...new Set(Object.keys(engineMap).sort()),
+            ].join(', ')
+            const errorMsg = `Invalid engine "${options.engine}". Valid options: ${validEngines}`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }, null, 2))
+            } else {
+              console.error(uiError(errorMsg))
+            }
+            process.exit(1)
+          }
         }
 
         // Get all containers and find matching one
@@ -204,7 +247,7 @@ export const whichCommand = new Command('which')
 
           const errorMsg = `No container found matching: ${criteria.join(', ')}`
           if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg, found: false }))
+            console.log(JSON.stringify({ error: errorMsg, found: false }, null, 2))
           } else {
             console.error(uiError(errorMsg))
           }
@@ -214,15 +257,19 @@ export const whichCommand = new Command('which')
         // Output result
         if (options.json) {
           console.log(
-            JSON.stringify({
-              found: true,
-              name: match.name,
-              engine: match.engine,
-              version: match.version,
-              port: match.port,
-              status: match.status,
-              database: match.database,
-            }),
+            JSON.stringify(
+              {
+                found: true,
+                name: match.name,
+                engine: match.engine,
+                version: match.version,
+                port: match.port,
+                status: match.status,
+                database: match.database,
+              },
+              null,
+              2,
+            ),
           )
         } else {
           // Simple output: just the container name (useful for $() substitution)
@@ -231,7 +278,7 @@ export const whichCommand = new Command('which')
       } catch (error) {
         const e = error as Error
         if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
+          console.log(JSON.stringify({ error: e.message }, null, 2))
         } else {
           console.error(uiError(e.message))
         }
