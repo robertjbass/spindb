@@ -597,12 +597,17 @@ export async function handleList(
 
       if (isRunning) {
         await handleStopContainer(containerName)
+        // Brief pause so user can see the result
+        await new Promise((resolve) => setTimeout(resolve, 300))
       } else {
-        await handleStartContainer(containerName)
+        const result = await handleStartContainer(containerName)
+        if (result === 'home') {
+          await showMainMenu()
+          return
+        }
+        // Brief pause so user can see the result (for 'started' or 'back')
+        await new Promise((resolve) => setTimeout(resolve, 300))
       }
-
-      // Brief pause so user can see the result
-      await new Promise((resolve) => setTimeout(resolve, 300))
     }
 
     // Refresh the container list
@@ -874,10 +879,15 @@ export async function showContainerSubmenu(
   // Escape is handled globally by the menu loop
 
   switch (action) {
-    case 'start':
-      await handleStartContainer(containerName)
+    case 'start': {
+      const result = await handleStartContainer(containerName)
+      if (result === 'home') {
+        await showMainMenu()
+        return
+      }
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
+    }
     case 'stop':
       await handleStopContainer(containerName)
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
@@ -983,36 +993,8 @@ export async function handleStart(): Promise<void> {
   )
   if (!containerName) return
 
-  const config = await containerManager.getConfig(containerName)
-  if (!config) {
-    console.error(uiError(`Container "${containerName}" not found`))
-    return
-  }
-
-  const portAvailable = await portManager.isPortAvailable(config.port)
-  if (!portAvailable) {
-    const { port: newPort } = await portManager.findAvailablePort()
-    console.log(
-      uiWarning(`Port ${config.port} is in use, switching to port ${newPort}`),
-    )
-    config.port = newPort
-    await containerManager.updateConfig(containerName, { port: newPort })
-  }
-
-  const engine = getEngine(config.engine)
-
-  const spinner = createSpinner(`Starting ${containerName}...`)
-  spinner.start()
-
-  await engine.start(config)
-  await containerManager.updateConfig(containerName, { status: 'running' })
-
-  spinner.succeed(`Container "${containerName}" started`)
-
-  const connectionString = engine.getConnectionString(config)
-  console.log()
-  console.log(chalk.gray('  Connection string:'))
-  console.log(chalk.cyan(`  ${connectionString}`))
+  // Reuse handleStartContainer for consistent port conflict handling
+  await handleStartContainer(containerName)
 }
 
 export async function handleStop(): Promise<void> {
@@ -1051,16 +1033,24 @@ export async function handleStop(): Promise<void> {
   spinner.succeed(`Container "${containerName}" stopped`)
 }
 
-async function handleStartContainer(containerName: string): Promise<void> {
+type StartResult = 'started' | 'back' | 'home'
+
+async function handleStartContainer(
+  containerName: string,
+): Promise<StartResult> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.error(uiError(`Container "${containerName}" not found`))
-    return
+    return 'back'
   }
 
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
-    console.log()
+    // Find next available port
+    const { port: newPort } = await portManager.findAvailablePort({
+      preferredPort: config.port,
+    })
+
     // Check if another SpinDB container is using this port
     const allContainers = await containerManager.list()
     const conflictingContainer = allContainers.find(
@@ -1070,42 +1060,44 @@ async function handleStartContainer(containerName: string): Promise<void> {
         c.status === 'running',
     )
 
-    if (conflictingContainer) {
-      console.log(
-        uiWarning(
-          `Port ${config.port} is already in use by container "${conflictingContainer.name}"`,
-        ),
-      )
-      console.log()
-      console.log(
-        uiInfo(
-          `Stop "${conflictingContainer.name}" first, or change this container's port with:`,
-        ),
-      )
-      console.log(chalk.cyan(`    spindb edit ${containerName}`))
-    } else {
-      console.log(
-        uiWarning(`Port ${config.port} is in use by another process.`),
-      )
-      console.log()
-      console.log(
-        uiInfo("Stop the process using it or change this container's port."),
-      )
-      console.log()
-      console.log(
-        uiInfo(
-          'Tip: If you installed MariaDB via apt, it may have started a system service.',
-        ),
-      )
-      console.log(
-        uiInfo(
-          'Run: sudo systemctl stop mariadb && sudo systemctl disable mariadb',
-        ),
-      )
-    }
+    const conflictReason = conflictingContainer
+      ? `in use by "${conflictingContainer.name}"`
+      : 'in use by another process'
+
     console.log()
-    await pressEnterToContinue()
-    return
+    console.log(uiWarning(`Port ${config.port} is ${conflictReason}`))
+    console.log()
+
+    const { action } = await escapeablePrompt<{ action: string }>([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'What would you like to do?',
+        choices: [
+          {
+            name: `${chalk.green('▶')} Update to port ${newPort} and start ${chalk.gray('(recommended)')}`,
+            value: 'update',
+          },
+          { name: `${chalk.blue('←')} Go back`, value: 'back' },
+          {
+            name: `${chalk.blue('⌂')} Back to main menu`,
+            value: 'home',
+          },
+        ],
+      },
+    ])
+
+    if (action === 'back') {
+      return 'back'
+    }
+    if (action === 'home') {
+      return 'home'
+    }
+
+    // Update port and continue to start
+    config.port = newPort
+    await containerManager.updateConfig(containerName, { port: newPort })
+    console.log(uiSuccess(`Updated port to ${newPort}`))
   }
 
   const engine = getEngine(config.engine)
@@ -1123,6 +1115,7 @@ async function handleStartContainer(containerName: string): Promise<void> {
     console.log()
     console.log(chalk.gray('  Connection string:'))
     console.log(chalk.cyan(`  ${connectionString}`))
+    return 'started'
   } catch (error) {
     spinner.fail(`Failed to start "${containerName}"`)
     const e = error as Error
@@ -1136,6 +1129,7 @@ async function handleStartContainer(containerName: string): Promise<void> {
       console.log()
       console.log(uiInfo(`Check the log file for details: ${logPath}`))
     }
+    return 'back'
   }
 }
 
