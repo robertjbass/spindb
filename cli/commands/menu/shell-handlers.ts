@@ -873,39 +873,18 @@ async function launchShell(
   } else if (shellType === 'iredis') {
     // iredis: enhanced Redis CLI
     shellCmd = 'iredis'
-    shellArgs = [
-      '-h',
-      '127.0.0.1',
-      '-p',
-      String(config.port),
-      '-n',
-      config.database,
-    ]
+    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
     installHint = 'brew install iredis'
   } else if (config.engine === 'redis') {
     // Default Redis shell
     shellCmd = 'redis-cli'
-    shellArgs = [
-      '-h',
-      '127.0.0.1',
-      '-p',
-      String(config.port),
-      '-n',
-      config.database,
-    ]
+    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
     installHint = 'brew install redis'
   } else if (config.engine === 'valkey') {
     // Default Valkey shell
     const valkeyCliPath = await configManager.getBinaryPath('valkey-cli')
     shellCmd = valkeyCliPath || 'valkey-cli'
-    shellArgs = [
-      '-h',
-      '127.0.0.1',
-      '-p',
-      String(config.port),
-      '-n',
-      config.database,
-    ]
+    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
     installHint = 'spindb engines download valkey'
   } else if (config.engine === 'clickhouse') {
     // ClickHouse uses a unified binary with subcommands
