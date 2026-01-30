@@ -302,6 +302,10 @@ describe('JSON Output Validation', () => {
       const output = result.stdout.trim()
       if (output) {
         assertValidJson(output, 'databases add nonexistent --json')
+        const parsed = JSON.parse(output)
+        if (!parsed.error) {
+          throw new Error('databases add error should include "error" field')
+        }
       }
     })
 
@@ -317,6 +321,10 @@ describe('JSON Output Validation', () => {
       const output = result.stdout.trim()
       if (output) {
         assertValidJson(output, 'databases remove nonexistent --json')
+        const parsed = JSON.parse(output)
+        if (!parsed.error) {
+          throw new Error('databases remove error should include "error" field')
+        }
       }
     })
 
@@ -332,6 +340,10 @@ describe('JSON Output Validation', () => {
       const output = result.stdout.trim()
       if (output) {
         assertValidJson(output, 'databases sync nonexistent --json')
+        const parsed = JSON.parse(output)
+        if (!parsed.error) {
+          throw new Error('databases sync error should include "error" field')
+        }
       }
     })
 
@@ -347,6 +359,12 @@ describe('JSON Output Validation', () => {
       const output = result.stdout.trim()
       if (output) {
         assertValidJson(output, 'databases set-default nonexistent --json')
+        const parsed = JSON.parse(output)
+        if (!parsed.error) {
+          throw new Error(
+            'databases set-default error should include "error" field',
+          )
+        }
       }
     })
   })
