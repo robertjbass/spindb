@@ -12,9 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Type-to-filter in container selection** - Container list prompts now support typing to filter by name
 - **Type-to-filter in restore container selection** - Restore workflow container selection now supports filtering
+- **Shift+Tab to toggle containers** - Press Shift+Tab on the container list to start/stop the highlighted container without entering its menu
 
 ### Changed
 - **Container menu reorganized into 4 sections** - Clearer grouping: (1) Start/Stop & database selection, (2) Data operations (shell, run, copy URL, backup, restore, logs), (3) Container management (edit, clone, delete), (4) Navigation
+- **Port conflict UX improved** - Instead of "Press Enter to continue", now shows actionable dropdown: update to next available port and start, go back, or return to main menu
+- **Container list prompt hints updated** - Shows `(↑↓ pick, type to filter)` at top, `Shift+Tab: Toggle` at bottom for clearer instructions
 - **CI workflow improvements**:
   - Disabled `fail-fast` so all matrix jobs run even when one fails
   - Clearer platform labels: `Linux x64 22.04`, `macOS ARM64`, `Win x64` instead of `Ubuntu 22`, `ARM`, `Windows`
@@ -31,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Added `spindb pull` command examples to README "Pull from Remote Database" section
+- Added custom keyboard shortcut pattern documentation to CLAUDE.md for future development
 
 ## [0.28.0] - 2026-01-29
 
