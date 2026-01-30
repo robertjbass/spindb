@@ -446,11 +446,17 @@ export class PullManager {
     }
   }
 
+  /**
+   * Check if a database exists in SpinDB's tracking.
+   *
+   * Note: This only checks SpinDB's tracked databases, not the actual database server.
+   * Databases created outside SpinDB (e.g., via psql) won't be detected.
+   * Use `spindb databases add` to track externally created databases.
+   */
   private async databaseExists(
     config: ContainerConfig,
     database: string,
   ): Promise<boolean> {
-    // Check against tracked databases in config
     const tracked = config.databases || [config.database]
     if (tracked.includes(database)) return true
 
