@@ -206,6 +206,31 @@ export type CockroachDBFormat = 'sql'
 export type SurrealDBFormat = 'surql'
 export type QuestDBFormat = 'sql'
 
+// Pull command types
+export type PullOptions = {
+  database?: string // Target database (defaults to container.database)
+  fromUrl: string // Remote connection string
+  asDatabase?: string // Clone mode: create new database with this name
+  noBackup?: boolean // Skip backup (requires force)
+  postScript?: string // Path to post-pull script
+  dryRun?: boolean
+  force?: boolean
+  json?: boolean
+}
+
+export type PullResult = {
+  success: boolean
+  mode: 'replace' | 'clone'
+  container: string // Container name
+  port: number // Container port
+  database: string // Target database that received remote data
+  databaseUrl: string // Connection URL for target database
+  backupDatabase?: string // Backup database (replace mode only)
+  backupUrl?: string // Connection URL for backup database (replace mode only)
+  source: string // Redacted remote URL
+  message: string
+}
+
 // Union of all backup formats
 export type BackupFormatType =
   | PostgreSQLFormat

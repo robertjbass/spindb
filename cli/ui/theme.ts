@@ -41,12 +41,7 @@ export const theme = {
 }
 
 export function header(text: string): string {
-  const line = '─'.repeat(text.length + 4)
-  return `
-${chalk.cyan('┌' + line + '┐')}
-${chalk.cyan('│')}  ${chalk.bold(text)}  ${chalk.cyan('│')}
-${chalk.cyan('└' + line + '┘')}
-`.trim()
+  return `${chalk.bold(text)}\n${chalk.gray('─'.repeat(40))}`
 }
 
 export function uiSuccess(message: string): string {

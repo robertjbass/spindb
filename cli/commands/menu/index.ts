@@ -24,6 +24,7 @@ import { handleCheckUpdate, handleDoctor } from './update-handlers'
 import { handleSettings } from './settings-handlers'
 import { configManager } from '../../../core/config-manager'
 import { type MenuChoice } from './shared'
+import { getPageSize } from '../../constants'
 
 async function showMainMenu(): Promise<void> {
   console.clear()
@@ -137,7 +138,7 @@ async function showMainMenu(): Promise<void> {
         name: 'action',
         message: 'What would you like to do?',
         choices,
-        pageSize: 12,
+        pageSize: getPageSize(),
       },
     ])
     action = result.action

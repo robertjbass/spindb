@@ -44,24 +44,24 @@ jobs:
     name: Unit ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,24 +141,24 @@ jobs:
     name: PostgreSQL ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -205,24 +205,24 @@ jobs:
     name: MariaDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -267,24 +267,24 @@ jobs:
     name: MySQL ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -347,24 +347,24 @@ jobs:
     name: SQLite ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -408,24 +408,24 @@ jobs:
     name: DuckDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -469,24 +469,24 @@ jobs:
     name: MongoDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -532,21 +532,21 @@ jobs:
     name: FerretDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           # Windows not supported - postgresql-documentdb has startup issues
     steps:
       - name: Checkout
@@ -627,24 +627,24 @@ jobs:
     name: Redis ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -689,24 +689,24 @@ jobs:
     name: Valkey ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -752,22 +752,22 @@ jobs:
     name: ClickHouse ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
       - name: Checkout
@@ -830,24 +830,24 @@ jobs:
     name: Qdrant ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -908,24 +908,24 @@ jobs:
     name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -984,24 +984,24 @@ jobs:
     name: CouchDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1061,24 +1061,24 @@ jobs:
     name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1152,24 +1152,24 @@ jobs:
     name: SurrealDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1242,24 +1242,24 @@ jobs:
     name: QuestDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1335,24 +1335,24 @@ jobs:
     name: CLI E2E ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             icon: 🐧
-            label: Ubuntu 22
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu 24
+            label: Linux x64 24.04
           - os: macos-15
-            icon: 💻
-            label: Intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1401,18 +1401,18 @@ jobs:
     name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu
+            label: Linux x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1546,16 +1546,16 @@ jobs:
     name: ClickHouse Rename ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu
+            label: Linux x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1673,15 +1673,15 @@ jobs:
     name: Fresh Install ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu
+            label: Linux x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
     steps:
       - name: Checkout
@@ -1753,15 +1753,15 @@ jobs:
     name: Upgrade ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu
+            label: Linux x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
     steps:
       - name: Checkout
@@ -1848,18 +1848,18 @@ jobs:
     name: Self-Update ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             icon: 🐧
-            label: Ubuntu
+            label: Linux x64
           - os: macos-14
-            icon: 💻
-            label: ARM
+            icon: 🍎
+            label: macOS ARM64
           - os: windows-latest
-            icon: 🔷
-            label: Windows
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -2206,7 +2206,7 @@ jobs:
   #   # Native ARM64 runner (requires GitHub Teams/Enterprise or larger runners)
   #   runs-on: ubuntu-24.04-arm64
   #   strategy:
-  #     fail-fast: true
+  #     fail-fast: false
   #     matrix:
   #       test:
   #         - unit

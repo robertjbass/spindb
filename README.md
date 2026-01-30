@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![npm downloads](https://img.shields.io/npm/dm/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
-[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#platform-coverage)
+[![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#supported-engines--platforms)
 
 **One CLI for all your local databases.**
 
@@ -23,6 +23,35 @@ spindb create cache --engine redis
 
 # All running side-by-side, all managed the same way
 ```
+
+---
+
+## Supported Engines & Platforms
+
+SpinDB supports **16 database engines** across **5 platform architectures**—all with a consistent API.
+
+| Engine | Type | macOS ARM | macOS Intel | Linux x64 | Linux ARM | Windows |
+|--------|------|:---------:|:-----------:|:---------:|:---------:|:-------:|
+| 🐘 **PostgreSQL** | Relational SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🐬 **MySQL** | Relational SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦭 **MariaDB** | Relational SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🪶 **SQLite** | Embedded SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦆 **DuckDB** | Embedded OLAP | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🍃 **MongoDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🦔 **FerretDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 🔴 **Redis** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔷 **Valkey** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🏠 **ClickHouse** | Columnar OLAP | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 🧭 **Qdrant** | Vector Search | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔍 **Meilisearch** | Full-Text Search | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🛋️ **CouchDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🪳 **CockroachDB** | Distributed SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🌀 **SurrealDB** | Multi-Model | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ⏱️ **QuestDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+**78 combinations. One CLI. Zero configuration.**
+
+> ClickHouse and FerretDB are available on Windows via WSL.
 
 ---
 
@@ -65,33 +94,6 @@ spindb run mydb -c "db.users.find().pretty()"           # MongoDB
 spindb run mydb -c "SET mykey myvalue"                  # Redis/Valkey
 spindb run mydb -c "SELECT * FROM system.tables"        # ClickHouse
 ```
-
----
-
-## Platform Coverage
-
-SpinDB works across **16 database engines** and **5 platform architectures** with a **single, consistent API**.
-
-| Database | macOS ARM64 | macOS Intel | Linux x64 | Linux ARM64 | Windows x64 |
-|----------|:-----------:|:-----------:|:---------:|:-----------:|:-----------:|
-| 🐘 **PostgreSQL** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🐬 **MySQL** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🦭 **MariaDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🪶 **SQLite** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🦆 **DuckDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🍃 **MongoDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🦔 **FerretDB** | ✅ | ✅ | ✅ | ✅ | ❌ |
-| 🔴 **Redis** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🔷 **Valkey** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🏠 **ClickHouse** | ✅ | ✅ | ✅ | ✅ | ❌ |
-| 🧭 **Qdrant** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🔍 **Meilisearch** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🛋️ **CouchDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🪳 **CockroachDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🌀 **SurrealDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ⏱️ **QuestDB** | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-**78 combinations. One CLI. Zero configuration.**
 
 ---
 
@@ -165,20 +167,56 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 - **Multi-version support** - Run PostgreSQL 14 and 18 side-by-side
 - **Unified interface** - Manage PostgreSQL, MongoDB, and Redis the same way
 
-### Comparison Matrix
+### Comparison: Database GUI Tools
 
-| Feature | SpinDB | Docker | DBngin | Postgres.app | XAMPP |
-|---------|--------|--------|--------|--------------|-------|
-| **All database types unified** | ✅ 16 engines | ❌ | ❌ | ❌ | ❌ |
-| No Docker required | ✅ | ❌ | ✅ | ✅ | ✅ |
-| CLI-first | ✅ | ✅ | ❌ GUI-first | ❌ GUI-first | ❌ GUI-first |
-| Multiple versions side-by-side | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Clone databases | ✅ | Manual | ✅ | ❌ | ❌ |
-| Backup/restore built-in | ✅ | Manual | ✅ | ❌ | ❌ |
-| Low resource usage | ✅ Native | ❌ VM overhead | ✅ Native | ✅ Native | ✅ Native |
-| Linux support | ✅ | ✅ | ❌ | ❌ | ✅ |
-| ARM64 support | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Free for commercial use | ❌ | ⚠️ Paid for orgs | ✅ | ✅ | ✅ |
+*For developers who prefer visual interfaces or use macOS-native tools.*
+
+| Feature | SpinDB | DBngin | Postgres.app | Laragon |
+|---------|--------|--------|--------------|---------|
+| **Engines supported** | 16 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
+| CLI-first | ✅ | ❌ GUI-only | ❌ GUI-only | ⚠️ Limited CLI |
+| Multi-version support | ✅ | ✅ | ✅ | ✅ |
+| Built-in backup/restore | ✅ | ✅ | ❌ | ⚠️ Manual |
+| Clone databases | ✅ | ✅ | ❌ | ❌ |
+| macOS | ✅ | ✅ | ✅ | ❌ |
+| Linux | ✅ | ❌ | ❌ | ❌ |
+| Windows | ✅ | ❌ | ❌ | ✅ |
+| Free for commercial use | ❌ | ✅ | ✅ | ✅ |
+
+### Comparison: Docker & Containers
+
+*For developers already using containerization.*
+
+| Feature | SpinDB | Docker Desktop | Podman | OrbStack |
+|---------|--------|----------------|--------|----------|
+| **Engines supported** | 16 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
+| Daemon required | ❌ | ✅ | ❌ (rootless) | ✅ |
+| Resource overhead | Native | VM + containers | VM + containers | VM + containers |
+| Built-in backup/restore | ✅ | ❌ Manual | ❌ Manual | ❌ Manual |
+| Connection strings | ✅ Auto-generated | ❌ Manual | ❌ Manual | ❌ Manual |
+| Version switching | ✅ Instant | ⚠️ Pull images | ⚠️ Pull images | ⚠️ Pull images |
+| Database-specific CLI | ✅ Included | ❌ Exec into container | ❌ Exec into container | ❌ Exec into container |
+| Prod parity | ⚠️ Native binaries | ✅ Exact images | ✅ Exact images | ✅ Exact images |
+| Free for commercial use | ❌ | ⚠️ Paid for orgs | ✅ | ⚠️ Paid tiers |
+
+### Comparison: Package Managers
+
+*For developers who "just install" databases system-wide.*
+
+| Feature | SpinDB | Homebrew | apt/winget | asdf-vm |
+|---------|--------|----------|------------|---------|
+| **Engines supported** | 16 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
+| Multi-version side-by-side | ✅ | ⚠️ Complex | ❌ | ✅ |
+| Isolated data directories | ✅ | ❌ System-wide | ❌ System-wide | ❌ |
+| Built-in backup/restore | ✅ | ❌ | ❌ | ❌ |
+| Unified CLI across engines | ✅ | ❌ | ❌ | ❌ |
+| No root/sudo required | ✅ | ✅ | ❌ | ✅ |
+| macOS | ✅ | ✅ | ❌ | ✅ |
+| Linux | ✅ | ✅ | ✅ | ✅ |
+| Windows | ✅ | ❌ | ✅ (winget) | ⚠️ WSL |
+| Free for commercial use | ❌ | ✅ | ✅ | ✅ |
+
+> **Note on licensing:** SpinDB requires a commercial license for business use. For personal projects, education, research, nonprofits, and government use, SpinDB is free. See [License](#license) for details.
 
 ---
 
@@ -290,12 +328,30 @@ spindb backup mydb --format custom              # Custom binary format (PostgreS
 spindb restore mydb backup.dump
 spindb restore mydb backup.sql --database prod_copy
 
-# Pull from remote database
-spindb restore mydb --from-url "postgresql://user:pass@prod-host/db"
-
 # Clone existing database
 spindb create prod-copy --from ./prod-backup.dump
 spindb create staging --from "postgresql://user:pass@prod:5432/production"
+```
+
+### Pull from Remote Database
+
+Sync production data to your local database while automatically backing up your original data:
+
+```bash
+# Pull production data (backs up original, replaces with remote)
+spindb pull mydb --from "postgresql://user:pass@prod-host/db"
+
+# Read URL from environment variable (keeps credentials out of shell history)
+spindb pull mydb --from-env CLONE_FROM_DATABASE_URL
+
+# Clone mode: pull to new database (original untouched)
+spindb pull mydb --from-env PROD_URL --as mydb_prod
+
+# Preview what will happen
+spindb pull mydb --from-env PROD_URL --dry-run
+
+# Run post-pull script (e.g., sync local credentials)
+spindb pull mydb --from-env PROD_URL --post-script ./sync-credentials.ts
 ```
 
 ### Container Management
@@ -439,8 +495,6 @@ Databases run as **native processes**, and **data persists across restarts**. Wh
 ---
 
 ## Engine-Specific Details
-
-Each database engine has unique features and behaviors. See full documentation in [ENGINES.md](ENGINES.md).
 
 ### PostgreSQL 🐘
 

@@ -19,58 +19,131 @@ export const databasesCommand = new Command('databases').description(
   'Manage database tracking within a container',
 )
 
-// List databases in a container
+// List databases in a container (or all containers if none specified)
 databasesCommand
   .command('list')
-  .description('List tracked databases in a container')
-  .argument('<container>', 'Container name')
+  .description('List tracked databases in a container (or all containers)')
+  .argument('[container]', 'Container name (optional - lists all if omitted)')
   .option('-j, --json', 'Output as JSON')
-  .action(async (container: string, options: { json?: boolean }) => {
-    try {
-      const config = await containerManager.getConfig(container)
-      if (!config) {
+  .option('--default', 'Show only the default database (requires container)')
+  .action(
+    async (
+      container: string | undefined,
+      options: { json?: boolean; default?: boolean },
+    ) => {
+      try {
+        // --default requires a container
+        if (options.default && !container) {
+          const errorMsg = '--default requires a container name'
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }, null, 2))
+          } else {
+            console.error(uiError(errorMsg))
+          }
+          process.exit(1)
+        }
+
+        // If no container specified, list all containers with their databases
+        if (!container) {
+          const containers = await containerManager.list()
+
+          if (containers.length === 0) {
+            if (options.json) {
+              console.log(JSON.stringify([], null, 2))
+            } else {
+              console.log()
+              console.log(chalk.gray('No containers found.'))
+              console.log()
+            }
+            return
+          }
+
+          if (options.json) {
+            const result = containers.map((c) => {
+              const rawDatabases = c.databases || []
+              const databases = [...new Set([c.database, ...rawDatabases])]
+              return {
+                container: c.name,
+                engine: c.engine,
+                primary: c.database,
+                databases,
+              }
+            })
+            console.log(JSON.stringify(result, null, 2))
+          } else {
+            console.log()
+            for (const c of containers) {
+              const rawDatabases = c.databases || []
+              const databases = [...new Set([c.database, ...rawDatabases])]
+              console.log(
+                chalk.bold(`${c.name}`) + chalk.gray(` (${c.engine})`),
+              )
+              for (const db of databases) {
+                const isPrimary = db === c.database
+                const label = isPrimary ? chalk.gray(' (primary)') : ''
+                console.log(`  ${chalk.cyan(db)}${label}`)
+              }
+              console.log()
+            }
+          }
+          return
+        }
+
+        // Single container specified
+        const config = await containerManager.getConfig(container)
+        if (!config) {
+          if (options.json) {
+            console.log(
+              JSON.stringify(
+                { error: `Container "${container}" not found` },
+                null,
+                2,
+              ),
+            )
+          } else {
+            console.error(uiError(`Container "${container}" not found`))
+          }
+          process.exit(1)
+        }
+
+        // --default flag: just output the default database name
+        if (options.default) {
+          if (options.json) {
+            console.log(JSON.stringify({ database: config.database }, null, 2))
+          } else {
+            console.log(config.database)
+          }
+          return
+        }
+
+        // Merge config.databases with config.database to ensure primary is always included
+        const rawDatabases = config.databases || []
+        const databases = [...new Set([config.database, ...rawDatabases])]
+
         if (options.json) {
-          console.log(
-            JSON.stringify({ error: `Container "${container}" not found` }),
-          )
+          // Return the full container config - it's already JSON and has all the info
+          console.log(JSON.stringify(config, null, 2))
         } else {
-          console.error(uiError(`Container "${container}" not found`))
+          console.log()
+          console.log(chalk.bold(`Databases in "${container}":`))
+          for (const db of databases) {
+            const isPrimary = db === config.database
+            const label = isPrimary ? chalk.gray(' (primary)') : ''
+            console.log(`  ${chalk.cyan(db)}${label}`)
+          }
+          console.log()
+        }
+      } catch (error) {
+        const e = error as Error
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }, null, 2))
+        } else {
+          console.error(uiError(e.message))
         }
         process.exit(1)
       }
-
-      // Merge config.databases with config.database to ensure primary is always included
-      const rawDatabases = config.databases || []
-      const databases = [...new Set([config.database, ...rawDatabases])]
-
-      if (options.json) {
-        console.log(
-          JSON.stringify({
-            container,
-            primary: config.database,
-            databases,
-          }),
-        )
-      } else {
-        console.log()
-        console.log(chalk.bold(`Databases in "${container}":`))
-        for (const db of databases) {
-          const isPrimary = db === config.database
-          const label = isPrimary ? chalk.gray(' (primary)') : ''
-          console.log(`  ${chalk.cyan(db)}${label}`)
-        }
-        console.log()
-      }
-    } catch (error) {
-      const e = error as Error
-      if (options.json) {
-        console.log(JSON.stringify({ error: e.message }))
-      } else {
-        console.error(uiError(e.message))
-      }
-      process.exit(1)
-    }
-  })
+    },
+  )
 
 // Add a database to tracking
 databasesCommand
@@ -92,7 +165,11 @@ databasesCommand
         if (!config) {
           if (options.json) {
             console.log(
-              JSON.stringify({ error: `Container "${container}" not found` }),
+              JSON.stringify(
+                { error: `Container "${container}" not found` },
+                null,
+                2,
+              ),
             )
           } else {
             console.error(uiError(`Container "${container}" not found`))
@@ -106,11 +183,15 @@ databasesCommand
         if (databases.includes(database)) {
           if (options.json) {
             console.log(
-              JSON.stringify({
-                success: true,
-                message: `Database "${database}" is already tracked`,
-                databases,
-              }),
+              JSON.stringify(
+                {
+                  success: true,
+                  message: `Database "${database}" is already tracked`,
+                  databases,
+                },
+                null,
+                2,
+              ),
             )
           } else {
             console.log(
@@ -128,11 +209,15 @@ databasesCommand
 
         if (options.json) {
           console.log(
-            JSON.stringify({
-              success: true,
-              added: database,
-              databases: updatedDatabases,
-            }),
+            JSON.stringify(
+              {
+                success: true,
+                added: database,
+                databases: updatedDatabases,
+              },
+              null,
+              2,
+            ),
           )
         } else {
           console.log(
@@ -142,7 +227,7 @@ databasesCommand
       } catch (error) {
         const e = error as Error
         if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
+          console.log(JSON.stringify({ error: e.message }, null, 2))
         } else {
           console.error(uiError(e.message))
         }
@@ -171,7 +256,11 @@ databasesCommand
         if (!config) {
           if (options.json) {
             console.log(
-              JSON.stringify({ error: `Container "${container}" not found` }),
+              JSON.stringify(
+                { error: `Container "${container}" not found` },
+                null,
+                2,
+              ),
             )
           } else {
             console.error(uiError(`Container "${container}" not found`))
@@ -183,7 +272,7 @@ databasesCommand
         if (database === config.database) {
           const errorMsg = `Cannot remove primary database "${database}" from tracking`
           if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
+            console.log(JSON.stringify({ error: errorMsg }, null, 2))
           } else {
             console.error(uiError(errorMsg))
           }
@@ -196,11 +285,15 @@ databasesCommand
         if (!databases.includes(database)) {
           if (options.json) {
             console.log(
-              JSON.stringify({
-                success: true,
-                message: `Database "${database}" is not tracked`,
-                databases,
-              }),
+              JSON.stringify(
+                {
+                  success: true,
+                  message: `Database "${database}" is not tracked`,
+                  databases,
+                },
+                null,
+                2,
+              ),
             )
           } else {
             console.log(
@@ -218,11 +311,15 @@ databasesCommand
 
         if (options.json) {
           console.log(
-            JSON.stringify({
-              success: true,
-              removed: database,
-              databases: updatedDatabases,
-            }),
+            JSON.stringify(
+              {
+                success: true,
+                removed: database,
+                databases: updatedDatabases,
+              },
+              null,
+              2,
+            ),
           )
         } else {
           console.log(
@@ -232,7 +329,7 @@ databasesCommand
       } catch (error) {
         const e = error as Error
         if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
+          console.log(JSON.stringify({ error: e.message }, null, 2))
         } else {
           console.error(uiError(e.message))
         }
@@ -261,7 +358,11 @@ databasesCommand
         if (!config) {
           if (options.json) {
             console.log(
-              JSON.stringify({ error: `Container "${container}" not found` }),
+              JSON.stringify(
+                { error: `Container "${container}" not found` },
+                null,
+                2,
+              ),
             )
           } else {
             console.error(uiError(`Container "${container}" not found`))
@@ -273,7 +374,7 @@ databasesCommand
         if (oldName === config.database) {
           const errorMsg = `Cannot sync primary database "${oldName}". Use 'spindb edit' to change the primary database.`
           if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
+            console.log(JSON.stringify({ error: errorMsg }, null, 2))
           } else {
             console.error(uiError(errorMsg))
           }
@@ -284,7 +385,7 @@ databasesCommand
         if (oldName === newName) {
           const errorMsg = `Old and new database names are the same: "${oldName}"`
           if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
+            console.log(JSON.stringify({ error: errorMsg }, null, 2))
           } else {
             console.error(uiError(errorMsg))
           }
@@ -316,7 +417,7 @@ databasesCommand
           if (wasTracked) {
             result.removed = oldName
           }
-          console.log(JSON.stringify(result))
+          console.log(JSON.stringify(result, null, 2))
         } else {
           console.log(
             uiSuccess(
@@ -327,7 +428,110 @@ databasesCommand
       } catch (error) {
         const e = error as Error
         if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
+          console.log(JSON.stringify({ error: e.message }, null, 2))
+        } else {
+          console.error(uiError(e.message))
+        }
+        process.exit(1)
+      }
+    },
+  )
+
+// Set the default/primary database for a container
+databasesCommand
+  .command('set-default')
+  .description('Set the default (primary) database for a container')
+  .argument('<container>', 'Container name')
+  .argument('<database>', 'Database name to set as default')
+  .option('-j, --json', 'Output as JSON')
+  .action(
+    async (
+      container: string,
+      database: string,
+      options: { json?: boolean },
+    ) => {
+      try {
+        const config = await containerManager.getConfig(container)
+        if (!config) {
+          if (options.json) {
+            console.log(
+              JSON.stringify(
+                { error: `Container "${container}" not found` },
+                null,
+                2,
+              ),
+            )
+          } else {
+            console.error(uiError(`Container "${container}" not found`))
+          }
+          process.exit(1)
+        }
+
+        // Check if database is tracked
+        const rawDatabases = config.databases || []
+        const databases = [...new Set([config.database, ...rawDatabases])]
+        if (!databases.includes(database)) {
+          const errorMsg = `Database "${database}" is not tracked in "${container}". Add it first with: spindb databases add ${container} ${database}`
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }, null, 2))
+          } else {
+            console.error(uiError(errorMsg))
+          }
+          process.exit(1)
+        }
+
+        // Check if already the default
+        if (database === config.database) {
+          if (options.json) {
+            console.log(
+              JSON.stringify(
+                {
+                  success: true,
+                  message: `Database "${database}" is already the default`,
+                  primary: database,
+                  databases,
+                },
+                null,
+                2,
+              ),
+            )
+          } else {
+            console.log(
+              chalk.gray(
+                `Database "${database}" is already the default in "${container}"`,
+              ),
+            )
+          }
+          return
+        }
+
+        // Update the primary database
+        await containerManager.updateConfig(container, { database })
+
+        if (options.json) {
+          console.log(
+            JSON.stringify(
+              {
+                success: true,
+                primary: database,
+                previous: config.database,
+                databases,
+              },
+              null,
+              2,
+            ),
+          )
+        } else {
+          console.log(
+            uiSuccess(
+              `Default database changed from "${config.database}" to "${database}" in "${container}"`,
+            ),
+          )
+        }
+      } catch (error) {
+        const e = error as Error
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }, null, 2))
         } else {
           console.error(uiError(e.message))
         }

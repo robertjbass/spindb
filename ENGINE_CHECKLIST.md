@@ -61,7 +61,6 @@ This comprehensive document provides both the specification for adding a new dat
 | `tests/docker/Dockerfile` | Add engine binaries and dependencies |
 | `.github/workflows/ci.yml` | Add CI job |
 | `README.md` | Update documentation |
-| `ENGINES.md` | Add engine details |
 | `ARCHITECTURE.md` | Update architecture |
 | `CLAUDE.md` | Update project docs |
 | `CHANGELOG.md` | Add entry |
@@ -2135,15 +2134,6 @@ fi
 - [ ] Add to Connection String Formats table
 - [ ] Remove from Roadmap if it was listed as planned
 
-### ENGINES.md
-
-- [ ] Add to Supported engines table
-- [ ] Remove from Planned section (if applicable)
-- [ ] Add Engine Details section with full documentation
-- [ ] Add to Backup Format Summary table
-- [ ] Add to Enhanced CLI Tools table
-- [ ] Add to Engine Icons table (ASCII code, Nerd Font glyph, emoji)
-
 ### ARCHITECTURE.md
 
 - [ ] Update description to include engine
@@ -2363,7 +2353,7 @@ ls -la tests/integration/{engine}.test.ts
 ls -la tests/unit/{engine}-*.test.ts
 
 # Check documentation changes
-git diff --stat README.md ENGINES.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md
+git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md TODO.md
 ```
 
 ### Manual Verification
@@ -2580,11 +2570,6 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Added Backup & Restore section
 - [ ] Added to Connection String Formats
 - [ ] Removed from Roadmap (if applicable)
-- [ ] Updated `ENGINES.md` supported engines table
-- [ ] Removed from Planned section (if applicable)
-- [ ] Added Engine Details section
-- [ ] Added to Backup Format Summary table
-- [ ] Added to Engine Icons table
 - [ ] Updated `ARCHITECTURE.md` description
 - [ ] Updated architecture diagram
 - [ ] Added to Engine Types list

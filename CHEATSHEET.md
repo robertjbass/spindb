@@ -65,6 +65,21 @@ spindb url mydb -d analytics            # URL for specific database
 spindb url mydb --json                  # JSON with host/port/user details
 ```
 
+## Find Container
+
+Find which container matches a port or connection URL. Useful for scripting.
+
+```bash
+spindb which --port 5432                # Find container on port 5432
+spindb which --url "$DATABASE_URL"      # Find container matching URL
+spindb which --port 5432 --running      # Only match running containers
+spindb which --port 5432 --json         # JSON output for scripting
+
+# Use in scripts to auto-detect container
+CONTAINER=$(spindb which --url "$DATABASE_URL")
+spindb pull "$CONTAINER" --from-env PROD_DB_URL
+```
+
 ## Backup & Restore
 
 ```bash
@@ -103,22 +118,168 @@ spindb clone mydb mydb-copy             # Clone container
 spindb start mydb-copy                  # Start on new port
 ```
 
+## Pull (Sync from Remote)
+
+Pull remote database data into a local container with automatic backup.
+
+```bash
+# Replace mode (default): backs up original, then replaces with remote data
+spindb pull mydb --from "postgresql://user:pass@prod.example.com/db"
+
+# Read URL from environment variable (keeps credentials out of shell history)
+spindb pull mydb --from-env CLONE_FROM_DATABASE_URL
+
+# Clone mode: pull to new database, leave original untouched
+spindb pull mydb --from-env PROD_DB_URL --as mydb_prod
+
+# Target specific database (default: container's primary database)
+spindb pull mydb --from-env PROD_DB_URL -d analytics
+
+# Skip backup (dangerous, requires --force)
+spindb pull mydb --from-env PROD_DB_URL --no-backup -f
+
+# Preview changes without executing
+spindb pull mydb --from-env PROD_DB_URL --dry-run
+
+# Run script after pull (e.g., sync credentials)
+spindb pull mydb --from-env PROD_DB_URL --post-script ./sync-creds.ts
+
+# JSON output for scripting (includes connection URLs)
+spindb pull mydb --from-env PROD_DB_URL --json
+```
+
+**JSON output includes connection URLs for scripting:**
+```json
+{
+  "success": true,
+  "mode": "replace",
+  "container": "mydb",
+  "port": 5432,
+  "database": "efficientdb",
+  "databaseUrl": "postgresql://postgres@127.0.0.1:5432/efficientdb",
+  "backupDatabase": "efficientdb_20260129_143052",
+  "backupUrl": "postgresql://postgres@127.0.0.1:5432/efficientdb_20260129_143052",
+  "source": "postgresql://user:***@prod.example.com/db"
+}
+```
+
+> **vs restore --from-url:** `restore` directly overwrites without backup. `pull` automatically creates a timestamped backup (e.g., `mydb_20260129_143052`) before replacing, so you can always revert.
+
+### Post-Pull Scripts
+
+Post-pull scripts run after the pull completes, with access to both the new data and your original data (backup). This is useful for syncing credentials from your local database to the pulled production data.
+
+SpinDB writes a JSON context file and sets `SPINDB_CONTEXT` env var pointing to it:
+
+```json
+{
+  "container": "myapp",
+  "engine": "postgresql",
+  "mode": "replace",
+  "port": 5432,
+  "newDatabase": "mydb",
+  "newUrl": "postgresql://postgres@127.0.0.1:5432/mydb",
+  "originalDatabase": "mydb_20260129_143052",
+  "originalUrl": "postgresql://postgres@127.0.0.1:5432/mydb_20260129_143052"
+}
+```
+
+### Example: Sync user credentials after pulling production data
+
+```typescript
+#!/usr/bin/env tsx
+// sync-credentials.ts - Preserves local passwords after pulling prod
+import { readFileSync } from 'fs'
+import pg from 'pg'
+
+const ctx = JSON.parse(readFileSync(process.env.SPINDB_CONTEXT!, 'utf-8'))
+const { originalUrl, newUrl } = ctx
+
+const originalPool = new pg.Pool({ connectionString: originalUrl })
+const newPool = new pg.Pool({ connectionString: newUrl })
+
+async function syncCredentials() {
+  const originalClient = await originalPool.connect()
+  const newClient = await newPool.connect()
+
+  try {
+    // Get credentials from original (backup) database
+    const { rows } = await originalClient.query(`
+      SELECT email, password_hash, password_salt, refresh_token_hash
+      FROM users WHERE email IS NOT NULL
+    `)
+
+    if (!rows.length) return
+
+    // Build batch UPDATE
+    const values: string[] = []
+    const params: string[] = []
+
+    rows.forEach((u, i) => {
+      const base = i * 4
+      values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`)
+      params.push(u.email, u.password_hash, u.password_salt, u.refresh_token_hash)
+    })
+
+    await newClient.query('BEGIN')
+    await newClient.query(`
+      UPDATE users AS n SET
+        password_hash = v.password_hash,
+        password_salt = v.password_salt,
+        refresh_token_hash = v.refresh_token_hash,
+        updated_at = NOW()
+      FROM (VALUES ${values.join(',')}) AS v(email, password_hash, password_salt, refresh_token_hash)
+      WHERE n.email = v.email
+    `, params)
+    await newClient.query('COMMIT')
+
+    console.log(`Synced credentials for ${rows.length} users`)
+  } catch (e) {
+    await newClient.query('ROLLBACK')
+    throw e
+  } finally {
+    originalClient.release()
+    newClient.release()
+    await originalPool.end()
+    await newPool.end()
+  }
+}
+
+syncCredentials()
+```
+
+> **Note:** When using `--no-backup` with `--post-script`, SpinDB still creates a temporary backup so your script can access the original data, then drops it after the script succeeds.
+
 ## Database Tracking
 
 SpinDB tracks which databases exist within each container. Use these commands to keep tracking in sync after external changes (e.g., SQL renames, scripts that create/drop databases).
 
 ```bash
-spindb databases list mydb              # List tracked databases
+spindb databases list                   # List all containers with their databases
+spindb databases list mydb              # List tracked databases in a container
+spindb databases list mydb --default    # Show only the default database name
 spindb databases add mydb analytics     # Add database to tracking
 spindb databases remove mydb old_backup # Remove from tracking
 spindb databases sync mydb old new      # Sync after rename (remove old, add new)
+spindb databases set-default mydb prod  # Change the default/primary database
 
 # JSON output for scripting
+spindb databases list --json            # All containers with databases as JSON
 spindb databases list mydb --json
+spindb databases list mydb --default --json  # {"database": "mydb"}
 spindb databases add mydb newdb --json
+spindb databases set-default mydb prod --json
 ```
 
 > **Note:** These commands only update SpinDB's tracking. They do NOT create or drop actual databases. Use `spindb run` for that.
+
+The **default database** is used when no `-d` flag is provided to commands like `spindb run`, `spindb backup`, etc. Change it via CLI or the interactive menu's "Change default database" option.
+
+**Scripting pattern** - Get the default database for use in scripts:
+```bash
+DB=$(spindb databases list myapp --default)
+spindb run myapp -d "$DB" -c "SELECT * FROM users"
+```
 
 ## Edit & Configure
 

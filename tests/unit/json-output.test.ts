@@ -138,6 +138,27 @@ describe('JSON Output Validation', () => {
       }
     })
 
+    it('spindb databases list --json (all containers)', () => {
+      const result = runCommand('databases list --json')
+      // databases list --json should succeed even with no containers
+      if (result.exitCode === 0) {
+        assertValidJson(result.stdout, 'databases list --json')
+        const parsed = JSON.parse(result.stdout.trim())
+        // Should be an array of containers with their databases
+        if (!Array.isArray(parsed)) {
+          throw new Error('databases list --json should output an array')
+        }
+        // If there are containers, validate structure
+        for (const item of parsed) {
+          if (!item.container || !item.engine || !item.databases) {
+            throw new Error(
+              'databases list item missing required fields (container, engine, databases)',
+            )
+          }
+        }
+      }
+    })
+
     it('spindb engines supported --json', () => {
       const result = runCommand('engines supported --json')
       // This should always succeed - it reads from engines.json
@@ -246,6 +267,86 @@ describe('JSON Output Validation', () => {
       const output = result.stdout.trim()
       if (output) {
         assertValidJson(output, 'detach nonexistent --json')
+      }
+    })
+
+    it('spindb databases list nonexistent --json should output JSON error', () => {
+      const result = runCommand(
+        'databases list nonexistent-container-12345 --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error(
+          'databases list --json should fail for nonexistent container',
+        )
+      }
+      const output = result.stdout.trim()
+      if (output) {
+        assertValidJson(output, 'databases list nonexistent --json')
+        // Verify the error structure
+        const parsed = JSON.parse(output)
+        if (!parsed.error) {
+          throw new Error('databases list error should include "error" field')
+        }
+      }
+    })
+
+    it('spindb databases add nonexistent db --json should output JSON error', () => {
+      const result = runCommand(
+        'databases add nonexistent-container-12345 testdb --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error(
+          'databases add --json should fail for nonexistent container',
+        )
+      }
+      const output = result.stdout.trim()
+      if (output) {
+        assertValidJson(output, 'databases add nonexistent --json')
+      }
+    })
+
+    it('spindb databases remove nonexistent db --json should output JSON error', () => {
+      const result = runCommand(
+        'databases remove nonexistent-container-12345 testdb --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error(
+          'databases remove --json should fail for nonexistent container',
+        )
+      }
+      const output = result.stdout.trim()
+      if (output) {
+        assertValidJson(output, 'databases remove nonexistent --json')
+      }
+    })
+
+    it('spindb databases sync nonexistent old new --json should output JSON error', () => {
+      const result = runCommand(
+        'databases sync nonexistent-container-12345 olddb newdb --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error(
+          'databases sync --json should fail for nonexistent container',
+        )
+      }
+      const output = result.stdout.trim()
+      if (output) {
+        assertValidJson(output, 'databases sync nonexistent --json')
+      }
+    })
+
+    it('spindb databases set-default nonexistent db --json should output JSON error', () => {
+      const result = runCommand(
+        'databases set-default nonexistent-container-12345 testdb --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error(
+          'databases set-default --json should fail for nonexistent container',
+        )
+      }
+      const output = result.stdout.trim()
+      if (output) {
+        assertValidJson(output, 'databases set-default nonexistent --json')
       }
     })
   })

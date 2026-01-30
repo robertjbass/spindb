@@ -32,6 +32,11 @@ import {
   promptInstallDependencies,
   promptConfirm,
   escapeablePrompt,
+  filterableListPrompt,
+  type FilterableChoice,
+  BACK_VALUE,
+  MAIN_MENU_VALUE,
+  ESCAPE_VALUE,
 } from '../../ui/prompts'
 import { createSpinner } from '../../ui/spinner'
 import {
@@ -42,7 +47,7 @@ import {
   connectionBox,
   formatBytes,
 } from '../../ui/theme'
-import { getEngineIcon } from '../../constants'
+import { getEngineIcon, getPageSize } from '../../constants'
 import { Engine, assertExhaustive } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
@@ -347,12 +352,15 @@ export async function handleRestore(): Promise<void> {
     const containers = await containerManager.list()
     const running = containers.filter((c) => c.status === 'running')
 
-    const choices = [
-      ...running.map((c) => ({
-        name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
-        value: c.name,
-        short: c.name,
-      })),
+    // Build filterable container choices
+    const containerChoices: FilterableChoice[] = running.map((c) => ({
+      name: `${c.name} ${chalk.gray(`(${getEngineIcon(c.engine)}${c.engine} ${c.version}, port ${c.port})`)} ${chalk.green('● running')}`,
+      value: c.name,
+      short: c.name,
+    }))
+
+    // Build footer with action and navigation options
+    const footerChoices: (FilterableChoice | inquirer.Separator)[] = [
       new inquirer.Separator(),
       {
         name: `${chalk.green('➕')} Create new container`,
@@ -360,25 +368,32 @@ export async function handleRestore(): Promise<void> {
         short: 'Create new',
       },
       new inquirer.Separator(),
+      { name: `${chalk.blue('←')} Back`, value: BACK_VALUE },
       {
-        name: `${chalk.blue('←')} Back`,
-        value: '__back__',
+        name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
+        value: MAIN_MENU_VALUE,
       },
+      new inquirer.Separator(),
     ]
 
-    const { selectedContainer } = await escapeablePrompt<{
-      selectedContainer: string
-    }>([
-      {
-        type: 'list',
-        name: 'selectedContainer',
-        message: 'Select container to restore to:',
-        choices,
-        pageSize: 15,
-      },
-    ])
+    const allChoices = [...containerChoices, ...footerChoices]
 
-    if (selectedContainer === '__back__') {
+    const selectedContainer = await filterableListPrompt(
+      allChoices,
+      'Select container to restore to:',
+      {
+        filterableCount: containerChoices.length,
+        pageSize: getPageSize(),
+        emptyText: 'No containers match filter',
+      },
+    )
+
+    // Handle navigation (including escape)
+    if (
+      selectedContainer === ESCAPE_VALUE ||
+      selectedContainer === BACK_VALUE ||
+      selectedContainer === MAIN_MENU_VALUE
+    ) {
       return
     }
 
@@ -911,8 +926,14 @@ export async function handleRestore(): Promise<void> {
 /**
  * Shared backup flow for both main menu and container submenu
  * Reduces code duplication between handleBackup and handleBackupForContainer
+ *
+ * @param containerName - The container to backup
+ * @param database - Optional database name (skips database selection if provided)
  */
-async function performBackupFlow(containerName: string): Promise<void> {
+async function performBackupFlow(
+  containerName: string,
+  database?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
@@ -956,11 +977,14 @@ async function performBackupFlow(containerName: string): Promise<void> {
     depsSpinner.succeed('Required tools available')
   }
 
-  // Select database (auto-select if only one)
+  // Use provided database or select from available databases
   const databases = config.databases || [config.database]
   let databaseName: string
 
-  if (databases.length > 1) {
+  if (database) {
+    // Use the pre-selected database from the container submenu
+    databaseName = database
+  } else if (databases.length > 1) {
     databaseName = await promptDatabaseSelect(
       databases,
       'Select database to backup:',
@@ -1054,17 +1078,22 @@ export async function handleBackup(): Promise<void> {
  */
 export async function handleBackupForContainer(
   containerName: string,
+  database?: string,
 ): Promise<void> {
-  await performBackupFlow(containerName)
+  await performBackupFlow(containerName, database)
   await pressEnterToContinue()
 }
 
 /**
  * Handle restore for a specific container (used from container submenu)
  * Skips container selection since we already know which container
+ *
+ * @param containerName - The container to restore to
+ * @param database - Optional database name (pre-selects target database if provided)
  */
 export async function handleRestoreForContainer(
   containerName: string,
+  database?: string,
 ): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
@@ -1343,12 +1372,18 @@ export async function handleRestoreForContainer(
       return
     }
   } else {
-    // Replace existing database - auto-select if only one
-    if (existingDatabases.length === 1) {
+    // Replace existing database - use pre-selected or auto-select if only one
+    if (database) {
+      // Use the pre-selected database from the container submenu
+      databaseName = database
+      console.log(chalk.gray(`  Target database: ${databaseName}`))
+    } else if (existingDatabases.length === 1) {
       databaseName = existingDatabases[0]
       console.log(chalk.gray(`  Using database: ${databaseName}`))
     } else {
-      const { database } = await escapeablePrompt<{ database: string }>([
+      const { database: selectedDb } = await escapeablePrompt<{
+        database: string
+      }>([
         {
           type: 'list',
           name: 'database',
@@ -1356,7 +1391,7 @@ export async function handleRestoreForContainer(
           choices: existingDatabases.map((db) => ({ name: db, value: db })),
         },
       ])
-      databaseName = database
+      databaseName = selectedDb
     }
   }
 
