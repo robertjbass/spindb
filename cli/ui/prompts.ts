@@ -30,12 +30,20 @@ import {
 export const BACK_VALUE = '__back__'
 export const MAIN_MENU_VALUE = '__main__'
 export const ESCAPE_VALUE = '__escape__'
+export const TOGGLE_PREFIX = '__toggle__:'
 
 // Global escape handler state
 let globalEscapeEnabled = false
 let escapeTriggered = false
 let escapeReject: ((error: Error) => void) | null = null
 let currentPromptUi: { close?: () => void } | null = null
+
+// Toggle handler state (Shift+Tab to toggle container start/stop)
+let toggleEnabled = false
+let toggleCursorPosition = 0
+let toggleCurrentItems: FilterableChoice[] = []
+let toggleTriggered = false
+let toggleTargetValue: string | null = null
 
 // Custom error class for escape
 export class EscapeError extends Error {
@@ -45,13 +53,74 @@ export class EscapeError extends Error {
   }
 }
 
-// Module-scoped stdin data handler for escape key detection
+// Custom error class for toggle (Shift+Tab)
+export class ToggleError extends Error {
+  targetValue: string
+  constructor(targetValue: string) {
+    super('Toggle pressed')
+    this.name = 'ToggleError'
+    this.targetValue = targetValue
+  }
+}
+
+// Module-scoped stdin data handler for escape key and special key detection
 // Defined at module scope so disableGlobalEscape() can remove it
 function onEscapeData(data: Buffer): void {
   // Ctrl+C is byte 3 - handle graceful exit
   if (data.length === 1 && data[0] === 3) {
     console.log(chalk.gray('\n  Goodbye!\n'))
     process.exit(0)
+  }
+
+  // Handle multi-byte escape sequences (arrow keys, Shift+Tab)
+  // These start with ESC (27) followed by '[' (91) and a letter
+  if (data.length === 3 && data[0] === 27 && data[1] === 91) {
+    const keyCode = data[2]
+
+    // Arrow Up: \x1b[A (27, 91, 65)
+    if (keyCode === 65 && toggleEnabled) {
+      toggleCursorPosition = Math.max(0, toggleCursorPosition - 1)
+      return // Let inquirer handle the actual cursor movement
+    }
+
+    // Arrow Down: \x1b[B (27, 91, 66)
+    if (keyCode === 66 && toggleEnabled) {
+      toggleCursorPosition = Math.min(
+        toggleCurrentItems.length - 1,
+        toggleCursorPosition + 1,
+      )
+      return // Let inquirer handle the actual cursor movement
+    }
+
+    // Shift+Tab: \x1b[Z (27, 91, 90)
+    if (keyCode === 90 && toggleEnabled && toggleCurrentItems.length > 0) {
+      // Get the currently highlighted item's value
+      const currentItem = toggleCurrentItems[toggleCursorPosition]
+      if (currentItem) {
+        toggleTriggered = true
+        toggleTargetValue = currentItem.value
+
+        // Reject the prompt to interrupt it
+        if (escapeReject) {
+          const reject = escapeReject
+          escapeReject = null
+          reject(new ToggleError(currentItem.value))
+        }
+
+        // Close the prompt UI
+        if (currentPromptUi?.close) {
+          try {
+            currentPromptUi.close()
+          } catch {
+            // Swallow errors from inquirer internals
+          }
+          currentPromptUi = null
+        }
+      }
+      return
+    }
+
+    return // Don't process other escape sequences as standalone escape
   }
 
   // Escape key is byte 27 (0x1b) by itself
@@ -77,6 +146,12 @@ function onEscapeData(data: Buffer): void {
     }
     // Clear the screen
     console.clear()
+  }
+
+  // Any other input (typing to filter) resets cursor to 0
+  // This helps keep our tracking in sync when the list is filtered
+  if (toggleEnabled && data.length > 0 && data[0] !== 27) {
+    toggleCursorPosition = 0
   }
 }
 
@@ -112,6 +187,55 @@ export function checkAndResetEscape(): boolean {
   const wasTriggered = escapeTriggered
   escapeTriggered = false
   return wasTriggered
+}
+
+/**
+ * Enable toggle tracking for the container list.
+ * This tracks arrow key movements and Shift+Tab presses.
+ */
+export function enableToggleTracking(): void {
+  toggleEnabled = true
+  toggleCursorPosition = 0
+  toggleCurrentItems = []
+  toggleTriggered = false
+  toggleTargetValue = null
+}
+
+/**
+ * Disable toggle tracking and clean up state.
+ */
+export function disableToggleTracking(): void {
+  toggleEnabled = false
+  toggleCursorPosition = 0
+  toggleCurrentItems = []
+  toggleTriggered = false
+  toggleTargetValue = null
+}
+
+/**
+ * Update the current list of filterable items.
+ * Called by filterableListPrompt when the source function returns new items.
+ */
+export function updateToggleItems(items: FilterableChoice[]): void {
+  toggleCurrentItems = items
+  // Clamp cursor position to valid range
+  if (toggleCursorPosition >= items.length) {
+    toggleCursorPosition = Math.max(0, items.length - 1)
+  }
+}
+
+/**
+ * Check if toggle was triggered and get the target value.
+ * Resets the toggle state after reading.
+ */
+export function checkAndResetToggle(): {
+  triggered: boolean
+  value: string | null
+} {
+  const result = { triggered: toggleTriggered, value: toggleTargetValue }
+  toggleTriggered = false
+  toggleTargetValue = null
+  return result
 }
 
 /**
@@ -183,6 +307,7 @@ export type FilterableChoice = {
  *                                  (remaining items like Back/separators are always shown)
  * @param options.pageSize - Number of items to show at once
  * @param options.emptyText - Text to show when filter matches nothing
+ * @param options.enableToggle - Enable Shift+Tab to toggle items (returns TOGGLE_PREFIX + value)
  */
 export async function filterableListPrompt(
   choices: (FilterableChoice | inquirer.Separator)[],
@@ -191,6 +316,7 @@ export async function filterableListPrompt(
     filterableCount: number
     pageSize?: number
     emptyText?: string
+    enableToggle?: boolean
   },
 ): Promise<string> {
   // Split choices into filterable items and static footer (separators, back buttons, etc.)
@@ -200,6 +326,12 @@ export async function filterableListPrompt(
   ) as FilterableChoice[]
   const footerItems = choices.slice(options.filterableCount)
 
+  // Enable toggle tracking if requested
+  if (options.enableToggle) {
+    enableToggleTracking()
+    updateToggleItems(filterableItems)
+  }
+
   // Source function for autocomplete - filters items based on input
   async function source(
     _answers: Record<string, unknown>,
@@ -207,32 +339,48 @@ export async function filterableListPrompt(
   ): Promise<(FilterableChoice | inquirer.Separator)[]> {
     const searchTerm = (input || '').toLowerCase().trim()
 
+    let result: (FilterableChoice | inquirer.Separator)[]
+
     if (!searchTerm) {
       // No filter - show all items
-      return [...filterableItems, ...footerItems]
+      result = [...filterableItems, ...footerItems]
+      // Update toggle tracking with current filterable items
+      if (options.enableToggle) {
+        updateToggleItems(filterableItems)
+      }
+    } else {
+      // Filter items by matching search term against the display name
+      // Strip ANSI codes for matching but keep them for display
+      // eslint-disable-next-line no-control-regex
+      const ansiPattern = /\x1b\[[0-9;]*m/g
+      const filtered = filterableItems.filter((item) => {
+        // Strip ANSI escape codes for matching
+        const plainName = item.name.replace(ansiPattern, '')
+        return plainName.toLowerCase().includes(searchTerm)
+      })
+
+      if (filtered.length === 0) {
+        // No matches - show empty message and footer
+        result = [
+          new inquirer.Separator(
+            chalk.gray(options.emptyText || `No matches for "${input}"`),
+          ),
+          ...footerItems,
+        ]
+        // Update toggle tracking with empty list (no items to toggle)
+        if (options.enableToggle) {
+          updateToggleItems([])
+        }
+      } else {
+        result = [...filtered, ...footerItems]
+        // Update toggle tracking with filtered items
+        if (options.enableToggle) {
+          updateToggleItems(filtered)
+        }
+      }
     }
 
-    // Filter items by matching search term against the display name
-    // Strip ANSI codes for matching but keep them for display
-    // eslint-disable-next-line no-control-regex
-    const ansiPattern = /\x1b\[[0-9;]*m/g
-    const filtered = filterableItems.filter((item) => {
-      // Strip ANSI escape codes for matching
-      const plainName = item.name.replace(ansiPattern, '')
-      return plainName.toLowerCase().includes(searchTerm)
-    })
-
-    if (filtered.length === 0) {
-      // No matches - show empty message and footer
-      return [
-        new inquirer.Separator(
-          chalk.gray(options.emptyText || `No matches for "${input}"`),
-        ),
-        ...footerItems,
-      ]
-    }
-
-    return [...filtered, ...footerItems]
+    return result
   }
 
   // Create escape promise for escape key handling
@@ -250,6 +398,9 @@ export async function filterableListPrompt(
         pageSize: options.pageSize || getPageSize(),
         emptyText: options.emptyText || 'No matches',
         suggestOnly: false,
+        // Suppress the default "(Use arrow keys or type to search)" suffix
+        // since we include custom instructions in the message
+        suffix: '',
       },
     ])
 
@@ -270,9 +421,18 @@ export async function filterableListPrompt(
       selection: string
     }
     return result.selection
+  } catch (error) {
+    // Handle toggle (Shift+Tab) - return special value so caller can handle it
+    if (error instanceof ToggleError) {
+      return TOGGLE_PREFIX + error.targetValue
+    }
+    throw error
   } finally {
     escapeReject = null
     currentPromptUi = null
+    if (options.enableToggle) {
+      disableToggleTracking()
+    }
   }
 }
 

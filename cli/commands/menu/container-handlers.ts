@@ -36,6 +36,7 @@ import {
   type FilterableChoice,
   BACK_VALUE,
   MAIN_MENU_VALUE,
+  TOGGLE_PREFIX,
 } from '../../ui/prompts'
 import { getEngineDefaults } from '../../../config/defaults'
 import { createSpinner } from '../../ui/spinner'
@@ -544,13 +545,22 @@ export async function handleList(
     )
   }
 
+  // Check if there are any server-based (toggleable) containers
+  const hasServerContainers = containers.some(
+    (c) => !isFileBasedEngine(c.engine),
+  )
+
+  // Build hints string (bottom of list)
+  const hints = hasServerContainers ? chalk.gray('[Shift]+[Tab] - toggle') : ''
+
   // Build the full choice list with footer items
+  const summary = hints
+    ? `${containers.length} container(s): ${parts.join('; ')} — ${hints}`
+    : `${containers.length} container(s): ${parts.join('; ')}`
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
     ...containerChoices,
     new inquirer.Separator(),
-    new inquirer.Separator(
-      `${containers.length} container(s): ${parts.join('; ')} ${chalk.gray('— type to filter')}`,
-    ),
+    new inquirer.Separator(summary),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
     {
@@ -562,13 +572,43 @@ export async function handleList(
 
   const selectedContainer = await filterableListPrompt(
     allChoices,
-    'Select a container:',
+    `Select a container: ${chalk.gray('↑↓ pick, type to filter')}`,
     {
       filterableCount: containerChoices.length,
       pageSize: getPageSize(),
       emptyText: 'No containers match filter',
+      enableToggle: hasServerContainers,
     },
   )
+
+  // Handle toggle (Shift+Tab) - start/stop the container and refresh list
+  if (selectedContainer.startsWith(TOGGLE_PREFIX)) {
+    const containerName = selectedContainer.slice(TOGGLE_PREFIX.length)
+    const config = await containerManager.getConfig(containerName)
+
+    if (config && !isFileBasedEngine(config.engine)) {
+      const isRunning = await processManager.isRunning(containerName, {
+        engine: config.engine,
+      })
+
+      // Clear screen and show brief status
+      console.clear()
+      console.log(header('Containers'))
+
+      if (isRunning) {
+        await handleStopContainer(containerName)
+      } else {
+        await handleStartContainer(containerName)
+      }
+
+      // Brief pause so user can see the result
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
+
+    // Refresh the container list
+    await handleList(showMainMenu)
+    return
+  }
 
   // Back returns to main menu (escape is handled globally)
   if (selectedContainer === 'back') {
