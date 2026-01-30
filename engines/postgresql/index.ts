@@ -843,9 +843,11 @@ export class PostgreSQLEngine extends BaseEngine {
     const sql = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${database}' AND pid <> pg_backend_pid()`
 
     // Connect to 'postgres' database for admin operations
+    // Escape single quotes for shell: ' becomes '\'' (end quote, escaped quote, start quote)
+    const shellEscapedSql = sql.replace(/'/g, "'\\''")
     const cmd = isWindows()
       ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${shellEscapedSql}'`
 
     try {
       await execAsync(cmd)
