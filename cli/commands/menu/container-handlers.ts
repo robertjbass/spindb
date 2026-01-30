@@ -1047,9 +1047,19 @@ async function handleStartContainer(
   const portAvailable = await portManager.isPortAvailable(config.port)
   if (!portAvailable) {
     // Find next available port
-    const { port: newPort } = await portManager.findAvailablePort({
-      preferredPort: config.port,
-    })
+    let newPort: number
+    try {
+      const result = await portManager.findAvailablePort({
+        preferredPort: config.port,
+      })
+      newPort = result.port
+    } catch {
+      console.log()
+      console.log(
+        uiError('No available ports found. Free up a port and try again.'),
+      )
+      return 'back'
+    }
 
     // Check if another SpinDB container is using this port
     const allContainers = await containerManager.list()
