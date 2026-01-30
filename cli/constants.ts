@@ -1,6 +1,16 @@
 import chalk from 'chalk'
 import { Engine, type IconMode } from '../types'
 
+/**
+ * Get the page size for list prompts based on terminal height.
+ * Returns 20 for tall terminals (>= 30 rows), 15 for shorter ones.
+ * This provides a consistent experience while avoiding rendering issues on small terminals.
+ */
+export function getPageSize(): number {
+  const terminalHeight = process.stdout.rows || 24
+  return terminalHeight >= 30 ? 20 : 15
+}
+
 // Engine icons with three display modes:
 // - 'ascii' (default): Works everywhere, no special fonts needed (colored with brand colors)
 // - 'nerd': Nerd Font glyphs - requires a patched font (https://nerdfonts.com)

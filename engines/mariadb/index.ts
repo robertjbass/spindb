@@ -923,6 +923,53 @@ export class MariaDBEngine extends BaseEngine {
     return createBackup(container, outputPath, options)
   }
 
+  async terminateConnections(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<void> {
+    assertValidDatabaseName(database)
+    const { port } = container
+    const mysql = await this.getMariadbClientPath()
+
+    // Get all connection IDs for the target database and kill them
+    // We need to do this in two steps since MariaDB doesn't support subqueries in KILL
+    const getIdsCmd = buildMariadbInlineCommand(
+      mysql,
+      port,
+      engineDef.superuser,
+      `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
+    )
+
+    try {
+      const { stdout } = await execAsync(getIdsCmd)
+      const lines = stdout
+        .trim()
+        .split('\n')
+        .filter((l) => l.trim())
+      // Skip header row if present
+      const ids = lines
+        .slice(1)
+        .map((l) => l.trim())
+        .filter((l) => /^\d+$/.test(l))
+
+      for (const id of ids) {
+        const killCmd = buildMariadbInlineCommand(
+          mysql,
+          port,
+          engineDef.superuser,
+          `KILL CONNECTION ${id}`,
+        )
+        try {
+          await execAsync(killCmd)
+        } catch {
+          // Connection may already be gone
+        }
+      }
+    } catch {
+      // Ignore errors - connections may already be gone
+    }
+  }
+
   async runScript(
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },

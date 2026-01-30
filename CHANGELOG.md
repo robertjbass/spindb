@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-01-29
+
+### Added
+- **Type-to-filter in container selection** - Container list prompts now support typing to filter by name
+- **Type-to-filter in restore container selection** - Restore workflow container selection now supports filtering
+- **Shift+Tab to toggle containers** - Press Shift+Tab on the container list to start/stop the highlighted container without entering its menu
+
+### Changed
+- **Container menu reorganized into 4 sections** - Clearer grouping: (1) Start/Stop & database selection, (2) Data operations (shell, run, copy URL, backup, restore, logs), (3) Container management (edit, clone, delete), (4) Navigation
+- **Port conflict UX improved** - Instead of "Press Enter to continue", now shows actionable dropdown: update to next available port and start, go back, or return to main menu
+- **Container list prompt hints updated** - Shows `(↑↓ pick, type to filter)` at top, `Shift+Tab: Toggle` at bottom for clearer instructions
+- **CI workflow improvements**:
+  - Disabled `fail-fast` so all matrix jobs run even when one fails
+  - Clearer platform labels: `Linux x64 22.04`, `macOS ARM64`, `Win x64` instead of `Ubuntu 22`, `ARM`, `Windows`
+- **`spindb which` command improvements**:
+  - JSON output is now pretty-printed with indentation
+  - Invalid `--engine` values now show helpful error with list of valid options
+  - Unrecognized URL protocols now error instead of defaulting to port 5432
+
+### Fixed
+- **SQL injection in `terminateConnections`** - Database names are now validated in PostgreSQL, MySQL, and MariaDB before use in SQL queries
+- **Pull command backup format** - Now uses engine-appropriate format instead of hardcoded PostgreSQL `custom` format
+- **Redis/Valkey shell database parameter** - Shell now correctly uses the passed database parameter
+- **Documentation fixes** - Markdown lint issues in CHEATSHEET.md, ENGINE_CHECKLIST.md, and CLONE_FEATURE.md
+
+### Documentation
+- Added `spindb pull` command examples to README "Pull from Remote Database" section
+- Added custom keyboard shortcut pattern documentation to CLAUDE.md for future development
+
+## [0.28.0] - 2026-01-29
+
+### Added
+- **`spindb pull` command** - Pull remote database data into a local container with automatic backup:
+  ```bash
+  # Replace mode: backup original, pull remote data (connection string unchanged)
+  spindb pull myapp --from postgresql://user:pass@prod.example.com/db
+
+  # Read URL from environment variable (keeps credentials out of shell history)
+  spindb pull myapp --from-env CLONE_FROM_DATABASE_URL
+
+  # Clone mode: create new database with remote data
+  spindb pull myapp --from-env PROD_DB_URL --as mydb_prod
+
+  # Preview changes without executing
+  spindb pull myapp --from-env PROD_DB_URL --dry-run
+
+  # Run post-pull script (e.g., credential sync)
+  spindb pull myapp --from-env PROD_DB_URL --post-script ./sync-credentials.ts
+  ```
+  - **Replace mode** (default): Backs up original database with timestamp, pulls remote data into original database name - your connection string never changes
+  - **Clone mode** (`--as`): Pulls remote data into a new database, leaves original untouched
+  - **JSON output** with `--json` returns `databaseUrl` and `backupUrl` for scripting
+  - **Post-pull scripts** receive context via `SPINDB_CONTEXT` JSON file (container, database, backupDatabase, port, engine)
+  - Supports PostgreSQL, MySQL, and MariaDB (more engines planned)
+- **`spindb which` command** - Find containers by port or connection URL for scripting:
+  ```bash
+  spindb which --port 5432              # Find container on port 5432
+  spindb which --url "$DATABASE_URL"    # Find container matching URL
+  CONTAINER=$(spindb which --port 5432) # Use in scripts
+  ```
+- **`terminateConnections()` engine method** - Safely disconnect clients before dropping databases (PostgreSQL, MySQL, MariaDB)
+- **`databases set-default` command** - Change the default/primary database for a container: `spindb databases set-default mydb prod`
+- **`databases list --default` flag** - Show only the default database name: `spindb databases list mydb --default` outputs just `efficientdb`
+- **`databases list` all containers** - Running without a container argument now lists all containers with their databases
+- **Database selection in container menu** - Containers with multiple databases now show a "Set database" option to select which database to operate on
+- **Dynamic menu page sizing** - Menu lists now adapt to terminal height (20 items for tall terminals, 15 for shorter)
+
+### Changed
+- **Menu UI improvements**:
+  - Container submenu header simplified to `🐘 container → database` format (respects icon preference)
+  - Database-specific actions (shell, backup, restore, copy URL) now require database selection for multi-database containers
+  - "Set database" menu item shows current selection and count: `Set database | Current: efficientdb (1 of 2)`
+  - Disabled menu items show clear hints (e.g., "Select database first", "Start container first")
+- **JSON output** - All `--json` output is now pretty-printed with indentation for readability
+- **Documentation reorganization**:
+  - README: Platform matrix moved to top with cleaner "Type" column, comparison tables split by category
+  - Deleted redundant ENGINES.md (content consolidated in README and engines.json)
+  - Moved MIGRATION.md to docs/historical-refactor-notes/ for historical reference
+  - Updated ARCHITECTURE.md with SurrealDB, QuestDB details
+  - Added `spindb pull` and `spindb which` commands to CHEATSHEET.md
+  - New plans/CLONE_FEATURE.md tracking engine support for pull command
+
+### Fixed
+- **Double parentheses in disabled menu items** - Fixed menu items showing "(Stop container first) (Disabled)" by passing hint to inquirer's disabled property directly
+- **SurrealDB history.txt pollution** - SurrealDB shell now writes history to container directory instead of user's working directory
+
 ## [0.27.6] - 2026-01-28
 
 ### Fixed

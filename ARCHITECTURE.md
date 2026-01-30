@@ -1,6 +1,6 @@
 # SpinDB Architecture
 
-This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, and CockroachDB.
+This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, and QuestDB.
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ SpinDB follows a **three-tier layered architecture**:
 │                   Engine Layer (engines/)                   │
 │  PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis,      │
 │  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch,   │
-│  CouchDB, CockroachDB                                       │
+│  CouchDB, CockroachDB, SurrealDB, QuestDB                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -211,7 +211,7 @@ The core layer contains business logic independent of CLI concerns.
 The engine layer implements database-specific logic via the abstract `BaseEngine` class.
 
 **Engine Types:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB): Process management, port allocation
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB): Process management, port allocation
 - **File-based** (SQLite, DuckDB): No server, files in project directories
 - **Composite** (FerretDB): Multiple processes working together (see [FerretDB Architecture](#ferretdb-architecture))
 
@@ -325,13 +325,13 @@ type FerretDBContainerConfig = ContainerConfig & {
 
 | Platform | FerretDB | PostgreSQL+DocumentDB | Notes |
 |----------|----------|----------------------|-------|
-| darwin-arm64 | ✅ | ❌ | FerretDB only (no backend) |
-| darwin-x64 | ✅ | ❌ | FerretDB only (no backend) |
+| darwin-arm64 | ✅ | ✅ | Full support |
+| darwin-x64 | ✅ | ✅ | Full support |
 | linux-x64 | ✅ | ✅ | Full support |
-| linux-arm64 | ✅ | ❌ | FerretDB only (no backend) |
-| win32-x64 | ✅ | ❌ | FerretDB only (no backend) |
+| linux-arm64 | ✅ | ✅ | Full support |
+| win32-x64 | ✅ | ❌ | postgresql-documentdb has startup issues on Windows |
 
-> **Note:** `postgresql-documentdb-17-0.107.0` is currently only available for linux-x64 on hostdb. FerretDB requires both the proxy binary and the PostgreSQL+DocumentDB backend to function. Until hostdb adds more architectures, FerretDB is effectively linux-x64-only. Update this table when additional platforms become available.
+> **Note:** FerretDB requires both the proxy binary and the PostgreSQL+DocumentDB backend to function. Windows is not supported due to postgresql-documentdb startup issues; use WSL2 on Windows.
 
 ---
 
@@ -394,6 +394,8 @@ getEngine('qdrant')      // or 'qd' - Vector database
 getEngine('meilisearch') // or 'meili', 'ms' - Full-text search
 getEngine('couchdb')     // or 'couch' - Document database
 getEngine('cockroachdb') // or 'crdb' - Distributed SQL
+getEngine('surrealdb')   // or 'surreal' - Multi-model database
+getEngine('questdb')     // or 'quest' - Time-series database
 ```
 
 ---
@@ -562,7 +564,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb' | 'surrealdb' | 'questdb'
   version: string
   port: number
   database: string        // Primary database
@@ -636,7 +638,7 @@ All functionality must be available via CLI arguments:
 
 ```bash
 # CLI commands
-spindb create mydb -e postgresql -v 17 -p 5433
+spindb create mydb -e postgresql --db-version 17 -p 5433
 
 # Interactive menu is syntactic sugar
 spindb  # Opens menu → same operations
@@ -692,6 +694,8 @@ const engines = {
   meilisearch: new MeilisearchEngine(),
   couchdb: new CouchDBEngine(),
   cockroachdb: new CockroachDBEngine(),
+  surrealdb: new SurrealDBEngine(),
+  questdb: new QuestDBEngine(),
 }
 
 const aliases = {
@@ -706,6 +710,8 @@ const aliases = {
   ms: 'meilisearch',
   couch: 'couchdb',
   crdb: 'cockroachdb',
+  surreal: 'surrealdb',
+  quest: 'questdb',
 }
 ```
 
@@ -738,7 +744,7 @@ Core types are centralized in `types/index.ts`:
 | Type | Purpose |
 |------|---------|
 | `ContainerConfig` | Container state and metadata |
-| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB |
+| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB |
 | `BackupFormat` | Backup file format detection |
 | `BackupOptions` | Backup command options |
 | `BackupResult` | Backup operation result |
@@ -775,19 +781,21 @@ Error messages include actionable fix suggestions.
 
 ## Platform Support
 
-All database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for all supported platforms.
+Database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for most platform combinations. Exceptions are noted in the table below.
 
-| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | FerretDB | Redis | Valkey | ClickHouse | SQLite | DuckDB | Qdrant | Meilisearch | CouchDB | CockroachDB |
-|----------|------------|-------|---------|---------|----------|-------|--------|------------|--------|--------|--------|-------------|---------|-------------|
-| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
-| Windows (x64) | EDB* | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | ❌** | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Platform | PostgreSQL | MySQL | MariaDB | MongoDB | FerretDB | Redis | Valkey | ClickHouse | SQLite | DuckDB | Qdrant | Meilisearch | CouchDB | CockroachDB | SurrealDB | QuestDB |
+|----------|------------|-------|---------|---------|----------|-------|--------|------------|--------|--------|--------|-------------|---------|-------------|-----------|---------|
+| macOS (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| macOS (Intel) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (x64) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Linux (ARM) | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
+| Windows (x64) | EDB* | hostdb | hostdb | hostdb | ❌*** | hostdb | hostdb | ❌** | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb | hostdb |
 
 *PostgreSQL on Windows uses [EnterpriseDB (EDB)](https://www.enterprisedb.com/download-postgresql-binaries) binaries.
 
 **ClickHouse binaries not available for Windows in hostdb. Use WSL2.
+
+***FerretDB requires postgresql-documentdb which has startup issues on Windows. Use WSL2.
 
 **Binary source:**
 - **hostdb**: https://github.com/robertjbass/hostdb - Pre-built database binaries for all platforms
@@ -804,7 +812,7 @@ Comprehensive examples of CLI commands grouped by engine and utility.
 ```bash
 # Container Lifecycle
 spindb create pgdb                              # Create with defaults (v17, port 5432)
-spindb create pgdb --version 16                 # Specific version
+spindb create pgdb --db-version 16              # Specific version
 spindb create pgdb --port 5433                  # Custom port
 spindb create pgdb --database myapp             # Custom database name
 spindb create pgdb --max-connections 300        # Custom max connections
@@ -827,7 +835,7 @@ spindb url pgdb --json                          # JSON output with details
 
 # SQL Execution
 spindb run pgdb script.sql                      # Run SQL file
-spindb run pgdb --sql "SELECT * FROM users"     # Run inline SQL
+spindb run pgdb -c "SELECT * FROM users"        # Run inline SQL
 spindb run pgdb seed.sql --database myapp       # Target specific database
 
 # Backup & Restore
@@ -888,7 +896,7 @@ spindb url mydb --copy                          # Copy to clipboard
 
 # SQL Execution
 spindb run mydb script.sql                      # Run SQL file
-spindb run mydb --sql "SHOW TABLES"             # Run inline SQL
+spindb run mydb -c "SHOW TABLES"                # Run inline SQL
 spindb run mydb seed.sql --database app         # Target specific database
 
 # Backup & Restore
@@ -939,7 +947,7 @@ spindb url lite                                 # Print file path
 
 # SQL Execution
 spindb run lite script.sql                      # Run SQL file
-spindb run lite --sql "SELECT * FROM users"     # Run inline SQL
+spindb run lite -c "SELECT * FROM users"        # Run inline SQL
 
 # Backup (file copy)
 spindb backup lite                              # Copy database file
@@ -1048,7 +1056,7 @@ spindb restore mydb ./backups/before-migration.dump
 
 # Switch between database versions
 spindb stop pgdb
-spindb create pgdb-16 --version 16 --port 5433
+spindb create pgdb-16 --db-version 16 --port 5433
 spindb clone pgdb pgdb-backup              # Backup current
 spindb start pgdb-16
 

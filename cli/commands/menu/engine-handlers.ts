@@ -11,7 +11,7 @@ import {
   filterableListPrompt,
   type FilterableChoice,
 } from '../../ui/prompts'
-import { getEngineIcon } from '../../constants'
+import { getEngineIcon, getPageSize } from '../../constants'
 import {
   getInstalledEngines,
   type InstalledPostgresEngine,
@@ -144,7 +144,7 @@ export async function handleEngines(): Promise<void> {
 
   const action = await filterableListPrompt(allChoices, 'Select an engine:', {
     filterableCount: engineChoices.length,
-    pageSize: 18,
+    pageSize: getPageSize(),
     emptyText: 'No engines match filter',
   })
 
