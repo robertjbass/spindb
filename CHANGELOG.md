@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Container menu reorganized into 4 sections** - Clearer grouping: (1) Start/Stop & database selection, (2) Data operations (shell, run, copy URL, backup, restore, logs), (3) Container management (edit, clone, delete), (4) Navigation
+- **CI workflow improvements**:
+  - Disabled `fail-fast` so all matrix jobs run even when one fails
+  - Clearer platform labels: `Linux x64 22.04`, `macOS ARM64`, `Win x64` instead of `Ubuntu 22`, `ARM`, `Windows`
 - **`spindb which` command improvements**:
   - JSON output is now pretty-printed with indentation
   - Invalid `--engine` values now show helpful error with list of valid options
