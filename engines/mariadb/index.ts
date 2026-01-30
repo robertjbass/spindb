@@ -927,6 +927,7 @@ export class MariaDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
+    assertValidDatabaseName(database)
     const { port } = container
     const mysql = await this.getMariadbClientPath()
 
