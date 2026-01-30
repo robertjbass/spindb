@@ -381,7 +381,7 @@ Both approaches benefit from:
 
 If your project needs to support both older (v0.27.x) and newer (v0.28.0+) SpinDB versions, use a version router pattern:
 
-```
+```text
 scripts/clone-prod-db/
 ├── index.ts              # Version router
 ├── clone-prod-db-v1.ts   # SpinDB <= 0.27.x (uses restore --from-url)

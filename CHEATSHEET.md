@@ -184,7 +184,7 @@ SpinDB writes a JSON context file and sets `SPINDB_CONTEXT` env var pointing to 
 }
 ```
 
-**Example: Sync user credentials after pulling production data**
+### Example: Sync user credentials after pulling production data
 
 ```typescript
 #!/usr/bin/env tsx

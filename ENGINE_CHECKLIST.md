@@ -2353,7 +2353,7 @@ ls -la tests/integration/{engine}.test.ts
 ls -la tests/unit/{engine}-*.test.ts
 
 # Check documentation changes
-git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md
+git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md TODO.md
 ```
 
 ### Manual Verification
