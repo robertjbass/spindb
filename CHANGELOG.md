@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-01-29
+
+### Added
+- **Type-to-filter in container selection** - Container list prompts now support typing to filter by name
+- **Type-to-filter in restore container selection** - Restore workflow container selection now supports filtering
+
+### Changed
+- **Container menu reorganized into 4 sections** - Clearer grouping: (1) Start/Stop & database selection, (2) Data operations (shell, run, copy URL, backup, restore, logs), (3) Container management (edit, clone, delete), (4) Navigation
+- **`spindb which` command improvements**:
+  - JSON output is now pretty-printed with indentation
+  - Invalid `--engine` values now show helpful error with list of valid options
+  - Unrecognized URL protocols now error instead of defaulting to port 5432
+
+### Fixed
+- **SQL injection in `terminateConnections`** - Database names are now validated in PostgreSQL, MySQL, and MariaDB before use in SQL queries
+- **Pull command backup format** - Now uses engine-appropriate format instead of hardcoded PostgreSQL `custom` format
+- **Redis/Valkey shell database parameter** - Shell now correctly uses the passed database parameter
+- **Documentation fixes** - Markdown lint issues in CHEATSHEET.md, ENGINE_CHECKLIST.md, and CLONE_FEATURE.md
+
+### Documentation
+- Added `spindb pull` command examples to README "Pull from Remote Database" section
+
 ## [0.28.0] - 2026-01-29
 
 ### Added
