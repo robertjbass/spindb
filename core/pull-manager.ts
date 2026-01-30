@@ -17,6 +17,7 @@ import { getEngine } from '../engines'
 import { logDebug } from './error-handler'
 import type { ContainerConfig, PullOptions, PullResult, Engine } from '../types'
 import type { BaseEngine } from '../engines/base-engine'
+import { getDefaultFormat } from '../config/backup-formats'
 
 /**
  * Context passed to post-pull scripts via SPINDB_CONTEXT env var.
@@ -143,7 +144,7 @@ export class PullManager {
         logDebug(`Dumping original database to: ${tempOriginalDump}`)
         await engine.backup(config, tempOriginalDump, {
           database: targetDatabase,
-          format: 'custom', // Compressed, fast restore for PostgreSQL
+          format: getDefaultFormat(config.engine),
         })
         tx.addRollback({
           description: 'Delete original dump temp file',
