@@ -781,7 +781,7 @@ Error messages include actionable fix suggestions.
 
 ## Platform Support
 
-All database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for all supported platforms.
+Database binaries are downloaded from [hostdb](https://github.com/robertjbass/hostdb), which provides pre-built binaries for most platform combinations. Exceptions are noted in the table below.
 
 | Platform | PostgreSQL | MySQL | MariaDB | MongoDB | FerretDB | Redis | Valkey | ClickHouse | SQLite | DuckDB | Qdrant | Meilisearch | CouchDB | CockroachDB | SurrealDB | QuestDB |
 |----------|------------|-------|---------|---------|----------|-------|--------|------------|--------|--------|--------|-------------|---------|-------------|-----------|---------|
