@@ -247,7 +247,9 @@ export const whichCommand = new Command('which')
 
           const errorMsg = `No container found matching: ${criteria.join(', ')}`
           if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg, found: false }, null, 2))
+            console.log(
+              JSON.stringify({ error: errorMsg, found: false }, null, 2),
+            )
           } else {
             console.error(uiError(errorMsg))
           }
