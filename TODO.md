@@ -8,6 +8,20 @@ Quick capture for ideas that need review and prioritization:
 
 ---
 
+## High Priority
+
+- [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
+- [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
+- [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure
+- [ ] **Proxy/reverse-proxy MVP** - Build system to deploy directly to containers with network access
+- [ ] **Git hook integration** - Add hooks for pre-commit, post-checkout, etc. to automate database workflows
+- [ ] **Refine API** - Clean up and stabilize the programmatic API surface
+- [ ] **Build package to mimic CLI** - Export package that provides CLI functionality programmatically
+- [ ] **Rethink testing processes** - Optimize test suite for faster execution time
+- [ ] **Default username/password for all engines** - Standardize credential defaults across all database engines
+
+---
+
 ## Roadmap
 
 ### v1.1 - Remote Connections & Secrets
