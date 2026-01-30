@@ -328,12 +328,30 @@ spindb backup mydb --format custom              # Custom binary format (PostgreS
 spindb restore mydb backup.dump
 spindb restore mydb backup.sql --database prod_copy
 
-# Pull from remote database
-spindb restore mydb --from-url "postgresql://user:pass@prod-host/db"
-
 # Clone existing database
 spindb create prod-copy --from ./prod-backup.dump
 spindb create staging --from "postgresql://user:pass@prod:5432/production"
+```
+
+### Pull from Remote Database
+
+Sync production data to your local database while automatically backing up your original data:
+
+```bash
+# Pull production data (backs up original, replaces with remote)
+spindb pull mydb --from "postgresql://user:pass@prod-host/db"
+
+# Read URL from environment variable (keeps credentials out of shell history)
+spindb pull mydb --from-env CLONE_FROM_DATABASE_URL
+
+# Clone mode: pull to new database (original untouched)
+spindb pull mydb --from-env PROD_URL --as mydb_prod
+
+# Preview what will happen
+spindb pull mydb --from-env PROD_URL --dry-run
+
+# Run post-pull script (e.g., sync local credentials)
+spindb pull mydb --from-env PROD_URL --post-script ./sync-credentials.ts
 ```
 
 ### Container Management
