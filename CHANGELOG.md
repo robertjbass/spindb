@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.2] - 2026-01-31
+
+### Fixed
+- **Version-matched backup/restore binaries** - `pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`, `mongodump`, and `mongorestore` now use the same version as the container being backed up/restored. Previously, a version mismatch (e.g., pg_dump v17 with PostgreSQL 18 container) would cause "server version mismatch" errors. The fix implements a fallback chain: exact version match → major version match → globally cached binary → system binary.
+
 ## [0.28.1] - 2026-01-29
 
 ### Added
