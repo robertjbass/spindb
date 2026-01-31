@@ -36,6 +36,7 @@ This comprehensive document provides both the specification for adding a new dat
 
 | File | Action |
 |------|--------|
+| `engines/{engine}/README.md` | Create (binary structure, quirks, implementation notes) |
 | `engines/{engine}/*.ts` | Create (8 files) |
 | `engines/index.ts` | Add import and registration |
 | `engines/base-engine.ts` | Add client path getter |
@@ -66,7 +67,7 @@ This comprehensive document provides both the specification for adding a new dat
 | `CHANGELOG.md` | Add entry |
 | `package.json` | Add keyword, bump version |
 
-**Total: ~35 files modified or created**
+**Total: ~36 files modified or created**
 
 ---
 
@@ -214,7 +215,15 @@ Before writing code, gather this information:
 
 Create directory `engines/{engine}/` with these files:
 
-### Required Files (8)
+### Required Files (9)
+
+- [ ] `README.md` - Engine documentation (binary structure, quirks, gotchas)
+  - [ ] Document platform support table
+  - [ ] Document binary packaging (archive format, directory structure)
+  - [ ] Document implementation details (version format, configuration)
+  - [ ] Document known issues & gotchas
+  - [ ] Document CI/CD considerations
+  - See existing READMEs in `engines/*/README.md` for structure template
 
 - [ ] `index.ts` - Main engine class extending `BaseEngine`
   - [ ] Set `name`, `displayName`, `defaultPort`, `supportedVersions` properties
@@ -2118,7 +2127,36 @@ fi
 
 ## Documentation Updates
 
-### README.md
+### Engine-Specific README (`engines/{engine}/README.md`)
+
+Every engine must have a comprehensive README.md documenting implementation details. Use existing engine READMEs as templates (e.g., `engines/clickhouse/README.md`, `engines/questdb/README.md`).
+
+**Required sections:**
+
+- [ ] **Overview** - Brief description of the database and its use case
+- [ ] **Platform Support** - Table showing supported platforms (darwin/linux/win32 x x64/arm64)
+- [ ] **Binary Packaging**
+  - [ ] Archive format (tar.gz, zip)
+  - [ ] Archive structure (directory layout after extraction)
+  - [ ] Any platform-specific differences in structure
+  - [ ] Version map sync notes (especially for non-semver formats like ClickHouse's YY.MM)
+- [ ] **Implementation Details**
+  - [ ] Binary manager customizations
+  - [ ] Version parsing/format
+  - [ ] Configuration file format (XML, YAML, conf, etc.)
+  - [ ] Port configuration (single port, dual ports, multi-port)
+  - [ ] PID file handling quirks
+  - [ ] Startup command details
+  - [ ] Connection string format
+- [ ] **Backup & Restore** - Formats, tools used, any cross-engine dependencies
+- [ ] **Integration Test Notes** - Special considerations for testing
+- [ ] **Docker E2E Test Notes** - What the E2E tests verify
+- [ ] **Known Issues & Gotchas** - Document ALL quirks, edge cases, and lessons learned
+- [ ] **CI/CD Notes** - GitHub Actions cache step, platform-specific CI considerations
+
+**Why this matters:** This documentation captures tribal knowledge that would otherwise be lost. When future contributors need to debug or modify an engine, this README is their primary reference.
+
+### README.md (project root)
 
 - [ ] Update engine count (e.g., "13 different database engines" → "14 different database engines")
 - [ ] Add engine to `--engine` option list in examples
@@ -2453,7 +2491,8 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] hostdb availability confirmed
 - [ ] Platform support documented
 
-### Core Engine Files (8 required)
+### Core Engine Files (9 required)
+- [ ] `engines/{engine}/README.md` created (binary structure, quirks, gotchas)
 - [ ] `engines/{engine}/index.ts` created
 - [ ] `engines/{engine}/backup.ts` created
 - [ ] `engines/{engine}/restore.ts` created
@@ -2557,6 +2596,12 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Added curl-based tests (REST API only)
 
 ### Documentation Updates
+- [ ] Created `engines/{engine}/README.md` with all required sections
+- [ ] Documented platform support table
+- [ ] Documented binary packaging (archive format, directory structure)
+- [ ] Documented implementation details (version format, configuration, ports)
+- [ ] Documented known issues & gotchas
+- [ ] Documented CI/CD considerations
 - [ ] Updated `README.md` engine count
 - [ ] Added to `--engine` option list
 - [ ] Added to Platform Coverage table
