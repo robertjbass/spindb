@@ -48,6 +48,8 @@ export const exportCommand = new Command('export')
         ) => {
           try {
             let containerName = containerArg
+            // Track if we're in interactive mode (no container arg = user will select)
+            const isInteractive = !containerArg && !options.json
 
             // Select container if not provided
             if (!containerName) {
@@ -110,8 +112,8 @@ export const exportCommand = new Command('export')
             // Determine target port:
             // 1. If user explicitly passed -p, use that
             // 2. If local port matches engine default, use it
-            // 3. If interactive mode and ports differ, prompt user
-            // 4. In JSON mode, default to engine's standard port
+            // 3. If interactive mode (no container arg) and ports differ, prompt user
+            // 4. CLI mode or JSON mode: default to engine's standard port
             let targetPort: number
             if (options.port !== undefined) {
               // User explicitly specified a port
@@ -119,8 +121,8 @@ export const exportCommand = new Command('export')
             } else if (port === engineDefaultPort) {
               // Local port matches engine default, no decision needed
               targetPort = engineDefaultPort
-            } else if (!options.json) {
-              // Interactive mode: prompt user to choose between local and default port
+            } else if (isInteractive) {
+              // Interactive mode only: prompt user to choose between local and default port
               console.log()
               console.log(
                 chalk.yellow(
@@ -149,7 +151,7 @@ export const exportCommand = new Command('export')
               ])
               targetPort = selectedPort
             } else {
-              // JSON mode: default to standard port
+              // CLI mode or JSON mode: default to standard port
               targetPort = engineDefaultPort
             }
 
