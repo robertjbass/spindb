@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Static imports refactoring** - Converted unnecessary dynamic `await import()` patterns to static imports across 12 files. Improves module load time and code clarity. No functional changes.
+- **Self-update verification** - After updating, runs `spindb --version` in a new process to verify the update worked. Replaces the confusing "restart your terminal" message with immediate confirmation.
+
+### Fixed
+- **Self-update false failure with fnm/nvm** - Fixed issue where self-update reported failure even when install succeeded. The verification step (`npm list -g`) could fail with stale cwd errors when using Node version managers. Install and verification are now separate, and verification uses fallbacks.
 
 ## [0.30.0] - 2026-01-31
 
