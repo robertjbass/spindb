@@ -1926,7 +1926,7 @@ async function handleExportDocker(
     console.log()
     console.log(chalk.bold('  To run:'))
     console.log(
-      chalk.cyan(`    cd "${result.outputDir}" && docker-compose up -d`),
+      chalk.cyan(`    cd "${result.outputDir}" && docker compose up -d`),
     )
     console.log()
   } catch (error) {

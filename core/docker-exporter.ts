@@ -505,13 +505,13 @@ This directory contains a Docker-ready package for running your SpinDB ${display
 
 \`\`\`bash
 # Start the container
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop the container
-docker-compose down
+docker compose down
 \`\`\`
 
 ## Configuration

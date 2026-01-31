@@ -340,7 +340,7 @@ export const exportCommand = new Command('export')
               console.log(chalk.bold('  To run:'))
               console.log(
                 chalk.cyan(
-                  `    cd "${result.outputDir}" && docker-compose up -d`,
+                  `    cd "${result.outputDir}" && docker compose up -d`,
                 ),
               )
               console.log()
