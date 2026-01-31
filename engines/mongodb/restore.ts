@@ -4,7 +4,8 @@
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync, statSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
+import { open } from 'fs/promises'
 import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from './cli-utils'
@@ -32,7 +33,7 @@ export async function detectBackupFormat(
   // Check file contents for archive format
   try {
     const buffer = Buffer.alloc(16)
-    const fd = await import('fs').then((fs) => fs.promises.open(filePath, 'r'))
+    const fd = await open(filePath, 'r')
     let header: string
     try {
       await fd.read(buffer, 0, 16, 0)
@@ -168,7 +169,6 @@ export async function restoreBackup(
     } else {
       // For restores to a different database, find any database subdirectory
       // (mongodump creates backupPath/{sourceDatabase}/)
-      const { readdirSync } = await import('fs')
       const entries = readdirSync(backupPath, { withFileTypes: true })
       const dbDirs = entries.filter((e) => e.isDirectory())
 

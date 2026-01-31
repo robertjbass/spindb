@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-01-31
+
+### Changed
+- **Static imports refactoring** - Converted unnecessary dynamic `await import()` patterns to static imports across 12 files. Improves module load time and code clarity. No functional changes.
+
+## [0.30.0] - 2026-01-31
+
+### Added
+- **`spindb export docker` command** - Export a local SpinDB container to a Docker-ready package:
+  ```bash
+  spindb export docker myapp
+  # Generates: ./myapp-docker/
+  #   ├── Dockerfile
+  #   ├── docker-compose.yml
+  #   ├── .env (auto-generated credentials)
+  #   ├── certs/ (TLS certificates)
+  #   ├── data/ (database backup)
+  #   ├── entrypoint.sh
+  #   └── README.md
+  ```
+  - **All 16 engines supported** - PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB
+  - **Multi-database export** - Containers with multiple databases export all databases by default
+  - **TLS enabled by default** - Auto-generates self-signed certificates for secure connections
+  - **Credential generation** - Auto-generates shell-safe passwords (avoids problematic characters like `#$&*?`)
+  - **Port selection** - Interactive prompt when local port differs from engine default
+  - **JSON output** - `--json` flag for scripting
+- **"Export to Docker" menu option** - Available in the interactive container menu for running containers
+
 ## [0.28.2] - 2026-01-31
 
 ### Fixed

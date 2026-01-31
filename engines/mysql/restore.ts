@@ -13,6 +13,8 @@ import { validateRestoreCompatibility } from './version-validator'
 import { getEngineDefaults } from '../../config/defaults'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
+import { normalizeVersion } from './version-maps'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
@@ -189,10 +191,6 @@ async function getMysqlClientPath(
 
   // Try version-matched SpinDB binary if containerVersion is provided
   if (containerVersion) {
-    // Dynamic imports to avoid circular dependencies
-    const { paths } = await import('../../config/paths')
-    const { normalizeVersion } = await import('./version-maps')
-
     const fullVersion = normalizeVersion(containerVersion)
     const platformInfo = platformService.getPlatformInfo()
 

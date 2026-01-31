@@ -13,7 +13,7 @@ import { isFileBasedEngine } from '../../types'
 import { getDefaultFormat } from '../../config/backup-formats'
 import { getEngineDefaults } from '../../config/engine-defaults'
 import { paths } from '../../config/paths'
-import { stat, rm } from 'fs/promises'
+import { stat, rm, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import inquirer from 'inquirer'
 
@@ -242,7 +242,6 @@ export const exportCommand = new Command('export')
                 )
 
                 // Create parent directory for backup
-                const { mkdir } = await import('fs/promises')
                 await mkdir(join(outputDir, 'data'), { recursive: true })
 
                 // Create backup using engine's backup method

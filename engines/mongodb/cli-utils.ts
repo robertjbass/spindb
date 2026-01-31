@@ -7,6 +7,10 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { configManager } from '../../core/config-manager'
+import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
+import { normalizeVersion } from './version-maps'
 
 /**
  * Get the path to mongodump binary for a specific MongoDB version.
@@ -26,15 +30,8 @@ import { join } from 'path'
 export async function getMongodumpPath(
   containerVersion?: string,
 ): Promise<string | null> {
-  // Dynamic imports to avoid circular dependencies
-  const { configManager } = await import('../../core/config-manager')
-  const { platformService } = await import('../../core/platform-service')
-
   // Try version-matched SpinDB binary if containerVersion is provided
   if (containerVersion) {
-    const { paths } = await import('../../config/paths')
-    const { normalizeVersion } = await import('./version-maps')
-
     const fullVersion = normalizeVersion(containerVersion)
     const platformInfo = platformService.getPlatformInfo()
     const ext = platformInfo.platform === 'win32' ? '.exe' : ''
@@ -76,8 +73,7 @@ export async function getMongodumpPath(
   }
 
   // Fallback to system PATH
-  const { platformService: ps } = await import('../../core/platform-service')
-  return ps.findToolPath('mongodump')
+  return platformService.findToolPath('mongodump')
 }
 
 /**
@@ -98,15 +94,8 @@ export async function getMongodumpPath(
 export async function getMongorestorePath(
   containerVersion?: string,
 ): Promise<string | null> {
-  // Dynamic imports to avoid circular dependencies
-  const { configManager } = await import('../../core/config-manager')
-  const { platformService } = await import('../../core/platform-service')
-
   // Try version-matched SpinDB binary if containerVersion is provided
   if (containerVersion) {
-    const { paths } = await import('../../config/paths')
-    const { normalizeVersion } = await import('./version-maps')
-
     const fullVersion = normalizeVersion(containerVersion)
     const platformInfo = platformService.getPlatformInfo()
     const ext = platformInfo.platform === 'win32' ? '.exe' : ''
@@ -156,8 +145,7 @@ export async function getMongorestorePath(
   }
 
   // Fallback to system PATH
-  const { platformService: ps } = await import('../../core/platform-service')
-  return ps.findToolPath('mongorestore')
+  return platformService.findToolPath('mongorestore')
 }
 
 /**
