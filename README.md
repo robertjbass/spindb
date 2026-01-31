@@ -354,6 +354,37 @@ spindb pull mydb --from-env PROD_URL --dry-run
 spindb pull mydb --from-env PROD_URL --post-script ./sync-credentials.ts
 ```
 
+### Export to Docker
+
+Generate a Docker-ready package from any SpinDB container:
+
+```bash
+# Export to Docker (generates Dockerfile, docker-compose.yml, etc.)
+spindb export docker mydb
+
+# Custom output directory
+spindb export docker mydb -o ./deploy
+
+# Override port (default: engine's standard port, e.g., 5432 for PostgreSQL)
+spindb export docker mydb -p 5433
+
+# Skip database backup or TLS certificates
+spindb export docker mydb --no-data
+spindb export docker mydb --no-tls
+
+# JSON output for scripting
+spindb export docker mydb --json --force
+```
+
+Generated files:
+- `Dockerfile` - Ubuntu 22.04 + Node.js 22 + SpinDB
+- `docker-compose.yml` - Container orchestration
+- `.env` - Auto-generated credentials
+- `certs/` - TLS certificates (self-signed)
+- `data/` - Database backup
+- `entrypoint.sh` - Startup script
+- `README.md` - Instructions
+
 ### Container Management
 
 ```bash
