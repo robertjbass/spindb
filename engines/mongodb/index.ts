@@ -641,7 +641,7 @@ export class MongoDBEngine extends BaseEngine {
     backupPath: string,
     options: Record<string, unknown> = {},
   ): Promise<RestoreResult> {
-    const { port } = container
+    const { port, version } = container
     const database = (options.database as string) || container.database
 
     return restoreBackup(backupPath, {
@@ -649,6 +649,7 @@ export class MongoDBEngine extends BaseEngine {
       database,
       drop: options.drop !== false,
       validateVersion: options.validateVersion !== false,
+      containerVersion: version,
     })
   }
 

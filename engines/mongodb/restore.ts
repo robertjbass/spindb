@@ -90,6 +90,7 @@ export type RestoreOptions = {
   drop?: boolean // Drop existing data before restore
   validateVersion?: boolean
   sourceDatabase?: string // Original database name in the backup (for namespace remapping)
+  containerVersion?: string // Container's MongoDB version for version-matched lookup
 }
 
 /**
@@ -122,9 +123,15 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database, drop = true, sourceDatabase } = options
+  const {
+    port,
+    database,
+    drop = true,
+    sourceDatabase,
+    containerVersion,
+  } = options
 
-  const mongorestore = await getMongorestorePath()
+  const mongorestore = await getMongorestorePath(containerVersion)
   if (!mongorestore) {
     throw new Error(MONGORESTORE_NOT_FOUND_ERROR)
   }

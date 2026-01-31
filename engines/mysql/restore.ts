@@ -149,6 +149,7 @@ export type RestoreOptions = {
   createDatabase?: boolean
   validateVersion?: boolean
   binPath?: string // Optional path to MySQL binaries directory
+  containerVersion?: string // Container's MySQL version for version-matched lookup
 }
 
 // =============================================================================
@@ -156,28 +157,72 @@ export type RestoreOptions = {
 // =============================================================================
 
 /**
- * Restore a MySQL backup to a database
+ * Get the mysql client path for a specific MySQL version.
  *
- * CLI equivalent: mysql -h 127.0.0.1 -P {port} -u root {db} < {file}
- */
-/**
- * Get the mysql client path from config or binPath
+ * Prioritizes SpinDB-managed binaries that match the container's version,
+ * falling back to system mysql only if no matching version is found.
  *
  * Lookup order:
- * 1. binPath/bin/mysql (hostdb layout: binaries are in bin/ subdirectory)
- * 2. Config manager cached path
- * 3. System PATH
+ * 1. binPath/bin/mysql (if explicitly provided)
+ * 2. SpinDB-managed mysql matching the container version
+ * 3. SpinDB-managed mysql matching the major version
+ * 4. Config manager cached path
+ * 5. System PATH
  *
- * @param binPath - Optional path to MySQL binary directory (from hostdb download)
+ * @param binPath - Optional explicit path to MySQL binary directory
+ * @param containerVersion - Container's MySQL version for version-matched lookup
  */
-async function getMysqlClientPath(binPath?: string): Promise<string> {
+async function getMysqlClientPath(
+  binPath?: string,
+  containerVersion?: string,
+): Promise<string> {
+  const ext = platformService.getExecutableExtension()
+
   // First check if binPath is provided and has mysql client
   // hostdb packages MySQL binaries in a bin/ subdirectory
   if (binPath) {
-    const ext = platformService.getExecutableExtension()
     const mysqlPath = join(binPath, 'bin', `mysql${ext}`)
     if (existsSync(mysqlPath)) {
       return mysqlPath
+    }
+  }
+
+  // Try version-matched SpinDB binary if containerVersion is provided
+  if (containerVersion) {
+    // Dynamic imports to avoid circular dependencies
+    const { paths } = await import('../../config/paths')
+    const { normalizeVersion } = await import('./version-maps')
+
+    const fullVersion = normalizeVersion(containerVersion)
+    const platformInfo = platformService.getPlatformInfo()
+
+    // Try exact version match
+    const versionedBinPath = paths.getBinaryPath({
+      engine: 'mysql',
+      version: fullVersion,
+      platform: platformInfo.platform,
+      arch: platformInfo.arch,
+    })
+
+    const versionedMysql = join(versionedBinPath, 'bin', `mysql${ext}`)
+    if (existsSync(versionedMysql)) {
+      return versionedMysql
+    }
+
+    // Try major version match
+    const majorVersion = containerVersion.split('.')[0]
+    const installed = paths.findInstalledBinaryForMajor(
+      'mysql',
+      majorVersion,
+      platformInfo.platform,
+      platformInfo.arch,
+    )
+
+    if (installed) {
+      const installedMysql = join(installed.path, 'bin', `mysql${ext}`)
+      if (existsSync(installedMysql)) {
+        return installedMysql
+      }
     }
   }
 
@@ -348,6 +393,7 @@ export async function restoreBackup(
     user = engineDef.superuser,
     validateVersion = true,
     binPath,
+    containerVersion,
   } = options
 
   // Validate version compatibility if requested
@@ -365,7 +411,7 @@ export async function restoreBackup(
     }
   }
 
-  const mysql = await getMysqlClientPath(binPath)
+  const mysql = await getMysqlClientPath(binPath, containerVersion)
 
   // Detect format and check for wrong engine
   const format = await detectBackupFormat(backupPath)
