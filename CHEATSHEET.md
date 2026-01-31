@@ -378,6 +378,45 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **CouchDB:** Default credentials are admin/admin.
 > **QuestDB:** Uses PostgreSQL wire protocol. Default credentials are admin/quest. Single database `qdb`.
 
+## Export to Docker
+
+Export a container to a Docker-ready package that runs SpinDB inside Docker.
+
+```bash
+spindb export docker mydb                    # Export to ~/.spindb/containers/{engine}/mydb/docker/
+spindb export docker mydb -o ./deploy        # Custom output directory
+spindb export docker mydb -o ./              # Export to current directory
+spindb export docker mydb -f                 # Overwrite existing export
+spindb export docker mydb -p 5433            # Override port (default: engine's standard port)
+spindb export docker mydb --no-data          # Skip database backup
+spindb export docker mydb --no-tls           # Skip TLS certificates
+spindb export docker mydb --copy             # Copy password to clipboard
+spindb export docker mydb --json             # JSON output for scripting
+```
+
+> **Port behavior:** Docker exports default to the engine's standard port (5432 for PostgreSQL, 3306 for MySQL, etc.). If your local container uses a different port, you'll be prompted to choose.
+
+**Generated files:**
+- `Dockerfile` - Ubuntu 22.04 base with Node.js, pnpm, SpinDB
+- `docker-compose.yml` - Container orchestration with health checks
+- `entrypoint.sh` - Startup script with user creation and data restore
+- `.env` - Auto-generated credentials (spindb user + random password)
+- `certs/` - Self-signed TLS certificates
+- `data/` - Database backup for initialization
+- `README.md` - Usage instructions and connection strings
+
+**To deploy:**
+```bash
+# Navigate to the output directory (shown in export output)
+cd ~/.spindb/containers/postgresql/mydb/docker && docker-compose up -d
+
+# Or use -o to export to a custom directory
+spindb export docker mydb -o ./mydb-docker
+cd mydb-docker && docker-compose up -d
+```
+
+> **Note:** All 16 engines are supported. File-based databases (SQLite, DuckDB) are exported but require additional work for network access.
+
 ## JSON Output (for scripting)
 
 Most commands support `--json` / `-j` for machine-readable output:
@@ -389,6 +428,7 @@ spindb create mydb --json
 spindb url mydb --json
 spindb backup mydb --json
 spindb backups --json
+spindb export docker mydb --json
 ```
 
 ## Common Workflows

@@ -23,12 +23,13 @@ This comprehensive document provides both the specification for adding a new dat
 13. [Testing Requirements](#testing-requirements)
 14. [CI/CD Configuration](#cicd-configuration)
 15. [Docker E2E Tests](#docker-e2e-tests)
-16. [Documentation Updates](#documentation-updates)
-17. [Common Gotchas & Edge Cases](#common-gotchas--edge-cases)
-18. [Windows Considerations](#windows-considerations)
-19. [Pass/Fail Criteria](#passfail-criteria)
-20. [Reference Implementations](#reference-implementations)
-21. [Appendix: Full Implementation Checklist](#appendix-full-implementation-checklist)
+16. [Docker Export Compatibility](#docker-export-compatibility)
+17. [Documentation Updates](#documentation-updates)
+18. [Common Gotchas & Edge Cases](#common-gotchas--edge-cases)
+19. [Windows Considerations](#windows-considerations)
+20. [Pass/Fail Criteria](#passfail-criteria)
+21. [Reference Implementations](#reference-implementations)
+22. [Appendix: Full Implementation Checklist](#appendix-full-implementation-checklist)
 
 ---
 
@@ -46,6 +47,7 @@ This comprehensive document provides both the specification for adding a new dat
 | `config/backup-formats.ts` | Add formats |
 | `core/dependency-manager.ts` | Add to KNOWN_BINARY_TOOLS |
 | `core/config-manager.ts` | Add tools constant and mappings |
+| `core/docker-exporter.ts` | Add display name, connection string, user creation |
 | `cli/constants.ts` | Add icons (ASCII, Nerd, emoji) and brand colors |
 | `cli/helpers.ts` | Add type, detection, ENGINE_PREFIXES |
 | `cli/commands/create.ts` | Add engine case for creation options |
@@ -67,7 +69,7 @@ This comprehensive document provides both the specification for adding a new dat
 | `CHANGELOG.md` | Add entry |
 | `package.json` | Add keyword, bump version |
 
-**Total: ~36 files modified or created**
+**Total: ~37 files modified or created**
 
 ---
 
@@ -2125,6 +2127,170 @@ fi
 
 ---
 
+## Docker Export Compatibility
+
+The `spindb export docker` command generates Docker-ready packages for deploying containers. Each engine must be properly integrated for this feature to work correctly.
+
+### core/docker-exporter.ts Updates
+
+- [ ] Add engine display name to `getEngineDisplayName()` function
+- [ ] Add connection string template to `getConnectionStringTemplate()` function
+- [ ] Add user creation commands in `generateEntrypoint()` switch statement
+
+**Display Name:**
+
+```ts
+function getEngineDisplayName(engine: Engine): string {
+  const displayNames: Record<Engine, string> = {
+    // ... existing engines
+    [Engine.YourEngine]: 'YourEngine',
+  }
+  return displayNames[engine] || engine
+}
+```
+
+**Connection String Template:**
+
+Return a template with `${SPINDB_USER}`, `${SPINDB_PASSWORD}`, and `<host>` placeholders:
+
+```ts
+function getConnectionStringTemplate(
+  engine: Engine,
+  port: number,
+  database: string,
+): string {
+  switch (engine) {
+    // ... existing engines
+
+    case Engine.YourEngine:
+      return `yourengine://${SPINDB_USER}:${SPINDB_PASSWORD}@<host>:${port}/${database}?tls=true`
+
+    // For REST API engines (no user in URL):
+    case Engine.YourApiEngine:
+      return `https://<host>:${port}`
+  }
+}
+```
+
+**User Creation Commands:**
+
+Add engine-specific SQL/commands to create the `spindb` user:
+
+```ts
+function generateEntrypoint(...): string {
+  let userCreationCommands = ''
+
+  switch (engine) {
+    // ... existing engines
+
+    // For SQL engines:
+    case Engine.YourEngine:
+      userCreationCommands = `
+# Create user with password
+echo "Creating database user..."
+spindb run "$CONTAINER_NAME" --database system <<EOF
+CREATE USER IF NOT EXISTS $SPINDB_USER IDENTIFIED BY '$SPINDB_PASSWORD';
+GRANT ALL ON $DATABASE.* TO $SPINDB_USER;
+EOF
+`
+      break
+
+    // For key-value engines (password only):
+    case Engine.YourKVEngine:
+      userCreationCommands = `
+# Authentication configured via server settings
+echo "Authentication configured via server settings"
+`
+      break
+
+    // For REST API engines (API key):
+    case Engine.YourApiEngine:
+      userCreationCommands = `
+# API key is configured at server start
+echo "API key configured via server settings"
+`
+      break
+  }
+}
+```
+
+### TLS Configuration
+
+Document how your engine handles TLS:
+
+| Engine | TLS Config Method | Connection String Param |
+|--------|-------------------|-------------------------|
+| PostgreSQL | `ssl = on` + certs in postgresql.conf | `?sslmode=require` |
+| MySQL | `require_secure_transport = ON` | `?ssl=true` |
+| Redis/Valkey | `tls-port` + cert flags | `rediss://` scheme |
+| REST APIs | Usually behind reverse proxy | `https://` |
+
+For engines with native TLS support, document:
+- Configuration file or command-line flags for enabling TLS
+- Certificate file paths
+- Whether client verification is optional or required
+
+### Authentication Methods
+
+Each engine has a different authentication mechanism:
+
+| Type | Engines | How It Works |
+|------|---------|--------------|
+| **User + Password** | PostgreSQL, MySQL, MariaDB, MongoDB, ClickHouse, CockroachDB | Create user via SQL/shell after startup |
+| **Password Only** | Redis, Valkey | Configure via `--requirepass` at startup |
+| **API Key** | Qdrant, Meilisearch | Configure via `--api-key` or `--master-key` at startup |
+| **Admin Account** | CouchDB, SurrealDB | Create via API or configure at startup |
+| **Wire Protocol Auth** | QuestDB | Uses PostgreSQL-compatible auth |
+
+### File-Based Engines
+
+SQLite and DuckDB require special handling:
+
+```ts
+// In generateEntrypoint(), use file copy instead of spindb restore:
+const restoreSection = isFileBased
+  ? `
+# File-based database - copy data file
+if ls /root/.spindb/init/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} 1> /dev/null 2>&1; then
+    echo "Copying database file..."
+    cp /root/.spindb/init/*.${extension} ~/.spindb/containers/$ENGINE/$CONTAINER_NAME/
+fi
+`
+  : `
+# Server-based - use spindb restore
+...
+`
+```
+
+### REST API Engines
+
+Engines like Qdrant, Meilisearch, and CouchDB:
+- Don't have CLI shells (`spindb run` not applicable)
+- Use API keys or master keys for authentication
+- Connection strings use `https://` scheme
+- No user creation needed (just API key configuration)
+
+### Testing Docker Export
+
+After implementing Docker export support for your engine:
+
+1. Create a local container with test data
+2. Export to Docker: `spindb export docker mycontainer`
+3. Build and run from the output directory (shown in export output):
+   ```bash
+   cd ~/.spindb/containers/{engine}/mycontainer/docker
+   docker-compose up -d
+   ```
+4. Verify:
+   - Container starts successfully
+   - Database is accessible on configured port
+   - Credentials work for authentication
+   - Data from backup is restored correctly
+
+**Note:** Use `-o ./mycontainer-docker` to export to the current directory instead of the default location. Use `--force` to overwrite an existing export.
+
+---
+
 ## Documentation Updates
 
 ### Engine-Specific README (`engines/{engine}/README.md`)
@@ -2595,6 +2761,16 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Updated start/stop skip conditions (file-based only)
 - [ ] Added curl-based tests (REST API only)
 
+### Docker Export Compatibility
+- [ ] Added engine display name to `getEngineDisplayName()` in `core/docker-exporter.ts`
+- [ ] Added connection string template to `getConnectionStringTemplate()`
+- [ ] Added user creation commands to `generateEntrypoint()` switch statement
+- [ ] Documented TLS configuration method for engine
+- [ ] Documented authentication mechanism (user/pass, API key, etc.)
+- [ ] Tested `spindb export docker` → `docker-compose up` workflow
+- [ ] Verified credentials work for authentication
+- [ ] Verified data restore works correctly
+
 ### Documentation Updates
 - [ ] Created `engines/{engine}/README.md` with all required sections
 - [ ] Documented platform support table
@@ -2641,3 +2817,5 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Full lifecycle test passed manually
 - [ ] Engine appears in "Manage engines" menu
 - [ ] `spindb engines list` shows the engine
+- [ ] `spindb export docker` works for engine
+- [ ] Docker container starts and database is accessible

@@ -8,6 +8,7 @@ import {
   copyFileSync,
   unlinkSync,
 } from 'fs'
+import { stat, mkdir, rm } from 'fs/promises'
 import { dirname, basename, join, resolve } from 'path'
 import { homedir } from 'os'
 import { containerManager } from '../../../core/container-manager'
@@ -48,6 +49,7 @@ import {
   uiInfo,
   connectionBox,
   formatBytes,
+  box,
 } from '../../ui/theme'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
@@ -55,6 +57,11 @@ import {
   handleBackupForContainer,
   handleRestoreForContainer,
 } from './backup-handlers'
+import {
+  exportToDocker,
+  getExportBackupPath,
+} from '../../../core/docker-exporter'
+import { getDefaultFormat } from '../../../config/backup-formats'
 import { Engine, isFileBasedEngine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 import { getEngineIcon } from '../../constants'
@@ -849,6 +856,19 @@ export async function showContainerSubmenu(
       : disabledItem('✕', 'Delete container', 'Stop container first'),
   )
 
+  // Export to Docker - server-based DBs must be running to backup, file-based can always export
+  const canExport = isFileBasedDB ? true : isRunning
+  const exportDbCount = databases.length
+  const exportLabel =
+    exportDbCount > 1
+      ? `${chalk.cyan('⬆')} Export to Docker ${chalk.gray(`(${exportDbCount} databases)`)}`
+      : `${chalk.cyan('⬆')} Export to Docker`
+  actionChoices.push(
+    canExport
+      ? { name: exportLabel, value: 'export-docker' }
+      : disabledItem('⬆', 'Export to Docker', 'Start container first'),
+  )
+
   actionChoices.push(new inquirer.Separator())
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -966,6 +986,9 @@ export async function showContainerSubmenu(
     case 'delete':
       await handleDelete(containerName)
       return // Don't show submenu again after delete
+    case 'export-docker':
+      await handleExportDocker(containerName, databases, showMainMenu)
+      return
     case 'back':
       await handleList(showMainMenu)
       return
@@ -1704,4 +1727,182 @@ async function handleDelete(containerName: string): Promise<void> {
   await containerManager.delete(containerName, { force: true })
 
   deleteSpinner.succeed(`Container "${containerName}" deleted`)
+}
+
+async function handleExportDocker(
+  containerName: string,
+  databases: string[],
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    await showContainerSubmenu(containerName, showMainMenu, undefined)
+    return
+  }
+
+  const engine = getEngine(config.engine)
+  const engineDefaultPort = getEngineDefaults(config.engine).defaultPort
+
+  // Determine output directory
+  const outputDir = join(
+    paths.getContainerPath(containerName, { engine: config.engine }),
+    'docker',
+  )
+
+  // Check if output directory already exists
+  if (existsSync(outputDir)) {
+    console.log()
+    console.log(uiWarning(`Output directory already exists: ${outputDir}`))
+    const shouldOverwrite = await promptConfirm(
+      'Do you want to overwrite it?',
+      false,
+    )
+    if (!shouldOverwrite) {
+      console.log(uiInfo('Export cancelled'))
+      await pressEnterToContinue()
+      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      return
+    }
+    // Remove existing directory
+    await rm(outputDir, { recursive: true, force: true })
+  }
+
+  // Determine target port
+  let targetPort = engineDefaultPort
+  if (config.port !== engineDefaultPort) {
+    console.log()
+    console.log(
+      chalk.yellow(
+        `Local container uses port ${chalk.cyan(String(config.port))}, but ${engine.displayName}'s standard port is ${chalk.cyan(String(engineDefaultPort))}.`,
+      ),
+    )
+    const { selectedPort } = await escapeablePrompt<{ selectedPort: number }>([
+      {
+        type: 'list',
+        name: 'selectedPort',
+        message: 'Which port should the Docker container use?',
+        choices: [
+          {
+            name: `${engineDefaultPort} ${chalk.gray('(standard port - recommended)')}`,
+            value: engineDefaultPort,
+          },
+          {
+            name: `${config.port} ${chalk.gray('(same as local container)')}`,
+            value: config.port,
+          },
+        ],
+        default: engineDefaultPort,
+      },
+    ])
+    targetPort = selectedPort
+  }
+
+  console.log()
+  console.log(chalk.bold(`Exporting ${chalk.cyan(containerName)} to Docker...`))
+  console.log()
+
+  // Create backups for all databases
+  const backupPaths: Array<{ database: string; path: string }> = []
+  const isFileBased = isFileBasedEngine(config.engine)
+
+  if (!isFileBased) {
+    const backupSpinner = createSpinner(
+      databases.length > 1
+        ? `Creating backups for ${databases.length} databases...`
+        : 'Creating database backup...',
+    )
+    backupSpinner.start()
+
+    try {
+      await mkdir(join(outputDir, 'data'), { recursive: true })
+
+      for (const db of databases) {
+        const backupPath = getExportBackupPath(
+          outputDir,
+          containerName,
+          db,
+          config.engine,
+        )
+        const format = getDefaultFormat(config.engine)
+        const result = await engine.backup(config, backupPath, {
+          database: db,
+          format,
+        })
+        backupPaths.push({ database: db, path: result.path })
+      }
+
+      const totalSize = await Promise.all(
+        backupPaths.map(async (bp) => (await stat(bp.path)).size),
+      ).then((sizes) => sizes.reduce((a, b) => a + b, 0))
+
+      backupSpinner.succeed(
+        databases.length > 1
+          ? `Backups created for ${databases.length} databases (${formatBytes(totalSize)})`
+          : `Backup created (${formatBytes(totalSize)})`,
+      )
+    } catch (error) {
+      backupSpinner.fail('Backup failed')
+      console.log(uiError((error as Error).message))
+      await pressEnterToContinue()
+      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      return
+    }
+  }
+
+  // Generate Docker artifacts
+  const exportSpinner = createSpinner('Generating Docker artifacts...')
+  exportSpinner.start()
+
+  try {
+    const result = await exportToDocker(config, {
+      outputDir,
+      port: targetPort,
+      includeData: !isFileBased,
+      backupPaths: backupPaths.length > 0 ? backupPaths : undefined,
+      skipTLS: false,
+    })
+
+    exportSpinner.succeed('Docker artifacts generated')
+
+    console.log()
+    console.log(uiSuccess(`Exported ${chalk.cyan(containerName)} to Docker`))
+    console.log()
+
+    // Display summary
+    const lines = [
+      `${chalk.bold(engine.displayName)} ${config.version}`,
+      `Port: ${chalk.green(String(targetPort))}`,
+      databases.length > 1
+        ? `Databases: ${chalk.cyan(databases.join(', '))}`
+        : `Database: ${chalk.cyan(config.database)}`,
+      '',
+      chalk.bold('Generated Credentials'),
+      chalk.gray('────────────────────────'),
+      `Username: ${chalk.white(result.credentials.username)}`,
+      `Password: ${chalk.white(result.credentials.password)}`,
+      chalk.gray('────────────────────────'),
+      '',
+      chalk.yellow('Save these credentials now - stored in .env'),
+    ]
+
+    // Simple box display using the theme's box function
+    console.log(box(lines))
+
+    console.log()
+    console.log(chalk.gray('  Output:'), chalk.cyan(result.outputDir))
+    console.log()
+    console.log(chalk.bold('  To run:'))
+    console.log(
+      chalk.cyan(`    cd "${result.outputDir}" && docker-compose up -d`),
+    )
+    console.log()
+  } catch (error) {
+    exportSpinner.fail('Export failed')
+    console.log(uiError((error as Error).message))
+  }
+
+  await pressEnterToContinue()
+  await showContainerSubmenu(containerName, showMainMenu, undefined)
 }
