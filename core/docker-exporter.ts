@@ -149,15 +149,11 @@ RUN mkdir -p /etc/apt/keyrings \\
     && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm and SpinDB globally
-RUN npm install -g pnpm \
-    && pnpm setup \
-    && export PNPM_HOME="/root/.local/share/pnpm" \
-    && export PATH="$PNPM_HOME:$PATH" \
-    && pnpm add -g spindb
-
-# Add pnpm to PATH for runtime
 ENV PNPM_HOME="/root/.local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+RUN npm install -g pnpm \
+    && mkdir -p "$PNPM_HOME" \
+    && pnpm add -g spindb
 
 # Create spindb directories
 RUN mkdir -p /root/.spindb/containers /root/.spindb/bin /root/.spindb/certs
