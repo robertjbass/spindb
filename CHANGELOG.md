@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Credential generation** - Auto-generates shell-safe passwords (avoids problematic characters like `#$&*?`)
   - **Port selection** - Interactive prompt when local port differs from engine default
   - **JSON output** - `--json` flag for scripting
-- **"Export to Docker" menu option** - Available in the interactive container menu for running containers
+- **"Export" menu option** - Available in the interactive container menu with submenu for export formats (currently Docker, extensible for future deployment targets)
 
 ## [0.28.2] - 2026-01-31
 

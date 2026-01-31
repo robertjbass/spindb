@@ -856,17 +856,12 @@ export async function showContainerSubmenu(
       : disabledItem('✕', 'Delete container', 'Stop container first'),
   )
 
-  // Export to Docker - server-based DBs must be running to backup, file-based can always export
+  // Export - server-based DBs must be running to backup, file-based can always export
   const canExport = isFileBasedDB ? true : isRunning
-  const exportDbCount = databases.length
-  const exportLabel =
-    exportDbCount > 1
-      ? `${chalk.cyan('⬆')} Export to Docker ${chalk.gray(`(${exportDbCount} databases)`)}`
-      : `${chalk.cyan('⬆')} Export to Docker`
   actionChoices.push(
     canExport
-      ? { name: exportLabel, value: 'export-docker' }
-      : disabledItem('⬆', 'Export to Docker', 'Start container first'),
+      ? { name: `${chalk.cyan('↑')} Export`, value: 'export' }
+      : disabledItem('⬆', 'Export', 'Start container first'),
   )
 
   actionChoices.push(new inquirer.Separator())
@@ -986,8 +981,8 @@ export async function showContainerSubmenu(
     case 'delete':
       await handleDelete(containerName)
       return // Don't show submenu again after delete
-    case 'export-docker':
-      await handleExportDocker(containerName, databases, showMainMenu)
+    case 'export':
+      await handleExportSubmenu(containerName, databases, showMainMenu)
       return
     case 'back':
       await handleList(showMainMenu)
@@ -1727,6 +1722,42 @@ async function handleDelete(containerName: string): Promise<void> {
   await containerManager.delete(containerName, { force: true })
 
   deleteSpinner.succeed(`Container "${containerName}" deleted`)
+}
+
+async function handleExportSubmenu(
+  containerName: string,
+  databases: string[],
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  console.log()
+  console.log(header('Export'))
+  console.log()
+
+  const { action } = await escapeablePrompt<{ action: string }>([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'Export format:',
+      choices: [
+        { name: `${chalk.cyan('▣')} Docker`, value: 'docker' },
+        new inquirer.Separator(),
+        { name: `${chalk.blue('←')} Back`, value: 'back' },
+        { name: `${chalk.blue('⌂')} Home`, value: 'home' },
+      ],
+    },
+  ])
+
+  switch (action) {
+    case 'docker':
+      await handleExportDocker(containerName, databases, showMainMenu)
+      return
+    case 'back':
+      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      return
+    case 'home':
+      await showMainMenu()
+      return
+  }
 }
 
 async function handleExportDocker(
