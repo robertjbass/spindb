@@ -568,14 +568,13 @@ export async function handleList(
     (c) => !isFileBasedEngine(c.engine),
   )
 
-  // Build hints string (bottom of list)
-  const hints = hasServerContainers ? chalk.gray('[Shift]+[Tab] - toggle') : ''
-
-  // Build the full choice list with footer items
-  const summary = hints
-    ? `${containers.length} container(s): ${parts.join('; ')} — ${hints}`
-    : `${containers.length} container(s): ${parts.join('; ')}`
+  // Build the full choice list with header hint and footer items
+  const summary = `${containers.length} container(s): ${parts.join('; ')}`
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
+    // Show toggle hint at top when server-based containers exist
+    ...(hasServerContainers
+      ? [new inquirer.Separator(chalk.cyan('── [Shift+Tab] toggle start/stop ──'))]
+      : []),
     ...containerChoices,
     new inquirer.Separator(),
     new inquirer.Separator(summary),

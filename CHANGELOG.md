@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.5] - 2026-02-01
+
+### Changed
+- **Container list toggle hint** - Moved Shift+Tab toggle hint from bottom summary line to a persistent separator at the top of the container list. Now displays as a cyan-colored separator for better visibility.
+
 ## [0.30.4] - 2026-02-01
 
 ### Changed
