@@ -579,35 +579,41 @@ describe('PostgreSQL Integration Tests', () => {
   it('should handle port conflict gracefully', async () => {
     console.log(`\n⚠️  Testing port conflict handling...`)
 
-    // Try to create container on a port that's already in use (testPorts[2])
-    await containerManager.create(portConflictContainerName, {
-      engine: ENGINE,
-      version: '18',
-      port: testPorts[2], // This port is in use by renamed container
-      database: 'conflictdb',
-    })
+    try {
+      // Try to create container on a port that's already in use (testPorts[2])
+      await containerManager.create(portConflictContainerName, {
+        engine: ENGINE,
+        version: '18',
+        port: testPorts[2], // This port is in use by renamed container
+        database: 'conflictdb',
+      })
 
-    const engine = getEngine(ENGINE)
-    await engine.initDataDir(portConflictContainerName, '18', {
-      superuser: 'postgres',
-    })
+      const engine = getEngine(ENGINE)
+      await engine.initDataDir(portConflictContainerName, '18', {
+        superuser: 'postgres',
+      })
 
-    // The container should be created but when we try to start, it should detect conflict
-    // In real usage, the start command would auto-assign a new port
-    const config = await containerManager.getConfig(portConflictContainerName)
-    assert(config !== null, 'Container should be created')
-    assertEqual(
-      config?.port,
-      testPorts[2],
-      'Port should be set to conflicting port initially',
-    )
+      // The container should be created but when we try to start, it should detect conflict
+      // In real usage, the start command would auto-assign a new port
+      const config = await containerManager.getConfig(portConflictContainerName)
+      assert(config !== null, 'Container should be created')
+      assertEqual(
+        config?.port,
+        testPorts[2],
+        'Port should be set to conflicting port initially',
+      )
 
-    // Clean up this test container
-    await containerManager.delete(portConflictContainerName, { force: true })
-
-    console.log(
-      '   ✓ Container created with conflicting port (would auto-reassign on start)',
-    )
+      console.log(
+        '   ✓ Container created with conflicting port (would auto-reassign on start)',
+      )
+    } finally {
+      // Always clean up this test container, even if the test fails
+      await containerManager
+        .delete(portConflictContainerName, { force: true })
+        .catch(() => {
+          // Ignore errors during cleanup (container may not exist if creation failed)
+        })
+    }
   })
 
   it('should show warning when starting already running container', async () => {
