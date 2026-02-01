@@ -369,13 +369,13 @@ echo "File-based database initialized"
   // Note: Uses /home/spindb/.spindb/init/ since container runs as spindb user
   const initDir = '/home/spindb/.spindb/init'
   const fileExt = engine === Engine.SQLite ? 'sqlite' : 'duckdb'
-  const fileBasedDataPath = `/home/spindb/.spindb/containers/${engine}/${containerName}/${containerName}.${fileExt}`
+  // File-based path is computed at runtime in the shell script using $FILE_DB_PATH
   const restoreSection = isFileBased
     ? `
 # File-based database - copy data file to the path used by spindb create --path
 if ls ${initDir}/*.${fileExt} 1> /dev/null 2>&1; then
     echo "Copying database file..."
-    cp ${initDir}/*.${fileExt} "${fileBasedDataPath}"
+    cp ${initDir}/*.${fileExt} "$FILE_DB_PATH"
 fi
 `
     : databases.length > 1
@@ -413,7 +413,14 @@ VERSION="\${SPINDB_VERSION:-${version}}"
 PORT="\${SPINDB_PORT:-${port}}"
 SPINDB_USER="\${SPINDB_USER:-spindb}"
 SPINDB_PASSWORD="\${SPINDB_PASSWORD:?Error: SPINDB_PASSWORD environment variable is required}"
-
+${
+  isFileBased
+    ? `
+# File-based database path (computed from runtime CONTAINER_NAME)
+FILE_DB_PATH="/home/spindb/.spindb/containers/${engine}/\${CONTAINER_NAME}/\${CONTAINER_NAME}.${fileExt}"
+`
+    : ''
+}
 # Export environment variables for the spindb user
 export SPINDB_CONTAINER SPINDB_DATABASE SPINDB_ENGINE SPINDB_VERSION SPINDB_PORT SPINDB_USER SPINDB_PASSWORD
 
@@ -443,7 +450,7 @@ else
     ${
       isFileBased
         ? `# File-based database: use deterministic path for database file
-    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "${fileBasedDataPath}" --force`
+    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "$FILE_DB_PATH" --force`
         : `run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force`
     }
 fi
@@ -513,7 +520,17 @@ function generateDockerCompose(
   version: string,
   port: number,
   database: string,
+  isFileBased: boolean,
 ): string {
+  // Engine-aware healthcheck matching Dockerfile behavior
+  // Server-based: check for running status
+  // File-based: check that container exists (no server process to check)
+  const healthcheckCommand = isFileBased
+    ? `gosu spindb spindb list --json | grep -q '"engine":"${engine}"'`
+    : `gosu spindb spindb list --json | grep -q '"status":"running"'`
+
+  const startPeriod = isFileBased ? '30s' : '60s'
+
   return `name: spindb-${containerName}
 
 services:
@@ -534,10 +551,10 @@ services:
     volumes:
       - spindb-data:/home/spindb/.spindb
     healthcheck:
-      test: ["CMD", "gosu", "spindb", "spindb", "list", "--json"]
+      test: ["CMD-SHELL", "${healthcheckCommand}"]
       interval: 30s
       timeout: 10s
-      start_period: 60s
+      start_period: ${startPeriod}
       retries: 3
 
 volumes:
@@ -766,6 +783,7 @@ export async function exportToDocker(
       version,
       port,
       database,
+      isFileBasedEngine(engine),
     )
     await writeFile(join(outputDir, 'docker-compose.yml'), dockerCompose)
     files.push('docker-compose.yml')
