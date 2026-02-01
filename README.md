@@ -279,6 +279,7 @@ spindb create mydb --engine mongodb             # MongoDB
 spindb create mydb --engine mysql --db-version 8.0  # MySQL 8.0
 spindb create mydb --port 5433                  # Custom port
 spindb create mydb --start --connect            # Create, start, and connect
+spindb create mydb --force                      # Overwrite existing container
 
 # Start/stop databases
 spindb start mydb

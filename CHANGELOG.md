@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--force` flag for `spindb create`** - Overwrites existing containers without prompting. Useful for scripting and Docker entrypoints where interactive prompts aren't available. Stops running containers before deletion.
+  ```bash
+  spindb create mydb --engine postgresql --force
+  ```
+
+### Fixed
+- **Docker export container startup** - Fixed multiple issues preventing Docker containers from starting:
+  - Added `libnuma1` dependency required by PostgreSQL binaries on Linux
+  - Added `gosu` for running database processes as non-root user (PostgreSQL refuses to run as root)
+  - Fixed volume permissions with `chown` at container startup
+  - Fixed shell escaping in grep patterns for container status checks
+
 ## [0.30.1] - 2026-01-31
 
 ### Changed

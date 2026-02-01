@@ -133,11 +133,15 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install base dependencies
+# libnuma1: Required by PostgreSQL binaries
+# gosu: For running commands as non-root user
 RUN apt-get update && apt-get install -y \\
     curl \\
     openssl \\
     ca-certificates \\
     gnupg \\
+    libnuma1 \\
+    gosu \\
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22 LTS (matches SpinDB's engine requirements)
@@ -148,21 +152,25 @@ RUN mkdir -p /etc/apt/keyrings \\
     && apt-get install -y nodejs \\
     && rm -rf /var/lib/apt/lists/*
 
+# Create spindb user (non-root for database processes)
+RUN groupadd -r spindb && useradd -r -g spindb -d /home/spindb -m -s /bin/bash spindb
+
 # Install pnpm and SpinDB globally
-ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PNPM_HOME="/home/spindb/.local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g pnpm \
-    && mkdir -p "$PNPM_HOME" \
+RUN npm install -g pnpm \\
+    && mkdir -p "$PNPM_HOME" \\
     && pnpm add -g spindb
 
-# Create spindb directories
-RUN mkdir -p /root/.spindb/containers /root/.spindb/bin /root/.spindb/certs
+# Create spindb directories with proper ownership
+RUN mkdir -p /home/spindb/.spindb/containers /home/spindb/.spindb/bin /home/spindb/.spindb/certs /home/spindb/.spindb/init \\
+    && chown -R spindb:spindb /home/spindb
 
 # Copy TLS certificates
-COPY ./certs/ /root/.spindb/certs/
+COPY --chown=spindb:spindb ./certs/ /home/spindb/.spindb/certs/
 
 # Copy database backup/data
-COPY ./data/ /root/.spindb/init/
+COPY --chown=spindb:spindb ./data/ /home/spindb/.spindb/init/
 
 # Copy entrypoint script
 COPY ./entrypoint.sh /entrypoint.sh
@@ -170,13 +178,14 @@ RUN chmod +x /entrypoint.sh
 
 # Environment variables (can be overridden)
 ENV SPINDB_ENGINE=${engine}
+ENV HOME=/home/spindb
 
 # Expose database port
 EXPOSE \${SPINDB_PORT:-${engineDefaults[engine].defaultPort}}
 
-# Health check
+# Health check (run as spindb user)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
-    CMD spindb list --json | grep -q "\\"status\\":\\"running\\""
+    CMD gosu spindb spindb list --json | grep -q '"status":"running"'
 
 ENTRYPOINT ["/entrypoint.sh"]
 `
@@ -203,7 +212,7 @@ function generateEntrypoint(
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-spindb run "$CONTAINER_NAME" --database postgres <<EOF
+run_as_spindb spindb run "$CONTAINER_NAME" --database postgres <<EOF
 DO \\$\\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$SPINDB_USER') THEN
@@ -223,7 +232,7 @@ EOF
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-spindb run "$CONTAINER_NAME" --database mysql <<EOF
+run_as_spindb spindb run "$CONTAINER_NAME" --database mysql <<EOF
 CREATE USER IF NOT EXISTS '$SPINDB_USER'@'%' IDENTIFIED BY '$SPINDB_PASSWORD';
 GRANT ALL PRIVILEGES ON \\\`$DATABASE\\\`.* TO '$SPINDB_USER'@'%';
 FLUSH PRIVILEGES;
@@ -236,7 +245,7 @@ EOF
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-spindb run "$CONTAINER_NAME" --database admin <<EOF
+run_as_spindb spindb run "$CONTAINER_NAME" --database admin <<EOF
 db.createUser({
   user: "$SPINDB_USER",
   pwd: "$SPINDB_PASSWORD",
@@ -259,7 +268,7 @@ echo "Authentication configured via server settings"
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-spindb run "$CONTAINER_NAME" <<EOF
+run_as_spindb spindb run "$CONTAINER_NAME" <<EOF
 CREATE USER IF NOT EXISTS $SPINDB_USER IDENTIFIED BY '$SPINDB_PASSWORD';
 GRANT ALL ON $DATABASE.* TO $SPINDB_USER;
 EOF
@@ -277,7 +286,7 @@ echo "Admin credentials configured via server settings"
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-spindb run "$CONTAINER_NAME" --database defaultdb <<EOF
+run_as_spindb spindb run "$CONTAINER_NAME" --database defaultdb <<EOF
 CREATE USER IF NOT EXISTS $SPINDB_USER WITH PASSWORD '$SPINDB_PASSWORD';
 GRANT ALL ON DATABASE $DATABASE TO $SPINDB_USER;
 EOF
@@ -313,12 +322,14 @@ echo "Credentials configured"
   }
 
   // Generate restore commands for all databases
+  // Note: Uses /home/spindb/.spindb/init/ since container runs as spindb user
+  const initDir = '/home/spindb/.spindb/init'
   const restoreSection = isFileBased
     ? `
 # File-based database - copy data file
-if ls /root/.spindb/init/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} 1> /dev/null 2>&1; then
+if ls ${initDir}/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} 1> /dev/null 2>&1; then
     echo "Copying database file..."
-    cp /root/.spindb/init/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} ~/.spindb/containers/$ENGINE/$CONTAINER_NAME/
+    cp ${initDir}/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} ~/.spindb/containers/$ENGINE/$CONTAINER_NAME/
 fi
 `
     : databases.length > 1
@@ -327,21 +338,21 @@ fi
 DATABASES="${databases.join(' ')}"
 for DB in $DATABASES; do
     # Find backup file for this database (pattern: containerName-dbName.*)
-    BACKUP_FILE=$(ls /root/.spindb/init/${containerName}-$DB.* 2>/dev/null | head -1)
+    BACKUP_FILE=$(ls ${initDir}/${containerName}-$DB.* 2>/dev/null | head -1)
     if [ -n "$BACKUP_FILE" ]; then
         echo "Restoring database: $DB"
         # Add database to tracking if not already tracked
-        spindb databases add "$CONTAINER_NAME" "$DB" 2>/dev/null || true
-        spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DB" --force || echo "Restore of $DB completed with warnings"
+        run_as_spindb spindb databases add "$CONTAINER_NAME" "$DB" 2>/dev/null || true
+        run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DB" --force || echo "Restore of $DB completed with warnings"
     fi
 done
 `
       : `
 # Restore data if backup exists
-if ls /root/.spindb/init/* 1> /dev/null 2>&1; then
+if ls ${initDir}/* 1> /dev/null 2>&1; then
     echo "Restoring data from backup..."
-    BACKUP_FILE=$(ls /root/.spindb/init/* | head -1)
-    spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DATABASE" --force || echo "Restore completed with warnings"
+    BACKUP_FILE=$(ls ${initDir}/* | head -1)
+    run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DATABASE" --force || echo "Restore completed with warnings"
 fi
 `
 
@@ -357,6 +368,13 @@ PORT="\${SPINDB_PORT:-${port}}"
 SPINDB_USER="\${SPINDB_USER:-spindb}"
 SPINDB_PASSWORD="\${SPINDB_PASSWORD:?Error: SPINDB_PASSWORD environment variable is required}"
 
+# Export environment variables for the spindb user
+export SPINDB_CONTAINER SPINDB_DATABASE SPINDB_ENGINE SPINDB_VERSION SPINDB_PORT SPINDB_USER SPINDB_PASSWORD
+
+# Fix permissions on mounted volume (may have been created with root ownership)
+echo "Setting up directories..."
+chown -R spindb:spindb /home/spindb/.spindb 2>/dev/null || true
+
 echo "========================================"
 echo "SpinDB Docker Container"
 echo "========================================"
@@ -366,22 +384,27 @@ echo "Database: $DATABASE"
 echo "Port: $PORT"
 echo "========================================"
 
+# Run all spindb commands as the spindb user (databases cannot run as root)
+run_as_spindb() {
+    gosu spindb "$@"
+}
+
 # Check if container already exists
-if spindb list --json 2>/dev/null | grep -q "\\"name\\":\\"$CONTAINER_NAME\\""; then
+if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name":"'"$CONTAINER_NAME"'"'; then
     echo "Container '$CONTAINER_NAME' already exists"
 else
     echo "Creating container '$CONTAINER_NAME'..."
-    spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE"
+    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force
 fi
 
 # Start the database
 echo "Starting database..."
-spindb start "$CONTAINER_NAME"
+run_as_spindb spindb start "$CONTAINER_NAME"
 
 # Wait for database to be ready
 echo "Waiting for database to be ready..."
 RETRIES=30
-until spindb list --json 2>/dev/null | grep -q "\\"status\\":\\"running\\"" || [ $RETRIES -eq 0 ]; do
+until run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":"running"' || [ $RETRIES -eq 0 ]; do
     echo "Waiting for database... ($RETRIES attempts remaining)"
     sleep 2
     RETRIES=$((RETRIES-1))
@@ -403,15 +426,16 @@ echo "========================================"
 
 # Keep container running
 # Trap SIGTERM and SIGINT for graceful shutdown
-trap "echo 'Shutting down...'; spindb stop '$CONTAINER_NAME'; exit 0" SIGTERM SIGINT
+trap "echo 'Shutting down...'; run_as_spindb spindb stop '$CONTAINER_NAME'; exit 0" SIGTERM SIGINT
 
-# Keep the container running
+# Keep the container running (as spindb user)
+exec gosu spindb tail -f /dev/null &
 while true; do
     sleep 60
     # Check if database is still running
-    if ! spindb list --json 2>/dev/null | grep -q "\\"status\\":\\"running\\""; then
+    if ! run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":"running"'; then
         echo "Database stopped unexpectedly, restarting..."
-        spindb start "$CONTAINER_NAME" || true
+        run_as_spindb spindb start "$CONTAINER_NAME" || true
     fi
 done
 `
@@ -445,9 +469,9 @@ services:
     ports:
       - "\${PORT:-${port}}:\${PORT:-${port}}"
     volumes:
-      - spindb-data:/root/.spindb
+      - spindb-data:/home/spindb/.spindb
     healthcheck:
-      test: ["CMD", "spindb", "list", "--json"]
+      test: ["CMD", "gosu", "spindb", "spindb", "list", "--json"]
       interval: 30s
       timeout: 10s
       start_period: 60s

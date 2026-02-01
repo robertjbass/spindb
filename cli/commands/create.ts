@@ -37,10 +37,11 @@ async function createSqliteContainer(
     path?: string
     from?: string | null
     connect?: boolean
+    force?: boolean
     json?: boolean
   },
 ): Promise<void> {
-  const { path: filePath, from: restoreLocation, connect, json } = options
+  const { path: filePath, from: restoreLocation, connect, force, json } = options
 
   // Check dependencies
   const depsSpinner = json ? null : createSpinner('Checking required tools...')
@@ -70,17 +71,26 @@ async function createSqliteContainer(
 
   // Check if container already exists
   if (await containerManager.exists(containerName)) {
-    if (json) {
+    if (force) {
+      // Delete existing container with force
+      if (!json) {
+        console.log(
+          chalk.yellow(`  Removing existing container "${containerName}"...`),
+        )
+      }
+      await containerManager.delete(containerName, { force: true })
+    } else if (json) {
       return exitWithError({
-        message: `Container "${containerName}" already exists`,
+        message: `Container "${containerName}" already exists. Use --force to overwrite.`,
         json: true,
       })
-    }
-    while (await containerManager.exists(containerName)) {
-      console.log(
-        chalk.yellow(`  Container "${containerName}" already exists.`),
-      )
-      containerName = await promptContainerName()
+    } else {
+      while (await containerManager.exists(containerName)) {
+        console.log(
+          chalk.yellow(`  Container "${containerName}" already exists.`),
+        )
+        containerName = await promptContainerName()
+      }
     }
   }
 
@@ -190,10 +200,11 @@ async function createDuckDBContainer(
     path?: string
     from?: string | null
     connect?: boolean
+    force?: boolean
     json?: boolean
   },
 ): Promise<void> {
-  const { path: filePath, from: restoreLocation, connect, json } = options
+  const { path: filePath, from: restoreLocation, connect, force, json } = options
 
   // Check dependencies
   const depsSpinner = json ? null : createSpinner('Checking required tools...')
@@ -223,17 +234,26 @@ async function createDuckDBContainer(
 
   // Check if container already exists
   if (await containerManager.exists(containerName)) {
-    if (json) {
+    if (force) {
+      // Delete existing container with force
+      if (!json) {
+        console.log(
+          chalk.yellow(`  Removing existing container "${containerName}"...`),
+        )
+      }
+      await containerManager.delete(containerName, { force: true })
+    } else if (json) {
       return exitWithError({
-        message: `Container "${containerName}" already exists`,
+        message: `Container "${containerName}" already exists. Use --force to overwrite.`,
         json: true,
       })
-    }
-    while (await containerManager.exists(containerName)) {
-      console.log(
-        chalk.yellow(`  Container "${containerName}" already exists.`),
-      )
-      containerName = await promptContainerName()
+    } else {
+      while (await containerManager.exists(containerName)) {
+        console.log(
+          chalk.yellow(`  Container "${containerName}" already exists.`),
+        )
+        containerName = await promptContainerName()
+      }
     }
   }
 
@@ -404,6 +424,10 @@ export const createCommand = new Command('create')
     '--max-connections <number>',
     'Maximum number of database connections (default: 200)',
   )
+  .option(
+    '-f, --force',
+    'Overwrite existing container without prompting (deletes existing data)',
+  )
   .option('--start', 'Start the container after creation (skip prompt)')
   .option('--no-start', 'Do not start the container after creation')
   .option('--connect', 'Open a shell connection after creation')
@@ -422,6 +446,7 @@ export const createCommand = new Command('create')
         port?: string
         path?: string
         maxConnections?: string
+        force?: boolean
         start?: boolean
         connect?: boolean
         from?: string
@@ -541,6 +566,7 @@ export const createCommand = new Command('create')
             path: options.path,
             from: restoreLocation,
             connect: options.connect,
+            force: options.force,
             json: options.json,
           })
           return
@@ -552,6 +578,7 @@ export const createCommand = new Command('create')
             path: options.path,
             from: restoreLocation,
             connect: options.connect,
+            force: options.force,
             json: options.json,
           })
           return
@@ -733,17 +760,44 @@ export const createCommand = new Command('create')
         }
 
         if (await containerManager.exists(containerName)) {
-          if (options.json) {
+          if (options.force) {
+            // Stop the container if it's running, then delete it
+            const existingConfig =
+              await containerManager.getConfig(containerName)
+            if (existingConfig?.status === 'running') {
+              if (!options.json) {
+                console.log(
+                  chalk.yellow(
+                    `  Stopping existing container "${containerName}"...`,
+                  ),
+                )
+              }
+              try {
+                await dbEngine.stop(existingConfig)
+              } catch {
+                // Ignore stop errors - container may already be stopped
+              }
+            }
+            if (!options.json) {
+              console.log(
+                chalk.yellow(
+                  `  Removing existing container "${containerName}"...`,
+                ),
+              )
+            }
+            await containerManager.delete(containerName, { force: true })
+          } else if (options.json) {
             return exitWithError({
-              message: `Container "${containerName}" already exists`,
+              message: `Container "${containerName}" already exists. Use --force to overwrite.`,
               json: true,
             })
-          }
-          while (await containerManager.exists(containerName)) {
-            console.log(
-              chalk.yellow(`  Container "${containerName}" already exists.`),
-            )
-            containerName = await promptContainerName()
+          } else {
+            while (await containerManager.exists(containerName)) {
+              console.log(
+                chalk.yellow(`  Container "${containerName}" already exists.`),
+              )
+              containerName = await promptContainerName()
+            }
           }
         }
 
