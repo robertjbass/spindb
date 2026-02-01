@@ -13,6 +13,186 @@ SpinDB can export local containers to Docker-ready packages. The exported packag
 3. **Single abstraction**: Learn SpinDB once, deploy anywhere
 4. **All engines work**: Including file-based databases (SQLite, DuckDB)
 
+## Important: Development Tool Disclaimer
+
+**SpinDB is currently a development tool.** While it can produce production-ready Docker images with TLS encryption and authentication, it is not recommended for production deployments at this time. Use SpinDB for:
+
+- Local development environments
+- CI/CD testing pipelines
+- Staging environments
+- Learning and experimentation
+
+For production databases, consider managed services like AWS RDS, Google Cloud SQL, Neon, Supabase, or PlanetScale.
+
+---
+
+## EXPORT FOR DOCKER
+
+This section provides a complete walkthrough for exporting a SpinDB container to a Docker image that can be deployed anywhere Docker runs (EC2, DigitalOcean, Kubernetes, etc.).
+
+### Step 1: Export Your Container
+
+```bash
+# Export with all data (default)
+spindb export docker mydb -o ./mydb-docker
+
+# Export schema only (no data)
+spindb export docker mydb -o ./mydb-docker --no-data
+
+# Export with custom port
+spindb export docker mydb -o ./mydb-docker -p 5433
+```
+
+**Schema-only vs Full Data Export:**
+
+| Flag | What's Included | Use Case |
+|------|-----------------|----------|
+| *(default)* | Schema + all data | Staging, demos, full clones |
+| `--no-data` | Schema only (empty tables) | Fresh deployments, CI/CD |
+| `--no-tls` | Skip TLS certificates | Internal networks, testing |
+
+### Step 2: Build the Docker Image
+
+```bash
+cd ./mydb-docker
+
+# Build the image
+docker compose build
+
+# Or build without cache (recommended for fresh builds)
+docker compose build --no-cache
+```
+
+### Step 3: Start the Container
+
+```bash
+# Start in detached mode
+docker compose up -d
+
+# View logs to monitor startup
+docker logs -f spindb-mydb
+
+# Wait for "SpinDB container ready!" message
+```
+
+The container will:
+1. Download the database engine from hostdb
+2. Initialize the database cluster
+3. Configure network access for external connections
+4. Create the `spindb` user with the generated password
+5. Restore your data (if not using `--no-data`)
+6. Start accepting connections
+
+### Step 4: Connect from External Clients
+
+Once the container shows "SpinDB container ready!", you can connect from any PostgreSQL client:
+
+**Connection Details** (from `.env` file):
+```bash
+# View your credentials
+cat .env
+
+# Example output:
+# SPINDB_USER=spindb
+# SPINDB_PASSWORD=TENFLCPOUVghbAzkoc1B
+# PORT=5432
+# DATABASE=mydb
+```
+
+**Connection String:**
+```
+postgresql://spindb:<password>@localhost:5432/mydb
+```
+
+**Connect with psql:**
+```bash
+PGPASSWORD=TENFLCPOUVghbAzkoc1B psql -h localhost -p 5432 -U spindb -d mydb
+```
+
+**Connect with TablePlus, DBeaver, or other GUI clients:**
+- Host: `localhost` (or your server's IP)
+- Port: `5432` (or your custom port)
+- User: `spindb`
+- Password: *(from .env file)*
+- Database: `mydb`
+- SSL: Optional (self-signed certs provided)
+
+### Step 5: Deploy to a Remote Server
+
+To deploy to an EC2 instance, DigitalOcean droplet, or any server with Docker:
+
+```bash
+# Copy the export directory to your server
+scp -r ./mydb-docker user@your-server:~/
+
+# SSH into the server
+ssh user@your-server
+
+# Build and run
+cd ~/mydb-docker
+docker compose up -d
+```
+
+Then connect using your server's public IP:
+```
+postgresql://spindb:<password>@your-server-ip:5432/mydb
+```
+
+### Complete Example: Export and Deploy
+
+```bash
+# 1. Create and populate a local database
+spindb create myapp --start
+spindb run myapp ./schema.sql
+spindb run myapp ./seed-data.sql
+
+# 2. Export to Docker
+spindb export docker myapp -o ./myapp-deploy
+
+# 3. Build and run locally to test
+cd ./myapp-deploy
+docker compose build --no-cache
+docker compose up -d
+
+# 4. Verify connection works
+source .env
+PGPASSWORD=$SPINDB_PASSWORD psql -h localhost -p 5432 -U $SPINDB_USER -d $DATABASE -c "SELECT 1"
+
+# 5. Stop local test
+docker compose down
+
+# 6. Deploy to production server
+scp -r . user@prod-server:~/myapp-deploy
+ssh user@prod-server "cd ~/myapp-deploy && docker compose up -d"
+```
+
+### Docker Compose Commands Reference
+
+```bash
+# Start container
+docker compose up -d
+
+# Stop container
+docker compose down
+
+# View logs
+docker compose logs -f
+
+# Restart container
+docker compose restart
+
+# Rebuild after changes
+docker compose build --no-cache && docker compose up -d
+
+# Check container status
+docker compose ps
+
+# Execute commands inside container
+docker compose exec spindb-mydb spindb list
+```
+
+---
+
 ## Quick Start
 
 ```bash
@@ -311,3 +491,20 @@ This feature is planned for a future release.
 - Per-user isolation
 
 This feature is planned for a future release.
+
+## Future: Managed Service Exports (Phase 4)
+
+Direct export to managed database services:
+
+```bash
+# Export to Neon (planned)
+spindb export neon mydb --project my-neon-project
+
+# Export to Supabase (planned)
+spindb export supabase mydb --project my-supabase-project
+
+# Export to PlanetScale (planned)
+spindb export planetscale mydb --database my-db
+```
+
+These features are tentatively planned for future releases, allowing seamless migration from local development to production-ready managed services.

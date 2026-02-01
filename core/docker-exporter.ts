@@ -452,6 +452,40 @@ if ls ${initDir}/* 1> /dev/null 2>&1; then
 fi
 `
 
+  // Post-restore commands - grant table/sequence permissions to the spindb user
+  // Tables created during restore are owned by postgres, so spindb user needs grants
+  let postRestoreCommands = ''
+
+  switch (engine) {
+    case Engine.PostgreSQL:
+    case Engine.CockroachDB:
+      postRestoreCommands = `
+# Grant table and sequence permissions to spindb user
+# (Tables from restore are owned by postgres, spindb user needs access)
+echo "Granting table permissions..."
+cat > /tmp/grant-permissions.sql <<EOSQL
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$SPINDB_USER";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$SPINDB_USER";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$SPINDB_USER";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$SPINDB_USER";
+EOSQL
+run_as_spindb spindb run "$CONTAINER_NAME" /tmp/grant-permissions.sql --database "$DATABASE" || echo "Permission grants completed with warnings"
+rm -f /tmp/grant-permissions.sql
+`
+      break
+
+    case Engine.MySQL:
+    case Engine.MariaDB:
+      // MySQL grants are already handled by GRANT ALL ON database.* in user creation
+      postRestoreCommands = ''
+      break
+
+    default:
+      // Other engines don't need post-restore permission grants
+      postRestoreCommands = ''
+      break
+  }
+
   return `#!/bin/bash
 set -e
 
@@ -483,6 +517,9 @@ FILE_DB_PATH="/home/spindb/.spindb/containers/${engine}/\${CONTAINER_NAME}/\${CO
 # Export environment variables for the spindb user
 export SPINDB_CONTAINER SPINDB_DATABASE SPINDB_ENGINE SPINDB_VERSION SPINDB_PORT SPINDB_USER SPINDB_PASSWORD
 
+# Add ~/.local/bin to PATH for symlinked database binaries
+export PATH="/home/spindb/.local/bin:$PATH"
+
 # Fix permissions on mounted volume (may have been created with root ownership)
 echo "Setting up directories..."
 chown -R spindb:spindb /home/spindb/.spindb 2>/dev/null || true
@@ -513,6 +550,21 @@ else
         : `run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force`
     }
 fi
+
+# Create symlinks for database binaries in ~/.local/bin
+# This allows users to run psql, mysql, etc. directly in the container
+echo "Creating binary symlinks..."
+mkdir -p /home/spindb/.local/bin
+BIN_DIR=$(ls -d /home/spindb/.spindb/bin/\${ENGINE}-*/bin 2>/dev/null | head -1)
+if [ -d "$BIN_DIR" ]; then
+    for binary in "$BIN_DIR"/*; do
+        if [ -x "$binary" ] && [ -f "$binary" ]; then
+            name=$(basename "$binary")
+            ln -sf "$binary" "/home/spindb/.local/bin/$name"
+        fi
+    done
+    echo "Binaries available: $(ls /home/spindb/.local/bin | tr '\\n' ' ')"
+fi
 ${networkConfig}${
     isFileBased
       ? `
@@ -541,6 +593,7 @@ fi`
 echo "Database is running!"
 ${userCreationCommands}
 ${restoreSection}
+${postRestoreCommands}
 echo "========================================"
 echo "SpinDB container ready!"
 echo ""

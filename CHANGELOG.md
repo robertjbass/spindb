@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.7] - 2026-02-01
+
+### Fixed
+- **Docker export table permissions** - Automatically grant table/sequence permissions to `spindb` user after restore (tables are owned by `postgres` after restore, now `spindb` user can access them)
+- **Docker export binary symlinks** - Symlink database binaries to `~/.local/bin` so users can run `psql`, `pg_dump`, etc. directly in the container
+
+### Added
+- **Docker deployment documentation** - Comprehensive "EXPORT FOR DOCKER" section in DEPLOY.md with step-by-step guide, schema-only vs full data export options, and deployment instructions
+- **README deployment section** - Added "Deploying Your Container" section explaining Docker export workflow and future plans for Neon/Supabase exports
+
 ## [0.30.6] - 2026-02-01
 
 ### Fixed

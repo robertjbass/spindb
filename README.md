@@ -386,6 +386,36 @@ Generated files:
 - `entrypoint.sh` - Startup script
 - `README.md` - Instructions
 
+### Deploying Your Container
+
+**SpinDB doesn't require Docker for local development**, but it can repackage your database as a Docker image for deployment to cloud servers, EC2 instances, Kubernetes clusters, or any Docker-compatible environment.
+
+```bash
+# Export your local database to Docker
+spindb export docker mydb -o ./mydb-deploy
+
+# Build and run
+cd ./mydb-deploy
+docker compose build --no-cache
+docker compose up -d
+
+# Connect from host (credentials in .env)
+source .env
+psql "postgresql://$SPINDB_USER:$SPINDB_PASSWORD@localhost:$PORT/$DATABASE"
+```
+
+**Schema-only vs Full Data:**
+```bash
+spindb export docker mydb                    # Include all data (default)
+spindb export docker mydb --no-data          # Schema only (empty tables)
+```
+
+> **Development Tool Notice:** SpinDB is currently a development tool. While Docker exports include TLS encryption and authentication, they are intended for staging and testing—not production workloads. For production databases, consider managed services.
+
+**Future Export Options:** Additional export targets are planned for future releases, including direct deployment to managed database services like Neon, Supabase, and PlanetScale.
+
+See [DEPLOY.md](DEPLOY.md) for comprehensive deployment documentation.
+
 ### Container Management
 
 ```bash
