@@ -396,15 +396,38 @@ DuckDB:      duckdb:///path/to/file.duckdb
 Export a container to a Docker-ready package that runs SpinDB inside Docker.
 
 ```bash
+# Basic export
 spindb export docker mydb                    # Export to ~/.spindb/containers/{engine}/mydb/docker/
 spindb export docker mydb -o ./deploy        # Custom output directory (recommended)
-spindb export docker mydb -o ./              # Export to current directory
 spindb export docker mydb -f                 # Overwrite existing export
+
+# Schema only vs full data
+spindb export docker mydb --no-data          # Schema only (empty database)
+spindb export docker mydb                    # Full data (default)
+
+# Port and TLS options
 spindb export docker mydb -p 5433            # Override port (default: engine's standard port)
-spindb export docker mydb --no-data          # Skip database backup
 spindb export docker mydb --no-tls           # Skip TLS certificates
+
+# Scripting options
 spindb export docker mydb --copy             # Copy password to clipboard
 spindb export docker mydb --json             # JSON output for scripting
+```
+
+**Build and run the exported container:**
+```bash
+cd ./deploy
+docker compose build --no-cache              # Build image
+docker compose up -d                         # Start container
+docker compose logs -f                       # Watch startup logs
+docker compose down                          # Stop container
+```
+
+**Connect from host machine:**
+```bash
+# Get credentials from .env
+source .env
+psql "postgresql://$SPINDB_USER:$SPINDB_PASSWORD@localhost:$PORT/$DATABASE"
 ```
 
 > **Default output path:** For server-based engines (PostgreSQL, MySQL, etc.), exports go to `~/.spindb/containers/{engine}/{name}/docker/`. For file-based engines (**SQLite** and **DuckDB**), data lives in your project directory (CWD), so use `-o` to specify where to export.
