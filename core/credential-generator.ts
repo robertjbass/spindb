@@ -79,11 +79,15 @@ export type Credentials = {
 
 /**
  * Generate standard credentials for a Docker export
+ * Uses alphanumeric only to avoid issues with special characters in:
+ * - Connection strings (@ is a separator, % needs URL encoding)
+ * - Environment variable parsing (= can cause issues)
+ * - SQL/shell commands (quotes, backslashes need escaping)
  * @returns Object with username and password
  */
 export function generateCredentials(): Credentials {
   return {
     username: 'spindb',
-    password: generatePassword({ length: 16 }),
+    password: generatePassword({ length: 20, alphanumericOnly: true }),
   }
 }

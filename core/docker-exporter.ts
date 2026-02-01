@@ -8,7 +8,7 @@
  * using the same hostdb binaries as local development.
  */
 
-import { mkdir, writeFile, copyFile, rm } from 'fs/promises'
+import { mkdir, writeFile, copyFile, rm, readdir } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
 import {
@@ -422,6 +422,15 @@ VERSION="\${SPINDB_VERSION:-${version}}"
 PORT="\${SPINDB_PORT:-${port}}"
 SPINDB_USER="\${SPINDB_USER:-spindb}"
 SPINDB_PASSWORD="\${SPINDB_PASSWORD:?Error: SPINDB_PASSWORD environment variable is required}"
+
+# Validate password doesn't contain characters that break SQL/JS here-docs
+# These characters would cause syntax errors in the user creation commands
+if echo "$SPINDB_PASSWORD" | grep -qE "['"'\\\`$!]'; then
+    echo "ERROR: SPINDB_PASSWORD contains unsafe characters for shell scripts." >&2
+    echo 'Avoid using: '"'"' " \\ \` $ ! in passwords when running in Docker.' >&2
+    echo "These characters break SQL/JS here-docs in the entrypoint script." >&2
+    exit 1
+fi
 ${
   isFileBased
     ? `
@@ -718,17 +727,49 @@ export async function exportToDocker(
   const databases = container.databases || [database]
 
   return withTransaction(async (tx) => {
-    // Create output directory structure
-    await mkdir(outputDir, { recursive: true })
+    // Check if output directory already exists
+    const outputDirExisted = existsSync(outputDir)
+
+    if (outputDirExisted) {
+      // If it exists, check if it's empty
+      const existingFiles = await readdir(outputDir)
+      if (existingFiles.length > 0) {
+        throw new Error(
+          `Output directory "${outputDir}" already exists and is not empty. ` +
+            `Please use an empty directory or remove the existing files.`,
+        )
+      }
+      // Directory exists but is empty - don't register rollback for it
+    } else {
+      // Directory doesn't exist - create it and register rollback
+      await mkdir(outputDir, { recursive: true })
+      tx.addRollback({
+        description: `Delete output directory: ${outputDir}`,
+        execute: async () => {
+          await rm(outputDir, { recursive: true, force: true })
+        },
+      })
+    }
+
+    // Create subdirectories (always register rollback for these since we create them)
+    const certsDir = join(outputDir, 'certs')
+    const dataDir = join(outputDir, 'data')
+
+    await mkdir(certsDir, { recursive: true })
     tx.addRollback({
-      description: `Delete output directory: ${outputDir}`,
+      description: `Delete certs directory: ${certsDir}`,
       execute: async () => {
-        await rm(outputDir, { recursive: true, force: true })
+        await rm(certsDir, { recursive: true, force: true })
       },
     })
 
-    await mkdir(join(outputDir, 'certs'), { recursive: true })
-    await mkdir(join(outputDir, 'data'), { recursive: true })
+    await mkdir(dataDir, { recursive: true })
+    tx.addRollback({
+      description: `Delete data directory: ${dataDir}`,
+      execute: async () => {
+        await rm(dataDir, { recursive: true, force: true })
+      },
+    })
 
     const files: string[] = []
 
