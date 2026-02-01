@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.4] - 2026-02-01
+
+### Changed
+- **Main menu simplified** - Removed Start, Stop, Backup, Restore, and Clone shortcuts from main menu. These operations are now accessed through the Containers list → container submenu. Main menu now shows only: Containers, Create container, Settings, and Exit.
+
 ## [0.30.3] - 2026-02-01
 
 ### Changed

@@ -15,11 +15,8 @@ import { MissingToolError } from '../../../core/error-handler'
 import {
   handleCreate,
   handleList,
-  handleStart,
-  handleStop,
   showContainerSubmenu,
 } from './container-handlers'
-import { handleBackup, handleRestore, handleClone } from './backup-handlers'
 import { handleSettings } from './settings-handlers'
 import { configManager } from '../../../core/config-manager'
 import { createSpinner } from '../../ui/spinner'
@@ -68,12 +65,7 @@ async function showMainMenu(): Promise<void> {
   )
   console.log()
 
-  const canStart = stopped > 0
-  const canStop = running > 0
-  const canRestore = running > 0
-  const canClone = containers.length > 0
-
-  // If containers exist, show List first; otherwise show Create first
+  // If containers exist, show Containers first; otherwise show Create first
   const hasContainers = containers.length > 0
 
   const choices: MenuChoice[] = [
@@ -86,41 +78,6 @@ async function showMainMenu(): Promise<void> {
           { name: `${chalk.green('+')} Create container`, value: 'create' },
           { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
         ]),
-    {
-      name: canStart
-        ? `${chalk.green('▶')} Start container`
-        : chalk.gray('▶ Start container'),
-      value: 'start',
-      disabled: canStart ? false : 'No stopped containers',
-    },
-    {
-      name: canStop
-        ? `${chalk.red('■')} Stop container`
-        : chalk.gray('■ Stop container'),
-      value: 'stop',
-      disabled: canStop ? false : 'No running containers',
-    },
-    {
-      name: canRestore
-        ? `${chalk.magenta('↓')} Backup database`
-        : chalk.gray('↓ Backup database'),
-      value: 'backup',
-      disabled: canRestore ? false : 'No running containers',
-    },
-    {
-      name: canRestore
-        ? `${chalk.magenta('↑')} Restore backup`
-        : chalk.gray('↑ Restore backup'),
-      value: 'restore',
-      disabled: canRestore ? false : 'No running containers',
-    },
-    {
-      name: canClone
-        ? `${chalk.cyan('◇')} Clone container`
-        : chalk.gray('◇ Clone container'),
-      value: 'clone',
-      disabled: canClone ? false : 'No containers',
-    },
     new inquirer.Separator(),
     { name: `${chalk.yellow('⚙')} Settings`, value: 'settings' },
     // Show update option if a new version is available (only when auto-check enabled)
@@ -177,21 +134,6 @@ async function showMainMenu(): Promise<void> {
     }
     case 'list':
       await handleList(showMainMenu)
-      break
-    case 'start':
-      await handleStart()
-      break
-    case 'stop':
-      await handleStop()
-      break
-    case 'restore':
-      await handleRestore()
-      break
-    case 'backup':
-      await handleBackup()
-      break
-    case 'clone':
-      await handleClone()
       break
     case 'settings':
       await handleSettings()
