@@ -380,7 +380,7 @@ export const restoreCommand = new Command('restore')
             }
           }
 
-          // Drop existing database
+          // Drop existing database (tracking entry stays - we're recreating same name)
           const dropSpinner = createSpinner(
             `Dropping existing database "${databaseName}"...`,
           )
@@ -388,7 +388,8 @@ export const restoreCommand = new Command('restore')
 
           try {
             await engine.dropDatabase(config, databaseName)
-            await containerManager.removeDatabase(containerName, databaseName)
+            // Don't remove from tracking - the database name stays the same
+            // and addDatabase() is idempotent, so tracking remains valid
             dropSpinner.succeed(`Dropped database "${databaseName}"`)
           } catch (dropErr) {
             dropSpinner.fail('Failed to drop database')
