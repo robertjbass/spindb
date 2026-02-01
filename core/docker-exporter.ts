@@ -8,7 +8,7 @@
  * using the same hostdb binaries as local development.
  */
 
-import { mkdir, writeFile, copyFile, rm, readdir } from 'fs/promises'
+import { mkdir, writeFile, copyFile, rm, readdir, readFile } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
 import {
@@ -1083,4 +1083,147 @@ export function getExportBackupPath(
   const format = getDefaultFormat(engine)
   const extension = getBackupExtension(engine, format)
   return join(outputDir, 'data', `${containerName}-${database}${extension}`)
+}
+
+/**
+ * Get the default Docker export directory for a container
+ */
+export function getDefaultDockerExportPath(
+  containerName: string,
+  engine: Engine,
+): string {
+  const homedir = process.env.HOME || process.env.USERPROFILE || '~'
+  return join(
+    homedir,
+    '.spindb',
+    'containers',
+    engine,
+    containerName,
+    'docker',
+  )
+}
+
+/**
+ * Check if a Docker export already exists for a container
+ */
+export function dockerExportExists(
+  containerName: string,
+  engine: Engine,
+): boolean {
+  const exportPath = getDefaultDockerExportPath(containerName, engine)
+  const envPath = join(exportPath, '.env')
+  return existsSync(envPath)
+}
+
+export type DockerCredentials = {
+  username: string
+  password: string
+  port: number
+  database: string
+  engine: string
+  version: string
+  containerName: string
+}
+
+/**
+ * Read Docker credentials from an existing export's .env file
+ */
+export async function getDockerCredentials(
+  containerName: string,
+  engine: Engine,
+): Promise<DockerCredentials | null> {
+  const exportPath = getDefaultDockerExportPath(containerName, engine)
+  const envPath = join(exportPath, '.env')
+
+  if (!existsSync(envPath)) {
+    return null
+  }
+
+  try {
+    const envContent = await readFile(envPath, 'utf-8')
+    const lines = envContent.split('\n')
+
+    const values: Record<string, string> = {}
+    for (const line of lines) {
+      const match = line.match(/^([A-Z_]+)=(.*)$/)
+      if (match) {
+        values[match[1]] = match[2]
+      }
+    }
+
+    return {
+      username: values.SPINDB_USER || 'spindb',
+      password: values.SPINDB_PASSWORD || '',
+      port: parseInt(values.PORT || '0', 10),
+      database: values.DATABASE || '',
+      engine: values.ENGINE || engine,
+      version: values.VERSION || '',
+      containerName: values.CONTAINER_NAME || containerName,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get the Docker connection string for an existing export
+ * Returns the connection string with actual credentials substituted
+ */
+export async function getDockerConnectionString(
+  containerName: string,
+  engine: Engine,
+  options: { host?: string } = {},
+): Promise<string | null> {
+  const credentials = await getDockerCredentials(containerName, engine)
+  if (!credentials) {
+    return null
+  }
+
+  const host = options.host || 'localhost'
+  const { username, password, port, database } = credentials
+
+  // Build connection string based on engine type
+  switch (engine) {
+    case Engine.PostgreSQL:
+    case Engine.CockroachDB:
+    case Engine.QuestDB:
+      return `postgresql://${username}:${password}@${host}:${port}/${database}`
+
+    case Engine.MySQL:
+    case Engine.MariaDB:
+      return `mysql://${username}:${password}@${host}:${port}/${database}`
+
+    case Engine.MongoDB:
+    case Engine.FerretDB:
+      return `mongodb://${username}:${password}@${host}:${port}/${database}`
+
+    case Engine.Redis:
+    case Engine.Valkey:
+      return `redis://:${password}@${host}:${port}`
+
+    case Engine.ClickHouse:
+      return `clickhouse://${username}:${password}@${host}:${port}/${database}`
+
+    case Engine.Qdrant:
+      return `http://${host}:${port}`
+
+    case Engine.Meilisearch:
+      return `http://${host}:${port}`
+
+    case Engine.CouchDB:
+      return `http://${username}:${password}@${host}:${port}/${database}`
+
+    case Engine.SurrealDB:
+      return `ws://${username}:${password}@${host}:${port}`
+
+    case Engine.SQLite:
+    case Engine.DuckDB:
+      return `File-based database (no network connection)`
+
+    default:
+      assertExhaustive(
+        engine,
+        `Unhandled engine in getDockerConnectionString: ${engine}`,
+      )
+  }
 }

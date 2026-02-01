@@ -60,6 +60,8 @@ import {
 import {
   exportToDocker,
   getExportBackupPath,
+  dockerExportExists,
+  getDockerConnectionString,
 } from '../../../core/docker-exporter'
 import { getDefaultFormat } from '../../../config/backup-formats'
 import { Engine, isFileBasedEngine } from '../../../types'
@@ -1751,25 +1753,56 @@ async function handleExportSubmenu(
   databases: string[],
   showMainMenu: () => Promise<void>,
 ): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  // Check if Docker export already exists
+  const hasDockerExport = dockerExportExists(containerName, config.engine)
+
   console.log()
   console.log(header('Export'))
   console.log()
+
+  // Build choices based on whether export exists
+  const choices: MenuChoice[] = []
+
+  if (hasDockerExport) {
+    // Export exists: show option to get connection string
+    choices.push({
+      name: `${chalk.green('📋')} Get Docker connection string`,
+      value: 'docker-url',
+    })
+    choices.push({
+      name: `${chalk.cyan('▣')} Docker ${chalk.yellow('(Re-export - invalidates original credentials)')}`,
+      value: 'docker',
+    })
+  } else {
+    // No export: just show Docker option
+    choices.push({ name: `${chalk.cyan('▣')} Docker`, value: 'docker' })
+  }
+
+  choices.push(new inquirer.Separator())
+  choices.push({ name: `${chalk.blue('←')} Back`, value: 'back' })
+  choices.push({ name: `${chalk.blue('⌂')} Back to main menu`, value: 'home' })
 
   const { action } = await escapeablePrompt<{ action: string }>([
     {
       type: 'list',
       name: 'action',
       message: 'Export format:',
-      choices: [
-        { name: `${chalk.cyan('▣')} Docker`, value: 'docker' },
-        new inquirer.Separator(),
-        { name: `${chalk.blue('←')} Back`, value: 'back' },
-        { name: `${chalk.blue('⌂')} Back to main menu`, value: 'home' },
-      ],
+      choices,
     },
   ])
 
   switch (action) {
+    case 'docker-url':
+      await handleGetDockerConnectionString(containerName, config.engine)
+      await handleExportSubmenu(containerName, databases, showMainMenu)
+      return
     case 'docker':
       await handleExportDocker(containerName, databases, showMainMenu)
       return
@@ -1780,6 +1813,36 @@ async function handleExportSubmenu(
       await showMainMenu()
       return
   }
+}
+
+async function handleGetDockerConnectionString(
+  containerName: string,
+  engine: Engine,
+): Promise<void> {
+  const connectionString = await getDockerConnectionString(containerName, engine)
+
+  if (!connectionString) {
+    console.log()
+    console.log(uiError('Could not read Docker export credentials'))
+    await pressEnterToContinue()
+    return
+  }
+
+  // Copy to clipboard
+  const copied = await platformService.copyToClipboard(connectionString)
+
+  console.log()
+  if (copied) {
+    console.log(uiSuccess('Connection string copied to clipboard'))
+  } else {
+    console.log(uiWarning('Could not copy to clipboard'))
+  }
+  console.log()
+  console.log(chalk.gray('  Connection string:'))
+  console.log(chalk.cyan(`  ${connectionString}`))
+  console.log()
+
+  await pressEnterToContinue()
 }
 
 async function handleExportDocker(

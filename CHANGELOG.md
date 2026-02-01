@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-02-01
+
+### Added
+- **Docker export connection string retrieval** - Get connection strings from existing Docker exports for scripting and automation:
+  ```bash
+  # CLI command for scripting
+  spindb export docker-url mydb                    # Returns connection string
+  spindb export docker-url mydb --copy             # Copy to clipboard
+  spindb export docker-url mydb --json             # JSON with all credentials
+  spindb export docker-url mydb --host myserver    # Override hostname
+  ```
+- **Interactive menu Docker export status** - Export menu now shows:
+  - "Get Docker connection string" option when export exists (copies to clipboard)
+  - "(Re-export - invalidates original credentials)" warning on Docker option when export exists
+
+### Fixed
+- **Docker export container recreation on restart** - Fixed JSON grep pattern to match actual `"name": "..."` format (with space after colon). Containers were being recreated on every restart because the existence check always failed.
+- **Docker export PATH duplication** - PATH setup now checks if entry exists before appending to `.profile`, and uses overwrite for `/etc/profile.d/spindb-bins.sh`
+- **Docker export data re-initialization** - Added initialization marker file (`.initialized-{name}`) so user creation and data restore only run on first start, not on every container restart
+
+### Changed
+- **Documentation updates**:
+  - DEPLOY.md: Added container restart idempotency and `docker exec` examples
+  - CHEATSHEET.md: Added comprehensive "Docker Commands (after export)" section
+
 ## [0.30.8] - 2026-02-01
 
 ### Fixed
