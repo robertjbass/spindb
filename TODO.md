@@ -73,6 +73,16 @@ Combine common multi-step workflows into single commands:
 - [ ] **Password authentication** - Set passwords on container creation
 - [ ] **Encrypted backups** - GPG/OpenSSL encryption for dumps
 - [ ] **User management** - Custom users with specific privileges
+- [ ] **Docker export credential security** - Secure storage for `.env` credentials in exported Docker artifacts
+  - Current: plaintext `.env` file with auto-generated password
+  - Problem: Anyone with access to export directory can read credentials
+  - Potential solutions:
+    - Encrypt `.env` using local SSH key (user's `~/.ssh/id_rsa` or `id_ed25519`)
+    - HashiCorp Vault integration for production deployments
+    - SOPS (Secrets OPerationS) with age/GPG encryption
+    - Docker secrets integration (Swarm mode or Compose secrets)
+  - Requirements: Must be bulletproof for production, accessible by right person, protected from wrong person
+  - Related file: `core/docker-exporter.ts` - `generateCredentials()` and `.env` generation
 
 ### Team Features (Pro)
 

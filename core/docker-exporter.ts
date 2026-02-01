@@ -603,7 +603,7 @@ run_as_spindb() {
 }
 
 # Check if container already exists
-if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name":"'"$CONTAINER_NAME"'"'; then
+if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name": "'"$CONTAINER_NAME"'"'; then
     echo "Container '$CONTAINER_NAME' already exists"
 else
     echo "Creating container '$CONTAINER_NAME'..."
@@ -615,7 +615,7 @@ else
     }
 fi
 
-# Add engine binary directory to PATH
+# Add engine binary directory to PATH (idempotent - only adds if not present)
 # This allows users to run psql, mysql, etc. directly in the container
 # Note: We add the actual bin directory to PATH instead of creating symlinks
 # because some binaries (like psql) are wrapper scripts that use relative paths
@@ -623,11 +623,14 @@ echo "Setting up database binaries in PATH..."
 BIN_DIR=$(ls -d /home/spindb/.spindb/bin/\${ENGINE}-*/bin 2>/dev/null | head -1)
 if [ -d "$BIN_DIR" ]; then
     export PATH="$BIN_DIR:$PATH"
-    # Add to .profile for login shells and /etc/profile.d for all users
+    # Add to .profile for login shells (only if not already present)
     # .bashrc has an early return for non-interactive shells, so use .profile
-    echo "export PATH=\\"$BIN_DIR:\\$PATH\\"" >> /home/spindb/.profile
-    # Also create a script in /etc/profile.d for system-wide access
-    echo "export PATH=\\"$BIN_DIR:\\$PATH\\"" | tee /etc/profile.d/spindb-bins.sh > /dev/null
+    PATH_EXPORT="export PATH=\\"$BIN_DIR:\\$PATH\\""
+    if ! grep -qF "$BIN_DIR" /home/spindb/.profile 2>/dev/null; then
+        echo "$PATH_EXPORT" >> /home/spindb/.profile
+    fi
+    # Create/overwrite script in /etc/profile.d for system-wide access (idempotent)
+    echo "$PATH_EXPORT" > /etc/profile.d/spindb-bins.sh
     echo "Binaries available in PATH: $(ls "$BIN_DIR" | tr '\\n' ' ')"
 else
     echo "Warning: No engine binaries found"
@@ -658,9 +661,22 @@ fi`
   }
 
 echo "Database is running!"
+
+# Initialization marker file - ensures user creation and data restore only run once
+INIT_MARKER="/home/spindb/.spindb/.initialized-$CONTAINER_NAME"
+if [ ! -f "$INIT_MARKER" ]; then
+    echo "First-time initialization..."
 ${userCreationCommands}
 ${restoreSection}
 ${postRestoreCommands}
+    # Mark initialization complete
+    touch "$INIT_MARKER"
+    chown spindb:spindb "$INIT_MARKER"
+    echo "Initialization complete."
+else
+    echo "Container already initialized, skipping data restore."
+fi
+
 echo "========================================"
 echo "SpinDB container ready!"
 echo ""
