@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.8] - 2026-02-01
+
+### Fixed
+- **Docker export psql not working inside container** - Fixed `psql` and other database binaries not being accessible inside exported Docker containers via `docker exec bash`. The previous symlink approach broke because binaries like `psql` are wrapper scripts that use `dirname "$0"` for relative path resolution. Now adds the actual bin directory directly to PATH and persists to `~/.profile` and `/etc/profile.d/spindb-bins.sh` for interactive shells.
+
 ## [0.30.7] - 2026-02-01
 
 ### Fixed

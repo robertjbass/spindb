@@ -74,6 +74,71 @@ function getEngineDisplayName(engine: Engine): string {
 }
 
 /**
+ * Engine binary configuration for Docker exports
+ *
+ * Defines primary binaries per engine for PATH setup and documentation.
+ * This structure supports future enhancements:
+ * - excludedBinaries: binaries to omit from PATH (e.g., internal tools)
+ * - renamedBinaries: map of original -> renamed (e.g., for collision avoidance)
+ * - priority: for multi-engine containers, which engine's binary wins
+ */
+const _ENGINE_BINARY_CONFIG: Record<
+  Engine,
+  {
+    primaryBinaries: string[]
+  }
+> = {
+  [Engine.PostgreSQL]: {
+    primaryBinaries: ['psql', 'pg_dump', 'pg_restore', 'createdb', 'dropdb'],
+  },
+  [Engine.MySQL]: {
+    primaryBinaries: ['mysql', 'mysqldump', 'mysqladmin'],
+  },
+  [Engine.MariaDB]: {
+    primaryBinaries: ['mariadb', 'mariadb-dump', 'mariadb-admin'],
+  },
+  [Engine.SQLite]: {
+    primaryBinaries: ['sqlite3'],
+  },
+  [Engine.DuckDB]: {
+    primaryBinaries: ['duckdb'],
+  },
+  [Engine.MongoDB]: {
+    primaryBinaries: ['mongosh', 'mongodump', 'mongorestore'],
+  },
+  [Engine.FerretDB]: {
+    primaryBinaries: ['mongosh', 'psql'], // FerretDB uses mongosh + PostgreSQL backend
+  },
+  [Engine.Redis]: {
+    primaryBinaries: ['redis-cli', 'redis-server'],
+  },
+  [Engine.Valkey]: {
+    primaryBinaries: ['valkey-cli', 'valkey-server'],
+  },
+  [Engine.ClickHouse]: {
+    primaryBinaries: ['clickhouse', 'clickhouse-client'],
+  },
+  [Engine.Qdrant]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
+  [Engine.Meilisearch]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
+  [Engine.CouchDB]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
+  [Engine.CockroachDB]: {
+    primaryBinaries: ['cockroach'],
+  },
+  [Engine.SurrealDB]: {
+    primaryBinaries: ['surreal'],
+  },
+  [Engine.QuestDB]: {
+    primaryBinaries: [], // Uses psql from PostgreSQL for connections
+  },
+}
+
+/**
  * Get the connection string template for an engine
  * Includes placeholders for credentials and optionally TLS
  *
@@ -517,8 +582,7 @@ FILE_DB_PATH="/home/spindb/.spindb/containers/${engine}/\${CONTAINER_NAME}/\${CO
 # Export environment variables for the spindb user
 export SPINDB_CONTAINER SPINDB_DATABASE SPINDB_ENGINE SPINDB_VERSION SPINDB_PORT SPINDB_USER SPINDB_PASSWORD
 
-# Add ~/.local/bin to PATH for symlinked database binaries
-export PATH="/home/spindb/.local/bin:$PATH"
+# PATH will be updated after spindb downloads engine binaries
 
 # Fix permissions on mounted volume (may have been created with root ownership)
 echo "Setting up directories..."
@@ -551,19 +615,22 @@ else
     }
 fi
 
-# Create symlinks for database binaries in ~/.local/bin
+# Add engine binary directory to PATH
 # This allows users to run psql, mysql, etc. directly in the container
-echo "Creating binary symlinks..."
-mkdir -p /home/spindb/.local/bin
+# Note: We add the actual bin directory to PATH instead of creating symlinks
+# because some binaries (like psql) are wrapper scripts that use relative paths
+echo "Setting up database binaries in PATH..."
 BIN_DIR=$(ls -d /home/spindb/.spindb/bin/\${ENGINE}-*/bin 2>/dev/null | head -1)
 if [ -d "$BIN_DIR" ]; then
-    for binary in "$BIN_DIR"/*; do
-        if [ -x "$binary" ] && [ -f "$binary" ]; then
-            name=$(basename "$binary")
-            ln -sf "$binary" "/home/spindb/.local/bin/$name"
-        fi
-    done
-    echo "Binaries available: $(ls /home/spindb/.local/bin | tr '\\n' ' ')"
+    export PATH="$BIN_DIR:$PATH"
+    # Add to .profile for login shells and /etc/profile.d for all users
+    # .bashrc has an early return for non-interactive shells, so use .profile
+    echo "export PATH=\\"$BIN_DIR:\\$PATH\\"" >> /home/spindb/.profile
+    # Also create a script in /etc/profile.d for system-wide access
+    echo "export PATH=\\"$BIN_DIR:\\$PATH\\"" | tee /etc/profile.d/spindb-bins.sh > /dev/null
+    echo "Binaries available in PATH: $(ls "$BIN_DIR" | tr '\\n' ' ')"
+else
+    echo "Warning: No engine binaries found"
 fi
 ${networkConfig}${
     isFileBased

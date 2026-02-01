@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.30.7",
+  "version": "0.30.8",
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
