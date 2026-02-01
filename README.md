@@ -1077,6 +1077,8 @@ See [CLAUDE.md](CLAUDE.md) for AI-assisted development context.
 
 See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
+See [USE_CASES.md](USE_CASES.md) for detailed use cases and infrastructure opportunities.
+
 ---
 
 ## Acknowledgments
