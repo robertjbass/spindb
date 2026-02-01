@@ -21,6 +21,11 @@ import {
 import { getEngineDependencies } from '../../config/os-dependencies'
 import { getEngineIcon, getPageSize } from '../constants'
 import {
+  BACKUP_FORMATS,
+  supportsFormatChoice,
+  getDefaultFormat,
+} from '../../config/backup-formats'
+import {
   type ContainerConfig,
   type Engine,
   type BackupFormatType,
@@ -1055,10 +1060,6 @@ export async function promptBackupFormat(
   engine: Engine,
   options?: { includeBack?: boolean },
 ): Promise<BackupFormatType | null> {
-  // Import here to avoid circular dependencies
-  const { BACKUP_FORMATS, supportsFormatChoice, getDefaultFormat } =
-    await import('../../config/backup-formats')
-
   // If engine doesn't support format choice (e.g., ClickHouse), return default
   if (!supportsFormatChoice(engine)) {
     return getDefaultFormat(engine)
@@ -1147,7 +1148,6 @@ export async function promptBackupDirectory(): Promise<string | null> {
     },
   ])
 
-  const { resolve } = await import('path')
   return resolve(customPath.replace(/^~/, process.env.HOME || ''))
 }
 

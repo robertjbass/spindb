@@ -493,6 +493,7 @@ export class PostgreSQLEngine extends BaseEngine {
       database,
       user: defaults.superuser,
       pgRestorePath: options.pgRestorePath as string, // Use custom path if provided
+      containerVersion: version, // Pass container version for version-matched binary lookup
       ...(options as { format?: string }),
     })
   }

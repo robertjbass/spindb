@@ -9,6 +9,7 @@ import {
 } from '../../engines/sqlite/scanner'
 import { containerManager } from '../../core/container-manager'
 import { uiSuccess, uiError, uiInfo } from '../ui/theme'
+import { detachCommand } from './detach'
 
 export const sqliteCommand = new Command('sqlite').description(
   'SQLite-specific operations',
@@ -241,9 +242,6 @@ sqliteCommand
       name: string,
       options: { force?: boolean; json?: boolean },
     ): Promise<void> => {
-      // Import dynamically to avoid circular dependency issues
-      const { detachCommand } = await import('./detach')
-
       // Build args array
       const args = ['node', 'detach', name]
       if (options.force) args.push('-f')

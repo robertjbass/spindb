@@ -16,6 +16,8 @@ import {
   platformService,
 } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
+import { paths } from '../../config/paths'
+import { normalizeVersion } from './version-maps'
 import {
   Platform,
   type ContainerConfig,
@@ -29,10 +31,6 @@ const engineDef = getEngineDefaults('mariadb')
 async function getDumpPath(container: ContainerConfig): Promise<string> {
   const { platform, arch } = platformService.getPlatformInfo()
   const ext = platform === Platform.Win32 ? '.exe' : ''
-
-  // Import dynamically to avoid circular dependency
-  const { paths } = await import('../../config/paths')
-  const { normalizeVersion } = await import('./version-maps')
 
   const fullVersion = normalizeVersion(container.version)
   const binPath = paths.getBinaryPath({

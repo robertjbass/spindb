@@ -18,7 +18,7 @@
 
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink, readdir } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, readdir, stat } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -689,7 +689,6 @@ export class QuestDBEngine extends BaseEngine {
       })
       for (const entry of entries) {
         if (entry.isFile()) {
-          const { stat } = await import('fs/promises')
           const filePath = join(entry.parentPath ?? dataDir, entry.name)
           const stats = await stat(filePath)
           totalSize += stats.size

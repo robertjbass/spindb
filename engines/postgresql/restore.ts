@@ -1,9 +1,14 @@
 import { open } from 'fs/promises'
+import { existsSync } from 'fs'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import { join } from 'path'
 import { configManager } from '../../core/config-manager'
 import { findBinary } from '../../core/dependency-manager'
+import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
 import { validateRestoreCompatibility } from './version-validator'
+import { normalizeVersion } from './version-maps'
 import { SpinDBError, ErrorCodes } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
 
@@ -123,25 +128,122 @@ export type RestoreOptions = {
   user?: string
   format?: string
   pgRestorePath?: string
+  containerVersion?: string
 }
 
-// Get psql path from config, with helpful error message
-async function getPsqlPath(): Promise<string> {
-  const psqlPath = await configManager.getBinaryPath('psql')
-  if (!psqlPath) {
-    throw new Error(
-      'psql not found. Install PostgreSQL client tools:\n' +
-        '  macOS: brew install libpq && brew link --force libpq\n' +
-        '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-        'Or configure manually: spindb config set psql /path/to/psql',
+/**
+ * Get psql path for a specific PostgreSQL version.
+ *
+ * Prioritizes SpinDB-managed binaries that match the container's version,
+ * falling back to system psql only if no matching version is found.
+ *
+ * @param containerVersion - The container's PostgreSQL version (e.g., "18" or "18.1.0")
+ * @returns Path to the version-matched psql binary
+ */
+async function getPsqlPath(containerVersion?: string): Promise<string> {
+  if (containerVersion) {
+    // Normalize to full version (e.g., "18" -> "18.1.0")
+    const fullVersion = normalizeVersion(containerVersion)
+
+    // Get platform info for building the binary path
+    const platformInfo = platformService.getPlatformInfo()
+    const ext = platformInfo.platform === 'win32' ? '.exe' : ''
+
+    // Try to find SpinDB-managed psql for the matching version
+    const versionedBinPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version: fullVersion,
+      platform: platformInfo.platform,
+      arch: platformInfo.arch,
+    })
+
+    const versionedPsql = join(versionedBinPath, 'bin', `psql${ext}`)
+
+    if (existsSync(versionedPsql)) {
+      return versionedPsql
+    }
+
+    // Try to find any installed version for this major version
+    const majorVersion = containerVersion.split('.')[0]
+    const installed = paths.findInstalledBinaryForMajor(
+      'postgresql',
+      majorVersion,
+      platformInfo.platform,
+      platformInfo.arch,
     )
+
+    if (installed) {
+      const installedPsql = join(installed.path, 'bin', `psql${ext}`)
+      if (existsSync(installedPsql)) {
+        return installedPsql
+      }
+    }
   }
-  return psqlPath
+
+  // Fall back to globally registered psql (system binary)
+  const systemPsql = await configManager.getBinaryPath('psql')
+  if (systemPsql) {
+    return systemPsql
+  }
+
+  throw new Error(
+    'psql not found. Install PostgreSQL client tools:\n' +
+      '  macOS: brew install libpq && brew link --force libpq\n' +
+      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
+      'Or configure manually: spindb config set psql /path/to/psql',
+  )
 }
 
-// Get pg_restore path from config or system PATH, with helpful error message
-async function getPgRestorePath(): Promise<string> {
-  // First try to get from config (in case user has set a custom path)
+/**
+ * Get pg_restore path for a specific PostgreSQL version.
+ *
+ * Prioritizes SpinDB-managed binaries that match the container's version,
+ * falling back to system pg_restore only if no matching version is found.
+ *
+ * @param containerVersion - The container's PostgreSQL version (e.g., "18" or "18.1.0")
+ * @returns Path to the version-matched pg_restore binary
+ */
+async function getPgRestorePath(containerVersion?: string): Promise<string> {
+  if (containerVersion) {
+    // Normalize to full version (e.g., "18" -> "18.1.0")
+    const fullVersion = normalizeVersion(containerVersion)
+
+    // Get platform info for building the binary path
+    const platformInfo = platformService.getPlatformInfo()
+    const ext = platformInfo.platform === 'win32' ? '.exe' : ''
+
+    // Try to find SpinDB-managed pg_restore for the matching version
+    const versionedBinPath = paths.getBinaryPath({
+      engine: 'postgresql',
+      version: fullVersion,
+      platform: platformInfo.platform,
+      arch: platformInfo.arch,
+    })
+
+    const versionedPgRestore = join(versionedBinPath, 'bin', `pg_restore${ext}`)
+
+    if (existsSync(versionedPgRestore)) {
+      return versionedPgRestore
+    }
+
+    // Try to find any installed version for this major version
+    const majorVersion = containerVersion.split('.')[0]
+    const installed = paths.findInstalledBinaryForMajor(
+      'postgresql',
+      majorVersion,
+      platformInfo.platform,
+      platformInfo.arch,
+    )
+
+    if (installed) {
+      const installedPgRestore = join(installed.path, 'bin', `pg_restore${ext}`)
+      if (existsSync(installedPgRestore)) {
+        return installedPgRestore
+      }
+    }
+  }
+
+  // Fall back to globally registered pg_restore (system binary)
   const configPath = await configManager.getBinaryPath('pg_restore')
   if (configPath) {
     return configPath
@@ -165,7 +267,14 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database, user = 'postgres', format, pgRestorePath } = options
+  const {
+    port,
+    database,
+    user = 'postgres',
+    format,
+    pgRestorePath,
+    containerVersion,
+  } = options
 
   // Detect format and check for wrong engine
   const detectedBackupFormat = await detectBackupFormat(backupPath)
@@ -175,7 +284,8 @@ export async function restoreBackup(
 
   // For pg_restore formats, validate version compatibility
   if (detectedFormat !== 'sql') {
-    const restorePath = pgRestorePath || (await getPgRestorePath())
+    const restorePath =
+      pgRestorePath || (await getPgRestorePath(containerVersion))
 
     // This will throw SpinDBError if versions are incompatible
     await validateRestoreCompatibility({
@@ -186,7 +296,7 @@ export async function restoreBackup(
   }
 
   if (detectedFormat === 'sql') {
-    const psqlPath = await getPsqlPath()
+    const psqlPath = await getPsqlPath(containerVersion)
 
     const result = await execAsync(
       `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${database} -f "${backupPath}"`,
@@ -198,8 +308,9 @@ export async function restoreBackup(
       ...result,
     }
   } else {
-    // Use custom path if provided, otherwise find it dynamically
-    const restorePath = pgRestorePath || (await getPgRestorePath())
+    // Use custom path if provided, otherwise find version-matched binary
+    const restorePath =
+      pgRestorePath || (await getPgRestorePath(containerVersion))
 
     try {
       const formatFlag =

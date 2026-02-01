@@ -784,6 +784,7 @@ export class MySQLEngine extends BaseEngine {
       createDatabase: false,
       validateVersion: options.validateVersion !== false,
       binPath,
+      containerVersion: version,
     })
   }
 
