@@ -41,7 +41,13 @@ async function createSqliteContainer(
     json?: boolean
   },
 ): Promise<void> {
-  const { path: filePath, from: restoreLocation, connect, force, json } = options
+  const {
+    path: filePath,
+    from: restoreLocation,
+    connect,
+    force,
+    json,
+  } = options
 
   // Check dependencies
   const depsSpinner = json ? null : createSpinner('Checking required tools...')
@@ -204,7 +210,13 @@ async function createDuckDBContainer(
     json?: boolean
   },
 ): Promise<void> {
-  const { path: filePath, from: restoreLocation, connect, force, json } = options
+  const {
+    path: filePath,
+    from: restoreLocation,
+    connect,
+    force,
+    json,
+  } = options
 
   // Check dependencies
   const depsSpinner = json ? null : createSpinner('Checking required tools...')
