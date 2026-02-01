@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.2] - 2026-02-01
+
 ### Added
 - **`--force` flag for `spindb create`** - Overwrites existing containers without prompting. Useful for scripting and Docker entrypoints where interactive prompts aren't available. Stops running containers before deletion.
   ```bash
@@ -19,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `gosu` for running database processes as non-root user (PostgreSQL refuses to run as root)
   - Fixed volume permissions with `chown` at container startup
   - Fixed shell escaping in grep patterns for container status checks
+- **Docker export TLS handling** - TLS is now properly conditional:
+  - Only generates certificates when OpenSSL is available and `--skip-tls` is not set
+  - README now correctly reflects TLS status (no misleading `certs/` references when TLS is disabled)
+  - Dockerfile only includes COPY certs when TLS is enabled
+- **Docker export password safety** - Generated passwords now use alphanumeric characters only to avoid shell/SQL escaping issues. Added runtime validation that fails fast if user-supplied passwords contain problematic characters.
+- **Docker export transaction safety** - Export now checks if output directory pre-exists before registering cleanup rollback, preventing accidental deletion of user directories on failure.
+- **Qdrant stop race condition** - Added 1-second wait after process termination on Linux/macOS to prevent race conditions when checking ports after killing processes.
+- **Windows CI test timeout** - Increased `doctor --json` test timeout from 30s to 60s for slower Windows CI environments.
 
 ## [0.30.1] - 2026-01-31
 
