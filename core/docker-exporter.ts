@@ -8,14 +8,20 @@
  * using the same hostdb binaries as local development.
  */
 
-import { mkdir, writeFile, copyFile } from 'fs/promises'
+import { mkdir, writeFile, copyFile, rm } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
-import { type ContainerConfig, Engine, isFileBasedEngine } from '../types'
+import {
+  type ContainerConfig,
+  Engine,
+  isFileBasedEngine,
+  assertExhaustive,
+} from '../types'
 import { engineDefaults } from '../config/engine-defaults'
 import { getDefaultFormat, getBackupExtension } from '../config/backup-formats'
 import { generateCredentials, type Credentials } from './credential-generator'
 import { generateTLSCertificates, isOpenSSLAvailable } from './tls-generator'
+import { withTransaction } from './transaction-manager'
 
 export type DockerExportOptions = {
   // Output directory for the Docker artifacts
@@ -82,8 +88,6 @@ function getConnectionStringTemplate(
   database: string,
   useTLS = true,
 ): string {
-  const defaults = engineDefaults[engine]
-
   switch (engine) {
     case Engine.PostgreSQL:
     case Engine.CockroachDB:
@@ -136,7 +140,10 @@ function getConnectionStringTemplate(
       return `File-based database (no network connection)`
 
     default:
-      return `${defaults.connectionScheme}://<host>:${port}/${database}`
+      assertExhaustive(
+        engine,
+        `Unhandled engine in getConnectionUri: ${engine}`,
+      )
   }
 }
 
@@ -336,10 +343,19 @@ echo "API key configured via server settings"
 `
       break
 
-    default:
+    case Engine.SQLite:
+    case Engine.DuckDB:
       userCreationCommands = `
-echo "Credentials configured"
+# File-based database - no user creation needed
+echo "File-based database initialized"
 `
+      break
+
+    default:
+      assertExhaustive(
+        engine,
+        `Unhandled engine in generateEntrypoint: ${engine}`,
+      )
   }
 
   // Generate restore commands for all databases
@@ -668,108 +684,119 @@ export async function exportToDocker(
   // Get all databases for the container
   const databases = container.databases || [database]
 
-  // Create output directory structure
-  await mkdir(outputDir, { recursive: true })
-  await mkdir(join(outputDir, 'certs'), { recursive: true })
-  await mkdir(join(outputDir, 'data'), { recursive: true })
-
-  const files: string[] = []
-
-  // Generate credentials
-  const credentials = generateCredentials()
-
-  // Check OpenSSL availability once for TLS decisions
-  const hasOpenSSL = await isOpenSSLAvailable()
-
-  // Generate TLS certificates (if openssl is available and not skipped)
-  if (!skipTLS && hasOpenSSL) {
-    await generateTLSCertificates({
-      outputDir: join(outputDir, 'certs'),
-      commonName: 'localhost',
-      validDays: 365,
+  return withTransaction(async (tx) => {
+    // Create output directory structure
+    await mkdir(outputDir, { recursive: true })
+    tx.addRollback({
+      description: `Delete output directory: ${outputDir}`,
+      execute: async () => {
+        await rm(outputDir, { recursive: true, force: true })
+      },
     })
-    files.push('certs/server.crt', 'certs/server.key')
-  }
 
-  // Copy backup files if provided (multiple databases)
-  if (includeData && backupPaths && backupPaths.length > 0) {
-    for (const bp of backupPaths) {
-      if (existsSync(bp.path)) {
-        const backupFilename = basename(bp.path)
-        await copyFile(bp.path, join(outputDir, 'data', backupFilename))
-        files.push(`data/${backupFilename}`)
-      }
+    await mkdir(join(outputDir, 'certs'), { recursive: true })
+    await mkdir(join(outputDir, 'data'), { recursive: true })
+
+    const files: string[] = []
+
+    // Generate credentials
+    const credentials = generateCredentials()
+
+    // Check OpenSSL availability once for TLS decisions
+    const hasOpenSSL = await isOpenSSLAvailable()
+
+    // Generate TLS certificates (if openssl is available and not skipped)
+    if (!skipTLS && hasOpenSSL) {
+      await generateTLSCertificates({
+        outputDir: join(outputDir, 'certs'),
+        commonName: 'localhost',
+        validDays: 365,
+      })
+      files.push('certs/server.crt', 'certs/server.key')
     }
-  } else if (includeData && backupPath && existsSync(backupPath)) {
-    // Single backup file (legacy support)
-    const backupFilename = basename(backupPath)
-    await copyFile(backupPath, join(outputDir, 'data', backupFilename))
-    files.push(`data/${backupFilename}`)
-  }
 
-  // Generate Dockerfile
-  const dockerfile = generateDockerfile(engine)
-  await writeFile(join(outputDir, 'Dockerfile'), dockerfile)
-  files.push('Dockerfile')
+    // Copy backup files if provided (multiple databases)
+    if (includeData && backupPaths && backupPaths.length > 0) {
+      for (const bp of backupPaths) {
+        if (existsSync(bp.path)) {
+          const backupFilename = basename(bp.path)
+          await copyFile(bp.path, join(outputDir, 'data', backupFilename))
+          files.push(`data/${backupFilename}`)
+        }
+      }
+    } else if (includeData && backupPath && existsSync(backupPath)) {
+      // Single backup file (legacy support)
+      const backupFilename = basename(backupPath)
+      await copyFile(backupPath, join(outputDir, 'data', backupFilename))
+      files.push(`data/${backupFilename}`)
+    }
 
-  // Generate entrypoint.sh
-  const useTLS = !skipTLS && hasOpenSSL
-  const entrypoint = generateEntrypoint(
-    engine,
-    containerName,
-    database,
-    databases,
-    version,
-    port,
-    useTLS,
-  )
-  await writeFile(join(outputDir, 'entrypoint.sh'), entrypoint, { mode: 0o755 })
-  files.push('entrypoint.sh')
+    // Generate Dockerfile
+    const dockerfile = generateDockerfile(engine)
+    await writeFile(join(outputDir, 'Dockerfile'), dockerfile)
+    files.push('Dockerfile')
 
-  // Generate docker-compose.yml
-  const dockerCompose = generateDockerCompose(
-    containerName,
-    engine,
-    version,
-    port,
-    database,
-  )
-  await writeFile(join(outputDir, 'docker-compose.yml'), dockerCompose)
-  files.push('docker-compose.yml')
+    // Generate entrypoint.sh
+    const useTLS = !skipTLS && hasOpenSSL
+    const entrypoint = generateEntrypoint(
+      engine,
+      containerName,
+      database,
+      databases,
+      version,
+      port,
+      useTLS,
+    )
+    await writeFile(join(outputDir, 'entrypoint.sh'), entrypoint, {
+      mode: 0o755,
+    })
+    files.push('entrypoint.sh')
 
-  // Generate .env file
-  const envFile = generateEnvFile(
-    containerName,
-    engine,
-    version,
-    port,
-    database,
-    credentials,
-  )
-  await writeFile(join(outputDir, '.env'), envFile)
-  files.push('.env')
+    // Generate docker-compose.yml
+    const dockerCompose = generateDockerCompose(
+      containerName,
+      engine,
+      version,
+      port,
+      database,
+    )
+    await writeFile(join(outputDir, 'docker-compose.yml'), dockerCompose)
+    files.push('docker-compose.yml')
 
-  // Generate README.md
-  const readme = generateReadme(
-    containerName,
-    engine,
-    version,
-    port,
-    database,
-    useTLS,
-  )
-  await writeFile(join(outputDir, 'README.md'), readme)
-  files.push('README.md')
+    // Generate .env file
+    const envFile = generateEnvFile(
+      containerName,
+      engine,
+      version,
+      port,
+      database,
+      credentials,
+    )
+    await writeFile(join(outputDir, '.env'), envFile)
+    files.push('.env')
 
-  return {
-    outputDir,
-    credentials,
-    port,
-    engine,
-    version,
-    database,
-    files,
-  }
+    // Generate README.md
+    const readme = generateReadme(
+      containerName,
+      engine,
+      version,
+      port,
+      database,
+      useTLS,
+    )
+    await writeFile(join(outputDir, 'README.md'), readme)
+    files.push('README.md')
+
+    return {
+      outputDir,
+      credentials,
+      port,
+      engine,
+      version,
+      database,
+      files,
+    }
+  })
 }
 
 /**
