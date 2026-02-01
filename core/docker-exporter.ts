@@ -427,10 +427,12 @@ function generateDockerCompose(
   port: number,
   database: string,
 ): string {
-  return `services:
-  database:
+  return `name: spindb-${containerName}
+
+services:
+  ${containerName}:
     build: .
-    container_name: \${CONTAINER_NAME:-${containerName}}
+    container_name: spindb-${containerName}
     restart: unless-stopped
     environment:
       SPINDB_CONTAINER: \${CONTAINER_NAME:-${containerName}}
