@@ -69,12 +69,18 @@ function getEngineDisplayName(engine: Engine): string {
 
 /**
  * Get the connection string template for an engine
- * Includes placeholders for credentials and TLS
+ * Includes placeholders for credentials and optionally TLS
+ *
+ * @param engine - Database engine
+ * @param port - Port number
+ * @param database - Database name
+ * @param useTLS - Whether to include TLS parameters (default: true)
  */
 function getConnectionStringTemplate(
   engine: Engine,
   port: number,
   database: string,
+  useTLS = true,
 ): string {
   const defaults = engineDefaults[engine]
 
@@ -82,34 +88,48 @@ function getConnectionStringTemplate(
     case Engine.PostgreSQL:
     case Engine.CockroachDB:
     case Engine.QuestDB:
-      return `postgresql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?sslmode=require`
+      return useTLS
+        ? `postgresql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?sslmode=require`
+        : `postgresql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
     case Engine.MySQL:
     case Engine.MariaDB:
-      return `mysql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?ssl=true`
+      return useTLS
+        ? `mysql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?ssl=true`
+        : `mysql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
     case Engine.MongoDB:
     case Engine.FerretDB:
-      return `mongodb://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?tls=true`
+      return useTLS
+        ? `mongodb://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?tls=true`
+        : `mongodb://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
     case Engine.Redis:
     case Engine.Valkey:
-      return `rediss://:\${SPINDB_PASSWORD}@<host>:${port}`
+      return useTLS
+        ? `rediss://:\${SPINDB_PASSWORD}@<host>:${port}`
+        : `redis://:\${SPINDB_PASSWORD}@<host>:${port}`
 
     case Engine.ClickHouse:
-      return `clickhouse://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?secure=true`
+      return useTLS
+        ? `clickhouse://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?secure=true`
+        : `clickhouse://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
     case Engine.Qdrant:
-      return `https://<host>:${port}`
+      return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
 
     case Engine.Meilisearch:
-      return `https://<host>:${port}`
+      return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
 
     case Engine.CouchDB:
-      return `https://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
+      return useTLS
+        ? `https://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
+        : `http://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
     case Engine.SurrealDB:
-      return `wss://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}`
+      return useTLS
+        ? `wss://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}`
+        : `ws://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}`
 
     case Engine.SQLite:
     case Engine.DuckDB:
@@ -201,6 +221,7 @@ function generateEntrypoint(
   databases: string[],
   version: string,
   port: number,
+  useTLS: boolean,
 ): string {
   const isFileBased = isFileBasedEngine(engine)
 
@@ -324,12 +345,14 @@ echo "Credentials configured"
   // Generate restore commands for all databases
   // Note: Uses /home/spindb/.spindb/init/ since container runs as spindb user
   const initDir = '/home/spindb/.spindb/init'
+  const fileExt = engine === Engine.SQLite ? 'sqlite' : 'duckdb'
+  const fileBasedDataPath = `/home/spindb/.spindb/containers/${engine}/${containerName}/${containerName}.${fileExt}`
   const restoreSection = isFileBased
     ? `
-# File-based database - copy data file
-if ls ${initDir}/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} 1> /dev/null 2>&1; then
+# File-based database - copy data file to the path used by spindb create --path
+if ls ${initDir}/*.${fileExt} 1> /dev/null 2>&1; then
     echo "Copying database file..."
-    cp ${initDir}/*.${engine === Engine.SQLite ? 'sqlite' : 'duckdb'} ~/.spindb/containers/$ENGINE/$CONTAINER_NAME/
+    cp ${initDir}/*.${fileExt} "${fileBasedDataPath}"
 fi
 `
     : databases.length > 1
@@ -394,9 +417,19 @@ if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name":"'"$CONTAINER_
     echo "Container '$CONTAINER_NAME' already exists"
 else
     echo "Creating container '$CONTAINER_NAME'..."
-    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force
+    ${
+      isFileBased
+        ? `# File-based database: use deterministic path for database file
+    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "${fileBasedDataPath}" --force`
+        : `run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force`
+    }
 fi
-
+${
+  isFileBased
+    ? `
+# File-based database: no server to start, just verify file exists after restore
+`
+    : `
 # Start the database
 echo "Starting database..."
 run_as_spindb spindb start "$CONTAINER_NAME"
@@ -413,7 +446,8 @@ done
 if [ $RETRIES -eq 0 ]; then
     echo "Error: Database failed to start"
     exit 1
-fi
+fi`
+}
 
 echo "Database is running!"
 ${userCreationCommands}
@@ -421,7 +455,7 @@ ${restoreSection}
 echo "========================================"
 echo "SpinDB container ready!"
 echo ""
-echo "Connection: ${getConnectionStringTemplate(engine, port, database).replace(/\$/g, '\\$')}"
+echo "Connection: ${getConnectionStringTemplate(engine, port, database, useTLS).replace(/\$/g, '\\$')}"
 echo "========================================"
 
 # Keep container running
@@ -518,9 +552,15 @@ function generateReadme(
   version: string,
   port: number,
   database: string,
+  useTLS: boolean,
 ): string {
   const displayName = getEngineDisplayName(engine)
-  const connectionTemplate = getConnectionStringTemplate(engine, port, database)
+  const connectionTemplate = getConnectionStringTemplate(
+    engine,
+    port,
+    database,
+    useTLS,
+  )
 
   return `# ${containerName} - SpinDB Docker Export
 
@@ -667,6 +707,7 @@ export async function exportToDocker(
   files.push('Dockerfile')
 
   // Generate entrypoint.sh
+  const useTLS = !skipTLS
   const entrypoint = generateEntrypoint(
     engine,
     containerName,
@@ -674,6 +715,7 @@ export async function exportToDocker(
     databases,
     version,
     port,
+    useTLS,
   )
   await writeFile(join(outputDir, 'entrypoint.sh'), entrypoint, { mode: 0o755 })
   files.push('entrypoint.sh')
@@ -702,7 +744,14 @@ export async function exportToDocker(
   files.push('.env')
 
   // Generate README.md
-  const readme = generateReadme(containerName, engine, version, port, database)
+  const readme = generateReadme(
+    containerName,
+    engine,
+    version,
+    port,
+    database,
+    useTLS,
+  )
   await writeFile(join(outputDir, 'README.md'), readme)
   files.push('README.md')
 

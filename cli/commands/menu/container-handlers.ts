@@ -1834,11 +1834,41 @@ async function handleExportDocker(
   console.log(chalk.bold(`Exporting ${chalk.cyan(containerName)} to Docker...`))
   console.log()
 
-  // Create backups for all databases
+  // Create backups for all databases (or copy file for file-based DBs)
   const backupPaths: Array<{ database: string; path: string }> = []
   const isFileBased = isFileBasedEngine(config.engine)
 
-  if (!isFileBased) {
+  if (isFileBased) {
+    // File-based database: copy the database file directly
+    const copySpinner = createSpinner('Copying database file...')
+    copySpinner.start()
+
+    try {
+      await mkdir(join(outputDir, 'data'), { recursive: true })
+
+      // Get the database file path from config.database
+      const dbFilePath = config.database
+      if (!existsSync(dbFilePath)) {
+        throw new Error(`Database file not found: ${dbFilePath}`)
+      }
+
+      // Copy to data directory with original filename
+      const destPath = join(outputDir, 'data', basename(dbFilePath))
+      copyFileSync(dbFilePath, destPath)
+
+      const fileSize = (await stat(destPath)).size
+      backupPaths.push({ database: config.database, path: destPath })
+
+      copySpinner.succeed(`Database file copied (${formatBytes(fileSize)})`)
+    } catch (error) {
+      copySpinner.fail('Failed to copy database file')
+      console.log(uiError((error as Error).message))
+      await pressEnterToContinue()
+      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      return
+    }
+  } else {
+    // Server-based database: create backups using engine's backup method
     const backupSpinner = createSpinner(
       databases.length > 1
         ? `Creating backups for ${databases.length} databases...`
@@ -1890,9 +1920,9 @@ async function handleExportDocker(
     const result = await exportToDocker(config, {
       outputDir,
       port: targetPort,
-      includeData: !isFileBased,
+      includeData: true,
       backupPaths: backupPaths.length > 0 ? backupPaths : undefined,
-      skipTLS: false,
+      skipTLS: isFileBased, // Skip TLS for file-based DBs (no network connection)
     })
 
     exportSpinner.succeed('Docker artifacts generated')

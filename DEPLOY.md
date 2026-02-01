@@ -59,7 +59,7 @@ Options:
 
 ## Generated Files
 
-```
+```text
 ~/.spindb/containers/{engine}/{name}/docker/
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Container orchestration
@@ -75,7 +75,7 @@ Options:
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │  Docker Container (Ubuntu 22.04)            │
 │                                             │
@@ -91,7 +91,7 @@ Options:
 │  │  (PostgreSQL, MySQL, MongoDB, etc)   │   │
 │  │  - Native TLS enabled                │   │
 │  │  - Password authentication           │   │
-│  │  Data: /root/.spindb/containers/     │   │
+│  │  Data: /home/spindb/.spindb/         │   │
 │  └─────────────────────────────────────┘   │
 └─────────────────────────────────────────────┘
          │
@@ -161,7 +161,7 @@ SPINDB_PASSWORD=xK9#mP2$vL7nQ4wR
 
 After deploying, connect using the TLS-enabled connection string:
 
-```
+```text
 PostgreSQL:   postgresql://spindb:PASSWORD@HOST:5432/mydb?sslmode=require
 MySQL:        mysql://spindb:PASSWORD@HOST:3306/mydb?ssl=true
 MongoDB:      mongodb://spindb:PASSWORD@HOST:27017/mydb?tls=true
