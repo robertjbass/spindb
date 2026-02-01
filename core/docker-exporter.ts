@@ -678,17 +678,17 @@ export async function exportToDocker(
   // Generate credentials
   const credentials = generateCredentials()
 
+  // Check OpenSSL availability once for TLS decisions
+  const hasOpenSSL = await isOpenSSLAvailable()
+
   // Generate TLS certificates (if openssl is available and not skipped)
-  if (!skipTLS) {
-    const hasOpenSSL = await isOpenSSLAvailable()
-    if (hasOpenSSL) {
-      await generateTLSCertificates({
-        outputDir: join(outputDir, 'certs'),
-        commonName: 'localhost',
-        validDays: 365,
-      })
-      files.push('certs/server.crt', 'certs/server.key')
-    }
+  if (!skipTLS && hasOpenSSL) {
+    await generateTLSCertificates({
+      outputDir: join(outputDir, 'certs'),
+      commonName: 'localhost',
+      validDays: 365,
+    })
+    files.push('certs/server.crt', 'certs/server.key')
   }
 
   // Copy backup files if provided (multiple databases)
@@ -713,7 +713,7 @@ export async function exportToDocker(
   files.push('Dockerfile')
 
   // Generate entrypoint.sh
-  const useTLS = !skipTLS
+  const useTLS = !skipTLS && hasOpenSSL
   const entrypoint = generateEntrypoint(
     engine,
     containerName,

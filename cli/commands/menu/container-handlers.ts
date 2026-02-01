@@ -1745,7 +1745,7 @@ async function handleExportSubmenu(
         { name: `${chalk.cyan('▣')} Docker`, value: 'docker' },
         new inquirer.Separator(),
         { name: `${chalk.blue('←')} Back`, value: 'back' },
-        { name: `${chalk.blue('⌂')} Home`, value: 'home' },
+        { name: `${chalk.blue('⌂')} Back to main menu`, value: 'home' },
       ],
     },
   ])
