@@ -1748,6 +1748,19 @@ async function handleDelete(containerName: string): Promise<void> {
   deleteSpinner.succeed(`Container "${containerName}" deleted`)
 }
 
+async function isDockerContainerRunning(containerName: string): Promise<boolean> {
+  try {
+    const { execSync } = await import('child_process')
+    const result = execSync(
+      `docker ps --filter "name=spindb-${containerName}" --format "{{.Names}}"`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+    return result.trim().includes(`spindb-${containerName}`)
+  } catch {
+    return false
+  }
+}
+
 async function handleExportSubmenu(
   containerName: string,
   databases: string[],
@@ -1763,6 +1776,12 @@ async function handleExportSubmenu(
   // Check if Docker export already exists
   const hasDockerExport = dockerExportExists(containerName, config.engine)
 
+  // Check if Docker container is running (only if export exists)
+  let dockerRunning = false
+  if (hasDockerExport) {
+    dockerRunning = await isDockerContainerRunning(containerName)
+  }
+
   console.log()
   console.log(header('Export'))
   console.log()
@@ -1771,13 +1790,16 @@ async function handleExportSubmenu(
   const choices: MenuChoice[] = []
 
   if (hasDockerExport) {
-    // Export exists: show option to get connection string
+    // Export exists: show option to get connection string with running status
+    const runningStatus = dockerRunning
+      ? chalk.green('running')
+      : chalk.gray('not running')
     choices.push({
-      name: `${chalk.green('📋')} Get Docker connection string`,
+      name: `${chalk.green('⎘')} Get Docker connection string ${chalk.gray(`(${runningStatus})`)}`,
       value: 'docker-url',
     })
     choices.push({
-      name: `${chalk.cyan('▣')} Docker ${chalk.yellow('(Re-export - invalidates original credentials)')}`,
+      name: `${chalk.cyan('▣')} Docker ${chalk.gray('(Re-export - invalidates original credentials)')}`,
       value: 'docker',
     })
   } else {
