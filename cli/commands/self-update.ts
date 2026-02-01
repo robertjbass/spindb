@@ -106,9 +106,7 @@ export const selfUpdateCommand = new Command('self-update')
           } catch {
             // Verification failed, but update succeeded
             console.log(
-              chalk.gray(
-                '  Run "spindb --version" to verify the update.',
-              ),
+              chalk.gray('  Run "spindb --version" to verify the update.'),
             )
             console.log()
           }
