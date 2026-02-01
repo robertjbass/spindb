@@ -384,7 +384,7 @@ Export a container to a Docker-ready package that runs SpinDB inside Docker.
 
 ```bash
 spindb export docker mydb                    # Export to ~/.spindb/containers/{engine}/mydb/docker/
-spindb export docker mydb -o ./deploy        # Custom output directory
+spindb export docker mydb -o ./deploy        # Custom output directory (recommended)
 spindb export docker mydb -o ./              # Export to current directory
 spindb export docker mydb -f                 # Overwrite existing export
 spindb export docker mydb -p 5433            # Override port (default: engine's standard port)
@@ -394,6 +394,8 @@ spindb export docker mydb --copy             # Copy password to clipboard
 spindb export docker mydb --json             # JSON output for scripting
 ```
 
+> **Default output path:** For server-based engines (PostgreSQL, MySQL, etc.), exports go to `~/.spindb/containers/{engine}/{name}/docker/`. For file-based engines (**SQLite** and **DuckDB**), data lives in your project directory (CWD), so use `-o` to specify where to export.
+>
 > **Port behavior:** Docker exports default to the engine's standard port (5432 for PostgreSQL, 3306 for MySQL, etc.). If your local container uses a different port, you'll be prompted to choose.
 
 **Generated files:**
@@ -408,14 +410,14 @@ spindb export docker mydb --json             # JSON output for scripting
 **To deploy:**
 ```bash
 # Navigate to the output directory (shown in export output)
-cd ~/.spindb/containers/postgresql/mydb/docker && docker-compose up -d
+cd ~/.spindb/containers/postgresql/mydb/docker && docker compose up -d
 
 # Or use -o to export to a custom directory
 spindb export docker mydb -o ./mydb-docker
-cd mydb-docker && docker-compose up -d
+cd mydb-docker && docker compose up -d
 ```
 
-> **Note:** All 16 engines are supported. File-based databases (SQLite, DuckDB) are exported but require additional work for network access.
+> **File-based databases:** SQLite and DuckDB are supported but don't have network servers. Inside Docker, they work as local files. For managing SQLite/DuckDB registry entries, see `spindb attach` and `spindb detach`.
 
 ## JSON Output (for scripting)
 

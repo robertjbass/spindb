@@ -21,7 +21,7 @@ Redis is an in-memory key-value store with persistence. SpinDB downloads Redis b
 - **Windows**: `zip`
 
 ### Archive Structure
-```
+```text
 redis/
 └── bin/
     ├── redis-server     # Server binary
@@ -35,7 +35,7 @@ redis/
 ```typescript
 export const REDIS_VERSION_MAP: Record<string, string> = {
   '7': '7.4.7',
-  '8': '8.x.x',
+  '8': '8.4.0',
 }
 ```
 
@@ -87,7 +87,7 @@ Redis on Windows doesn't support `daemonize yes`. SpinDB uses:
 
 ### Connection String Format
 
-```
+```text
 redis://127.0.0.1:{port}/{database}
 ```
 

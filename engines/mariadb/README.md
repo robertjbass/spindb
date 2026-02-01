@@ -21,7 +21,7 @@ MariaDB is a MySQL-compatible SQL database. SpinDB downloads MariaDB binaries fr
 - **Windows**: `zip`
 
 ### Archive Structure
-```
+```text
 mariadb/
 ├── bin/
 │   ├── mariadbd         # Server binary (newer versions)
@@ -46,9 +46,9 @@ The binary manager checks for both names: `['mariadbd', 'mysqld']`
 
 ```typescript
 export const MARIADB_VERSION_MAP: Record<string, string> = {
-  '10.11': '10.11.x',
-  '11.4': '11.4.x',
-  '11.8': '11.8.x',
+  '10.11': '10.11.15',
+  '11.4': '11.4.5',
+  '11.8': '11.8.5',
 }
 ```
 
@@ -76,7 +76,7 @@ serverBinaryNames: ['mariadbd', 'mysqld']
 
 ### Connection String Format
 
-```
+```text
 mysql://127.0.0.1:{port}/{database}
 ```
 

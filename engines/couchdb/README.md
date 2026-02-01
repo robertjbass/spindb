@@ -18,7 +18,7 @@ CouchDB is a document-oriented database with a REST API. Like Qdrant and Meilise
 
 **Critical**: CouchDB on Windows uses a **batch file** (`couchdb.cmd`), not an executable:
 
-```
+```text
 couchdb/bin/couchdb.cmd    # NOT couchdb.exe
 ```
 
@@ -31,7 +31,7 @@ The binary manager has a helper `getCouchDBExtension()` that returns `.cmd` on W
 - **Windows**: `zip`
 
 ### Archive Structure
-```
+```text
 couchdb/
 ├── bin/
 │   ├── couchdb           # Unix: shell script
@@ -94,14 +94,14 @@ CouchDB 3.x requires an admin account. Even with `require_valid_user = false`:
 
 ### Connection String Format
 
-```
+```text
 http://127.0.0.1:{port}/{database}
 ```
 
 ### Web Dashboard (Fauxton)
 
 Fauxton dashboard is at:
-```
+```text
 http://localhost:{port}/_utils
 ```
 

@@ -21,7 +21,7 @@ MySQL is a traditional SQL database with full server-based lifecycle management.
 - **Windows**: `zip`
 
 ### Archive Structure
-```
+```text
 mysql/
 ├── bin/
 │   ├── mysqld           # Server binary
@@ -39,8 +39,8 @@ The `version-maps.ts` file must stay synchronized with hostdb's `releases.json`:
 ```typescript
 export const MYSQL_VERSION_MAP: Record<string, string> = {
   '8.0': '8.0.40',
-  '8.4': '8.4.x',
-  '9': '9.x.x',
+  '8.4': '8.4.3',
+  '9': '9.5.0',
 }
 ```
 
@@ -72,7 +72,7 @@ MySQL uses `mysqld --initialize-insecure` to create the data directory without r
 
 ### Connection String Format
 
-```
+```text
 mysql://127.0.0.1:{port}/{database}
 ```
 
