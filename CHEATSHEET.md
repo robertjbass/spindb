@@ -312,6 +312,19 @@ spindb deps check                       # Check required tools
 spindb deps install                     # Install missing tools
 ```
 
+## Configuration
+
+```bash
+spindb config show                      # Show current config
+spindb config detect                    # Re-detect tool paths
+spindb config set psql /opt/pg/bin/psql # Set custom binary path
+spindb config unset psql                # Remove custom path
+spindb config path psql                 # Show path for a tool
+spindb config update-check              # Show update check status
+spindb config update-check on           # Enable update checks
+spindb config update-check off          # Disable update checks
+```
+
 ## Doctor
 
 ```bash

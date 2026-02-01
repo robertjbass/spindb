@@ -433,7 +433,8 @@ spindb deps install                             # Install missing tools
 # Configuration
 spindb config show                              # Show current config
 spindb config detect                            # Re-detect tool paths
-spindb config update-check on                   # Enable update notifications
+spindb config update-check on                   # Enable update checks
+spindb config update-check off                  # Disable update checks
 
 # Doctor
 spindb doctor                                   # Interactive health check

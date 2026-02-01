@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.3] - 2026-02-01
+
+### Changed
+- **Container submenu reorganization** - Improved menu layout with labeled section separators:
+  - Separators now show state ("Running", "Stopped", "Available") or required action ("Start container first", "Stop container first")
+  - "View logs" moved to container state section (always accessible, not gated by running status)
+  - "Export" moved to data operations section (logical grouping with backup/restore)
+- **Main menu simplification** - Moved system tasks to Settings submenu:
+  - "Manage engines", "Health check", and "Check for updates" now in Settings
+  - Exit icon changed from ⏻ to ⎋ (ESC symbol) for consistent character width
+- **Post-create navigation** - After creating a container, navigates directly to its submenu instead of returning to main menu
+- **Non-intrusive update notifications** - Update check runs once in background on interactive CLI startup (if enabled). Shows "Update to vX.X.X" option on main menu when new version available. Respects `spindb config update-check off` setting. Never runs during scripts.
+
+### Fixed
+- **Settings menu page size** - Settings prompts now use correct `pageSize` for consistent display
+- **Documentation** - Added `spindb config update-check off` to README and CHEATSHEET
+
 ## [0.30.2] - 2026-02-01
 
 ### Added
