@@ -457,7 +457,12 @@ echo "SpinDB container ready!"
 echo ""
 echo "Connection: ${getConnectionStringTemplate(engine, port, database, useTLS).replace(/\$/g, '\\$')}"
 echo "========================================"
-
+${
+  isFileBased
+    ? `
+# File-based database: just keep container alive (no server to monitor)
+exec tail -f /dev/null`
+    : `
 # Keep container running
 # Trap SIGTERM and SIGINT for graceful shutdown
 trap "echo 'Shutting down...'; run_as_spindb spindb stop '$CONTAINER_NAME'; exit 0" SIGTERM SIGINT
@@ -471,7 +476,8 @@ while true; do
         echo "Database stopped unexpectedly, restarting..."
         run_as_spindb spindb start "$CONTAINER_NAME" || true
     fi
-done
+done`
+}
 `
 }
 

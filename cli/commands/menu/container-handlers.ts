@@ -856,12 +856,15 @@ export async function showContainerSubmenu(
       : disabledItem('✕', 'Delete container', 'Stop container first'),
   )
 
-  // Export - server-based DBs must be running to backup, file-based can always export
-  const canExport = isFileBasedDB ? true : isRunning
+  // Export - server-based DBs must be running, file-based must have the file
+  const canExport = containerReady
+  const exportHint = isFileBasedDB
+    ? 'Database file missing'
+    : 'Start container first'
   actionChoices.push(
     canExport
       ? { name: `${chalk.cyan('↑')} Export`, value: 'export' }
-      : disabledItem('⬆', 'Export', 'Start container first'),
+      : disabledItem('⬆', 'Export', exportHint),
   )
 
   actionChoices.push(new inquirer.Separator())
@@ -1797,7 +1800,18 @@ async function handleExportDocker(
       return
     }
     // Remove existing directory
-    await rm(outputDir, { recursive: true, force: true })
+    try {
+      await rm(outputDir, { recursive: true, force: true })
+    } catch (error) {
+      console.log(
+        uiError(
+          `Failed to remove existing directory: ${(error as Error).message}`,
+        ),
+      )
+      await pressEnterToContinue()
+      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      return
+    }
   }
 
   // Determine target port
