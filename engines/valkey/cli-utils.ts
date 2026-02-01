@@ -6,6 +6,8 @@
  */
 
 import { existsSync } from 'fs'
+import { configManager } from '../../core/config-manager'
+import { platformService } from '../../core/platform-service'
 
 /**
  * Get the path to valkey-cli binary
@@ -17,9 +19,6 @@ import { existsSync } from 'fs'
  * @returns Path to valkey-cli or null if not found
  */
 export async function getValkeyCliPath(): Promise<string | null> {
-  // Dynamic imports to avoid circular dependencies
-  const { configManager } = await import('../../core/config-manager')
-
   // Check if we have a cached/bundled valkey-cli from hostdb
   const cachedPath = await configManager.getBinaryPath('valkey-cli')
   if (cachedPath && existsSync(cachedPath)) {
@@ -27,7 +26,6 @@ export async function getValkeyCliPath(): Promise<string | null> {
   }
 
   // Fallback to system PATH
-  const { platformService } = await import('../../core/platform-service')
   return platformService.findToolPath('valkey-cli')
 }
 

@@ -15,7 +15,7 @@
 
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, unlink } from 'fs/promises'
+import { mkdir, writeFile, unlink, stat, readdir } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -761,7 +761,6 @@ export class SurrealDBEngine extends BaseEngine {
     })
 
     try {
-      const { stat, readdir } = await import('fs/promises')
       const stats = await stat(dataDir)
 
       if (!stats.isDirectory()) {

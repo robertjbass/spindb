@@ -179,23 +179,9 @@ export class UpdateManager {
     const pm = await this.detectPackageManager()
     const installCmd = this.getInstallCommand(pm)
 
+    // Run install command
     try {
       await execAsync(installCmd, { timeout: 60000 })
-
-      const { stdout } = await execAsync(this.getListCommand(pm), {
-        timeout: 10000,
-      })
-      const newVersion = this.parseVersionFromListOutput(
-        pm,
-        stdout,
-        previousVersion,
-      )
-
-      return {
-        success: true,
-        previousVersion,
-        newVersion,
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
 
@@ -215,6 +201,30 @@ export class UpdateManager {
         newVersion: previousVersion,
         error: `${message}\nManual update: ${installCmd}`,
       }
+    }
+
+    // Verify new version - use explicit cwd to avoid stale directory issues
+    // (fnm and other version managers can invalidate the cwd during global installs)
+    let newVersion = previousVersion
+    try {
+      const { stdout } = await execAsync(this.getListCommand(pm), {
+        timeout: 10000,
+        cwd: '/',
+      })
+      newVersion = this.parseVersionFromListOutput(pm, stdout, previousVersion)
+    } catch {
+      // Verification failed but install likely succeeded - fetch from registry instead
+      try {
+        newVersion = await this.fetchLatestVersion()
+      } catch {
+        // Fall back to previous version (install still succeeded)
+      }
+    }
+
+    return {
+      success: true,
+      previousVersion,
+      newVersion,
     }
   }
 

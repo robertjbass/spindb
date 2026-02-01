@@ -24,10 +24,10 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port, database } = container
+  const { port, database, version } = container
   const db = options.database || database
 
-  const mongodump = await getMongodumpPath()
+  const mongodump = await getMongodumpPath(version)
   if (!mongodump) {
     throw new Error(MONGODUMP_NOT_FOUND_ERROR)
   }
