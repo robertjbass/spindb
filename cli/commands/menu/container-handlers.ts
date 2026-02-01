@@ -822,8 +822,8 @@ export async function showContainerSubmenu(
   // Copy connection string - requires database selection for multi-db containers
   actionChoices.push(
     canDoDbAction
-      ? { name: `${chalk.magenta('⊕')} Copy connection string`, value: 'copy' }
-      : disabledItem('⊕', 'Copy connection string'),
+      ? { name: `${chalk.green('⎘')} Copy connection string`, value: 'copy' }
+      : disabledItem('⎘', 'Copy connection string'),
   )
 
   // Backup - requires database selection for multi-db containers
