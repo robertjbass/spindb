@@ -373,7 +373,11 @@ export const exportCommand = new Command('export')
       .argument('[container]', 'Container name')
       .option('-c, --copy', 'Copy connection string to clipboard')
       .option('-j, --json', 'Output result as JSON')
-      .option('--host <hostname>', 'Override hostname in connection string', 'localhost')
+      .option(
+        '--host <hostname>',
+        'Override hostname in connection string',
+        'localhost',
+      )
       .action(
         async (
           containerArg: string | undefined,
@@ -445,7 +449,10 @@ export const exportCommand = new Command('export')
 
             // Check if Docker export exists
             if (!dockerExportExists(containerName, config.engine)) {
-              const exportPath = getDefaultDockerExportPath(containerName, config.engine)
+              const exportPath = getDefaultDockerExportPath(
+                containerName,
+                config.engine,
+              )
               if (options.json) {
                 console.log(
                   JSON.stringify({
@@ -464,7 +471,10 @@ export const exportCommand = new Command('export')
             }
 
             // Get credentials and connection string
-            const credentials = await getDockerCredentials(containerName, config.engine)
+            const credentials = await getDockerCredentials(
+              containerName,
+              config.engine,
+            )
             const connectionString = await getDockerConnectionString(
               containerName,
               config.engine,
@@ -479,17 +489,22 @@ export const exportCommand = new Command('export')
                   }),
                 )
               } else {
-                console.error(uiError('Could not read Docker export credentials'))
+                console.error(
+                  uiError('Could not read Docker export credentials'),
+                )
               }
               process.exit(1)
             }
 
             // Copy to clipboard if requested
             if (options.copy) {
-              const copied = await platformService.copyToClipboard(connectionString)
+              const copied =
+                await platformService.copyToClipboard(connectionString)
               if (!options.json) {
                 if (copied) {
-                  console.log(uiSuccess('Connection string copied to clipboard'))
+                  console.log(
+                    uiSuccess('Connection string copied to clipboard'),
+                  )
                 } else {
                   console.log(uiWarning('Could not copy to clipboard'))
                 }

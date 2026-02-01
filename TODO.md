@@ -10,6 +10,7 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
+- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 16 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
 - [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure

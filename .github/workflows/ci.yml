@@ -2192,6 +2192,208 @@ jobs:
         timeout-minutes: 30
 
   # ============================================
+  # Docker Export Test - Tests the `spindb export docker` functionality
+  # Creates a container, seeds it, exports to Docker, and verifies:
+  #   1. Docker build and run works
+  #   2. Data is properly restored
+  #   3. Container restarts are idempotent (no data re-init, no PATH duplication)
+  #   4. `spindb export docker-url` command works
+  # ============================================
+  test-docker-export:
+    name: Docker Export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      - name: Create test container
+        run: pnpm start create docker-export-test --engine postgresql --db-version 18 --no-start
+
+      - name: Start container
+        run: pnpm start start docker-export-test
+
+      - name: Wait for container to be ready
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            if pnpm start info docker-export-test --json 2>/dev/null | grep -q '"status": "running"'; then
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Seed database with fixture data
+        run: pnpm start run docker-export-test -f tests/fixtures/postgresql/seeds/sample-db.sql
+
+      - name: Verify seed data exists
+        shell: bash
+        run: |
+          COUNT=$(pnpm start run docker-export-test -c "SELECT COUNT(*) FROM test_user;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
+          if [ "$COUNT" != "5" ]; then
+            echo "Seed data verification failed: expected 5 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Seed data verified: $COUNT rows"
+
+      - name: Export to Docker
+        run: pnpm start export docker docker-export-test --force
+
+      - name: Verify Docker export files exist
+        shell: bash
+        run: |
+          EXPORT_DIR=~/.spindb/containers/postgresql/docker-export-test/docker
+          if [ ! -f "$EXPORT_DIR/Dockerfile" ]; then
+            echo "Dockerfile not found"
+            exit 1
+          fi
+          if [ ! -f "$EXPORT_DIR/docker-compose.yml" ]; then
+            echo "docker-compose.yml not found"
+            exit 1
+          fi
+          if [ ! -f "$EXPORT_DIR/.env" ]; then
+            echo ".env not found"
+            exit 1
+          fi
+          if [ ! -f "$EXPORT_DIR/entrypoint.sh" ]; then
+            echo "entrypoint.sh not found"
+            exit 1
+          fi
+          echo "All Docker export files verified"
+
+      - name: Build Docker image
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          docker compose build
+
+      - name: Start Docker container
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          docker compose up -d
+          # Wait for container to be ready
+          for i in {1..60}; do
+            if docker compose exec -T db pg_isready -U spindb 2>/dev/null; then
+              echo "PostgreSQL is ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Verify data was restored in Docker container
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          # Use login shell to ensure PATH is set
+          COUNT=$(docker compose exec -T db bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
+          if [ "$COUNT" != "5" ]; then
+            echo "Data restoration failed: expected 5 rows, got '$COUNT'"
+            docker compose logs db
+            exit 1
+          fi
+          echo "Data verified in Docker container: $COUNT rows"
+
+      - name: Test restart idempotency - restart container
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          docker compose restart db
+          # Wait for container to be ready again
+          for i in {1..60}; do
+            if docker compose exec -T db pg_isready -U spindb 2>/dev/null; then
+              echo "PostgreSQL is ready after restart"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Verify data persists after restart
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          COUNT=$(docker compose exec -T db bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
+          if [ "$COUNT" != "5" ]; then
+            echo "Data persistence failed after restart: expected 5 rows, got '$COUNT'"
+            docker compose logs db
+            exit 1
+          fi
+          echo "Data persists after restart: $COUNT rows"
+
+      - name: Verify PATH is not duplicated after restart
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          PATH_COUNT=$(docker compose exec -T db bash -l -c 'echo $PATH | tr ":" "\n" | grep -c "postgresql" || true' 2>&1 | tr -d ' \n')
+          if [ "$PATH_COUNT" -gt "1" ]; then
+            echo "PATH duplication detected: postgresql appears $PATH_COUNT times"
+            docker compose exec -T db bash -l -c 'echo $PATH'
+            exit 1
+          fi
+          echo "PATH idempotency verified: postgresql appears $PATH_COUNT time(s)"
+
+      - name: Test docker-url command
+        shell: bash
+        run: |
+          URL=$(pnpm start export docker-url docker-export-test --json 2>&1 | grep -v '^>' | jq -r '.connectionString' 2>/dev/null || echo "")
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            echo "docker-url command failed to return connection string"
+            pnpm start export docker-url docker-export-test --json
+            exit 1
+          fi
+          echo "docker-url command works: $URL"
+
+      - name: Cleanup Docker container
+        if: always()
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker 2>/dev/null && docker compose down -v || true
+
+      - name: Cleanup SpinDB container
+        if: always()
+        run: |
+          pnpm start stop docker-export-test 2>/dev/null || true
+          pnpm start delete docker-export-test --yes 2>/dev/null || true
+
+      - name: Show Docker logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== Docker compose logs ==="
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker 2>/dev/null && docker compose logs || echo "No compose logs"
+          echo ""
+          echo "=== Export directory contents ==="
+          ls -la ~/.spindb/containers/postgresql/docker-export-test/docker/ 2>/dev/null || echo "No export directory"
+          echo ""
+          echo "=== .env file contents ==="
+          cat ~/.spindb/containers/postgresql/docker-export-test/docker/.env 2>/dev/null || echo "No .env file"
+          echo ""
+          echo "=== entrypoint.sh contents ==="
+          cat ~/.spindb/containers/postgresql/docker-export-test/docker/entrypoint.sh 2>/dev/null || echo "No entrypoint.sh"
+
+  # ============================================
   # Linux ARM64 Tests (COMMENTED OUT)
   # ============================================
   # Uncomment this section if GitHub adds free ARM64 runners or if you have
@@ -2355,6 +2557,7 @@ jobs:
         test-self-update,
         # test-windows-all,  # Commented out - using parallel Windows tests instead
         test-docker-linux,
+        test-docker-export,
         lint,
         hostdb-sync,
       ]
@@ -2457,6 +2660,10 @@ jobs:
           # test-windows-all check removed - using parallel Windows tests instead
           if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
             echo "Docker Linux edge case tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-docker-export.result }}" != "success" ]; then
+            echo "Docker Export tests failed"
             exit 1
           fi
           if [ "${{ needs.lint.result }}" != "success" ]; then

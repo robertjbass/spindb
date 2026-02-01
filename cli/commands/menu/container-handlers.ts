@@ -575,7 +575,11 @@ export async function handleList(
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
     // Show toggle hint at top when server-based containers exist
     ...(hasServerContainers
-      ? [new inquirer.Separator(chalk.cyan('── [Shift+Tab] toggle start/stop ──'))]
+      ? [
+          new inquirer.Separator(
+            chalk.cyan('── [Shift+Tab] toggle start/stop ──'),
+          ),
+        ]
       : []),
     ...containerChoices,
     new inquirer.Separator(),
@@ -1748,7 +1752,9 @@ async function handleDelete(containerName: string): Promise<void> {
   deleteSpinner.succeed(`Container "${containerName}" deleted`)
 }
 
-async function isDockerContainerRunning(containerName: string): Promise<boolean> {
+async function isDockerContainerRunning(
+  containerName: string,
+): Promise<boolean> {
   try {
     const { execSync } = await import('child_process')
     const result = execSync(
@@ -1841,7 +1847,10 @@ async function handleGetDockerConnectionString(
   containerName: string,
   engine: Engine,
 ): Promise<void> {
-  const connectionString = await getDockerConnectionString(containerName, engine)
+  const connectionString = await getDockerConnectionString(
+    containerName,
+    engine,
+  )
 
   if (!connectionString) {
     console.log()

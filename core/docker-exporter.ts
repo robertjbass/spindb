@@ -1093,14 +1093,7 @@ export function getDefaultDockerExportPath(
   engine: Engine,
 ): string {
   const homedir = process.env.HOME || process.env.USERPROFILE || '~'
-  return join(
-    homedir,
-    '.spindb',
-    'containers',
-    engine,
-    containerName,
-    'docker',
-  )
+  return join(homedir, '.spindb', 'containers', engine, containerName, 'docker')
 }
 
 /**
