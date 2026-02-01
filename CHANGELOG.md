@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--force` flag for `spindb create`** - Overwrites existing containers without prompting. Useful for scripting and Docker entrypoints where interactive prompts aren't available. Stops running containers before deletion.
+  ```bash
+  spindb create mydb --engine postgresql --force
+  ```
+
+### Fixed
+- **Docker export container startup** - Fixed multiple issues preventing Docker containers from starting:
+  - Added `libnuma1` dependency required by PostgreSQL binaries on Linux
+  - Added `gosu` for running database processes as non-root user (PostgreSQL refuses to run as root)
+  - Fixed volume permissions with `chown` at container startup
+  - Fixed shell escaping in grep patterns for container status checks
+
+## [0.30.1] - 2026-01-31
+
+### Changed
+- **Static imports refactoring** - Converted unnecessary dynamic `await import()` patterns to static imports across 12 files. Improves module load time and code clarity. No functional changes.
+- **Self-update verification** - After updating, runs `spindb --version` in a new process to verify the update worked. Replaces the confusing "restart your terminal" message with immediate confirmation.
+
+### Fixed
+- **Self-update false failure with fnm/nvm** - Fixed issue where self-update reported failure even when install succeeded. The verification step (`npm list -g`) could fail with stale cwd errors when using Node version managers. Install and verification are now separate, and verification uses fallbacks.
+
+## [0.30.0] - 2026-01-31
+
+### Added
+- **`spindb export docker` command** - Export a local SpinDB container to a Docker-ready package:
+  ```bash
+  spindb export docker myapp
+  # Generates: ./myapp-docker/
+  #   ├── Dockerfile
+  #   ├── docker-compose.yml
+  #   ├── .env (auto-generated credentials)
+  #   ├── certs/ (TLS certificates)
+  #   ├── data/ (database backup)
+  #   ├── entrypoint.sh
+  #   └── README.md
+  ```
+  - **All 16 engines supported** - PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB
+  - **Multi-database export** - Containers with multiple databases export all databases by default
+  - **TLS enabled by default** - Auto-generates self-signed certificates for secure connections
+  - **Credential generation** - Auto-generates shell-safe passwords (avoids problematic characters like `#$&*?`)
+  - **Port selection** - Interactive prompt when local port differs from engine default
+  - **JSON output** - `--json` flag for scripting
+- **"Export" menu option** - Available in the interactive container menu with submenu for export formats (currently Docker, extensible for future deployment targets)
+
+## [0.28.2] - 2026-01-31
+
+### Fixed
+- **Version-matched backup/restore binaries** - `pg_dump`, `pg_restore`, `psql`, `mysqldump`, `mysql`, `mongodump`, and `mongorestore` now use the same version as the container being backed up/restored. Previously, a version mismatch (e.g., pg_dump v17 with PostgreSQL 18 container) would cause "server version mismatch" errors. The fix implements a fallback chain: exact version match → major version match → globally cached binary → system binary.
+
 ## [0.28.1] - 2026-01-29
 
 ### Added

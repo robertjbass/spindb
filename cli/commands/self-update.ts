@@ -1,4 +1,5 @@
 import { Command } from 'commander'
+import { execSync } from 'child_process'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { updateManager } from '../../core/update-manager'
@@ -91,13 +92,24 @@ export const selfUpdateCommand = new Command('self-update')
           ),
         )
         console.log()
+
+        // Verify the new version by running spindb --version in a new process
+        // (new process loads the updated code)
         if (updateResult.previousVersion !== updateResult.newVersion) {
-          console.log(
-            chalk.gray(
-              '  Please restart your terminal to use the new version.',
-            ),
-          )
-          console.log()
+          try {
+            const versionOutput = execSync('spindb --version', {
+              encoding: 'utf-8',
+              cwd: '/',
+            }).trim()
+            console.log(chalk.gray(`  Verified: ${versionOutput}`))
+            console.log()
+          } catch {
+            // Verification failed, but update succeeded
+            console.log(
+              chalk.gray('  Run "spindb --version" to verify the update.'),
+            )
+            console.log()
+          }
         }
       } else {
         updateSpinner.fail('Update failed')

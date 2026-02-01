@@ -11,6 +11,21 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Cleanup function to remove Docker artifacts
+cleanup() {
+  echo ""
+  echo "Cleaning up Docker artifacts..."
+  docker rmi spindb-e2e 2>/dev/null || true
+  # Remove dangling images (old layers from previous builds)
+  docker image prune -f 2>/dev/null || true
+  # Remove build cache to reclaim disk space
+  docker builder prune -f 2>/dev/null || true
+}
+
+# Ensure cleanup runs on exit (success or failure)
+trap cleanup EXIT
+
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Skip "--" if passed (pnpm passes it literally)
@@ -31,5 +46,4 @@ else
   docker run --rm spindb-e2e
 fi
 
-# Cleanup (ignore errors if image doesn't exist)
-docker rmi spindb-e2e 2>/dev/null || true
+# Cleanup is handled by the trap on EXIT
