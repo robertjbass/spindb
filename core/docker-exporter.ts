@@ -150,7 +150,15 @@ function getConnectionStringTemplate(
 /**
  * Generate the Dockerfile content
  */
-function generateDockerfile(engine: Engine): string {
+function generateDockerfile(engine: Engine, isFileBased: boolean): string {
+  // File-based engines don't have a running server, so check container exists
+  // Server-based engines check for running status
+  const healthcheck = isFileBased
+    ? `HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \\
+    CMD gosu spindb spindb list --json | grep -q '"engine":"${engine}"'`
+    : `HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
+    CMD gosu spindb spindb list --json | grep -q '"status":"running"'`
+
   return `# SpinDB Docker Container
 # Runs SpinDB inside Docker to manage database lifecycle
 
@@ -211,8 +219,7 @@ ENV HOME=/home/spindb
 EXPOSE \${SPINDB_PORT:-${engineDefaults[engine].defaultPort}}
 
 # Health check (run as spindb user)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
-    CMD gosu spindb spindb list --json | grep -q '"status":"running"'
+${healthcheck}
 
 ENTRYPOINT ["/entrypoint.sh"]
 `
@@ -732,7 +739,7 @@ export async function exportToDocker(
     }
 
     // Generate Dockerfile
-    const dockerfile = generateDockerfile(engine)
+    const dockerfile = generateDockerfile(engine, isFileBasedEngine(engine))
     await writeFile(join(outputDir, 'Dockerfile'), dockerfile)
     files.push('Dockerfile')
 
