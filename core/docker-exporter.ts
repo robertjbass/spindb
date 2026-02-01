@@ -150,7 +150,11 @@ function getConnectionStringTemplate(
 /**
  * Generate the Dockerfile content
  */
-function generateDockerfile(engine: Engine, isFileBased: boolean): string {
+function generateDockerfile(
+  engine: Engine,
+  isFileBased: boolean,
+  useTLS: boolean,
+): string {
   // File-based engines don't have a running server, so check container exists
   // Server-based engines check for running status
   const healthcheck = isFileBased
@@ -158,6 +162,14 @@ function generateDockerfile(engine: Engine, isFileBased: boolean): string {
     CMD gosu spindb spindb list --json | grep -q '"engine":"${engine}"'`
     : `HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
     CMD gosu spindb spindb list --json | grep -q '"status":"running"'`
+
+  // Only copy TLS certificates if they were generated
+  const copyCerts = useTLS
+    ? `
+# Copy TLS certificates
+COPY --chown=spindb:spindb ./certs/ /home/spindb/.spindb/certs/
+`
+    : ''
 
   return `# SpinDB Docker Container
 # Runs SpinDB inside Docker to manage database lifecycle
@@ -200,10 +212,7 @@ RUN npm install -g pnpm \\
 # Create spindb directories with proper ownership
 RUN mkdir -p /home/spindb/.spindb/containers /home/spindb/.spindb/bin /home/spindb/.spindb/certs /home/spindb/.spindb/init \\
     && chown -R spindb:spindb /home/spindb
-
-# Copy TLS certificates
-COPY --chown=spindb:spindb ./certs/ /home/spindb/.spindb/certs/
-
+${copyCerts}
 # Copy database backup/data
 COPY --chown=spindb:spindb ./data/ /home/spindb/.spindb/init/
 
@@ -755,13 +764,19 @@ export async function exportToDocker(
       files.push(`data/${backupFilename}`)
     }
 
+    // Determine TLS status for Dockerfile and entrypoint
+    const useTLS = !skipTLS && hasOpenSSL
+
     // Generate Dockerfile
-    const dockerfile = generateDockerfile(engine, isFileBasedEngine(engine))
+    const dockerfile = generateDockerfile(
+      engine,
+      isFileBasedEngine(engine),
+      useTLS,
+    )
     await writeFile(join(outputDir, 'Dockerfile'), dockerfile)
     files.push('Dockerfile')
 
     // Generate entrypoint.sh
-    const useTLS = !skipTLS && hasOpenSSL
     const entrypoint = generateEntrypoint(
       engine,
       containerName,
