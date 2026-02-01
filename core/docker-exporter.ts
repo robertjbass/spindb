@@ -371,7 +371,7 @@ if spindb list --json 2>/dev/null | grep -q "\\"name\\":\\"$CONTAINER_NAME\\""; 
     echo "Container '$CONTAINER_NAME' already exists"
 else
     echo "Creating container '$CONTAINER_NAME'..."
-    spindb create "$CONTAINER_NAME" --engine "$ENGINE" --version "$VERSION" --port "$PORT" --database "$DATABASE"
+    spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE"
 fi
 
 # Start the database
