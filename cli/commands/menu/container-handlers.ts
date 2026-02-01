@@ -66,7 +66,7 @@ import { Engine, isFileBasedEngine } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 import { getEngineIcon } from '../../constants'
 
-export async function handleCreate(): Promise<'main' | void> {
+export async function handleCreate(): Promise<'main' | string | void> {
   console.log()
   console.log(header('Create New Database Container'))
   console.log()
@@ -342,11 +342,11 @@ export async function handleCreate(): Promise<'main' | void> {
         {
           type: 'input',
           name: 'continue',
-          message: chalk.gray('Press Enter to return to the main menu...'),
+          message: chalk.gray('Press Enter to continue...'),
         },
       ])
     }
-    return
+    return containerNameFinal
   }
 
   // Server databases: start and create database
@@ -410,7 +410,7 @@ export async function handleCreate(): Promise<'main' | void> {
         {
           type: 'input',
           name: 'continue',
-          message: chalk.gray('Press Enter to return to the main menu...'),
+          message: chalk.gray('Press Enter to continue...'),
         },
       ])
     }
@@ -426,7 +426,18 @@ export async function handleCreate(): Promise<'main' | void> {
         `Start it later with: ${chalk.cyan(`spindb start ${containerNameFinal}`)}`,
       ),
     )
+    console.log()
+
+    await escapeablePrompt([
+      {
+        type: 'input',
+        name: 'continue',
+        message: chalk.gray('Press Enter to continue...'),
+      },
+    ])
   }
+
+  return containerNameFinal
 }
 
 export async function handleList(
@@ -557,14 +568,13 @@ export async function handleList(
     (c) => !isFileBasedEngine(c.engine),
   )
 
-  // Build hints string (bottom of list)
-  const hints = hasServerContainers ? chalk.gray('[Shift]+[Tab] - toggle') : ''
-
-  // Build the full choice list with footer items
-  const summary = hints
-    ? `${containers.length} container(s): ${parts.join('; ')} — ${hints}`
-    : `${containers.length} container(s): ${parts.join('; ')}`
+  // Build the full choice list with header hint and footer items
+  const summary = `${containers.length} container(s): ${parts.join('; ')}`
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
+    // Show toggle hint at top when server-based containers exist
+    ...(hasServerContainers
+      ? [new inquirer.Separator(chalk.cyan('── [Shift+Tab] toggle start/stop ──'))]
+      : []),
     ...containerChoices,
     new inquirer.Separator(),
     new inquirer.Separator(summary),
@@ -694,12 +704,14 @@ export async function showContainerSubmenu(
   // Build action choices based on engine type
   const actionChoices: MenuChoice[] = []
 
-  // Helper for disabled menu items - passes hint to inquirer's disabled property
-  const disabledItem = (icon: string, label: string, hint: string) => ({
-    name: chalk.gray(`${icon} ${label}`),
-    value: '_disabled_',
-    disabled: chalk.gray(hint), // String value shows as the reason instead of "(Disabled)"
-  })
+  // Helper for disabled menu items (hint shown in separator, not on each item)
+  function disabledItem(icon: string, label: string) {
+    return {
+      name: chalk.gray(`${icon} ${label}`),
+      value: '_disabled_',
+      disabled: '', // Empty string hides the "(Disabled)" text
+    }
+  }
 
   // Determine if database-specific actions can be performed
   // Requires: database selected + (running for server DBs OR file exists for file-based DBs)
@@ -707,13 +719,25 @@ export async function showContainerSubmenu(
   const hasMultipleDatabases = databases.length > 1
   const canDoDbAction = !!activeDatabase && containerReady
 
-  // Hint for disabled database actions
-  const getDbActionHint = () => {
-    if (!activeDatabase && hasMultipleDatabases) return 'Select database first'
+  // Label for data section separator - shows state or required action
+  function getDataSectionLabel(): string {
     if (!containerReady) {
       return isFileBasedDB ? 'Database file missing' : 'Start container first'
     }
-    return 'Select database first'
+    if (!activeDatabase && hasMultipleDatabases) {
+      return 'Select database first'
+    }
+    // Show positive state when actions are available
+    return isFileBasedDB ? 'Available' : 'Running'
+  }
+
+  // Label for management section separator - shows state or required action
+  function getManageSectionLabel(): string {
+    if (!isFileBasedDB && isRunning) {
+      return 'Stop container first'
+    }
+    // Show positive state when actions are available
+    return isFileBasedDB ? 'Available' : 'Stopped'
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -733,6 +757,12 @@ export async function showContainerSubmenu(
         value: 'stop',
       })
     }
+
+    // View logs - available anytime for server-based DBs
+    actionChoices.push({
+      name: `${chalk.gray('☰')} View logs`,
+      value: 'logs',
+    })
   }
 
   // Database selection - show current selection or prompt to select
@@ -748,18 +778,20 @@ export async function showContainerSubmenu(
     })
   }
 
-  actionChoices.push(new inquirer.Separator())
-
   // ─────────────────────────────────────────────────────────────────────────────
   // SECTION 2: Data Operations
+  // Separator shows current state or required action
   // ─────────────────────────────────────────────────────────────────────────────
+  const dataSectionLabel = getDataSectionLabel()
+  actionChoices.push(
+    new inquirer.Separator(chalk.gray(`── ${dataSectionLabel} ──`)),
+  )
 
   // Open shell - requires database selection for multi-db containers
-  const shellHint = getDbActionHint()
   actionChoices.push(
     canDoDbAction
       ? { name: `${chalk.blue('>')} Open shell`, value: 'shell' }
-      : disabledItem('>', 'Open shell', shellHint),
+      : disabledItem('>', 'Open shell'),
   )
 
   // Run SQL/script - requires database selection for multi-db containers
@@ -778,66 +810,64 @@ export async function showContainerSubmenu(
           : config.engine === Engine.SurrealDB
             ? 'Run SurrealQL file'
             : 'Run SQL file'
-    const runSqlHint = getDbActionHint()
     actionChoices.push(
       canDoDbAction
         ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
-        : disabledItem('▷', runScriptLabel, runSqlHint),
+        : disabledItem('▷', runScriptLabel),
     )
   }
 
   // Copy connection string - requires database selection for multi-db containers
-  const copyHint = getDbActionHint()
   actionChoices.push(
     canDoDbAction
       ? { name: `${chalk.magenta('⊕')} Copy connection string`, value: 'copy' }
-      : disabledItem('⊕', 'Copy connection string', copyHint),
+      : disabledItem('⊕', 'Copy connection string'),
   )
 
   // Backup - requires database selection for multi-db containers
-  const backupHint = getDbActionHint()
   actionChoices.push(
     canDoDbAction
       ? { name: `${chalk.magenta('↓')} Backup database`, value: 'backup' }
-      : disabledItem('↓', 'Backup database', backupHint),
+      : disabledItem('↓', 'Backup database'),
   )
 
   // Restore - requires database selection for multi-db containers
-  const restoreHint = getDbActionHint()
   actionChoices.push(
     canDoDbAction
       ? { name: `${chalk.magenta('↑')} Restore from backup`, value: 'restore' }
-      : disabledItem('↑', 'Restore from backup', restoreHint),
+      : disabledItem('↑', 'Restore from backup'),
   )
 
-  // View logs - not available for file-based DBs (no log file)
-  if (!isFileBasedDB) {
-    actionChoices.push({
-      name: `${chalk.gray('☰')} View logs`,
-      value: 'logs',
-    })
-  }
-
-  actionChoices.push(new inquirer.Separator())
+  // Export - server-based DBs must be running, file-based must have the file
+  actionChoices.push(
+    containerReady
+      ? { name: `${chalk.cyan('⬆')} Export`, value: 'export' }
+      : disabledItem('⬆', 'Export'),
+  )
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // SECTION 3: Container Management (requires stopped)
+  // SECTION 3: Container Management (requires stopped for server-based)
+  // Separator shows current state or required action
   // ─────────────────────────────────────────────────────────────────────────────
+  const manageSectionLabel = getManageSectionLabel()
+  actionChoices.push(
+    new inquirer.Separator(chalk.gray(`── ${manageSectionLabel} ──`)),
+  )
 
   // Edit container - file-based DBs can always edit (no running state), server databases must be stopped
-  const canEdit = isFileBasedDB ? true : !isRunning
+  const canEdit = isFileBasedDB || !isRunning
   actionChoices.push(
     canEdit
       ? { name: `${chalk.yellow('⚙')} Edit container`, value: 'edit' }
-      : disabledItem('⚙', 'Edit container', 'Stop container first'),
+      : disabledItem('⚙', 'Edit container'),
   )
 
   // Clone container - file-based DBs can always clone, server databases must be stopped
-  const canClone = isFileBasedDB ? true : !isRunning
+  const canClone = isFileBasedDB || !isRunning
   actionChoices.push(
     canClone
       ? { name: `${chalk.cyan('◇')} Clone container`, value: 'clone' }
-      : disabledItem('◇', 'Clone container', 'Stop container first'),
+      : disabledItem('◇', 'Clone container'),
   )
 
   // Detach - only for file-based DBs (unregisters without deleting file)
@@ -849,22 +879,11 @@ export async function showContainerSubmenu(
   }
 
   // Delete container - file-based DBs can always delete, server databases must be stopped
-  const canDelete = isFileBasedDB ? true : !isRunning
+  const canDelete = isFileBasedDB || !isRunning
   actionChoices.push(
     canDelete
       ? { name: `${chalk.red('✕')} Delete container`, value: 'delete' }
-      : disabledItem('✕', 'Delete container', 'Stop container first'),
-  )
-
-  // Export - server-based DBs must be running, file-based must have the file
-  const canExport = containerReady
-  const exportHint = isFileBasedDB
-    ? 'Database file missing'
-    : 'Start container first'
-  actionChoices.push(
-    canExport
-      ? { name: `${chalk.cyan('↑')} Export`, value: 'export' }
-      : disabledItem('⬆', 'Export', exportHint),
+      : disabledItem('✕', 'Delete container'),
   )
 
   actionChoices.push(new inquirer.Separator())

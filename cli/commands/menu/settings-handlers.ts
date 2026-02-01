@@ -4,9 +4,12 @@ import { configManager } from '../../../core/config-manager'
 import { updateManager } from '../../../core/update-manager'
 import { escapeablePrompt } from '../../ui/prompts'
 import { header, uiSuccess, uiInfo } from '../../ui/theme'
-import { setCachedIconMode, ENGINE_BRAND_COLORS } from '../../constants'
+import { setCachedIconMode, ENGINE_BRAND_COLORS, getPageSize } from '../../constants'
+import { hasAnyInstalledEngines } from '../../helpers'
 import { Engine, type IconMode } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
+import { handleEngines } from './engine-handlers'
+import { handleCheckUpdate, handleDoctor } from './update-handlers'
 
 // Sample engines for icon preview
 const PREVIEW_ENGINES = [
@@ -178,6 +181,7 @@ async function handleIconModeSettings(): Promise<void> {
       name: 'iconMode',
       message: 'Select icon mode:',
       choices,
+      pageSize: getPageSize(),
     },
   ])
 
@@ -244,6 +248,7 @@ async function handleUpdateCheckSettings(): Promise<void> {
       name: 'action',
       message: 'Update check setting:',
       choices,
+      pageSize: getPageSize(),
     },
   ])
 
@@ -273,9 +278,12 @@ async function handleUpdateCheckSettings(): Promise<void> {
  */
 export async function handleSettings(): Promise<void> {
   while (true) {
-    const config = await configManager.getConfig()
+    const [config, hasEngines, cached] = await Promise.all([
+      configManager.getConfig(),
+      hasAnyInstalledEngines(),
+      updateManager.getCachedUpdateInfo(),
+    ])
     const currentIconMode = config.preferences?.iconMode || 'ascii'
-    const cached = await updateManager.getCachedUpdateInfo()
     const updateCheckEnabled = cached.autoCheckEnabled !== false
 
     console.clear()
@@ -283,6 +291,16 @@ export async function handleSettings(): Promise<void> {
     console.log()
 
     const choices: MenuChoice[] = [
+      {
+        name: hasEngines
+          ? `${chalk.magenta('⬢')} Manage engines`
+          : chalk.gray('⬢ Manage engines'),
+        value: 'engines',
+        disabled: hasEngines ? false : 'No engines installed',
+      },
+      { name: `${chalk.red.bold('+')} Health check`, value: 'doctor' },
+      { name: `${chalk.cyan('↑')} Check for updates`, value: 'check-update' },
+      new inquirer.Separator(),
       {
         name: `Icon mode: ${chalk.cyan(currentIconMode)}`,
         value: 'icon-mode',
@@ -293,7 +311,7 @@ export async function handleSettings(): Promise<void> {
       },
       new inquirer.Separator(),
       {
-        name: `${chalk.blue('\u2190')} Back`,
+        name: `${chalk.blue('←')} Back`,
         value: 'back',
       },
     ]
@@ -304,10 +322,20 @@ export async function handleSettings(): Promise<void> {
         name: 'action',
         message: 'What would you like to configure?',
         choices,
+        pageSize: getPageSize(),
       },
     ])
 
     switch (action) {
+      case 'engines':
+        await handleEngines()
+        break
+      case 'doctor':
+        await handleDoctor()
+        break
+      case 'check-update':
+        await handleCheckUpdate()
+        break
       case 'icon-mode':
         await handleIconModeSettings()
         break

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.6] - 2026-02-01
+
+### Fixed
+- **Docker export network connectivity** - PostgreSQL and CockroachDB containers now accept connections from external clients:
+  - Configure `listen_addresses = '*'` in postgresql.conf
+  - Add `host all all 0.0.0.0/0 scram-sha-256` rule to pg_hba.conf
+  - Fix config file path to include `/data/` subdirectory
+- **Docker export user creation** - Use temp file instead of heredoc (spindb run doesn't read from stdin)
+- **Docker export healthcheck** - Fix grep patterns to handle JSON whitespace (`"status": "running"` vs `"status":"running"`)
+- **Restore to primary database** - Remove unnecessary tracking removal during restore overwrite (fixes "Cannot remove primary database from tracking" error)
+
+## [0.30.5] - 2026-02-01
+
+### Changed
+- **Container list toggle hint** - Moved Shift+Tab toggle hint from bottom summary line to a persistent separator at the top of the container list. Now displays as a cyan-colored separator for better visibility.
+
+## [0.30.4] - 2026-02-01
+
+### Changed
+- **Main menu simplified** - Removed Start, Stop, Backup, Restore, and Clone shortcuts from main menu. These operations are now accessed through the Containers list → container submenu. Main menu now shows only: Containers, Create container, Settings, and Exit.
+
+## [0.30.3] - 2026-02-01
+
+### Changed
+- **Container submenu reorganization** - Improved menu layout with labeled section separators:
+  - Separators now show state ("Running", "Stopped", "Available") or required action ("Start container first", "Stop container first")
+  - "View logs" moved to container state section (always accessible, not gated by running status)
+  - "Export" moved to data operations section (logical grouping with backup/restore)
+- **Main menu simplification** - Moved system tasks to Settings submenu:
+  - "Manage engines", "Health check", and "Check for updates" now in Settings
+  - Exit icon changed from ⏻ to ⎋ (ESC symbol) for consistent character width
+- **Post-create navigation** - After creating a container, navigates directly to its submenu instead of returning to main menu
+- **Non-intrusive update notifications** - Update check runs once in background on interactive CLI startup (if enabled). Shows "Update to vX.X.X" option on main menu when new version available. Respects `spindb config update-check off` setting. Never runs during scripts.
+
+### Fixed
+- **Settings menu page size** - Settings prompts now use correct `pageSize` for consistent display
+- **Documentation** - Added `spindb config update-check off` to README and CHEATSHEET
+
+## [0.30.2] - 2026-02-01
+
 ### Added
 - **`--force` flag for `spindb create`** - Overwrites existing containers without prompting. Useful for scripting and Docker entrypoints where interactive prompts aren't available. Stops running containers before deletion.
   ```bash
@@ -19,6 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `gosu` for running database processes as non-root user (PostgreSQL refuses to run as root)
   - Fixed volume permissions with `chown` at container startup
   - Fixed shell escaping in grep patterns for container status checks
+- **Docker export TLS handling** - TLS is now properly conditional:
+  - Only generates certificates when OpenSSL is available and `--skip-tls` is not set
+  - README now correctly reflects TLS status (no misleading `certs/` references when TLS is disabled)
+  - Dockerfile only includes COPY certs when TLS is enabled
+- **Docker export password safety** - Generated passwords now use alphanumeric characters only to avoid shell/SQL escaping issues. Added runtime validation that fails fast if user-supplied passwords contain problematic characters.
+- **Docker export transaction safety** - Export now checks if output directory pre-exists before registering cleanup rollback, preventing accidental deletion of user directories on failure.
+- **Qdrant stop race condition** - Added 1-second wait after process termination on Linux/macOS to prevent race conditions when checking ports after killing processes.
+- **Windows CI test timeout** - Increased `doctor --json` test timeout from 30s to 60s for slower Windows CI environments.
 
 ## [0.30.1] - 2026-01-31
 

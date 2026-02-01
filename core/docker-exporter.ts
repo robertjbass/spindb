@@ -159,9 +159,9 @@ function generateDockerfile(
   // Server-based engines check for running status
   const healthcheck = isFileBased
     ? `HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \\
-    CMD gosu spindb spindb list --json | grep -q '"engine":"${engine}"'`
+    CMD gosu spindb spindb list --json | grep -q '"engine":.*"${engine}"'`
     : `HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
-    CMD gosu spindb spindb list --json | grep -q '"status":"running"'`
+    CMD gosu spindb spindb list --json | grep -q '"status":.*"running"'`
 
   // Only copy TLS certificates if they were generated
   const copyCerts = useTLS
@@ -248,6 +248,37 @@ function generateEntrypoint(
 ): string {
   const isFileBased = isFileBasedEngine(engine)
 
+  // Engine-specific network configuration (run after create, before start)
+  // This configures databases to accept connections from Docker network
+  let networkConfig = ''
+
+  switch (engine) {
+    case Engine.PostgreSQL:
+    case Engine.CockroachDB:
+      // PostgreSQL/CockroachDB need to listen on all interfaces and allow network connections
+      networkConfig = `
+# Configure PostgreSQL to accept connections from Docker network
+echo "Configuring network access..."
+PG_CONF="/home/spindb/.spindb/containers/${engine}/\${CONTAINER_NAME}/data/postgresql.conf"
+PG_HBA="/home/spindb/.spindb/containers/${engine}/\${CONTAINER_NAME}/data/pg_hba.conf"
+
+# Set listen_addresses to allow connections from any interface
+if [ -f "$PG_CONF" ]; then
+    sed -i "s/^#*listen_addresses.*/listen_addresses = '*'/" "$PG_CONF"
+fi
+
+# Add rule to allow password-authenticated connections from any IP
+if [ -f "$PG_HBA" ] && ! grep -q "0.0.0.0/0" "$PG_HBA"; then
+    echo "host    all             all             0.0.0.0/0               scram-sha-256" >> "$PG_HBA"
+fi
+`
+      break
+
+    default:
+      // Other engines don't need special network config (they listen on all interfaces by default)
+      break
+  }
+
   // Engine-specific user creation commands
   let userCreationCommands = ''
 
@@ -256,7 +287,7 @@ function generateEntrypoint(
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-run_as_spindb spindb run "$CONTAINER_NAME" --database postgres <<EOF
+cat > /tmp/create-user.sql <<EOSQL
 DO \\$\\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$SPINDB_USER') THEN
@@ -267,7 +298,9 @@ BEGIN
 END
 \\$\\$;
 GRANT ALL PRIVILEGES ON DATABASE "$DATABASE" TO "$SPINDB_USER";
-EOF
+EOSQL
+run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database postgres
+rm -f /tmp/create-user.sql
 `
       break
 
@@ -276,11 +309,13 @@ EOF
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-run_as_spindb spindb run "$CONTAINER_NAME" --database mysql <<EOF
+cat > /tmp/create-user.sql <<EOSQL
 CREATE USER IF NOT EXISTS '$SPINDB_USER'@'%' IDENTIFIED BY '$SPINDB_PASSWORD';
 GRANT ALL PRIVILEGES ON \\\`$DATABASE\\\`.* TO '$SPINDB_USER'@'%';
 FLUSH PRIVILEGES;
-EOF
+EOSQL
+run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database mysql
+rm -f /tmp/create-user.sql
 `
       break
 
@@ -289,13 +324,15 @@ EOF
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-run_as_spindb spindb run "$CONTAINER_NAME" --database admin <<EOF
+cat > /tmp/create-user.js <<EOJS
 db.createUser({
   user: "$SPINDB_USER",
   pwd: "$SPINDB_PASSWORD",
   roles: [{ role: "readWrite", db: "$DATABASE" }]
 });
-EOF
+EOJS
+run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.js --database admin
+rm -f /tmp/create-user.js
 `
       break
 
@@ -312,10 +349,12 @@ echo "Authentication configured via server settings"
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-run_as_spindb spindb run "$CONTAINER_NAME" <<EOF
+cat > /tmp/create-user.sql <<EOSQL
 CREATE USER IF NOT EXISTS $SPINDB_USER IDENTIFIED BY '$SPINDB_PASSWORD';
 GRANT ALL ON $DATABASE.* TO $SPINDB_USER;
-EOF
+EOSQL
+run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql
+rm -f /tmp/create-user.sql
 `
       break
 
@@ -330,10 +369,12 @@ echo "Admin credentials configured via server settings"
       userCreationCommands = `
 # Create user with password
 echo "Creating database user..."
-run_as_spindb spindb run "$CONTAINER_NAME" --database defaultdb <<EOF
+cat > /tmp/create-user.sql <<EOSQL
 CREATE USER IF NOT EXISTS $SPINDB_USER WITH PASSWORD '$SPINDB_PASSWORD';
 GRANT ALL ON DATABASE $DATABASE TO $SPINDB_USER;
-EOF
+EOSQL
+run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database defaultdb
+rm -f /tmp/create-user.sql
 `
       break
 
@@ -472,12 +513,12 @@ else
         : `run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force`
     }
 fi
-${
-  isFileBased
-    ? `
+${networkConfig}${
+    isFileBased
+      ? `
 # File-based database: no server to start, just verify file exists after restore
 `
-    : `
+      : `
 # Start the database
 echo "Starting database..."
 run_as_spindb spindb start "$CONTAINER_NAME"
@@ -485,7 +526,7 @@ run_as_spindb spindb start "$CONTAINER_NAME"
 # Wait for database to be ready
 echo "Waiting for database to be ready..."
 RETRIES=30
-until run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":"running"' || [ $RETRIES -eq 0 ]; do
+until run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"' || [ $RETRIES -eq 0 ]; do
     echo "Waiting for database... ($RETRIES attempts remaining)"
     sleep 2
     RETRIES=$((RETRIES-1))
@@ -495,7 +536,7 @@ if [ $RETRIES -eq 0 ]; then
     echo "Error: Database failed to start"
     exit 1
 fi`
-}
+  }
 
 echo "Database is running!"
 ${userCreationCommands}
@@ -520,7 +561,7 @@ exec gosu spindb tail -f /dev/null &
 while true; do
     sleep 60
     # Check if database is still running
-    if ! run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":"running"'; then
+    if ! run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"'; then
         echo "Database stopped unexpectedly, restarting..."
         run_as_spindb spindb start "$CONTAINER_NAME" || true
     fi
@@ -543,9 +584,10 @@ function generateDockerCompose(
   // Engine-aware healthcheck matching Dockerfile behavior
   // Server-based: check for running status
   // File-based: check that container exists (no server process to check)
+  // Note: Double quotes must be escaped for YAML string context
   const healthcheckCommand = isFileBased
-    ? `gosu spindb spindb list --json | grep -q '"engine":"${engine}"'`
-    : `gosu spindb spindb list --json | grep -q '"status":"running"'`
+    ? `gosu spindb spindb list --json | grep -q '\\"engine\\":.*\\"${engine}\\"'`
+    : `gosu spindb spindb list --json | grep -q '\\"status\\":.*\\"running\\"'`
 
   const startPeriod = isFileBased ? '30s' : '60s'
 
@@ -626,6 +668,29 @@ function generateReadme(
     useTLS,
   )
 
+  // TLS-conditional content
+  const tlsSecurityNote = useTLS
+    ? '- TLS certificates in `certs/` are self-signed. For production, replace with valid certificates.'
+    : '- TLS is disabled for this export. Consider enabling TLS for production use.'
+  const certsFileEntry = useTLS ? '| `certs/` | TLS certificates |\n' : ''
+  const tlsCustomization = useTLS
+    ? `
+### Use Custom Certificates
+
+Replace the files in \`certs/\`:
+- \`server.crt\` - TLS certificate
+- \`server.key\` - TLS private key
+
+### Disable TLS
+
+Edit \`entrypoint.sh\` and remove TLS-related flags (not recommended for production).
+`
+    : `
+### Enable TLS
+
+To enable TLS, re-export the container without the \`--skip-tls\` flag (requires OpenSSL).
+`
+
   return `# ${containerName} - SpinDB Docker Export
 
 This directory contains a Docker-ready package for running your SpinDB ${displayName} container.
@@ -664,7 +729,7 @@ Replace \`\${SPINDB_USER}\` and \`\${SPINDB_PASSWORD}\` with the values from \`.
 ## Security Notes
 
 - The \`.env\` file contains auto-generated credentials. **Change these in production.**
-- TLS certificates in \`certs/\` are self-signed. For production, replace with valid certificates.
+${tlsSecurityNote}
 - The default \`spindb\` user has full access to the database. Create restricted users for applications.
 
 ## Files
@@ -675,8 +740,7 @@ Replace \`\${SPINDB_USER}\` and \`\${SPINDB_PASSWORD}\` with the values from \`.
 | \`docker-compose.yml\` | Container orchestration |
 | \`.env\` | Environment variables and credentials |
 | \`entrypoint.sh\` | Container startup script |
-| \`certs/\` | TLS certificates |
-| \`data/\` | Database backup for initialization |
+${certsFileEntry}| \`data/\` | Database backup for initialization |
 
 ## Customization
 
@@ -686,17 +750,7 @@ Edit \`.env\`:
 \`\`\`
 PORT=5433
 \`\`\`
-
-### Use Custom Certificates
-
-Replace the files in \`certs/\`:
-- \`server.crt\` - TLS certificate
-- \`server.key\` - TLS private key
-
-### Disable TLS
-
-Edit \`entrypoint.sh\` and remove TLS-related flags (not recommended for production).
-
+${tlsCustomization}
 ---
 
 Generated by [SpinDB](https://github.com/robertjbass/spindb)
@@ -731,15 +785,16 @@ export async function exportToDocker(
     const outputDirExisted = existsSync(outputDir)
 
     if (outputDirExisted) {
-      // If it exists, check if it's empty
+      // If it exists, check if it's empty or only contains 'data' (from backup step)
       const existingFiles = await readdir(outputDir)
-      if (existingFiles.length > 0) {
+      const nonDataFiles = existingFiles.filter((f) => f !== 'data')
+      if (nonDataFiles.length > 0) {
         throw new Error(
           `Output directory "${outputDir}" already exists and is not empty. ` +
             `Please use an empty directory or remove the existing files.`,
         )
       }
-      // Directory exists but is empty - don't register rollback for it
+      // Directory exists but is empty or only has data/ - don't register rollback for it
     } else {
       // Directory doesn't exist - create it and register rollback
       await mkdir(outputDir, { recursive: true })

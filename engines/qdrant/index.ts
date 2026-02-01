@@ -710,9 +710,10 @@ export class QdrantEngine extends BaseEngine {
     }
 
     // Wait for process to fully terminate
-    if (isWindows()) {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-    }
+    // Windows needs longer due to file handle release
+    // Linux/macOS need a brief wait after SIGKILL before checking ports
+    const terminationWait = isWindows() ? 3000 : 1000
+    await new Promise((resolve) => setTimeout(resolve, terminationWait))
 
     // Kill any processes still listening on the ports
     // This handles cases where the PID file is stale, child processes exist,

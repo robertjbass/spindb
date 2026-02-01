@@ -80,6 +80,7 @@ export class UpdateManager {
     try {
       const { stdout } = await execAsync('pnpm list -g spindb --json', {
         timeout: 5000,
+        cwd: '/',
       })
       const data = JSON.parse(stdout) as Array<{
         dependencies?: { spindb?: unknown }
@@ -94,6 +95,7 @@ export class UpdateManager {
     try {
       const { stdout } = await execAsync('yarn global list --json', {
         timeout: 5000,
+        cwd: '/',
       })
       // yarn outputs newline-delimited JSON, look for spindb in any line
       if (stdout.includes('"spindb@')) {
@@ -106,6 +108,7 @@ export class UpdateManager {
     try {
       const { stdout } = await execAsync('bun pm ls -g', {
         timeout: 5000,
+        cwd: '/',
       })
       if (stdout.includes('spindb@')) {
         return 'bun'
@@ -181,7 +184,7 @@ export class UpdateManager {
 
     // Run install command
     try {
-      await execAsync(installCmd, { timeout: 60000 })
+      await execAsync(installCmd, { timeout: 60000, cwd: '/' })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
 
