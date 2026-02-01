@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.6] - 2026-02-01
+
+### Fixed
+- **Docker export network connectivity** - PostgreSQL and CockroachDB containers now accept connections from external clients:
+  - Configure `listen_addresses = '*'` in postgresql.conf
+  - Add `host all all 0.0.0.0/0 scram-sha-256` rule to pg_hba.conf
+  - Fix config file path to include `/data/` subdirectory
+- **Docker export user creation** - Use temp file instead of heredoc (spindb run doesn't read from stdin)
+- **Docker export healthcheck** - Fix grep patterns to handle JSON whitespace (`"status": "running"` vs `"status":"running"`)
+- **Restore to primary database** - Remove unnecessary tracking removal during restore overwrite (fixes "Cannot remove primary database from tracking" error)
+
 ## [0.30.5] - 2026-02-01
 
 ### Changed
