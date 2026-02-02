@@ -1447,7 +1447,7 @@ jobs:
           pnpm start start rename-test
           # Wait for ready
           for i in {1..30}; do
-            if pnpm start info rename-test --json 2>/dev/null | grep -q '"status":"running"'; then
+            if pnpm start info rename-test --json 2>/dev/null | grep -q '"status": "running"'; then
               break
             fi
             sleep 1
@@ -1590,7 +1590,7 @@ jobs:
           pnpm start start ch-rename-test
           # Wait for ready (ClickHouse takes longer to start)
           for i in {1..60}; do
-            if pnpm start info ch-rename-test --json 2>/dev/null | grep -q '"status":"running"'; then
+            if pnpm start info ch-rename-test --json 2>/dev/null | grep -q '"status": "running"'; then
               break
             fi
             sleep 1
@@ -1628,7 +1628,7 @@ jobs:
           pnpm start start ch-renamed-test
           # Wait for ready
           for i in {1..60}; do
-            if pnpm start info ch-renamed-test --json 2>/dev/null | grep -q '"status":"running"'; then
+            if pnpm start info ch-renamed-test --json 2>/dev/null | grep -q '"status": "running"'; then
               break
             fi
             sleep 1

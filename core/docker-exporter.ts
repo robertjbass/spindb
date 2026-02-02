@@ -11,6 +11,7 @@
 import { mkdir, writeFile, copyFile, rm, readdir, readFile } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
+import { homedir } from 'os'
 import {
   type ContainerConfig,
   Engine,
@@ -642,11 +643,8 @@ ${networkConfig}${
 # File-based database: no server to start, just verify file exists after restore
 `
       : `
-# Start the database
-echo "Starting database..."
-run_as_spindb spindb start "$CONTAINER_NAME"
-
-# Wait for database to be ready
+# Database was started by 'spindb create --start' above
+# Wait for database to be fully ready for connections
 echo "Waiting for database to be ready..."
 RETRIES=30
 until run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"' || [ $RETRIES -eq 0 ]; do
@@ -1093,8 +1091,14 @@ export function getDefaultDockerExportPath(
   containerName: string,
   engine: Engine,
 ): string {
-  const homedir = process.env.HOME || process.env.USERPROFILE || '~'
-  return join(homedir, '.spindb', 'containers', engine, containerName, 'docker')
+  return join(
+    homedir(),
+    '.spindb',
+    'containers',
+    engine,
+    containerName,
+    'docker',
+  )
 }
 
 /**
