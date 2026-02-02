@@ -688,14 +688,9 @@ echo "Setting up database binaries in PATH..."
 BIN_DIR=$(ls -d /home/spindb/.spindb/bin/\${ENGINE}-*/bin 2>/dev/null | head -1)
 if [ -d "$BIN_DIR" ]; then
     export PATH="$BIN_DIR:$PATH"
-    # Add to .profile for login shells (only if not already present)
-    # .bashrc has an early return for non-interactive shells, so use .profile
-    PATH_EXPORT="export PATH=\\"$BIN_DIR:\\$PATH\\""
-    if ! grep -qF "$BIN_DIR" /home/spindb/.profile 2>/dev/null; then
-        echo "$PATH_EXPORT" >> /home/spindb/.profile
-    fi
     # Create/overwrite script in /etc/profile.d for system-wide access (idempotent)
-    echo "$PATH_EXPORT" > /etc/profile.d/spindb-bins.sh
+    # This ensures PATH is set for login shells without duplication
+    echo "export PATH=\\"$BIN_DIR:\\$PATH\\"" > /etc/profile.d/spindb-bins.sh
     echo "Binaries available in PATH: $(ls "$BIN_DIR" | tr '\\n' ' ')"
 else
     echo "Warning: No engine binaries found"
