@@ -247,6 +247,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install base dependencies
 # libnuma1: Required by PostgreSQL binaries
+# libxml2: XML library required by PostgreSQL
+# libicu70: ICU library required by PostgreSQL (Ubuntu 22.04 ships ICU 70)
+# libaio1: Async I/O library required by MySQL
+# libncurses6: Terminal library required by MariaDB
+# locales: Needed for PostgreSQL locale configuration
+# lsof: Needed by SpinDB's findProcessByPort()
 # gosu: For running commands as non-root user
 RUN apt-get update && apt-get install -y \\
     curl \\
@@ -254,8 +260,19 @@ RUN apt-get update && apt-get install -y \\
     ca-certificates \\
     gnupg \\
     libnuma1 \\
+    libxml2 \\
+    libicu70 \\
+    libaio1 \\
+    libncurses6 \\
+    locales \\
+    lsof \\
     gosu \\
+    && locale-gen en_US.UTF-8 \\
     && rm -rf /var/lib/apt/lists/*
+
+# Set locale environment variables
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 # Install Node.js 22 LTS (matches SpinDB's engine requirements)
 RUN mkdir -p /etc/apt/keyrings \\
