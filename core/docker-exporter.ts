@@ -611,7 +611,8 @@ else
       isFileBased
         ? `# File-based database: use deterministic path for database file
     run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "$FILE_DB_PATH" --force`
-        : `run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force`
+        : `# Use --start to ensure database is created (non-TTY defaults to no-start)
+    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force --start`
     }
 fi
 
