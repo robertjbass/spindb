@@ -56,7 +56,12 @@ Quick capture for ideas that need review and prioritization:
 - [ ] **Export query results** - `spindb run <container> query.sql --format csv/json --output file`
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
-- [ ] **Add `--json` to remaining commands** - clone, connect, logs, run, edit, attach, detach
+- [ ] **Add `--json` to remaining commands** - clone, connect, logs, edit, attach, detach
+- [ ] **Add `--json` to `spindb run`** - Capture stdout/stderr and return as JSON instead of inheriting stdio
+  - Requires updating `runScript` signature in `BaseEngine` (line 233-236 of `engines/base-engine.ts`)
+  - All 16 engine implementations need to be updated to support output capture mode
+  - Output format: `{ success: boolean, stdout: string, stderr: string, exitCode: number, container: string, engine: string, database: string }`
+  - Once implemented, update layerbase query logic to use this for programmatic SQL execution
 
 ### Chained Commands
 
