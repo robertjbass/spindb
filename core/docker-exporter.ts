@@ -352,7 +352,7 @@ fi
     case Engine.PostgreSQL:
       userCreationCommands = `
 # Create user with password
-echo "Creating database user..."
+echo "[$(date '+%H:%M:%S')] Creating database user '$SPINDB_USER'..."
 cat > /tmp/create-user.sql <<EOSQL
 DO \\$\\$
 BEGIN
@@ -365,8 +365,13 @@ END
 \\$\\$;
 GRANT ALL PRIVILEGES ON DATABASE "$DATABASE" TO "$SPINDB_USER";
 EOSQL
-run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database postgres
+if ! run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database postgres; then
+    echo "[$(date '+%H:%M:%S')] ERROR: Failed to create database user"
+    rm -f /tmp/create-user.sql
+    exit 1
+fi
 rm -f /tmp/create-user.sql
+echo "[$(date '+%H:%M:%S')] User '$SPINDB_USER' created successfully"
 `
       break
 
@@ -497,24 +502,41 @@ fi
     : databases.length > 1
       ? `
 # Restore data for all databases
+echo "[$(date '+%H:%M:%S')] Checking for backup files in ${initDir}..."
+ls -la ${initDir}/ 2>/dev/null || echo "  (directory empty or not found)"
 DATABASES="${databases.join(' ')}"
 for DB in $DATABASES; do
     # Find backup file for this database (pattern: containerName-dbName.*)
     BACKUP_FILE=$(ls ${initDir}/${containerName}-$DB.* 2>/dev/null | head -1)
     if [ -n "$BACKUP_FILE" ]; then
-        echo "Restoring database: $DB"
+        echo "[$(date '+%H:%M:%S')] Found backup for database '$DB': $BACKUP_FILE"
         # Add database to tracking if not already tracked
         run_as_spindb spindb databases add "$CONTAINER_NAME" "$DB" 2>/dev/null || true
-        run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DB" --force || echo "Restore of $DB completed with warnings"
+        if ! run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DB" --force; then
+            echo "[$(date '+%H:%M:%S')] ERROR: Restore of '$DB' failed"
+            exit 1
+        fi
+        echo "[$(date '+%H:%M:%S')] Restore of '$DB' completed successfully"
+    else
+        echo "[$(date '+%H:%M:%S')] WARNING: No backup file found for database '$DB'"
     fi
 done
 `
       : `
 # Restore data if backup exists
+echo "[$(date '+%H:%M:%S')] Checking for backup files in ${initDir}..."
+ls -la ${initDir}/ 2>/dev/null || echo "  (directory empty or not found)"
 if ls ${initDir}/* 1> /dev/null 2>&1; then
-    echo "Restoring data from backup..."
     BACKUP_FILE=$(ls ${initDir}/* | head -1)
-    run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DATABASE" --force || echo "Restore completed with warnings"
+    echo "[$(date '+%H:%M:%S')] Found backup file: $BACKUP_FILE"
+    echo "[$(date '+%H:%M:%S')] Restoring to database '$DATABASE'..."
+    if ! run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DATABASE" --force; then
+        echo "[$(date '+%H:%M:%S')] ERROR: Restore failed with exit code $?"
+        exit 1
+    fi
+    echo "[$(date '+%H:%M:%S')] Restore completed successfully"
+else
+    echo "[$(date '+%H:%M:%S')] WARNING: No backup files found in ${initDir}"
 fi
 `
 
@@ -528,15 +550,20 @@ fi
       postRestoreCommands = `
 # Grant table and sequence permissions to spindb user
 # (Tables from restore are owned by postgres, spindb user needs access)
-echo "Granting table permissions..."
+echo "[$(date '+%H:%M:%S')] Granting table permissions to '$SPINDB_USER'..."
 cat > /tmp/grant-permissions.sql <<EOSQL
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$SPINDB_USER";
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$SPINDB_USER";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$SPINDB_USER";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$SPINDB_USER";
 EOSQL
-run_as_spindb spindb run "$CONTAINER_NAME" /tmp/grant-permissions.sql --database "$DATABASE" || echo "Permission grants completed with warnings"
+if ! run_as_spindb spindb run "$CONTAINER_NAME" /tmp/grant-permissions.sql --database "$DATABASE"; then
+    echo "[$(date '+%H:%M:%S')] ERROR: Failed to grant permissions"
+    rm -f /tmp/grant-permissions.sql
+    exit 1
+fi
 rm -f /tmp/grant-permissions.sql
+echo "[$(date '+%H:%M:%S')] Permissions granted successfully"
 `
       break
 
@@ -605,16 +632,23 @@ run_as_spindb() {
 
 # Check if container already exists
 if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name": "'"$CONTAINER_NAME"'"'; then
-    echo "Container '$CONTAINER_NAME' already exists"
+    echo "[$(date '+%H:%M:%S')] Container '$CONTAINER_NAME' already exists"
 else
-    echo "Creating container '$CONTAINER_NAME'..."
+    echo "[$(date '+%H:%M:%S')] Creating container '$CONTAINER_NAME'..."
     ${
       isFileBased
         ? `# File-based database: use deterministic path for database file
-    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "$FILE_DB_PATH" --force`
+    if ! run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "$FILE_DB_PATH" --force; then
+        echo "[$(date '+%H:%M:%S')] ERROR: Failed to create container"
+        exit 1
+    fi`
         : `# Use --start to ensure database is created (non-TTY defaults to no-start)
-    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force --start`
+    if ! run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force --start; then
+        echo "[$(date '+%H:%M:%S')] ERROR: Failed to create container"
+        exit 1
+    fi`
     }
+    echo "[$(date '+%H:%M:%S')] Container created successfully"
 fi
 
 # Add engine binary directory to PATH (idempotent - only adds if not present)
@@ -645,38 +679,39 @@ ${networkConfig}${
       : `
 # Database was started by 'spindb create --start' above
 # Wait for database to be fully ready for connections
-echo "Waiting for database to be ready..."
+echo "[$(date '+%H:%M:%S')] Waiting for database to be ready..."
 RETRIES=30
 until run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"' || [ $RETRIES -eq 0 ]; do
-    echo "Waiting for database... ($RETRIES attempts remaining)"
+    echo "[$(date '+%H:%M:%S')] Waiting for database... ($RETRIES attempts remaining)"
     sleep 2
     RETRIES=$((RETRIES-1))
 done
 
 if [ $RETRIES -eq 0 ]; then
-    echo "Error: Database failed to start"
+    echo "[$(date '+%H:%M:%S')] ERROR: Database failed to start"
     exit 1
 fi`
   }
 
-echo "Database is running!"
+echo "[$(date '+%H:%M:%S')] Database is running!"
 
 # Initialization marker file - ensures user creation and data restore only run once
 INIT_MARKER="/home/spindb/.spindb/.initialized-$CONTAINER_NAME"
 if [ ! -f "$INIT_MARKER" ]; then
-    echo "First-time initialization..."
+    echo "[$(date '+%H:%M:%S')] ======== FIRST-TIME INITIALIZATION ========"
 ${userCreationCommands}
 ${restoreSection}
 ${postRestoreCommands}
     # Mark initialization complete
     touch "$INIT_MARKER"
     chown spindb:spindb "$INIT_MARKER"
-    echo "Initialization complete."
+    echo "[$(date '+%H:%M:%S')] ======== INITIALIZATION COMPLETE ========"
 else
-    echo "Container already initialized, skipping data restore."
+    echo "[$(date '+%H:%M:%S')] Container already initialized, skipping data restore."
 fi
 
 echo "========================================"
+echo "SPINDB_READY"
 echo "SpinDB container ready!"
 echo ""
 echo "Connection: ${getConnectionStringTemplate(engine, port, database, useTLS).replace(/\$/g, '\\$')}"

@@ -2297,11 +2297,18 @@ jobs:
         run: |
           cd ~/.spindb/containers/postgresql/docker-export-test/docker
           docker compose up -d
-          # Wait for container to be ready
-          for i in {1..60}; do
-            if docker compose exec -T docker-export-test pg_isready -U spindb 2>/dev/null; then
-              echo "PostgreSQL is ready"
+          # Wait for SPINDB_READY marker in logs (indicates initialization complete)
+          echo "Waiting for container initialization to complete..."
+          for i in {1..120}; do
+            if docker compose logs docker-export-test 2>&1 | grep -q "SPINDB_READY"; then
+              echo "Container initialization complete"
               break
+            fi
+            if [ $i -eq 120 ]; then
+              echo "Timeout waiting for container initialization"
+              echo "=== Container logs ==="
+              docker compose logs docker-export-test
+              exit 1
             fi
             sleep 1
           done
@@ -2310,10 +2317,22 @@ jobs:
         shell: bash
         run: |
           cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          # Show container logs for debugging
+          echo "=== Container initialization logs ==="
+          docker compose logs docker-export-test | tail -50
+          echo "=== Running verification query ==="
           # Use login shell to ensure PATH is set
-          COUNT=$(docker compose exec -T docker-export-test bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
+          set +e  # Don't exit on error, capture it
+          OUTPUT=$(docker compose exec -T docker-export-test bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "psql exit code: $EXIT_CODE"
+          echo "psql output: '$OUTPUT'"
+          COUNT=$(echo "$OUTPUT" | tr -d ' \n')
+          echo "Parsed count: '$COUNT'"
           if [ "$COUNT" != "5" ]; then
             echo "Data restoration failed: expected 5 rows, got '$COUNT'"
+            echo "=== Full container logs ==="
             docker compose logs docker-export-test
             exit 1
           fi
