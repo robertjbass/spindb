@@ -2246,7 +2246,7 @@ jobs:
           done
 
       - name: Seed database with fixture data
-        run: pnpm start run docker-export-test -f tests/fixtures/postgresql/seeds/sample-db.sql
+        run: pnpm start run docker-export-test tests/fixtures/postgresql/seeds/sample-db.sql
 
       - name: Verify seed data exists
         shell: bash
