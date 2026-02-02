@@ -2283,6 +2283,9 @@ jobs:
           fi
           echo "All Docker export files verified"
 
+      - name: Stop SpinDB container (free port for Docker)
+        run: pnpm start stop docker-export-test
+
       - name: Build Docker image
         shell: bash
         run: |
@@ -2296,7 +2299,7 @@ jobs:
           docker compose up -d
           # Wait for container to be ready
           for i in {1..60}; do
-            if docker compose exec -T db pg_isready -U spindb 2>/dev/null; then
+            if docker compose exec -T docker-export-test pg_isready -U spindb 2>/dev/null; then
               echo "PostgreSQL is ready"
               break
             fi
@@ -2308,10 +2311,10 @@ jobs:
         run: |
           cd ~/.spindb/containers/postgresql/docker-export-test/docker
           # Use login shell to ensure PATH is set
-          COUNT=$(docker compose exec -T db bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
+          COUNT=$(docker compose exec -T docker-export-test bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
           if [ "$COUNT" != "5" ]; then
             echo "Data restoration failed: expected 5 rows, got '$COUNT'"
-            docker compose logs db
+            docker compose logs docker-export-test
             exit 1
           fi
           echo "Data verified in Docker container: $COUNT rows"
@@ -2320,10 +2323,10 @@ jobs:
         shell: bash
         run: |
           cd ~/.spindb/containers/postgresql/docker-export-test/docker
-          docker compose restart db
+          docker compose restart docker-export-test
           # Wait for container to be ready again
           for i in {1..60}; do
-            if docker compose exec -T db pg_isready -U spindb 2>/dev/null; then
+            if docker compose exec -T docker-export-test pg_isready -U spindb 2>/dev/null; then
               echo "PostgreSQL is ready after restart"
               break
             fi
@@ -2334,10 +2337,10 @@ jobs:
         shell: bash
         run: |
           cd ~/.spindb/containers/postgresql/docker-export-test/docker
-          COUNT=$(docker compose exec -T db bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
+          COUNT=$(docker compose exec -T docker-export-test bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1 | tr -d ' \n')
           if [ "$COUNT" != "5" ]; then
             echo "Data persistence failed after restart: expected 5 rows, got '$COUNT'"
-            docker compose logs db
+            docker compose logs docker-export-test
             exit 1
           fi
           echo "Data persists after restart: $COUNT rows"
@@ -2346,10 +2349,10 @@ jobs:
         shell: bash
         run: |
           cd ~/.spindb/containers/postgresql/docker-export-test/docker
-          PATH_COUNT=$(docker compose exec -T db bash -l -c 'echo $PATH | tr ":" "\n" | grep -c "postgresql" || true' 2>&1 | tr -d ' \n')
+          PATH_COUNT=$(docker compose exec -T docker-export-test bash -l -c 'echo $PATH | tr ":" "\n" | grep -c "postgresql" || true' 2>&1 | tr -d ' \n')
           if [ "$PATH_COUNT" -gt "1" ]; then
             echo "PATH duplication detected: postgresql appears $PATH_COUNT times"
-            docker compose exec -T db bash -l -c 'echo $PATH'
+            docker compose exec -T docker-export-test bash -l -c 'echo $PATH'
             exit 1
           fi
           echo "PATH idempotency verified: postgresql appears $PATH_COUNT time(s)"
