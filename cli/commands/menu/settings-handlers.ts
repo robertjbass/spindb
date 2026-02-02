@@ -4,7 +4,11 @@ import { configManager } from '../../../core/config-manager'
 import { updateManager } from '../../../core/update-manager'
 import { escapeablePrompt } from '../../ui/prompts'
 import { header, uiSuccess, uiInfo } from '../../ui/theme'
-import { setCachedIconMode, ENGINE_BRAND_COLORS, getPageSize } from '../../constants'
+import {
+  setCachedIconMode,
+  ENGINE_BRAND_COLORS,
+  getPageSize,
+} from '../../constants'
 import { hasAnyInstalledEngines } from '../../helpers'
 import { Engine, type IconMode } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'

@@ -383,6 +383,41 @@ docker-compose build --no-cache
 docker-compose up -d
 ```
 
+### Container Restarts
+
+The container is idempotent - restarting won't recreate the database or duplicate configuration:
+
+```bash
+# Safe to restart anytime
+docker compose restart
+
+# After restart, data persists and credentials remain valid
+# Logs will show "Container already exists" and "skipping data restore"
+```
+
+### Run Commands Inside the Container
+
+Database CLI tools (psql, mysql, mongosh, etc.) are available inside the container via login shell:
+
+```bash
+# Check tool availability
+docker exec spindb-mydb bash -l -c "which psql && psql --version"
+
+# Run psql inside container (uses container's SPINDB_PASSWORD env var)
+docker exec spindb-mydb bash -l -c 'PGPASSWORD=$SPINDB_PASSWORD psql -h localhost -U spindb -d mydb'
+
+# Run a query
+docker exec spindb-mydb bash -l -c 'PGPASSWORD=$SPINDB_PASSWORD psql -h localhost -U spindb -d mydb -c "SELECT COUNT(*) FROM users"'
+
+# MySQL example
+docker exec spindb-mydb bash -l -c 'mysql -h localhost -u spindb -p$SPINDB_PASSWORD mydb'
+
+# MongoDB example
+docker exec spindb-mydb bash -l -c 'mongosh "mongodb://spindb:$SPINDB_PASSWORD@localhost:27017/mydb"'
+```
+
+> **Note:** Use `bash -l` (login shell) to ensure PATH includes the database binaries. Without `-l`, commands like `psql` won't be found.
+
 ## Customization
 
 ### Change Port

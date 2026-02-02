@@ -2,7 +2,10 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { containerManager } from '../../../core/container-manager'
-import { updateManager, type UpdateCheckResult } from '../../../core/update-manager'
+import {
+  updateManager,
+  type UpdateCheckResult,
+} from '../../../core/update-manager'
 import {
   promptInstallDependencies,
   enableGlobalEscape,
@@ -158,9 +161,13 @@ async function handleUpdate(): Promise<void> {
     return
   }
 
-  console.log(chalk.gray(`  Current version: ${cachedUpdateResult.currentVersion}`))
   console.log(
-    chalk.gray(`  Latest version:  ${chalk.green(cachedUpdateResult.latestVersion)}`),
+    chalk.gray(`  Current version: ${cachedUpdateResult.currentVersion}`),
+  )
+  console.log(
+    chalk.gray(
+      `  Latest version:  ${chalk.green(cachedUpdateResult.latestVersion)}`,
+    ),
   )
   console.log()
 
@@ -173,7 +180,9 @@ async function handleUpdate(): Promise<void> {
     spinner.succeed('Update complete')
     console.log()
     console.log(
-      uiSuccess(`Updated from ${result.previousVersion} to ${result.newVersion}`),
+      uiSuccess(
+        `Updated from ${result.previousVersion} to ${result.newVersion}`,
+      ),
     )
     console.log()
     if (result.previousVersion !== result.newVersion) {
@@ -189,7 +198,9 @@ async function handleUpdate(): Promise<void> {
     console.log(uiError(result.error || 'Unknown error'))
     console.log()
     const pm = await updateManager.detectPackageManager()
-    console.log(chalk.gray(`  Manual update: ${updateManager.getInstallCommand(pm)}`))
+    console.log(
+      chalk.gray(`  Manual update: ${updateManager.getInstallCommand(pm)}`),
+    )
   }
 
   await pressEnterToContinue()

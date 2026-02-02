@@ -5,7 +5,14 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { platformService } from '../../core/platform-service'
-import { exportToDocker, getExportBackupPath } from '../../core/docker-exporter'
+import {
+  exportToDocker,
+  getExportBackupPath,
+  dockerExportExists,
+  getDockerConnectionString,
+  getDockerCredentials,
+  getDefaultDockerExportPath,
+} from '../../core/docker-exporter'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning, box, formatBytes } from '../ui/theme'
@@ -346,6 +353,181 @@ export const exportCommand = new Command('export')
                 ),
               )
               console.log()
+            }
+          } catch (error) {
+            const e = error as Error
+
+            if (options.json) {
+              console.log(JSON.stringify({ error: e.message }))
+            } else {
+              console.error(uiError(e.message))
+            }
+            process.exit(1)
+          }
+        },
+      ),
+  )
+  .addCommand(
+    new Command('docker-url')
+      .description('Get connection string for an existing Docker export')
+      .argument('[container]', 'Container name')
+      .option('-c, --copy', 'Copy connection string to clipboard')
+      .option('-j, --json', 'Output result as JSON')
+      .option(
+        '--host <hostname>',
+        'Override hostname in connection string',
+        'localhost',
+      )
+      .action(
+        async (
+          containerArg: string | undefined,
+          options: {
+            copy?: boolean
+            json?: boolean
+            host?: string
+          },
+        ) => {
+          try {
+            let containerName = containerArg
+
+            // Select container if not provided
+            if (!containerName) {
+              if (options.json) {
+                console.log(
+                  JSON.stringify({ error: 'Container name is required' }),
+                )
+                process.exit(1)
+              }
+
+              const containers = await containerManager.list()
+
+              if (containers.length === 0) {
+                console.log(
+                  uiWarning(
+                    'No containers found. Create one with: spindb create',
+                  ),
+                )
+                return
+              }
+
+              // Filter to containers with Docker exports
+              const containersWithExports = containers.filter((c) =>
+                dockerExportExists(c.name, c.engine),
+              )
+
+              if (containersWithExports.length === 0) {
+                console.log(
+                  uiWarning(
+                    'No Docker exports found. Export a container first with: spindb export docker <container>',
+                  ),
+                )
+                return
+              }
+
+              const selected = await promptContainerSelect(
+                containersWithExports,
+                'Select container:',
+              )
+              if (!selected) return
+              containerName = selected
+            }
+
+            // Get container config
+            const config = await containerManager.getConfig(containerName)
+            if (!config) {
+              if (options.json) {
+                console.log(
+                  JSON.stringify({
+                    error: `Container "${containerName}" not found`,
+                  }),
+                )
+              } else {
+                console.error(uiError(`Container "${containerName}" not found`))
+              }
+              process.exit(1)
+            }
+
+            // Check if Docker export exists
+            if (!dockerExportExists(containerName, config.engine)) {
+              const exportPath = getDefaultDockerExportPath(
+                containerName,
+                config.engine,
+              )
+              if (options.json) {
+                console.log(
+                  JSON.stringify({
+                    error: `No Docker export found for "${containerName}". Export first with: spindb export docker ${containerName}`,
+                    exportPath,
+                  }),
+                )
+              } else {
+                console.error(
+                  uiError(
+                    `No Docker export found for "${containerName}".\nExport first with: spindb export docker ${containerName}`,
+                  ),
+                )
+              }
+              process.exit(1)
+            }
+
+            // Get credentials and connection string
+            const credentials = await getDockerCredentials(
+              containerName,
+              config.engine,
+            )
+            const connectionString = await getDockerConnectionString(
+              containerName,
+              config.engine,
+              { host: options.host },
+            )
+
+            if (!connectionString || !credentials) {
+              if (options.json) {
+                console.log(
+                  JSON.stringify({
+                    error: 'Could not read Docker export credentials',
+                  }),
+                )
+              } else {
+                console.error(
+                  uiError('Could not read Docker export credentials'),
+                )
+              }
+              process.exit(1)
+            }
+
+            // Copy to clipboard if requested
+            if (options.copy) {
+              const copied =
+                await platformService.copyToClipboard(connectionString)
+              if (!options.json) {
+                if (copied) {
+                  console.log(
+                    uiSuccess('Connection string copied to clipboard'),
+                  )
+                } else {
+                  console.log(uiWarning('Could not copy to clipboard'))
+                }
+              }
+            }
+
+            // Output
+            if (options.json) {
+              console.log(
+                JSON.stringify({
+                  connectionString,
+                  username: credentials.username,
+                  password: credentials.password,
+                  host: options.host || 'localhost',
+                  port: credentials.port,
+                  database: credentials.database,
+                  engine: credentials.engine,
+                  version: credentials.version,
+                }),
+              )
+            } else if (!options.copy) {
+              // Only print connection string if not copying (to allow piping)
+              console.log(connectionString)
             }
           } catch (error) {
             const e = error as Error

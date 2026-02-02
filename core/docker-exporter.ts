@@ -8,9 +8,10 @@
  * using the same hostdb binaries as local development.
  */
 
-import { mkdir, writeFile, copyFile, rm, readdir } from 'fs/promises'
+import { mkdir, writeFile, copyFile, rm, readdir, readFile } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
+import { homedir } from 'os'
 import {
   type ContainerConfig,
   Engine,
@@ -71,6 +72,71 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.QuestDB]: 'QuestDB',
   }
   return displayNames[engine] || engine
+}
+
+/**
+ * Engine binary configuration for Docker exports
+ *
+ * Defines primary binaries per engine for PATH setup and documentation.
+ * This structure supports future enhancements:
+ * - excludedBinaries: binaries to omit from PATH (e.g., internal tools)
+ * - renamedBinaries: map of original -> renamed (e.g., for collision avoidance)
+ * - priority: for multi-engine containers, which engine's binary wins
+ */
+const _ENGINE_BINARY_CONFIG: Record<
+  Engine,
+  {
+    primaryBinaries: string[]
+  }
+> = {
+  [Engine.PostgreSQL]: {
+    primaryBinaries: ['psql', 'pg_dump', 'pg_restore', 'createdb', 'dropdb'],
+  },
+  [Engine.MySQL]: {
+    primaryBinaries: ['mysql', 'mysqldump', 'mysqladmin'],
+  },
+  [Engine.MariaDB]: {
+    primaryBinaries: ['mariadb', 'mariadb-dump', 'mariadb-admin'],
+  },
+  [Engine.SQLite]: {
+    primaryBinaries: ['sqlite3'],
+  },
+  [Engine.DuckDB]: {
+    primaryBinaries: ['duckdb'],
+  },
+  [Engine.MongoDB]: {
+    primaryBinaries: ['mongosh', 'mongodump', 'mongorestore'],
+  },
+  [Engine.FerretDB]: {
+    primaryBinaries: ['mongosh', 'psql'], // FerretDB uses mongosh + PostgreSQL backend
+  },
+  [Engine.Redis]: {
+    primaryBinaries: ['redis-cli', 'redis-server'],
+  },
+  [Engine.Valkey]: {
+    primaryBinaries: ['valkey-cli', 'valkey-server'],
+  },
+  [Engine.ClickHouse]: {
+    primaryBinaries: ['clickhouse', 'clickhouse-client'],
+  },
+  [Engine.Qdrant]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
+  [Engine.Meilisearch]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
+  [Engine.CouchDB]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
+  [Engine.CockroachDB]: {
+    primaryBinaries: ['cockroach'],
+  },
+  [Engine.SurrealDB]: {
+    primaryBinaries: ['surreal'],
+  },
+  [Engine.QuestDB]: {
+    primaryBinaries: [], // Uses psql from PostgreSQL for connections
+  },
 }
 
 /**
@@ -181,6 +247,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install base dependencies
 # libnuma1: Required by PostgreSQL binaries
+# libxml2: XML library required by PostgreSQL
+# libicu70: ICU library required by PostgreSQL (Ubuntu 22.04 ships ICU 70)
+# libaio1: Async I/O library required by MySQL
+# libncurses6: Terminal library required by MariaDB
+# locales: Needed for PostgreSQL locale configuration
+# lsof: Needed by SpinDB's findProcessByPort()
 # gosu: For running commands as non-root user
 RUN apt-get update && apt-get install -y \\
     curl \\
@@ -188,8 +260,19 @@ RUN apt-get update && apt-get install -y \\
     ca-certificates \\
     gnupg \\
     libnuma1 \\
+    libxml2 \\
+    libicu70 \\
+    libaio1 \\
+    libncurses6 \\
+    locales \\
+    lsof \\
     gosu \\
+    && locale-gen en_US.UTF-8 \\
     && rm -rf /var/lib/apt/lists/*
+
+# Set locale environment variables
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 # Install Node.js 22 LTS (matches SpinDB's engine requirements)
 RUN mkdir -p /etc/apt/keyrings \\
@@ -286,7 +369,7 @@ fi
     case Engine.PostgreSQL:
       userCreationCommands = `
 # Create user with password
-echo "Creating database user..."
+echo "[$(date '+%H:%M:%S')] Creating database user '$SPINDB_USER'..."
 cat > /tmp/create-user.sql <<EOSQL
 DO \\$\\$
 BEGIN
@@ -299,8 +382,13 @@ END
 \\$\\$;
 GRANT ALL PRIVILEGES ON DATABASE "$DATABASE" TO "$SPINDB_USER";
 EOSQL
-run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database postgres
+if ! run_as_spindb spindb run "$CONTAINER_NAME" /tmp/create-user.sql --database postgres; then
+    echo "[$(date '+%H:%M:%S')] ERROR: Failed to create database user"
+    rm -f /tmp/create-user.sql
+    exit 1
+fi
 rm -f /tmp/create-user.sql
+echo "[$(date '+%H:%M:%S')] User '$SPINDB_USER' created successfully"
 `
       break
 
@@ -431,24 +519,41 @@ fi
     : databases.length > 1
       ? `
 # Restore data for all databases
+echo "[$(date '+%H:%M:%S')] Checking for backup files in ${initDir}..."
+ls -la ${initDir}/ 2>/dev/null || echo "  (directory empty or not found)"
 DATABASES="${databases.join(' ')}"
 for DB in $DATABASES; do
     # Find backup file for this database (pattern: containerName-dbName.*)
     BACKUP_FILE=$(ls ${initDir}/${containerName}-$DB.* 2>/dev/null | head -1)
     if [ -n "$BACKUP_FILE" ]; then
-        echo "Restoring database: $DB"
+        echo "[$(date '+%H:%M:%S')] Found backup for database '$DB': $BACKUP_FILE"
         # Add database to tracking if not already tracked
         run_as_spindb spindb databases add "$CONTAINER_NAME" "$DB" 2>/dev/null || true
-        run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DB" --force || echo "Restore of $DB completed with warnings"
+        if ! run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DB" --force; then
+            echo "[$(date '+%H:%M:%S')] ERROR: Restore of '$DB' failed"
+            exit 1
+        fi
+        echo "[$(date '+%H:%M:%S')] Restore of '$DB' completed successfully"
+    else
+        echo "[$(date '+%H:%M:%S')] WARNING: No backup file found for database '$DB'"
     fi
 done
 `
       : `
 # Restore data if backup exists
+echo "[$(date '+%H:%M:%S')] Checking for backup files in ${initDir}..."
+ls -la ${initDir}/ 2>/dev/null || echo "  (directory empty or not found)"
 if ls ${initDir}/* 1> /dev/null 2>&1; then
-    echo "Restoring data from backup..."
     BACKUP_FILE=$(ls ${initDir}/* | head -1)
-    run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DATABASE" --force || echo "Restore completed with warnings"
+    echo "[$(date '+%H:%M:%S')] Found backup file: $BACKUP_FILE"
+    echo "[$(date '+%H:%M:%S')] Restoring to database '$DATABASE'..."
+    if ! run_as_spindb spindb restore "$CONTAINER_NAME" "$BACKUP_FILE" --database "$DATABASE" --force; then
+        echo "[$(date '+%H:%M:%S')] ERROR: Restore failed with exit code $?"
+        exit 1
+    fi
+    echo "[$(date '+%H:%M:%S')] Restore completed successfully"
+else
+    echo "[$(date '+%H:%M:%S')] WARNING: No backup files found in ${initDir}"
 fi
 `
 
@@ -462,15 +567,20 @@ fi
       postRestoreCommands = `
 # Grant table and sequence permissions to spindb user
 # (Tables from restore are owned by postgres, spindb user needs access)
-echo "Granting table permissions..."
+echo "[$(date '+%H:%M:%S')] Granting table permissions to '$SPINDB_USER'..."
 cat > /tmp/grant-permissions.sql <<EOSQL
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$SPINDB_USER";
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$SPINDB_USER";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$SPINDB_USER";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$SPINDB_USER";
 EOSQL
-run_as_spindb spindb run "$CONTAINER_NAME" /tmp/grant-permissions.sql --database "$DATABASE" || echo "Permission grants completed with warnings"
+if ! run_as_spindb spindb run "$CONTAINER_NAME" /tmp/grant-permissions.sql --database "$DATABASE"; then
+    echo "[$(date '+%H:%M:%S')] ERROR: Failed to grant permissions"
+    rm -f /tmp/grant-permissions.sql
+    exit 1
+fi
 rm -f /tmp/grant-permissions.sql
+echo "[$(date '+%H:%M:%S')] Permissions granted successfully"
 `
       break
 
@@ -517,8 +627,7 @@ FILE_DB_PATH="/home/spindb/.spindb/containers/${engine}/\${CONTAINER_NAME}/\${CO
 # Export environment variables for the spindb user
 export SPINDB_CONTAINER SPINDB_DATABASE SPINDB_ENGINE SPINDB_VERSION SPINDB_PORT SPINDB_USER SPINDB_PASSWORD
 
-# Add ~/.local/bin to PATH for symlinked database binaries
-export PATH="/home/spindb/.local/bin:$PATH"
+# PATH will be updated after spindb downloads engine binaries
 
 # Fix permissions on mounted volume (may have been created with root ownership)
 echo "Setting up directories..."
@@ -539,31 +648,52 @@ run_as_spindb() {
 }
 
 # Check if container already exists
-if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name":"'"$CONTAINER_NAME"'"'; then
-    echo "Container '$CONTAINER_NAME' already exists"
+if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name": "'"$CONTAINER_NAME"'"'; then
+    echo "[$(date '+%H:%M:%S')] Container '$CONTAINER_NAME' already exists"
+    ${
+      isFileBased
+        ? `# File-based database: no server to start`
+        : `# Check if database is running, start if not (handles Docker restart)
+    if ! run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"'; then
+        echo "[$(date '+%H:%M:%S')] Database not running, starting..."
+        if ! run_as_spindb spindb start "$CONTAINER_NAME"; then
+            echo "[$(date '+%H:%M:%S')] ERROR: Failed to start database"
+            exit 1
+        fi
+    fi`
+    }
 else
-    echo "Creating container '$CONTAINER_NAME'..."
+    echo "[$(date '+%H:%M:%S')] Creating container '$CONTAINER_NAME'..."
     ${
       isFileBased
         ? `# File-based database: use deterministic path for database file
-    run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "$FILE_DB_PATH" --force`
-        : `run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force`
+    if ! run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --path "$FILE_DB_PATH" --force; then
+        echo "[$(date '+%H:%M:%S')] ERROR: Failed to create container"
+        exit 1
+    fi`
+        : `# Use --start to ensure database is created (non-TTY defaults to no-start)
+    if ! run_as_spindb spindb create "$CONTAINER_NAME" --engine "$ENGINE" --db-version "$VERSION" --port "$PORT" --database "$DATABASE" --force --start; then
+        echo "[$(date '+%H:%M:%S')] ERROR: Failed to create container"
+        exit 1
+    fi`
     }
+    echo "[$(date '+%H:%M:%S')] Container created successfully"
 fi
 
-# Create symlinks for database binaries in ~/.local/bin
+# Add engine binary directory to PATH (idempotent - only adds if not present)
 # This allows users to run psql, mysql, etc. directly in the container
-echo "Creating binary symlinks..."
-mkdir -p /home/spindb/.local/bin
+# Note: We add the actual bin directory to PATH instead of creating symlinks
+# because some binaries (like psql) are wrapper scripts that use relative paths
+echo "Setting up database binaries in PATH..."
 BIN_DIR=$(ls -d /home/spindb/.spindb/bin/\${ENGINE}-*/bin 2>/dev/null | head -1)
 if [ -d "$BIN_DIR" ]; then
-    for binary in "$BIN_DIR"/*; do
-        if [ -x "$binary" ] && [ -f "$binary" ]; then
-            name=$(basename "$binary")
-            ln -sf "$binary" "/home/spindb/.local/bin/$name"
-        fi
-    done
-    echo "Binaries available: $(ls /home/spindb/.local/bin | tr '\\n' ' ')"
+    export PATH="$BIN_DIR:$PATH"
+    # Create/overwrite script in /etc/profile.d for system-wide access (idempotent)
+    # This ensures PATH is set for login shells without duplication
+    echo "export PATH=\\"$BIN_DIR:\\$PATH\\"" > /etc/profile.d/spindb-bins.sh
+    echo "Binaries available in PATH: $(ls "$BIN_DIR" | tr '\\n' ' ')"
+else
+    echo "Warning: No engine binaries found"
 fi
 ${networkConfig}${
     isFileBased
@@ -571,30 +701,41 @@ ${networkConfig}${
 # File-based database: no server to start, just verify file exists after restore
 `
       : `
-# Start the database
-echo "Starting database..."
-run_as_spindb spindb start "$CONTAINER_NAME"
-
-# Wait for database to be ready
-echo "Waiting for database to be ready..."
+# Database was started by 'spindb create --start' above
+# Wait for database to be fully ready for connections
+echo "[$(date '+%H:%M:%S')] Waiting for database to be ready..."
 RETRIES=30
 until run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"' || [ $RETRIES -eq 0 ]; do
-    echo "Waiting for database... ($RETRIES attempts remaining)"
+    echo "[$(date '+%H:%M:%S')] Waiting for database... ($RETRIES attempts remaining)"
     sleep 2
     RETRIES=$((RETRIES-1))
 done
 
 if [ $RETRIES -eq 0 ]; then
-    echo "Error: Database failed to start"
+    echo "[$(date '+%H:%M:%S')] ERROR: Database failed to start"
     exit 1
 fi`
   }
 
-echo "Database is running!"
+echo "[$(date '+%H:%M:%S')] Database is running!"
+
+# Initialization marker file - ensures user creation and data restore only run once
+INIT_MARKER="/home/spindb/.spindb/.initialized-$CONTAINER_NAME"
+if [ ! -f "$INIT_MARKER" ]; then
+    echo "[$(date '+%H:%M:%S')] ======== FIRST-TIME INITIALIZATION ========"
 ${userCreationCommands}
 ${restoreSection}
 ${postRestoreCommands}
+    # Mark initialization complete
+    touch "$INIT_MARKER"
+    chown spindb:spindb "$INIT_MARKER"
+    echo "[$(date '+%H:%M:%S')] ======== INITIALIZATION COMPLETE ========"
+else
+    echo "[$(date '+%H:%M:%S')] Container already initialized, skipping data restore."
+fi
+
 echo "========================================"
+echo "SPINDB_READY"
 echo "SpinDB container ready!"
 echo ""
 echo "Connection: ${getConnectionStringTemplate(engine, port, database, useTLS).replace(/\$/g, '\\$')}"
@@ -1000,4 +1141,151 @@ export function getExportBackupPath(
   const format = getDefaultFormat(engine)
   const extension = getBackupExtension(engine, format)
   return join(outputDir, 'data', `${containerName}-${database}${extension}`)
+}
+
+/**
+ * Get the default Docker export directory for a container
+ */
+export function getDefaultDockerExportPath(
+  containerName: string,
+  engine: Engine,
+): string {
+  return join(
+    homedir(),
+    '.spindb',
+    'containers',
+    engine,
+    containerName,
+    'docker',
+  )
+}
+
+/**
+ * Check if a Docker export already exists for a container
+ */
+export function dockerExportExists(
+  containerName: string,
+  engine: Engine,
+): boolean {
+  const exportPath = getDefaultDockerExportPath(containerName, engine)
+  const envPath = join(exportPath, '.env')
+  return existsSync(envPath)
+}
+
+export type DockerCredentials = {
+  username: string
+  password: string
+  port: number
+  database: string
+  engine: string
+  version: string
+  containerName: string
+}
+
+/**
+ * Read Docker credentials from an existing export's .env file
+ */
+export async function getDockerCredentials(
+  containerName: string,
+  engine: Engine,
+): Promise<DockerCredentials | null> {
+  const exportPath = getDefaultDockerExportPath(containerName, engine)
+  const envPath = join(exportPath, '.env')
+
+  if (!existsSync(envPath)) {
+    return null
+  }
+
+  try {
+    const envContent = await readFile(envPath, 'utf-8')
+    const lines = envContent.split('\n')
+
+    const values: Record<string, string> = {}
+    for (const line of lines) {
+      const match = line.match(/^([A-Z_]+)=(.*)$/)
+      if (match) {
+        values[match[1]] = match[2]
+      }
+    }
+
+    return {
+      username: values.SPINDB_USER || 'spindb',
+      password: values.SPINDB_PASSWORD || '',
+      port: parseInt(values.PORT || '0', 10),
+      database: values.DATABASE || '',
+      engine: values.ENGINE || engine,
+      version: values.VERSION || '',
+      containerName: values.CONTAINER_NAME || containerName,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get the Docker connection string for an existing export
+ * Returns the connection string with actual credentials substituted
+ */
+export async function getDockerConnectionString(
+  containerName: string,
+  engine: Engine,
+  options: { host?: string } = {},
+): Promise<string | null> {
+  const credentials = await getDockerCredentials(containerName, engine)
+  if (!credentials) {
+    return null
+  }
+
+  const host = options.host || 'localhost'
+  const { username, password, port, database } = credentials
+
+  // URL-encode credentials to escape reserved URI characters
+  const encodedUsername = encodeURIComponent(username)
+  const encodedPassword = encodeURIComponent(password)
+  const encodedDatabase = encodeURIComponent(database)
+
+  // Build connection string based on engine type
+  switch (engine) {
+    case Engine.PostgreSQL:
+    case Engine.CockroachDB:
+    case Engine.QuestDB:
+      return `postgresql://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
+
+    case Engine.MySQL:
+    case Engine.MariaDB:
+      return `mysql://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
+
+    case Engine.MongoDB:
+    case Engine.FerretDB:
+      return `mongodb://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
+
+    case Engine.Redis:
+    case Engine.Valkey:
+      return `redis://:${encodedPassword}@${host}:${port}`
+
+    case Engine.ClickHouse:
+      return `clickhouse://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
+
+    case Engine.Qdrant:
+      return `http://${host}:${port}`
+
+    case Engine.Meilisearch:
+      return `http://${host}:${port}`
+
+    case Engine.CouchDB:
+      return `http://${username}:${password}@${host}:${port}/${database}`
+
+    case Engine.SurrealDB:
+      return `ws://${username}:${password}@${host}:${port}`
+
+    case Engine.SQLite:
+    case Engine.DuckDB:
+      return `File-based database (no network connection)`
+
+    default:
+      assertExhaustive(
+        engine,
+        `Unhandled engine in getDockerConnectionString: ${engine}`,
+      )
+  }
 }

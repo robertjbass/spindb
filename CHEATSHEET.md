@@ -455,6 +455,37 @@ cd mydb-docker && docker compose up -d
 
 > **File-based databases:** SQLite and DuckDB are supported but don't have network servers. Inside Docker, they work as local files. For managing SQLite/DuckDB registry entries, see `spindb attach` and `spindb detach`.
 
+## Docker Commands (after export)
+
+After exporting with `spindb export docker`, use these commands to manage the container:
+
+```bash
+# Container lifecycle
+docker compose up -d                    # Start container
+docker compose down                     # Stop container
+docker compose down -v                  # Stop and remove volume (DATA LOSS!)
+docker compose restart                  # Restart (safe, idempotent)
+docker compose logs -f                  # Follow logs
+docker compose ps                       # Show status
+
+# Build/rebuild
+docker compose build                    # Build image
+docker compose build --no-cache         # Rebuild from scratch
+
+# Execute commands inside container (use bash -l for PATH)
+docker exec spindb-mydb bash -l -c "psql --version"
+docker exec spindb-mydb bash -l -c "which psql"
+docker exec spindb-mydb bash -l -c 'PGPASSWORD=$SPINDB_PASSWORD psql -U spindb -d mydb'
+docker exec spindb-mydb bash -l -c 'PGPASSWORD=$SPINDB_PASSWORD psql -U spindb -d mydb -c "SELECT 1"'
+
+# Health and inspection
+docker inspect spindb-mydb --format='{{.State.Health.Status}}'
+docker inspect spindb-mydb --format='{{json .State}}'
+docker inspect spindb-mydb --format='{{.RestartCount}}'
+```
+
+> **Login shell required:** Use `bash -l` to ensure database binaries are in PATH. Without `-l`, tools like `psql` won't be found.
+
 ## JSON Output (for scripting)
 
 Most commands support `--json` / `-j` for machine-readable output:
