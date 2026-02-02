@@ -650,6 +650,18 @@ run_as_spindb() {
 # Check if container already exists
 if run_as_spindb spindb list --json 2>/dev/null | grep -q '"name": "'"$CONTAINER_NAME"'"'; then
     echo "[$(date '+%H:%M:%S')] Container '$CONTAINER_NAME' already exists"
+    ${
+      isFileBased
+        ? `# File-based database: no server to start`
+        : `# Check if database is running, start if not (handles Docker restart)
+    if ! run_as_spindb spindb list --json 2>/dev/null | grep -q '"status":.*"running"'; then
+        echo "[$(date '+%H:%M:%S')] Database not running, starting..."
+        if ! run_as_spindb spindb start "$CONTAINER_NAME"; then
+            echo "[$(date '+%H:%M:%S')] ERROR: Failed to start database"
+            exit 1
+        fi
+    fi`
+    }
 else
     echo "[$(date '+%H:%M:%S')] Creating container '$CONTAINER_NAME'..."
     ${
@@ -1232,27 +1244,32 @@ export async function getDockerConnectionString(
   const host = options.host || 'localhost'
   const { username, password, port, database } = credentials
 
+  // URL-encode credentials to escape reserved URI characters
+  const encodedUsername = encodeURIComponent(username)
+  const encodedPassword = encodeURIComponent(password)
+  const encodedDatabase = encodeURIComponent(database)
+
   // Build connection string based on engine type
   switch (engine) {
     case Engine.PostgreSQL:
     case Engine.CockroachDB:
     case Engine.QuestDB:
-      return `postgresql://${username}:${password}@${host}:${port}/${database}`
+      return `postgresql://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 
     case Engine.MySQL:
     case Engine.MariaDB:
-      return `mysql://${username}:${password}@${host}:${port}/${database}`
+      return `mysql://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 
     case Engine.MongoDB:
     case Engine.FerretDB:
-      return `mongodb://${username}:${password}@${host}:${port}/${database}`
+      return `mongodb://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 
     case Engine.Redis:
     case Engine.Valkey:
-      return `redis://:${password}@${host}:${port}`
+      return `redis://:${encodedPassword}@${host}:${port}`
 
     case Engine.ClickHouse:
-      return `clickhouse://${username}:${password}@${host}:${port}/${database}`
+      return `clickhouse://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 
     case Engine.Qdrant:
       return `http://${host}:${port}`
