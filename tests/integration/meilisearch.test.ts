@@ -24,8 +24,9 @@ import {
   waitForReady,
   waitForStopped,
   containerDataExists,
+  executeQuery,
 } from './helpers'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -193,6 +194,44 @@ describe('Meilisearch Integration Tests', () => {
     assertEqual(docCount, 3, 'Should have 3 documents')
 
     console.log(`   Created index with ${docCount} documents`)
+  })
+
+  it('should query data using executeQuery (REST API)', async () => {
+    console.log(`\n Querying data using engine.executeQuery (REST API)...`)
+
+    // Test GET indexes (REST API query format: METHOD /path)
+    // Meilisearch returns { results: [...], offset: 0, limit: 20, total: N }
+    const indexesResult = await executeQuery(containerName, 'GET /indexes')
+
+    // Verify indexes are returned
+    assertEqual(indexesResult.rowCount, 1, 'Should have one result object')
+    assertTruthy(
+      indexesResult.columns.length > 0,
+      'Should have columns in result',
+    )
+
+    // Test GET index stats
+    const statsResult = await executeQuery(
+      containerName,
+      `GET /indexes/${TEST_INDEX}/stats`,
+    )
+
+    assertEqual(statsResult.rowCount, 1, 'Should return stats')
+
+    // Test POST search with body
+    // Search returns the full response object with hits, query, etc.
+    const searchResult = await executeQuery(
+      containerName,
+      `POST /indexes/${TEST_INDEX}/search {"q": "document"}`,
+    )
+
+    // Meilisearch search returns hits directly as rows (parsed from 'hits' array)
+    // All 3 documents contain the word "document"
+    assertTruthy(searchResult.rowCount > 0, 'Search should return hits')
+
+    console.log(
+      `   REST API query returned index with ${searchResult.rowCount} hits`,
+    )
   })
 
   it(

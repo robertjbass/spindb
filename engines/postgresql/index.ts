@@ -33,6 +33,7 @@ import {
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
+import { parseCSVToQueryResult } from '../../core/query-parser'
 import type {
   Platform,
   Arch,
@@ -44,6 +45,8 @@ import type {
   RestoreResult,
   DumpResult,
   StatusResult,
+  QueryResult,
+  QueryOptions,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -922,6 +925,59 @@ export class PostgreSQLEngine extends BaseEngine {
           resolve()
         } else {
           reject(new Error(`psql exited with code ${code}`))
+        }
+      })
+    })
+  }
+
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port } = container
+    const db = options?.database || container.database || 'postgres'
+    const psqlPath = await this.getPsqlPath()
+
+    // Use --csv for machine-readable output
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      defaults.superuser,
+      '-d',
+      db,
+      '--csv',
+      '-c',
+      query,
+    ]
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(psqlPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(parseCSVToQueryResult(stdout))
+        } else {
+          reject(new Error(stderr || `psql exited with code ${code}`))
         }
       })
     })

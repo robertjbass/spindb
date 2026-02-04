@@ -23,8 +23,9 @@ import {
   waitForReady,
   waitForStopped,
   containerDataExists,
+  executeQuery,
 } from './helpers'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -164,6 +165,47 @@ describe('Qdrant Integration Tests', () => {
     assertEqual(pointCount, 3, 'Should have 3 points')
 
     console.log(`   Created collection with ${pointCount} points`)
+  })
+
+  it('should query data using executeQuery (REST API)', async () => {
+    console.log(`\n Querying data using engine.executeQuery (REST API)...`)
+
+    // Test GET collections (REST API query format: METHOD /path)
+    const collectionsResult = await executeQuery(
+      containerName,
+      'GET /collections',
+    )
+
+    // Verify collections are returned (Qdrant returns { result: { collections: [...] } })
+    assertEqual(collectionsResult.rowCount, 1, 'Should have one result object')
+    assertTruthy(
+      collectionsResult.columns.includes('collections'),
+      'Should have collections in result',
+    )
+
+    // Test GET collection info
+    const collectionResult = await executeQuery(
+      containerName,
+      `GET /collections/${TEST_COLLECTION}`,
+    )
+
+    assertEqual(collectionResult.rowCount, 1, 'Should return collection info')
+
+    // Test POST scroll to get points
+    const scrollResult = await executeQuery(
+      containerName,
+      `POST /collections/${TEST_COLLECTION}/points/scroll {"limit": 10}`,
+    )
+
+    assertEqual(scrollResult.rowCount, 1, 'Should return scroll results')
+    // Verify we got points back
+    const scrollData = scrollResult.rows[0] as Record<string, unknown>
+    const points = scrollData.points as unknown[]
+    assertEqual(points.length, 3, 'Should have 3 points')
+
+    console.log(
+      `   REST API query returned collection with ${points.length} points`,
+    )
   })
 
   it('should clone container using backup/restore', async () => {

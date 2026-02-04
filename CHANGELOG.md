@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`spindb query` command** - Execute queries against database containers and return results in tabular or JSON format:
+  ```bash
+  spindb query <container> "<query>" [-d database] [--json]
+  ```
+
+  **SQL Engines** (PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse, CockroachDB, QuestDB):
+  ```bash
+  spindb query mypostgres "SELECT * FROM users LIMIT 10"
+  spindb query mypostgres "SELECT * FROM users" --json
+  spindb query mypostgres "SELECT * FROM orders" -d sales
+  ```
+
+  **MongoDB/FerretDB** (JavaScript - auto-prepends `db.` if missing):
+  ```bash
+  spindb query mymongo "users.find({active: true})"
+  spindb query mymongo "db.orders.countDocuments()"
+  ```
+
+  **Redis/Valkey** (Redis commands):
+  ```bash
+  spindb query myredis "KEYS user:*"
+  spindb query myredis "HGETALL session:123"
+  spindb query myvalkey "SMEMBERS active_users"
+  ```
+
+  **SurrealDB** (SurrealQL):
+  ```bash
+  spindb query mysurreal "SELECT * FROM users"
+  spindb query mysurreal "SELECT * FROM products WHERE price > 100"
+  ```
+
+  **REST API Engines** (Qdrant, Meilisearch, CouchDB - format: `METHOD /path [JSON body]`):
+  ```bash
+  spindb query myqdrant "GET /collections"
+  spindb query myqdrant 'POST /collections/movies/points/search {"vector": [0.1, 0.2], "limit": 5}'
+  spindb query mymeili "GET /indexes"
+  spindb query mymeili 'POST /indexes/movies/search {"q": "action"}'
+  spindb query mycouch "GET /_all_dbs"
+  spindb query mycouch 'POST /mydb/_find {"selector": {"type": "user"}}'
+  ```
+
+  **Output formats**:
+  - **Tabular (default)**: Formatted table with column headers
+  - **JSON (`--json`)**: Array of row objects for scripting
+
+## [0.31.1] - 2026-02-03
+
+### Fixed
+- **MongoDB/FerretDB database creation failing** - Fixed `createDatabase` failing with `TypeError: Cannot read properties of undefined (reading 'drop')`. The issue was that mongosh doesn't support shorthand notation (`db._collectionName`) for collection names starting with underscore. Changed to use `db.getCollection("_spindb_init")` instead.
+
 ## [0.31.0] - 2026-02-01
 
 ### Added

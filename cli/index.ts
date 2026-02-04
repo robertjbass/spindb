@@ -30,6 +30,7 @@ import { databasesCommand } from './commands/databases'
 import { pullCommand } from './commands/pull'
 import { whichCommand } from './commands/which'
 import { exportCommand } from './commands/export'
+import { queryCommand } from './commands/query'
 import { updateManager } from '../core/update-manager'
 import { configManager } from '../core/config-manager'
 import { setCachedIconMode } from './constants'
@@ -142,6 +143,7 @@ export async function run(): Promise<void> {
   program.addCommand(pullCommand)
   program.addCommand(whichCommand)
   program.addCommand(exportCommand)
+  program.addCommand(queryCommand)
 
   if (process.argv.length <= 2) {
     // Only show update notification in interactive menu mode (once at startup)

@@ -49,3 +49,18 @@ export function assertNullish(
     throw new Error(`${message}\n  Expected null/undefined, got: ${value}`)
   }
 }
+
+// Assert two values are deeply equal (for arrays and objects)
+export function assertDeepEqual<T>(
+  actual: T,
+  expected: T,
+  message: string,
+): void {
+  const actualStr = JSON.stringify(actual, null, 2)
+  const expectedStr = JSON.stringify(expected, null, 2)
+  if (actualStr !== expectedStr) {
+    throw new Error(
+      `${message}\n  Expected: ${expectedStr}\n  Actual: ${actualStr}`,
+    )
+  }
+}

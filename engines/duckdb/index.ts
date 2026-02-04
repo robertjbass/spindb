@@ -47,7 +47,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseCSVToQueryResult } from '../../core/query-parser'
 
 const execFileAsync = promisify(execFile)
 
@@ -752,6 +755,34 @@ export class DuckDBEngine extends BaseEngine {
       )
     }
     return duckdb
+  }
+
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    _options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const entry = await duckdbRegistry.get(container.name)
+    if (!entry || !existsSync(entry.filePath)) {
+      throw new Error('DuckDB database file not found')
+    }
+
+    const duckdb = await this.requireDuckDBPath()
+
+    // Use -csv -header for machine-readable output
+    const { stdout, stderr } = await execFileAsync(duckdb, [
+      '-csv',
+      '-header',
+      entry.filePath,
+      '-c',
+      query,
+    ])
+
+    if (stderr) {
+      throw new Error(stderr)
+    }
+
+    return parseCSVToQueryResult(stdout)
   }
 }
 

@@ -41,7 +41,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseMongoDBResult } from '../../core/query-parser'
 
 const execAsync = promisify(exec)
 
@@ -724,11 +727,13 @@ export class MongoDBEngine extends BaseEngine {
     // without leaving any visible marker collections.
     // First drop any existing _spindb_init collection (ignore errors), then create and drop.
     // This ensures cleanup even if a previous createDatabase was interrupted.
+    // NOTE: Use db.getCollection() instead of db._spindb_init shorthand because
+    // mongosh doesn't support shorthand notation for collection names starting with underscore.
     const cmd = buildMongoshCommand(
       mongosh,
       port,
       database,
-      'try { db._spindb_init.drop(); } catch(e) {} db.createCollection("_spindb_init"); db._spindb_init.drop();',
+      'try { db.getCollection("_spindb_init").drop(); } catch(e) {} db.createCollection("_spindb_init"); db.getCollection("_spindb_init").drop();',
     )
 
     await execAsync(cmd, { timeout: 10000 })
@@ -905,6 +910,50 @@ export class MongoDBEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port } = container
+    const db = options?.database || container.database || 'test'
+
+    const mongosh = await this.getMongoshPath()
+
+    // Auto-prepend db. if not already present for collection methods
+    let script = query.trim()
+    if (!script.startsWith('db.') && !script.startsWith('use ')) {
+      script = `db.${script}`
+    }
+
+    // Wrap in JSON.stringify for parseable output
+    // Handle both toArray() results and single document results
+    const wrappedScript = `JSON.stringify(${script})`
+
+    const cmd = buildMongoshCommand(mongosh, port, db, wrappedScript, {
+      quiet: true,
+    })
+
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
+
+    if (stderr && !stdout.trim()) {
+      throw new Error(stderr)
+    }
+
+    // Extract JSON from output (mongosh may include extra output)
+    const jsonMatch = stdout.match(/\[[\s\S]*\]|\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      // Handle scalar results
+      return {
+        columns: ['result'],
+        rows: [{ result: stdout.trim() }],
+        rowCount: 1,
+      }
+    }
+
+    return parseMongoDBResult(jsonMatch[0])
   }
 }
 

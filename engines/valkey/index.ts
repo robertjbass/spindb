@@ -35,7 +35,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseRedisResult } from '../../core/query-parser'
 
 const execAsync = promisify(exec)
 
@@ -1402,6 +1405,50 @@ export class ValkeyEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port, version } = container
+    const db = options?.database || container.database || '0'
+
+    const valkeyCli = await this.getValkeyCliPathForVersion(version)
+
+    return new Promise((resolve, reject) => {
+      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+
+      const proc = spawn(valkeyCli, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code === 0 || code === null) {
+          // Use Redis parser since Valkey is Redis-compatible
+          resolve(parseRedisResult(stdout, query))
+        } else {
+          reject(new Error(stderr || `valkey-cli exited with code ${code}`))
+        }
+      })
+
+      // Write command to stdin and close it
+      proc.stdin?.write(query + '\n')
+      proc.stdin?.end()
+    })
   }
 }
 

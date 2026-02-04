@@ -49,7 +49,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseSurrealDBResult } from '../../core/query-parser'
 
 const ENGINE = 'surrealdb'
 const engineDef = getEngineDefaults(ENGINE)
@@ -980,6 +983,92 @@ export class SurrealDBEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  /**
+   * Execute a SurrealQL query and return structured results
+   *
+   * Examples:
+   *   SELECT * FROM users
+   *   SELECT * FROM users WHERE active = true
+   */
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port, version, name } = container
+    const db = options?.database || container.database || 'default'
+    const namespace = name.replace(/-/g, '_')
+
+    const surreal = await this.getSurrealPath(version)
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        'sql',
+        '--endpoint',
+        `ws://127.0.0.1:${port}`,
+        '--user',
+        'root',
+        '--pass',
+        'root',
+        '--ns',
+        namespace,
+        '--db',
+        db,
+        '--hide-welcome',
+        '--json',
+      ]
+
+      const proc = spawn(surreal, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: containerDir,
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      // Send query and close stdin
+      proc.stdin?.write(query + '\n')
+      proc.stdin?.end()
+
+      const timeout = setTimeout(() => {
+        proc.kill('SIGTERM')
+        reject(new Error('Query timed out after 60 seconds'))
+      }, 60000)
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout)
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        if (code !== 0) {
+          reject(new Error(stderr || `surreal sql exited with code ${code}`))
+          return
+        }
+
+        try {
+          // SurrealDB returns JSON array of statement results
+          resolve(parseSurrealDBResult(stdout))
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to parse query result: ${error instanceof Error ? error.message : error}`,
+            ),
+          )
+        }
+      })
+    })
   }
 }
 

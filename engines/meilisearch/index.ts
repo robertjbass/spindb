@@ -31,7 +31,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseRESTAPIResult } from '../../core/query-parser'
 
 const ENGINE = 'meilisearch'
 const engineDef = getEngineDefaults(ENGINE)
@@ -1089,6 +1092,72 @@ export class MeilisearchEngine extends BaseEngine {
     }
 
     throw new Error('Either file or sql option must be provided')
+  }
+
+  /**
+   * Execute a query via REST API
+   *
+   * Query format: METHOD /path [JSON body]
+   * Examples:
+   *   GET /indexes
+   *   POST /indexes/movies/search {"q": "action"}
+   */
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port } = container
+
+    // Parse the query string: METHOD /path [body]
+    const trimmed = query.trim()
+    const spaceIdx = trimmed.indexOf(' ')
+
+    if (spaceIdx === -1) {
+      throw new Error(
+        'Invalid query format. Expected: METHOD /path [body]\n' +
+          'Example: GET /indexes',
+      )
+    }
+
+    const method = (options?.method ||
+      trimmed.substring(0, spaceIdx).toUpperCase()) as
+      | 'GET'
+      | 'POST'
+      | 'PUT'
+      | 'DELETE'
+    const rest = trimmed.substring(spaceIdx + 1).trim()
+
+    // Extract path and optional JSON body
+    let path: string
+    let body: Record<string, unknown> | undefined = options?.body
+
+    const bodyStart = rest.indexOf('{')
+    if (bodyStart !== -1 && !body) {
+      path = rest.substring(0, bodyStart).trim()
+      try {
+        body = JSON.parse(rest.substring(bodyStart)) as Record<string, unknown>
+      } catch {
+        throw new Error('Invalid JSON body in query')
+      }
+    } else {
+      path = rest
+    }
+
+    // Ensure path starts with /
+    if (!path.startsWith('/')) {
+      path = '/' + path
+    }
+
+    const response = await meilisearchApiRequest(port, method, path, body)
+
+    if (response.status >= 400) {
+      throw new Error(
+        `Meilisearch API error (${response.status}): ${JSON.stringify(response.data)}`,
+      )
+    }
+
+    return parseRESTAPIResult(JSON.stringify(response.data))
   }
 }
 
