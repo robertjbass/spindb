@@ -24,6 +24,7 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -153,7 +154,7 @@ describe('FerretDB Integration Tests', () => {
   })
 
   it('should query seeded data using executeQuery', async () => {
-    console.log(`\n🔍 Querying seeded data using engine.executeQuery...`)
+    logDebug('Querying seeded data using engine.executeQuery...')
 
     // Test basic find query (FerretDB uses MongoDB JavaScript syntax)
     // Sort by id field (not _id which is auto-generated)
@@ -207,9 +208,7 @@ describe('FerretDB Integration Tests', () => {
       'Columns should include email',
     )
 
-    console.log(
-      `   ✓ Query returned ${result.rowCount} documents with correct data`,
-    )
+    logDebug(`Query returned ${result.rowCount} documents with correct data`)
   })
 
   it('should create a new container from connection string (dump/restore)', async () => {

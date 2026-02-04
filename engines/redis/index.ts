@@ -1392,7 +1392,7 @@ export class RedisEngine extends BaseEngine {
     const redisCli = await this.getRedisCliPathForVersion(version)
 
     return new Promise((resolve, reject) => {
-      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db, '--raw']
 
       const proc = spawn(redisCli, args, {
         stdio: ['pipe', 'pipe', 'pipe'],

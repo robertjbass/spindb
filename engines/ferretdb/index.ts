@@ -1190,8 +1190,9 @@ export class FerretDBEngine extends BaseEngine {
       normalizedQuery = `db.${normalizedQuery}`
     }
 
-    // Wrap query to output JSON
-    const script = `JSON.stringify(${normalizedQuery}.toArray ? ${normalizedQuery}.toArray() : ${normalizedQuery})`
+    // Wrap query in async IIFE to properly await cursor.toArray()
+    // This prevents JSON.stringify from serializing a Promise
+    const script = `(async () => { const res = ${normalizedQuery}; return JSON.stringify(res.toArray ? await res.toArray() : await Promise.resolve(res)); })()`
 
     return new Promise((resolve, reject) => {
       const args = [

@@ -26,6 +26,7 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -168,7 +169,7 @@ describe('Qdrant Integration Tests', () => {
   })
 
   it('should query data using executeQuery (REST API)', async () => {
-    console.log(`\n Querying data using engine.executeQuery (REST API)...`)
+    logDebug('Querying data using engine.executeQuery (REST API)...')
 
     // Test GET collections (REST API query format: METHOD /path)
     const collectionsResult = await executeQuery(
@@ -203,9 +204,7 @@ describe('Qdrant Integration Tests', () => {
     const points = scrollData.points as unknown[]
     assertEqual(points.length, 3, 'Should have 3 points')
 
-    console.log(
-      `   REST API query returned collection with ${points.length} points`,
-    )
+    logDebug(`REST API query returned collection with ${points.length} points`)
   })
 
   it('should clone container using backup/restore', async () => {

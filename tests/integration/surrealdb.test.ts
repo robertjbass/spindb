@@ -27,6 +27,7 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -233,7 +234,7 @@ describe('SurrealDB Integration Tests', () => {
   })
 
   it('should query seeded data using executeQuery', async () => {
-    console.log(`\n Querying seeded data using engine.executeQuery...`)
+    logDebug('Querying seeded data using engine.executeQuery...')
 
     // Test basic SELECT query (SurrealQL syntax)
     const result = await executeQuery(
@@ -269,7 +270,7 @@ describe('SurrealDB Integration Tests', () => {
     assertEqual(filteredResult.rowCount, 1, 'Should return one row for Bob')
     assertEqual(filteredResult.rows[0].name, 'Bob', 'Should find Bob')
 
-    console.log(`   Query returned ${result.rowCount} rows with correct data`)
+    logDebug(`Query returned ${result.rowCount} rows with correct data`)
   })
 
   it('should clone container using backup/restore', async () => {

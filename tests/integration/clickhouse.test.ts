@@ -39,6 +39,7 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
+import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -268,7 +269,7 @@ describe(
     })
 
     it('should query seeded data using executeQuery', async () => {
-      console.log(`\n Querying seeded data using engine.executeQuery...`)
+      logDebug('Querying seeded data using engine.executeQuery...')
 
       // Test basic SELECT query
       const result = await executeQuery(
@@ -310,7 +311,7 @@ describe(
         'Should find Bob Smith',
       )
 
-      console.log(`   Query returned ${result.rowCount} rows with correct data`)
+      logDebug(`Query returned ${result.rowCount} rows with correct data`)
     })
 
     it('should clone container using backup/restore', async () => {

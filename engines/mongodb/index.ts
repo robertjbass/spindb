@@ -922,9 +922,18 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await this.getMongoshPath()
 
+    // Reject "use " shell helper - it doesn't work with JSON output
+    const trimmedQuery = query.trim()
+    if (trimmedQuery.toLowerCase().startsWith('use ')) {
+      throw new Error(
+        'The "use" command is not supported in executeQuery. ' +
+          'To switch databases, set options.database or container.database instead.',
+      )
+    }
+
     // Auto-prepend db. if not already present for collection methods
-    let script = query.trim()
-    if (!script.startsWith('db.') && !script.startsWith('use ')) {
+    let script = trimmedQuery
+    if (!script.startsWith('db.')) {
       script = `db.${script}`
     }
 
