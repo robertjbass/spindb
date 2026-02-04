@@ -1182,23 +1182,45 @@ export class CouchDBEngine extends BaseEngine {
     const { port } = container
 
     // Parse the query string: METHOD /path [body]
+    // If options?.method is provided, query can be just the path
     const trimmed = query.trim()
     const spaceIdx = trimmed.indexOf(' ')
 
-    if (spaceIdx === -1) {
-      throw new Error(
-        'Invalid query format. Expected: METHOD /path [body]\n' +
-          'Example: GET /_all_dbs',
-      )
-    }
+    let method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    let rest: string
 
-    const method = (options?.method ||
-      trimmed.substring(0, spaceIdx).toUpperCase()) as
-      | 'GET'
-      | 'POST'
-      | 'PUT'
-      | 'DELETE'
-    const rest = trimmed.substring(spaceIdx + 1).trim()
+    if (options?.method) {
+      // Method provided via options
+      method = options.method as 'GET' | 'POST' | 'PUT' | 'DELETE'
+      if (spaceIdx !== -1) {
+        // Check if first token looks like a method (GET, POST, etc.)
+        const firstToken = trimmed.substring(0, spaceIdx).toUpperCase()
+        if (['GET', 'POST', 'PUT', 'DELETE'].includes(firstToken)) {
+          // Query has method prefix, use rest after it
+          rest = trimmed.substring(spaceIdx + 1).trim()
+        } else {
+          // Query is path + body, use entire trimmed
+          rest = trimmed
+        }
+      } else {
+        // Query is just the path
+        rest = trimmed
+      }
+    } else {
+      // No method in options, must parse from query
+      if (spaceIdx === -1) {
+        throw new Error(
+          'Invalid query format. Expected: METHOD /path [body]\n' +
+            'Example: GET /_all_dbs',
+        )
+      }
+      method = trimmed.substring(0, spaceIdx).toUpperCase() as
+        | 'GET'
+        | 'POST'
+        | 'PUT'
+        | 'DELETE'
+      rest = trimmed.substring(spaceIdx + 1).trim()
+    }
 
     // Extract path and optional JSON body
     let path: string
