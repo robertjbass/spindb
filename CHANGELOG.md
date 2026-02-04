@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Improved test output** - Test scripts now use `--test-reporter=spec` for cleaner hierarchical output with pass/fail summary at the end
+
 ### Added
 - **`spindb query` command** - Execute queries against database containers and return results in tabular or JSON format:
   ```bash
