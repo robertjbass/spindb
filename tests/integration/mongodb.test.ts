@@ -21,8 +21,9 @@ import {
   getConnectionString,
   runScriptFile,
   runScriptSQL,
+  executeQuery,
 } from './helpers'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -149,6 +150,66 @@ describe('MongoDB Integration Tests', () => {
     )
 
     console.log(`   ✓ Seeded ${rowCount} documents using engine.runScript`)
+  })
+
+  it('should query seeded data using executeQuery', async () => {
+    console.log(`\n🔍 Querying seeded data using engine.executeQuery...`)
+
+    // Test basic find query (MongoDB uses JavaScript syntax)
+    // Sort by id field (not _id which is auto-generated)
+    // Must call .toArray() to convert cursor to array for JSON serialization
+    const result = await executeQuery(
+      containerName,
+      'test_user.find({}).sort({id: 1}).toArray()',
+      DATABASE,
+    )
+
+    assertEqual(
+      result.rowCount,
+      EXPECTED_ROW_COUNT,
+      'Should return all documents',
+    )
+
+    // Verify first document data (sorted by id, so id:1 = Alice Johnson)
+    assertEqual(
+      result.rows[0].name,
+      'Alice Johnson',
+      'First document should be Alice Johnson',
+    )
+    assertEqual(
+      result.rows[0].email,
+      'alice@example.com',
+      'First document email should match',
+    )
+
+    // Test filtered query
+    const filteredResult = await executeQuery(
+      containerName,
+      'test_user.find({email: /bob/}).toArray()',
+      DATABASE,
+    )
+
+    assertEqual(
+      filteredResult.rowCount,
+      1,
+      'Should return one document for Bob',
+    )
+    assertEqual(
+      filteredResult.rows[0].name,
+      'Bob Smith',
+      'Should find Bob Smith',
+    )
+
+    // Verify columns include expected fields
+    assertTruthy(result.columns.includes('name'), 'Columns should include name')
+    assertTruthy(
+      result.columns.includes('email'),
+      'Columns should include email',
+    )
+
+    console.log(
+      `   ✓ Query returned ${result.rowCount} documents with correct data`,
+    )
   })
 
   it('should create a new container from connection string (dump/restore)', async () => {

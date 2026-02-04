@@ -55,7 +55,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseMongoDBResult } from '../../core/query-parser'
 
 const execAsync = promisify(exec)
 
@@ -1161,6 +1164,111 @@ export class FerretDBEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  /**
+   * Execute a query and return structured results
+   * FerretDB uses MongoDB JavaScript syntax
+   *
+   * Examples:
+   *   db.users.find({active: true})
+   *   db.orders.countDocuments()
+   */
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port } = container
+    const db = options?.database || container.database || 'test'
+
+    const mongosh = await this.getMongoshPath()
+
+    // Normalize query - prepend "db." if missing
+    let normalizedQuery = query.trim()
+    if (!normalizedQuery.startsWith('db.')) {
+      normalizedQuery = `db.${normalizedQuery}`
+    }
+
+    // Wrap query to output JSON
+    const script = `JSON.stringify(${normalizedQuery}.toArray ? ${normalizedQuery}.toArray() : ${normalizedQuery})`
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        db,
+        '--quiet',
+        '--eval',
+        script,
+      ]
+
+      const proc = spawn(mongosh, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      const timeout = setTimeout(() => {
+        proc.kill('SIGTERM')
+        reject(new Error('Query timed out after 60 seconds'))
+      }, 60000)
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout)
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        if (code !== 0) {
+          reject(new Error(stderr || `mongosh exited with code ${code}`))
+          return
+        }
+
+        try {
+          // Extract JSON from output (mongosh may output extra info)
+          const jsonStart = stdout.indexOf('[')
+          const jsonEnd = stdout.lastIndexOf(']')
+
+          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+            const jsonStr = stdout.substring(jsonStart, jsonEnd + 1)
+            resolve(parseMongoDBResult(jsonStr))
+          } else {
+            // Try parsing as single object or scalar
+            const objStart = stdout.indexOf('{')
+            const objEnd = stdout.lastIndexOf('}')
+            if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+              const jsonStr = stdout.substring(objStart, objEnd + 1)
+              resolve(parseMongoDBResult(jsonStr))
+            } else {
+              // Return as scalar result
+              resolve({
+                columns: ['result'],
+                rows: [{ result: stdout.trim() }],
+                rowCount: 1,
+              })
+            }
+          }
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to parse query result: ${error instanceof Error ? error.message : error}`,
+            ),
+          )
+        }
+      })
+    })
   }
 }
 

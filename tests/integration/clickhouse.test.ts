@@ -36,8 +36,9 @@ import {
   containerDataExists,
   runScriptFile,
   runScriptSQL,
+  executeQuery,
 } from './helpers'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -264,6 +265,52 @@ describe(
       )
 
       console.log(`   Seeded ${rowCount} rows using engine.runScript`)
+    })
+
+    it('should query seeded data using executeQuery', async () => {
+      console.log(`\n Querying seeded data using engine.executeQuery...`)
+
+      // Test basic SELECT query
+      const result = await executeQuery(
+        containerName,
+        'SELECT id, name, email FROM test_user ORDER BY id',
+        DATABASE,
+      )
+
+      assertEqual(result.rowCount, EXPECTED_ROW_COUNT, 'Should return all rows')
+      assertDeepEqual(
+        result.columns,
+        ['id', 'name', 'email'],
+        'Should have correct columns',
+      )
+
+      // Verify first row data
+      assertEqual(
+        result.rows[0].name,
+        'Alice Johnson',
+        'First row should be Alice Johnson',
+      )
+      assertEqual(
+        result.rows[0].email,
+        'alice@example.com',
+        'First row email should match',
+      )
+
+      // Test filtered query
+      const filteredResult = await executeQuery(
+        containerName,
+        "SELECT name FROM test_user WHERE email LIKE '%bob%'",
+        DATABASE,
+      )
+
+      assertEqual(filteredResult.rowCount, 1, 'Should return one row for Bob')
+      assertEqual(
+        filteredResult.rows[0].name,
+        'Bob Smith',
+        'Should find Bob Smith',
+      )
+
+      console.log(`   Query returned ${result.rowCount} rows with correct data`)
     })
 
     it('should clone container using backup/restore', async () => {

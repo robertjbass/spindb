@@ -7,6 +7,8 @@ import type {
   RestoreResult,
   DumpResult,
   StatusResult,
+  QueryResult,
+  QueryOptions,
 } from '../types'
 
 /**
@@ -248,4 +250,17 @@ export abstract class BaseEngine {
   ): Promise<void> {
     // Default: no-op. Override in engines that support connection termination.
   }
+
+  /**
+   * Execute a query and return results in a structured format.
+   * @param container - The container configuration
+   * @param query - The query to execute (SQL, JavaScript, Redis commands, or REST API request)
+   * @param options - Query options including target database
+   * @returns QueryResult with columns, rows, and row count
+   */
+  abstract executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult>
 }

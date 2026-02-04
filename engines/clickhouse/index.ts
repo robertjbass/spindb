@@ -37,7 +37,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseClickHouseJSONResult } from '../../core/query-parser'
 
 const ENGINE = 'clickhouse'
 const engineDef = getEngineDefaults(ENGINE)
@@ -1120,6 +1123,58 @@ export class ClickHouseEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port, version } = container
+    const db = options?.database || container.database || 'default'
+
+    const clickhouse = await this.getClickHouseClientPath(version)
+
+    // Append FORMAT JSON to get structured output
+    const queryWithFormat = query.trim().replace(/;?\s*$/, ' FORMAT JSON')
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        'client',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--database',
+        db,
+        '--query',
+        queryWithFormat,
+      ]
+
+      const proc = spawn(clickhouse, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(parseClickHouseJSONResult(stdout))
+        } else {
+          reject(new Error(stderr || `clickhouse exited with code ${code}`))
+        }
+      })
+    })
   }
 }
 

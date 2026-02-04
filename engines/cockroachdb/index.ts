@@ -57,7 +57,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseCSVToQueryResult } from '../../core/query-parser'
 
 const ENGINE = 'cockroachdb'
 const engineDef = getEngineDefaults(ENGINE)
@@ -1083,6 +1086,67 @@ export class CockroachDBEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  /**
+   * Execute a SQL query and return structured results
+   */
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port, version } = container
+    const db = options?.database || container.database || 'defaultdb'
+
+    const cockroach = await this.getCockroachPath(version)
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        'sql',
+        '--insecure',
+        '--host',
+        `127.0.0.1:${port}`,
+        '--database',
+        db,
+        '--execute',
+        query,
+        '--format=csv',
+      ]
+
+      const proc = spawn(cockroach, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `cockroach sql exited with code ${code}`))
+          return
+        }
+
+        try {
+          resolve(parseCSVToQueryResult(stdout))
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to parse query result: ${error instanceof Error ? error.message : error}`,
+            ),
+          )
+        }
+      })
+    })
   }
 }
 

@@ -45,7 +45,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseTSVToQueryResult } from '../../core/query-parser'
 
 const execAsync = promisify(exec)
 
@@ -1056,6 +1059,58 @@ export class MariaDBEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port } = container
+    const db = options?.database || container.database || 'mysql'
+    assertValidDatabaseName(db)
+
+    const mariadb = await this.getMariadbClientPath()
+
+    // Use -B (batch mode) for tab-separated output
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(port),
+      '-u',
+      engineDef.superuser,
+      '-B',
+      db,
+      '-e',
+      query,
+    ]
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mariadb, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(parseTSVToQueryResult(stdout))
+        } else {
+          reject(new Error(stderr || `mariadb exited with code ${code}`))
+        }
+      })
+    })
   }
 }
 

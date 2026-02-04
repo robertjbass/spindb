@@ -206,6 +206,22 @@ export type CockroachDBFormat = 'sql'
 export type SurrealDBFormat = 'surql'
 export type QuestDBFormat = 'sql'
 
+// Query command types
+export type QueryResultRow = Record<string, unknown>
+
+export type QueryResult = {
+  columns: string[]
+  rows: QueryResultRow[]
+  rowCount: number
+  executionTimeMs?: number
+}
+
+export type QueryOptions = {
+  database?: string
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' // For REST API engines
+  body?: Record<string, unknown> // For REST API engines
+}
+
 // Pull command types
 export type PullOptions = {
   database?: string // Target database (defaults to container.database)

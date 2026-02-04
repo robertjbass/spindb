@@ -53,7 +53,10 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  type QueryResult,
+  type QueryOptions,
 } from '../../types'
+import { parseCSVToQueryResult } from '../../core/query-parser'
 
 const ENGINE = 'questdb'
 const engineDef = getEngineDefaults(ENGINE)
@@ -927,6 +930,82 @@ export class QuestDBEngine extends BaseEngine {
     } else {
       throw new Error('Either file or sql option must be provided')
     }
+  }
+
+  /**
+   * Execute a SQL query and return structured results
+   * Uses PostgreSQL wire protocol via psql
+   */
+  async executeQuery(
+    container: ContainerConfig,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const { port } = container
+    const db = options?.database || container.database || 'qdb'
+
+    // Find psql
+    let psqlPath = await configManager.getBinaryPath('psql')
+    if (!psqlPath) {
+      const result = await findBinary('psql')
+      if (result?.path) {
+        psqlPath = result.path
+      } else {
+        throw new Error(
+          'psql not found. Install PostgreSQL client tools or use the Web Console.',
+        )
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        '-h',
+        '127.0.0.1',
+        '-p',
+        String(port),
+        '-U',
+        'admin',
+        '-d',
+        db,
+        '--csv',
+        '-c',
+        query,
+      ]
+
+      const proc = spawn(psqlPath!, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PGPASSWORD: 'quest' },
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `psql exited with code ${code}`))
+          return
+        }
+
+        try {
+          resolve(parseCSVToQueryResult(stdout))
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to parse query result: ${error instanceof Error ? error.message : error}`,
+            ),
+          )
+        }
+      })
+    })
   }
 }
 

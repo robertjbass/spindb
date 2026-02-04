@@ -305,6 +305,13 @@ spindb run mydb -c "SELECT * FROM users"        # Inline SQL
 spindb run mydb seed.js                         # JavaScript (MongoDB)
 spindb run mydb -c "SET foo bar"                # Redis command
 
+# Query with structured output
+spindb query mydb "SELECT * FROM users LIMIT 5" # Tabular output
+spindb query mydb "SELECT * FROM users" --json  # JSON for scripting
+spindb query mydb "users.find()" -d mydb        # MongoDB/FerretDB
+spindb query myredis "KEYS user:*"              # Redis/Valkey
+spindb query myqdrant "GET /collections"        # REST API engines
+
 # Get connection string
 spindb url mydb                                 # postgresql://postgres@localhost:5432/mydb
 spindb url mydb --copy                          # Copy to clipboard

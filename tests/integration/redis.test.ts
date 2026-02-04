@@ -25,8 +25,9 @@ import {
   containerDataExists,
   runScriptFile,
   runScriptSQL,
+  executeQuery,
 } from './helpers'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -148,6 +149,52 @@ describe('Redis Integration Tests', () => {
     )
 
     console.log(`   ✓ Seeded ${keyCount} keys using engine.runScript`)
+  })
+
+  it('should query seeded data using executeQuery', async () => {
+    console.log(`\n🔍 Querying seeded data using engine.executeQuery...`)
+
+    // Test KEYS command
+    const keysResult = await executeQuery(
+      containerName,
+      'KEYS user:*',
+      DATABASE,
+    )
+
+    assertEqual(
+      keysResult.rowCount,
+      EXPECTED_KEY_COUNT,
+      'Should return all user keys',
+    )
+    assertTruthy(
+      keysResult.columns.includes('value'),
+      'KEYS result should have value column',
+    )
+
+    // Test GET command
+    const getResult = await executeQuery(
+      containerName,
+      'GET user:count',
+      DATABASE,
+    )
+
+    assertEqual(getResult.rowCount, 1, 'GET should return one result')
+    assertEqual(getResult.rows[0].result, '5', 'user:count should be 5')
+
+    // Test GET for a specific user key
+    const userResult = await executeQuery(containerName, 'GET user:1', DATABASE)
+
+    assertEqual(userResult.rowCount, 1, 'GET should return one result')
+    // user:1 contains JSON with Alice's data
+    const userData = userResult.rows[0].result as string
+    assertTruthy(
+      userData.includes('Alice Johnson'),
+      'user:1 should contain Alice Johnson',
+    )
+
+    console.log(
+      `   ✓ Query returned ${keysResult.rowCount} keys with correct data`,
+    )
   })
 
   it('should clone container using backup/restore', async () => {

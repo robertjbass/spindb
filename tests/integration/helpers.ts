@@ -11,7 +11,7 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { paths } from '../../config/paths'
 import { isWindows } from '../../core/platform-service'
-import { Engine } from '../../types'
+import { Engine, type QueryResult } from '../../types'
 import { compareVersions } from '../../core/version-utils'
 
 const execAsync = promisify(exec)
@@ -1087,6 +1087,24 @@ export async function runScriptJS(
   database?: string,
 ): Promise<void> {
   return runScriptSQL(containerName, script, database)
+}
+
+/**
+ * Execute a query using engine.executeQuery (tests spindb query command)
+ * Returns the QueryResult with columns, rows, and row count
+ */
+export async function executeQuery(
+  containerName: string,
+  query: string,
+  database?: string,
+): Promise<QueryResult> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    throw new Error(`Container "${containerName}" not found`)
+  }
+
+  const engine = getEngine(config.engine)
+  return engine.executeQuery(config, query, { database })
 }
 
 // Meilisearch helper functions

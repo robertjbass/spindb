@@ -23,8 +23,9 @@ import {
   waitForReady,
   waitForStopped,
   containerDataExists,
+  executeQuery,
 } from './helpers'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -157,6 +158,41 @@ describe('CouchDB Integration Tests', () => {
     assertEqual(docCount, 5, 'Should have 5 documents')
 
     console.log(`   Created database with ${docCount} documents`)
+  })
+
+  it('should query data using executeQuery (REST API)', async () => {
+    console.log(`\n Querying data using engine.executeQuery (REST API)...`)
+
+    // Test GET all databases (REST API query format: METHOD /path)
+    // CouchDB returns an array of database names
+    const dbsResult = await executeQuery(containerName, 'GET /_all_dbs')
+
+    // Verify databases are returned (array of strings -> rows with 'value' column)
+    assertTruthy(dbsResult.rowCount > 0, 'Should have database results')
+
+    // Test GET all docs from our database
+    // CouchDB _all_docs returns { rows: [...] } and parser extracts rows directly
+    const docsResult = await executeQuery(
+      containerName,
+      `GET /${DATABASE}/_all_docs?include_docs=true`,
+    )
+
+    // Parser extracts the rows array directly from CouchDB response
+    assertEqual(docsResult.rowCount, 5, 'Should have 5 documents')
+
+    // Test GET a specific document
+    const docResult = await executeQuery(
+      containerName,
+      `GET /${DATABASE}/user1`,
+    )
+
+    assertEqual(docResult.rowCount, 1, 'Should return document')
+    const docData = docResult.rows[0] as Record<string, unknown>
+    assertEqual(docData.name, 'Alice', 'Document should be Alice')
+
+    console.log(
+      `   REST API query returned database with ${docsResult.rowCount} documents`,
+    )
   })
 
   it('should clone container using backup/restore', async () => {
