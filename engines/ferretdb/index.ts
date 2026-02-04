@@ -286,7 +286,7 @@ export class FerretDBEngine extends BaseEngine {
    */
   async initDataDir(
     containerName: string,
-    version: string,
+    _version: string,
     options: Record<string, unknown> = {},
   ): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()
@@ -1184,14 +1184,27 @@ export class FerretDBEngine extends BaseEngine {
 
     const mongosh = await this.getMongoshPath()
 
-    // Normalize query - prepend "db." if missing
+    // Normalize query - only prepend "db." for collection operations
+    // Collection operations match pattern: identifier.method(...) e.g., "users.find({})"
+    // Non-collection queries (show dbs, arbitrary JS) are rejected with clear error
     let normalizedQuery = query.trim()
     if (!normalizedQuery.startsWith('db.')) {
-      normalizedQuery = `db.${normalizedQuery}`
+      // Check if it looks like a collection operation: identifier.method(
+      const collectionOpPattern =
+        /^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\s*\(/
+      if (collectionOpPattern.test(normalizedQuery)) {
+        normalizedQuery = `db.${normalizedQuery}`
+      } else {
+        throw new Error(
+          'Invalid query format. Expected a collection operation like "users.find({})" or "db.users.find({})"\n' +
+            'Shell commands like "show dbs" and "use dbname" are not supported in executeQuery.',
+        )
+      }
     }
 
-    // Wrap query to output JSON
-    const script = `JSON.stringify(${normalizedQuery}.toArray ? ${normalizedQuery}.toArray() : ${normalizedQuery})`
+    // Wrap query in async IIFE to properly await cursor.toArray()
+    // This prevents JSON.stringify from serializing a Promise
+    const script = `(async () => { const res = ${normalizedQuery}; return JSON.stringify(res.toArray ? await res.toArray() : await Promise.resolve(res)); })()`
 
     return new Promise((resolve, reject) => {
       const args = [

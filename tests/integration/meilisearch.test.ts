@@ -27,6 +27,7 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -197,7 +198,7 @@ describe('Meilisearch Integration Tests', () => {
   })
 
   it('should query data using executeQuery (REST API)', async () => {
-    console.log(`\n Querying data using engine.executeQuery (REST API)...`)
+    logDebug('Querying data using engine.executeQuery (REST API)...')
 
     // Test GET indexes (REST API query format: METHOD /path)
     // Meilisearch returns { results: [...], offset: 0, limit: 20, total: N }
@@ -229,9 +230,7 @@ describe('Meilisearch Integration Tests', () => {
     // All 3 documents contain the word "document"
     assertTruthy(searchResult.rowCount > 0, 'Search should return hits')
 
-    console.log(
-      `   REST API query returned index with ${searchResult.rowCount} hits`,
-    )
+    logDebug(`REST API query returned index with ${searchResult.rowCount} hits`)
   })
 
   it(

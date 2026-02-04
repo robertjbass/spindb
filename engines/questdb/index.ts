@@ -959,6 +959,7 @@ export class QuestDBEngine extends BaseEngine {
 
     return new Promise((resolve, reject) => {
       const args = [
+        '-X', // Skip ~/.psqlrc to ensure deterministic CSV output
         '-h',
         '127.0.0.1',
         '-p',
@@ -973,7 +974,7 @@ export class QuestDBEngine extends BaseEngine {
       ]
 
       const proc = spawn(psqlPath!, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, PGPASSWORD: 'quest' },
       })
 

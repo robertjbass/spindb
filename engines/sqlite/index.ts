@@ -668,19 +668,33 @@ export class SQLiteEngine extends BaseEngine {
 
     const sqlite3 = await this.requireSqlite3Path()
 
-    // Use -csv -header for machine-readable output
-    const { stdout, stderr } = await execFileAsync(sqlite3, [
-      '-csv',
-      '-header',
-      entry.filePath,
-      query,
-    ])
+    // Use spawn instead of execFileAsync to stream results
+    return new Promise((resolve, reject) => {
+      const proc = spawn(sqlite3, ['-csv', '-header', entry.filePath, query])
 
-    if (stderr) {
-      throw new Error(stderr)
-    }
+      let stdout = ''
+      let stderr = ''
 
-    return parseCSVToQueryResult(stdout)
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `sqlite3 exited with code ${code}`))
+          return
+        }
+        if (stderr) {
+          logDebug(`SQLite stderr: ${stderr}`)
+        }
+        resolve(parseCSVToQueryResult(stdout))
+      })
+    })
   }
 }
 

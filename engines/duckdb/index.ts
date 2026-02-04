@@ -769,20 +769,40 @@ export class DuckDBEngine extends BaseEngine {
 
     const duckdb = await this.requireDuckDBPath()
 
-    // Use -csv -header for machine-readable output
-    const { stdout, stderr } = await execFileAsync(duckdb, [
-      '-csv',
-      '-header',
-      entry.filePath,
-      '-c',
-      query,
-    ])
+    // Use spawn instead of execFileAsync to stream results
+    return new Promise((resolve, reject) => {
+      const proc = spawn(duckdb, [
+        '-csv',
+        '-header',
+        entry.filePath,
+        '-c',
+        query,
+      ])
 
-    if (stderr) {
-      throw new Error(stderr)
-    }
+      let stdout = ''
+      let stderr = ''
 
-    return parseCSVToQueryResult(stdout)
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `duckdb exited with code ${code}`))
+          return
+        }
+        // Log stderr as debug info if present (warnings, etc.) but don't throw
+        if (stderr) {
+          logDebug(`DuckDB stderr: ${stderr}`)
+        }
+        resolve(parseCSVToQueryResult(stdout))
+      })
+    })
   }
 }
 

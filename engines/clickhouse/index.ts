@@ -1135,8 +1135,17 @@ export class ClickHouseEngine extends BaseEngine {
 
     const clickhouse = await this.getClickHouseClientPath(version)
 
-    // Append FORMAT JSON to get structured output
-    const queryWithFormat = query.trim().replace(/;?\s*$/, ' FORMAT JSON')
+    // Handle FORMAT clause: replace existing FORMAT or append FORMAT JSON
+    // Regex matches "FORMAT <type>" with optional trailing whitespace/semicolon
+    let queryWithFormat = query.trim()
+    const formatRegex = /\bFORMAT\s+\w+\s*;?\s*$/i
+    if (formatRegex.test(queryWithFormat)) {
+      // Replace existing FORMAT clause with FORMAT JSON
+      queryWithFormat = queryWithFormat.replace(formatRegex, 'FORMAT JSON')
+    } else {
+      // No FORMAT clause, append FORMAT JSON
+      queryWithFormat = queryWithFormat.replace(/;?\s*$/, ' FORMAT JSON')
+    }
 
     return new Promise((resolve, reject) => {
       const args = [

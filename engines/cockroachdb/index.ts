@@ -1115,7 +1115,7 @@ export class CockroachDBEngine extends BaseEngine {
       ]
 
       const proc = spawn(cockroach, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
 
       let stdout = ''

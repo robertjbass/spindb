@@ -922,9 +922,37 @@ export class MongoDBEngine extends BaseEngine {
 
     const mongosh = await this.getMongoshPath()
 
+    // Reject "use " shell helper - it doesn't work with JSON output
+    const trimmedQuery = query.trim()
+    if (trimmedQuery.toLowerCase().startsWith('use ')) {
+      throw new Error(
+        'The "use" command is not supported in executeQuery. ' +
+          'To switch databases, set options.database or container.database instead.',
+      )
+    }
+
     // Auto-prepend db. if not already present for collection methods
-    let script = query.trim()
-    if (!script.startsWith('db.') && !script.startsWith('use ')) {
+    // But don't prepend for shell helper functions
+    let script = trimmedQuery
+    const shellFunctions = [
+      'print',
+      'printjson',
+      'sleep',
+      'ObjectId',
+      'ISODate',
+      'NumberLong',
+      'NumberInt',
+      'NumberDecimal',
+      'UUID',
+      'BinData',
+      'Timestamp',
+      'MinKey',
+      'MaxKey',
+    ]
+    const startsWithShellFunction = shellFunctions.some(
+      (fn) => script.startsWith(`${fn}(`) || script.startsWith(`${fn} (`),
+    )
+    if (!script.startsWith('db.') && !startsWithShellFunction) {
       script = `db.${script}`
     }
 
@@ -939,7 +967,7 @@ export class MongoDBEngine extends BaseEngine {
     const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
 
     if (stderr && !stdout.trim()) {
-      throw new Error(stderr)
+      throw new Error(`${stderr}${stdout ? `\nOutput: ${stdout}` : ''}`)
     }
 
     // Extract JSON from output (mongosh may include extra output)
