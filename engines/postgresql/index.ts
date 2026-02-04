@@ -941,6 +941,7 @@ export class PostgreSQLEngine extends BaseEngine {
 
     // Use --csv for machine-readable output
     const args = [
+      '-X', // Skip ~/.psqlrc to ensure deterministic CSV output
       '-h',
       '127.0.0.1',
       '-p',

@@ -157,13 +157,16 @@ export const queryCommand = new Command('query')
             ),
           )
 
-          const installed = await promptInstallDependencies(
-            missingDeps[0].binary,
-            engineName,
-          )
+          // Install all missing dependencies
+          for (const dep of missingDeps) {
+            const installed = await promptInstallDependencies(
+              dep.binary,
+              engineName,
+            )
 
-          if (!installed) {
-            process.exit(1)
+            if (!installed) {
+              process.exit(1)
+            }
           }
 
           missingDeps = await getMissingDependencies(engineName)

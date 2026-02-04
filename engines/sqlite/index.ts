@@ -685,9 +685,12 @@ export class SQLiteEngine extends BaseEngine {
       proc.on('error', reject)
 
       proc.on('close', (code) => {
-        if (code !== 0 || stderr) {
+        if (code !== 0) {
           reject(new Error(stderr || `sqlite3 exited with code ${code}`))
           return
+        }
+        if (stderr) {
+          logDebug(`SQLite stderr: ${stderr}`)
         }
         resolve(parseCSVToQueryResult(stdout))
       })

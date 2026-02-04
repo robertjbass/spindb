@@ -1190,7 +1190,8 @@ export class FerretDBEngine extends BaseEngine {
     let normalizedQuery = query.trim()
     if (!normalizedQuery.startsWith('db.')) {
       // Check if it looks like a collection operation: identifier.method(
-      const collectionOpPattern = /^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\s*\(/
+      const collectionOpPattern =
+        /^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\s*\(/
       if (collectionOpPattern.test(normalizedQuery)) {
         normalizedQuery = `db.${normalizedQuery}`
       } else {

@@ -932,8 +932,27 @@ export class MongoDBEngine extends BaseEngine {
     }
 
     // Auto-prepend db. if not already present for collection methods
+    // But don't prepend for shell helper functions
     let script = trimmedQuery
-    if (!script.startsWith('db.')) {
+    const shellFunctions = [
+      'print',
+      'printjson',
+      'sleep',
+      'ObjectId',
+      'ISODate',
+      'NumberLong',
+      'NumberInt',
+      'NumberDecimal',
+      'UUID',
+      'BinData',
+      'Timestamp',
+      'MinKey',
+      'MaxKey',
+    ]
+    const startsWithShellFunction = shellFunctions.some(
+      (fn) => script.startsWith(`${fn}(`) || script.startsWith(`${fn} (`),
+    )
+    if (!script.startsWith('db.') && !startsWithShellFunction) {
       script = `db.${script}`
     }
 
@@ -948,7 +967,7 @@ export class MongoDBEngine extends BaseEngine {
     const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
 
     if (stderr && !stdout.trim()) {
-      throw new Error(stderr)
+      throw new Error(`${stderr}${stdout ? `\nOutput: ${stdout}` : ''}`)
     }
 
     // Extract JSON from output (mongosh may include extra output)

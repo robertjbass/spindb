@@ -974,7 +974,7 @@ export class QuestDBEngine extends BaseEngine {
       ]
 
       const proc = spawn(psqlPath!, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, PGPASSWORD: 'quest' },
       })
 
