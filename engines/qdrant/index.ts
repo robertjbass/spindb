@@ -1159,8 +1159,15 @@ export class QdrantEngine extends BaseEngine {
     let body: Record<string, unknown> | undefined = options?.body
 
     const bodyStart = rest.indexOf('{')
-    if (bodyStart !== -1 && !body) {
+    if (bodyStart !== -1) {
+      // Always extract path without the JSON blob
       path = rest.substring(0, bodyStart).trim()
+      if (options?.body) {
+        // Both inline JSON and options.body provided - error
+        throw new Error(
+          'Cannot specify both inline JSON body in query and options.body. Use one or the other.',
+        )
+      }
       try {
         body = JSON.parse(rest.substring(bodyStart)) as Record<string, unknown>
       } catch {
