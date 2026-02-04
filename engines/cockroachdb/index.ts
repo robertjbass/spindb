@@ -1148,6 +1148,59 @@ export class CockroachDBEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List all user databases, excluding system databases (defaultdb, postgres, system).
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port, version } = container
+    const cockroach = await this.getCockroachPath(version)
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        'sql',
+        '--insecure',
+        '--host',
+        `127.0.0.1:${port}`,
+        '--execute',
+        `SHOW DATABASES`,
+        '--format=csv',
+      ]
+
+      const proc = spawn(cockroach, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `cockroach sql exited with code ${code}`))
+          return
+        }
+
+        // Parse CSV output (first column is database_name, skip header)
+        const systemDatabases = ['defaultdb', 'postgres', 'system']
+        const lines = stdout.trim().split('\n')
+        const databases = lines
+          .slice(1) // Skip header
+          .map((line) => line.split(',')[0].trim())
+          .filter((db) => db.length > 0 && !systemDatabases.includes(db))
+
+        resolve(databases)
+      })
+    })
+  }
 }
 
 export const cockroachdbEngine = new CockroachDBEngine()

@@ -1423,6 +1423,17 @@ export class RedisEngine extends BaseEngine {
       proc.stdin?.end()
     })
   }
+
+  /**
+   * List databases for Redis.
+   * Redis uses numbered databases (0-15 by default), not named databases.
+   * Returns the configured database number as a single-item array.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // Redis has numbered databases, not named ones
+    // Return the container's configured database
+    return [container.database]
+  }
 }
 
 export const redisEngine = new RedisEngine()

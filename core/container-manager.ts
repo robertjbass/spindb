@@ -19,7 +19,7 @@ import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
 import { duckdbRegistry } from '../engines/duckdb/registry'
 import type { ContainerConfig } from '../types'
-import { Engine } from '../types'
+import { Engine, isFileBasedEngine } from '../types'
 
 export type CreateOptions = {
   engine: Engine
@@ -710,6 +710,73 @@ export class ContainerManager {
       config.databases = config.databases.filter((db) => db !== database)
       await this.saveConfig(containerName, { engine: config.engine }, config)
     }
+  }
+
+  /**
+   * Sync the databases array with the actual databases on the server.
+   * Queries the database server for all user databases and updates the registry.
+   *
+   * @param containerName - The container to sync
+   * @returns The updated list of databases
+   * @throws Error if the container is not running or doesn't support listing databases
+   */
+  async syncDatabases(containerName: string): Promise<string[]> {
+    const config = await this.getConfig(containerName)
+    if (!config) {
+      throw new Error(`Container "${containerName}" not found`)
+    }
+
+    // File-based engines don't have multiple databases to sync
+    if (isFileBasedEngine(config.engine)) {
+      return config.databases || [config.database]
+    }
+
+    // Container must be running to query databases
+    const running = await processManager.isRunning(containerName, {
+      engine: config.engine,
+    })
+    if (!running) {
+      throw new Error(
+        `Container "${containerName}" is not running. Start it first to sync databases.`,
+      )
+    }
+
+    const engine = getEngine(config.engine)
+
+    // Query the actual database server for all databases
+    let actualDatabases: string[]
+    try {
+      actualDatabases = await engine.listDatabases(config)
+    } catch (error) {
+      // If the engine doesn't support listDatabases, return current registry
+      const err = error as Error
+      if (err.message.includes('not supported')) {
+        logDebug(
+          `listDatabases not supported for ${config.engine}, skipping sync`,
+        )
+        return config.databases || [config.database]
+      }
+      throw error
+    }
+
+    // Ensure primary database is always included
+    if (!actualDatabases.includes(config.database)) {
+      actualDatabases = [config.database, ...actualDatabases]
+    }
+
+    // Sort for consistent ordering (primary database first, then alphabetical)
+    const sortedDatabases = [
+      config.database,
+      ...actualDatabases
+        .filter((db) => db !== config.database)
+        .sort((a, b) => a.localeCompare(b)),
+    ]
+
+    // Update the registry
+    config.databases = sortedDatabases
+    await this.saveConfig(containerName, { engine: config.engine }, config)
+
+    return sortedDatabases
   }
 
   getConnectionString(config: ContainerConfig, database?: string): string {

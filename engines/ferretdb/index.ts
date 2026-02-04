@@ -1283,6 +1283,55 @@ export class FerretDBEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List all user databases, excluding system databases (admin, config, local).
+   * FerretDB uses MongoDB protocol, so same approach as MongoDB.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port } = container
+    const mongosh = await this.getMongoshPath()
+
+    return new Promise((resolve, reject) => {
+      // Use JSON output for reliable parsing
+      const script = `JSON.stringify(db.adminCommand({listDatabases: 1}).databases.map(d => d.name))`
+      const args = ['--quiet', '--host', `127.0.0.1:${port}`, '--eval', script]
+
+      const proc = spawn(mongosh, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `mongosh exited with code ${code}`))
+          return
+        }
+
+        try {
+          const allDatabases = JSON.parse(stdout.trim()) as string[]
+          const systemDatabases = ['admin', 'config', 'local']
+          const databases = allDatabases.filter(
+            (db) => !systemDatabases.includes(db),
+          )
+          resolve(databases)
+        } catch (error) {
+          reject(new Error(`Failed to parse database list: ${error}`))
+        }
+      })
+    })
+  }
 }
 
 export const ferretdbEngine = new FerretDBEngine()

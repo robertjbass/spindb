@@ -696,6 +696,16 @@ export class SQLiteEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List databases for SQLite.
+   * SQLite is file-based with one database per file.
+   * Returns the configured database (file path) as a single-item array.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // SQLite is file-based, one database per file
+    return [container.database]
+  }
 }
 
 export const sqliteEngine = new SQLiteEngine()

@@ -1166,6 +1166,16 @@ export class MeilisearchEngine extends BaseEngine {
 
     return parseRESTAPIResult(JSON.stringify(response.data))
   }
+
+  /**
+   * List databases for Meilisearch.
+   * Meilisearch uses indexes, not databases. Returns the configured database.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // Meilisearch uses indexes, not databases
+    // Return the container's configured database
+    return [container.database]
+  }
 }
 
 export const meilisearchEngine = new MeilisearchEngine()

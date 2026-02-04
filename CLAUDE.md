@@ -370,6 +370,38 @@ type ContainerConfig = {
 }
 ```
 
+### Database Registry Sync
+
+The `databases` array in ContainerConfig tracks which databases exist within a container. This registry can become out of sync when databases are created/dropped externally (via SQL, `spindb pull`, etc.).
+
+**Sync Command:**
+```bash
+spindb databases refresh <container>  # Query server, update registry
+```
+
+**Automatic Sync:** Called automatically on `spindb start` and after `spindb pull` operations.
+
+**Engine Support for `listDatabases()`:**
+
+| Engine | Method | System DBs Excluded |
+|--------|--------|---------------------|
+| PostgreSQL | `pg_database` query | `template0`, `template1`, `postgres` |
+| MySQL | `SHOW DATABASES` | `information_schema`, `mysql`, `performance_schema`, `sys` |
+| MariaDB | `SHOW DATABASES` | `information_schema`, `mysql`, `performance_schema`, `sys` |
+| CockroachDB | `SHOW DATABASES` | `defaultdb`, `postgres`, `system` |
+| ClickHouse | `SHOW DATABASES` | `system`, `information_schema` |
+| MongoDB | `listDatabases` admin command | `admin`, `config`, `local` |
+| FerretDB | `listDatabases` admin command | `admin`, `config`, `local` |
+| CouchDB | `/_all_dbs` REST API | `_users`, `_replicator`, `_*` |
+| SurrealDB | `INFO FOR NS` query | — |
+| SQLite | Returns `[config.database]` | N/A (single-file) |
+| DuckDB | Returns `[config.database]` | N/A (single-file) |
+| Redis | Returns `[config.database]` | N/A (numbered DBs) |
+| Valkey | Returns `[config.database]` | N/A (numbered DBs) |
+| Qdrant | Returns `[config.database]` | N/A (uses collections) |
+| Meilisearch | Returns `[config.database]` | N/A (uses indexes) |
+| QuestDB | Returns `[config.database]` | N/A (single DB `qdb`) |
+
 ## Core Principles
 
 - **CLI-First**: All functionality via command-line arguments. Menus are syntactic sugar.
@@ -403,6 +435,7 @@ spindb databases list <container>              # List tracked databases
 spindb databases add <container> <database>    # Add to tracking
 spindb databases remove <container> <database> # Remove from tracking
 spindb databases sync <container> <old> <new>  # Sync after rename
+spindb databases refresh <container>           # Query server and sync registry
 ```
 
 ### Running Tests

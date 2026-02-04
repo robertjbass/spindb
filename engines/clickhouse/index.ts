@@ -1185,6 +1185,65 @@ export class ClickHouseEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List all user databases, excluding system databases (system, information_schema, INFORMATION_SCHEMA).
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port, version } = container
+    const clickhouse = await this.getClickHouseClientPath()
+
+    logDebug(`Listing databases on port ${port} with version ${version}`)
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        'client',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--query',
+        'SHOW DATABASES',
+      ]
+
+      const proc = spawn(clickhouse, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `clickhouse exited with code ${code}`))
+          return
+        }
+
+        // Parse output (one database per line)
+        const systemDatabases = [
+          'system',
+          'information_schema',
+          'INFORMATION_SCHEMA',
+        ]
+        const databases = stdout
+          .trim()
+          .split('\n')
+          .map((db) => db.trim())
+          .filter((db) => db.length > 0 && !systemDatabases.includes(db))
+
+        resolve(databases)
+      })
+    })
+  }
 }
 
 export const clickhouseEngine = new ClickHouseEngine()

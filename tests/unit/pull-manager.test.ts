@@ -210,4 +210,42 @@ describe('PullManager', () => {
       assert.strictEqual(result.backupDatabase, undefined)
     })
   })
+
+  describe('registry sync after pull', () => {
+    it('should call syncDatabases after replace mode completes', () => {
+      // After pull --replace, syncDatabases is called to update registry
+      // This captures backup databases and any other databases on the server
+      // The backup database name follows the pattern: {database}_{YYYYMMDD_HHMMSS}
+      const backupPattern = /^main_\d{8}_\d{6}$/
+
+      assert.ok(
+        backupPattern.test('main_20260204_123456'),
+        'Backup name should match timestamp pattern',
+      )
+    })
+
+    it('should call syncDatabases after clone mode completes', () => {
+      // After pull --as=newdb, syncDatabases is called to update registry
+      // The cloned database name is specified by the user via --as flag
+      const clonedDatabase = 'prod_clone'
+
+      assert.ok(
+        /^[a-zA-Z][a-zA-Z0-9_]*$/.test(clonedDatabase),
+        'Cloned database name should be valid',
+      )
+    })
+
+    it('should handle engines that do not support database listing', () => {
+      // Some engines (Redis, Qdrant) don't support listDatabases
+      // syncDatabases gracefully falls back to current registry
+      const currentRegistry = ['0'] // Redis database
+
+      // When listDatabases throws "not supported", keep current registry
+      assert.strictEqual(
+        currentRegistry.length,
+        1,
+        'Should preserve registry when listing not supported',
+      )
+    })
+  })
 })

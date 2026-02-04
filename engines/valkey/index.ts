@@ -1450,6 +1450,17 @@ export class ValkeyEngine extends BaseEngine {
       proc.stdin?.end()
     })
   }
+
+  /**
+   * List databases for Valkey.
+   * Valkey uses numbered databases (0-15 by default), not named databases.
+   * Returns the configured database number as a single-item array.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // Valkey has numbered databases, not named ones
+    // Return the container's configured database
+    return [container.database]
+  }
 }
 
 export const valkeyEngine = new ValkeyEngine()

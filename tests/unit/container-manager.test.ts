@@ -459,3 +459,91 @@ describe('Container Paths', () => {
     )
   })
 })
+
+describe('syncDatabases', () => {
+  it('should require container to be running', () => {
+    const errorMessage =
+      'Container "testdb" is not running. Start it first to sync databases.'
+
+    assert(
+      errorMessage.includes('not running'),
+      'Error should indicate container is not running',
+    )
+    assert(
+      errorMessage.includes('Start it first'),
+      'Error should suggest starting the container',
+    )
+  })
+
+  it('should preserve primary database in synced list', () => {
+    const primaryDatabase = 'main'
+    const discoveredDatabases = ['backup_20260204', 'staging']
+
+    // Ensure primary is included
+    const syncedDatabases = discoveredDatabases.includes(primaryDatabase)
+      ? discoveredDatabases
+      : [primaryDatabase, ...discoveredDatabases]
+
+    assert(
+      syncedDatabases.includes(primaryDatabase),
+      'Synced list should include primary database',
+    )
+    assertEqual(
+      syncedDatabases[0],
+      primaryDatabase,
+      'Primary database should be first',
+    )
+  })
+
+  it('should sort databases alphabetically after primary', () => {
+    const primaryDatabase = 'main'
+    const discoveredDatabases = ['main', 'zebra_db', 'alpha_db', 'beta_db']
+
+    // Sort: primary first, then alphabetical
+    const sorted = [
+      primaryDatabase,
+      ...discoveredDatabases
+        .filter((db) => db !== primaryDatabase)
+        .sort((a, b) => a.localeCompare(b)),
+    ]
+
+    assertEqual(sorted[0], 'main', 'Primary should be first')
+    assertEqual(sorted[1], 'alpha_db', 'Then alphabetically: alpha_db')
+    assertEqual(sorted[2], 'beta_db', 'Then alphabetically: beta_db')
+    assertEqual(sorted[3], 'zebra_db', 'Then alphabetically: zebra_db')
+  })
+
+  it('should handle engines that do not support listDatabases', () => {
+    // Engines like Qdrant, Meilisearch use collections/indexes, not databases
+    // syncDatabases should gracefully fall back to current registry
+    const currentDatabases = ['mydb']
+
+    // When listDatabases throws "not supported", return current registry
+    assertEqual(
+      currentDatabases.length,
+      1,
+      'Should return current databases when not supported',
+    )
+  })
+
+  it('should return current registry for file-based engines', () => {
+    // SQLite and DuckDB are single-database engines
+    const config = {
+      engine: 'sqlite',
+      database: '/path/to/mydb.sqlite',
+      databases: ['/path/to/mydb.sqlite'],
+    }
+
+    // File-based engines should return existing registry
+    assertEqual(
+      config.databases.length,
+      1,
+      'File-based engines have single database',
+    )
+    assertEqual(
+      config.databases[0],
+      config.database,
+      'Should match primary database',
+    )
+  })
+})

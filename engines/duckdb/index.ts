@@ -804,6 +804,16 @@ export class DuckDBEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List databases for DuckDB.
+   * DuckDB is file-based with one database per file.
+   * Returns the configured database (file path) as a single-item array.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // DuckDB is file-based, one database per file
+    return [container.database]
+  }
 }
 
 export const duckdbEngine = new DuckDBEngine()

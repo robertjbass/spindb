@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.3] - 2026-02-04
+
+### Added
+- **Automatic database registry sync** - The `databases` array in container config now automatically syncs with the actual database server:
+  - On `spindb start` - syncs after container starts successfully
+  - After `spindb pull` operations - syncs after restore completes
+  - Manual sync via `spindb databases refresh <container>`
+  - Works on all 16 engines (queries system catalogs, excludes system databases)
+- **`spindb databases refresh` command** - Manually sync the database registry with the actual server state:
+  ```bash
+  spindb databases refresh mydb        # Query server, update registry
+  spindb databases refresh mydb --json # JSON output with changes
+  ```
+- **`listDatabases()` method for all engines** - Each engine now implements `listDatabases()` to query actual databases from the server, excluding system databases (e.g., `template0`/`template1`/`postgres` for PostgreSQL, `information_schema`/`mysql`/`performance_schema`/`sys` for MySQL)
+
 ### Changed
 - **Improved test output** - Test scripts now use `--test-reporter=spec` for cleaner hierarchical output with pass/fail summary at the end
 

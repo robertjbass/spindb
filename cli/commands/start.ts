@@ -9,8 +9,8 @@ import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiWarning } from '../ui/theme'
-import { Engine } from '../../types'
-import { exitWithError } from '../../core/error-handler'
+import { Engine, isFileBasedEngine } from '../../types'
+import { exitWithError, logDebug } from '../../core/error-handler'
 
 export const startCommand = new Command('start')
   .description('Start a container')
@@ -171,6 +171,18 @@ export const startCommand = new Command('start')
           dbSpinner.succeed(`Database "${config.database}" ready`)
         } catch {
           dbSpinner.succeed(`Database "${config.database}" ready`)
+        }
+      }
+
+      // Sync database registry with actual server state (silent, non-blocking)
+      if (!isFileBasedEngine(config.engine)) {
+        try {
+          await containerManager.syncDatabases(containerName)
+        } catch (syncError) {
+          // Don't fail start if sync fails - just log for debugging
+          logDebug(
+            `Failed to sync databases for ${containerName}: ${syncError}`,
+          )
         }
       }
 

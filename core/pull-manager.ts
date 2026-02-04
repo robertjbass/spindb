@@ -217,12 +217,7 @@ export class PullManager {
         createDatabase: false,
       })
 
-      // Step 9: Update registry (add backup if we're keeping it)
-      if (keepBackup) {
-        await containerManager.addDatabase(config.name, backupDatabase)
-      }
-
-      // Step 10: Cleanup temp files
+      // Step 9: Cleanup temp files
       try {
         await unlink(tempOriginalDump)
       } catch {
@@ -234,7 +229,7 @@ export class PullManager {
         // Ignore errors
       }
 
-      // Step 11: Run post-script if provided
+      // Step 10: Run post-script if provided
       if (options.postScript) {
         const context: PullContext = {
           container: config.name,
@@ -260,6 +255,10 @@ export class PullManager {
           }
         }
       }
+
+      // Step 11: Sync registry with actual databases on server
+      // This captures the backup database (if kept) and any other databases
+      await containerManager.syncDatabases(config.name)
 
       return {
         success: true,
@@ -335,17 +334,14 @@ export class PullManager {
         createDatabase: false,
       })
 
-      // Step 5: Update registry
-      await containerManager.addDatabase(config.name, targetDatabase)
-
-      // Step 6: Cleanup
+      // Step 5: Cleanup
       try {
         await unlink(tempRemoteDump)
       } catch {
         // Ignore errors
       }
 
-      // Step 7: Run post-script if provided
+      // Step 6: Run post-script if provided
       if (options.postScript) {
         const context: PullContext = {
           container: config.name,
@@ -359,6 +355,9 @@ export class PullManager {
 
         await this.runPostScript(options.postScript, context)
       }
+
+      // Step 7: Sync registry with actual databases on server
+      await containerManager.syncDatabases(config.name)
 
       return {
         success: true,

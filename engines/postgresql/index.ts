@@ -983,6 +983,66 @@ export class PostgreSQLEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List all user databases, excluding system databases (template0, template1, postgres).
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port } = container
+    const psqlPath = await this.getPsqlPath()
+
+    // Query pg_database for all non-system databases
+    const sql = `SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1', 'postgres') AND datistemplate = false ORDER BY datname`
+
+    const args = [
+      '-X', // Skip ~/.psqlrc
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      defaults.superuser,
+      '-d',
+      'postgres',
+      '-t', // Tuples only (no headers)
+      '-A', // Unaligned output
+      '-c',
+      sql,
+    ]
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(psqlPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          const databases = stdout
+            .trim()
+            .split('\n')
+            .map((db) => db.trim())
+            .filter((db) => db.length > 0)
+          resolve(databases)
+        } else {
+          reject(new Error(stderr || `psql exited with code ${code}`))
+        }
+      })
+    })
+  }
 }
 
 export const postgresqlEngine = new PostgreSQLEngine()

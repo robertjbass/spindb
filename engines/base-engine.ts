@@ -263,4 +263,24 @@ export abstract class BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult>
+
+  /**
+   * List all user databases on the server, excluding system databases.
+   * Used to sync the registry with actual databases on the server.
+   *
+   * System databases excluded by default:
+   * - PostgreSQL: template0, template1, postgres
+   * - MySQL/MariaDB: information_schema, mysql, performance_schema, sys
+   * - CockroachDB: defaultdb, postgres, system
+   *
+   * @param container - The container configuration
+   * @returns Array of database names (excluding system databases)
+   * @throws Error if the engine doesn't support multiple databases or listing
+   */
+  async listDatabases(_container: ContainerConfig): Promise<string[]> {
+    throw new Error(
+      `listDatabases is not supported for ${this.displayName}. ` +
+        `This engine may not support multiple databases or use a different concept (collections, indexes, etc.).`,
+    )
+  }
 }

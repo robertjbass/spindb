@@ -437,6 +437,90 @@ databasesCommand
     },
   )
 
+// Refresh databases from server - queries the actual database server
+databasesCommand
+  .command('refresh')
+  .description(
+    'Refresh tracking by querying the database server for actual databases',
+  )
+  .argument('<container>', 'Container name')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (container: string, options: { json?: boolean }) => {
+    try {
+      const config = await containerManager.getConfig(container)
+      if (!config) {
+        if (options.json) {
+          console.log(
+            JSON.stringify(
+              { error: `Container "${container}" not found` },
+              null,
+              2,
+            ),
+          )
+        } else {
+          console.error(uiError(`Container "${container}" not found`))
+        }
+        process.exit(1)
+      }
+
+      const beforeDatabases = config.databases || [config.database]
+      const afterDatabases = await containerManager.syncDatabases(container)
+
+      // Calculate changes
+      const added = afterDatabases.filter((db) => !beforeDatabases.includes(db))
+      const removed = beforeDatabases.filter(
+        (db) => !afterDatabases.includes(db),
+      )
+
+      if (options.json) {
+        console.log(
+          JSON.stringify(
+            {
+              success: true,
+              container,
+              databases: afterDatabases,
+              changes: {
+                added: added.length > 0 ? added : undefined,
+                removed: removed.length > 0 ? removed : undefined,
+              },
+            },
+            null,
+            2,
+          ),
+        )
+      } else {
+        if (added.length === 0 && removed.length === 0) {
+          console.log(chalk.gray(`Registry already in sync for "${container}"`))
+        } else {
+          console.log(
+            uiSuccess(`Refreshed database tracking for "${container}"`),
+          )
+          if (added.length > 0) {
+            console.log(chalk.green(`  Added: ${added.join(', ')}`))
+          }
+          if (removed.length > 0) {
+            console.log(chalk.yellow(`  Removed: ${removed.join(', ')}`))
+          }
+        }
+        console.log()
+        console.log(chalk.bold('Current databases:'))
+        for (const db of afterDatabases) {
+          const isPrimary = db === config.database
+          const label = isPrimary ? chalk.gray(' (primary)') : ''
+          console.log(`  ${chalk.cyan(db)}${label}`)
+        }
+      }
+    } catch (error) {
+      const e = error as Error
+      if (options.json) {
+        console.log(JSON.stringify({ error: e.message }, null, 2))
+      } else {
+        console.error(uiError(e.message))
+      }
+      process.exit(1)
+    }
+  })
+
 // Set the default/primary database for a container
 databasesCommand
   .command('set-default')
