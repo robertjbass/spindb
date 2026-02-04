@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-02-03
+
+### Fixed
+- **MongoDB/FerretDB database creation failing** - Fixed `createDatabase` failing with `TypeError: Cannot read properties of undefined (reading 'drop')`. The issue was that mongosh doesn't support shorthand notation (`db._collectionName`) for collection names starting with underscore. Changed to use `db.getCollection("_spindb_init")` instead.
+
 ## [0.31.0] - 2026-02-01
 
 ### Added

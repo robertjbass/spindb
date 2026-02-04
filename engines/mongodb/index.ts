@@ -724,11 +724,13 @@ export class MongoDBEngine extends BaseEngine {
     // without leaving any visible marker collections.
     // First drop any existing _spindb_init collection (ignore errors), then create and drop.
     // This ensures cleanup even if a previous createDatabase was interrupted.
+    // NOTE: Use db.getCollection() instead of db._spindb_init shorthand because
+    // mongosh doesn't support shorthand notation for collection names starting with underscore.
     const cmd = buildMongoshCommand(
       mongosh,
       port,
       database,
-      'try { db._spindb_init.drop(); } catch(e) {} db.createCollection("_spindb_init"); db._spindb_init.drop();',
+      'try { db.getCollection("_spindb_init").drop(); } catch(e) {} db.createCollection("_spindb_init"); db.getCollection("_spindb_init").drop();',
     )
 
     await execAsync(cmd, { timeout: 10000 })
