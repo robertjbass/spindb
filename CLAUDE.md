@@ -465,6 +465,29 @@ pnpm test:docker -- meilisearch # Meilisearch (uses curl for REST API tests)
 
 **Node 22 Worker Thread Bug**: Tests use `--experimental-test-isolation=none` due to macOS serialization bug. Don't remove this flag.
 
+### Generate Scripts (Dev Only)
+
+```bash
+# Create demo container with sample data for a specific engine
+pnpm generate:db <engine> [name] [--port <port>]
+pnpm generate:db postgresql          # Creates demo-postgresql with seed data
+pnpm generate:db pg mydb             # Seeds existing container "mydb"
+
+# Create demo containers for all missing engines (quick bulk setup)
+pnpm generate:missing                # One demo-* per engine you don't have
+pnpm generate:missing --all          # Create even if containers exist
+pnpm generate:missing --dry-run      # Preview what would be created
+
+# Delete all demo containers (cleanup)
+pnpm delete:demos                    # Stop and delete all demo-* containers
+pnpm delete:demos --dry-run          # Preview what would be deleted
+
+# Generate backup fixtures
+pnpm generate:backup qdrant          # Generate Qdrant snapshot fixture
+```
+
+> **Note:** `generate:db` starts the container and seeds it. `generate:missing` only creates containers (no start, no seed) for quick bulk setup. `delete:demos` cleans up all `demo-*` containers.
+
 ### Adding a New Engine
 
 See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete guide. Quick checklist:

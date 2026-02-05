@@ -555,6 +555,19 @@ pnpm generate:db mongo mydb --port 27027 # Create "mydb" on port 27027
 # Generate backup fixtures
 pnpm generate:backup qdrant              # Generate Qdrant snapshot fixture
 pnpm generate:backup qdrant my-snapshot  # With custom snapshot name
+
+# Create demo containers for missing engines (quick bulk setup)
+pnpm generate:missing                    # Create one demo-* container per missing engine
+pnpm generate:missing --all              # Create demo containers for ALL engines
+pnpm generate:missing --dry-run          # Preview what would be created
+
+# Delete all demo containers (cleanup)
+pnpm delete:demos                        # Stop and delete all demo-* containers
+pnpm delete:demos --dry-run              # Preview what would be deleted
 ```
 
 > **Note:** These scripts require running from the SpinDB project root and use the local development code via `pnpm start`.
+>
+> **`generate:missing`** is useful for quickly creating one container of each engine type for testing. It skips engines that already have containers (unless `--all` is used). If `demo-postgresql` exists, it creates `demo-postgresql-2`, etc. Containers are created but NOT started.
+>
+> **`delete:demos`** cleans up all containers with names starting with `demo-`. It stops running containers before deleting them.
