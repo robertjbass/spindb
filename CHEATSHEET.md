@@ -274,7 +274,7 @@ spindb databases refresh mydb --json    # {"databases": [...], "changes": {...}}
 ```
 
 > **Note:** `list`, `add`, `remove`, `sync`, and `set-default` only update SpinDB's tracking. They do NOT create or drop actual databases. Use `spindb run` for that.
-
+>
 > **`databases refresh`** queries the actual database server and syncs the registry with what exists. Works on all engines. Called automatically on `spindb start` and after `spindb pull`.
 
 The **default database** is used when no `-d` flag is provided to commands like `spindb run`, `spindb backup`, etc. Change it via CLI or the interactive menu's "Change default database" option.

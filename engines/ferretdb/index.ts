@@ -1295,7 +1295,15 @@ export class FerretDBEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       // Use JSON output for reliable parsing
       const script = `JSON.stringify(db.adminCommand({listDatabases: 1}).databases.map(d => d.name))`
-      const args = ['--quiet', '--host', `127.0.0.1:${port}`, '--eval', script]
+      const args = [
+        '--quiet',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--eval',
+        script,
+      ]
 
       const proc = spawn(mongosh, args, {
         stdio: ['ignore', 'pipe', 'pipe'],

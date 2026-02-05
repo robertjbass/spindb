@@ -123,7 +123,7 @@ export class PullManager {
     // Track whether to keep backup in final result (user didn't specify --no-backup)
     const keepBackup = !options.noBackup
 
-    return withTransaction(async (tx) => {
+    const result = await withTransaction(async (tx) => {
       // --- BACKUP ORIGINAL (always if post-script, otherwise if not --no-backup) ---
       if (needsBackup) {
         // Step 1: Create backup database
@@ -256,10 +256,6 @@ export class PullManager {
         }
       }
 
-      // Step 11: Sync registry with actual databases on server
-      // This captures the backup database (if kept) and any other databases
-      await containerManager.syncDatabases(config.name)
-
       return {
         success: true,
         mode: 'replace' as const,
@@ -277,6 +273,19 @@ export class PullManager {
           : `Pulled remote data into "${targetDatabase}"`,
       }
     })
+
+    // Sync registry with actual databases on server after transaction commits
+    // This captures the backup database (if kept) and any other databases
+    // Wrapped in try/catch to avoid affecting the main pull result on transient failures
+    try {
+      await containerManager.syncDatabases(config.name)
+    } catch (error) {
+      logDebug(
+        `Failed to sync databases for "${config.name}": ${error instanceof Error ? error.message : error}`,
+      )
+    }
+
+    return result
   }
 
   private async executeCloneMode(
@@ -357,7 +366,14 @@ export class PullManager {
       }
 
       // Step 7: Sync registry with actual databases on server
-      await containerManager.syncDatabases(config.name)
+      // Wrapped in try/catch to avoid rolling back a successful clone on transient failures
+      try {
+        await containerManager.syncDatabases(config.name)
+      } catch (error) {
+        logDebug(
+          `Failed to sync databases for "${config.name}": ${error instanceof Error ? error.message : error}`,
+        )
+      }
 
       return {
         success: true,

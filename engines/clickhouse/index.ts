@@ -1191,7 +1191,7 @@ export class ClickHouseEngine extends BaseEngine {
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
     const { port, version } = container
-    const clickhouse = await this.getClickHouseClientPath()
+    const clickhouse = await this.getClickHouseClientPath(version)
 
     logDebug(`Listing databases on port ${port} with version ${version}`)
 
