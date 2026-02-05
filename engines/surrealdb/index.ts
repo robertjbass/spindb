@@ -1070,6 +1070,77 @@ export class SurrealDBEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List all databases in the container's namespace.
+   * SurrealDB has a namespace > database hierarchy.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port, version, name } = container
+    const surreal = await this.getSurrealPath(version)
+    const namespace = name.replace(/-/g, '_')
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        'sql',
+        '--endpoint',
+        `ws://127.0.0.1:${port}`,
+        '--user',
+        'root',
+        '--pass',
+        'root',
+        '--ns',
+        namespace,
+        '--db',
+        container.database,
+        '--hide-welcome',
+        '--json',
+      ]
+
+      const proc = spawn(surreal, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: paths.getContainerPath(name, { engine: ENGINE }),
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      // Send the INFO FOR NS query to list databases
+      proc.stdin?.write('INFO FOR NS;\n')
+      proc.stdin?.end()
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `surreal sql exited with code ${code}`))
+          return
+        }
+
+        try {
+          // Parse JSON output - INFO FOR NS returns database info
+          const results = JSON.parse(stdout)
+          if (Array.isArray(results) && results[0]?.result?.databases) {
+            const databases = Object.keys(results[0].result.databases)
+            resolve(databases)
+          } else {
+            // No databases found or different format
+            resolve([container.database])
+          }
+        } catch {
+          // If parsing fails, return the configured database
+          resolve([container.database])
+        }
+      })
+    })
+  }
 }
 
 export const surrealdbEngine = new SurrealDBEngine()

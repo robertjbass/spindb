@@ -1192,6 +1192,16 @@ export class QdrantEngine extends BaseEngine {
 
     return parseRESTAPIResult(JSON.stringify(response.data))
   }
+
+  /**
+   * List databases for Qdrant.
+   * Qdrant uses collections, not databases. Returns the configured database.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // Qdrant uses collections, not databases
+    // Return the container's configured database
+    return [container.database]
+  }
 }
 
 export const qdrantEngine = new QdrantEngine()

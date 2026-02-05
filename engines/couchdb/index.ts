@@ -1253,6 +1253,29 @@ export class CouchDBEngine extends BaseEngine {
 
     return parseRESTAPIResult(JSON.stringify(response.data))
   }
+
+  /**
+   * List all user databases, excluding system databases (_users, _replicator, _global_changes).
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port } = container
+
+    const response = await couchdbApiRequest(port, 'GET', '/_all_dbs')
+
+    if (response.status >= 400) {
+      throw new Error(
+        `CouchDB API error (${response.status}): ${JSON.stringify(response.data)}`,
+      )
+    }
+
+    const allDatabases = response.data as string[]
+    const systemDatabases = ['_users', '_replicator', '_global_changes']
+    const databases = allDatabases.filter(
+      (db) => !systemDatabases.includes(db) && !db.startsWith('_'),
+    )
+
+    return databases
+  }
 }
 
 export const couchdbEngine = new CouchDBEngine()

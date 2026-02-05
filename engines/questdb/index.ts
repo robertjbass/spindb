@@ -1008,6 +1008,16 @@ export class QuestDBEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List databases for QuestDB.
+   * QuestDB has a single database 'qdb'. Returns the configured database.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    // QuestDB has a single database 'qdb'
+    // Return the container's configured database
+    return [container.database]
+  }
 }
 
 export const questdbEngine = new QuestDBEngine()

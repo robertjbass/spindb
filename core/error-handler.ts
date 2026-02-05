@@ -136,6 +136,27 @@ export class MissingToolError extends Error {
   }
 }
 
+/**
+ * Error thrown when an operation is not supported by an engine.
+ * For example, listDatabases on engines that don't have the concept of databases.
+ */
+export class UnsupportedOperationError extends Error {
+  public readonly operation: string
+  public readonly engine: string
+
+  constructor(operation: string, engine: string, message?: string) {
+    super(
+      message ??
+        `${operation} is not supported for ${engine}. ` +
+          `This engine may use a different concept (collections, indexes, etc.).`,
+    )
+    this.name = 'UnsupportedOperationError'
+    this.operation = operation
+    this.engine = engine
+    Error.captureStackTrace(this, UnsupportedOperationError)
+  }
+}
+
 function getLogPath(): string {
   return join(getSpinDBRoot(), 'spindb.log')
 }

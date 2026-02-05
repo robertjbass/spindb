@@ -1196,6 +1196,62 @@ export class MySQLEngine extends BaseEngine {
       })
     })
   }
+
+  /**
+   * List all user databases, excluding system databases
+   * (information_schema, mysql, performance_schema, sys).
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port } = container
+    const mysql = await this.getMysqlClientPath()
+
+    // Query for all non-system databases
+    const sql = `SHOW DATABASES WHERE \`Database\` NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')`
+
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(port),
+      '-u',
+      engineDef.superuser,
+      '-N', // Skip column names
+      '-B', // Batch mode (no formatting)
+      '-e',
+      sql,
+    ]
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mysql, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          const databases = stdout
+            .trim()
+            .split('\n')
+            .map((db) => db.trim())
+            .filter((db) => db.length > 0)
+          resolve(databases)
+        } else {
+          reject(new Error(stderr || `mysql exited with code ${code}`))
+        }
+      })
+    })
+  }
 }
 
 export const mysqlEngine = new MySQLEngine()

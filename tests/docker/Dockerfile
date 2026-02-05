@@ -39,14 +39,15 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Node.js 22.x LTS and basic tools
-RUN apt-get update && apt-get install -y \
+# Note: Acquire::Retries handles transient mirror sync failures
+RUN apt-get update -o Acquire::Retries=3 && apt-get install -y \
     curl \
     ca-certificates \
     gnupg \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update \
+    && apt-get update -o Acquire::Retries=3 \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
@@ -61,7 +62,7 @@ RUN apt-get update && apt-get install -y \
 # locales: needed for PostgreSQL locale configuration (en_US.UTF-8)
 # sudo: needed for non-root user to run privileged commands
 # lsof: needed by SpinDB's findProcessByPort() to detect running database processes
-RUN apt-get update && apt-get install -y \
+RUN apt-get update -o Acquire::Retries=3 && apt-get install -y \
     git \
     procps \
     jq \

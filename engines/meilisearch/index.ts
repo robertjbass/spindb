@@ -1166,6 +1166,31 @@ export class MeilisearchEngine extends BaseEngine {
 
     return parseRESTAPIResult(JSON.stringify(response.data))
   }
+
+  /**
+   * List databases for Meilisearch.
+   * Meilisearch uses indexes, so we query the /indexes endpoint.
+   */
+  async listDatabases(container: ContainerConfig): Promise<string[]> {
+    const { port } = container
+
+    try {
+      const response = await meilisearchApiRequest(port, 'GET', '/indexes')
+      if (response.status === 200 && response.data) {
+        // Response is { results: [{ uid: "index_name", ... }, ...], ... }
+        const data = response.data as { results?: Array<{ uid: string }> }
+        if (Array.isArray(data.results)) {
+          const indexes = data.results.map((index) => index.uid)
+          return indexes.length > 0 ? indexes : [container.database]
+        }
+      }
+      // Fall back to configured database
+      return [container.database]
+    } catch {
+      // On error, fall back to configured database
+      return [container.database]
+    }
+  }
 }
 
 export const meilisearchEngine = new MeilisearchEngine()
