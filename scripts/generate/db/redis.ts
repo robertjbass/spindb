@@ -16,6 +16,7 @@ import {
   getContainerConfig,
   waitForReady,
   getSeedFile,
+  parseQuotedCommand,
   PROJECT_ROOT,
 } from './_shared.js'
 
@@ -93,14 +94,14 @@ async function main(): Promise<void> {
   console.log('Seeding database with sample data...')
   const seedContent = await readFile(SEED_FILE, 'utf-8')
 
-  // Execute each Redis command individually
+  // Execute each Redis command individually (supports # comments)
   const commands = seedContent
     .trim()
     .split('\n')
-    .filter((line) => line.trim())
+    .filter((line) => line.trim() && !line.trim().startsWith('#'))
 
   for (const command of commands) {
-    const args = command.split(' ')
+    const args = parseQuotedCommand(command)
     const result = spawnSync(
       'pnpm',
       ['start', 'run', containerName, '--', ...args],

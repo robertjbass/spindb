@@ -18,77 +18,35 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const SUPPORTED_ENGINES = [
-  'postgresql',
-  'mysql',
-  'mariadb',
-  'mongodb',
-  'ferretdb',
-  'redis',
-  'valkey',
-  'clickhouse',
-  'sqlite',
-  'duckdb',
-  'qdrant',
-  'meilisearch',
-  'couchdb',
-  'cockroachdb',
-  'surrealdb',
-  'questdb',
+// Single source of truth for engine names and aliases
+const ENGINE_DEFS = [
+  { engine: 'postgresql', aliases: ['postgres', 'pg'] },
+  { engine: 'mysql', aliases: [] },
+  { engine: 'mariadb', aliases: ['maria'] },
+  { engine: 'mongodb', aliases: ['mongo'] },
+  { engine: 'ferretdb', aliases: ['ferret'] },
+  { engine: 'redis', aliases: [] },
+  { engine: 'valkey', aliases: [] },
+  { engine: 'clickhouse', aliases: ['ch'] },
+  { engine: 'sqlite', aliases: ['lite'] },
+  { engine: 'duckdb', aliases: ['duck'] },
+  { engine: 'qdrant', aliases: ['qd'] },
+  { engine: 'meilisearch', aliases: ['meili', 'ms'] },
+  { engine: 'couchdb', aliases: ['couch'] },
+  { engine: 'cockroachdb', aliases: ['crdb', 'cockroach'] },
+  { engine: 'surrealdb', aliases: ['surreal'] },
+  { engine: 'questdb', aliases: ['quest'] },
 ] as const
-type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]
 
-// Map aliases to canonical engine names
-const ENGINE_ALIASES: Record<string, SupportedEngine> = {
-  // PostgreSQL
-  postgresql: 'postgresql',
-  postgres: 'postgresql',
-  pg: 'postgresql',
-  // MySQL
-  mysql: 'mysql',
-  // MariaDB
-  mariadb: 'mariadb',
-  maria: 'mariadb',
-  // MongoDB
-  mongodb: 'mongodb',
-  mongo: 'mongodb',
-  // FerretDB
-  ferretdb: 'ferretdb',
-  ferret: 'ferretdb',
-  // Redis
-  redis: 'redis',
-  // Valkey
-  valkey: 'valkey',
-  // ClickHouse
-  clickhouse: 'clickhouse',
-  ch: 'clickhouse',
-  // SQLite
-  sqlite: 'sqlite',
-  lite: 'sqlite',
-  // DuckDB
-  duckdb: 'duckdb',
-  duck: 'duckdb',
-  // Qdrant
-  qdrant: 'qdrant',
-  qd: 'qdrant',
-  // Meilisearch
-  meilisearch: 'meilisearch',
-  meili: 'meilisearch',
-  ms: 'meilisearch',
-  // CouchDB
-  couchdb: 'couchdb',
-  couch: 'couchdb',
-  // CockroachDB
-  cockroachdb: 'cockroachdb',
-  crdb: 'cockroachdb',
-  cockroach: 'cockroachdb',
-  // SurrealDB
-  surrealdb: 'surrealdb',
-  surreal: 'surrealdb',
-  // QuestDB
-  questdb: 'questdb',
-  quest: 'questdb',
-}
+type SupportedEngine = (typeof ENGINE_DEFS)[number]['engine']
+
+// Derive alias map from ENGINE_DEFS
+const ENGINE_ALIASES: Record<string, SupportedEngine> = Object.fromEntries(
+  ENGINE_DEFS.flatMap(({ engine, aliases }) => [
+    [engine, engine],
+    ...aliases.map((alias) => [alias, engine]),
+  ]),
+) as Record<string, SupportedEngine>
 
 function resolveEngine(input: string): SupportedEngine | null {
   return ENGINE_ALIASES[input.toLowerCase()] ?? null
@@ -100,22 +58,10 @@ function printUsage(): void {
   )
   console.log('')
   console.log('Supported engines (with aliases):')
-  console.log('  - postgresql (postgres, pg)')
-  console.log('  - mysql')
-  console.log('  - mariadb (maria)')
-  console.log('  - mongodb (mongo)')
-  console.log('  - ferretdb (ferret)')
-  console.log('  - redis')
-  console.log('  - valkey')
-  console.log('  - clickhouse (ch)')
-  console.log('  - sqlite (lite)')
-  console.log('  - duckdb (duck)')
-  console.log('  - qdrant (qd)')
-  console.log('  - meilisearch (meili, ms)')
-  console.log('  - couchdb (couch)')
-  console.log('  - cockroachdb (crdb, cockroach)')
-  console.log('  - surrealdb (surreal)')
-  console.log('  - questdb (quest)')
+  for (const { engine, aliases } of ENGINE_DEFS) {
+    const aliasText = aliases.length > 0 ? ` (${aliases.join(', ')})` : ''
+    console.log(`  - ${engine}${aliasText}`)
+  }
   console.log('')
   console.log('Options:')
   console.log('  --port <port>  Specify port for new containers')
@@ -165,14 +111,16 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
   })
 
-  child.on('close', (code) => {
-    process.exit(code ?? 0)
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.on('close', (code) => resolve(code ?? 0))
+    child.on('error', reject)
   })
 
-  child.on('error', (error) => {
-    console.error(`Error running script: ${error.message}`)
-    process.exit(1)
-  })
+  process.exit(exitCode)
 }
 
-main()
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`Error running script: ${message}`)
+  process.exit(1)
+})

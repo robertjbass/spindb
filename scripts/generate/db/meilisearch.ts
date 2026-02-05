@@ -141,7 +141,12 @@ async function main(): Promise<void> {
   }
 
   const createTask = (await createResponse.json()) as { taskUid: number }
-  await waitForTask(config.port, createTask.taskUid)
+  const indexCreated = await waitForTask(config.port, createTask.taskUid)
+
+  if (!indexCreated) {
+    console.error(`Error: Index creation task failed for "${INDEX_NAME}"`)
+    process.exit(1)
+  }
 
   // Insert documents
   const insertResponse = await meiliRequest(

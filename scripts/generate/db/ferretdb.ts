@@ -7,51 +7,20 @@
  */
 
 import { existsSync } from 'fs'
+import { spawnSync } from 'child_process'
 import {
   parseArgs,
   runSpindb,
   runSpindbStreaming,
   getContainerConfig,
   getSeedFile,
+  waitForReady,
   PROJECT_ROOT,
 } from './_shared.js'
-import { spawnSync } from 'child_process'
 
 const ENGINE = 'ferretdb'
 const DEFAULT_CONTAINER_NAME = `demo-${ENGINE}`
 const SEED_FILE = getSeedFile(ENGINE, 'sample-db.js')
-
-async function waitForFerretReady(
-  containerName: string,
-  maxAttempts = 30,
-): Promise<boolean> {
-  for (let i = 0; i < maxAttempts; i++) {
-    const result = spawnSync(
-      'pnpm',
-      [
-        'start',
-        'run',
-        containerName,
-        '--',
-        '--eval',
-        'db.adminCommand("ping")',
-      ],
-      {
-        cwd: PROJECT_ROOT,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    )
-
-    if (result.status === 0) {
-      return true
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  }
-
-  return false
-}
 
 async function main(): Promise<void> {
   const { containerName, port } = parseArgs(DEFAULT_CONTAINER_NAME)
@@ -111,7 +80,11 @@ async function main(): Promise<void> {
   console.log(`Container running on port ${config.port}\n`)
 
   console.log('Waiting for FerretDB to be ready...')
-  const isReady = await waitForFerretReady(containerName)
+  const isReady = await waitForReady(containerName, [
+    '--',
+    '--eval',
+    'db.adminCommand("ping")',
+  ])
 
   if (!isReady) {
     console.error('Error: FerretDB did not become ready in time')

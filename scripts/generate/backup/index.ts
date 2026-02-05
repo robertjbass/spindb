@@ -68,14 +68,16 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
   })
 
-  child.on('close', (code) => {
-    process.exit(code ?? 0)
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.on('close', (code) => resolve(code ?? 0))
+    child.on('error', reject)
   })
 
-  child.on('error', (error) => {
-    console.error(`Error running script: ${error.message}`)
-    process.exit(1)
-  })
+  process.exit(exitCode)
 }
 
-main()
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`Error running script: ${message}`)
+  process.exit(1)
+})

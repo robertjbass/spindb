@@ -487,6 +487,8 @@ pnpm generate:backup qdrant          # Generate Qdrant snapshot fixture
 ```
 
 > **Note:** `generate:db` starts the container and seeds it. `generate:missing` only creates containers (no start, no seed) for quick bulk setup. `delete:demos` cleans up all `demo-*` containers.
+>
+> **Note:** File-based engines (SQLite, DuckDB) ignore the `--port` flag since they don't run server processes.
 
 ### Adding a New Engine
 
@@ -498,7 +500,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete guide. Quick checkli
 5. Add CI cache step in `.github/workflows/ci.yml`
 6. **Create fixtures** in `tests/fixtures/{engine}/seeds/` (REQUIRED for all engines)
    - SQL engines: `sample-db.sql` with 5 test_user records
-   - Key-value engines: `sample-db.{ext}` with 6 keys
+   - Key-value engines: `sample-db.{ext}` with 6 keys (Redis/Valkey support `#` comments)
    - REST API engines: `README.md` documenting the API-based approach
 6. Add Docker E2E test support in `tests/docker/run-e2e.sh`
 

@@ -186,6 +186,15 @@ Invalid versions like `"foo"` become `"foo.0.0"` and fail later with confusing 4
 
 - [ ] Single .bson file restore - detection exists but restore logic doesn't derive collection name from filename
 
+#### Generate Scripts CLI Length Limits
+
+**Files:** `scripts/generate/db/mysql.ts`, `scripts/generate/db/cockroachdb.ts`, etc.
+
+SQL seed files are passed via command-line argument (`-e seedContent`), which could fail for large files due to OS limits (~128KB-2MB).
+
+- [ ] Switch to stdin-based approach for large seed files
+- [ ] Not urgent - current seed files are small (~1KB)
+
 ---
 
 ## Testing

@@ -138,13 +138,19 @@ export async function waitForHttpReady(
   maxAttempts = 30,
 ): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 2000)
     try {
-      const response = await fetch(`http://127.0.0.1:${port}${path}`)
+      const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+        signal: controller.signal,
+      })
       if (response.ok) {
         return true
       }
     } catch {
-      // Server not ready yet
+      // Server not ready yet or request timed out
+    } finally {
+      clearTimeout(timeout)
     }
 
     // Wait 500ms before retry
@@ -156,4 +162,43 @@ export async function waitForHttpReady(
 
 export function getSeedFile(engine: string, filename: string): string {
   return join(PROJECT_ROOT, 'tests', 'fixtures', engine, 'seeds', filename)
+}
+
+/**
+ * Parse a command string into arguments, respecting single and double quotes.
+ * Used for Redis/Valkey commands that contain JSON with spaces.
+ *
+ * Example: `SET user:1 '{"name":"Alice Johnson"}'` becomes
+ *          ['SET', 'user:1', '{"name":"Alice Johnson"}']
+ */
+export function parseQuotedCommand(command: string): string[] {
+  const tokens: string[] = []
+  let current = ''
+  let inQuote = false
+  let quoteChar = ''
+
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i]
+
+    if (!inQuote && (char === "'" || char === '"')) {
+      inQuote = true
+      quoteChar = char
+    } else if (inQuote && char === quoteChar) {
+      inQuote = false
+      quoteChar = ''
+    } else if (!inQuote && char === ' ') {
+      if (current) {
+        tokens.push(current)
+        current = ''
+      }
+    } else {
+      current += char
+    }
+  }
+
+  if (current) {
+    tokens.push(current)
+  }
+
+  return tokens
 }

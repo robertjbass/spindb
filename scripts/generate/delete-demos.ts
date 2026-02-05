@@ -96,6 +96,7 @@ async function main(): Promise<void> {
   console.log()
 
   const deleted: string[] = []
+  const wouldDelete: string[] = []
   const failed: { name: string; error: string }[] = []
 
   for (const container of demoContainers) {
@@ -106,7 +107,7 @@ async function main(): Promise<void> {
         console.log(`[dry-run] Would stop: ${name}`)
       }
       console.log(`[dry-run] Would delete: ${name}\n`)
-      deleted.push(name)
+      wouldDelete.push(name)
       continue
     }
 
@@ -142,17 +143,27 @@ async function main(): Promise<void> {
   // Summary
   console.log('Summary')
   console.log('-------')
-  console.log(`Deleted: ${deleted.length}`)
-  if (deleted.length > 0) {
-    for (const name of deleted) {
-      console.log(`  - ${name}`)
-    }
-  }
 
-  if (failed.length > 0) {
-    console.log(`\nFailed: ${failed.length}`)
-    for (const { name, error } of failed) {
-      console.log(`  - ${name}: ${error}`)
+  if (dryRun) {
+    console.log(`Would delete: ${wouldDelete.length}`)
+    if (wouldDelete.length > 0) {
+      for (const name of wouldDelete) {
+        console.log(`  - ${name}`)
+      }
+    }
+  } else {
+    console.log(`Deleted: ${deleted.length}`)
+    if (deleted.length > 0) {
+      for (const name of deleted) {
+        console.log(`  - ${name}`)
+      }
+    }
+
+    if (failed.length > 0) {
+      console.log(`\nFailed: ${failed.length}`)
+      for (const { name, error } of failed) {
+        console.log(`  - ${name}: ${error}`)
+      }
     }
   }
 }
