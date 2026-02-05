@@ -623,6 +623,9 @@ export class FerretDBEngine extends BaseEngine {
       const spawnOpts: SpawnOptions = {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
+        // Run FerretDB in the container directory so telemetry.json/state.json
+        // are written there instead of polluting the user's cwd
+        cwd: containerDir,
       }
 
       const proc = spawn(ferretdbBinary, ferretArgs, spawnOpts)

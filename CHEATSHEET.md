@@ -519,3 +519,55 @@ spindb backup mydb --format sql -o ~/backups
 # Reset database
 spindb delete mydb -f && spindb create mydb --start
 ```
+
+## Development-Only Scripts
+
+These scripts are for SpinDB development only. They use `pnpm start` to run the local source code.
+
+```bash
+# Generate test databases with sample data
+pnpm generate:db <engine> [name] [--port <port>]
+
+# Supported engines (with aliases):
+pnpm generate:db postgresql    # postgres, pg
+pnpm generate:db mysql
+pnpm generate:db mariadb       # maria
+pnpm generate:db mongodb       # mongo
+pnpm generate:db ferretdb      # ferret
+pnpm generate:db redis
+pnpm generate:db valkey
+pnpm generate:db clickhouse    # ch
+pnpm generate:db sqlite        # lite (file-based, no --port)
+pnpm generate:db duckdb        # duck (file-based, no --port)
+pnpm generate:db qdrant        # qd (REST API)
+pnpm generate:db meilisearch   # meili, ms (REST API)
+pnpm generate:db couchdb       # couch (REST API)
+pnpm generate:db cockroachdb   # crdb, cockroach
+pnpm generate:db surrealdb     # surreal
+pnpm generate:db questdb       # quest
+
+# Examples:
+pnpm generate:db pg                      # Create "demo-postgresql" with seed data
+pnpm generate:db pg mydb                 # Seed existing container "mydb"
+pnpm generate:db mysql --port 3333       # Create on specific port
+pnpm generate:db mongo mydb --port 27027 # Create "mydb" on port 27027
+
+# Generate backup fixtures
+pnpm generate:backup qdrant              # Generate Qdrant snapshot fixture
+pnpm generate:backup qdrant my-snapshot  # With custom snapshot name
+
+# Create demo containers for missing engines (quick bulk setup)
+pnpm generate:missing                    # Create one demo-* container per missing engine
+pnpm generate:missing --all              # Create demo containers for ALL engines
+pnpm generate:missing --dry-run          # Preview what would be created
+
+# Delete all demo containers (cleanup)
+pnpm delete:demos                        # Stop and delete all demo-* containers
+pnpm delete:demos --dry-run              # Preview what would be deleted
+```
+
+> **Note:** These scripts require running from the SpinDB project root and use the local development code via `pnpm start`.
+>
+> **`generate:missing`** is useful for quickly creating one container of each engine type for testing. It skips engines that already have containers (unless `--all` is used). If `demo-postgresql` exists, it creates `demo-postgresql-2`, etc. Containers are created but NOT started.
+>
+> **`delete:demos`** cleans up all containers with names starting with `demo-`. It stops running containers before deleting them.

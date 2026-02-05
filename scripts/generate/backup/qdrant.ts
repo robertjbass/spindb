@@ -3,16 +3,16 @@
  * Generate a Qdrant snapshot fixture for testing.
  *
  * Usage:
- *   pnpm generate:qdrant-snapshot [name]
+ *   pnpm generate:backup qdrant [name]
  *
  * Arguments:
  *   name - Optional snapshot name (default: "test_vectors")
  *          The .snapshot extension is added automatically
  *
  * Examples:
- *   pnpm generate:qdrant-snapshot                    # Creates test_vectors.snapshot
- *   pnpm generate:qdrant-snapshot my-snapshot        # Creates my-snapshot.snapshot
- *   pnpm generate:qdrant-snapshot backup.snapshot    # Creates backup.snapshot
+ *   pnpm generate:backup qdrant                    # Creates test_vectors.snapshot
+ *   pnpm generate:backup qdrant my-snapshot        # Creates my-snapshot.snapshot
+ *   pnpm generate:backup qdrant backup.snapshot    # Creates backup.snapshot
  *
  * This script:
  * 1. Finds a running Qdrant container (or uses the first available)
@@ -316,7 +316,6 @@ async function main() {
 
   // Use pipeline to stream the download to file
   const fileStream = createWriteStream(outputPath)
-  // @ts-expect-error - Node.js ReadableStream compatibility
   await pipeline(downloadResponse.body, fileStream)
 
   console.log('Download complete!\n')
@@ -326,13 +325,14 @@ async function main() {
   await qdrantRequest(port, 'DELETE', `/collections/${encodedName}`)
 
   // Delete the snapshot from Qdrant (we have our local copy)
+  // Note: This may fail with 404 if the collection was already deleted above,
+  // since Qdrant automatically removes snapshots when their parent collection is deleted.
+  // This is expected behavior and the error is intentionally ignored.
   await qdrantRequest(
     port,
     'DELETE',
     `/collections/${encodedName}/snapshots/${encodeURIComponent(snapshotName)}`,
-  ).catch(() => {
-    // Collection already deleted, snapshot goes with it
-  })
+  ).catch(() => {})
 
   console.log('\nDone!')
   console.log(`Snapshot saved to: ${outputPath}`)

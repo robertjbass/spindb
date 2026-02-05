@@ -146,6 +146,10 @@ vite.config.ts.timestamp-*
 _dumps
 .spindb
 
+# FerretDB telemetry (created in cwd when FerretDB runs)
+telemetry.json
+state.json
+
 # SQLite database files (created during testing or development)
 *.sqlite
 *.sqlite3
@@ -155,7 +159,7 @@ _dumps
 *.duckdb
 *.duckdb.wal
 
-# Qdrant snapshots (too large for git - use generate:qdrant-snapshot to create on demand)
+# Qdrant snapshots (too large for git - use `pnpm generate:backup qdrant` to create on demand)
 tests/fixtures/qdrant/snapshots/*.snapshot
 
 # Private docs

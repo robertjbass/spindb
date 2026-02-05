@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.4] - 2026-02-05
+
+### Added
+- **`pnpm generate:db <engine>` scripts** - Create demo databases with sample data for development and testing:
+  ```bash
+  pnpm generate:db postgres   # Create PostgreSQL container with sample data
+  pnpm generate:db mysql      # Create MySQL container with sample data
+  pnpm generate:db mongo      # Create MongoDB container with sample data
+  # ... supports all 16 engines with aliases
+  ```
+  Each script creates a container named `demo-<engine>`, populates it with realistic sample data (users, products, orders), and displays the connection string.
+
+### Changed
+- **Smoother Shift+Tab toggle UX** - When toggling a container's start/stop state with Shift+Tab, the cursor now returns to the same container after the operation completes instead of resetting to the top of the list.
+
+### Fixed
+- **Shift+Tab toggle in container list** - Fixed the keyboard shortcut to start/stop containers which was broken due to separator positioning. Now correctly accesses inquirer's internal state to identify the highlighted container regardless of list position.
+- **Type-to-filter crash in container list** - Fixed crash when typing to filter containers caused by separator being incorrectly included in filterable items.
+- **FerretDB telemetry files in wrong location** - FerretDB now runs with `cwd` set to the container directory, so `telemetry.json` and `state.json` are written there instead of polluting the user's project directory.
+
 ## [0.31.3] - 2026-02-04
 
 ### Added

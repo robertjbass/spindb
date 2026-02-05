@@ -444,6 +444,7 @@ export async function handleCreate(): Promise<'main' | string | void> {
 
 export async function handleList(
   showMainMenu: () => Promise<void>,
+  options?: { focusContainer?: string },
 ): Promise<void> {
   console.clear()
   console.log(header('Containers'))
@@ -570,19 +571,19 @@ export async function handleList(
     (c) => !isFileBasedEngine(c.engine),
   )
 
-  // Build the full choice list with header hint and footer items
+  // Build the full choice list with footer items
+  // IMPORTANT: Containers must come FIRST because filterableCount slices from index 0
   const summary = `${containers.length} container(s): ${parts.join('; ')}`
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
-    // Show toggle hint at top when server-based containers exist
+    ...containerChoices,
+    // Show toggle hint after containers (before footer) when server-based containers exist
     ...(hasServerContainers
       ? [
           new inquirer.Separator(
             chalk.cyan('── [Shift+Tab] toggle start/stop ──'),
           ),
         ]
-      : []),
-    ...containerChoices,
-    new inquirer.Separator(),
+      : [new inquirer.Separator()]),
     new inquirer.Separator(summary),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
@@ -601,6 +602,7 @@ export async function handleList(
       pageSize: getPageSize(),
       emptyText: 'No containers match filter',
       enableToggle: hasServerContainers,
+      defaultValue: options?.focusContainer,
     },
   )
 
@@ -614,27 +616,21 @@ export async function handleList(
         engine: config.engine,
       })
 
-      // Clear screen and show brief status
-      console.clear()
-      console.log(header('Containers'))
-
+      // Show inline status without clearing screen
+      console.log()
       if (isRunning) {
         await handleStopContainer(containerName)
-        // Brief pause so user can see the result
-        await new Promise((resolve) => setTimeout(resolve, 300))
       } else {
         const result = await handleStartContainer(containerName)
         if (result === 'home') {
           await showMainMenu()
           return
         }
-        // Brief pause so user can see the result (for 'started' or 'back')
-        await new Promise((resolve) => setTimeout(resolve, 300))
       }
     }
 
-    // Refresh the container list
-    await handleList(showMainMenu)
+    // Refresh the container list with cursor on the same container
+    await handleList(showMainMenu, { focusContainer: containerName })
     return
   }
 

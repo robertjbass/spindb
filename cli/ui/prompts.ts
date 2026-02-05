@@ -41,14 +41,14 @@ export const TOGGLE_PREFIX = '__toggle__:'
 let globalEscapeEnabled = false
 let escapeTriggered = false
 let escapeReject: ((error: Error) => void) | null = null
-let currentPromptUi: { close?: () => void } | null = null
+// Store the raw UI object so we can access activePrompt dynamically
+// (activePrompt may not be set at capture time due to async initialization)
+let currentPromptUi: Record<string, unknown> | null = null
 
 // Toggle handler state (Shift+Tab to toggle container start/stop)
 let toggleEnabled = false
-let toggleCursorPosition = 0
-let toggleCurrentItems: FilterableChoice[] = []
-let toggleTriggered = false
-let toggleTargetValue: string | null = null
+// Set of values that are valid toggle targets (container names)
+let toggleValidTargets: Set<string> = new Set()
 
 // Custom error class for escape
 export class EscapeError extends Error {
@@ -82,45 +82,61 @@ function onEscapeData(data: Buffer): void {
   if (data.length === 3 && data[0] === 27 && data[1] === 91) {
     const keyCode = data[2]
 
-    // Arrow Up: \x1b[A (27, 91, 65)
-    if (keyCode === 65 && toggleEnabled) {
-      toggleCursorPosition = Math.max(0, toggleCursorPosition - 1)
-      return // Let inquirer handle the actual cursor movement
-    }
-
-    // Arrow Down: \x1b[B (27, 91, 66)
-    if (keyCode === 66 && toggleEnabled) {
-      toggleCursorPosition = Math.min(
-        toggleCurrentItems.length - 1,
-        toggleCursorPosition + 1,
-      )
-      return // Let inquirer handle the actual cursor movement
-    }
-
     // Shift+Tab: \x1b[Z (27, 91, 90)
-    if (keyCode === 90 && toggleEnabled && toggleCurrentItems.length > 0) {
-      // Get the currently highlighted item's value
-      const currentItem = toggleCurrentItems[toggleCursorPosition]
-      if (currentItem) {
-        toggleTriggered = true
-        toggleTargetValue = currentItem.value
+    // Access inquirer's internal state to get the currently highlighted value
+    if (keyCode === 90 && toggleEnabled && currentPromptUi) {
+      try {
+        // Access activePrompt dynamically (it may not be set at capture time)
+        // inquirer-autocomplete-prompt uses 'selected' for cursor index
+        // and currentChoices.getChoice(index) to get the choice object
+        const activePrompt = currentPromptUi.activePrompt as
+          | {
+              selected?: number
+              currentChoices?: {
+                getChoice?: (
+                  index: number,
+                ) => { value?: string; type?: string } | undefined
+              }
+            }
+          | undefined
 
-        // Reject the prompt to interrupt it
-        if (escapeReject) {
-          const reject = escapeReject
-          escapeReject = null
-          reject(new ToggleError(currentItem.value))
-        }
+        if (
+          activePrompt?.currentChoices?.getChoice &&
+          activePrompt.selected !== undefined
+        ) {
+          const currentChoice = activePrompt.currentChoices.getChoice(
+            activePrompt.selected,
+          )
 
-        // Close the prompt UI
-        if (currentPromptUi?.close) {
-          try {
-            currentPromptUi.close()
-          } catch {
-            // Swallow errors from inquirer internals
+          // Check if the highlighted item is a valid toggle target (a container)
+          // Skip separators (type === 'separator') and non-container items
+          if (
+            currentChoice &&
+            currentChoice.value &&
+            currentChoice.type !== 'separator' &&
+            toggleValidTargets.has(currentChoice.value)
+          ) {
+            // Reject the prompt with the container value to toggle
+            if (escapeReject) {
+              const reject = escapeReject
+              escapeReject = null
+              reject(new ToggleError(currentChoice.value))
+            }
+
+            // Close the prompt UI
+            if (typeof currentPromptUi.close === 'function') {
+              try {
+                currentPromptUi.close()
+              } catch {
+                // Swallow errors from inquirer internals
+              }
+              currentPromptUi = null
+            }
           }
-          currentPromptUi = null
         }
+      } catch {
+        // Ignore errors accessing inquirer internals - the prompt state
+        // may be inconsistent during filtering or other operations
       }
       return
     }
@@ -141,7 +157,7 @@ function onEscapeData(data: Buffer): void {
     // Then close the prompt UI to stop it from rendering
     // Do this after rejecting so the error propagates first
     // Wrap in try/catch as inquirer internals may change between versions
-    if (currentPromptUi?.close) {
+    if (currentPromptUi && typeof currentPromptUi.close === 'function') {
       try {
         currentPromptUi.close()
       } catch {
@@ -151,12 +167,6 @@ function onEscapeData(data: Buffer): void {
     }
     // Clear the screen
     console.clear()
-  }
-
-  // Any other input (typing to filter) resets cursor to 0
-  // This helps keep our tracking in sync when the list is filtered
-  if (toggleEnabled && data.length > 0 && data[0] !== 27) {
-    toggleCursorPosition = 0
   }
 }
 
@@ -196,14 +206,11 @@ export function checkAndResetEscape(): boolean {
 
 /**
  * Enable toggle tracking for the container list.
- * This tracks arrow key movements and Shift+Tab presses.
+ * @param validTargets - Set of values that are valid toggle targets (container names)
  */
-export function enableToggleTracking(): void {
+export function enableToggleTracking(validTargets: Set<string>): void {
   toggleEnabled = true
-  toggleCursorPosition = 0
-  toggleCurrentItems = []
-  toggleTriggered = false
-  toggleTargetValue = null
+  toggleValidTargets = validTargets
 }
 
 /**
@@ -211,36 +218,7 @@ export function enableToggleTracking(): void {
  */
 export function disableToggleTracking(): void {
   toggleEnabled = false
-  toggleCursorPosition = 0
-  toggleCurrentItems = []
-  toggleTriggered = false
-  toggleTargetValue = null
-}
-
-/**
- * Update the current list of filterable items.
- * Called by filterableListPrompt when the source function returns new items.
- */
-export function updateToggleItems(items: FilterableChoice[]): void {
-  toggleCurrentItems = items
-  // Clamp cursor position to valid range
-  if (toggleCursorPosition >= items.length) {
-    toggleCursorPosition = Math.max(0, items.length - 1)
-  }
-}
-
-/**
- * Check if toggle was triggered and get the target value.
- * Resets the toggle state after reading.
- */
-export function checkAndResetToggle(): {
-  triggered: boolean
-  value: string | null
-} {
-  const result = { triggered: toggleTriggered, value: toggleTargetValue }
-  toggleTriggered = false
-  toggleTargetValue = null
-  return result
+  toggleValidTargets = new Set()
 }
 
 /**
@@ -279,7 +257,7 @@ export async function escapeablePrompt<T extends Record<string, unknown>>(
       promptWithUi.ui !== null &&
       typeof (promptWithUi.ui as Record<string, unknown>).close === 'function'
     ) {
-      currentPromptUi = promptWithUi.ui as { close: () => void }
+      currentPromptUi = promptWithUi.ui as Record<string, unknown>
     } else {
       currentPromptUi = null
     }
@@ -322,6 +300,7 @@ export async function filterableListPrompt(
     pageSize?: number
     emptyText?: string
     enableToggle?: boolean
+    defaultValue?: string // Pre-select this value (cursor starts here)
   },
 ): Promise<string> {
   // Split choices into filterable items and static footer (separators, back buttons, etc.)
@@ -332,9 +311,10 @@ export async function filterableListPrompt(
   const footerItems = choices.slice(options.filterableCount)
 
   // Enable toggle tracking if requested
+  // Build a set of valid toggle targets (the container values from filterable items)
   if (options.enableToggle) {
-    enableToggleTracking()
-    updateToggleItems(filterableItems)
+    const validTargets = new Set(filterableItems.map((item) => item.value))
+    enableToggleTracking(validTargets)
   }
 
   // Source function for autocomplete - filters items based on input
@@ -349,10 +329,6 @@ export async function filterableListPrompt(
     if (!searchTerm) {
       // No filter - show all items
       result = [...filterableItems, ...footerItems]
-      // Update toggle tracking with current filterable items
-      if (options.enableToggle) {
-        updateToggleItems(filterableItems)
-      }
     } else {
       // Filter items by matching search term against the display name
       // Strip ANSI codes for matching but keep them for display
@@ -372,16 +348,8 @@ export async function filterableListPrompt(
           ),
           ...footerItems,
         ]
-        // Update toggle tracking with empty list (no items to toggle)
-        if (options.enableToggle) {
-          updateToggleItems([])
-        }
       } else {
         result = [...filtered, ...footerItems]
-        // Update toggle tracking with filtered items
-        if (options.enableToggle) {
-          updateToggleItems(filtered)
-        }
       }
     }
 
@@ -406,10 +374,14 @@ export async function filterableListPrompt(
         // Suppress the default "(Use arrow keys or type to search)" suffix
         // since we include custom instructions in the message
         suffix: '',
+        // Pre-select a value (cursor starts on this item)
+        default: options.defaultValue,
       },
     ])
 
-    // Register the prompt UI for escape handling
+    // Register the prompt UI for escape and toggle handling
+    // Store the raw UI object so we can access activePrompt dynamically
+    // (activePrompt contains selected and currentChoices for the highlighted item)
     const promptWithUi = p as unknown as Record<string, unknown>
     if (
       promptWithUi.ui &&
@@ -417,7 +389,7 @@ export async function filterableListPrompt(
       promptWithUi.ui !== null &&
       typeof (promptWithUi.ui as Record<string, unknown>).close === 'function'
     ) {
-      currentPromptUi = promptWithUi.ui as { close: () => void }
+      currentPromptUi = promptWithUi.ui as Record<string, unknown>
     } else {
       currentPromptUi = null
     }

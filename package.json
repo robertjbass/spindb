@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.31.3",
+  "version": "0.31.4",
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
@@ -22,7 +22,10 @@
     "test:local:quick": "./scripts/test-local.sh --quick",
     "test:local:fresh": "./scripts/test-local.sh --fresh",
     "test:docker": "bash tests/docker/run-docker-test.sh",
-    "generate:qdrant-snapshot": "tsx scripts/generate-qdrant-snapshot.ts",
+    "generate:backup": "tsx scripts/generate/backup/index.ts",
+    "generate:db": "tsx scripts/generate/db/index.ts",
+    "generate:missing": "tsx scripts/generate/missing-databases.ts",
+    "delete:demos": "tsx scripts/generate/delete-demos.ts",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
     "prepare": "husky"

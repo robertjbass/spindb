@@ -186,6 +186,22 @@ Invalid versions like `"foo"` become `"foo.0.0"` and fail later with confusing 4
 
 - [ ] Single .bson file restore - detection exists but restore logic doesn't derive collection name from filename
 
+#### Generate Scripts CLI Length Limits
+
+SQL seed files are passed via command-line argument (`-e` or `-c`), which could fail for large files due to OS limits (~128KB-2MB).
+
+**Affected files:**
+- `scripts/generate/db/postgresql.ts` - uses `-c seedContent`
+- `scripts/generate/db/mysql.ts` - uses `-e seedContent`
+- `scripts/generate/db/mariadb.ts` - uses `-e seedContent`
+- `scripts/generate/db/clickhouse.ts` - uses `-q seedContent`
+- `scripts/generate/db/cockroachdb.ts` - uses `-e seedContent`
+
+**Fix:** Switch to stdin-based approach using `spawnSync` `input` option.
+
+- [ ] Update all affected scripts to pipe seed content via stdin
+- [ ] Not urgent - current seed files are small (~1KB)
+
 ---
 
 ## Testing
