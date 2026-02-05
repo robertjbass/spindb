@@ -300,6 +300,7 @@ export async function filterableListPrompt(
     pageSize?: number
     emptyText?: string
     enableToggle?: boolean
+    defaultValue?: string // Pre-select this value (cursor starts here)
   },
 ): Promise<string> {
   // Split choices into filterable items and static footer (separators, back buttons, etc.)
@@ -373,6 +374,8 @@ export async function filterableListPrompt(
         // Suppress the default "(Use arrow keys or type to search)" suffix
         // since we include custom instructions in the message
         suffix: '',
+        // Pre-select a value (cursor starts on this item)
+        default: options.defaultValue,
       },
     ])
 
