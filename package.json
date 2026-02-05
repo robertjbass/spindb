@@ -22,7 +22,8 @@
     "test:local:quick": "./scripts/test-local.sh --quick",
     "test:local:fresh": "./scripts/test-local.sh --fresh",
     "test:docker": "bash tests/docker/run-docker-test.sh",
-    "generate:qdrant-snapshot": "tsx scripts/generate-qdrant-snapshot.ts",
+    "generate:backup": "tsx scripts/generate/backup/index.ts",
+    "generate:db": "tsx scripts/generate/db/index.ts",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
     "prepare": "husky"

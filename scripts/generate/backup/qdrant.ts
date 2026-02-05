@@ -3,16 +3,16 @@
  * Generate a Qdrant snapshot fixture for testing.
  *
  * Usage:
- *   pnpm generate:qdrant-snapshot [name]
+ *   pnpm generate:backup qdrant [name]
  *
  * Arguments:
  *   name - Optional snapshot name (default: "test_vectors")
  *          The .snapshot extension is added automatically
  *
  * Examples:
- *   pnpm generate:qdrant-snapshot                    # Creates test_vectors.snapshot
- *   pnpm generate:qdrant-snapshot my-snapshot        # Creates my-snapshot.snapshot
- *   pnpm generate:qdrant-snapshot backup.snapshot    # Creates backup.snapshot
+ *   pnpm generate:backup qdrant                    # Creates test_vectors.snapshot
+ *   pnpm generate:backup qdrant my-snapshot        # Creates my-snapshot.snapshot
+ *   pnpm generate:backup qdrant backup.snapshot    # Creates backup.snapshot
  *
  * This script:
  * 1. Finds a running Qdrant container (or uses the first available)
@@ -316,7 +316,6 @@ async function main() {
 
   // Use pipeline to stream the download to file
   const fileStream = createWriteStream(outputPath)
-  // @ts-expect-error - Node.js ReadableStream compatibility
   await pipeline(downloadResponse.body, fileStream)
 
   console.log('Download complete!\n')

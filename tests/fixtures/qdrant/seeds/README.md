@@ -16,8 +16,8 @@ and WAL files).
 **To generate a snapshot on demand:**
 
 ```bash
-pnpm generate:qdrant-snapshot              # Creates test_vectors.snapshot
-pnpm generate:qdrant-snapshot my-backup    # Creates my-backup.snapshot
+pnpm generate:backup qdrant              # Creates test_vectors.snapshot
+pnpm generate:backup qdrant my-backup    # Creates my-backup.snapshot
 ```
 
 This script will:
