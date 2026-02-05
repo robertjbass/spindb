@@ -13,7 +13,7 @@ import { paths } from '../config/paths'
 import { processManager } from './process-manager'
 import { portManager } from './port-manager'
 import { isWindows } from './platform-service'
-import { logDebug } from './error-handler'
+import { logDebug, UnsupportedOperationError } from './error-handler'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
@@ -749,8 +749,7 @@ export class ContainerManager {
       actualDatabases = await engine.listDatabases(config)
     } catch (error) {
       // If the engine doesn't support listDatabases, return current registry
-      const err = error as Error
-      if (err.message.includes('not supported')) {
+      if (error instanceof UnsupportedOperationError) {
         logDebug(
           `listDatabases not supported for ${config.engine}, skipping sync`,
         )

@@ -10,6 +10,7 @@ import type {
   QueryResult,
   QueryOptions,
 } from '../types'
+import { UnsupportedOperationError } from '../core/error-handler'
 
 /**
  * Base class for database engines
@@ -278,9 +279,6 @@ export abstract class BaseEngine {
    * @throws Error if the engine doesn't support multiple databases or listing
    */
   async listDatabases(_container: ContainerConfig): Promise<string[]> {
-    throw new Error(
-      `listDatabases is not supported for ${this.displayName}. ` +
-        `This engine may not support multiple databases or use a different concept (collections, indexes, etc.).`,
-    )
+    throw new UnsupportedOperationError('listDatabases', this.displayName)
   }
 }
