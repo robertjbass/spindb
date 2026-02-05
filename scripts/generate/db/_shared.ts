@@ -83,7 +83,13 @@ export async function getContainerConfig(
   engine: string,
   name: string,
 ): Promise<ContainerConfig | null> {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
+  const homeDir = process.env.HOME || process.env.USERPROFILE
+  if (!homeDir) {
+    throw new Error(
+      'Could not determine home directory. Set HOME or USERPROFILE environment variable.',
+    )
+  }
+
   const containerJsonPath = join(
     homeDir,
     '.spindb',
