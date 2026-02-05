@@ -23,6 +23,10 @@ const ENGINE = 'questdb'
 const DEFAULT_CONTAINER_NAME = `demo-${ENGINE}`
 const SEED_FILE = getSeedFile(ENGINE, 'sample-db.sql')
 
+// QuestDB's HTTP web console port offset from PG wire protocol port
+// Default: PG port 8812 + 188 = HTTP port 9000
+const QUESTDB_HTTP_PORT_OFFSET = 188
+
 async function main(): Promise<void> {
   const { containerName, port } = parseArgs(DEFAULT_CONTAINER_NAME)
 
@@ -80,8 +84,7 @@ async function main(): Promise<void> {
 
   console.log(`Container running on port ${config.port}\n`)
 
-  // QuestDB's web console is at PG port + 188
-  const httpPort = config.port + 188
+  const httpPort = config.port + QUESTDB_HTTP_PORT_OFFSET
   console.log('Waiting for QuestDB to be ready...')
   const isReady = await waitForHttpReady(httpPort, '/')
 

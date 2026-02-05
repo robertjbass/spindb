@@ -325,13 +325,14 @@ async function main() {
   await qdrantRequest(port, 'DELETE', `/collections/${encodedName}`)
 
   // Delete the snapshot from Qdrant (we have our local copy)
+  // Note: This may fail with 404 if the collection was already deleted above,
+  // since Qdrant automatically removes snapshots when their parent collection is deleted.
+  // This is expected behavior and the error is intentionally ignored.
   await qdrantRequest(
     port,
     'DELETE',
     `/collections/${encodedName}/snapshots/${encodeURIComponent(snapshotName)}`,
-  ).catch(() => {
-    // Collection already deleted, snapshot goes with it
-  })
+  ).catch(() => {})
 
   console.log('\nDone!')
   console.log(`Snapshot saved to: ${outputPath}`)

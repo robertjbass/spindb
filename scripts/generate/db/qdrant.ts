@@ -120,9 +120,27 @@ async function main(): Promise<void> {
 
   console.log('Seeding database with sample data...')
 
-  // Delete collection if it exists
+  // Delete collection if it exists (404 is expected if collection doesn't exist)
   const encodedName = encodeURIComponent(COLLECTION_NAME)
-  await qdrantRequest(config.port, 'DELETE', `/collections/${encodedName}`)
+  try {
+    const deleteResponse = await qdrantRequest(
+      config.port,
+      'DELETE',
+      `/collections/${encodedName}`,
+    )
+    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+      const error = await deleteResponse.text()
+      throw new Error(`Failed to delete collection "${COLLECTION_NAME}": ${error}`)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Failed to delete')) {
+      throw error
+    }
+    // Network error - rethrow with context
+    throw new Error(
+      `Network error deleting collection "${COLLECTION_NAME}": ${error instanceof Error ? error.message : error}`,
+    )
+  }
 
   // Create collection
   const createResponse = await qdrantRequest(

@@ -124,9 +124,16 @@ async function main(): Promise<void> {
 
   console.log('Seeding database with sample data...')
 
-  // Delete index if it exists
-  await meiliRequest(config.port, 'DELETE', `/indexes/${INDEX_NAME}`)
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  // Delete index if it exists and wait for task completion
+  const deleteResponse = await meiliRequest(
+    config.port,
+    'DELETE',
+    `/indexes/${INDEX_NAME}`,
+  )
+  if (deleteResponse.ok) {
+    const deleteTask = (await deleteResponse.json()) as { taskUid: number }
+    await waitForTask(config.port, deleteTask.taskUid)
+  }
 
   // Create index
   const createResponse = await meiliRequest(config.port, 'POST', '/indexes', {
