@@ -87,7 +87,10 @@ function getExistingContainers(): ContainerConfig[] {
   try {
     return JSON.parse(result.output) as ContainerConfig[]
   } catch {
-    // No containers or parse error
+    // No containers (empty output) or JSON parse error
+    if (result.output.trim()) {
+      console.warn('Warning: Could not parse container list output')
+    }
     return []
   }
 }

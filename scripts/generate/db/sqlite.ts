@@ -10,6 +10,7 @@
 
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
+import { homedir } from 'os'
 import {
   parseArgs,
   runSpindb,
@@ -25,7 +26,12 @@ const SEED_FILE = getSeedFile(ENGINE, 'sample-db.sql')
 async function getFileBasedConfig(
   name: string,
 ): Promise<{ name: string; database: string } | null> {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
+  // Use os.homedir() for cross-platform compatibility, bail out if unavailable
+  const homeDir = homedir()
+  if (!homeDir) {
+    return null
+  }
+
   const configPath = join(homeDir, '.spindb', 'config.json')
 
   if (!existsSync(configPath)) {

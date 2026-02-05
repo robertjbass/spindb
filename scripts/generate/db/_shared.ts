@@ -158,6 +158,7 @@ export async function waitForReady(
         cwd: PROJECT_ROOT,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true, // Required for Windows where pnpm is a .cmd shim
       },
     )
 
@@ -207,6 +208,8 @@ export function getSeedFile(engine: string, filename: string): string {
 /**
  * Parse a command string into arguments, respecting single and double quotes.
  * Used for Redis/Valkey commands that contain JSON with spaces.
+ *
+ * Note: Does not handle escaped quotes within quoted strings (e.g., 'it\'s').
  *
  * Example: `SET user:1 '{"name":"Alice Johnson"}'` becomes
  *          ['SET', 'user:1', '{"name":"Alice Johnson"}']
