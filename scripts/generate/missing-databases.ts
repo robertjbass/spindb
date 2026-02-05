@@ -16,6 +16,7 @@
 
 import { runSpindb, type ContainerConfig } from './db/_shared.js'
 
+// TODO - source from hostdb if possible
 const SUPPORTED_ENGINES = [
   'postgresql',
   'mysql',

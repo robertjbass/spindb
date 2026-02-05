@@ -130,7 +130,9 @@ async function main(): Promise<void> {
     )
     if (!deleteResponse.ok && deleteResponse.status !== 404) {
       const error = await deleteResponse.text()
-      throw new Error(`Failed to delete collection "${COLLECTION_NAME}": ${error}`)
+      throw new Error(
+        `Failed to delete collection "${COLLECTION_NAME}": ${error}`,
+      )
     }
   } catch (error) {
     if (error instanceof Error && error.message.includes('Failed to delete')) {
@@ -173,17 +175,37 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const infoResponse = await qdrantRequest(
-    config.port,
-    'GET',
-    `/collections/${encodedName}`,
-  )
-  const info = (await infoResponse.json()) as {
-    result: { points_count: number }
+  try {
+    const infoResponse = await qdrantRequest(
+      config.port,
+      'GET',
+      `/collections/${encodedName}`,
+    )
+    if (!infoResponse.ok) {
+      const error = await infoResponse.text()
+      console.error(
+        `Error fetching collection "${COLLECTION_NAME}" info: ${error}`,
+      )
+      process.exit(1)
+    }
+    const info = (await infoResponse.json()) as {
+      result?: { points_count?: number }
+    }
+    if (typeof info.result?.points_count !== 'number') {
+      console.warn(
+        `Warning: Could not verify points count for "${COLLECTION_NAME}"`,
+      )
+    } else {
+      console.log(
+        `Verified: ${info.result.points_count} points in ${COLLECTION_NAME} collection`,
+      )
+    }
+  } catch (error) {
+    console.error(
+      `Error verifying data: ${error instanceof Error ? error.message : error}`,
+    )
+    process.exit(1)
   }
-  console.log(
-    `Verified: ${info.result.points_count} points in ${COLLECTION_NAME} collection`,
-  )
 
   console.log('\nDone!')
   console.log(`\nContainer "${containerName}" is ready with sample data.`)

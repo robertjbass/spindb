@@ -152,9 +152,25 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const infoResponse = await couchRequest(config.port, 'GET', `/${DB_NAME}`)
-  const info = (await infoResponse.json()) as { doc_count: number }
-  console.log(`Verified: ${info.doc_count} documents in ${DB_NAME} database`)
+  try {
+    const infoResponse = await couchRequest(config.port, 'GET', `/${DB_NAME}`)
+    if (!infoResponse.ok) {
+      const error = await infoResponse.text()
+      console.error(`Error fetching database info: ${error}`)
+      process.exit(1)
+    }
+    const info = (await infoResponse.json()) as { doc_count?: number }
+    if (typeof info.doc_count !== 'number') {
+      console.warn('Warning: Could not verify document count from response')
+    } else {
+      console.log(`Verified: ${info.doc_count} documents in ${DB_NAME} database`)
+    }
+  } catch (error) {
+    console.error(
+      `Error verifying data: ${error instanceof Error ? error.message : error}`,
+    )
+    process.exit(1)
+  }
 
   console.log('\nDone!')
   console.log(`\nContainer "${containerName}" is ready with sample data.`)

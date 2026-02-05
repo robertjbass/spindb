@@ -139,7 +139,14 @@ async function main(): Promise<void> {
     const match = verifyResult.stdout.match(/(\d+)/)
     if (match) {
       console.log(`Verified: ${match[1]} users in test_user table`)
+    } else {
+      console.warn(
+        'Warning: Could not verify user count from output:',
+        verifyResult.stdout.trim() || '(empty)',
+      )
     }
+  } else {
+    console.warn('Warning: Verification query failed:', verifyResult.stderr)
   }
 
   console.log('\nDone!')

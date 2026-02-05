@@ -132,7 +132,11 @@ async function main(): Promise<void> {
   )
   if (deleteResponse.ok) {
     const deleteTask = (await deleteResponse.json()) as { taskUid: number }
-    await waitForTask(config.port, deleteTask.taskUid)
+    const deleteSuccess = await waitForTask(config.port, deleteTask.taskUid)
+    if (!deleteSuccess) {
+      // Delete failure is non-fatal - index may not exist
+      console.log(`Note: Could not delete existing index "${INDEX_NAME}"`)
+    }
   }
 
   // Create index
@@ -185,10 +189,19 @@ async function main(): Promise<void> {
     'GET',
     `/indexes/${INDEX_NAME}/stats`,
   )
-  const stats = (await statsResponse.json()) as { numberOfDocuments: number }
-  console.log(
-    `Verified: ${stats.numberOfDocuments} documents in ${INDEX_NAME} index`,
-  )
+  if (!statsResponse.ok) {
+    const error = await statsResponse.text()
+    console.error(`Error fetching index stats: ${error}`)
+    process.exit(1)
+  }
+  const stats = (await statsResponse.json()) as { numberOfDocuments?: number }
+  if (typeof stats.numberOfDocuments !== 'number') {
+    console.warn(`Warning: Could not verify document count for "${INDEX_NAME}"`)
+  } else {
+    console.log(
+      `Verified: ${stats.numberOfDocuments} documents in ${INDEX_NAME} index`,
+    )
+  }
 
   console.log('\nDone!')
   console.log(`\nContainer "${containerName}" is ready with sample data.`)

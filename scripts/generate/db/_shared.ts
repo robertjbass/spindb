@@ -54,6 +54,7 @@ export function runSpindb(args: string[]): {
     cwd: PROJECT_ROOT,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
+    shell: true, // Required for Windows where pnpm is a .cmd shim
   })
 
   return {
@@ -67,6 +68,7 @@ export function runSpindbStreaming(args: string[]): Promise<number> {
     const child = spawn('pnpm', ['start', ...args], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
+      shell: true, // Required for Windows where pnpm is a .cmd shim
     })
 
     child.on('close', (code) => {
