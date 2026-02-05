@@ -31,10 +31,17 @@ export function parseArgs(defaultName: string): ParsedArgs {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
-    if (arg === '--port' && args[i + 1]) {
-      port = parseInt(args[i + 1], 10)
-      if (isNaN(port)) {
-        console.error(`Error: Invalid port "${args[i + 1]}"`)
+    if (arg === '--port') {
+      const portValue = args[i + 1]
+      if (!portValue || portValue.startsWith('-')) {
+        console.error('Error: --port requires a value')
+        process.exit(1)
+      }
+      port = parseInt(portValue, 10)
+      if (isNaN(port) || port < 1 || port > 65535) {
+        console.error(
+          `Error: Invalid port "${portValue}". Must be a number between 1 and 65535.`,
+        )
         process.exit(1)
       }
       i++ // Skip the port value
@@ -159,8 +166,16 @@ export async function waitForReady(
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: true, // Required for Windows where pnpm is a .cmd shim
+        timeout: 5000, // Prevent hanging on unresponsive commands
       },
     )
+
+    // Check for timeout or termination signal
+    if (result.error || result.signal) {
+      // Timed out or killed - treat as failed attempt, continue to retry
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      continue
+    }
 
     if (result.status === 0) {
       return true
