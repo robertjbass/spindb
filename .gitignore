@@ -146,6 +146,10 @@ vite.config.ts.timestamp-*
 _dumps
 .spindb
 
+# FerretDB telemetry (created in cwd when FerretDB runs)
+telemetry.json
+state.json
+
 # SQLite database files (created during testing or development)
 *.sqlite
 *.sqlite3
