@@ -81,6 +81,38 @@ export function runSpindbStreaming(args: string[]): Promise<number> {
   })
 }
 
+export type CommandResult = {
+  status: number | null
+  stdout: string
+  stderr: string
+}
+
+/**
+ * Run a command inside a container via `spindb run`.
+ * Uses shell: true for Windows compatibility where pnpm is a .cmd shim.
+ */
+export function runContainerCommand(
+  containerName: string,
+  args: string[],
+): CommandResult {
+  const result = spawnSync(
+    'pnpm',
+    ['start', 'run', containerName, '--', ...args],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: true,
+    },
+  )
+
+  return {
+    status: result.status,
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+  }
+}
+
 export async function getContainerConfig(
   engine: string,
   name: string,

@@ -10,8 +10,12 @@
 
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { spawnSync } from 'child_process'
-import { parseArgs, runSpindb, getSeedFile, PROJECT_ROOT } from './_shared.js'
+import {
+  parseArgs,
+  runSpindb,
+  getSeedFile,
+  runContainerCommand,
+} from './_shared.js'
 import { join } from 'path'
 
 const ENGINE = 'sqlite'
@@ -91,15 +95,7 @@ async function main(): Promise<void> {
   console.log('Seeding database with sample data...')
   const seedContent = await readFile(SEED_FILE, 'utf-8')
 
-  const seedResult = spawnSync(
-    'pnpm',
-    ['start', 'run', containerName, '--', '-cmd', seedContent],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const seedResult = runContainerCommand(containerName, ['-cmd', seedContent])
 
   if (seedResult.status !== 0) {
     console.error('Error seeding database:')
@@ -110,22 +106,10 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const verifyResult = spawnSync(
-    'pnpm',
-    [
-      'start',
-      'run',
-      containerName,
-      '--',
-      '-cmd',
-      'SELECT COUNT(*) FROM test_user;',
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const verifyResult = runContainerCommand(containerName, [
+    '-cmd',
+    'SELECT COUNT(*) FROM test_user;',
+  ])
 
   if (verifyResult.status === 0) {
     const match = verifyResult.stdout.match(/(\d+)/)

@@ -7,7 +7,6 @@
  */
 
 import { existsSync } from 'fs'
-import { spawnSync } from 'child_process'
 import {
   parseArgs,
   runSpindb,
@@ -15,7 +14,7 @@ import {
   getContainerConfig,
   getSeedFile,
   waitForReady,
-  PROJECT_ROOT,
+  runContainerCommand,
 } from './_shared.js'
 
 const ENGINE = 'mongodb'
@@ -96,15 +95,7 @@ async function main(): Promise<void> {
   console.log('Seeding database with sample data...')
 
   // MongoDB uses --file to run JS seed scripts
-  const seedResult = spawnSync(
-    'pnpm',
-    ['start', 'run', containerName, '--', '--file', SEED_FILE],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const seedResult = runContainerCommand(containerName, ['--file', SEED_FILE])
 
   if (seedResult.status !== 0) {
     console.error('Error seeding database:')
@@ -115,22 +106,10 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const verifyResult = spawnSync(
-    'pnpm',
-    [
-      'start',
-      'run',
-      containerName,
-      '--',
-      '--eval',
-      'db.getSiblingDB("testdb").test_user.countDocuments()',
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const verifyResult = runContainerCommand(containerName, [
+    '--eval',
+    'db.getSiblingDB("testdb").test_user.countDocuments()',
+  ])
 
   if (verifyResult.status === 0) {
     const match = verifyResult.stdout.match(/(\d+)/)

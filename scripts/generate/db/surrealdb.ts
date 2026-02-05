@@ -8,7 +8,6 @@
 
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { spawnSync } from 'child_process'
 import {
   parseArgs,
   runSpindb,
@@ -16,7 +15,7 @@ import {
   getContainerConfig,
   waitForHttpReady,
   getSeedFile,
-  PROJECT_ROOT,
+  runContainerCommand,
 } from './_shared.js'
 
 const ENGINE = 'surrealdb'
@@ -93,15 +92,7 @@ async function main(): Promise<void> {
   console.log('Seeding database with sample data...')
   const seedContent = await readFile(SEED_FILE, 'utf-8')
 
-  const seedResult = spawnSync(
-    'pnpm',
-    ['start', 'run', containerName, '--', '-c', seedContent],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const seedResult = runContainerCommand(containerName, ['-c', seedContent])
 
   if (seedResult.status !== 0) {
     console.error('Error seeding database:')
@@ -112,22 +103,10 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const verifyResult = spawnSync(
-    'pnpm',
-    [
-      'start',
-      'run',
-      containerName,
-      '--',
-      '-c',
-      'SELECT count() FROM test_user GROUP ALL',
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const verifyResult = runContainerCommand(containerName, [
+    '-c',
+    'SELECT count() FROM test_user GROUP ALL',
+  ])
 
   if (verifyResult.status === 0) {
     const match = verifyResult.stdout.match(/(\d+)/)

@@ -163,7 +163,9 @@ async function main(): Promise<void> {
     if (typeof info.doc_count !== 'number') {
       console.warn('Warning: Could not verify document count from response')
     } else {
-      console.log(`Verified: ${info.doc_count} documents in ${DB_NAME} database`)
+      console.log(
+        `Verified: ${info.doc_count} documents in ${DB_NAME} database`,
+      )
     }
   } catch (error) {
     console.error(

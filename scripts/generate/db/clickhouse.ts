@@ -8,7 +8,6 @@
 
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { spawnSync } from 'child_process'
 import {
   parseArgs,
   runSpindb,
@@ -16,7 +15,7 @@ import {
   getContainerConfig,
   waitForReady,
   getSeedFile,
-  PROJECT_ROOT,
+  runContainerCommand,
 } from './_shared.js'
 
 const ENGINE = 'clickhouse'
@@ -94,15 +93,11 @@ async function main(): Promise<void> {
   const seedContent = await readFile(SEED_FILE, 'utf-8')
 
   // ClickHouse needs multiquery for multiple statements
-  const seedResult = spawnSync(
-    'pnpm',
-    ['start', 'run', containerName, '--', '--multiquery', '-q', seedContent],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const seedResult = runContainerCommand(containerName, [
+    '--multiquery',
+    '-q',
+    seedContent,
+  ])
 
   if (seedResult.status !== 0) {
     console.error('Error seeding database:')
@@ -113,22 +108,10 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const verifyResult = spawnSync(
-    'pnpm',
-    [
-      'start',
-      'run',
-      containerName,
-      '--',
-      '-q',
-      'SELECT COUNT(*) FROM test_user',
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const verifyResult = runContainerCommand(containerName, [
+    '-q',
+    'SELECT COUNT(*) FROM test_user',
+  ])
 
   if (verifyResult.status === 0) {
     const match = verifyResult.stdout.trim()

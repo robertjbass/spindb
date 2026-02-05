@@ -8,7 +8,6 @@
 
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { spawnSync } from 'child_process'
 import {
   parseArgs,
   runSpindb,
@@ -17,7 +16,7 @@ import {
   waitForReady,
   getSeedFile,
   parseQuotedCommand,
-  PROJECT_ROOT,
+  runContainerCommand,
 } from './_shared.js'
 
 const ENGINE = 'valkey'
@@ -102,15 +101,7 @@ async function main(): Promise<void> {
 
   for (const command of commands) {
     const args = parseQuotedCommand(command)
-    const result = spawnSync(
-      'pnpm',
-      ['start', 'run', containerName, '--', ...args],
-      {
-        cwd: PROJECT_ROOT,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    )
+    const result = runContainerCommand(containerName, args)
 
     if (result.status !== 0) {
       console.error(`Error executing: ${command}`)
@@ -122,15 +113,7 @@ async function main(): Promise<void> {
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')
-  const verifyResult = spawnSync(
-    'pnpm',
-    ['start', 'run', containerName, '--', 'GET', 'user:count'],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  )
+  const verifyResult = runContainerCommand(containerName, ['GET', 'user:count'])
 
   if (verifyResult.status === 0) {
     const count = verifyResult.stdout.trim().replace(/"/g, '')
