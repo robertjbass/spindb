@@ -570,19 +570,19 @@ export async function handleList(
     (c) => !isFileBasedEngine(c.engine),
   )
 
-  // Build the full choice list with header hint and footer items
+  // Build the full choice list with footer items
+  // IMPORTANT: Containers must come FIRST because filterableCount slices from index 0
   const summary = `${containers.length} container(s): ${parts.join('; ')}`
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
-    // Show toggle hint at top when server-based containers exist
+    ...containerChoices,
+    // Show toggle hint after containers (before footer) when server-based containers exist
     ...(hasServerContainers
       ? [
           new inquirer.Separator(
             chalk.cyan('── [Shift+Tab] toggle start/stop ──'),
           ),
         ]
-      : []),
-    ...containerChoices,
-    new inquirer.Separator(),
+      : [new inquirer.Separator()]),
     new inquirer.Separator(summary),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
