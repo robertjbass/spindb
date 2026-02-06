@@ -1384,7 +1384,7 @@ export class CouchDBEngine extends BaseEngine {
 
     logDebug(`Created CouchDB user: ${username}`)
 
-    const connectionString = `http://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${encodeURIComponent(db)}`
 
     return {
       username,

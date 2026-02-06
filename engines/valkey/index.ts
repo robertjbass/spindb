@@ -1497,7 +1497,8 @@ export class ValkeyEngine extends BaseEngine {
     logDebug(`Created Valkey user: ${username}`)
 
     // Valkey uses redis:// scheme for compatibility
-    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${container.database}`
+    const db = container.database ?? '0'
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,
@@ -1505,7 +1506,7 @@ export class ValkeyEngine extends BaseEngine {
       connectionString,
       engine: container.engine,
       container: container.name,
-      database: container.database,
+      database: db,
     }
   }
 }

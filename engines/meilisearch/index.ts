@@ -1223,7 +1223,11 @@ export class MeilisearchEngine extends BaseEngine {
     // Derive a deterministic UID from the username so createUser is idempotent.
     // Meilisearch UIDs are UUIDv4 format; we derive one via a stable hash.
     const { createHash } = await import('crypto')
-    const hash = createHash('md5').update(`spindb:${username}`).digest('hex')
+    const hashBuf = createHash('md5').update(`spindb:${username}`).digest()
+    // Set version (4) and variant (RFC 4122) bits for valid UUIDv4
+    hashBuf[6] = (hashBuf[6] & 0x0f) | 0x40
+    hashBuf[8] = (hashBuf[8] & 0x3f) | 0x80
+    const hash = hashBuf.toString('hex')
     const uid = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`
 
     // Check if a key with this UID already exists

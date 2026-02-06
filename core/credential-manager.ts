@@ -40,16 +40,34 @@ function getCredentialFilePath(
 /**
  * Format credentials as .env file content.
  */
+function encodeEnvValue(value: string): string {
+  if (/[\n\r=\\]/.test(value)) {
+    return JSON.stringify(value)
+  }
+  return value
+}
+
+function decodeEnvValue(raw: string): string {
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    try {
+      return JSON.parse(raw) as string
+    } catch {
+      return raw
+    }
+  }
+  return raw
+}
+
 function formatCredentials(credentials: UserCredentials): string {
   const lines: string[] = []
 
   if (credentials.apiKey) {
-    lines.push(`API_KEY_NAME=${credentials.username}`)
-    lines.push(`API_KEY=${credentials.apiKey}`)
-    lines.push(`API_URL=${credentials.connectionString}`)
+    lines.push(`API_KEY_NAME=${encodeEnvValue(credentials.username)}`)
+    lines.push(`API_KEY=${encodeEnvValue(credentials.apiKey)}`)
+    lines.push(`API_URL=${encodeEnvValue(credentials.connectionString)}`)
   } else {
-    lines.push(`DB_USER=${credentials.username}`)
-    lines.push(`DB_PASSWORD=${credentials.password}`)
+    lines.push(`DB_USER=${encodeEnvValue(credentials.username)}`)
+    lines.push(`DB_PASSWORD=${encodeEnvValue(credentials.password)}`)
     lines.push(`DB_HOST=127.0.0.1`)
     // Extract port from the host portion of the connection string.
     // Use URL parsing when possible; fall back to a regex targeting host:port.
@@ -71,9 +89,9 @@ function formatCredentials(credentials: UserCredentials): string {
       lines.push(`DB_PORT=${extractedPort}`)
     }
     if (credentials.database) {
-      lines.push(`DB_NAME=${credentials.database}`)
+      lines.push(`DB_NAME=${encodeEnvValue(credentials.database)}`)
     }
-    lines.push(`DB_URL=${credentials.connectionString}`)
+    lines.push(`DB_URL=${encodeEnvValue(credentials.connectionString)}`)
   }
 
   return lines.join('\n') + '\n'
@@ -93,7 +111,7 @@ function parseCredentialFile(
     if (!trimmed || trimmed.startsWith('#')) continue
     const eqIdx = trimmed.indexOf('=')
     if (eqIdx === -1) continue
-    vars[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1)
+    vars[trimmed.slice(0, eqIdx)] = decodeEnvValue(trimmed.slice(eqIdx + 1))
   }
 
   if (vars.API_KEY) {

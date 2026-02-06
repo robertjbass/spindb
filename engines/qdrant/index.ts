@@ -1255,10 +1255,11 @@ export class QdrantEngine extends BaseEngine {
       }
     }
 
+    const yamlSafePassword = `"${password.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
     if (apiKeyIdx >= 0) {
-      lines[apiKeyIdx] = `  api_key: ${password}`
+      lines[apiKeyIdx] = `  api_key: ${yamlSafePassword}`
     } else {
-      lines.splice(lastServicePropIdx + 1, 0, `  api_key: ${password}`)
+      lines.splice(lastServicePropIdx + 1, 0, `  api_key: ${yamlSafePassword}`)
     }
 
     const updatedConfig = lines.join('\n')

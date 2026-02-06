@@ -1264,10 +1264,17 @@ export class MySQLEngine extends BaseEngine {
     assertValidUsername(username)
     const { port } = container
     const db = database || container.database
+    if (!db) {
+      throw new Error(
+        'No target database specified. Provide a database name with --database or ensure the container has a default database.',
+      )
+    }
+    assertValidDatabaseName(db)
     const mysql = await this.getMysqlClientPath()
 
     const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
-    const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
+    const escapedDb = db.replace(/`/g, '``')
+    const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${escapedDb}\`.* TO '${username}'@'%'; GRANT ALL ON \`${escapedDb}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
 
     const cmd = buildMysqlInlineCommand(mysql, port, engineDef.superuser, sql)
     await execAsync(cmd)

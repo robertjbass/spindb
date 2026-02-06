@@ -1055,6 +1055,12 @@ export class PostgreSQLEngine extends BaseEngine {
     assertValidUsername(username)
     const { port } = container
     const db = database || container.database
+    if (!db) {
+      throw new Error(
+        'No target database specified. Provide a database name with --database or ensure the container has a default database.',
+      )
+    }
+    assertValidDatabaseName(db)
     const psqlPath = await this.getPsqlPath()
 
     // Create the role with login and password

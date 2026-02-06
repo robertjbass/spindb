@@ -1450,10 +1450,12 @@ export class RedisEngine extends BaseEngine {
     const { port } = container
     const redisCli = await this.getRedisCliPath(container.version)
 
-    // Reject passwords with characters that break ACL SETUSER syntax
-    if (/[>\s]/.test(password)) {
+    // Reject passwords with characters that break ACL SETUSER syntax:
+    // '>' sets password, '#' sets hash, '<' removes password — all are ACL delimiters.
+    // Whitespace and newlines would split the command unexpectedly.
+    if (/[>#<\s\n\r]/.test(password)) {
       throw new Error(
-        'Password contains invalid characters for Redis ACL (">", whitespace). Use alphanumeric passwords only.',
+        'Password contains invalid characters for Redis ACL. Passwords must not contain ">", "#", "<", whitespace, or newlines.',
       )
     }
 
@@ -1467,7 +1469,8 @@ export class RedisEngine extends BaseEngine {
     await execAsync(cmd, { timeout: 10000 })
     logDebug(`Created Redis user: ${username}`)
 
-    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${container.database}`
+    const db = container.database ?? '0'
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,
@@ -1475,7 +1478,7 @@ export class RedisEngine extends BaseEngine {
       connectionString,
       engine: container.engine,
       container: container.name,
-      database: container.database,
+      database: db,
     }
   }
 }
