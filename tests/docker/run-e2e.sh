@@ -33,10 +33,37 @@ VERBOSE="${VERBOSE:-false}"
 # Set SMOKE_TEST=false for full test with all phases
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
+# Engine groups for parallel CI execution
+# Usage: ./run-e2e.sh --group sql
+GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
+GROUP_NOSQL="mongodb redis valkey surrealdb"
+GROUP_REST="qdrant meilisearch couchdb sqlite duckdb"
+
 # Valid engines and utility tests
 VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb"
 VALID_UTILITY_TESTS="self-update"
+VALID_GROUPS="sql nosql rest"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
+
+# Handle --group flag
+ENGINE_GROUP=""
+if [ "$ENGINE_FILTER" = "--group" ]; then
+  ENGINE_GROUP="${2:-}"
+  ENGINE_FILTER=""
+  if [ -z "$ENGINE_GROUP" ]; then
+    echo "Error: --group requires a group name"
+    echo "Valid groups: $VALID_GROUPS"
+    exit 1
+  fi
+  if ! echo "$VALID_GROUPS" | grep -qw "$ENGINE_GROUP"; then
+    echo "Error: Invalid group '$ENGINE_GROUP'"
+    echo "Valid groups: $VALID_GROUPS"
+    echo "  sql:   $GROUP_SQL"
+    echo "  nosql: $GROUP_NOSQL"
+    echo "  rest:  $GROUP_REST"
+    exit 1
+  fi
+fi
 
 # Validate filter (accepts engine names OR utility test names)
 if [ -n "$ENGINE_FILTER" ]; then
@@ -44,6 +71,7 @@ if [ -n "$ENGINE_FILTER" ]; then
     echo "Error: Invalid test '$ENGINE_FILTER'"
     echo "Valid engines: $VALID_ENGINES"
     echo "Valid utility tests: $VALID_UTILITY_TESTS"
+    echo "Valid groups (--group): $VALID_GROUPS"
     exit 1
   fi
   # FerretDB is skipped in Docker E2E due to timeout/signal issues
@@ -1642,9 +1670,21 @@ get_default_version() {
 }
 
 should_run_test() {
-  [ -z "$ENGINE_FILTER" ] && return 0
-  [ "$ENGINE_FILTER" = "$1" ] && return 0
-  return 1
+  local engine=$1
+  # If a specific engine filter is set, only run that engine
+  [ -n "$ENGINE_FILTER" ] && [ "$ENGINE_FILTER" = "$engine" ] && return 0
+  [ -n "$ENGINE_FILTER" ] && [ "$ENGINE_FILTER" != "$engine" ] && return 1
+  # If a group filter is set, check membership
+  if [ -n "$ENGINE_GROUP" ]; then
+    case $ENGINE_GROUP in
+      sql)   echo "$GROUP_SQL" | grep -qw "$engine" && return 0 ;;
+      nosql) echo "$GROUP_NOSQL" | grep -qw "$engine" && return 0 ;;
+      rest)  echo "$GROUP_REST" | grep -qw "$engine" && return 0 ;;
+    esac
+    return 1
+  fi
+  # No filter - run everything
+  return 0
 }
 
 # ============================================================================
@@ -1712,6 +1752,14 @@ echo "${BOLD}${CYAN}════════════════════
 echo ""
 if [ -n "$ENGINE_FILTER" ]; then
   echo "  ${BOLD}Filter:${RESET}    $ENGINE_FILTER"
+elif [ -n "$ENGINE_GROUP" ]; then
+  _group_engines=""
+  case $ENGINE_GROUP in
+    sql)   _group_engines="$GROUP_SQL" ;;
+    nosql) _group_engines="$GROUP_NOSQL" ;;
+    rest)  _group_engines="$GROUP_REST" ;;
+  esac
+  echo "  ${BOLD}Group:${RESET}     $ENGINE_GROUP ($_group_engines)"
 fi
 if [ "$SMOKE_TEST" = "true" ]; then
   echo "  ${BOLD}Mode:${RESET}      ${YELLOW}smoke test${RESET} (download + start + query only)"

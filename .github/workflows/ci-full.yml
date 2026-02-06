@@ -1,34 +1,32 @@
-name: CI
+name: CI Full Matrix
 
 on:
-  pull_request:
-    branches: [main]
-  # TODO - uncomment to test on dev branch push
-  # push:
-  #   branches: [dev]
   workflow_dispatch:
+  schedule:
+    # Weekly on Sunday at 2am UTC
+    - cron: '0 2 * * 0'
 
 # =============================================================================
-# OS Coverage Strategy (Tiered)
+# OS Coverage Strategy
 # =============================================================================
-# Engines are assigned to tiers based on platform complexity and popularity:
+# We test on 5 OS variants to cover different platforms and architectures:
+#   - ubuntu-22.04 (x64) - LTS with older glibc/system libraries
+#   - ubuntu-24.04 (x64) - LTS with newer libraries (catches issues like libaio rename)
+#   - macos-15 (Intel x64) - Sequoia
+#   - macos-14 (ARM64/Apple Silicon) - Sonoma
+#   - windows-latest (x64)
 #
-# Tier A (full 5 OS): PostgreSQL, MySQL
-#   - ubuntu-22.04, ubuntu-24.04, macos-15, macos-14, windows-latest
-#   - Most popular engines with the most platform quirks (EDB Windows, libaio)
+# Note: We test two Ubuntu versions instead of Linux ARM64 because:
+#   1. GitHub Actions doesn't offer free native Linux ARM64 runners
+#   2. QEMU emulation is too slow and flaky for CI
+#   3. Two Ubuntu LTS versions catch real library compatibility issues
+#   4. macOS ARM64 validates ARM code paths
+#   5. A commented-out ARM64 job exists below if native runners become available
 #
-# Tier B (3 OS): MariaDB, MongoDB, Redis, Valkey, SQLite, DuckDB, CockroachDB
-#   - ubuntu-24.04, macos-14, windows-latest
-#   - Stable binaries, adequate cross-platform signal
-#
-# Tier C (2 OS): ClickHouse, FerretDB, Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB
-#   - ubuntu-24.04, macos-14
-#   - No Windows support (CH, Ferret) or simpler engines
-#
-# Unit tests: 3 OS (ubuntu-24.04, macos-14, windows-latest)
-#
-# Full 5-OS matrix available via: ci-full.yml (manual dispatch or weekly)
-# See TESTING_STRATEGY.md for rollback instructions.
+# Windows Strategy:
+# Windows tests run in parallel within each engine's matrix (windows-latest).
+# A sequential test-windows-all job is commented out below as a fallback if
+# parallel Windows jobs ever exhaust the runner pool again.
 # =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
@@ -47,9 +45,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -202,9 +206,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -338,9 +348,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -393,9 +409,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -448,9 +470,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -505,12 +533,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          # Windows not supported - postgresql-documentdb has startup issues
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -593,9 +628,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -649,9 +690,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -704,14 +751,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -776,12 +831,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -845,12 +909,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -912,12 +985,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -980,9 +1062,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -1065,12 +1153,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1146,12 +1243,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1230,12 +1336,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4

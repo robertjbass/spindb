@@ -68,4 +68,61 @@ describe('Username Validation', () => {
       }
     })
   })
+
+  describe('SQL injection prevention', () => {
+    it('should reject common SQL injection patterns', () => {
+      assert(
+        !isValidUsername("admin'; DROP TABLE users; --"),
+        'SQL injection with semicolon',
+      )
+      assert(!isValidUsername('user" OR "1"="1'), 'SQL injection with quotes')
+      assert(
+        !isValidUsername("'; DELETE FROM test; --"),
+        'SQL delete injection',
+      )
+      assert(!isValidUsername('admin/**/OR/**/1=1'), 'SQL comment injection')
+    })
+
+    it('should throw SpinDBError for SQL injection attempts', () => {
+      try {
+        assertValidUsername("admin'; DROP TABLE users; --")
+        assert(false, 'Should have thrown for SQL injection')
+      } catch (error) {
+        assert(error instanceof SpinDBError, 'Should be SpinDBError')
+        assertEqual(
+          (error as SpinDBError).code,
+          ErrorCodes.INVALID_USERNAME,
+          'Should have INVALID_USERNAME code',
+        )
+      }
+    })
+  })
+
+  describe('boundary values', () => {
+    it('should accept exactly 63 characters', () => {
+      const name = 'A' + 'b'.repeat(62)
+      assert(isValidUsername(name), '63 chars should be valid')
+    })
+
+    it('should reject exactly 64 characters', () => {
+      const name = 'A' + 'b'.repeat(63)
+      assert(!isValidUsername(name), '64 chars should be invalid')
+    })
+
+    it('should accept single character names', () => {
+      assert(isValidUsername('a'), 'Single lowercase')
+      assert(isValidUsername('Z'), 'Single uppercase')
+    })
+
+    it('should reject whitespace-only strings', () => {
+      assert(!isValidUsername(' '), 'Single space')
+      assert(!isValidUsername('\t'), 'Tab')
+      assert(!isValidUsername('\n'), 'Newline')
+    })
+
+    it('should reject unicode characters', () => {
+      assert(!isValidUsername('user\u0000'), 'Null byte')
+      assert(!isValidUsername('caf\u00e9'), 'Accented character')
+    })
+  })
 })
