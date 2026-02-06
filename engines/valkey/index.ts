@@ -1487,27 +1487,19 @@ export class ValkeyEngine extends BaseEngine {
     }
 
     // ACL SETUSER is idempotent - sets user with full access
-    // Use argv form (spawn) instead of shell execution to avoid injection risks
-    const aclArgs = [
+    // Send ACL command via stdin to avoid leaking password in process argv
+    const cliArgs = [
       '-h',
       '127.0.0.1',
       '-p',
       String(port),
       '-n',
       container.database ?? '0',
-      'ACL',
-      'SETUSER',
-      username,
-      'on',
-      `>${password}`,
-      '~*',
-      '&*',
-      '+@all',
     ]
 
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn(valkeyCli, aclArgs, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+      const proc = spawn(valkeyCli, cliArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
       })
 
       let stderr = ''
@@ -1520,6 +1512,9 @@ export class ValkeyEngine extends BaseEngine {
         else reject(new Error(`Failed to create user: ${stderr}`))
       })
       proc.on('error', reject)
+
+      proc.stdin?.write(`ACL SETUSER ${username} on >${password} ~* &* +@all\n`)
+      proc.stdin?.end()
     })
     logDebug(`Created Valkey user: ${username}`)
 

@@ -1186,13 +1186,35 @@ export class MariaDBEngine extends BaseEngine {
     const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
     const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
 
-    const cmd = buildMariadbInlineCommand(
-      mariadb,
-      port,
+    // Send SQL via stdin to avoid leaking password in process argv
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(port),
+      '-u',
       engineDef.superuser,
-      sql,
-    )
-    await execAsync(cmd)
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(mariadb, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`Failed to create user: ${stderr}`))
+      })
+      proc.on('error', reject)
+
+      proc.stdin?.write(sql)
+      proc.stdin?.end()
+    })
 
     const connectionString = `mysql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 

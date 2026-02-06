@@ -79,8 +79,9 @@ function formatCredentials(credentials: UserCredentials): string {
       }
     } catch {
       // Not a valid URL (e.g. custom scheme). Use regex targeting host:port segment.
-      const hostPortMatch =
-        credentials.connectionString.match(/@[^:]+:(\d+)(?:\/|$)/)
+      const hostPortMatch = credentials.connectionString.match(
+        /@(?:\[[^\]]+\]|[^:]+):(\d+)(?:\/|$)/,
+      )
       if (hostPortMatch) {
         extractedPort = hostPortMatch[1]
       }

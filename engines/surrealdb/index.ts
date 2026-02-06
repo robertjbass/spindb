@@ -1164,7 +1164,7 @@ export class SurrealDBEngine extends BaseEngine {
     // DEFINE USER OVERWRITE on namespace level with EDITOR role (idempotent)
     // Escape backslashes first, then single quotes for SurrealQL string literals
     const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-    const sql = `DEFINE USER OVERWRITE ${username} ON NAMESPACE PASSWORD '${escapedPass}' ROLES EDITOR;`
+    const sql = `DEFINE USER OVERWRITE ${escapeSurrealIdentifier(username)} ON NAMESPACE PASSWORD '${escapedPass}' ROLES EDITOR;`
 
     const args = [
       'sql',
