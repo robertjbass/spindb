@@ -601,22 +601,6 @@ jobs:
           echo "=== PostgreSQL backend log files ==="
           find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
 
-      - name: Show FerretDB logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== FerretDB container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== FerretDB binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*documentdb*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== FerretDB log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
   # ============================================
   # Redis Integration Tests
   # Uses SpinDB to download and manage Redis binaries from hostdb

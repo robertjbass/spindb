@@ -58,7 +58,10 @@ import {
   credentialsExist,
   getDefaultUsername,
 } from '../../../core/credential-manager'
-import { UnsupportedOperationError } from '../../../core/error-handler'
+import {
+  UnsupportedOperationError,
+  isValidUsername,
+} from '../../../core/error-handler'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
 import {
   handleBackupForContainer,
@@ -2137,7 +2140,7 @@ async function handleCreateUser(containerName: string): Promise<void> {
         default: defaultUser,
         validate: (input: string) => {
           if (!input.trim()) return 'Username is required'
-          if (!/^[a-zA-Z][a-zA-Z0-9_]{0,62}$/.test(input)) {
+          if (!isValidUsername(input)) {
             return 'Must start with a letter, contain only letters/numbers/underscores'
           }
           return true

@@ -173,7 +173,7 @@ describe('CockroachDB Integration Tests', () => {
     const creds1 = await engine.createUser(config!, {
       username: 'testuser',
       password: 'firstpass123',
-      database: 'defaultdb',
+      database: DATABASE,
     })
     assertEqual(creds1.username, 'testuser', 'Username should match')
     assertEqual(creds1.password, 'firstpass123', 'Password should match')
@@ -182,7 +182,7 @@ describe('CockroachDB Integration Tests', () => {
     const creds2 = await engine.createUser(config!, {
       username: 'testuser',
       password: 'secondpass456',
-      database: 'defaultdb',
+      database: DATABASE,
     })
     assertEqual(creds2.password, 'secondpass456', 'Password should be updated')
     console.log('   ✓ Re-created user with new password (idempotent)')
