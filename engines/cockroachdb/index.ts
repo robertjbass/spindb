@@ -1224,11 +1224,10 @@ export class CockroachDBEngine extends BaseEngine {
 
     const cockroach = await this.getCockroachPath(version)
 
-    // CockroachDB in insecure mode: password not enforced but still accepted.
+    // CockroachDB in insecure mode doesn't support passwords.
+    // Create user without password and grant privileges.
     // SQL is sent via stdin to avoid shell escaping issues with --execute.
-    // Password is escaped by doubling single quotes (standard SQL escaping).
-    const escapedPass = password.replace(/'/g, "''")
-    const sql = `CREATE USER IF NOT EXISTS ${escapedUser} WITH PASSWORD '${escapedPass}'; ALTER USER ${escapedUser} WITH PASSWORD '${escapedPass}'; GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser};`
+    const sql = `CREATE USER IF NOT EXISTS ${escapedUser}; GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser};`
 
     const args = ['sql', '--insecure', '--host', `127.0.0.1:${port}`]
 
@@ -1255,7 +1254,8 @@ export class CockroachDBEngine extends BaseEngine {
       proc.stdin?.end()
     })
 
-    const connectionString = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+    // In insecure mode, connections don't use passwords
+    const connectionString = `postgresql://${encodeURIComponent(username)}@127.0.0.1:${port}/${db}?sslmode=disable`
 
     return {
       username,

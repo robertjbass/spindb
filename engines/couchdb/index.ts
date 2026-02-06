@@ -1297,6 +1297,14 @@ export class CouchDBEngine extends BaseEngine {
       )
     }
 
+    // Ensure _users system database exists (CouchDB 3.x doesn't auto-create it)
+    const usersDbResponse = await couchdbApiRequest(port, 'PUT', '/_users')
+    if (usersDbResponse.status !== 201 && usersDbResponse.status !== 412) {
+      throw new Error(
+        `Failed to ensure _users database exists: ${JSON.stringify(usersDbResponse.data)}`,
+      )
+    }
+
     // Create user document in _users database
     const userDoc = {
       _id: `org.couchdb.user:${username}`,
@@ -1343,6 +1351,19 @@ export class CouchDBEngine extends BaseEngine {
           `Failed to update user: ${JSON.stringify(updateResponse.data)}`,
         )
       }
+    }
+
+    // Ensure the target database exists before setting security
+    const dbCreateResponse = await couchdbApiRequest(
+      port,
+      'PUT',
+      `/${encodeURIComponent(db)}`,
+    )
+    // 201 = created, 412 = already exists — both are fine
+    if (dbCreateResponse.status !== 201 && dbCreateResponse.status !== 412) {
+      throw new Error(
+        `Failed to ensure database "${db}" exists: ${JSON.stringify(dbCreateResponse.data)}`,
+      )
     }
 
     // Grant access to the target database via _security document

@@ -92,6 +92,15 @@ function generateClickHouseConfig(options: {
 
     <mark_cache_size>5368709120</mark_cache_size>
     <max_concurrent_queries>100</max_concurrent_queries>
+
+    <user_directories>
+        <users_xml>
+            <path>users.xml</path>
+        </users_xml>
+        <local_directory>
+            <path>${dataDir}/access/</path>
+        </local_directory>
+    </user_directories>
 </clickhouse>
 `
 }
@@ -303,6 +312,7 @@ export class ClickHouseEngine extends BaseEngine {
     await mkdir(dataDir, { recursive: true })
     await mkdir(tmpDir, { recursive: true })
     await mkdir(join(dataDir, 'user_files'), { recursive: true })
+    await mkdir(join(dataDir, 'access'), { recursive: true })
 
     logDebug(`Created ClickHouse data directory: ${dataDir}`)
 
