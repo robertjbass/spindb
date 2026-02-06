@@ -130,7 +130,7 @@ function parseCredentialFile(
     }
   }
 
-  if (!vars.DB_USER || !vars.DB_PASSWORD || !vars.DB_URL) {
+  if (!vars.DB_USER || vars.DB_PASSWORD === undefined || !vars.DB_URL) {
     throw new Error(
       `Corrupt credential file for container "${containerName}": missing DB_USER, DB_PASSWORD, or DB_URL`,
     )

@@ -1018,7 +1018,7 @@ export async function showContainerSubmenu(
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
     case 'create_user':
-      await handleCreateUser(containerName)
+      await handleCreateUser(containerName, activeDatabase)
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
     case 'backup':
@@ -2121,7 +2121,10 @@ async function handleExportDocker(
   await showContainerSubmenu(containerName, showMainMenu, undefined)
 }
 
-async function handleCreateUser(containerName: string): Promise<void> {
+async function handleCreateUser(
+  containerName: string,
+  activeDatabase?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
@@ -2166,7 +2169,7 @@ async function handleCreateUser(containerName: string): Promise<void> {
     const credentials = await engine.createUser(config, {
       username,
       password,
-      database: config.database,
+      database: activeDatabase || config.database,
     })
 
     spinner.succeed(`Created user "${username}"`)
@@ -2200,16 +2203,20 @@ async function handleCreateUser(containerName: string): Promise<void> {
     console.log()
 
     // Offer to copy to clipboard
-    const copyText = credentials.apiKey || credentials.connectionString
-    const copied = await platformService.copyToClipboard(copyText)
-    if (copied) {
-      console.log(
-        uiSuccess(
-          credentials.apiKey
-            ? 'API key copied to clipboard'
-            : 'Connection string copied to clipboard',
-        ),
-      )
+    try {
+      const copyText = credentials.apiKey || credentials.connectionString
+      const copied = await platformService.copyToClipboard(copyText)
+      if (copied) {
+        console.log(
+          uiSuccess(
+            credentials.apiKey
+              ? 'API key copied to clipboard'
+              : 'Connection string copied to clipboard',
+          ),
+        )
+      }
+    } catch {
+      // Clipboard failure is non-critical — credentials are already displayed above
     }
   } catch (error) {
     if (error instanceof UnsupportedOperationError) {

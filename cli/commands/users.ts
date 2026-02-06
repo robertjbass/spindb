@@ -18,6 +18,15 @@ import { platformService } from '../../core/platform-service'
 import { isFileBasedEngine } from '../../types'
 import { uiError, uiSuccess, uiWarning } from '../ui/theme'
 
+function exitWithError(message: string, json?: boolean): never {
+  if (json) {
+    console.log(JSON.stringify({ error: message }))
+  } else {
+    console.error(uiError(message))
+  }
+  process.exit(1)
+}
+
 export const usersCommand = new Command('users').description(
   'Manage database users and credentials',
 )
@@ -49,20 +58,10 @@ usersCommand
       try {
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          if (options.json) {
-            console.log(
-              JSON.stringify({
-                error: `Container "${containerName}" not found`,
-              }),
-            )
-          } else {
-            console.error(
-              uiError(
-                `Container "${containerName}" not found. Run "spindb list" to see available containers.`,
-              ),
-            )
-          }
-          process.exit(1)
+          exitWithError(
+            `Container "${containerName}" not found. Run "spindb list" to see available containers.`,
+            options.json,
+          )
         }
 
         const engineName = config.engine
@@ -73,13 +72,10 @@ usersCommand
             engine: engineName,
           })
           if (!running) {
-            const errorMsg = `Container "${containerName}" is not running. Start it with: spindb start ${containerName}`
-            if (options.json) {
-              console.log(JSON.stringify({ error: errorMsg }))
-            } else {
-              console.error(uiError(errorMsg))
-            }
-            process.exit(1)
+            exitWithError(
+              `Container "${containerName}" is not running. Start it with: spindb start ${containerName}`,
+              options.json,
+            )
           }
         }
 
@@ -103,13 +99,10 @@ usersCommand
           !options.force &&
           credentialsExist(containerName, engineName, resolvedUsername)
         ) {
-          const errorMsg = `Credential file already exists for "${resolvedUsername}" in "${containerName}". Use --force to overwrite.`
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
-          }
-          process.exit(1)
+          exitWithError(
+            `Credential file already exists for "${resolvedUsername}" in "${containerName}". Use --force to overwrite.`,
+            options.json,
+          )
         }
 
         // Create the user in the database
@@ -193,21 +186,12 @@ usersCommand
         }
       } catch (error) {
         if (error instanceof UnsupportedOperationError) {
-          const msg = `User management is not supported for this engine`
-          if (options.json) {
-            console.log(JSON.stringify({ error: msg }))
-          } else {
-            console.error(uiError(msg))
-          }
-          process.exit(1)
+          exitWithError(
+            'User management is not supported for this engine',
+            options.json,
+          )
         }
-        const e = error as Error
-        if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
-        } else {
-          console.error(uiError(e.message))
-        }
-        process.exit(1)
+        exitWithError((error as Error).message, options.json)
       }
     },
   )
@@ -221,14 +205,7 @@ usersCommand
     try {
       const config = await containerManager.getConfig(containerName)
       if (!config) {
-        if (options.json) {
-          console.log(
-            JSON.stringify({ error: `Container "${containerName}" not found` }),
-          )
-        } else {
-          console.error(uiError(`Container "${containerName}" not found`))
-        }
-        process.exit(1)
+        exitWithError(`Container "${containerName}" not found`, options.json)
       }
 
       const usernames = await listCredentials(containerName, config.engine)
@@ -265,12 +242,6 @@ usersCommand
         }
       }
     } catch (error) {
-      const e = error as Error
-      if (options.json) {
-        console.log(JSON.stringify({ error: e.message }))
-      } else {
-        console.error(uiError(e.message))
-      }
-      process.exit(1)
+      exitWithError((error as Error).message, options.json)
     }
   })

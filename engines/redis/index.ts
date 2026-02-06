@@ -1460,13 +1460,40 @@ export class RedisEngine extends BaseEngine {
     }
 
     // ACL SETUSER is idempotent - sets user with full access
-    const cmd = buildRedisCliCommand(
-      redisCli,
-      port,
-      `ACL SETUSER ${username} on >${password} ~* &* +@all`,
-    )
+    // Use argv form (spawn) instead of shell execution to avoid injection risks
+    const aclArgs = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-n',
+      container.database ?? '0',
+      'ACL',
+      'SETUSER',
+      username,
+      'on',
+      `>${password}`,
+      '~*',
+      '&*',
+      '+@all',
+    ]
 
-    await execAsync(cmd, { timeout: 10000 })
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(redisCli, aclArgs, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`Failed to create user: ${stderr}`))
+      })
+      proc.on('error', reject)
+    })
     logDebug(`Created Redis user: ${username}`)
 
     const db = container.database ?? '0'

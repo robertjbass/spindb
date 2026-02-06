@@ -1261,6 +1261,7 @@ export class ClickHouseEngine extends BaseEngine {
     const db = database || container.database || 'default'
 
     validateClickHouseIdentifier(username, 'username')
+    validateClickHouseIdentifier(db, 'database')
     const escapedUser = escapeClickHouseIdentifier(username)
     const escapedDb = escapeClickHouseIdentifier(db)
 

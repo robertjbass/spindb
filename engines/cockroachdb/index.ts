@@ -1218,6 +1218,7 @@ export class CockroachDBEngine extends BaseEngine {
     const db = database || container.database || 'defaultdb'
 
     validateCockroachIdentifier(username, 'user')
+    validateCockroachIdentifier(db, 'database')
     const escapedUser = escapeCockroachIdentifier(username)
     const escapedDb = escapeCockroachIdentifier(db)
 
