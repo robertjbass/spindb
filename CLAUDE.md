@@ -10,6 +10,8 @@
 | [docs/historical-refactor-notes/](docs/historical-refactor-notes/) | Historical migration guides (BINARY-MANAGEMENT.md) |
 | [TODO.md](TODO.md) | Roadmap and backlog |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [TEST_COVERAGE.md](TEST_COVERAGE.md) | Test coverage gaps and priorities |
+| [TESTING_STRATEGY.md](TESTING_STRATEGY.md) | CI workflows and platform coverage |
 
 ## Project Overview
 
