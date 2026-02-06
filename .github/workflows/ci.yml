@@ -3,35 +3,33 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  # TODO - uncomment to test on dev branch push
-  # push:
-  #   branches: [dev]
+  push:
+    branches: [dev]
   workflow_dispatch:
 
 # =============================================================================
 # OS Coverage Strategy (Tiered)
 # =============================================================================
-# Engines are assigned to tiers based on platform complexity and popularity:
+# Platform-arch combos we test (all 5 supported):
+#   - linux-x64:     ubuntu-22.04 (older glibc) + ubuntu-24.04 (newer glibc)
+#   - linux-arm64:   Docker + QEMU smoke test (download, start, query, stop)
+#   - darwin-x64:    macos-15-intel (Intel, available until Aug 2027)
+#   - darwin-arm64:  macos-14 (Apple Silicon)
+#   - win32-x64:     windows-latest
 #
-# Tier A (full 5 OS): PostgreSQL, MySQL
-#   - ubuntu-22.04, ubuntu-24.04, macos-15, macos-14, windows-latest
-#   - Most popular engines with the most platform quirks (EDB Windows, libaio)
+# Note: macos-14 and macos-15 are BOTH ARM64 runners. To test darwin-x64
+# you must use macos-15-intel (or the deprecated macos-13).
 #
-# Tier B (3 OS): MariaDB, MongoDB, Redis, Valkey, SQLite, DuckDB, CockroachDB
-#   - ubuntu-24.04, macos-14, windows-latest
-#   - Stable binaries, adequate cross-platform signal
+# All engines (5 runners): ubuntu-22.04, ubuntu-24.04, macos-15-intel, macos-14,
+#   windows-latest
 #
-# Tier C (2 OS): ClickHouse, FerretDB
-#   - ubuntu-24.04, macos-14
-#   - No Windows support (no hostdb binaries)
+# Exceptions:
+#   - ClickHouse, FerretDB: No Windows (no hostdb binaries) → 4 runners
+#   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
 #
-# Tier C+ (3 OS): Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB
-#   - ubuntu-24.04, macos-14, windows-latest
-#   - Simpler engines with Windows support
+# Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
 #
-# Unit tests: 3 OS (ubuntu-24.04, macos-14, windows-latest)
-#
-# Full 5-OS matrix available via: ci-full.yml (manual dispatch or weekly)
+# Full matrix available via: ci-full.yml (manual dispatch or weekly)
 # See TESTING_STRATEGY.md for rollback instructions.
 # =============================================================================
 
@@ -148,7 +146,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -206,9 +204,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -268,7 +272,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -342,9 +346,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -397,9 +407,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -452,9 +468,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -509,9 +531,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -597,9 +625,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -653,9 +687,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -710,9 +750,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -780,9 +826,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -852,9 +904,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -922,9 +980,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -993,9 +1057,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -1078,9 +1148,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -1162,9 +1238,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -1452,9 +1534,15 @@ jobs:
       max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -2076,11 +2164,11 @@ jobs:
   #       shell: bash
 
   # ============================================
-  # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
+  # Docker Linux x64 - Tests library dependencies on minimal Linux
   # Verifies hostdb binaries work on clean Ubuntu systems
   # ============================================
   test-docker-linux:
-    name: Docker Linux Edge Cases
+    name: Docker Linux x64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -2092,6 +2180,40 @@ jobs:
       - name: Run Docker E2E tests
         run: docker run --rm spindb-e2e
         timeout-minutes: 30
+
+  # ============================================
+  # Docker Linux ARM64 (QEMU) - Smoke tests for linux-arm64 binaries
+  # Verifies each engine's hostdb arm64 binary can start and handle a query.
+  # Runs under QEMU emulation so it's slow (~30-45 min) but catches broken
+  # arm64 binaries that no other CI job tests.
+  # ============================================
+  test-docker-linux-arm64:
+    name: Docker Linux ARM64 (QEMU)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ARM64 Docker test image
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -t spindb-e2e-arm64 \
+            -f tests/docker/Dockerfile \
+            --load .
+        timeout-minutes: 30
+
+      - name: Run ARM64 smoke tests
+        run: docker run --rm --platform linux/arm64 spindb-e2e-arm64
+        timeout-minutes: 60
 
   # ============================================
   # Docker Export Test - Tests the `spindb export docker` functionality
@@ -2500,6 +2622,7 @@ jobs:
         test-self-update,
         # test-windows-all,  # Commented out - using parallel Windows tests instead
         test-docker-linux,
+        test-docker-linux-arm64,
         test-docker-export,
         lint,
         hostdb-sync,
@@ -2602,7 +2725,11 @@ jobs:
           fi
           # test-windows-all check removed - using parallel Windows tests instead
           if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
-            echo "Docker Linux edge case tests failed"
+            echo "Docker Linux x64 tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-docker-linux-arm64.result }}" != "success" ]; then
+            echo "Docker Linux ARM64 smoke tests failed"
             exit 1
           fi
           if [ "${{ needs.test-docker-export.result }}" != "success" ]; then

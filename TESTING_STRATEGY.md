@@ -2,36 +2,42 @@
 
 ## Overview
 
-SpinDB uses a tiered CI testing strategy to balance fast feedback with thorough cross-platform coverage.
+SpinDB tests every engine on every supported platform-arch combo in CI.
 
 ## CI Workflows
 
-| Workflow | Trigger | Duration | Purpose |
-|----------|---------|----------|---------|
-| `ci-fast.yml` | Push to any branch (except main) | ~3-5 min | Fast feedback: lint + unit tests on Ubuntu |
-| `ci.yml` | PR to main, manual dispatch | ~20-25 min | Tiered OS matrix (see below) |
-| `ci-full.yml` | Manual dispatch, weekly schedule | ~30-45 min | Full 5-OS matrix for all engines (rollback target) |
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci-fast.yml` | Push to any branch (except main) | Fast feedback: lint + unit tests on Ubuntu |
+| `ci.yml` | PR to main, manual dispatch | Full integration tests on all platforms |
+| `ci-full.yml` | Manual dispatch, weekly schedule | Same as ci.yml (kept as rollback target) |
 
-## OS Matrix Tiers (ci.yml)
+## Platform Coverage (ci.yml)
 
-| Tier | Engines | OS Variants | Rationale |
-|------|---------|-------------|-----------|
-| **A (full)** | PostgreSQL, MySQL | 5: ubuntu-22.04, ubuntu-24.04, macos-15, macos-14, windows | Most popular, most platform quirks (EDB Windows binaries, libaio) |
-| **B (reduced)** | MariaDB, MongoDB, Redis, Valkey, SQLite, DuckDB, CockroachDB | 3: ubuntu-24.04, macos-14, windows | Stable binaries, adequate cross-platform signal |
-| **C (minimal)** | ClickHouse, FerretDB | 2: ubuntu-24.04, macos-14 | No Windows support (no hostdb binaries) |
-| **C+ (3 OS)** | Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB | 3: ubuntu-24.04, macos-14, windows | Simpler engines with Windows support |
+Every engine runs on **5 runners** covering all **5 platform-arch combos**:
 
-**Unit tests** run on 3 OS variants: ubuntu-24.04, macos-14, windows.
+| Platform-Arch | Runner | Notes |
+|---------------|--------|-------|
+| linux-x64 | ubuntu-22.04 | Older glibc (2.35) — catches binary compatibility issues |
+| linux-x64 | ubuntu-24.04 | Newer glibc (2.39) — catches library renames (e.g., libaio) |
+| linux-arm64 | Docker + QEMU | Smoke test: download, start, one query, stop per engine |
+| darwin-x64 | macos-15-intel | Intel macOS (available until Aug 2027) |
+| darwin-arm64 | macos-14 | Apple Silicon |
+| win32-x64 | windows-latest | |
 
-## Rollback Instructions
+**Important:** `macos-14` and `macos-15` are both ARM64 runners. Use `macos-15-intel` for darwin-x64 testing.
 
-If the reduced matrix in `ci.yml` misses a platform-specific regression:
+The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`) and `run-e2e.sh` in smoke test mode. It's slow (~30-45 min under emulation) but runs in parallel with all other jobs.
 
-1. Rename `ci-full.yml` back to `ci.yml` (restore full matrix as PR trigger)
-2. Delete the current `ci.yml` and `ci-fast.yml`
-3. The full 5-OS matrix will run on every PR again
+### Exceptions
 
-Alternatively, manually dispatch `ci-full.yml` to run the complete matrix on demand.
+| Engine | Runners | Reason |
+|--------|---------|--------|
+| ClickHouse | 4 (no Windows) | No hostdb binary for Windows |
+| FerretDB | 4 (no Windows) | postgresql-documentdb has startup issues on Windows |
+| Meilisearch | 5 (backup/restore skipped on Windows) | Upstream page size alignment bug |
+
+**Unit tests** run on 3 runners: ubuntu-24.04, macos-14, windows.
 
 ## Test Types
 

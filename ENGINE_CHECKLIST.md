@@ -1869,12 +1869,12 @@ describe('YourEngine Restore', () => {
       key: spindb-{engine}-{version}-${{ runner.os }}-${{ runner.arch }}
   ```
 
-- [ ] Add integration test job `test-{engine}` with 5-platform matrix:
-  - ubuntu-22.04
-  - ubuntu-24.04
-  - macos-15 (Intel)
-  - macos-14 (ARM)
-  - windows-latest (if supported)
+- [ ] Add integration test job `test-{engine}` with platform matrix (see TESTING_STRATEGY.md for tier):
+  - ubuntu-22.04 (linux-x64, older glibc — Tier A only)
+  - ubuntu-24.04 (linux-x64)
+  - macos-15-intel (darwin-x64 — Tier A only)
+  - macos-14 (darwin-arm64)
+  - windows-latest (win32-x64, if supported)
 
 - [ ] Add download step: `pnpm start engines download {engine} {version}`
 
@@ -1908,8 +1908,8 @@ test-yourengine:
       os:
         - ubuntu-22.04
         - ubuntu-24.04
-        - macos-15  # Intel
-        - macos-14  # ARM64
+        - macos-15-intel  # darwin-x64
+        - macos-14        # darwin-arm64
         - windows-latest
   steps:
     - name: Checkout

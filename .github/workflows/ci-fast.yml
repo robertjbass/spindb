@@ -2,7 +2,7 @@ name: CI Fast
 
 on:
   push:
-    branches-ignore: [main]
+    branches-ignore: [main, dev]
 
 # Cancel in-progress runs when a new run is triggered
 concurrency:
