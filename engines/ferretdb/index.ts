@@ -338,7 +338,14 @@ export class FerretDBEngine extends BaseEngine {
       try {
         // Add timeout to prevent hanging on Windows
         // Pass -L to override the hardcoded share path in the DocumentDB binary
-        const shareDir = join(documentdbPath, 'share')
+        // darwin-arm64 layout: share/postgres.bki (custom source build)
+        // darwin-x64 layout:  share/postgresql/postgres.bki (Homebrew-derived)
+        const shareDirBase = join(documentdbPath, 'share')
+        const shareDir = existsSync(join(shareDirBase, 'postgres.bki'))
+          ? shareDirBase
+          : existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
+            ? join(shareDirBase, 'postgresql')
+            : shareDirBase // fallback to base (will fail with a clear error)
         await spawnAsync(
           initdb,
           [
