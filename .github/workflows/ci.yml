@@ -21,9 +21,13 @@ on:
 #   - ubuntu-24.04, macos-14, windows-latest
 #   - Stable binaries, adequate cross-platform signal
 #
-# Tier C (2 OS): ClickHouse, FerretDB, Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB
+# Tier C (2 OS): ClickHouse, FerretDB
 #   - ubuntu-24.04, macos-14
-#   - No Windows support (CH, Ferret) or simpler engines
+#   - No Windows support (no hostdb binaries)
+#
+# Tier C+ (3 OS): Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB
+#   - ubuntu-24.04, macos-14, windows-latest
+#   - Simpler engines with Windows support
 #
 # Unit tests: 3 OS (ubuntu-24.04, macos-14, windows-latest)
 #
@@ -782,6 +786,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Windows x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -851,6 +858,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Windows x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -918,6 +928,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Windows x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1071,6 +1084,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Windows x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1152,6 +1168,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Windows x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1179,7 +1179,7 @@ export class MariaDBEngine extends BaseEngine {
     const { username, password, database } = options
     assertValidUsername(username)
     const { port } = container
-    const db = database || container.database
+    const db = database || container.database || 'mysql'
     assertValidDatabaseName(db)
     const mariadb = await this.getMariadbClientPath()
 

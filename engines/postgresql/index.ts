@@ -1087,7 +1087,7 @@ export class PostgreSQLEngine extends BaseEngine {
 
     await execAsync(grantCmd)
 
-    const connectionString = `postgresql://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,

@@ -18,7 +18,8 @@ SpinDB uses a tiered CI testing strategy to balance fast feedback with thorough 
 |------|---------|-------------|-----------|
 | **A (full)** | PostgreSQL, MySQL | 5: ubuntu-22.04, ubuntu-24.04, macos-15, macos-14, windows | Most popular, most platform quirks (EDB Windows binaries, libaio) |
 | **B (reduced)** | MariaDB, MongoDB, Redis, Valkey, SQLite, DuckDB, CockroachDB | 3: ubuntu-24.04, macos-14, windows | Stable binaries, adequate cross-platform signal |
-| **C (minimal)** | ClickHouse, FerretDB, Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB | 2: ubuntu-24.04, macos-14 | No Windows support (CH, Ferret) or simpler engines |
+| **C (minimal)** | ClickHouse, FerretDB | 2: ubuntu-24.04, macos-14 | No Windows support (no hostdb binaries) |
+| **C+ (3 OS)** | Qdrant, Meilisearch, CouchDB, SurrealDB, QuestDB | 3: ubuntu-24.04, macos-14, windows | Simpler engines with Windows support |
 
 **Unit tests** run on 3 OS variants: ubuntu-24.04, macos-14, windows.
 

@@ -1258,7 +1258,7 @@ export class ClickHouseEngine extends BaseEngine {
     const { username, password, database } = options
     assertValidUsername(username)
     const { port, version } = container
-    const db = database || container.database
+    const db = database || container.database || 'default'
 
     validateClickHouseIdentifier(username, 'username')
     const escapedUser = escapeClickHouseIdentifier(username)

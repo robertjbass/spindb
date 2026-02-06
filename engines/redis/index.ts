@@ -1448,7 +1448,7 @@ export class RedisEngine extends BaseEngine {
     const { username, password } = options
     assertValidUsername(username)
     const { port } = container
-    const redisCli = await this.getRedisCliPath()
+    const redisCli = await this.getRedisCliPath(container.version)
 
     // Reject passwords with characters that break ACL SETUSER syntax
     if (/[>\s]/.test(password)) {

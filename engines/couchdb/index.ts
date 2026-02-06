@@ -1291,6 +1291,11 @@ export class CouchDBEngine extends BaseEngine {
     assertValidUsername(username)
     const { port } = container
     const db = database || container.database
+    if (!db) {
+      throw new Error(
+        'No database specified. Use --database or create a database first.',
+      )
+    }
 
     // Create user document in _users database
     const userDoc = {

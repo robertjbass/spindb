@@ -1156,7 +1156,7 @@ export class SurrealDBEngine extends BaseEngine {
     assertValidUsername(username)
     const { port, version, name } = container
     const namespace = name.replace(/-/g, '_')
-    const db = database || container.database || 'test'
+    const db = database || container.database || 'default'
 
     const surreal = await this.getSurrealPath(version)
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })

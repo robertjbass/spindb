@@ -51,9 +51,24 @@ function formatCredentials(credentials: UserCredentials): string {
     lines.push(`DB_USER=${credentials.username}`)
     lines.push(`DB_PASSWORD=${credentials.password}`)
     lines.push(`DB_HOST=127.0.0.1`)
-    const portMatch = credentials.connectionString.match(/:(\d+)/)
-    if (portMatch) {
-      lines.push(`DB_PORT=${portMatch[1]}`)
+    // Extract port from the host portion of the connection string.
+    // Use URL parsing when possible; fall back to a regex targeting host:port.
+    let extractedPort: string | undefined
+    try {
+      const url = new URL(credentials.connectionString)
+      if (url.port) {
+        extractedPort = url.port
+      }
+    } catch {
+      // Not a valid URL (e.g. custom scheme). Use regex targeting host:port segment.
+      const hostPortMatch =
+        credentials.connectionString.match(/@[^:]+:(\d+)(?:\/|$)/)
+      if (hostPortMatch) {
+        extractedPort = hostPortMatch[1]
+      }
+    }
+    if (extractedPort) {
+      lines.push(`DB_PORT=${extractedPort}`)
     }
     if (credentials.database) {
       lines.push(`DB_NAME=${credentials.database}`)
@@ -122,7 +137,10 @@ export async function saveCredentials(
     engine,
     credentials.username,
   )
-  await writeFile(filePath, formatCredentials(credentials), 'utf-8')
+  await writeFile(filePath, formatCredentials(credentials), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  })
   return filePath
 }
 
@@ -136,12 +154,15 @@ export async function loadCredentials(
   username: string,
 ): Promise<UserCredentials | null> {
   const filePath = getCredentialFilePath(containerName, engine, username)
-  if (!existsSync(filePath)) {
-    return null
+  try {
+    const content = await readFile(filePath, 'utf-8')
+    return parseCredentialFile(content, containerName, engine)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    throw error
   }
-
-  const content = await readFile(filePath, 'utf-8')
-  return parseCredentialFile(content, containerName, engine)
 }
 
 /**

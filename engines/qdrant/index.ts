@@ -1209,6 +1209,15 @@ export class QdrantEngine extends BaseEngine {
     return [container.database]
   }
 
+  /**
+   * Create/update the global API key for Qdrant.
+   *
+   * Qdrant supports only a single global API key (set in config.yaml).
+   * Calling createUser multiple times will overwrite the previous key.
+   * The caller-provided username is stored in the credential file for
+   * bookkeeping but has no effect on Qdrant itself — authentication
+   * is solely via the api-key header.
+   */
   async createUser(
     container: ContainerConfig,
     options: CreateUserOptions,
@@ -1217,8 +1226,8 @@ export class QdrantEngine extends BaseEngine {
     assertValidUsername(username)
     const { port, name } = container
 
-    // Qdrant uses API key authentication via config.yaml
-    // Read current config, add api-key, write back, and restart
+    // Qdrant uses a single global API key in config.yaml.
+    // Read current config, set/replace api_key, write back, and restart.
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'config.yaml')
 
@@ -1259,7 +1268,7 @@ export class QdrantEngine extends BaseEngine {
     await writeFile(configPath, updatedConfig)
     await this.start(container)
 
-    logDebug(`Configured Qdrant API key for: ${username}`)
+    logDebug(`Configured Qdrant global API key (credential label: ${username})`)
 
     const connectionString = `http://127.0.0.1:${port}`
 

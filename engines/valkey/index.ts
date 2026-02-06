@@ -1477,10 +1477,12 @@ export class ValkeyEngine extends BaseEngine {
     const { port } = container
     const valkeyCli = await this.getValkeyCliPath()
 
-    // Reject passwords with characters that break ACL SETUSER syntax
-    if (/[>\s]/.test(password)) {
+    // Reject passwords with characters that break ACL SETUSER syntax:
+    // '>' sets password, '#' sets hash, '<' removes password — all are ACL delimiters.
+    // Whitespace and newlines would split the command unexpectedly.
+    if (/[>#<\s\n\r]/.test(password)) {
       throw new Error(
-        'Password contains invalid characters for Valkey ACL. Passwords must not contain ">" or whitespace.',
+        'Password contains invalid characters for Valkey ACL. Passwords must not contain ">", "#", "<", whitespace, or newlines.',
       )
     }
 

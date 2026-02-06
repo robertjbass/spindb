@@ -1272,7 +1272,7 @@ export class MySQLEngine extends BaseEngine {
     const cmd = buildMysqlInlineCommand(mysql, port, engineDef.superuser, sql)
     await execAsync(cmd)
 
-    const connectionString = `mysql://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `mysql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,
