@@ -337,9 +337,20 @@ export class FerretDBEngine extends BaseEngine {
 
       try {
         // Add timeout to prevent hanging on Windows
+        // Pass -L to override the hardcoded share path in the DocumentDB binary
+        const shareDir = join(documentdbPath, 'share')
         await spawnAsync(
           initdb,
-          ['-D', pgDataDir, '-U', 'postgres', '--encoding=UTF8', '--locale=C'],
+          [
+            '-D',
+            pgDataDir,
+            '-U',
+            'postgres',
+            '--encoding=UTF8',
+            '--locale=C',
+            '-L',
+            shareDir,
+          ],
           { env: spawnEnv, timeout: 60000 },
         )
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
