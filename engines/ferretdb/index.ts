@@ -15,7 +15,14 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import net from 'net'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  readdir,
+  symlink,
+  unlink,
+} from 'fs/promises'
 import { join, basename } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -335,29 +342,30 @@ export class FerretDBEngine extends BaseEngine {
         arch,
       )
 
+      // Normalize share dir layout for Homebrew-derived x64 binaries.
+      // The x64 binary has share data in share/postgresql/ but PostgreSQL's
+      // relative path discovery looks for share/postgres.bki at the base level.
+      // Without this, postgres falls back to compiled-in /usr/local/share/postgresql@17/
+      // which doesn't exist, causing timezone lookup failures during initdb.
+      const shareDirBase = join(documentdbPath, 'share')
+      if (
+        !existsSync(join(shareDirBase, 'postgres.bki')) &&
+        existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
+      ) {
+        const subdir = join(shareDirBase, 'postgresql')
+        const entries = await readdir(subdir)
+        for (const entry of entries) {
+          const target = join(shareDirBase, entry)
+          if (!existsSync(target)) {
+            await symlink(join('postgresql', entry), target)
+          }
+        }
+      }
+
       try {
-        // Add timeout to prevent hanging on Windows
-        // Pass -L to override the hardcoded share path in the DocumentDB binary
-        // darwin-arm64 layout: share/postgres.bki (custom source build)
-        // darwin-x64 layout:  share/postgresql/postgres.bki (Homebrew-derived)
-        const shareDirBase = join(documentdbPath, 'share')
-        const shareDir = existsSync(join(shareDirBase, 'postgres.bki'))
-          ? shareDirBase
-          : existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
-            ? join(shareDirBase, 'postgresql')
-            : shareDirBase // fallback to base (will fail with a clear error)
         await spawnAsync(
           initdb,
-          [
-            '-D',
-            pgDataDir,
-            '-U',
-            'postgres',
-            '--encoding=UTF8',
-            '--locale=C',
-            '-L',
-            shareDir,
-          ],
+          ['-D', pgDataDir, '-U', 'postgres', '--encoding=UTF8', '--locale=C'],
           { env: spawnEnv, timeout: 60000 },
         )
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
@@ -368,11 +376,7 @@ export class FerretDBEngine extends BaseEngine {
 
       // Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
       // This is critical for DocumentDB extension to load properly
-      const bundledConf = join(
-        documentdbPath,
-        'share',
-        'postgresql.conf.sample',
-      )
+      const bundledConf = join(shareDirBase, 'postgresql.conf.sample')
       const pgConf = join(pgDataDir, 'postgresql.conf')
 
       if (existsSync(bundledConf)) {
