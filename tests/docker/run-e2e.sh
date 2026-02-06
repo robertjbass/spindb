@@ -85,6 +85,7 @@ fi
 
 # Timeouts
 STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-60}
+START_TIMEOUT=${START_TIMEOUT:-120}  # Max seconds for `spindb start` command
 
 # Directories
 BACKUP_DIR=$(mktemp -d)
@@ -1125,7 +1126,7 @@ run_test() {
     log_step "Start container"
     local start_output
     local start_exit_code
-    local start_timeout=120  # 2 minute timeout for start command
+    local start_timeout="$START_TIMEOUT"
     # Use timeout command if available (Linux), otherwise run without timeout (macOS for local testing)
     if command -v timeout &>/dev/null; then
       start_output=$(timeout "$start_timeout" spindb start "$container_name" 2>&1)
