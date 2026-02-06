@@ -2169,20 +2169,26 @@ async function handleCreateUser(
     const spinner = createSpinner(`Creating user "${username}"...`)
     spinner.start()
 
-    const credentials = await engine.createUser(config, {
-      username,
-      password,
-      database: activeDatabase || config.database,
-    })
+    let credentials
+    let credentialFile: string
+    try {
+      credentials = await engine.createUser(config, {
+        username,
+        password,
+        database: activeDatabase || config.database,
+      })
 
-    spinner.succeed(`Created user "${username}"`)
-
-    // Save credentials
-    const credentialFile = await saveCredentials(
-      containerName,
-      config.engine,
-      credentials,
-    )
+      // Save credentials
+      credentialFile = await saveCredentials(
+        containerName,
+        config.engine,
+        credentials,
+      )
+      spinner.succeed(`Created user "${username}"`)
+    } catch (error) {
+      spinner.fail(`Failed to create user "${username}"`)
+      throw error
+    }
 
     console.log()
     if (credentials.apiKey) {

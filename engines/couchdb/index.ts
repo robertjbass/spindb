@@ -1340,11 +1340,12 @@ export class CouchDBEngine extends BaseEngine {
           `User "${username}" already exists and could not be updated`,
         )
       }
+      const existingDoc = getResponse.data as Record<string, unknown>
       const updateResponse = await couchdbApiRequest(
         port,
         'PUT',
         `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
-        { ...userDoc, _rev: rev } as unknown as Record<string, unknown>,
+        { ...existingDoc, password, _rev: rev },
       )
       if (updateResponse.status !== 201) {
         throw new Error(
