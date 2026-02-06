@@ -1264,10 +1264,15 @@ export class QdrantEngine extends BaseEngine {
 
     const updatedConfig = lines.join('\n')
 
-    // Stop the server, update config, restart
-    await this.stop(container)
-    await writeFile(configPath, updatedConfig)
-    await this.start(container)
+    // Only restart if the container is currently running
+    const statusResult = await this.status(container)
+    if (statusResult.running) {
+      await this.stop(container)
+      await writeFile(configPath, updatedConfig)
+      await this.start(container)
+    } else {
+      await writeFile(configPath, updatedConfig)
+    }
 
     logDebug(`Configured Qdrant global API key (credential label: ${username})`)
 

@@ -112,14 +112,25 @@ usersCommand
           database,
         })
 
-        // Save credentials to disk
+        // Save credentials to disk (non-fatal — credentials are already created)
         let credentialFile: string | undefined
         if (options.save) {
-          credentialFile = await saveCredentials(
-            containerName,
-            engineName,
-            credentials,
-          )
+          try {
+            credentialFile = await saveCredentials(
+              containerName,
+              engineName,
+              credentials,
+            )
+          } catch (error) {
+            if (!options.json) {
+              console.error(
+                uiWarning(
+                  `Could not save credentials to disk: ${(error as Error).message}`,
+                ),
+              )
+            }
+            process.exitCode = 1
+          }
         }
 
         // Output results

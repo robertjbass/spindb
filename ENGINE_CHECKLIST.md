@@ -57,6 +57,7 @@ This comprehensive document provides both the specification for adding a new dat
 | `scripts/test-engine.ts` | Add engine support |
 | `tests/integration/helpers.ts` | Add helper functions |
 | `tests/integration/{engine}.test.ts` | Create test file |
+| `tests/integration/hostdb-sync.test.ts` | Add version map to ENGINES array |
 | `tests/unit/{engine}-version-validator.test.ts` | Create version validator tests |
 | `tests/unit/{engine}-restore.test.ts` | Create restore tests |
 | `tests/unit/config-manager.test.ts` | Update with engine tools |
@@ -1729,6 +1730,26 @@ describe('YourEngine Integration Tests', () => {
 })
 ```
 
+### tests/integration/hostdb-sync.test.ts
+
+- [ ] Import the engine's version map (e.g., `YOURENGINE_VERSION_MAP`)
+- [ ] Add entry to the `ENGINES` array with the hostdb engine name and version map
+
+The `ENGINES` array maps hostdb engine names to SpinDB version maps. The test verifies that every version in the version map exists in hostdb's `releases.json`, and warns if hostdb has engines not covered by SpinDB.
+
+```ts
+// Add import
+import { YOURENGINE_VERSION_MAP } from '../../engines/yourengine/version-maps'
+
+// Add to ENGINES array
+const ENGINES = [
+  // ... existing engines ...
+  { name: 'yourengine', map: YOURENGINE_VERSION_MAP },
+] as const
+```
+
+> **Note:** For composite engines like FerretDB, add entries for each hostdb binary. FerretDB adds both `ferretdb` (with `FERRETDB_VERSION_MAP`) and `postgresql-documentdb` (with `DOCUMENTDB_VERSION_MAP`).
+
 ### Integration Test Best Practices
 
 **Always wait for readiness after starting/restarting containers:**
@@ -2998,6 +3019,7 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Added engine-specific helper functions
 - [ ] Added to `runScriptFile()` and `runScriptSQL()`
 - [ ] Created `tests/integration/{engine}.test.ts` (15+ tests, including createUser idempotency)
+- [ ] Added version map import and entry to `ENGINES` array in `tests/integration/hostdb-sync.test.ts`
 - [ ] Created `tests/unit/{engine}-version-validator.test.ts`
 - [ ] Created `tests/unit/{engine}-restore.test.ts`
 - [ ] Updated `tests/unit/config-manager.test.ts`

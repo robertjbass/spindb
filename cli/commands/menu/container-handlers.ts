@@ -2170,24 +2170,32 @@ async function handleCreateUser(
     spinner.start()
 
     let credentials
-    let credentialFile: string
     try {
       credentials = await engine.createUser(config, {
         username,
         password,
         database: activeDatabase || config.database,
       })
+      spinner.succeed(`Created user "${username}"`)
+    } catch (error) {
+      spinner.fail(`Failed to create user "${username}"`)
+      throw error
+    }
 
-      // Save credentials
+    // Save credentials (non-fatal — credentials are already created)
+    let credentialFile: string | undefined
+    try {
       credentialFile = await saveCredentials(
         containerName,
         config.engine,
         credentials,
       )
-      spinner.succeed(`Created user "${username}"`)
     } catch (error) {
-      spinner.fail(`Failed to create user "${username}"`)
-      throw error
+      console.log(
+        uiWarning(
+          `Could not save credentials to disk: ${(error as Error).message}`,
+        ),
+      )
     }
 
     console.log()
@@ -2207,8 +2215,10 @@ async function handleCreateUser(
         `  ${chalk.gray('URL:')}       ${credentials.connectionString}`,
       )
     }
-    console.log()
-    console.log(`  ${chalk.gray('Saved to:')} ${credentialFile}`)
+    if (credentialFile) {
+      console.log()
+      console.log(`  ${chalk.gray('Saved to:')} ${credentialFile}`)
+    }
     console.log()
 
     // Offer to copy to clipboard
