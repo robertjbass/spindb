@@ -535,8 +535,11 @@ export async function handleList(
     // (padEnd counts code points, not visual width)
     const icon = getEngineIcon(c.engine)
     const engineName = c.engine.padEnd(COL_ENGINE)
+    const isRunning = c.status === 'running'
     const row =
-      chalk.cyan(displayName.padEnd(COL_NAME)) +
+      (isRunning
+        ? chalk.cyan.bold(displayName.padEnd(COL_NAME))
+        : chalk.cyan(displayName.padEnd(COL_NAME))) +
       chalk.white(`${icon}${engineName}`) +
       chalk.yellow(c.version.padEnd(COL_VERSION)) +
       chalk.green(portDisplay.padEnd(COL_PORT)) +
