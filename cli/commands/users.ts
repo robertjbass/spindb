@@ -134,14 +134,14 @@ usersCommand
           const result: Record<string, unknown> = {
             username: credentials.username,
             password: credentials.password,
-            database: credentials.database,
+            ...(credentials.database != null && {
+              database: credentials.database,
+            }),
             connectionString: credentials.connectionString,
-          }
-          if (credentials.apiKey) {
-            result.apiKey = credentials.apiKey
-          }
-          if (credentialFile) {
-            result.credentialFile = credentialFile
+            ...(credentials.apiKey != null && { apiKey: credentials.apiKey }),
+            ...(credentialFile != null && {
+              credentialFile,
+            }),
           }
           console.log(JSON.stringify(result, null, 2))
         } else {
@@ -236,7 +236,11 @@ usersCommand
       if (options.json) {
         console.log(
           JSON.stringify(
-            { container: containerName, users: usernames },
+            {
+              container: containerName,
+              engine: config.engine,
+              users: usernames,
+            },
             null,
             2,
           ),

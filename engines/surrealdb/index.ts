@@ -1162,7 +1162,9 @@ export class SurrealDBEngine extends BaseEngine {
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
 
     // DEFINE USER on namespace level with EDITOR role
-    const sql = `DEFINE USER ${username} ON NAMESPACE PASSWORD '${password.replace(/'/g, "\\'")}' ROLES EDITOR;`
+    // Escape backslashes first, then single quotes for SurrealQL string literals
+    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    const sql = `DEFINE USER ${username} ON NAMESPACE PASSWORD '${escapedPass}' ROLES EDITOR;`
 
     const args = [
       'sql',

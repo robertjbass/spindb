@@ -10,6 +10,7 @@ import { readFile, writeFile, readdir, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { paths } from '../config/paths'
 import { Engine, type UserCredentials } from '../types'
+import { isValidUsername } from './error-handler'
 
 /**
  * Get the credentials directory for a container.
@@ -21,12 +22,18 @@ function getCredentialsDir(containerName: string, engine: Engine): string {
 
 /**
  * Get the credential file path for a specific username.
+ * Validates the username to prevent path traversal (same rules as assertValidUsername).
  */
 function getCredentialFilePath(
   containerName: string,
   engine: Engine,
   username: string,
 ): string {
+  if (!isValidUsername(username)) {
+    throw new Error(
+      `Invalid username for credential file: "${username}". Must match ^[a-zA-Z][a-zA-Z0-9_]{0,62}$`,
+    )
+  }
   return join(getCredentialsDir(containerName, engine), `.env.${username}`)
 }
 

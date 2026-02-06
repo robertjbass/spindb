@@ -1180,6 +1180,7 @@ export class MariaDBEngine extends BaseEngine {
     assertValidUsername(username)
     const { port } = container
     const db = database || container.database
+    assertValidDatabaseName(db)
     const mariadb = await this.getMariadbClientPath()
 
     const escapedPass = password.replace(/'/g, "''")

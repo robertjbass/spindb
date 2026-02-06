@@ -1220,24 +1220,52 @@ export class MeilisearchEngine extends BaseEngine {
       )
     }
 
-    // Create an API key with the given name as description
-    const response = await meilisearchApiRequest(port, 'POST', '/keys', {
-      description: username,
-      actions: ['*'],
-      indexes: ['*'],
-      expiresAt: null,
-    } as unknown as Record<string, unknown>)
+    // Derive a deterministic UID from the username so createUser is idempotent.
+    // Meilisearch UIDs are UUIDv4 format; we derive one via a stable hash.
+    const { createHash } = await import('crypto')
+    const hash = createHash('md5').update(`spindb:${username}`).digest('hex')
+    const uid = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`
 
-    if (response.status !== 201 && response.status !== 200) {
-      throw new Error(
-        `Failed to create API key: ${JSON.stringify(response.data)}`,
-      )
+    // Check if a key with this UID already exists
+    const existingResponse = await meilisearchApiRequest(
+      port,
+      'GET',
+      `/keys/${uid}`,
+    )
+
+    let apiKey: string
+
+    if (existingResponse.status === 200) {
+      // Key already exists — return it
+      const existingData = existingResponse.data as { key?: string }
+      if (!existingData.key) {
+        throw new Error('Existing API key response missing key property')
+      }
+      apiKey = existingData.key
+      logDebug(`Found existing Meilisearch API key: ${username}`)
+    } else {
+      // Create a new API key with the deterministic UID
+      const response = await meilisearchApiRequest(port, 'POST', '/keys', {
+        uid,
+        description: username,
+        actions: ['*'],
+        indexes: ['*'],
+        expiresAt: null,
+      } as unknown as Record<string, unknown>)
+
+      if (response.status !== 201 && response.status !== 200) {
+        throw new Error(
+          `Failed to create API key: ${JSON.stringify(response.data)}`,
+        )
+      }
+
+      const data = response.data as { key?: string }
+      if (!data.key) {
+        throw new Error('API key creation response missing key property')
+      }
+      apiKey = data.key
+      logDebug(`Created Meilisearch API key: ${username}`)
     }
-
-    const data = response.data as { key?: string }
-    const apiKey = data.key || ''
-
-    logDebug(`Created Meilisearch API key: ${username}`)
 
     const connectionString = `http://127.0.0.1:${port}`
 

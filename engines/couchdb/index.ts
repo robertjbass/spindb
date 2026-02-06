@@ -1347,6 +1347,12 @@ export class CouchDBEngine extends BaseEngine {
       `/${encodeURIComponent(db)}/_security`,
     )
 
+    if (secResponse.status !== 200) {
+      throw new Error(
+        `Failed to read database security for "${db}": ${JSON.stringify(secResponse.data)}`,
+      )
+    }
+
     const security = (secResponse.data || {}) as Record<string, unknown>
     const members = (security.members || {}) as Record<string, unknown>
     const names = ((members.names || []) as string[]).slice()
@@ -1355,7 +1361,7 @@ export class CouchDBEngine extends BaseEngine {
       names.push(username)
     }
 
-    await couchdbApiRequest(
+    const secPutResponse = await couchdbApiRequest(
       port,
       'PUT',
       `/${encodeURIComponent(db)}/_security`,
@@ -1364,6 +1370,12 @@ export class CouchDBEngine extends BaseEngine {
         members: { ...members, names },
       },
     )
+
+    if (secPutResponse.status !== 200 && secPutResponse.status !== 201) {
+      throw new Error(
+        `Failed to update database security for "${db}": ${JSON.stringify(secPutResponse.data)}`,
+      )
+    }
 
     logDebug(`Created CouchDB user: ${username}`)
 

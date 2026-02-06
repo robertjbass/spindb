@@ -1477,6 +1477,13 @@ export class ValkeyEngine extends BaseEngine {
     const { port } = container
     const valkeyCli = await this.getValkeyCliPath()
 
+    // Reject passwords with characters that break ACL SETUSER syntax
+    if (/[>\s]/.test(password)) {
+      throw new Error(
+        'Password contains invalid characters for Valkey ACL (">", whitespace). Use alphanumeric passwords only.',
+      )
+    }
+
     // ACL SETUSER is idempotent - sets user with full access
     const cmd = buildValkeyCliCommand(
       valkeyCli,

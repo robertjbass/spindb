@@ -1354,7 +1354,8 @@ export class FerretDBEngine extends BaseEngine {
     const { username, password, database } = options
     assertValidUsername(username)
     const { port } = container
-    const db = database || container.database
+    const db = database ?? container.database ?? 'admin'
+    assertValidDatabaseName(db)
     const mongosh = await this.getMongoshPath()
 
     // Same as MongoDB - auth disabled with --no-auth but user is still created

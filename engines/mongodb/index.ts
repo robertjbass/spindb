@@ -1042,7 +1042,8 @@ export class MongoDBEngine extends BaseEngine {
     const { username, password, database } = options
     assertValidUsername(username)
     const { port } = container
-    const db = database || container.database
+    const db = database || container.database || 'admin'
+    assertValidDatabaseName(db)
     const mongosh = await this.getMongoshPath()
 
     // Create user with readWrite role on the target database

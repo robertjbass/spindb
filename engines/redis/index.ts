@@ -1450,6 +1450,13 @@ export class RedisEngine extends BaseEngine {
     const { port } = container
     const redisCli = await this.getRedisCliPath()
 
+    // Reject passwords with characters that break ACL SETUSER syntax
+    if (/[>\s]/.test(password)) {
+      throw new Error(
+        'Password contains invalid characters for Redis ACL (">", whitespace). Use alphanumeric passwords only.',
+      )
+    }
+
     // ACL SETUSER is idempotent - sets user with full access
     const cmd = buildRedisCliCommand(
       redisCli,
@@ -1460,7 +1467,7 @@ export class RedisEngine extends BaseEngine {
     await execAsync(cmd, { timeout: 10000 })
     logDebug(`Created Redis user: ${username}`)
 
-    const connectionString = `redis://${username}:${password}@127.0.0.1:${port}/${container.database}`
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${container.database}`
 
     return {
       username,
