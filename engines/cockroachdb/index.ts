@@ -1212,7 +1212,7 @@ export class CockroachDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: CreateUserOptions,
   ): Promise<UserCredentials> {
-    const { username, database } = options
+    const { username, password, database } = options
     assertValidUsername(username)
     const { port, version } = container
     const db = database || container.database || 'defaultdb'
@@ -1259,8 +1259,9 @@ export class CockroachDBEngine extends BaseEngine {
 
     return {
       username,
-      // CockroachDB insecure mode ignores passwords — return empty to avoid confusion
-      password: '',
+      // Note: CockroachDB insecure mode doesn't enforce passwords, but we
+      // return it for credential file consistency
+      password,
       connectionString,
       engine: container.engine,
       container: container.name,

@@ -25,7 +25,7 @@ type CommandResult = {
 /**
  * Run a CLI command and capture output
  * @param args - Command arguments to pass to the CLI
- * @param timeout - Command timeout in ms (default: 30000, use 60000 for slow commands like doctor)
+ * @param timeout - Command timeout in ms (default: 30000, use 120000 for slow commands like doctor)
  */
 function runCommand(args: string, timeout = 30000): CommandResult {
   try {
@@ -198,7 +198,8 @@ describe('JSON Output Validation', () => {
 
     it('spindb doctor --json', () => {
       // doctor command can be slow on Windows CI due to system checks
-      const result = runCommand('doctor --json', 60000)
+      // (spawns binary detection for all 16 engines — dozens of process spawns)
+      const result = runCommand('doctor --json', 120000)
       // doctor --json should always output valid JSON
       assertValidJson(result.stdout, 'doctor --json')
 
