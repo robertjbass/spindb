@@ -2148,8 +2148,6 @@ async function handleCreateUser(containerName: string): Promise<void> {
       },
     ])
 
-    if (username === BACK_VALUE || username === MAIN_MENU_VALUE) return
-
     // Check for existing credentials
     if (credentialsExist(containerName, config.engine, username)) {
       const overwrite = await promptConfirm(

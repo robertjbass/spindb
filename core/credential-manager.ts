@@ -115,20 +115,31 @@ function parseCredentialFile(
   }
 
   if (vars.API_KEY) {
+    if (!vars.API_KEY_NAME || !vars.API_URL) {
+      throw new Error(
+        `Corrupt credential file for container "${containerName}": missing API_KEY_NAME or API_URL`,
+      )
+    }
     return {
-      username: vars.API_KEY_NAME || '',
+      username: vars.API_KEY_NAME,
       password: '',
-      connectionString: vars.API_URL || '',
+      connectionString: vars.API_URL,
       engine,
       container: containerName,
       apiKey: vars.API_KEY,
     }
   }
 
+  if (!vars.DB_USER || !vars.DB_PASSWORD || !vars.DB_URL) {
+    throw new Error(
+      `Corrupt credential file for container "${containerName}": missing DB_USER, DB_PASSWORD, or DB_URL`,
+    )
+  }
+
   return {
-    username: vars.DB_USER || '',
-    password: vars.DB_PASSWORD || '',
-    connectionString: vars.DB_URL || '',
+    username: vars.DB_USER,
+    password: vars.DB_PASSWORD,
+    connectionString: vars.DB_URL,
     engine,
     container: containerName,
     database: vars.DB_NAME,
