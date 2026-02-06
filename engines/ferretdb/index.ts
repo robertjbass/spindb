@@ -27,6 +27,7 @@ import {
   logDebug,
   logWarning,
   assertValidDatabaseName,
+  assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
@@ -57,6 +58,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseMongoDBResult } from '../../core/query-parser'
 
@@ -1342,6 +1345,55 @@ export class FerretDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database
+    const mongosh = await this.getMongoshPath()
+
+    // Same as MongoDB - auth disabled with --no-auth but user is still created
+    const escapedPass = password.replace(/'/g, "\\'")
+    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:'${escapedPass}',roles:[{role:'readWrite',db:'${db}'}]})`
+
+    const cmd = isWindows()
+      ? `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval "${script.replace(/"/g, '\\"')}"`
+      : `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval '${script.replace(/'/g, "'\\''")}'`
+
+    try {
+      await execAsync(cmd, { timeout: 10000 })
+    } catch (error) {
+      const err = error as Error
+      if (
+        err.message.includes('51003') ||
+        err.message.includes('already exists')
+      ) {
+        // User exists — update password instead
+        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:'${escapedPass}'})`
+        const updateCmd = isWindows()
+          ? `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval "${updateScript.replace(/"/g, '\\"')}"`
+          : `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval '${updateScript.replace(/'/g, "'\\''")}'`
+        await execAsync(updateCmd, { timeout: 10000 })
+      } else {
+        throw error
+      }
+    }
+
+    const connectionString = `mongodb://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

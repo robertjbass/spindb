@@ -57,6 +57,8 @@ export const ErrorCodes = {
   INIT_FAILED: 'INIT_FAILED',
   DATABASE_CREATE_FAILED: 'DATABASE_CREATE_FAILED',
   INVALID_DATABASE_NAME: 'INVALID_DATABASE_NAME',
+  INVALID_USERNAME: 'INVALID_USERNAME',
+  USER_ALREADY_EXISTS: 'USER_ALREADY_EXISTS',
 
   // Dependency errors
   DEPENDENCY_MISSING: 'DEPENDENCY_MISSING',
@@ -329,6 +331,23 @@ export function assertValidDatabaseName(name: string): void {
       'error',
       'Database names must start with a letter and contain only letters, numbers, and underscores',
       { databaseName: name },
+    )
+  }
+}
+
+// Validates a username to prevent SQL injection.
+export function isValidUsername(name: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9_]{0,62}$/.test(name)
+}
+
+export function assertValidUsername(name: string): void {
+  if (!isValidUsername(name)) {
+    throw new SpinDBError(
+      ErrorCodes.INVALID_USERNAME,
+      `Invalid username: "${name}"`,
+      'error',
+      'Usernames must start with a letter, contain only letters, numbers, and underscores, and be at most 63 characters',
+      { username: name },
     )
   }
 }

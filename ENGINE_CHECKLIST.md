@@ -24,12 +24,13 @@ This comprehensive document provides both the specification for adding a new dat
 14. [CI/CD Configuration](#cicd-configuration)
 15. [Docker E2E Tests](#docker-e2e-tests)
 16. [Docker Export Compatibility](#docker-export-compatibility)
-17. [Documentation Updates](#documentation-updates)
-18. [Common Gotchas & Edge Cases](#common-gotchas--edge-cases)
-19. [Windows Considerations](#windows-considerations)
-20. [Pass/Fail Criteria](#passfail-criteria)
-21. [Reference Implementations](#reference-implementations)
-22. [Appendix: Full Implementation Checklist](#appendix-full-implementation-checklist)
+17. [User Management](#user-management)
+18. [Documentation Updates](#documentation-updates)
+19. [Common Gotchas & Edge Cases](#common-gotchas--edge-cases)
+20. [Windows Considerations](#windows-considerations)
+21. [Pass/Fail Criteria](#passfail-criteria)
+22. [Reference Implementations](#reference-implementations)
+23. [Appendix: Full Implementation Checklist](#appendix-full-implementation-checklist)
 
 ---
 
@@ -63,6 +64,8 @@ This comprehensive document provides both the specification for adding a new dat
 | `tests/docker/run-e2e.sh` | Add E2E tests |
 | `tests/docker/Dockerfile` | Add engine binaries and dependencies |
 | `.github/workflows/ci.yml` | Add CI job |
+| `core/credential-manager.ts` | Update `getDefaultUsername()` (if API key engine) |
+| `cli/commands/menu/container-handlers.ts` | Add/update "Create user" visibility |
 | `README.md` | Update documentation |
 | `ARCHITECTURE.md` | Update architecture |
 | `CLAUDE.md` | Update project docs |
@@ -269,6 +272,9 @@ export class YourEngine extends BaseEngine {
   async backup(container: ContainerConfig, outputPath: string, options: BackupOptions): Promise<BackupResult>
   async restore(container: ContainerConfig, backupPath: string, options?: Record<string, unknown>): Promise<RestoreResult>
   async dumpFromConnectionString(connectionString: string, outputPath: string): Promise<DumpResult>
+
+  // User management (optional - override if engine supports users)
+  async createUser(container: ContainerConfig, options: CreateUserOptions): Promise<UserCredentials>
 
   // Engine-specific client path (add to base-engine.ts too)
   async getYourEngineClientPath(): Promise<string>
@@ -678,6 +684,8 @@ async get{Engine}Path(_version?: string): Promise<string> {
 }
 ```
 
+**Note:** `createUser()` already has a default implementation in `BaseEngine` that throws `UnsupportedOperationError`. You do NOT need to modify `base-engine.ts` for user management — just override `createUser()` in your engine's `index.ts` if the engine supports users. See [User Management](#user-management) for details.
+
 ---
 
 ## CLI Updates
@@ -947,6 +955,7 @@ if (yourengineEngines.length > 0) {
 
 - [ ] Skip database name prompt if engine uses numbered DBs (like Redis 0-15)
 - [ ] Hide "Run SQL file" option if REST API engine (no CLI shell)
+- [ ] "Create user" menu item visibility (see below)
 
 ```ts
 // Skip database name prompt for engines with numbered DBs
@@ -962,6 +971,25 @@ if (config.engine !== Engine.Qdrant && config.engine !== Engine.Meilisearch && c
   // ... add the run-sql action choice
 }
 ```
+
+**"Create user" menu item:**
+
+The "Create user" option is shown in the Data Operations section of the container submenu. It is hidden for engines that don't support user creation (file-based engines and QuestDB). If your engine supports `createUser()`, ensure it is NOT in the exclusion list:
+
+```ts
+// Engines that don't support createUser - hide the menu item
+const ENGINES_WITHOUT_USERS = [
+  Engine.SQLite,
+  Engine.DuckDB,
+  Engine.QuestDB,
+]
+
+if (!ENGINES_WITHOUT_USERS.includes(config.engine)) {
+  // Show "Create user" option (disabled when container is not running)
+}
+```
+
+If your engine does NOT support users (throws `UnsupportedOperationError`), add it to this exclusion list.
 
 **Important:** Always use the `Engine` enum (e.g., `Engine.Qdrant`) instead of string literals (e.g., `'qdrant'`) for type safety.
 
@@ -1624,7 +1652,7 @@ export async function getYourEngineKeyCount(port: number, db: string, pattern: s
 
 ### tests/integration/{engine}.test.ts
 
-- [ ] Create integration test file with minimum 14 tests:
+- [ ] Create integration test file with minimum 15 tests:
   - [ ] should create container without starting (--no-start)
   - [ ] should start the container
   - [ ] should seed the database with test data using runScript
@@ -1632,6 +1660,7 @@ export async function getYourEngineKeyCount(port: number, db: string, pattern: s
   - [ ] should verify cloned data matches source
   - [ ] should stop and delete the cloned container
   - [ ] should modify data using runScript inline command
+  - [ ] should create a user and update password on re-create (if engine supports users)
   - [ ] should stop, rename container, and change port
   - [ ] should verify data persists after rename
   - [ ] should handle port conflict gracefully
@@ -1681,7 +1710,7 @@ describe('YourEngine Integration Tests', () => {
     // Cleanup: stop and delete test containers
   })
 
-  // Required tests (minimum 14):
+  // Required tests (minimum 15):
   it('should create container without starting (--no-start)', async () => { })
   it('should start the container', async () => { })
   it('should seed the database with test data using runScript', async () => { })
@@ -1693,6 +1722,7 @@ describe('YourEngine Integration Tests', () => {
   it('should restore from text format backup (replace mode)', async () => { })
   it('should detect backup format from file content', async () => { })
   it('should modify data using runScript inline command', async () => { })
+  it('should create a user and update password on re-create', async () => { })
   it('should stop, rename container, and change port', async () => { })
   it('should verify data persists after rename', async () => { })
   it('should delete container with --force', async () => { })
@@ -2291,6 +2321,248 @@ After implementing Docker export support for your engine:
 
 ---
 
+## User Management
+
+SpinDB supports creating database users via `spindb users create` and the interactive menu's "Create user" option. When adding a new engine, you must decide whether it supports user creation and implement accordingly.
+
+### Engine Support Categories
+
+| Category | Engines | Implementation |
+|----------|---------|----------------|
+| **SQL user/password** | PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse | SQL `CREATE USER` + `GRANT` via CLI tool |
+| **Document DB user/password** | MongoDB, FerretDB | `createUser()` / `updateUser()` via mongosh |
+| **KV ACL** | Redis, Valkey | `ACL SETUSER` via CLI tool |
+| **Multi-model** | SurrealDB | `DEFINE USER` via surreal sql |
+| **REST API user/password** | CouchDB | PUT to `/_users/` endpoint |
+| **REST API key** | Meilisearch | POST to `/keys` endpoint |
+| **Config-based API key** | Qdrant | Write `api_key` to config.yaml, restart server |
+| **Unsupported** | SQLite, DuckDB, QuestDB | Throw `UnsupportedOperationError` (default behavior) |
+
+### Implementing `createUser()` in Your Engine
+
+Override `createUser()` in your engine's `index.ts`. The base class already throws `UnsupportedOperationError` by default, so you only need to override if your engine supports users.
+
+```ts
+import type { ContainerConfig, CreateUserOptions, UserCredentials } from '../../types'
+
+async createUser(
+  container: ContainerConfig,
+  options: CreateUserOptions,
+): Promise<UserCredentials> {
+  const { username, password, database } = options
+  const port = container.port
+  const db = database || container.database
+
+  // 1. Create the user (engine-specific)
+  // 2. Grant permissions on the database
+  // 3. Return credentials with connection string
+
+  return {
+    username,
+    password,
+    connectionString: this.getConnectionString(container, db)
+      .replace('127.0.0.1', `${username}:${password}@127.0.0.1`),
+    engine: container.engine,
+    container: container.name,
+    database: db,
+  }
+}
+```
+
+### Idempotency Requirement (Critical)
+
+`createUser()` **MUST be idempotent** — calling it twice with the same username but a different password must update the password rather than error. This is required because:
+
+1. Users may run `spindb users create` with `--force` to reset a password
+2. The credential file on disk is overwritten, so the database password must match
+
+**Patterns by engine type:**
+
+**SQL engines (PostgreSQL):** Catch "already exists" error, run `ALTER ROLE`:
+
+```ts
+try {
+  await execAsync(createUserCmd)  // CREATE ROLE "user" WITH LOGIN PASSWORD 'pass'
+} catch (error) {
+  const err = error as Error
+  if (err.message.includes('already exists')) {
+    await execAsync(alterRoleCmd)  // ALTER ROLE "user" WITH PASSWORD 'newpass'
+  } else {
+    throw error
+  }
+}
+```
+
+**SQL engines (MySQL, MariaDB, ClickHouse, CockroachDB):** Use `CREATE USER IF NOT EXISTS` followed by `ALTER USER`:
+
+```ts
+const sql = [
+  `CREATE USER IF NOT EXISTS '${user}'@'%' IDENTIFIED BY '${pass}';`,
+  `ALTER USER '${user}'@'%' IDENTIFIED BY '${pass}';`,
+  `GRANT ALL ON \`${db}\`.* TO '${user}'@'%';`,
+  `FLUSH PRIVILEGES;`,
+].join(' ')
+```
+
+> **MySQL/MariaDB gotcha:** `CREATE USER ... '@'%'` does NOT match `localhost` connections. You must create the user for BOTH `'%'` and `'localhost'` hosts, with GRANT statements for both.
+
+**MongoDB/FerretDB:** Catch duplicate user error (code 51003), use `updateUser`:
+
+```ts
+try {
+  await execAsync(createUserCmd)  // db.createUser({...})
+} catch (error) {
+  if (err.message.includes('51003') || err.message.includes('already exists')) {
+    await execAsync(updateUserCmd)  // db.updateUser('user', {pwd: 'newpass'})
+  } else {
+    throw error
+  }
+}
+```
+
+**Redis/Valkey:** `ACL SETUSER` is inherently idempotent — it updates the user if they exist:
+
+```ts
+const cmd = `ACL SETUSER ${username} on >${password} ~* &* +@all`
+```
+
+**SurrealDB:** `DEFINE USER ... ON NAMESPACE` is idempotent — it replaces the user definition:
+
+```ts
+const sql = `DEFINE USER ${username} ON NAMESPACE PASSWORD '${password}' ROLES EDITOR`
+```
+
+**CouchDB (REST API):** Handle 409 Conflict by fetching `_rev` and updating:
+
+```ts
+const response = await couchdbApiRequest(port, 'PUT', `/_users/org.couchdb.user:${username}`, userDoc)
+if (response.status === 409) {
+  const existing = await couchdbApiRequest(port, 'GET', `/_users/org.couchdb.user:${username}`)
+  const rev = existing.data._rev
+  await couchdbApiRequest(port, 'PUT', `/_users/org.couchdb.user:${username}`, { ...userDoc, _rev: rev })
+}
+```
+
+**Meilisearch (API key):** POST to `/keys` creates a new key. For idempotency, search existing keys first:
+
+```ts
+// Search for existing key by name, delete if found, then create new
+```
+
+**Qdrant (config file):** Replace existing `api_key:` line in config.yaml, or append if not present:
+
+```ts
+if (currentConfig.includes('api_key:')) {
+  updatedConfig = currentConfig.replace(/api_key:\s*.+/, `api_key: ${password}`)
+} else {
+  updatedConfig = currentConfig + `\nservice:\n  api_key: ${password}\n`
+}
+// Restart server after config change
+```
+
+### API Key Engines vs User/Password Engines
+
+Most engines create user/password credentials. API key engines (Meilisearch, Qdrant) differ:
+
+- **Username** is a key name (e.g., `search_key`, `api_key`), not a login
+- **Password** is the generated API key value
+- **Connection string** includes the API key as a header or query parameter, not in the URL
+- **Credential file** uses `API_KEY_NAME`, `API_KEY`, `API_URL` instead of `DB_USER`, `DB_PASSWORD`, `DB_URL`
+
+Update `getDefaultUsername()` in `core/credential-manager.ts` if your engine uses API keys:
+
+```ts
+export function getDefaultUsername(engine: Engine): string {
+  switch (engine) {
+    case Engine.Meilisearch:
+      return 'search_key'
+    case Engine.Qdrant:
+      return 'api_key'
+    // Add your API key engine here:
+    case Engine.YourApiEngine:
+      return 'your_key_name'
+    default:
+      return 'spindb'
+  }
+}
+```
+
+### Credential Storage
+
+Credentials are saved to `~/.spindb/containers/{engine}/{name}/credentials/.env.{username}` by the credential manager. The engine's `createUser()` method does NOT handle file storage — that's done by `core/credential-manager.ts`.
+
+**Standard `.env.{username}` format:**
+```
+DB_USER=spindb
+DB_PASSWORD=xA9bK2mQ7nR4wE1s
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=mydb
+DB_URL=postgresql://spindb:xA9bK2mQ7nR4wE1s@127.0.0.1:5432/mydb
+```
+
+**API key `.env.{keyname}` format:**
+```
+API_KEY_NAME=search-key
+API_KEY=actual_generated_key_value
+API_URL=http://127.0.0.1:7700
+```
+
+### Integration Test for createUser
+
+Every engine that supports users must have a createUser integration test. Add this test after the data insertion/query tests and before the rename test:
+
+```ts
+it('should create a user and update password on re-create', async () => {
+  console.log(`\n Testing createUser...`)
+
+  const config = await containerManager.getConfig(containerName)
+  assert(config !== null, 'Container config should exist')
+
+  const engine = getEngine(ENGINE)
+
+  // First creation
+  const creds1 = await engine.createUser(config!, {
+    username: 'testuser',
+    password: 'firstpass123',
+    database: DATABASE,
+  })
+  assertEqual(creds1.username, 'testuser', 'Username should match')
+  assertEqual(creds1.password, 'firstpass123', 'Password should match')
+  console.log('   Created user with initial password')
+
+  // Re-create with different password (must update, not error)
+  const creds2 = await engine.createUser(config!, {
+    username: 'testuser',
+    password: 'secondpass456',
+    database: DATABASE,
+  })
+  assertEqual(creds2.password, 'secondpass456', 'Password should be updated')
+  console.log('   Re-created user with new password (idempotent)')
+})
+```
+
+For engines that don't support users (SQLite, DuckDB, QuestDB), skip this test entirely.
+
+### Password and Username Validation
+
+- **Usernames** are validated by `assertValidUsername()` in `core/error-handler.ts`: must match `^[a-zA-Z][a-zA-Z0-9_]{0,62}$`
+- **Passwords** are generated by `generatePassword({ length: 20, alphanumericOnly: true })` from `core/credential-generator.ts` — alphanumeric only to avoid URL-encoding issues in connection strings
+- **SQL injection prevention**: Escape single quotes in passwords (`'` → `''` for SQL, `'` → `\\'` for shell). Use quoted identifiers for usernames in SQL.
+
+### Checklist for New Engines
+
+- [ ] Decide: does the engine support user creation?
+  - **Yes**: Override `createUser()` in `engines/{engine}/index.ts`
+  - **No**: Add engine to `ENGINES_WITHOUT_USERS` in `container-handlers.ts`
+- [ ] Implement `createUser()` with idempotency (create or update)
+- [ ] Handle MySQL/MariaDB localhost host issue (if applicable)
+- [ ] Update `getDefaultUsername()` in `core/credential-manager.ts` (if API key engine)
+- [ ] Add createUser integration test with idempotency verification
+- [ ] Verify "Create user" menu item visibility (shown/hidden as appropriate)
+
+---
+
 ## Documentation Updates
 
 ### Engine-Specific README (`engines/{engine}/README.md`)
@@ -2725,7 +2997,7 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Added to `getConnectionString()`
 - [ ] Added engine-specific helper functions
 - [ ] Added to `runScriptFile()` and `runScriptSQL()`
-- [ ] Created `tests/integration/{engine}.test.ts` (14+ tests)
+- [ ] Created `tests/integration/{engine}.test.ts` (15+ tests, including createUser idempotency)
 - [ ] Created `tests/unit/{engine}-version-validator.test.ts`
 - [ ] Created `tests/unit/{engine}-restore.test.ts`
 - [ ] Updated `tests/unit/config-manager.test.ts`
@@ -2770,6 +3042,15 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Tested `spindb export docker` → `docker-compose up` workflow
 - [ ] Verified credentials work for authentication
 - [ ] Verified data restore works correctly
+
+### User Management
+- [ ] Decided: engine supports users? (Yes → override `createUser()`, No → add to exclusion list)
+- [ ] Overrode `createUser()` in `engines/{engine}/index.ts` (if supported)
+- [ ] `createUser()` is idempotent (re-create updates password, does not error)
+- [ ] Added engine to `ENGINES_WITHOUT_USERS` in `container-handlers.ts` (if unsupported)
+- [ ] Updated `getDefaultUsername()` in `core/credential-manager.ts` (if API key engine)
+- [ ] Added createUser integration test with idempotency check
+- [ ] Verified "Create user" menu item visibility
 
 ### Documentation Updates
 - [ ] Created `engines/{engine}/README.md` with all required sections

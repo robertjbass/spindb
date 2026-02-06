@@ -222,6 +222,23 @@ export type QueryOptions = {
   body?: Record<string, unknown> // For REST API engines
 }
 
+// User management types
+export type CreateUserOptions = {
+  username: string
+  password: string
+  database?: string
+}
+
+export type UserCredentials = {
+  username: string
+  password: string
+  connectionString: string
+  engine: Engine
+  container: string
+  database?: string
+  apiKey?: string // Meilisearch, Qdrant
+}
+
 // Pull command types
 export type PullOptions = {
   database?: string // Target database (defaults to container.database)

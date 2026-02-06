@@ -52,6 +52,13 @@ import {
   box,
 } from '../../ui/theme'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
+import { generatePassword } from '../../../core/credential-generator'
+import {
+  saveCredentials,
+  credentialsExist,
+  getDefaultUsername,
+} from '../../../core/credential-manager'
+import { UnsupportedOperationError } from '../../../core/error-handler'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
 import {
   handleBackupForContainer,
@@ -826,6 +833,22 @@ export async function showContainerSubmenu(
       : disabledItem('⎘', 'Copy connection string'),
   )
 
+  // Create user - only for engines that support users (hide for SQLite, DuckDB, QuestDB)
+  const supportsUsers =
+    config.engine !== Engine.SQLite &&
+    config.engine !== Engine.DuckDB &&
+    config.engine !== Engine.QuestDB
+  if (supportsUsers) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.yellow('+')} Create user`,
+            value: 'create_user',
+          }
+        : disabledItem('+', 'Create user'),
+    )
+  }
+
   // Backup - requires database selection for multi-db containers
   actionChoices.push(
     canDoDbAction
@@ -989,6 +1012,10 @@ export async function showContainerSubmenu(
       return
     case 'copy':
       await handleCopyConnectionString(containerName, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      return
+    case 'create_user':
+      await handleCreateUser(containerName)
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
     case 'backup':
@@ -2089,4 +2116,107 @@ async function handleExportDocker(
 
   await pressEnterToContinue()
   await showContainerSubmenu(containerName, showMainMenu, undefined)
+}
+
+async function handleCreateUser(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  try {
+    // Prompt for username
+    const defaultUser = getDefaultUsername(config.engine)
+    const { username } = await escapeablePrompt<{ username: string }>([
+      {
+        type: 'input',
+        name: 'username',
+        message: 'Username:',
+        default: defaultUser,
+        validate: (input: string) => {
+          if (!input.trim()) return 'Username is required'
+          if (!/^[a-zA-Z][a-zA-Z0-9_]{0,62}$/.test(input)) {
+            return 'Must start with a letter, contain only letters/numbers/underscores'
+          }
+          return true
+        },
+      },
+    ])
+
+    if (username === BACK_VALUE || username === MAIN_MENU_VALUE) return
+
+    // Check for existing credentials
+    if (credentialsExist(containerName, config.engine, username)) {
+      const overwrite = await promptConfirm(
+        `Credentials for "${username}" already exist. Overwrite?`,
+        false,
+      )
+      if (!overwrite) return
+    }
+
+    const password = generatePassword({ length: 20, alphanumericOnly: true })
+    const engine = getEngine(config.engine)
+
+    const spinner = createSpinner(`Creating user "${username}"...`)
+    spinner.start()
+
+    const credentials = await engine.createUser(config, {
+      username,
+      password,
+      database: config.database,
+    })
+
+    spinner.succeed(`Created user "${username}"`)
+
+    // Save credentials
+    const credentialFile = await saveCredentials(
+      containerName,
+      config.engine,
+      credentials,
+    )
+
+    console.log()
+    if (credentials.apiKey) {
+      console.log(`  ${chalk.gray('Key name:')}  ${credentials.username}`)
+      console.log(`  ${chalk.gray('API key:')}   ${credentials.apiKey}`)
+      console.log(
+        `  ${chalk.gray('API URL:')}   ${credentials.connectionString}`,
+      )
+    } else {
+      console.log(`  ${chalk.gray('Username:')}  ${credentials.username}`)
+      console.log(`  ${chalk.gray('Password:')}  ${credentials.password}`)
+      if (credentials.database) {
+        console.log(`  ${chalk.gray('Database:')}  ${credentials.database}`)
+      }
+      console.log(
+        `  ${chalk.gray('URL:')}       ${credentials.connectionString}`,
+      )
+    }
+    console.log()
+    console.log(`  ${chalk.gray('Saved to:')} ${credentialFile}`)
+    console.log()
+
+    // Offer to copy to clipboard
+    const copyText = credentials.apiKey || credentials.connectionString
+    const copied = await platformService.copyToClipboard(copyText)
+    if (copied) {
+      console.log(
+        uiSuccess(
+          credentials.apiKey
+            ? 'API key copied to clipboard'
+            : 'Connection string copied to clipboard',
+        ),
+      )
+    }
+  } catch (error) {
+    if (error instanceof UnsupportedOperationError) {
+      console.log(uiError('User management is not supported for this engine'))
+    } else {
+      console.log(uiError((error as Error).message))
+    }
+  }
+
+  await pressEnterToContinue()
 }

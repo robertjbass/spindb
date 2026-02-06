@@ -195,6 +195,33 @@ describe('CouchDB Integration Tests', () => {
     )
   })
 
+  it('should create a user and update password on re-create', async () => {
+    console.log(`\n👤 Testing createUser...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    const creds1 = await engine.createUser(config!, {
+      username: 'testuser',
+      password: 'firstpass123',
+      database: DATABASE,
+    })
+    assertEqual(creds1.username, 'testuser', 'Username should match')
+    assertEqual(creds1.password, 'firstpass123', 'Password should match')
+    console.log('   ✓ Created user with initial password')
+
+    // On 409, should fetch _rev and update
+    const creds2 = await engine.createUser(config!, {
+      username: 'testuser',
+      password: 'secondpass456',
+      database: DATABASE,
+    })
+    assertEqual(creds2.password, 'secondpass456', 'Password should be updated')
+    console.log('   ✓ Re-created user with new password (idempotent)')
+  })
+
   it('should clone container using backup/restore', async () => {
     console.log(
       `\n Creating container "${clonedContainerName}" via backup/restore...`,

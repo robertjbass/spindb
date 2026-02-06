@@ -18,6 +18,7 @@ import {
   logDebug,
   logWarning,
   assertValidDatabaseName,
+  assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { mongodbBinaryManager } from './binary-manager'
@@ -43,6 +44,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseMongoDBResult } from '../../core/query-parser'
 
@@ -1030,6 +1033,56 @@ export class MongoDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database
+    const mongosh = await this.getMongoshPath()
+
+    // Create user with readWrite role on the target database
+    // Auth is not enforced (no --auth flag) but user is still created
+    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:'${password.replace(/'/g, "\\'")}',roles:[{role:'readWrite',db:'${db}'}]})`
+
+    const cmd = buildMongoshCommand(mongosh, port, 'admin', script)
+
+    try {
+      await execAsync(cmd, { timeout: 10000 })
+    } catch (error) {
+      const err = error as Error
+      if (
+        err.message.includes('51003') ||
+        err.message.includes('already exists')
+      ) {
+        // User exists — update password instead
+        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:'${password.replace(/'/g, "\\'")}'})`
+        const updateCmd = buildMongoshCommand(
+          mongosh,
+          port,
+          'admin',
+          updateScript,
+        )
+        await execAsync(updateCmd, { timeout: 10000 })
+      } else {
+        throw error
+      }
+    }
+
+    const connectionString = `mongodb://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

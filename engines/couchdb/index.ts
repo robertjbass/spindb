@@ -7,7 +7,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { couchdbBinaryManager } from './binary-manager'
@@ -37,6 +41,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRESTAPIResult } from '../../core/query-parser'
 
@@ -1275,6 +1281,102 @@ export class CouchDBEngine extends BaseEngine {
     )
 
     return databases
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database
+
+    // Create user document in _users database
+    const userDoc = {
+      _id: `org.couchdb.user:${username}`,
+      name: username,
+      type: 'user',
+      roles: [],
+      password,
+    }
+
+    const createResponse = await couchdbApiRequest(
+      port,
+      'PUT',
+      `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
+      userDoc as unknown as Record<string, unknown>,
+    )
+
+    if (createResponse.status !== 201 && createResponse.status !== 409) {
+      throw new Error(
+        `Failed to create user: ${JSON.stringify(createResponse.data)}`,
+      )
+    }
+
+    if (createResponse.status === 409) {
+      // User exists — fetch current doc revision and update password
+      const getResponse = await couchdbApiRequest(
+        port,
+        'GET',
+        `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
+      )
+      const rev = (getResponse.data as Record<string, unknown>)?._rev as string
+      if (!rev) {
+        throw new Error(
+          `User "${username}" already exists and could not be updated`,
+        )
+      }
+      const updateResponse = await couchdbApiRequest(
+        port,
+        'PUT',
+        `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
+        { ...userDoc, _rev: rev } as unknown as Record<string, unknown>,
+      )
+      if (updateResponse.status !== 201) {
+        throw new Error(
+          `Failed to update user: ${JSON.stringify(updateResponse.data)}`,
+        )
+      }
+    }
+
+    // Grant access to the target database via _security document
+    const secResponse = await couchdbApiRequest(
+      port,
+      'GET',
+      `/${encodeURIComponent(db)}/_security`,
+    )
+
+    const security = (secResponse.data || {}) as Record<string, unknown>
+    const members = (security.members || {}) as Record<string, unknown>
+    const names = ((members.names || []) as string[]).slice()
+
+    if (!names.includes(username)) {
+      names.push(username)
+    }
+
+    await couchdbApiRequest(
+      port,
+      'PUT',
+      `/${encodeURIComponent(db)}/_security`,
+      {
+        ...security,
+        members: { ...members, names },
+      },
+    )
+
+    logDebug(`Created CouchDB user: ${username}`)
+
+    const connectionString = `http://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

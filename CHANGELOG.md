@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-02-06
+
+### Added
+- **User management commands** (`spindb users create`, `spindb users list`) - Create database users, API keys, and manage credentials across all supported engines:
+  ```bash
+  spindb users create mydb              # Create user with auto-generated password
+  spindb users create mydb --copy       # Copy connection string to clipboard
+  spindb users create mydb --json               # JSON output for scripting
+  spindb users list mydb                        # List saved credentials
+  ```
+  Supports 13 engines: PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Credentials saved as `.env` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
+- **Credential manager** (`core/credential-manager.ts`) - Persistent credential storage with save, load, list, and exists operations
+- **Username validation** - `assertValidUsername()` enforces `^[a-zA-Z][a-zA-Z0-9_]{0,62}$` pattern to prevent SQL injection
+- **Interactive menu integration** - "Create user" option in container submenu under Data Operations
+
 ## [0.31.4] - 2026-02-05
 
 ### Added

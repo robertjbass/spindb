@@ -30,6 +30,7 @@ import {
 import { switchHomebrewVersion } from '../../core/homebrew-version-manager'
 import {
   assertValidDatabaseName,
+  assertValidUsername,
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
@@ -47,6 +48,8 @@ import type {
   StatusResult,
   QueryResult,
   QueryOptions,
+  CreateUserOptions,
+  UserCredentials,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -1042,6 +1045,58 @@ export class PostgreSQLEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database
+    const psqlPath = await this.getPsqlPath()
+
+    // Create the role with login and password
+    const createRoleSql = `CREATE ROLE "${username}" WITH LOGIN PASSWORD '${password.replace(/'/g, "''")}'`
+    const createCmd = isWindows()
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${createRoleSql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${createRoleSql.replace(/'/g, "'\\''")}'`
+
+    try {
+      await execAsync(createCmd)
+    } catch (error) {
+      const err = error as Error
+      if (err.message.includes('already exists')) {
+        // User exists — update password instead
+        const alterSql = `ALTER ROLE "${username}" WITH PASSWORD '${password.replace(/'/g, "''")}'`
+        const alterCmd = isWindows()
+          ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${alterSql.replace(/"/g, '\\"')}"`
+          : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${alterSql.replace(/'/g, "'\\''")}'`
+        await execAsync(alterCmd)
+      } else {
+        throw error
+      }
+    }
+
+    // Grant all privileges on the target database
+    const grantSql = `GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${username}"`
+    const grantCmd = isWindows()
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${grantSql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${grantSql}'`
+
+    await execAsync(grantCmd)
+
+    const connectionString = `postgresql://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

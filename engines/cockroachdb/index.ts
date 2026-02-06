@@ -22,7 +22,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { findBinary } from '../../core/dependency-manager'
 import { processManager } from '../../core/process-manager'
 import { cockroachdbBinaryManager } from './binary-manager'
@@ -59,6 +63,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseCSVToQueryResult } from '../../core/query-parser'
 
@@ -1200,6 +1206,66 @@ export class CockroachDBEngine extends BaseEngine {
         resolve(databases)
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port, version } = container
+    const db = database || container.database
+
+    validateCockroachIdentifier(username, 'user')
+    const escapedUser = escapeCockroachIdentifier(username)
+    const escapedDb = escapeCockroachIdentifier(db)
+
+    const cockroach = await this.getCockroachPath(version)
+
+    // CockroachDB in insecure mode: password not enforced but still accepted
+    const escapedPass = password.replace(/'/g, "''")
+    const sql = `CREATE USER IF NOT EXISTS ${escapedUser} WITH PASSWORD '${escapedPass}'; ALTER USER ${escapedUser} WITH PASSWORD '${escapedPass}'; GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser};`
+
+    const args = [
+      'sql',
+      '--insecure',
+      '--host',
+      `127.0.0.1:${port}`,
+      '--execute',
+      sql,
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(cockroach, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Failed to create user: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+    })
+
+    const connectionString = `postgresql://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

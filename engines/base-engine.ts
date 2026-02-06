@@ -9,6 +9,8 @@ import type {
   StatusResult,
   QueryResult,
   QueryOptions,
+  CreateUserOptions,
+  UserCredentials,
 } from '../types'
 import { UnsupportedOperationError } from '../core/error-handler'
 
@@ -280,5 +282,21 @@ export abstract class BaseEngine {
    */
   async listDatabases(_container: ContainerConfig): Promise<string[]> {
     throw new UnsupportedOperationError('listDatabases', this.displayName)
+  }
+
+  /**
+   * Create a database user with the given credentials.
+   * Returns credentials including connection string.
+   *
+   * @param container - The container configuration
+   * @param options - Username, password, and optional target database
+   * @returns UserCredentials with connection info
+   * @throws UnsupportedOperationError for engines that don't support users (SQLite, DuckDB, QuestDB)
+   */
+  async createUser(
+    _container: ContainerConfig,
+    _options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    throw new UnsupportedOperationError('createUser', this.displayName)
   }
 }

@@ -23,6 +23,7 @@ import {
   ErrorCodes,
   SpinDBError,
   assertValidDatabaseName,
+  assertValidUsername,
 } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -47,6 +48,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseTSVToQueryResult } from '../../core/query-parser'
 
@@ -1167,6 +1170,39 @@ export class MariaDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database
+    const mariadb = await this.getMariadbClientPath()
+
+    const escapedPass = password.replace(/'/g, "''")
+    const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
+
+    const cmd = buildMariadbInlineCommand(
+      mariadb,
+      port,
+      engineDef.superuser,
+      sql,
+    )
+    await execAsync(cmd)
+
+    const connectionString = `mysql://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

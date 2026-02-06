@@ -22,7 +22,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { surrealdbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -51,6 +55,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseSurrealDBResult } from '../../core/query-parser'
 
@@ -1140,6 +1146,74 @@ export class SurrealDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port, version, name } = container
+    const namespace = name.replace(/-/g, '_')
+    const db = database || container.database
+
+    const surreal = await this.getSurrealPath(version)
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
+    // DEFINE USER on namespace level with EDITOR role
+    const sql = `DEFINE USER ${username} ON NAMESPACE PASSWORD '${password.replace(/'/g, "\\'")}' ROLES EDITOR;`
+
+    const args = [
+      'sql',
+      '--endpoint',
+      `ws://127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--ns',
+      namespace,
+      '--db',
+      db,
+      '--hide-welcome',
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(surreal, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: containerDir,
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.stdin?.write(sql + '\n')
+      proc.stdin?.end()
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          logDebug(`Created SurrealDB user: ${username}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to create user: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+    })
+
+    const connectionString = `ws://127.0.0.1:${port}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

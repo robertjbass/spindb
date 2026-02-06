@@ -78,7 +78,9 @@ Combine common multi-step workflows into single commands:
 
 - [ ] **Password authentication** - Set passwords on container creation
 - [ ] **Encrypted backups** - GPG/OpenSSL encryption for dumps
-- [ ] **User management** - Custom users with specific privileges
+- [x] **User management** - Custom users with specific privileges (`spindb users create/list`)
+- [ ] **Delete users** - `spindb users delete <container> <username>` — DROP USER + remove credential file
+- [ ] **Auth enforcement toggle** - `spindb users enforce-auth <container>` — modify server config to require auth
 - [ ] **Docker export credential security** - Secure storage for `.env` credentials in exported Docker artifacts
   - Current: plaintext `.env` file with auto-generated password
   - Problem: Anyone with access to export directory can read credentials

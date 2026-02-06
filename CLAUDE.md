@@ -37,6 +37,7 @@ core/                   # Core business logic
   container-manager.ts  # Container CRUD
   process-manager.ts    # Process start/stop
   config-manager.ts     # ~/.spindb/config.json
+  credential-manager.ts # User credential storage (.env files)
   dependency-manager.ts # Tool detection/installation (see KNOWN_BINARY_TOOLS)
 config/                 # Configuration files
   engines.json          # Engines registry (source of truth)
@@ -349,6 +350,10 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete documentation includ
 ~/.spindb/
 ├── bin/                    # Downloaded engine binaries
 ├── containers/             # Server-based engine data only
+│   └── {engine}/{name}/
+│       ├── data/           # Database files
+│       ├── credentials/    # User credential .env files
+│       └── container.json  # Container config
 └── config.json             # Tool paths + SQLite/DuckDB registries
 ```
 
@@ -429,6 +434,10 @@ spindb doctor                 # System health check
 spindb url <container>        # Connection string (--copy, --json flags)
 spindb config show            # Display configuration
 spindb config detect          # Re-detect tool paths
+
+# User management
+spindb users create <container> [username]     # Create database user/API key
+spindb users list <container>                  # List saved credentials
 
 # Database tracking (sync after external changes like SQL renames)
 spindb databases list <container>              # List tracked databases

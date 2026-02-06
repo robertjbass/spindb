@@ -9,7 +9,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { qdrantBinaryManager } from './binary-manager'
@@ -39,6 +43,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRESTAPIResult } from '../../core/query-parser'
 
@@ -1201,6 +1207,52 @@ export class QdrantEngine extends BaseEngine {
     // Qdrant uses collections, not databases
     // Return the container's configured database
     return [container.database]
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password } = options
+    assertValidUsername(username)
+    const { port, name } = container
+
+    // Qdrant uses API key authentication via config.yaml
+    // Read current config, add api-key, write back, and restart
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+    const configPath = join(containerDir, 'config.yaml')
+
+    const currentConfig = await readFile(configPath, 'utf-8')
+
+    let updatedConfig: string
+    if (currentConfig.includes('api_key:')) {
+      // API key exists — update it
+      updatedConfig = currentConfig.replace(
+        /api_key:\s*.+/,
+        `api_key: ${password}`,
+      )
+    } else {
+      // Append API key config
+      updatedConfig = currentConfig + `\nservice:\n  api_key: ${password}\n`
+    }
+
+    // Stop the server, update config, restart
+    await this.stop(container)
+    await writeFile(configPath, updatedConfig)
+    await this.start(container)
+
+    logDebug(`Configured Qdrant API key for: ${username}`)
+
+    const connectionString = `http://127.0.0.1:${port}`
+
+    return {
+      username,
+      password: '',
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      apiKey: password,
+    }
   }
 }
 

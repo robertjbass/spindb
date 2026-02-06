@@ -7,7 +7,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { clickhouseBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -39,6 +43,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseClickHouseJSONResult } from '../../core/query-parser'
 
@@ -1243,6 +1249,67 @@ export class ClickHouseEngine extends BaseEngine {
         resolve(databases)
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port, version } = container
+    const db = database || container.database
+
+    validateClickHouseIdentifier(username, 'username')
+    const escapedUser = escapeClickHouseIdentifier(username)
+    const escapedDb = escapeClickHouseIdentifier(db)
+
+    const clickhouse = await this.getClickHouseClientPath(version)
+
+    const escapedPass = password.replace(/'/g, "\\'")
+    const sql = `CREATE USER IF NOT EXISTS ${escapedUser} IDENTIFIED BY '${escapedPass}'; ALTER USER ${escapedUser} IDENTIFIED BY '${escapedPass}'; GRANT ALL ON ${escapedDb}.* TO ${escapedUser};`
+
+    const args = [
+      'client',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--query',
+      sql,
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(clickhouse, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          logDebug(`Created ClickHouse user: ${username}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to create user: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+    })
+
+    const connectionString = `clickhouse://${username}:${password}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

@@ -7,7 +7,12 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+  UnsupportedOperationError,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { meilisearchBinaryManager } from './binary-manager'
@@ -33,6 +38,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRESTAPIResult } from '../../core/query-parser'
 
@@ -1189,6 +1196,58 @@ export class MeilisearchEngine extends BaseEngine {
     } catch {
       // On error, fall back to configured database
       return [container.database]
+    }
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username } = options
+    assertValidUsername(username)
+    const { port } = container
+
+    // Meilisearch requires a master key to create API keys
+    // Check if the /keys endpoint is available
+    const keysResponse = await meilisearchApiRequest(port, 'GET', '/keys')
+
+    if (keysResponse.status === 403 || keysResponse.status === 401) {
+      throw new UnsupportedOperationError(
+        'createUser',
+        this.displayName,
+        'Meilisearch is running without a master key. API key management requires a master key. ' +
+          'Restart the container with a master key to enable user/key management.',
+      )
+    }
+
+    // Create an API key with the given name as description
+    const response = await meilisearchApiRequest(port, 'POST', '/keys', {
+      description: username,
+      actions: ['*'],
+      indexes: ['*'],
+      expiresAt: null,
+    } as unknown as Record<string, unknown>)
+
+    if (response.status !== 201 && response.status !== 200) {
+      throw new Error(
+        `Failed to create API key: ${JSON.stringify(response.data)}`,
+      )
+    }
+
+    const data = response.data as { key?: string }
+    const apiKey = data.key || ''
+
+    logDebug(`Created Meilisearch API key: ${username}`)
+
+    const connectionString = `http://127.0.0.1:${port}`
+
+    return {
+      username,
+      password: '',
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      apiKey,
     }
   }
 }

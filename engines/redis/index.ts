@@ -8,7 +8,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { redisBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -37,6 +41,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRedisResult } from '../../core/query-parser'
 
@@ -1433,6 +1439,37 @@ export class RedisEngine extends BaseEngine {
     // Redis has numbered databases, not named ones
     // Return the container's configured database
     return [container.database]
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password } = options
+    assertValidUsername(username)
+    const { port } = container
+    const redisCli = await this.getRedisCliPath()
+
+    // ACL SETUSER is idempotent - sets user with full access
+    const cmd = buildRedisCliCommand(
+      redisCli,
+      port,
+      `ACL SETUSER ${username} on >${password} ~* &* +@all`,
+    )
+
+    await execAsync(cmd, { timeout: 10000 })
+    logDebug(`Created Redis user: ${username}`)
+
+    const connectionString = `redis://${username}:${password}@127.0.0.1:${port}/${container.database}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: container.database,
+    }
   }
 }
 

@@ -322,6 +322,23 @@ export DATABASE_URL=$(spindb url mydb)
 psql $(spindb url mydb)
 ```
 
+### User Management
+
+```bash
+# Create database users and API keys
+spindb users create mydb               # Auto-generate password
+spindb users create mydb --password p  # Use specific password
+spindb users create mydb --copy        # Copy connection string to clipboard
+spindb users create mydb --json        # JSON output for scripting
+spindb users create mydb --no-save     # Don't save credential file
+
+# List saved credentials
+spindb users list mydb                         # List usernames
+spindb users list mydb --json                  # JSON output
+```
+
+Supports PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Credentials are saved as `.env` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
+
 ### Backup & Restore
 
 ```bash
@@ -525,6 +542,7 @@ Each container contains:
 │   │   └── myapp/
 │   │       ├── container.json
 │   │       ├── data/
+│   │       ├── credentials/              # User credential .env files
 │   │       └── postgres.log
 │   ├── mysql/
 │   └── mongodb/
