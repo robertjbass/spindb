@@ -15,15 +15,8 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import net from 'net'
-import {
-  mkdir,
-  writeFile,
-  readFile,
-  readdir,
-  symlink,
-  unlink,
-} from 'fs/promises'
-import { join, basename } from 'path'
+import { mkdir, writeFile, readFile, symlink, unlink } from 'fs/promises'
+import { join, basename, dirname } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -342,23 +335,37 @@ export class FerretDBEngine extends BaseEngine {
         arch,
       )
 
-      // Normalize share dir layout for Homebrew-derived x64 binaries.
-      // The x64 binary has share data in share/postgresql/ but PostgreSQL's
-      // relative path discovery looks for share/postgres.bki at the base level.
-      // Without this, postgres falls back to compiled-in /usr/local/share/postgresql@17/
-      // which doesn't exist, causing timezone lookup failures during initdb.
+      // Ensure PostgreSQL can find its share data (timezone files, etc.).
+      // Homebrew-derived binaries have compiled-in share paths (e.g.
+      // /usr/local/share/postgresql@17) that don't exist when running from
+      // ~/.spindb/bin/. If the binary's relative path discovery also fails
+      // (different offset than ../share/), we create a symlink at the
+      // compiled-in path pointing to the actual share data.
       const shareDirBase = join(documentdbPath, 'share')
-      if (
-        !existsSync(join(shareDirBase, 'postgres.bki')) &&
-        existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
-      ) {
-        const subdir = join(shareDirBase, 'postgresql')
-        const entries = await readdir(subdir)
-        for (const entry of entries) {
-          const target = join(shareDirBase, entry)
-          if (!existsSync(target)) {
-            await symlink(join('postgresql', entry), target)
+      const pgConfigBin = join(documentdbPath, 'bin', `pg_config${ext}`)
+      if (existsSync(pgConfigBin)) {
+        try {
+          const { stdout } = await execAsync(`"${pgConfigBin}" --sharedir`, {
+            timeout: 5000,
+          })
+          const compiledShareDir = stdout.trim()
+          if (compiledShareDir && !existsSync(compiledShareDir)) {
+            // Determine the actual share dir (may be share/ or share/postgresql/)
+            const actualShareDir = existsSync(
+              join(shareDirBase, 'postgres.bki'),
+            )
+              ? shareDirBase
+              : existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
+                ? join(shareDirBase, 'postgresql')
+                : shareDirBase
+            await mkdir(dirname(compiledShareDir), { recursive: true })
+            await symlink(actualShareDir, compiledShareDir)
+            logDebug(
+              `Created share dir symlink: ${compiledShareDir} -> ${actualShareDir}`,
+            )
           }
+        } catch {
+          logDebug('Could not determine or fix compiled share path')
         }
       }
 
@@ -376,7 +383,11 @@ export class FerretDBEngine extends BaseEngine {
 
       // Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
       // This is critical for DocumentDB extension to load properly
-      const bundledConf = join(shareDirBase, 'postgresql.conf.sample')
+      const bundledConf = existsSync(
+        join(shareDirBase, 'postgresql.conf.sample'),
+      )
+        ? join(shareDirBase, 'postgresql.conf.sample')
+        : join(shareDirBase, 'postgresql', 'postgresql.conf.sample')
       const pgConf = join(pgDataDir, 'postgresql.conf')
 
       if (existsSync(bundledConf)) {
