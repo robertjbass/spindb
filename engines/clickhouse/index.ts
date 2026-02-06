@@ -1275,6 +1275,7 @@ export class ClickHouseEngine extends BaseEngine {
       '127.0.0.1',
       '--port',
       String(port),
+      '--multiquery',
       '--query',
       sql,
     ]

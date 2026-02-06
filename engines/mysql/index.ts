@@ -1266,7 +1266,7 @@ export class MySQLEngine extends BaseEngine {
     const db = database || container.database
     const mysql = await this.getMysqlClientPath()
 
-    const escapedPass = password.replace(/'/g, "''")
+    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
     const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
 
     const cmd = buildMysqlInlineCommand(mysql, port, engineDef.superuser, sql)

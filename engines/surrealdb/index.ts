@@ -1156,15 +1156,15 @@ export class SurrealDBEngine extends BaseEngine {
     assertValidUsername(username)
     const { port, version, name } = container
     const namespace = name.replace(/-/g, '_')
-    const db = database || container.database
+    const db = database || container.database || 'test'
 
     const surreal = await this.getSurrealPath(version)
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
 
-    // DEFINE USER on namespace level with EDITOR role
+    // DEFINE USER OVERWRITE on namespace level with EDITOR role (idempotent)
     // Escape backslashes first, then single quotes for SurrealQL string literals
     const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-    const sql = `DEFINE USER ${username} ON NAMESPACE PASSWORD '${escapedPass}' ROLES EDITOR;`
+    const sql = `DEFINE USER OVERWRITE ${username} ON NAMESPACE PASSWORD '${escapedPass}' ROLES EDITOR;`
 
     const args = [
       'sql',
@@ -1206,7 +1206,7 @@ export class SurrealDBEngine extends BaseEngine {
       proc.on('error', reject)
     })
 
-    const connectionString = `ws://127.0.0.1:${port}`
+    const connectionString = `ws://127.0.0.1:${port}/rpc`
 
     return {
       username,

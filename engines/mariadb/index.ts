@@ -1183,7 +1183,7 @@ export class MariaDBEngine extends BaseEngine {
     assertValidDatabaseName(db)
     const mariadb = await this.getMariadbClientPath()
 
-    const escapedPass = password.replace(/'/g, "''")
+    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
     const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
 
     const cmd = buildMariadbInlineCommand(
@@ -1194,7 +1194,7 @@ export class MariaDBEngine extends BaseEngine {
     )
     await execAsync(cmd)
 
-    const connectionString = `mysql://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `mysql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,

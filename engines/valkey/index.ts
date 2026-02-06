@@ -1480,7 +1480,7 @@ export class ValkeyEngine extends BaseEngine {
     // Reject passwords with characters that break ACL SETUSER syntax
     if (/[>\s]/.test(password)) {
       throw new Error(
-        'Password contains invalid characters for Valkey ACL (">", whitespace). Use alphanumeric passwords only.',
+        'Password contains invalid characters for Valkey ACL. Passwords must not contain ">" or whitespace.',
       )
     }
 
@@ -1495,7 +1495,7 @@ export class ValkeyEngine extends BaseEngine {
     logDebug(`Created Valkey user: ${username}`)
 
     // Valkey uses redis:// scheme for compatibility
-    const connectionString = `redis://${username}:${password}@127.0.0.1:${port}/${container.database}`
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${container.database}`
 
     return {
       username,

@@ -1048,7 +1048,9 @@ export class MongoDBEngine extends BaseEngine {
 
     // Create user with readWrite role on the target database
     // Auth is not enforced (no --auth flag) but user is still created
-    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:'${password.replace(/'/g, "\\'")}',roles:[{role:'readWrite',db:'${db}'}]})`
+    // Use JSON.stringify for password to safely escape all special characters in JS context
+    const jsonPwd = JSON.stringify(password)
+    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
 
     const cmd = buildMongoshCommand(mongosh, port, 'admin', script)
 
@@ -1061,7 +1063,7 @@ export class MongoDBEngine extends BaseEngine {
         err.message.includes('already exists')
       ) {
         // User exists — update password instead
-        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:'${password.replace(/'/g, "\\'")}'})`
+        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:${jsonPwd}})`
         const updateCmd = buildMongoshCommand(
           mongosh,
           port,
@@ -1074,7 +1076,7 @@ export class MongoDBEngine extends BaseEngine {
       }
     }
 
-    const connectionString = `mongodb://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `mongodb://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,

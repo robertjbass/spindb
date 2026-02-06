@@ -1224,17 +1224,35 @@ export class QdrantEngine extends BaseEngine {
 
     const currentConfig = await readFile(configPath, 'utf-8')
 
-    let updatedConfig: string
-    if (currentConfig.includes('api_key:')) {
-      // API key exists — update it
-      updatedConfig = currentConfig.replace(
-        /api_key:\s*.+/,
-        `api_key: ${password}`,
-      )
-    } else {
-      // Append API key config
-      updatedConfig = currentConfig + `\nservice:\n  api_key: ${password}\n`
+    // Parse YAML config line-by-line to find service section and api_key
+    const lines = currentConfig.split('\n')
+    const serviceIdx = lines.findIndex((l) => /^service:/.test(l))
+
+    if (serviceIdx < 0) {
+      throw new Error('Could not find service section in Qdrant config')
     }
+
+    // Scan the service section for existing api_key and last property line
+    let apiKeyIdx = -1
+    let lastServicePropIdx = serviceIdx
+    for (let i = serviceIdx + 1; i < lines.length; i++) {
+      if (/^\s+\S/.test(lines[i])) {
+        lastServicePropIdx = i
+        if (/^\s+api_key:/.test(lines[i])) {
+          apiKeyIdx = i
+        }
+      } else if (/^\S/.test(lines[i]) && lines[i].trim() !== '') {
+        break // Next top-level section
+      }
+    }
+
+    if (apiKeyIdx >= 0) {
+      lines[apiKeyIdx] = `  api_key: ${password}`
+    } else {
+      lines.splice(lastServicePropIdx + 1, 0, `  api_key: ${password}`)
+    }
+
+    const updatedConfig = lines.join('\n')
 
     // Stop the server, update config, restart
     await this.stop(container)

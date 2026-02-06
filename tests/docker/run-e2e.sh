@@ -37,12 +37,13 @@ SMOKE_TEST="${SMOKE_TEST:-true}"
 # Usage: ./run-e2e.sh --group sql
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
 GROUP_NOSQL="mongodb redis valkey surrealdb"
-GROUP_REST="qdrant meilisearch couchdb sqlite duckdb"
+# "other" = REST API engines + file-based engines, grouped for CI load balancing
+GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb"
 
 # Valid engines and utility tests
 VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb"
 VALID_UTILITY_TESTS="self-update"
-VALID_GROUPS="sql nosql rest"
+VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
 
 # Handle --group flag
@@ -60,7 +61,7 @@ if [ "$ENGINE_FILTER" = "--group" ]; then
     echo "Valid groups: $VALID_GROUPS"
     echo "  sql:   $GROUP_SQL"
     echo "  nosql: $GROUP_NOSQL"
-    echo "  rest:  $GROUP_REST"
+    echo "  other: $GROUP_OTHER"
     exit 1
   fi
 fi
@@ -1679,7 +1680,7 @@ should_run_test() {
     case $ENGINE_GROUP in
       sql)   echo "$GROUP_SQL" | grep -qw "$engine" && return 0 ;;
       nosql) echo "$GROUP_NOSQL" | grep -qw "$engine" && return 0 ;;
-      rest)  echo "$GROUP_REST" | grep -qw "$engine" && return 0 ;;
+      other) echo "$GROUP_OTHER" | grep -qw "$engine" && return 0 ;;
     esac
     return 1
   fi
@@ -1757,7 +1758,7 @@ elif [ -n "$ENGINE_GROUP" ]; then
   case $ENGINE_GROUP in
     sql)   _group_engines="$GROUP_SQL" ;;
     nosql) _group_engines="$GROUP_NOSQL" ;;
-    rest)  _group_engines="$GROUP_REST" ;;
+    other) _group_engines="$GROUP_OTHER" ;;
   esac
   echo "  ${BOLD}Group:${RESET}     $ENGINE_GROUP ($_group_engines)"
 fi

@@ -1215,7 +1215,7 @@ export class CockroachDBEngine extends BaseEngine {
     const { username, password, database } = options
     assertValidUsername(username)
     const { port, version } = container
-    const db = database || container.database
+    const db = database || container.database || 'defaultdb'
 
     validateCockroachIdentifier(username, 'user')
     const escapedUser = escapeCockroachIdentifier(username)
@@ -1256,7 +1256,7 @@ export class CockroachDBEngine extends BaseEngine {
       proc.on('error', reject)
     })
 
-    const connectionString = `postgresql://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,

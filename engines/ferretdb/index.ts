@@ -1359,8 +1359,9 @@ export class FerretDBEngine extends BaseEngine {
     const mongosh = await this.getMongoshPath()
 
     // Same as MongoDB - auth disabled with --no-auth but user is still created
-    const escapedPass = password.replace(/'/g, "\\'")
-    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:'${escapedPass}',roles:[{role:'readWrite',db:'${db}'}]})`
+    // Use JSON.stringify for password to safely escape all special characters in JS context
+    const jsonPwd = JSON.stringify(password)
+    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
 
     const cmd = isWindows()
       ? `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval "${script.replace(/"/g, '\\"')}"`
@@ -1375,7 +1376,7 @@ export class FerretDBEngine extends BaseEngine {
         err.message.includes('already exists')
       ) {
         // User exists — update password instead
-        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:'${escapedPass}'})`
+        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:${jsonPwd}})`
         const updateCmd = isWindows()
           ? `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval "${updateScript.replace(/"/g, '\\"')}"`
           : `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval '${updateScript.replace(/'/g, "'\\''")}'`
@@ -1385,7 +1386,7 @@ export class FerretDBEngine extends BaseEngine {
       }
     }
 
-    const connectionString = `mongodb://${username}:${password}@127.0.0.1:${port}/${db}`
+    const connectionString = `mongodb://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {
       username,
