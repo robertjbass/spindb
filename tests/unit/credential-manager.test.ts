@@ -20,12 +20,12 @@ describe('Credential Manager', () => {
   beforeEach(() => {
     // Ensure container directories exist
     const pgDir = paths.getContainerPath(TEST_CONTAINER, {
-      engine: 'postgresql',
+      engine: Engine.PostgreSQL,
     })
     mkdirSync(pgDir, { recursive: true })
 
     const msDir = paths.getContainerPath(TEST_CONTAINER_MS, {
-      engine: 'meilisearch',
+      engine: Engine.Meilisearch,
     })
     mkdirSync(msDir, { recursive: true })
 
@@ -43,14 +43,14 @@ describe('Credential Manager', () => {
   afterEach(() => {
     // Clean up test containers
     const pgDir = paths.getContainerPath(TEST_CONTAINER, {
-      engine: 'postgresql',
+      engine: Engine.PostgreSQL,
     })
     if (existsSync(pgDir)) {
       rmSync(pgDir, { recursive: true, force: true })
     }
 
     const msDir = paths.getContainerPath(TEST_CONTAINER_MS, {
-      engine: 'meilisearch',
+      engine: Engine.Meilisearch,
     })
     if (existsSync(msDir)) {
       rmSync(msDir, { recursive: true, force: true })
@@ -137,7 +137,7 @@ describe('Credential Manager', () => {
       }
 
       const credDir = join(
-        paths.getContainerPath(TEST_CONTAINER, { engine: 'postgresql' }),
+        paths.getContainerPath(TEST_CONTAINER, { engine: Engine.PostgreSQL }),
         'credentials',
       )
       assert(!existsSync(credDir), 'Credentials dir should not exist yet')

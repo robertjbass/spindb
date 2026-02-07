@@ -1287,13 +1287,11 @@ export class ClickHouseEngine extends BaseEngine {
       '--port',
       String(port),
       '--multiquery',
-      '--query',
-      sql,
     ]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(clickhouse, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       })
 
       let stderr = ''
@@ -1310,6 +1308,9 @@ export class ClickHouseEngine extends BaseEngine {
         }
       })
       proc.on('error', reject)
+
+      proc.stdin?.write(sql)
+      proc.stdin?.end()
     })
 
     const connectionString = `clickhouse://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`

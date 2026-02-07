@@ -37,7 +37,7 @@ The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`)
 | FerretDB | 4 (no Windows) | postgresql-documentdb has startup issues on Windows |
 | Meilisearch | 5 (backup/restore skipped on Windows) | Upstream page size alignment bug |
 
-**Unit tests** run on 3 runners: ubuntu-24.04, macos-14, windows-latest.
+**Unit tests** run on 3 runners in ci.yml (ubuntu-24.04, macos-14, windows-latest) and 5 runners in ci-full.yml (adds ubuntu-22.04, macos-15-intel).
 
 ## Test Types
 

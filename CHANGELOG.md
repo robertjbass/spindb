@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spindb users create mydb --json               # JSON output for scripting
   spindb users list mydb                        # List saved credentials
   ```
-  Supports 13 engines: PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Credentials saved as `.env` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
+  Supports 13 engines: PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Credentials saved as `.env.<username>` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 - **Credential manager** (`core/credential-manager.ts`) - Persistent credential storage with save, load, list, and exists operations
 - **Username validation** - `assertValidUsername()` enforces `^[a-zA-Z][a-zA-Z0-9_]{0,62}$` pattern to prevent SQL injection
 - **Interactive menu integration** - "Create user" option in container submenu under Data Operations

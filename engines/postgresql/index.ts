@@ -1063,23 +1063,54 @@ export class PostgreSQLEngine extends BaseEngine {
     assertValidDatabaseName(db)
     const psqlPath = await this.getPsqlPath()
 
+    // Pass SQL via stdin (psql -f -) to avoid exposing passwords in process listings
+    const psqlBaseArgs = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      defaults.superuser,
+      '-d',
+      'postgres',
+      '-f',
+      '-',
+    ]
+
+    const runPsqlViaStdin = (sql: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const proc = spawn(psqlPath, psqlBaseArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          ...getWindowsSpawnOptions(),
+        })
+
+        let stderr = ''
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        proc.on('error', reject)
+
+        proc.on('close', (code) => {
+          if (code === 0) resolve()
+          else reject(new Error(stderr || `psql exited with code ${code}`))
+        })
+
+        proc.stdin?.write(sql)
+        proc.stdin?.end()
+      })
+
     // Create the role with login and password
     const createRoleSql = `CREATE ROLE "${username}" WITH LOGIN PASSWORD '${password.replace(/'/g, "''")}'`
-    const createCmd = isWindows()
-      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${createRoleSql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${createRoleSql.replace(/'/g, "'\\''")}'`
 
     try {
-      await execAsync(createCmd)
+      await runPsqlViaStdin(createRoleSql)
     } catch (error) {
       const err = error as Error
       if (err.message.includes('already exists')) {
         // User exists — update password instead
         const alterSql = `ALTER ROLE "${username}" WITH PASSWORD '${password.replace(/'/g, "''")}'`
-        const alterCmd = isWindows()
-          ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${alterSql.replace(/"/g, '\\"')}"`
-          : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${alterSql.replace(/'/g, "'\\''")}'`
-        await execAsync(alterCmd)
+        await runPsqlViaStdin(alterSql)
       } else {
         throw error
       }
@@ -1087,11 +1118,7 @@ export class PostgreSQLEngine extends BaseEngine {
 
     // Grant all privileges on the target database
     const grantSql = `GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${username}"`
-    const grantCmd = isWindows()
-      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${grantSql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${grantSql}'`
-
-    await execAsync(grantCmd)
+    await runPsqlViaStdin(grantSql)
 
     const connectionString = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 

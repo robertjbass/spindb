@@ -1557,15 +1557,45 @@ export class FerretDBEngine extends BaseEngine {
 
     // Same as MongoDB - auth disabled with --no-auth but user is still created
     // Use JSON.stringify for password to safely escape all special characters in JS context
+    // Pass script via stdin to avoid exposing passwords in process listings
     const jsonPwd = JSON.stringify(password)
     const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
 
-    const cmd = isWindows()
-      ? `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval "${script.replace(/"/g, '\\"')}"`
-      : `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval '${script.replace(/'/g, "'\\''")}'`
+    const mongoshArgs = ['--host', '127.0.0.1', '--port', String(port), 'admin']
+
+    const runMongoshViaStdin = (js: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const proc = spawn(mongosh, mongoshArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        let stderr = ''
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        const timeout = setTimeout(() => {
+          proc.kill('SIGTERM')
+          reject(new Error('mongosh timed out after 10 seconds'))
+        }, 10000)
+
+        proc.on('error', (err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          clearTimeout(timeout)
+          if (code === 0) resolve()
+          else reject(new Error(stderr || `mongosh exited with code ${code}`))
+        })
+
+        proc.stdin?.write(js)
+        proc.stdin?.end()
+      })
 
     try {
-      await execAsync(cmd, { timeout: 10000 })
+      await runMongoshViaStdin(script)
     } catch (error) {
       const err = error as Error
       if (
@@ -1574,10 +1604,7 @@ export class FerretDBEngine extends BaseEngine {
       ) {
         // User exists — update password instead
         const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:${jsonPwd}})`
-        const updateCmd = isWindows()
-          ? `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval "${updateScript.replace(/"/g, '\\"')}"`
-          : `"${mongosh}" --host 127.0.0.1 --port ${port} admin --eval '${updateScript.replace(/'/g, "'\\''")}'`
-        await execAsync(updateCmd, { timeout: 10000 })
+        await runMongoshViaStdin(updateScript)
       } else {
         throw error
       }

@@ -1247,6 +1247,11 @@ export class MeilisearchEngine extends BaseEngine {
       }
       apiKey = existingData.key
       logDebug(`Found existing Meilisearch API key: ${username}`)
+    } else if (existingResponse.status !== 404) {
+      // Unexpected error (e.g., 401, 403, 429, 500) — surface it instead of silently creating a new key
+      throw new Error(
+        `Failed to check existing API key (HTTP ${existingResponse.status}): ${JSON.stringify(existingResponse.data)}`,
+      )
     } else {
       // Create a new API key with the deterministic UID
       const response = await meilisearchApiRequest(port, 'POST', '/keys', {
