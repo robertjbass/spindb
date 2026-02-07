@@ -511,7 +511,7 @@ export class MySQLEngine extends BaseEngine {
 
         // Wait for MySQL to be ready
         let attempts = 0
-        const maxAttempts = 30
+        const maxAttempts = 60
         const checkInterval = 500
 
         const checkReady = async () => {

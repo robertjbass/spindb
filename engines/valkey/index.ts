@@ -695,7 +695,7 @@ export class ValkeyEngine extends BaseEngine {
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 30000,
+    timeoutMs = 60000,
   ): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 500

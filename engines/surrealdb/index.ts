@@ -400,7 +400,7 @@ export class SurrealDBEngine extends BaseEngine {
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 30000,
+    timeoutMs = 60000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for port ${port}, version ${version}`)
     const startTime = Date.now()
