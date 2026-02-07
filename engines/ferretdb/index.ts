@@ -15,7 +15,14 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import net from 'net'
-import { mkdir, writeFile, readFile, symlink, unlink } from 'fs/promises'
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  symlink,
+  unlink,
+  readdir,
+} from 'fs/promises'
 import { join, basename, dirname } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -392,6 +399,14 @@ export class FerretDBEngine extends BaseEngine {
         }
       }
 
+      // On macOS, fix hardcoded Homebrew dylib paths in extension libraries.
+      // The x64 build may have extensions (e.g. pg_documentdb_core.dylib) that
+      // reference Homebrew libraries (e.g. libbson2.2.dylib from mongo-c-driver)
+      // via absolute paths that don't exist on the target machine.
+      if (platform === 'darwin') {
+        await this.fixDylibDependencies(documentdbPath)
+      }
+
       // On macOS, set DYLD_FALLBACK_LIBRARY_PATH as additional library search path.
       // Unlike DYLD_LIBRARY_PATH, this is NOT stripped by SIP.
       const initdbEnv =
@@ -553,6 +568,11 @@ export class FerretDBEngine extends BaseEngine {
 
     // Allocate backend port
     const backendPort = existingBackendPort || (await allocateBackendPort())
+
+    // Fix hardcoded Homebrew dylib paths (darwin-x64 binaries)
+    if (platform === 'darwin') {
+      await this.fixDylibDependencies(documentdbPath)
+    }
 
     let pgStarted = false
     let ferretStarted = false
@@ -817,6 +837,92 @@ export class FerretDBEngine extends BaseEngine {
     }
 
     logDebug('FerretDB stopped')
+  }
+
+  /**
+   * Fix hardcoded Homebrew dylib paths in extension libraries.
+   *
+   * The x64 darwin build of postgresql-documentdb has extensions whose dylib
+   * load commands reference absolute Homebrew paths (e.g.
+   * /usr/local/opt/mongo-c-driver/lib/libbson2.2.dylib). When these paths
+   * don't exist on the target machine, the extension fails to load.
+   *
+   * This method scans extension dylibs with `otool -L`, finds missing
+   * dependencies, searches our bundle for matching libraries, and creates
+   * symlinks at the expected Homebrew paths.
+   */
+  private async fixDylibDependencies(documentdbPath: string): Promise<void> {
+    const libDir = join(documentdbPath, 'lib')
+    const pkgLibDir = join(libDir, 'postgresql')
+
+    if (!existsSync(pkgLibDir)) return
+
+    // Collect all .dylib files in our bundle's lib/ directory
+    const bundledLibNames = new Set<string>()
+    const bundledLibPaths = new Map<string, string>()
+    try {
+      const libFiles = await readdir(libDir)
+      for (const f of libFiles) {
+        if (f.endsWith('.dylib')) {
+          bundledLibNames.add(f)
+          bundledLibPaths.set(f, join(libDir, f))
+        }
+      }
+    } catch {
+      return
+    }
+
+    // Scan extension dylibs for missing dependencies
+    let extFiles: string[]
+    try {
+      extFiles = (await readdir(pkgLibDir)).filter((f) => f.endsWith('.dylib'))
+    } catch {
+      return
+    }
+
+    for (const extFile of extFiles) {
+      const extPath = join(pkgLibDir, extFile)
+      try {
+        const { stdout } = await execAsync(`otool -L "${extPath}"`, {
+          timeout: 5000,
+        })
+
+        for (const line of stdout.split('\n')) {
+          const match = line.trim().match(/^(\/[^\s]+\.dylib)\s/)
+          if (!match) continue
+          const depPath = match[1]
+
+          // Skip system libs, @-prefixed paths, and paths in our bundle
+          if (depPath.startsWith('/usr/lib/')) continue
+          if (depPath.startsWith('/System/')) continue
+          if (depPath.startsWith('@')) continue
+          if (depPath.includes(documentdbPath)) continue
+
+          if (!existsSync(depPath)) {
+            const depName = basename(depPath)
+
+            // Check if we have this exact library in our bundle
+            if (bundledLibPaths.has(depName)) {
+              await mkdir(dirname(depPath), { recursive: true })
+              try {
+                await symlink(bundledLibPaths.get(depName)!, depPath)
+                logDebug(
+                  `Fixed dylib dep: ${depPath} -> ${bundledLibPaths.get(depName)}`,
+                )
+              } catch {
+                // Symlink may already exist from a parallel fix
+              }
+            } else {
+              logDebug(
+                `Missing dylib dependency: ${depPath} (not found in bundle)`,
+              )
+            }
+          }
+        }
+      } catch {
+        logDebug(`Could not scan dylib deps for ${extFile}`)
+      }
+    }
   }
 
   /**
