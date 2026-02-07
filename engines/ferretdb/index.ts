@@ -335,74 +335,87 @@ export class FerretDBEngine extends BaseEngine {
         arch,
       )
 
-      // Ensure PostgreSQL can find its share data (timezone files, etc.).
-      // Homebrew-derived binaries have compiled-in share paths (e.g.
-      // /usr/local/share/postgresql@17) that don't exist when running from
-      // ~/.spindb/bin/. If the binary's relative path discovery also fails
-      // (different offset than ../share/), we create a symlink at the
-      // compiled-in path pointing to the actual share data.
+      // Homebrew-derived x64 binaries have compiled-in absolute paths for
+      // sharedir, pkglibdir ($libdir), and libdir that don't exist when running
+      // from ~/.spindb/bin/. We fix this by:
+      // 1. Using initdb's -L flag to explicitly set the share directory
+      // 2. Creating symlinks at compiled-in paths for pkglibdir and libdir
+      //    (these are needed by the bootstrap postgres subprocess during initdb)
       const shareDirBase = join(documentdbPath, 'share')
+      const actualShareDir = existsSync(join(shareDirBase, 'postgres.bki'))
+        ? shareDirBase
+        : existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
+          ? join(shareDirBase, 'postgresql')
+          : shareDirBase
+
       const pgConfigBin = join(documentdbPath, 'bin', `pg_config${ext}`)
       if (existsSync(pgConfigBin)) {
-        try {
-          const { stdout } = await execAsync(`"${pgConfigBin}" --sharedir`, {
-            timeout: 5000,
-          })
-          const compiledShareDir = stdout.trim()
-          if (compiledShareDir && !existsSync(compiledShareDir)) {
-            // Determine the actual share dir (may be share/ or share/postgresql/)
-            const actualShareDir = existsSync(
-              join(shareDirBase, 'postgres.bki'),
-            )
-              ? shareDirBase
-              : existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
-                ? join(shareDirBase, 'postgresql')
-                : shareDirBase
-            await mkdir(dirname(compiledShareDir), { recursive: true })
-            await symlink(actualShareDir, compiledShareDir)
-            logDebug(
-              `Created share dir symlink: ${compiledShareDir} -> ${actualShareDir}`,
-            )
-          }
-        } catch {
-          logDebug('Could not determine or fix compiled share path')
-        }
+        // Query all relevant compiled-in paths and create symlinks where needed
+        const pathFixups: Array<{
+          flag: string
+          actualDir: string
+          label: string
+        }> = [
+          { flag: '--sharedir', actualDir: actualShareDir, label: 'share' },
+          {
+            flag: '--pkglibdir',
+            actualDir: existsSync(join(documentdbPath, 'lib', 'postgresql'))
+              ? join(documentdbPath, 'lib', 'postgresql')
+              : join(documentdbPath, 'lib'),
+            label: 'pkglib',
+          },
+          {
+            flag: '--libdir',
+            actualDir: join(documentdbPath, 'lib'),
+            label: 'lib',
+          },
+        ]
 
-        // Same fix for $libdir (extension libraries like dict_snowball).
-        // Homebrew-derived binaries expect libs at e.g. /usr/local/opt/postgresql@17/lib/postgresql
-        try {
-          const { stdout: pkglibOut } = await execAsync(
-            `"${pgConfigBin}" --pkglibdir`,
-            { timeout: 5000 },
-          )
-          const compiledPkgLibDir = pkglibOut.trim()
-          if (compiledPkgLibDir && !existsSync(compiledPkgLibDir)) {
-            const libBase = join(documentdbPath, 'lib')
-            const libExt = platform === 'darwin' ? '.dylib' : '.so'
-            // Actual pkglib dir may be lib/postgresql/ or lib/ directly
-            const actualPkgLibDir = existsSync(
-              join(libBase, 'postgresql', `dict_snowball${libExt}`),
+        for (const { flag, actualDir, label } of pathFixups) {
+          try {
+            const { stdout: out } = await execAsync(
+              `"${pgConfigBin}" ${flag}`,
+              { timeout: 5000 },
             )
-              ? join(libBase, 'postgresql')
-              : existsSync(join(libBase, `dict_snowball${libExt}`))
-                ? libBase
-                : join(libBase, 'postgresql')
-            await mkdir(dirname(compiledPkgLibDir), { recursive: true })
-            await symlink(actualPkgLibDir, compiledPkgLibDir)
-            logDebug(
-              `Created pkglib dir symlink: ${compiledPkgLibDir} -> ${actualPkgLibDir}`,
-            )
+            const compiledDir = out.trim()
+            logDebug(`pg_config ${flag}: ${compiledDir}`)
+            if (compiledDir && !existsSync(compiledDir)) {
+              await mkdir(dirname(compiledDir), { recursive: true })
+              await symlink(actualDir, compiledDir)
+              logDebug(
+                `Created ${label} symlink: ${compiledDir} -> ${actualDir}`,
+              )
+            }
+          } catch {
+            logDebug(`Could not fix compiled ${label} path`)
           }
-        } catch {
-          logDebug('Could not determine or fix compiled pkglib path')
         }
       }
+
+      // On macOS, set DYLD_FALLBACK_LIBRARY_PATH as additional library search path.
+      // Unlike DYLD_LIBRARY_PATH, this is NOT stripped by SIP.
+      const initdbEnv =
+        platform === 'darwin'
+          ? {
+              ...spawnEnv,
+              DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
+            }
+          : spawnEnv
 
       try {
         await spawnAsync(
           initdb,
-          ['-D', pgDataDir, '-U', 'postgres', '--encoding=UTF8', '--locale=C'],
-          { env: spawnEnv, timeout: 60000 },
+          [
+            '-D',
+            pgDataDir,
+            '-U',
+            'postgres',
+            '--encoding=UTF8',
+            '--locale=C',
+            '-L',
+            actualShareDir,
+          ],
+          { env: initdbEnv, timeout: 60000 },
         )
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
       } catch (error) {
@@ -498,12 +511,21 @@ export class FerretDBEngine extends BaseEngine {
       arch,
     )
 
-    // Get spawn env for Linux (LD_LIBRARY_PATH for postgresql-documentdb binaries)
-    const pgSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+    // Get spawn env for postgresql-documentdb binaries:
+    // - Linux: LD_LIBRARY_PATH for shared libraries
+    // - macOS: DYLD_FALLBACK_LIBRARY_PATH (not stripped by SIP)
+    const baseSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
       fullBackendVersion,
       platform,
       arch,
     )
+    const pgSpawnEnv =
+      platform === 'darwin'
+        ? {
+            ...baseSpawnEnv,
+            DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
+          }
+        : baseSpawnEnv
 
     const ext = platformService.getExecutableExtension()
     const ferretdbBinary = join(ferretdbPath, 'bin', `ferretdb${ext}`)
@@ -764,12 +786,19 @@ export class FerretDBEngine extends BaseEngine {
       arch,
     )
 
-    // Get spawn env for Linux (LD_LIBRARY_PATH for postgresql-documentdb binaries)
-    const pgSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+    // Get spawn env for postgresql-documentdb binaries
+    const baseStopEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
       fullBackendVersion,
       platform,
       arch,
     )
+    const pgSpawnEnv =
+      platform === 'darwin'
+        ? {
+            ...baseStopEnv,
+            DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
+          }
+        : baseStopEnv
 
     const ext = platformService.getExecutableExtension()
     const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
