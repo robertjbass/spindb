@@ -1053,13 +1053,7 @@ export class MongoDBEngine extends BaseEngine {
     const jsonPwd = JSON.stringify(password)
     const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
 
-    const mongoshArgs = [
-      '--host',
-      '127.0.0.1',
-      '--port',
-      String(port),
-      'admin',
-    ]
+    const mongoshArgs = ['--host', '127.0.0.1', '--port', String(port), 'admin']
 
     const runMongoshViaStdin = (js: string): Promise<void> =>
       new Promise((resolve, reject) => {

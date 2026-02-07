@@ -1474,8 +1474,8 @@ export class ValkeyEngine extends BaseEngine {
   ): Promise<UserCredentials> {
     const { username, password } = options
     assertValidUsername(username)
-    const { port } = container
-    const valkeyCli = await this.getValkeyCliPath()
+    const { port, version } = container
+    const valkeyCli = await this.getValkeyCliPath(version)
 
     // Reject passwords with characters that break ACL SETUSER syntax:
     // '>' sets password, '#' sets hash, '<' removes password — all are ACL delimiters.

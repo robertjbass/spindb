@@ -12,14 +12,14 @@ For CI platform coverage, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 | Backup & restore (local) | All engines | None | High |
 | Clone & rename | All engines | None | High |
 | Query execution (run/executeQuery) | All engines | None | High |
-| User management (users create) | 13 of 16 engines (excludes SQLite, DuckDB, QuestDB) | None | High |
+| User management (users create) | 13 of 16 engines (excludes SQLite, DuckDB, QuestDB) | N/A (excluded engines have no user management) | High |
 | Binary management | All engines | None | High |
 | Doctor | Unit + CLI E2E | None | High |
 | JSON output (--json) | 442-line suite | None | High |
 | Validation & parsing | 1039 unit tests | None | High |
 | Pull (remote sync) | Unit only | No E2E | Low |
 | Restore --from-url | None | Full gap | None |
-| Export docker | None | Full gap | None |
+| Export docker | CI job (`test-docker-export`) | None | High |
 | Which (find container) | None | Full gap | None |
 | Logs | None | Full gap | None |
 | Databases subcommands | JSON errors only | No functional tests | Low |
@@ -32,14 +32,6 @@ For CI platform coverage, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 ## Detailed Gaps
 
 ### High Risk (complex features, engine-specific logic)
-
-#### `spindb export docker`
-- **What it does:** Generates Dockerfile, docker-compose.yml, entrypoint.sh, certs, .env, and backup data for deploying a container as a Docker package.
-- **Risk:** Lots of moving parts (file generation, credential handling, TLS certs, backup inclusion). Could generate broken Dockerfiles or compose files silently.
-- **Suggested tests:**
-  - Unit: Validate generated file contents for each engine type
-  - Integration: Export a PostgreSQL container, verify file structure and key content
-  - Stretch: Build and run the generated Docker image
 
 #### `spindb restore --from-url`
 - **What it does:** Dumps a remote database via connection string, then restores locally. Each engine has its own `dumpFromConnectionString()` implementation.
@@ -128,6 +120,7 @@ These features have solid test coverage and don't need additional work:
 - **Validation** (username, database name, SQL injection prevention) -- unit tests
 - **Config management** (load, staleness, binary paths) -- unit tests
 - **Credential management** (save, load, list) -- unit tests
+- **Export docker** -- CI job (`test-docker-export`): create, export, docker build, run, verify data
 
 ## Cross-Platform Coverage
 
