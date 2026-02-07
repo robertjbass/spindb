@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { createWriteStream, existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
@@ -1269,9 +1269,11 @@ export class QdrantEngine extends BaseEngine {
     if (statusResult.running) {
       await this.stop(container)
       await writeFile(configPath, updatedConfig)
+      await chmod(configPath, 0o600)
       await this.start(container)
     } else {
       await writeFile(configPath, updatedConfig)
+      await chmod(configPath, 0o600)
     }
 
     logDebug(`Configured Qdrant global API key (credential label: ${username})`)

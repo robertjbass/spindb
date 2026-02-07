@@ -110,9 +110,10 @@ function parseCredentialFile(
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue
-    const eqIdx = trimmed.indexOf('=')
+    const eqIdx = line.indexOf('=')
     if (eqIdx === -1) continue
-    vars[trimmed.slice(0, eqIdx)] = decodeEnvValue(trimmed.slice(eqIdx + 1))
+    const key = line.slice(0, eqIdx).trim()
+    vars[key] = decodeEnvValue(line.slice(eqIdx + 1))
   }
 
   if (vars.API_KEY) {

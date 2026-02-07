@@ -12,9 +12,10 @@ import {
 import type { UserCredentials } from '../../types'
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
 
-// Use unique container names to avoid collisions with other tests
-const TEST_CONTAINER = '_cred_test_container'
-const TEST_CONTAINER_MS = '_cred_test_ms'
+// Use unique container names with a nonce to avoid collisions with real data
+const TEST_NONCE = Date.now()
+const TEST_CONTAINER = `_cred_test_${TEST_NONCE}`
+const TEST_CONTAINER_MS = `_cred_test_ms_${TEST_NONCE}`
 
 describe('Credential Manager', () => {
   beforeEach(() => {

@@ -378,6 +378,9 @@ export class FerretDBEngine extends BaseEngine {
           },
         ]
 
+        // Create symlinks at compiled-in paths so PostgreSQL can find its
+        // libraries. These paths may be in system directories (e.g. /usr/local/),
+        // which require elevated privileges to write to.
         for (const { flag, actualDir, label } of pathFixups) {
           try {
             const { stdout: out } = await execAsync(
@@ -393,8 +396,21 @@ export class FerretDBEngine extends BaseEngine {
                 `Created ${label} symlink: ${compiledDir} -> ${actualDir}`,
               )
             }
-          } catch {
-            logDebug(`Could not fix compiled ${label} path`)
+          } catch (error) {
+            const e = error as NodeJS.ErrnoException
+            const isPermission =
+              e.code === 'EACCES' ||
+              e.code === 'EPERM' ||
+              (e.message && /permission denied/i.test(e.message))
+            if (isPermission) {
+              logWarning(
+                `Cannot create ${label} symlink (permission denied). ` +
+                  `Creating symlinks in system paths may require elevated privileges (sudo). ` +
+                  `Target: ${flag} -> ${actualDir}`,
+              )
+            } else {
+              logDebug(`Could not fix compiled ${label} path: ${e.message}`)
+            }
           }
         }
       }

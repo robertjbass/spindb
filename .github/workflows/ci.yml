@@ -565,7 +565,7 @@ jobs:
         id: ferretdb-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-ferretdb-3-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-ferretdb-2-${{ runner.os }}-${{ runner.arch }}
 
       # Download FerretDB binaries via SpinDB (downloads both ferretdb + postgresql-documentdb)
       - name: Download FerretDB binaries
