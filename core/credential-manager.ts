@@ -116,6 +116,7 @@ function parseCredentialFile(
     vars[key] = decodeEnvValue(line.slice(eqIdx + 1))
   }
 
+  // API key credentials: password is intentionally empty (auth uses API key, not password)
   if (vars.API_KEY) {
     if (!vars.API_KEY_NAME || !vars.API_URL) {
       throw new Error(
@@ -124,7 +125,7 @@ function parseCredentialFile(
     }
     return {
       username: vars.API_KEY_NAME,
-      password: '',
+      password: '', // API-based auth does not use a password
       connectionString: vars.API_URL,
       engine,
       container: containerName,
@@ -132,6 +133,7 @@ function parseCredentialFile(
     }
   }
 
+  // Empty string DB_PASSWORD is intentionally allowed (some DBs permit passwordless connections)
   if (!vars.DB_USER || vars.DB_PASSWORD === undefined || !vars.DB_URL) {
     throw new Error(
       `Corrupt credential file for container "${containerName}": missing DB_USER, DB_PASSWORD, or DB_URL`,

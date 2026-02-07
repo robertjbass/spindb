@@ -1448,6 +1448,7 @@ export class RedisEngine extends BaseEngine {
     const { username, password } = options
     assertValidUsername(username)
     const { port } = container
+    const db = options.database ?? container.database ?? '0'
     const redisCli = await this.getRedisCliPath(container.version)
 
     // Reject passwords with characters that break ACL SETUSER syntax:
@@ -1461,14 +1462,7 @@ export class RedisEngine extends BaseEngine {
 
     // ACL SETUSER is idempotent - sets user with full access
     // Pass the full ACL command via stdin to avoid exposing the password in argv
-    const connArgs = [
-      '-h',
-      '127.0.0.1',
-      '-p',
-      String(port),
-      '-n',
-      container.database ?? '0',
-    ]
+    const connArgs = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(redisCli, connArgs, {
@@ -1491,7 +1485,6 @@ export class RedisEngine extends BaseEngine {
     })
     logDebug(`Created Redis user: ${username}`)
 
-    const db = container.database ?? '0'
     const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {

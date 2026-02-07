@@ -1475,6 +1475,7 @@ export class ValkeyEngine extends BaseEngine {
     const { username, password } = options
     assertValidUsername(username)
     const { port, version } = container
+    const db = options.database ?? container.database ?? '0'
     const valkeyCli = await this.getValkeyCliPath(version)
 
     // Reject passwords with characters that break ACL SETUSER syntax:
@@ -1488,14 +1489,7 @@ export class ValkeyEngine extends BaseEngine {
 
     // ACL SETUSER is idempotent - sets user with full access
     // Send ACL command via stdin to avoid leaking password in process argv
-    const cliArgs = [
-      '-h',
-      '127.0.0.1',
-      '-p',
-      String(port),
-      '-n',
-      container.database ?? '0',
-    ]
+    const cliArgs = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(valkeyCli, cliArgs, {
@@ -1519,7 +1513,6 @@ export class ValkeyEngine extends BaseEngine {
     logDebug(`Created Valkey user: ${username}`)
 
     // Valkey uses redis:// scheme for compatibility
-    const db = container.database ?? '0'
     const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
 
     return {

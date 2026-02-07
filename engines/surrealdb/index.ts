@@ -1161,10 +1161,14 @@ export class SurrealDBEngine extends BaseEngine {
     const surreal = await this.getSurrealPath(version)
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
 
-    // DEFINE USER OVERWRITE on namespace level with EDITOR role (idempotent)
+    // DEFINE USER OVERWRITE with EDITOR role (idempotent)
+    // Scope to database when options.database is provided, otherwise namespace-level
     // Escape backslashes first, then single quotes for SurrealQL string literals
     const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-    const sql = `DEFINE USER OVERWRITE ${escapeSurrealIdentifier(username)} ON NAMESPACE PASSWORD '${escapedPass}' ROLES EDITOR;`
+    const scopeClause = database
+      ? `ON DATABASE ${escapeSurrealIdentifier(database)}`
+      : 'ON NAMESPACE'
+    const sql = `DEFINE USER OVERWRITE ${escapeSurrealIdentifier(username)} ${scopeClause} PASSWORD '${escapedPass}' ROLES EDITOR;`
 
     const args = [
       'sql',

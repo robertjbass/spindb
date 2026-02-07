@@ -405,7 +405,9 @@ export class FerretDBEngine extends BaseEngine {
             if (isPermission) {
               logWarning(
                 `Cannot create ${label} symlink (permission denied). ` +
-                  `Creating symlinks in system paths may require elevated privileges (sudo). ` +
+                  `Try running with elevated privileges: sudo spindb engines download ferretdb <version>. ` +
+                  `This is needed when compiled-in paths point to system directories. ` +
+                  `See https://github.com/robertjbass/spindb#ferretdb for details. ` +
                   `Target: ${flag} -> ${actualDir}`,
               )
             } else {
@@ -420,7 +422,15 @@ export class FerretDBEngine extends BaseEngine {
       // reference Homebrew libraries (e.g. libbson2.2.dylib from mongo-c-driver)
       // via absolute paths that don't exist on the target machine.
       if (platform === 'darwin') {
-        await this.fixDylibDependencies(documentdbPath)
+        const dylibMarker = join(documentdbPath, '.dylib_fix_done')
+        if (!existsSync(dylibMarker)) {
+          await this.fixDylibDependencies(documentdbPath)
+          try {
+            await writeFile(dylibMarker, '', { flag: 'wx' })
+          } catch {
+            // Marker may already exist from a parallel init — safe to ignore
+          }
+        }
       }
 
       // On macOS, set DYLD_FALLBACK_LIBRARY_PATH as additional library search path.
@@ -586,8 +596,17 @@ export class FerretDBEngine extends BaseEngine {
     const backendPort = existingBackendPort || (await allocateBackendPort())
 
     // Fix hardcoded Homebrew dylib paths (darwin-x64 binaries)
+    // Skip if already completed (marker written by initDataDir or a previous start)
     if (platform === 'darwin') {
-      await this.fixDylibDependencies(documentdbPath)
+      const dylibMarker = join(documentdbPath, '.dylib_fix_done')
+      if (!existsSync(dylibMarker)) {
+        await this.fixDylibDependencies(documentdbPath)
+        try {
+          await writeFile(dylibMarker, '', { flag: 'wx' })
+        } catch {
+          // Marker may already exist — safe to ignore
+        }
+      }
     }
 
     let pgStarted = false
