@@ -367,6 +367,35 @@ export class FerretDBEngine extends BaseEngine {
         } catch {
           logDebug('Could not determine or fix compiled share path')
         }
+
+        // Same fix for $libdir (extension libraries like dict_snowball).
+        // Homebrew-derived binaries expect libs at e.g. /usr/local/opt/postgresql@17/lib/postgresql
+        try {
+          const { stdout: pkglibOut } = await execAsync(
+            `"${pgConfigBin}" --pkglibdir`,
+            { timeout: 5000 },
+          )
+          const compiledPkgLibDir = pkglibOut.trim()
+          if (compiledPkgLibDir && !existsSync(compiledPkgLibDir)) {
+            const libBase = join(documentdbPath, 'lib')
+            const libExt = platform === 'darwin' ? '.dylib' : '.so'
+            // Actual pkglib dir may be lib/postgresql/ or lib/ directly
+            const actualPkgLibDir = existsSync(
+              join(libBase, 'postgresql', `dict_snowball${libExt}`),
+            )
+              ? join(libBase, 'postgresql')
+              : existsSync(join(libBase, `dict_snowball${libExt}`))
+                ? libBase
+                : join(libBase, 'postgresql')
+            await mkdir(dirname(compiledPkgLibDir), { recursive: true })
+            await symlink(actualPkgLibDir, compiledPkgLibDir)
+            logDebug(
+              `Created pkglib dir symlink: ${compiledPkgLibDir} -> ${actualPkgLibDir}`,
+            )
+          }
+        } catch {
+          logDebug('Could not determine or fix compiled pkglib path')
+        }
       }
 
       try {
