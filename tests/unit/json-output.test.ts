@@ -417,7 +417,8 @@ describe('JSON Output Validation', () => {
 
     it('doctor --json should have correct structure', () => {
       // doctor command can be slow on Windows CI due to system checks
-      const result = runCommand('doctor --json', 60000)
+      // (spawns binary detection for all 16 engines — dozens of process spawns)
+      const result = runCommand('doctor --json', 120000)
       const parsed = JSON.parse(result.stdout.trim())
 
       // doctor outputs an array of checks

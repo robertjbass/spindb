@@ -12,7 +12,7 @@ For CI platform coverage, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 | Backup & restore (local) | All engines | None | High |
 | Clone & rename | All engines | None | High |
 | Query execution (run/executeQuery) | All engines | None | High |
-| User management (users create) | All engines | None | High |
+| User management (users create) | 13 of 16 engines (excludes SQLite, DuckDB, QuestDB) | None | High |
 | Binary management | All engines | None | High |
 | Doctor | Unit + CLI E2E | None | High |
 | JSON output (--json) | 442-line suite | None | High |

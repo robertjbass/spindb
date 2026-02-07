@@ -159,7 +159,7 @@ export async function saveCredentials(
 ): Promise<string> {
   const credDir = getCredentialsDir(containerName, engine)
   if (!existsSync(credDir)) {
-    await mkdir(credDir, { recursive: true })
+    await mkdir(credDir, { recursive: true, mode: 0o700 })
   }
 
   const filePath = getCredentialFilePath(
