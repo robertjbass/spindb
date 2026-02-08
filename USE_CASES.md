@@ -16,7 +16,7 @@ spindb create vectors --engine qdrant
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-Engine** | 16 databases: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, FerretDB, QuestDB |
+| **Multi-Engine** | 17 databases: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, FerretDB, QuestDB, TypeDB |
 | **Zero Config** | No configuration files. No environment variables. Just create and start. |
 | **Cross-Platform** | Native binaries for macOS, Linux, and Windows. ARM and x64. |
 | **Version Control** | Run multiple versions simultaneously. Clone databases. Branch for features. |
@@ -242,15 +242,15 @@ A Neon/Supabase-style platform, but database-agnostic:
 | Connection pooling | Future: built-in pgbouncer-style proxy |
 | Multi-engine support | PostgreSQL, MySQL, MongoDB, Redis, etc. |
 
-Unlike Neon (PostgreSQL-only) or PlanetScale (MySQL-only), a SpinDB-backed platform supports **all 16 database engines** with unified management.
+Unlike Neon (PostgreSQL-only) or PlanetScale (MySQL-only), a SpinDB-backed platform supports **all 17 database engines** with unified management.
 
 #### Desktop Application Backend
 **Layerbase** - a modern replacement for legacy database GUI tools:
 
 | Legacy Tool | Limitations | Layerbase + SpinDB |
 |-------------|-------------|-------------------|
-| [DBngin](https://dbngin.com/) | macOS only, 3 engines | Cross-platform, 16 engines |
-| [Postgres.app](https://postgresapp.com/) | macOS only, PostgreSQL only | Cross-platform, 16 engines |
+| [DBngin](https://dbngin.com/) | macOS only, 3 engines | Cross-platform, 17 engines |
+| [Postgres.app](https://postgresapp.com/) | macOS only, PostgreSQL only | Cross-platform, 17 engines |
 | [XAMPP](https://www.apachefriends.org/) | Bundles Apache/PHP, MySQL focus | Database-only, modern UI |
 | [MAMP](https://www.mamp.info/) | Web server bundling, limited engines | Database-only, all engines |
 | [Laragon](https://laragon.org/) | Windows only | Cross-platform |

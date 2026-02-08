@@ -10,7 +10,7 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
-- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 16 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
+- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 17 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
 - [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure
@@ -59,7 +59,7 @@ Quick capture for ideas that need review and prioritization:
 - [ ] **Add `--json` to remaining commands** - clone, connect, logs, edit, attach, detach
 - [ ] **Add `--json` to `spindb run`** - Capture stdout/stderr and return as JSON instead of inheriting stdio
   - Requires updating `runScript` signature in `BaseEngine` (line 233-236 of `engines/base-engine.ts`)
-  - All 16 engine implementations need to be updated to support output capture mode
+  - All 17 engine implementations need to be updated to support output capture mode
   - Output format: `{ success: boolean, stdout: string, stderr: string, exitCode: number, container: string, engine: string, database: string }`
   - Once implemented, update layerbase query logic to use this for programmatic SQL execution
 
