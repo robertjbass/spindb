@@ -153,6 +153,14 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the typedb console binary if available
+   * Default implementation throws; TypeDB engine overrides this method.
+   */
+  async getTypeDBConsolePath(_version?: string): Promise<string> {
+    throw new Error('typedb_console_bin not found')
+  }
+
+  /**
    * Get the path to the sqlite3 client if available
    * Default implementation returns null; SQLite engine overrides this method.
    */

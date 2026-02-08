@@ -13,6 +13,7 @@ export type EngineConfig = {
   defaultPort: number | null
   runtime: 'server' | 'embedded'
   queryLanguage: string
+  scriptFileLabel: string | null
   connectionScheme: string
   superuser: string | null
   clientTools: string[]

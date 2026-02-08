@@ -32,6 +32,8 @@ import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { paths } from '../../../config/paths'
+import { getEngineConfig } from '../../../config/engines-registry'
+import { getConsoleBaseArgs } from '../../../engines/typedb/cli-utils'
 
 /**
  * Open a URL in the system's default browser
@@ -246,6 +248,13 @@ export async function handleOpenShell(
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'typedb') {
+    // TypeDB uses typedb console
+    defaultShellName = 'typedb console'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -342,17 +351,9 @@ export async function handleOpenShell(
     }
   }
 
-  // usql supports SQL databases (PostgreSQL, MySQL, SQLite) - skip for Redis, Valkey, MongoDB, FerretDB, Qdrant, Meilisearch, CouchDB, and SurrealDB
-  const isNonSqlEngine =
-    config.engine === 'redis' ||
-    config.engine === 'valkey' ||
-    config.engine === 'mongodb' ||
-    config.engine === 'ferretdb' ||
-    config.engine === 'qdrant' ||
-    config.engine === 'meilisearch' ||
-    config.engine === 'couchdb' ||
-    config.engine === 'surrealdb'
-  if (!isNonSqlEngine) {
+  // usql supports SQL databases - skip for non-SQL engines
+  const engineConfig = await getEngineConfig(config.engine)
+  if (engineConfig.queryLanguage === 'sql') {
     if (usqlInstalled) {
       choices.push({
         name: '⚡ Use usql (universal SQL client)',
@@ -990,10 +991,21 @@ async function launchShell(
     const questDbConnStr = `postgresql://admin:quest@127.0.0.1:${config.port}/${db}`
     shellArgs = [questDbConnStr]
     installHint = 'brew install libpq && brew link --force libpq'
+  } else if (config.engine === 'typedb') {
+    // TypeDB uses typedb console with address and tls-disabled flags
+    const engine = getEngine(config.engine)
+    const consolePath = await engine
+      .getTypeDBConsolePath(config.version)
+      .catch(() => 'typedb_console_bin')
+    shellCmd = consolePath
+    shellArgs = getConsoleBaseArgs(config.port)
+    installHint = 'spindb engines download typedb'
   } else {
-    shellCmd = 'psql'
+    // PostgreSQL default shell - look up downloaded binary path
+    const psqlPath = await configManager.getBinaryPath('psql')
+    shellCmd = psqlPath || 'psql'
     shellArgs = [connectionString]
-    installHint = 'brew install libpq && brew link --force libpq'
+    installHint = 'spindb engines download postgresql'
   }
 
   const shellProcess = spawn(shellCmd, shellArgs, {

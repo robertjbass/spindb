@@ -71,6 +71,7 @@ export const TEST_PORTS = {
   cockroachdb: { base: 26260, clone: 26262, renamed: 26261 },
   surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
   questdb: { base: 8820, clone: 8822, renamed: 8821 },
+  typedb: { base: 1730, clone: 1732, renamed: 1731 },
 }
 
 // Default test versions for each engine
@@ -79,6 +80,7 @@ export const TEST_VERSIONS = {
   cockroachdb: '25',
   surrealdb: '2',
   questdb: '9',
+  typedb: '3',
 }
 
 /**
@@ -354,6 +356,52 @@ export async function executeSQL(
     const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
     const cmd = `"${psqlPath}" "${connectionString}" -c "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
+  } else if (engine === Engine.TypeDB) {
+    // TypeDB console --command mode doesn't support multi-step transaction flows;
+    // each --command is a standalone command. Use temp script for queries.
+    const engineImpl = getEngine(Engine.TypeDB)
+    const consolePath = await engineImpl.getTypeDBConsolePath(
+      TEST_VERSIONS.typedb,
+    )
+    const { getConsoleBaseArgs } = await import(
+      '../../engines/typedb/cli-utils'
+    )
+    const { spawn } = await import('child_process')
+    const { writeFile, unlink } = await import('fs/promises')
+    const { tmpdir } = await import('os')
+    const { join } = await import('path')
+
+    const scriptContent = `transaction read ${database}\n\n${sql}\n\nclose\n`
+    const tempScript = join(
+      tmpdir(),
+      `spindb-typedb-test-${Date.now()}-${Math.random().toString(36).slice(2)}.tqls`,
+    )
+
+    try {
+      await writeFile(tempScript, scriptContent, 'utf-8')
+      const args = [...getConsoleBaseArgs(port), '--script', tempScript]
+
+      return await new Promise((resolve, reject) => {
+        const proc = spawn(consolePath, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+        let stdout = ''
+        let stderr = ''
+        proc.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+        proc.on('close', (code) => {
+          if (code === 0) resolve({ stdout, stderr })
+          else reject(new Error(stderr || `Exit code ${code}`))
+        })
+        proc.on('error', reject)
+      })
+    } finally {
+      await unlink(tempScript).catch(() => {})
+    }
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -454,6 +502,18 @@ export async function executeSQLFile(
     const engineImpl = getEngine(Engine.PostgreSQL)
     const psqlPath = await engineImpl.getPsqlPath().catch(() => 'psql')
     const cmd = `"${psqlPath}" "${connectionString}" -f "${filePath}"`
+    return execAsync(cmd)
+  } else if (engine === Engine.TypeDB) {
+    // TypeDB uses console binary with --script flag for .tqls files
+    const engineImpl = getEngine(Engine.TypeDB)
+    const consolePath = await engineImpl.getTypeDBConsolePath(
+      TEST_VERSIONS.typedb,
+    )
+    const { getConsoleBaseArgs } = await import(
+      '../../engines/typedb/cli-utils'
+    )
+    const args = [...getConsoleBaseArgs(port), '--script', filePath]
+    const cmd = `"${consolePath}" ${args.map((a) => `"${a}"`).join(' ')}`
     return execAsync(cmd)
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -737,6 +797,23 @@ export async function waitForReady(
           `"${psqlPath}" "postgresql://admin:quest@127.0.0.1:${port}/qdb" -c "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.TypeDB) {
+        // TypeDB health check via HTTP GET to HTTP port (main port + 6271)
+        const httpPort = port + 6271
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${httpPort}/`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('TypeDB health check failed or timed out')
+        }
       } else {
         // Use the engine-provided psql binary when available to avoid relying
         // on a psql in PATH (which may not exist on Windows)
@@ -906,6 +983,9 @@ export function getConnectionString(
   }
   if (engine === Engine.SurrealDB) {
     return `ws://127.0.0.1:${port}/rpc`
+  }
+  if (engine === Engine.TypeDB) {
+    return `typedb://admin:password@127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

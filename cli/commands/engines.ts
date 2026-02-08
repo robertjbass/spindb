@@ -65,6 +65,7 @@ import { couchdbBinaryManager } from '../../engines/couchdb/binary-manager'
 import { cockroachdbBinaryManager } from '../../engines/cockroachdb/binary-manager'
 import { surrealdbBinaryManager } from '../../engines/surrealdb/binary-manager'
 import { questdbBinaryManager } from '../../engines/questdb/binary-manager'
+import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
@@ -1835,9 +1836,52 @@ enginesCommand
         return
       }
 
+      if (['typedb', 'tdb'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('TypeDB requires a version (e.g., 3)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.TypeDB)
+
+        const spinner = createSpinner(`Checking TypeDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `TypeDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`TypeDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`TypeDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: typedbPlatform, arch: typedbArch } =
+          platformService.getPlatformInfo()
+        const typedbFullVersion = typedbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'typedb',
+          version: typedbFullVersion,
+          platform: typedbPlatform,
+          arch: typedbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check - TypeDB console is bundled
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb`,
         ),
       )
       process.exit(1)

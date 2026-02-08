@@ -36,6 +36,7 @@ const ENGINE_DEFS = [
   { engine: 'cockroachdb', aliases: ['crdb', 'cockroach'] },
   { engine: 'surrealdb', aliases: ['surreal'] },
   { engine: 'questdb', aliases: ['quest'] },
+  { engine: 'typedb', aliases: ['tdb'] },
 ] as const
 
 type SupportedEngine = (typeof ENGINE_DEFS)[number]['engine']

@@ -46,6 +46,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.CockroachDB]: '[CR]',
       [Engine.SurrealDB]: '[SR]',
       [Engine.QuestDB]: '[QS]',
+      [Engine.TypeDB]: '[TB]',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = ASCII_ICONS[engine] || '[??]'
@@ -73,6 +74,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.CockroachDB]: '\ue269',
       [Engine.SurrealDB]: '\uedfe',
       [Engine.QuestDB]: '\ued2f',
+      [Engine.TypeDB]: '\ue706',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = NERD_ICONS[engine] || '\ue706'
@@ -100,6 +102,7 @@ function generatePreviewLine(mode: IconMode): string {
     [Engine.CockroachDB]: '\u{1FAB3}',
     [Engine.SurrealDB]: '\u{1F300}',
     [Engine.QuestDB]: '\u23F1',
+    [Engine.TypeDB]: '\u{1F916}',
   }
   const icons = PREVIEW_ENGINES.map((engine) => EMOJI_ICONS[engine] || '\u25A3')
   return icons.join(' ')

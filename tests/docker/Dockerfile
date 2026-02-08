@@ -32,6 +32,7 @@
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
 # - DuckDB: duckdb
 # - Qdrant: qdrant (REST API engine - tests use curl instead of CLI)
+# - TypeDB: typedb, typedb_console_bin
 
 FROM ubuntu:22.04
 

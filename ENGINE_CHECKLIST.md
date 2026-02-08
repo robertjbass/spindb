@@ -54,6 +54,9 @@ This comprehensive document provides both the specification for adding a new dat
 | `cli/commands/create.ts` | Add engine case for creation options |
 | `cli/commands/engines.ts` | Add download and list cases |
 | `cli/commands/menu/*.ts` | Update handlers (5 files) |
+| `scripts/generate/db/{engine}.ts` | Create generate script for demo data |
+| `scripts/generate/db/index.ts` | Add engine to `ENGINE_DEFS` |
+| `scripts/generate/missing-databases.ts` | Add engine to `SUPPORTED_ENGINES` |
 | `scripts/test-engine.ts` | Add engine support |
 | `tests/integration/helpers.ts` | Add helper functions |
 | `tests/integration/{engine}.test.ts` | Create test file |
@@ -955,7 +958,7 @@ if (yourengineEngines.length > 0) {
 ### cli/commands/menu/container-handlers.ts
 
 - [ ] Skip database name prompt if engine uses numbered DBs (like Redis 0-15)
-- [ ] Hide "Run SQL file" option if REST API engine (no CLI shell)
+- [ ] "Run file" menu label comes from `scriptFileLabel` in `engines.json` (set to `null` for REST API engines to hide the option). No code changes needed in `container-handlers.ts`
 - [ ] "Create user" menu item visibility (see below)
 
 ```ts
@@ -966,11 +969,10 @@ if (engine === 'redis' || engine === 'valkey' || engine === 'yourengine') {
   // Prompt for database name
 }
 
-// Hide "Run SQL file" for REST API engines (they don't have CLI shells)
-if (config.engine !== Engine.Qdrant && config.engine !== Engine.Meilisearch && config.engine !== Engine.CouchDB) {
-  const canRunSql = isFileBasedDB ? existsSync(config.database) : isRunning
-  // ... add the run-sql action choice
-}
+// "Run file" menu label comes directly from engines.json scriptFileLabel field:
+//   "Run SQL file", "Run script file", "Run command file", "Run TypeQL file", etc.
+//   null → hidden (REST API engines with no CLI shell)
+// No code changes needed - just set scriptFileLabel in engines.json
 ```
 
 **"Create user" menu item:**
@@ -1859,6 +1861,28 @@ describe('YourEngine Restore', () => {
 })
 ```
 
+### scripts/generate/db/{engine}.ts
+
+Create a generate script that creates a demo container and seeds it with sample data.
+
+- [ ] Create `scripts/generate/db/{engine}.ts` following the pattern of existing engines (e.g., `postgresql.ts`, `redis.ts`)
+  - Import shared helpers from `_shared.ts`
+  - Create/start container, seed with sample data, verify data was inserted
+  - Support `--port` flag for custom port assignment
+
+- [ ] Add engine to `ENGINE_DEFS` in `scripts/generate/db/index.ts`:
+  ```ts
+  { engine: '{engine}', aliases: ['alias1', 'alias2'] },
+  ```
+
+- [ ] Add engine to `SUPPORTED_ENGINES` in `scripts/generate/missing-databases.ts`:
+  ```ts
+  const SUPPORTED_ENGINES = [
+    // ...existing engines...
+    '{engine}',
+  ] as const
+  ```
+
 ### scripts/test-engine.ts
 
 - [ ] Add to `ENGINE_TEST_FILES`:
@@ -2661,10 +2685,31 @@ Every engine must have a comprehensive README.md documenting implementation deta
   - Cross-platform support (macOS, Linux, Windows)
 ```
 
+### TODO.md
+
+- [ ] Update engine count in any hardcoded references (e.g., "All 17 engine implementations")
+
+### USE_CASES.md
+
+- [ ] Update engine count in Core Features table
+- [ ] Add engine name to Multi-Engine feature list
+- [ ] Update "all N database engines" references
+- [ ] Update comparison table engine counts (DBngin, Postgres.app rows)
+
+### TEST_COVERAGE.md
+
+- [ ] Update engine count in coverage table (e.g., "All 17 engines")
+- [ ] Update user management exclusion list if engine lacks user management
+- [ ] Update "well-covered" section engine count
+
 ### package.json
 
 - [ ] Add engine name to `keywords` array
 - [ ] Bump version (if this is a feature release)
+
+### Hostdb Acknowledgment (README.md)
+
+- [ ] Update engine count in Acknowledgments section (e.g., "Pre-compiled database binaries for 17 engines")
 
 ---
 
@@ -2850,7 +2895,7 @@ ls -la tests/integration/{engine}.test.ts
 ls -la tests/unit/{engine}-*.test.ts
 
 # Check documentation changes
-git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md TODO.md
+git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md TODO.md USE_CASES.md TEST_COVERAGE.md
 ```
 
 ### Manual Verification
@@ -3027,6 +3072,11 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Added to `ENGINE_ALIASES`
 - [ ] Added to `TEST_ORDER`
 - [ ] Updated help text
+
+### Generate Scripts
+- [ ] Created `scripts/generate/db/{engine}.ts`
+- [ ] Added engine to `ENGINE_DEFS` in `scripts/generate/db/index.ts`
+- [ ] Added engine to `SUPPORTED_ENGINES` in `scripts/generate/missing-databases.ts`
 
 ### CI/CD Configuration
 - [ ] Added binary cache step to `.github/workflows/ci.yml`

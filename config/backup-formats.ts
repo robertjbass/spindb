@@ -26,6 +26,7 @@ import {
   type CockroachDBFormat,
   type SurrealDBFormat,
   type QuestDBFormat,
+  type TypeDBFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -61,6 +62,7 @@ export const BACKUP_FORMATS: {
   [Engine.CockroachDB]: EngineBackupFormats<CockroachDBFormat>
   [Engine.SurrealDB]: EngineBackupFormats<SurrealDBFormat>
   [Engine.QuestDB]: EngineBackupFormats<QuestDBFormat>
+  [Engine.TypeDB]: EngineBackupFormats<TypeDBFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -307,6 +309,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only SQL format supported
     defaultFormat: 'sql',
+  },
+  [Engine.TypeDB]: {
+    formats: {
+      typeql: {
+        extension: '.typeql',
+        label: '.typeql',
+        description: 'TypeQL dump - schema and data as TypeQL statements',
+        spinnerLabel: 'TypeQL',
+      },
+    },
+    supportsFormatChoice: false, // Only TypeQL format supported
+    defaultFormat: 'typeql',
   },
 }
 

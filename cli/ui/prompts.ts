@@ -472,40 +472,44 @@ export async function promptEngine(options?: {
 }): Promise<string> {
   const engines = listEngines()
 
-  type Choice =
-    | { name: string; value: string; short?: string }
-    | inquirer.Separator
-
-  const choices: Choice[] = engines.map((e) => ({
+  const engineChoices: FilterableChoice[] = engines.map((e) => ({
     name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
     value: e.name,
     short: e.displayName,
   }))
 
+  const footerChoices: (FilterableChoice | inquirer.Separator)[] = [
+    new inquirer.Separator(),
+    new inquirer.Separator(
+      chalk.gray(`  ${engines.length} engines — type to filter`),
+    ),
+  ]
+
   if (options?.includeBack) {
-    choices.push(new inquirer.Separator())
-    choices.push({ name: `${chalk.blue('←')} Back`, value: BACK_VALUE })
-    choices.push({
+    footerChoices.push(new inquirer.Separator())
+    footerChoices.push({
+      name: `${chalk.blue('←')} Back`,
+      value: BACK_VALUE,
+    })
+    footerChoices.push({
       name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: MAIN_MENU_VALUE,
     })
-    choices.push(new inquirer.Separator())
   }
 
-  const { engine } = await escapeablePrompt<{ engine: string }>([
+  footerChoices.push(new inquirer.Separator())
+
+  const allChoices = [...engineChoices, ...footerChoices]
+
+  const engine = await filterableListPrompt(
+    allChoices,
+    'Select database engine:',
     {
-      type: 'list',
-      name: 'engine',
-      message: 'Select database engine:',
-      choices,
+      filterableCount: engineChoices.length,
       pageSize: getPageSize(),
+      emptyText: 'No engines match filter',
     },
-  ])
-
-  // Escape returns to main menu
-  if (engine === ESCAPE_VALUE) {
-    return MAIN_MENU_VALUE
-  }
+  )
 
   return engine
 }

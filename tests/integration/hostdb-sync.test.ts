@@ -34,6 +34,7 @@ import { MEILISEARCH_VERSION_MAP } from '../../engines/meilisearch/version-maps'
 import { QDRANT_VERSION_MAP } from '../../engines/qdrant/version-maps'
 import { QUESTDB_VERSION_MAP } from '../../engines/questdb/version-maps'
 import { SURREALDB_VERSION_MAP } from '../../engines/surrealdb/version-maps'
+import { TYPEDB_VERSION_MAP } from '../../engines/typedb/version-maps'
 import { VALKEY_VERSION_MAP } from '../../engines/valkey/version-maps'
 
 // Engine configurations for testing
@@ -55,6 +56,7 @@ const ENGINES = [
   { name: 'qdrant', map: QDRANT_VERSION_MAP },
   { name: 'questdb', map: QUESTDB_VERSION_MAP },
   { name: 'surrealdb', map: SURREALDB_VERSION_MAP },
+  { name: 'typedb', map: TYPEDB_VERSION_MAP },
   { name: 'valkey', map: VALKEY_VERSION_MAP },
 ] as const
 
