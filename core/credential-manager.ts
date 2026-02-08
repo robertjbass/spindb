@@ -170,7 +170,6 @@ export async function saveCredentials(
   if (!existsSync(credDir)) {
     await mkdir(credDir, { recursive: true, mode: 0o700 })
   }
-  await chmod(credDir, 0o700)
 
   const filePath = getCredentialFilePath(
     containerName,
@@ -181,7 +180,12 @@ export async function saveCredentials(
     encoding: 'utf-8',
     mode: 0o600,
   })
-  await chmod(filePath, 0o600)
+
+  // POSIX file permissions are no-ops on Windows
+  if (process.platform !== 'win32') {
+    await chmod(credDir, 0o700)
+    await chmod(filePath, 0o600)
+  }
   return filePath
 }
 

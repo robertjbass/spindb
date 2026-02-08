@@ -186,8 +186,11 @@ async function restoreTypeQLBackup(
 
   if (hasSchema || hasData) {
     // Import schema and data separately
-    const command =
-      `database import ${database} ${hasSchema ? schemaPath : ''} ${hasData ? dataPath : ''}`.trim()
+    const paths = [
+      ...(hasSchema ? [schemaPath] : []),
+      ...(hasData ? [dataPath] : []),
+    ]
+    const command = `database import ${database} ${paths.join(' ')}`
 
     return runConsoleCommand(consolePath, port, command)
   }

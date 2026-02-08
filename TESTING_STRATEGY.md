@@ -14,7 +14,7 @@ SpinDB tests every engine on every supported platform-arch combo in CI.
 
 ## Platform Coverage (ci.yml)
 
-Every engine runs on **5 runners** covering all **5 platform-arch combos**:
+Every engine runs on **6 runners** covering all **5 platform-arch combos**:
 
 | Platform-Arch | Runner | Notes |
 |---------------|--------|-------|

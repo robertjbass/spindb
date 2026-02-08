@@ -30,7 +30,7 @@ export function normalizeVersion(version: string): string {
  * Check if a version is supported
  */
 export function isVersionSupported(version: string): boolean {
-  return version in TYPEDB_VERSION_MAP
+  return Object.hasOwn(TYPEDB_VERSION_MAP, version)
 }
 
 /**

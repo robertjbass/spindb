@@ -996,9 +996,15 @@ async function launchShell(
     const engine = getEngine(config.engine)
     const consolePath = await engine
       .getTypeDBConsolePath(config.version)
-      .catch(() => 'typedb_console_bin')
-    shellCmd = consolePath
-    shellArgs = getConsoleBaseArgs(config.port)
+      .catch(() => null)
+    if (consolePath) {
+      shellCmd = consolePath
+      shellArgs = getConsoleBaseArgs(config.port)
+    } else {
+      // Fallback: use the typedb launcher with 'console' subcommand
+      shellCmd = 'typedb'
+      shellArgs = ['console', ...getConsoleBaseArgs(config.port)]
+    }
     installHint = 'spindb engines download typedb'
   } else {
     // PostgreSQL default shell - look up downloaded binary path

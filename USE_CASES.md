@@ -29,8 +29,8 @@ SpinDB consolidates the functionality of multiple single-purpose tools:
 
 | Tool | Platform | Databases | SpinDB Advantage |
 |------|----------|-----------|------------------|
-| [DBngin](https://dbngin.com/) | macOS | PostgreSQL, MySQL, Redis | + 13 more engines, cross-platform |
-| [Postgres.app](https://postgresapp.com/) | macOS | PostgreSQL only | + 15 more engines, cross-platform |
+| [DBngin](https://dbngin.com/) | macOS | PostgreSQL, MySQL, Redis | + 14 more engines, cross-platform |
+| [Postgres.app](https://postgresapp.com/) | macOS | PostgreSQL only | + 16 more engines, cross-platform |
 | [XAMPP](https://www.apachefriends.org/) | All | MySQL, MariaDB | + 14 more engines, no Apache bundling |
 | [MAMP](https://www.mamp.info/) | macOS/Windows | MySQL | + 15 more engines, no web server bundling |
 | [Laragon](https://laragon.org/) | Windows | MySQL, PostgreSQL, MongoDB, Redis | + 12 more engines, cross-platform |

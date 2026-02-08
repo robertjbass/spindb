@@ -3,6 +3,8 @@
  * Handles version parsing, comparison, and compatibility checking
  */
 
+import { SUPPORTED_MAJOR_VERSIONS } from './version-maps'
+
 /**
  * Parse a TypeDB version string into components
  * Handles formats like "3.8.0", "3.8", "v3.8.0"
@@ -24,13 +26,12 @@ export function parseVersion(versionString: string): {
   // Only allow 1-3 segments (major, major.minor, major.minor.patch)
   if (parts.length < 1 || parts.length > 3) return null
 
+  // Reject segments that aren't purely numeric (e.g., "3b", "8rc1")
+  if (parts.some((p) => !/^\d+$/.test(p))) return null
+
   const major = parseInt(parts[0], 10)
   const minor = parts[1] ? parseInt(parts[1], 10) : 0
   const patch = parts[2] ? parseInt(parts[2], 10) : 0
-
-  if (isNaN(major)) return null
-  if (parts[1] && isNaN(minor)) return null
-  if (parts[2] && isNaN(patch)) return null
 
   return { major, minor, patch, raw: cleaned }
 }
@@ -43,7 +44,7 @@ export function isVersionSupported(version: string): boolean {
   const parsed = parseVersion(version)
   if (!parsed) return false
 
-  return parsed.major >= 3
+  return SUPPORTED_MAJOR_VERSIONS.includes(String(parsed.major))
 }
 
 /**
