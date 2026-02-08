@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-02-07
+
+### Fixed
+- **FerretDB darwin-x64 support** - Fixed initdb and server startup for Homebrew-derived PostgreSQL-DocumentDB binaries by resolving compiled-in paths (sharedir, pkglibdir, libdir) via symlinks, adding `DYLD_FALLBACK_LIBRARY_PATH`, and scanning extension dylibs for missing Homebrew dependencies with `otool -L`
+- **Redis createUser** - Pass ACL command via stdin instead of argv to avoid exposing passwords in process listings
+- **Valkey createUser** - Pass container version to `getValkeyCliPath()` for version-aware CLI resolution
+- **Qdrant createUser** - Set config file permissions to 0600 after writing API key
+- **Credential manager** - Parse .env values from original line to preserve whitespace; set credentials directory mode to 0700
+- **Startup timeouts** - Increased readiness timeouts for engines that spawn CLI binaries per health check (Redis/Valkey/SurrealDB: 30s → 60s, MySQL/MariaDB: 15s → 30s) to prevent false failures under slow environments like QEMU ARM64 emulation
+- **Docker E2E smoke test** - Use `timeout --foreground` to only kill the child process on timeout, preventing the test script itself from being killed and swallowing error output
+- **FerretDB path fixup errors** - Distinguish permission errors from other failures when creating symlinks in system directories, with actionable warning messages
+
+### Changed
+- **TEST_COVERAGE.md** - Updated export docker status from "full gap" to covered (CI job `test-docker-export` exists); clarified user management gaps column
+
 ## [0.32.0] - 2026-02-06
 
 ### Added
