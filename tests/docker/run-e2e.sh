@@ -1128,8 +1128,11 @@ run_test() {
     local start_exit_code
     local start_timeout="$START_TIMEOUT"
     # Use timeout command if available (Linux), otherwise run without timeout (macOS for local testing)
+    # --foreground: only kill the child process, not the parent shell's process group.
+    # Without this, timeout sends SIGTERM to the entire process group, killing the
+    # test script itself and preventing error output from being displayed.
     if command -v timeout &>/dev/null; then
-      start_output=$(timeout "$start_timeout" spindb start "$container_name" 2>&1)
+      start_output=$(timeout --foreground "$start_timeout" spindb start "$container_name" 2>&1)
       start_exit_code=$?
     else
       # macOS doesn't have timeout command by default
