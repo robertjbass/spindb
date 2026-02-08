@@ -664,18 +664,45 @@ export class RedisEngine extends BaseEngine {
               reject(new Error(portError))
               return
             }
-            reject(
-              new Error(
-                `Redis failed to start within timeout. Check logs at: ${logFile}`,
-              ),
-            )
+
+            // Include log content in error for CI debugging
+            let logContent = ''
+            try {
+              logContent = await readFile(logFile, 'utf-8')
+            } catch {
+              logContent = '(log file not found or empty)'
+            }
+
+            const errorDetails = [
+              'Redis failed to start within timeout.',
+              `Binary: ${redisServer}`,
+              `Log file: ${logFile}`,
+              `Log content:\n${logContent || '(empty)'}`,
+              stderr ? `Stderr:\n${stderr}` : '',
+              stdout ? `Stdout:\n${stdout}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n')
+
+            reject(new Error(errorDetails))
           }
         } else {
-          reject(
-            new Error(
-              stderr || stdout || `redis-server exited with code ${code}`,
-            ),
-          )
+          // Include log content for non-zero exit codes too
+          let logContent = ''
+          try {
+            logContent = await readFile(logFile, 'utf-8')
+          } catch {
+            logContent = ''
+          }
+
+          const errorDetails = [
+            stderr || stdout || `redis-server exited with code ${code}`,
+            logContent ? `Log content:\n${logContent}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+
+          reject(new Error(errorDetails))
         }
       })
     })

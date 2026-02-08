@@ -1128,16 +1128,22 @@ run_test() {
     local start_exit_code
     local start_timeout="$START_TIMEOUT"
     # Use timeout command if available (Linux), otherwise run without timeout (macOS for local testing)
-    # --foreground: only kill the child process, not the parent shell's process group.
-    # Without this, timeout sends SIGTERM to the entire process group, killing the
-    # test script itself and preventing error output from being displayed.
+    # Wrap in `if` to prevent `set -e` from aborting the script on non-zero exit.
+    # Without this, a failed `spindb start` inside $(...) causes the script to exit
+    # immediately via the EXIT trap, skipping the error handler below.
     if command -v timeout &>/dev/null; then
-      start_output=$(timeout --foreground "$start_timeout" spindb start "$container_name" 2>&1)
-      start_exit_code=$?
+      if start_output=$(timeout --foreground "$start_timeout" spindb start "$container_name" 2>&1); then
+        start_exit_code=0
+      else
+        start_exit_code=$?
+      fi
     else
       # macOS doesn't have timeout command by default
-      start_output=$(spindb start "$container_name" 2>&1)
-      start_exit_code=$?
+      if start_output=$(spindb start "$container_name" 2>&1); then
+        start_exit_code=0
+      else
+        start_exit_code=$?
+      fi
     fi
 
     if [ $start_exit_code -ne 0 ]; then
@@ -1155,6 +1161,17 @@ run_test() {
         echo "$start_output" | sed 's/^/    /'
         echo ""
       fi
+      # Dump container log file if it exists (critical for CI debugging)
+      local container_dir="$HOME/.spindb/containers/$engine/$container_name"
+      local log_candidates=("$container_dir/logs/$engine.log" "$container_dir/$engine.log" "$container_dir/logs/postgres.log")
+      for log_candidate in "${log_candidates[@]}"; do
+        if [ -f "$log_candidate" ]; then
+          echo "  ${RED}Server log ($log_candidate):${RESET}"
+          tail -50 "$log_candidate" | sed 's/^/    /'
+          echo ""
+          break
+        fi
+      done
       spindb delete "$container_name" --yes &>/dev/null || true
       failure_reason="Container start failed (exit code: $start_exit_code)"
       record_result "$engine" "$version" "FAILED" "$failure_reason"
