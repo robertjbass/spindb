@@ -1277,7 +1277,7 @@ export class ClickHouseEngine extends BaseEngine {
 
     const clickhouse = await this.getClickHouseClientPath(version)
 
-    const escapedPass = password.replace(/'/g, "''")
+    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
     const sql = `CREATE USER IF NOT EXISTS ${escapedUser} IDENTIFIED BY '${escapedPass}'; ALTER USER ${escapedUser} IDENTIFIED BY '${escapedPass}'; GRANT ALL ON ${escapedDb}.* TO ${escapedUser};`
 
     const args = [

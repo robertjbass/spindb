@@ -71,17 +71,30 @@ async function createTypeQLBackup(
         try {
           // Calculate total size of both files
           let totalSize = 0
+          const errors: string[] = []
           try {
             const schemaStats = await stat(schemaPath)
             totalSize += schemaStats.size
-          } catch {
-            // Schema file may not exist for empty databases
+          } catch (err) {
+            errors.push(`schema(${schemaPath}): ${err}`)
           }
           try {
             const dataStats = await stat(dataPath)
             totalSize += dataStats.size
-          } catch {
-            // Data file may not exist for empty databases
+          } catch (err) {
+            errors.push(`data(${dataPath}): ${err}`)
+          }
+
+          if (totalSize === 0) {
+            reject(
+              new Error(
+                `Backup produced empty or missing files: schema=${schemaPath}, data=${dataPath}` +
+                  (errors.length > 0
+                    ? `. Stat errors: ${errors.join('; ')}`
+                    : ''),
+              ),
+            )
+            return
           }
 
           resolve({

@@ -6,6 +6,7 @@
 /**
  * Parse a TypeDB version string into components
  * Handles formats like "3.8.0", "3.8", "v3.8.0"
+ * Rejects pre-release suffixes (e.g., "3.8.0-beta") and extra segments (e.g., "3.8.0.1")
  */
 export function parseVersion(versionString: string): {
   major: number
@@ -14,9 +15,14 @@ export function parseVersion(versionString: string): {
   raw: string
 } | null {
   const cleaned = versionString.replace(/^v/, '').trim()
+
+  // Reject versions with pre-release suffixes or metadata
+  if (/[-+]/.test(cleaned)) return null
+
   const parts = cleaned.split('.')
 
-  if (parts.length < 1) return null
+  // Only allow 1-3 segments (major, major.minor, major.minor.patch)
+  if (parts.length < 1 || parts.length > 3) return null
 
   const major = parseInt(parts[0], 10)
   const minor = parts[1] ? parseInt(parts[1], 10) : 0

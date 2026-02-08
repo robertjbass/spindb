@@ -176,9 +176,10 @@ async function restoreTypeQLBackup(
 ): Promise<RestoreResult> {
   const consolePath = await requireTypeDBConsolePath(version)
 
-  // Check if this is a schema+data pair
-  const schemaPath = backupPath.replace(/\.typeql$/, '-schema.typeql')
-  const dataPath = backupPath.replace(/\.typeql$/, '-data.typeql')
+  // Derive base name by stripping known extensions (.typeql or .tql)
+  const baseName = backupPath.replace(/\.(typeql|tql)$/, '')
+  const schemaPath = `${baseName}-schema.typeql`
+  const dataPath = `${baseName}-data.typeql`
 
   const hasSchema = existsSync(schemaPath)
   const hasData = existsSync(dataPath)

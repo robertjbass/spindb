@@ -10,6 +10,7 @@ import {
   getMajorVersion,
   compareVersions,
   isVersionCompatible,
+  isValidVersionFormat,
 } from '../../engines/typedb/version-validator'
 
 describe('TypeDB Version Validator', () => {
@@ -125,6 +126,32 @@ describe('TypeDB Version Validator', () => {
     it('should return null for invalid versions', () => {
       const result = compareVersions('invalid', '3.8.0')
       assertEqual(result, null, 'Should return null for invalid version')
+    })
+  })
+
+  describe('isValidVersionFormat', () => {
+    it('should accept full semver', () => {
+      assert(isValidVersionFormat('3.8.0'), '3.8.0 should be valid')
+    })
+
+    it('should accept major.minor', () => {
+      assert(isValidVersionFormat('3.8'), '3.8 should be valid')
+    })
+
+    it('should accept major only', () => {
+      assert(isValidVersionFormat('3'), '3 should be valid')
+    })
+
+    it('should accept v prefix', () => {
+      assert(isValidVersionFormat('v3.8.0'), 'v3.8.0 should be valid')
+    })
+
+    it('should reject non-numeric strings', () => {
+      assert(!isValidVersionFormat('invalid'), 'invalid should be rejected')
+    })
+
+    it('should reject empty string', () => {
+      assert(!isValidVersionFormat(''), 'empty string should be rejected')
     })
   })
 

@@ -128,6 +128,17 @@ describe('TypeDB Integration Tests', () => {
     console.log('\n Finding available test ports...')
     // TypeDB uses 1 main port per container (HTTP port derived as main + 6271)
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.typedb.base)
+    // Also verify HTTP ports (main + 6271) are free
+    const { portManager } = await import('../../core/port-manager')
+    for (const port of testPorts) {
+      const httpPort = port + 6271
+      const httpFree = await portManager.isPortAvailable(httpPort)
+      if (!httpFree) {
+        console.log(
+          `   WARNING: HTTP port ${httpPort} (for main port ${port}) is in use`,
+        )
+      }
+    }
     console.log(`   Using ports: ${testPorts.join(', ')}`)
 
     containerName = generateTestName('typedb-test')

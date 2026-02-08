@@ -21,23 +21,31 @@ export const TYPEDB_DEFAULT_PASSWORD = 'password'
 /**
  * Get standard TypeDB console connection arguments including authentication.
  * TypeDB 3.x requires --username and --password for all console operations.
+ *
+ * @param tlsDisabled - When true (the default for local dev), appends --tls-disabled.
+ *   Pass false when connecting to a TLS-enabled TypeDB server.
  */
-export function getConsoleBaseArgs(port: number, host = '127.0.0.1'): string[] {
-  return [
+export function getConsoleBaseArgs(
+  port: number,
+  host = '127.0.0.1',
+  tlsDisabled = true,
+): string[] {
+  const args = [
     '--address',
     `${host}:${port}`,
-    '--tls-disabled',
+    ...(tlsDisabled ? ['--tls-disabled'] : []),
     '--username',
     TYPEDB_DEFAULT_USERNAME,
     '--password',
     TYPEDB_DEFAULT_PASSWORD,
   ]
+  return args
 }
 
 /**
  * Get the path to the typedb launcher binary
  *
- * First checks the config cache, then looks in the downloaded binaries directory.
+ * First checks the config cache, then scans the downloaded binaries directory.
  * Returns null if not found.
  */
 export async function getTypeDBPath(): Promise<string | null> {
@@ -45,6 +53,15 @@ export async function getTypeDBPath(): Promise<string | null> {
   const cached = await configManager.getBinaryPath('typedb')
   if (cached && existsSync(cached)) {
     return cached
+  }
+
+  // Fall back to filesystem scan using the same logic as getTypeDBPathForVersion
+  const { TYPEDB_VERSION_MAP } = await import('./version-maps')
+  for (const version of Object.values(TYPEDB_VERSION_MAP)) {
+    const found = await getTypeDBPathForVersion(version)
+    if (found) {
+      return found
+    }
   }
 
   return null
@@ -58,7 +75,8 @@ export async function getTypeDBPathForVersion(
 ): Promise<string | null> {
   const { platform, arch } = platformService.getPlatformInfo()
   const fullVersion = normalizeVersion(version)
-  const ext = process.platform === 'win32' ? '.bat' : ''
+  // TypeDB launcher is a .bat script on Windows, no extension on other platforms
+  const batExt = platform === 'win32' ? '.bat' : ''
 
   const binPath = paths.getBinaryPath({
     engine: 'typedb',
@@ -67,7 +85,7 @@ export async function getTypeDBPathForVersion(
     arch,
   })
 
-  const typedbPath = join(binPath, 'bin', `typedb${ext}`)
+  const typedbPath = join(binPath, 'bin', `typedb${batExt}`)
   if (existsSync(typedbPath)) {
     return typedbPath
   }

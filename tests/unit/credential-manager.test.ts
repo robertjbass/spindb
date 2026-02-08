@@ -233,6 +233,39 @@ describe('Credential Manager', () => {
       assertDeepEqual(users, ['alice', 'bob'], 'Should list both users sorted')
     })
 
+    it('should return sorted results regardless of insertion order', async () => {
+      const base: Omit<UserCredentials, 'username' | 'connectionString'> = {
+        password: 'pass',
+        engine: Engine.PostgreSQL,
+        container: TEST_CONTAINER,
+        database: 'mydb',
+      }
+
+      // Insert in reverse alphabetical order
+      await saveCredentials(TEST_CONTAINER, Engine.PostgreSQL, {
+        ...base,
+        username: 'zara',
+        connectionString: 'postgresql://zara:pass@127.0.0.1:5432/mydb',
+      })
+      await saveCredentials(TEST_CONTAINER, Engine.PostgreSQL, {
+        ...base,
+        username: 'alice',
+        connectionString: 'postgresql://alice:pass@127.0.0.1:5432/mydb',
+      })
+      await saveCredentials(TEST_CONTAINER, Engine.PostgreSQL, {
+        ...base,
+        username: 'mike',
+        connectionString: 'postgresql://mike:pass@127.0.0.1:5432/mydb',
+      })
+
+      const users = await listCredentials(TEST_CONTAINER, Engine.PostgreSQL)
+      assertDeepEqual(
+        users,
+        ['alice', 'mike', 'zara'],
+        'Should be alphabetically sorted regardless of insert order',
+      )
+    })
+
     it('should return empty array when no credentials', async () => {
       const users = await listCredentials(TEST_CONTAINER, Engine.PostgreSQL)
       assertDeepEqual(users, [], 'Should return empty array')

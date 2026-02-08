@@ -300,7 +300,7 @@ spindb users list mydb                  # List saved credentials
 spindb users list mydb --json           # JSON output
 ```
 
-> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant. Not supported: SQLite, DuckDB, QuestDB.
+> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB.
 >
 > **Credentials** are saved as `.env.{username}` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 >

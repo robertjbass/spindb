@@ -47,6 +47,8 @@ import {
   validateTypeDBIdentifier,
   requireTypeDBConsolePath,
   getConsoleBaseArgs,
+  TYPEDB_DEFAULT_USERNAME,
+  TYPEDB_DEFAULT_PASSWORD,
 } from './cli-utils'
 import {
   type Platform,
@@ -374,15 +376,21 @@ export class TypeDBEngine extends BaseEngine {
 
     // Spawn the server process
     // Use 'ignore' for all stdio to prevent pipes from keeping the event loop alive
+    // On Windows, .bat launcher files require shell: true to avoid spawn EINVAL
+    const isWindows = process.platform === 'win32'
+    const needsShell =
+      isWindows &&
+      (launcherPath.endsWith('.bat') || launcherPath.endsWith('.cmd'))
+
     const proc = spawn(launcherPath, args, {
       stdio: ['ignore', 'ignore', 'ignore'],
       detached: true,
       cwd: containerDir,
       windowsHide: true,
+      ...(needsShell ? { shell: true } : {}),
     })
 
     // Wait for the process to spawn
-    const isWindows = process.platform === 'win32'
     if (isWindows) {
       await new Promise<void>((resolve, reject) => {
         proc.on('error', (err) => {
@@ -635,7 +643,7 @@ export class TypeDBEngine extends BaseEngine {
    */
   getConnectionString(container: ContainerConfig, _database?: string): string {
     const { port } = container
-    return `typedb://admin:password@127.0.0.1:${port}`
+    return `typedb://${TYPEDB_DEFAULT_USERNAME}:${TYPEDB_DEFAULT_PASSWORD}@127.0.0.1:${port}`
   }
 
   // Open TypeDB console interactive shell

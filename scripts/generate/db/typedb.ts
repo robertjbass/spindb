@@ -112,7 +112,11 @@ async function main(): Promise<void> {
   ])
 
   if (verifyResult.status === 0) {
-    const match = verifyResult.stdout.match(/(\d+)/)
+    // Match a standalone count number from TypeDB reduce output (e.g., "{ $c = 5; }")
+    const match =
+      verifyResult.stdout.match(/\$c\s*=\s*(\d+)/) ||
+      verifyResult.stdout.match(/count[:\s]+(\d+)/i) ||
+      verifyResult.stdout.match(/^\s*(\d+)\s*$/m)
     if (match) {
       console.log(`Verified: ${match[1]} users in test_user entity type`)
     } else {
