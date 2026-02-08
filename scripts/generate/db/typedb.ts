@@ -7,7 +7,6 @@
  */
 
 import { existsSync } from 'fs'
-import { readFile } from 'fs/promises'
 import {
   parseArgs,
   runSpindb,
@@ -92,10 +91,9 @@ async function main(): Promise<void> {
   console.log('TypeDB is ready.\n')
 
   console.log('Seeding database with sample data...')
-  const seedContent = await readFile(SEED_FILE, 'utf-8')
 
   // TypeDB uses --script for .tqls files which contain transaction commands
-  const seedResult = runContainerCommand(containerName, ['-c', seedContent])
+  const seedResult = runContainerCommand(containerName, ['--script', SEED_FILE])
 
   if (seedResult.status !== 0) {
     console.error('Error seeding database:')

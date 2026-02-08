@@ -208,8 +208,14 @@ function validateConnectionString(
       }
       break
     case Engine.TypeDB:
-      if (!input.startsWith('typedb://')) {
-        return 'Connection string must start with typedb://'
+      if (
+        !input.startsWith('typedb://') &&
+        !input.startsWith('typedb-core://') &&
+        !input.startsWith('http://') &&
+        !input.startsWith('https://') &&
+        !/^[\w.-]+:\d+/.test(input)
+      ) {
+        return 'Connection string must be host:port, typedb://, typedb-core://, or http(s)://'
       }
       break
     case Engine.SQLite:

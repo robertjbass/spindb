@@ -193,6 +193,10 @@ export class TypeDBEngine extends BaseEngine {
 
     // Generate config.yml for this container
     // Must include all required sections: server (with authentication, encryption), storage, logging, diagnostics
+    // Use forward slashes in YAML paths - backslashes in double-quoted YAML strings are
+    // interpreted as escape sequences (\t → tab, \n → newline, etc.) which corrupts Windows paths
+    const yamlDataDir = dataDir.replace(/\\/g, '/')
+    const yamlContainerDir = containerDir.replace(/\\/g, '/')
     const configContent = [
       'server:',
       `  address: 127.0.0.1:${port}`,
@@ -207,9 +211,9 @@ export class TypeDBEngine extends BaseEngine {
       '    certificate-key:',
       '    ca-certificate:',
       'storage:',
-      `  data-directory: "${dataDir}"`,
+      `  data-directory: "${yamlDataDir}"`,
       'logging:',
-      `  directory: "${containerDir}"`,
+      `  directory: "${yamlContainerDir}"`,
       'diagnostics:',
       '  reporting:',
       '    metrics: false',
@@ -393,9 +397,22 @@ export class TypeDBEngine extends BaseEngine {
     // Wait for the process to spawn
     if (isWindows) {
       await new Promise<void>((resolve, reject) => {
+        let settled = false
+
         proc.on('error', (err) => {
+          if (settled) return
+          settled = true
           logDebug(`TypeDB spawn error on Windows: ${err.message}`)
           reject(new Error(`Failed to spawn TypeDB: ${err.message}`))
+        })
+
+        // Detect early exit (e.g., bad config, missing deps)
+        proc.on('close', (code, signal) => {
+          if (settled) return
+          settled = true
+          const errMsg = `TypeDB process exited early on Windows (code: ${code}, signal: ${signal})`
+          logDebug(errMsg)
+          reject(new Error(errMsg))
         })
 
         if (proc.pid) {
@@ -403,9 +420,16 @@ export class TypeDBEngine extends BaseEngine {
             .then(() => {
               logDebug(`Windows: wrote PID file ${pidFile} (pid: ${proc.pid})`)
               proc.unref()
-              setTimeout(resolve, 3000)
+              setTimeout(() => {
+                if (settled) return
+                settled = true
+                proc.removeAllListeners('close')
+                resolve()
+              }, 3000)
             })
             .catch((err) => {
+              if (settled) return
+              settled = true
               const errMsg = `Failed to write PID file: ${err instanceof Error ? err.message : String(err)}`
               logDebug(errMsg)
               try {
@@ -416,6 +440,7 @@ export class TypeDBEngine extends BaseEngine {
               reject(new Error(errMsg))
             })
         } else {
+          settled = true
           reject(new Error('Failed to spawn TypeDB: no PID available'))
         }
       })
@@ -491,6 +516,22 @@ export class TypeDBEngine extends BaseEngine {
       throw new Error(
         `TypeDB failed to start within timeout. Container: ${name}`,
       )
+    }
+
+    // On Windows with .bat launcher, the recorded PID is cmd.exe (not the actual server).
+    // Find the real server PID by port and update the PID file (same pattern as QuestDB).
+    if (isWindows) {
+      try {
+        const pids = await platformService.findProcessByPort(port)
+        if (pids.length > 0) {
+          await writeFile(pidFile, pids[0].toString(), 'utf-8')
+          logDebug(
+            `Windows: updated PID file with actual server PID: ${pids[0]}`,
+          )
+        }
+      } catch {
+        // Non-fatal: stop() also looks up by port
+      }
     }
 
     return {
@@ -810,6 +851,12 @@ export class TypeDBEngine extends BaseEngine {
     const host = url.hostname || '127.0.0.1'
     const port = parseInt(url.port, 10) || 1729
     const database = url.pathname.replace(/^\//, '') || 'default'
+    const username = url.username
+      ? decodeURIComponent(url.username)
+      : TYPEDB_DEFAULT_USERNAME
+    const password = url.password
+      ? decodeURIComponent(url.password)
+      : TYPEDB_DEFAULT_PASSWORD
 
     logDebug(`Connecting to remote TypeDB at ${host}:${port} (db: ${database})`)
 
@@ -831,9 +878,17 @@ export class TypeDBEngine extends BaseEngine {
     const schemaPath = outputPath.replace('.typeql', '-schema.typeql')
     const dataPath = outputPath.replace('.typeql', '-data.typeql')
 
+    // Build console args with URL credentials (may differ from local defaults)
+    const tlsDisabled = url.protocol !== 'https:'
     return new Promise<DumpResult>((resolve, reject) => {
       const args = [
-        ...getConsoleBaseArgs(port, host),
+        '--address',
+        `${host}:${port}`,
+        ...(tlsDisabled ? ['--tls-disabled'] : []),
+        '--username',
+        username,
+        '--password',
+        password,
         '--command',
         `database export ${database} ${schemaPath} ${dataPath}`,
       ]
@@ -1103,10 +1158,45 @@ export class TypeDBEngine extends BaseEngine {
         stderr += data.toString()
       })
 
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         if (code === 0) {
           logDebug(`Created TypeDB user: ${username}`)
           resolve()
+        } else if (stderr.toLowerCase().includes('already exists')) {
+          // User exists - update password instead
+          logDebug(`User "${username}" already exists, updating password`)
+          try {
+            const updateArgs = [
+              ...getConsoleBaseArgs(port),
+              '--command',
+              `user password-update ${username} ${password}`,
+            ]
+            await new Promise<void>((res, rej) => {
+              const updateProc = spawn(consolePath, updateArgs, {
+                stdio: ['ignore', 'pipe', 'pipe'],
+              })
+              let updateStderr = ''
+              updateProc.stderr?.on('data', (data: Buffer) => {
+                updateStderr += data.toString()
+              })
+              updateProc.on('close', (updateCode) => {
+                if (updateCode === 0) {
+                  logDebug(`Updated password for TypeDB user: ${username}`)
+                  res()
+                } else {
+                  rej(
+                    new Error(
+                      `Failed to update user password: ${updateStderr}`,
+                    ),
+                  )
+                }
+              })
+              updateProc.on('error', rej)
+            })
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
         } else {
           reject(new Error(`Failed to create user: ${stderr}`))
         }

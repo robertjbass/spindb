@@ -54,11 +54,11 @@ async function createTypeQLBackup(
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    let _stdout = ''
+    let stdout = ''
     let stderr = ''
 
     proc.stdout.on('data', (data: Buffer) => {
-      _stdout += data.toString()
+      stdout += data.toString()
     })
     proc.stderr.on('data', (data: Buffer) => {
       stderr += data.toString()
@@ -106,15 +106,17 @@ async function createTypeQLBackup(
           reject(new Error(`Backup files not created: ${error}`))
         }
       } else if (code === null) {
+        const detail = stderr || stdout
         reject(
           new Error(
-            `typedb console export was terminated by signal${stderr ? `: ${stderr}` : ''}`,
+            `typedb console export was terminated by signal${detail ? `: ${detail}` : ''}`,
           ),
         )
       } else {
+        const detail = stderr || stdout
         reject(
           new Error(
-            `typedb console export exited with code ${code}${stderr ? `: ${stderr}` : ''}`,
+            `typedb console export exited with code ${code}${detail ? `: ${detail}` : ''}`,
           ),
         )
       }

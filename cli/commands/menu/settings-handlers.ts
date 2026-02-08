@@ -74,7 +74,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.CockroachDB]: '\ue269',
       [Engine.SurrealDB]: '\uedfe',
       [Engine.QuestDB]: '\ued2f',
-      [Engine.TypeDB]: '\ue706',
+      [Engine.TypeDB]: '\uf288',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = NERD_ICONS[engine] || '\ue706'

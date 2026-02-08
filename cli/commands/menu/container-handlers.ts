@@ -2150,7 +2150,11 @@ async function handleCreateUser(
         `Credentials for "${username}" already exist. Overwrite?`,
         false,
       )
-      if (!overwrite) return
+      if (!overwrite) {
+        console.log(chalk.yellow('Credential creation cancelled.'))
+        await pressEnterToContinue()
+        return
+      }
     }
 
     const password = generatePassword({ length: 20, alphanumericOnly: true })

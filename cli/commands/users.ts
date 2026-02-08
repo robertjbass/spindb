@@ -137,7 +137,9 @@ usersCommand
         let clipboardCopied: boolean | undefined
         if (options.copy) {
           const textToCopy = credentials.apiKey || credentials.connectionString
-          clipboardCopied = await platformService.copyToClipboard(textToCopy)
+          if (textToCopy) {
+            clipboardCopied = await platformService.copyToClipboard(textToCopy)
+          }
         }
 
         // Output results
