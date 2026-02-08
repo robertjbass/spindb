@@ -339,7 +339,7 @@ spindb users list mydb                         # List usernames
 spindb users list mydb --json                  # JSON output
 ```
 
-Supports PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Credentials are saved as `.env.<username>` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
+Supports PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB. Credentials are saved as `.env.<username>` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 
 ### Backup & Restore
 

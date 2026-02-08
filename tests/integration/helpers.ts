@@ -371,7 +371,16 @@ export async function executeSQL(
     const { tmpdir } = await import('os')
     const { join } = await import('path')
 
-    const scriptContent = `transaction read ${database}\n\n${sql}\n\nclose\n`
+    // Detect if the query is a write operation (INSERT, DELETE, PUT, UNDEFINE, DEFINE with schema changes)
+    const upperSql = sql.trim().toUpperCase()
+    const isWrite =
+      upperSql.startsWith('INSERT') ||
+      upperSql.startsWith('DELETE') ||
+      upperSql.startsWith('PUT') ||
+      upperSql.startsWith('UNDEFINE')
+    const txType = isWrite ? 'write' : 'read'
+    const txEnd = isWrite ? 'commit' : 'close'
+    const scriptContent = `transaction ${txType} ${database}\n\n${sql}\n\n${txEnd}\n`
     const tempScript = join(
       tmpdir(),
       `spindb-typedb-test-${Date.now()}-${Math.random().toString(36).slice(2)}.tqls`,
@@ -807,7 +816,8 @@ export async function waitForReady(
             signal: controller.signal,
           })
           clearTimeout(timeoutId)
-          if (response.ok) {
+          // TypeDB HTTP endpoint returns 200+ on success
+          if (response.status < 500) {
             return true
           }
         } catch {
@@ -985,7 +995,7 @@ export function getConnectionString(
     return `ws://127.0.0.1:${port}/rpc`
   }
   if (engine === Engine.TypeDB) {
-    return `typedb://admin:password@127.0.0.1:${port}`
+    return `typedb://127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

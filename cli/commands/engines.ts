@@ -44,6 +44,10 @@ import {
   type InstalledQdrantEngine,
   type InstalledMeilisearchEngine,
   type InstalledCouchDBEngine,
+  type InstalledCockroachDBEngine,
+  type InstalledSurrealDBEngine,
+  type InstalledQuestDBEngine,
+  type InstalledTypeDBEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -459,6 +463,18 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const couchdbEngines = engines.filter(
     (e): e is InstalledCouchDBEngine => e.engine === 'couchdb',
   )
+  const cockroachdbEngines = engines.filter(
+    (e): e is InstalledCockroachDBEngine => e.engine === 'cockroachdb',
+  )
+  const surrealdbEngines = engines.filter(
+    (e): e is InstalledSurrealDBEngine => e.engine === 'surrealdb',
+  )
+  const questdbEngines = engines.filter(
+    (e): e is InstalledQuestDBEngine => e.engine === 'questdb',
+  )
+  const typedbEngines = engines.filter(
+    (e): e is InstalledTypeDBEngine => e.engine === 'typedb',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -627,6 +643,62 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // CockroachDB rows
+  for (const engine of cockroachdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('cockroachdb') +
+        chalk.cyan('cockroachdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // SurrealDB rows
+  for (const engine of surrealdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('surrealdb') +
+        chalk.cyan('surrealdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // QuestDB rows
+  for (const engine of questdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('questdb') +
+        chalk.cyan('questdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // TypeDB rows
+  for (const engine of typedbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('typedb') +
+        chalk.cyan('typedb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(59)))
 
   // Summary
@@ -733,6 +805,50 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  CouchDB: ${couchdbEngines.length} version(s), ${formatBytes(totalCouchDBSize)}`,
+      ),
+    )
+  }
+  if (cockroachdbEngines.length > 0) {
+    const totalCockroachDBSize = cockroachdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  CockroachDB: ${cockroachdbEngines.length} version(s), ${formatBytes(totalCockroachDBSize)}`,
+      ),
+    )
+  }
+  if (surrealdbEngines.length > 0) {
+    const totalSurrealDBSize = surrealdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  SurrealDB: ${surrealdbEngines.length} version(s), ${formatBytes(totalSurrealDBSize)}`,
+      ),
+    )
+  }
+  if (questdbEngines.length > 0) {
+    const totalQuestDBSize = questdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  QuestDB: ${questdbEngines.length} version(s), ${formatBytes(totalQuestDBSize)}`,
+      ),
+    )
+  }
+  if (typedbEngines.length > 0) {
+    const totalTypeDBSize = typedbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  TypeDB: ${typedbEngines.length} version(s), ${formatBytes(totalTypeDBSize)}`,
       ),
     )
   }

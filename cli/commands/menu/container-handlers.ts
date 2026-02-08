@@ -17,6 +17,7 @@ import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
 import { processManager } from '../../../core/process-manager'
 import { getEngine } from '../../../engines'
+import { BaseEngine } from '../../../engines/base-engine'
 import { sqliteRegistry } from '../../../engines/sqlite/registry'
 import { duckdbRegistry } from '../../../engines/duckdb/registry'
 import { defaults } from '../../../config/defaults'
@@ -829,11 +830,9 @@ export async function showContainerSubmenu(
       : disabledItem('⎘', 'Copy connection string'),
   )
 
-  // Create user - only for engines that support users (hide for SQLite, DuckDB, QuestDB)
-  const supportsUsers =
-    config.engine !== Engine.SQLite &&
-    config.engine !== Engine.DuckDB &&
-    config.engine !== Engine.QuestDB
+  // Create user - only for engines that override createUser from BaseEngine
+  const engine = getEngine(config.engine)
+  const supportsUsers = engine.createUser !== BaseEngine.prototype.createUser
   if (supportsUsers) {
     actionChoices.push(
       containerReady

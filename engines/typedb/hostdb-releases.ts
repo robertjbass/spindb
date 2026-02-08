@@ -40,7 +40,14 @@ export async function fetchAvailableVersions(): Promise<
   }
 
   try {
-    const response = await fetch(HOSTDB_RELEASES_URL)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    let response: Response
+    try {
+      response = await fetch(HOSTDB_RELEASES_URL, { signal: controller.signal })
+    } finally {
+      clearTimeout(timeoutId)
+    }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }

@@ -198,7 +198,7 @@ describe('JSON Output Validation', () => {
 
     it('spindb doctor --json', () => {
       // doctor command can be slow on Windows CI due to system checks
-      // (spawns binary detection for all 16 engines — dozens of process spawns)
+      // (spawns binary detection for all 17 engines — dozens of process spawns)
       const result = runCommand('doctor --json', 120000)
       // doctor --json should always output valid JSON
       assertValidJson(result.stdout, 'doctor --json')
@@ -417,7 +417,7 @@ describe('JSON Output Validation', () => {
 
     it('doctor --json should have correct structure', () => {
       // doctor command can be slow on Windows CI due to system checks
-      // (spawns binary detection for all 16 engines — dozens of process spawns)
+      // (spawns binary detection for all 17 engines — dozens of process spawns)
       const result = runCommand('doctor --json', 120000)
       const parsed = JSON.parse(result.stdout.trim())
 

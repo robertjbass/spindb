@@ -133,6 +133,13 @@ usersCommand
           }
         }
 
+        // Copy to clipboard before output so JSON includes the status
+        let clipboardCopied: boolean | undefined
+        if (options.copy) {
+          const textToCopy = credentials.apiKey || credentials.connectionString
+          clipboardCopied = await platformService.copyToClipboard(textToCopy)
+        }
+
         // Output results
         if (options.json) {
           const result: Record<string, unknown> = {
@@ -146,6 +153,7 @@ usersCommand
             ...(credentialFile != null && {
               credentialFile,
             }),
+            ...(clipboardCopied !== undefined && { clipboardCopied }),
           }
           console.log(JSON.stringify(result, null, 2))
         } else {
@@ -175,14 +183,10 @@ usersCommand
             console.log(`  ${chalk.gray('Saved to:')} ${credentialFile}`)
           }
           console.log()
-        }
 
-        // Copy to clipboard if requested
-        if (options.copy) {
-          const textToCopy = credentials.apiKey || credentials.connectionString
-          const copied = await platformService.copyToClipboard(textToCopy)
-          if (!options.json) {
-            if (copied) {
+          // Show clipboard status in human-readable output
+          if (clipboardCopied !== undefined) {
+            if (clipboardCopied) {
               console.log(
                 uiSuccess(
                   credentials.apiKey

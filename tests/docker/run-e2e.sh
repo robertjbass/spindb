@@ -141,6 +141,8 @@ handle_interrupt() {
 }
 trap handle_interrupt INT TERM
 trap cleanup EXIT
+# TypeDB HTTP port is main port + this offset (default: 1729 + 6271 = 8000)
+TYPEDB_HTTP_PORT_OFFSET=6271
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 
@@ -1319,7 +1321,7 @@ run_test() {
       local typedb_port
       typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
       if [ -n "$typedb_port" ]; then
-        local http_port=$((typedb_port + 6271))
+        local http_port=$((typedb_port + TYPEDB_HTTP_PORT_OFFSET))
         if curl -sf "http://127.0.0.1:${http_port}/" &>/dev/null; then
           query_ok=true
         fi

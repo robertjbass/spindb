@@ -68,24 +68,29 @@ function formatCredentials(credentials: UserCredentials): string {
   } else {
     lines.push(`DB_USER=${encodeEnvValue(credentials.username)}`)
     lines.push(`DB_PASSWORD=${encodeEnvValue(credentials.password)}`)
-    lines.push(`DB_HOST=127.0.0.1`)
-    // Extract port from the host portion of the connection string.
+    // Extract host and port from the connection string.
     // Use URL parsing when possible; fall back to a regex targeting host:port.
+    let extractedHost: string | undefined
     let extractedPort: string | undefined
     try {
       const url = new URL(credentials.connectionString)
+      if (url.hostname) {
+        extractedHost = url.hostname
+      }
       if (url.port) {
         extractedPort = url.port
       }
     } catch {
       // Not a valid URL (e.g. custom scheme). Use regex targeting host:port segment.
       const hostPortMatch = credentials.connectionString.match(
-        /@(?:\[[^\]]+\]|[^:]+):(\d+)(?:\/|$)/,
+        /@(\[[^\]]+\]|[^:/?#]+):(\d+)(?:\/|$)/,
       )
       if (hostPortMatch) {
-        extractedPort = hostPortMatch[1]
+        extractedHost = hostPortMatch[1].replace(/^\[|\]$/g, '')
+        extractedPort = hostPortMatch[2]
       }
     }
+    lines.push(`DB_HOST=${extractedHost || '127.0.0.1'}`)
     if (extractedPort) {
       lines.push(`DB_PORT=${extractedPort}`)
     }
@@ -113,7 +118,8 @@ function parseCredentialFile(
     const eqIdx = line.indexOf('=')
     if (eqIdx === -1) continue
     const key = line.slice(0, eqIdx).trim()
-    vars[key] = decodeEnvValue(line.slice(eqIdx + 1))
+    const rawValue = line.slice(eqIdx + 1).trim()
+    vars[key] = decodeEnvValue(rawValue)
   }
 
   // API key credentials: password is intentionally empty (auth uses API key, not password)
