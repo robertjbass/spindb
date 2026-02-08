@@ -30,6 +30,7 @@ import {
   type InstalledCockroachDBEngine,
   type InstalledSurrealDBEngine,
   type InstalledQuestDBEngine,
+  type InstalledTypeDBEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -95,6 +96,7 @@ export async function handleEngines(): Promise<void> {
     ...engines.filter(
       (e): e is InstalledQuestDBEngine => e.engine === 'questdb',
     ),
+    ...engines.filter((e): e is InstalledTypeDBEngine => e.engine === 'typedb'),
   ]
 
   // Calculate total size

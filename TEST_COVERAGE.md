@@ -131,4 +131,4 @@ See [TESTING_STRATEGY.md](TESTING_STRATEGY.md) for CI platform matrix. All engin
 - darwin-arm64 (macos-14)
 - win32-x64 (windows-latest)
 
-Exceptions: ClickHouse and FerretDB skip Windows (no binaries available).
+Exceptions: ClickHouse skips Windows (no binaries available). FerretDB skips Windows (postgresql-documentdb startup issues).

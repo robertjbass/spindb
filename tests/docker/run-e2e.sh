@@ -36,12 +36,12 @@ SMOKE_TEST="${SMOKE_TEST:-true}"
 # Engine groups for parallel CI execution
 # Usage: ./run-e2e.sh --group sql
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
-GROUP_NOSQL="mongodb redis valkey surrealdb"
+GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
 # "other" = REST API engines + file-based engines, grouped for CI load balancing
 GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb"
 VALID_UTILITY_TESTS="self-update"
 VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
@@ -149,7 +149,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -167,6 +167,7 @@ declare -A BACKUP_FORMATS=(
   [cockroachdb]="sql"
   [surrealdb]="surql"
   [questdb]="sql"
+  [typedb]="typeql"
 )
 
 # Results tracking
@@ -371,6 +372,10 @@ insert_seed_data() {
     questdb)
       seed_file="$FIXTURES_DIR/questdb/seeds/sample-db.sql"
       ;;
+    typedb)
+      # TypeDB uses .tqls console script format (includes transaction directives + db creation)
+      seed_file="$FIXTURES_DIR/typedb/seeds/sample-db.tqls"
+      ;;
   esac
 
   # Qdrant uses REST API for seeding, not a file
@@ -483,6 +488,10 @@ insert_seed_data() {
       # QuestDB uses 'qdb' as the default database
       run_cmd spindb run "$container_name" "$seed_file" -d qdb
       ;;
+    typedb)
+      # TypeDB .tqls script includes database creation and transactions
+      run_cmd spindb run "$container_name" "$seed_file"
+      ;;
     *)
       run_cmd spindb run "$container_name" "$seed_file" -d testdb
       ;;
@@ -564,6 +573,25 @@ get_data_count() {
       output=$(spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" -d "$database" 2>/dev/null)
       echo "$output" | grep -oE '[0-9]+' | head -1
       ;;
+    typedb)
+      # TypeDB console --command mode doesn't support multi-step transaction flows;
+      # each --command is a standalone top-level command. Use temp script for queries.
+      local typedb_port
+      typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$typedb_port" ]; then
+        output=$(spindb which typedb_console_bin 2>/dev/null)
+        if [ -n "$output" ] && [ -f "$output" ]; then
+          local count_script
+          count_script=$(mktemp /tmp/spindb-typedb-count-XXXXXX.tqls)
+          printf 'transaction read %s\n\nmatch $u isa test_user; reduce $c = count;\n\nclose\n' "$database" > "$count_script"
+          local count_output
+          count_output=$("$output" --address "127.0.0.1:${typedb_port}" --tls-disabled --username admin --password password \
+            --script "$count_script" 2>/dev/null)
+          rm -f "$count_script"
+          echo "$count_output" | grep -oE '[0-9]+' | head -1
+        fi
+      fi
+      ;;
   esac
 }
 
@@ -628,6 +656,9 @@ get_backup_extension() {
     surrealdb)
       # SurrealDB uses SurrealQL format for backups
       echo ".surql" ;;
+    typedb)
+      # TypeDB uses TypeQL format for backups
+      echo ".typeql" ;;
     *)
       echo ".$format" ;;
   esac
@@ -662,6 +693,10 @@ create_backup() {
       # QuestDB uses 'qdb' as the default database
       run_cmd spindb backup "$container_name" -d qdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    typedb)
+      # TypeDB exports schema + data from test_tdb (seed file creates this database)
+      run_cmd spindb backup "$container_name" -d test_tdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -692,6 +727,10 @@ create_restore_target() {
       ;;
     questdb)
       # QuestDB: Tables are created in the same qdb database, no explicit target needed
+      return 0
+      ;;
+    typedb)
+      # TypeDB: import creates the database, no explicit target needed
       return 0
       ;;
     *)
@@ -758,6 +797,10 @@ restore_backup() {
     questdb)
       run_cmd spindb restore "$container_name" "$backup_file" -d qdb --force
       ;;
+    typedb)
+      # TypeDB import creates the database from the backup
+      run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
+      ;;
   esac
 }
 
@@ -786,6 +829,9 @@ verify_restored_data() {
       ;;
     questdb)
       actual=$(get_data_count "$engine" "$container_name" "qdb")
+      ;;
+    typedb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
   esac
 
@@ -820,6 +866,9 @@ verify_restored_data_with_count() {
     questdb)
       actual=$(get_data_count "$engine" "$container_name" "qdb")
       ;;
+    typedb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
   esac
 
   actual=$(echo "$actual" | tr -d '[:space:]')
@@ -852,6 +901,20 @@ cleanup_restore_target() {
     questdb)
       # QuestDB: tables are stored in qdb, cleanup would drop the table but we skip it
       # since the container will be deleted anyway
+      ;;
+    typedb)
+      # TypeDB: delete the restored database via console directly
+      # (spindb run -c wraps in transaction context which doesn't work for database commands)
+      local typedb_port
+      typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$typedb_port" ]; then
+        local console_bin
+        console_bin=$(spindb which typedb_console_bin 2>/dev/null)
+        if [ -n "$console_bin" ] && [ -f "$console_bin" ]; then
+          "$console_bin" --address "127.0.0.1:${typedb_port}" --tls-disabled --username admin --password password \
+            --command "database delete restored_db" &>/dev/null || true
+        fi
+      fi
       ;;
   esac
 }
@@ -1162,7 +1225,7 @@ run_test() {
         echo ""
       fi
       # Dump container log file if it exists (critical for CI debugging)
-      local container_dir="$HOME/.spindb/containers/$engine/$container_name"
+      local container_dir="${SPINDB_HOME:-$HOME/.spindb}/containers/$engine/$container_name"
       local log_candidates=("$container_dir/logs/$engine.log" "$container_dir/$engine.log" "$container_dir/logs/postgres.log")
       for log_candidate in "${log_candidates[@]}"; do
         if [ -f "$log_candidate" ]; then
@@ -1251,6 +1314,17 @@ run_test() {
         query_ok=true
       fi
       ;;
+    typedb)
+      # TypeDB uses HTTP endpoint for health check
+      local typedb_port
+      typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$typedb_port" ]; then
+        local http_port=$((typedb_port + 6271))
+        if curl -sf "http://127.0.0.1:${http_port}/" &>/dev/null; then
+          query_ok=true
+        fi
+      fi
+      ;;
   esac
 
   if [ "$query_ok" = "false" ]; then
@@ -1303,6 +1377,10 @@ run_test() {
     questdb)
       # QuestDB uses "qdb" as the default database
       initial_count=$(get_data_count "$engine" "$container_name" "qdb")
+      ;;
+    typedb)
+      # TypeDB seed file creates database "test_tdb"
+      initial_count=$(get_data_count "$engine" "$container_name" "test_tdb")
       ;;
     *)
       initial_count=$(get_data_count "$engine" "$container_name" "testdb")
@@ -1489,6 +1567,10 @@ run_test() {
         # QuestDB uses "qdb" as the default database
         renamed_count=$(get_data_count "$engine" "$renamed_container" "qdb")
         ;;
+      typedb)
+        # TypeDB seed file creates database "test_tdb"
+        renamed_count=$(get_data_count "$engine" "$renamed_container" "test_tdb")
+        ;;
       *)
         renamed_count=$(get_data_count "$engine" "$renamed_container" "testdb")
         ;;
@@ -1601,6 +1683,10 @@ run_test() {
       questdb)
         # QuestDB uses single database 'qdb'
         cloned_count=$(get_data_count "$engine" "$cloned_container" "qdb")
+        ;;
+      typedb)
+        # TypeDB seed file creates database "test_tdb"
+        cloned_count=$(get_data_count "$engine" "$cloned_container" "test_tdb")
         ;;
       *)
         cloned_count=$(get_data_count "$engine" "$cloned_container" "testdb")
@@ -1865,7 +1951,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

@@ -27,6 +27,7 @@
         "defaultPort",
         "runtime",
         "queryLanguage",
+        "scriptFileLabel",
         "connectionScheme",
         "superuser",
         "clientTools"
@@ -72,8 +73,12 @@
         },
         "queryLanguage": {
           "type": "string",
-          "enum": ["sql", "javascript", "redis", "rest"],
+          "enum": ["sql", "javascript", "redis", "rest", "surrealql", "typeql"],
           "description": "Query language used by the engine"
+        },
+        "scriptFileLabel": {
+          "type": ["string", "null"],
+          "description": "Menu label for running script files (e.g., 'Run SQL file', 'Run TypeQL file'). Null for REST API engines that don't support script files."
         },
         "connectionScheme": {
           "type": "string",

@@ -15,7 +15,7 @@
 
 ## Project Overview
 
-SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, and QuestDB.
+SpinDB is a CLI tool for running local databases without Docker. It's a lightweight alternative to DBngin and Postgres.app, downloading database binaries directly from [hostdb](https://github.com/robertjbass/hostdb). Supports PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, and TypeDB.
 
 **Target audience:** Individual developers who want simple local databases with consumer-grade UX.
 
@@ -60,7 +60,7 @@ tests/
 
 Engines extend `BaseEngine` abstract class. See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for full method list.
 
-**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB):
+**Server-based engines** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB):
 - Data in `~/.spindb/containers/{engine}/{name}/`
 - Port management, start/stop lifecycle
 
@@ -154,13 +154,30 @@ For these engines, the "Connect/Shell" menu option opens the web UI in the syste
 - **Multi-port conflicts**: When running multiple QuestDB containers, must configure ALL ports uniquely via environment variables: `QDB_HTTP_BIND_TO`, `QDB_HTTP_MIN_NET_BIND_TO`, `QDB_PG_NET_BIND_TO`, `QDB_LINE_TCP_NET_BIND_TO`. The HTTP Min Server (health/metrics) defaults to port 9003 for all instances and will cause conflicts if not configured.
 - **Backup timestamp column**: QuestDB tables have a designated timestamp column that can have any name. Don't assume `timestamp` - query `tables()` for `designatedTimestamp` column name.
 
+**TypeDB:**
+- **Knowledge graph database**: Strongly-typed database with its own query language (TypeQL), built for knowledge representation and reasoning
+- **Rust-native binary**: TypeDB v3 was rewritten in Rust (not Java like QuestDB), making it a simpler start/stop pattern
+- **Default port**: 1729 (main TypeDB protocol)
+- **Secondary port**: HTTP at port 8000 (main port + 6271)
+- **Query language**: TypeQL (not SQL, not REST)
+- **Separate console binary**: `typedb_console_bin` for interactive queries and database management
+- **No authentication**: Community edition has no auth for local dev
+- **No default database**: Explicit database creation required via `database create`
+- **Config file**: YAML config (`config.yml`) per container, configures ports, storage, logging
+- **Health check**: HTTP GET to port 8000 (`server.http.address`)
+- **Backup/restore**: Two-file model (schema + data), exported via `database export` console command
+- **Connection scheme**: `typedb://` (e.g., `typedb://127.0.0.1:1729`)
+- **Multi-port conflicts**: Each container needs unique main port and HTTP port; monitoring is disabled per-container to avoid conflicts
+- **Emoji**: 🤖, **Alias**: `tdb`
+- **Version**: 3.8.0 (semver, major=3), MPL-2.0 license
+
 ### Binary Manager Base Classes
 
 When adding a new engine, choose the appropriate binary manager base class:
 
 | Base Class | Location | Used By | Use Case |
 |------------|----------|---------|----------|
-| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB | Key-value/vector/search/document/time-series stores with `bin/` layout |
+| `BaseBinaryManager` | `core/base-binary-manager.ts` | Redis, Valkey, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB | Key-value/vector/search/document/time-series stores with `bin/` layout |
 | `BaseServerBinaryManager` | `core/base-server-binary-manager.ts` | PostgreSQL, MySQL, MariaDB, ClickHouse | SQL servers needing version verification |
 | `BaseDocumentBinaryManager` | `core/base-document-binary-manager.ts` | MongoDB, FerretDB | Document DBs with macOS tar recovery |
 | `BaseEmbeddedBinaryManager` | `core/base-embedded-binary-manager.ts` | SQLite, DuckDB | File-based DBs with flat archive layout |
@@ -188,6 +205,7 @@ Engines can be referenced by aliases in CLI commands:
 - `cockroachdb`, `crdb` → CockroachDB
 - `surrealdb`, `surreal` → SurrealDB
 - `questdb`, `quest` → QuestDB
+- `typedb`, `tdb` → TypeDB
 
 ### Supported Versions & Query Languages
 
@@ -209,6 +227,7 @@ Engines can be referenced by aliases in CLI commands:
 | CockroachDB 🪳 | 25 | SQL | Distributed SQL, PostgreSQL-compatible |
 | SurrealDB 🌀 | 2 | SurrealQL | Multi-model, HTTP port 8000 |
 | QuestDB ⏱️ | 9 | SQL | Time-series, PG wire protocol port 8812 |
+| TypeDB 🤖 | 3 | TypeQL | Knowledge graph, port 1729, HTTP port 8000 |
 
 ### Binary Sources
 
@@ -343,6 +362,10 @@ Each engine has semantic format names defined in `config/backup-formats.ts`:
 | Qdrant | `snapshot` (.snapshot) | _(none)_ | `snapshot` |
 | Meilisearch | `snapshot` (.snapshot) | _(none)_ | `snapshot` |
 | CouchDB | `json` (.json) | _(none)_ | `json` |
+| CockroachDB | `sql` (.sql) | _(none)_ | `sql` |
+| SurrealDB | `surql` (.surql) | _(none)_ | `surql` |
+| QuestDB | `sql` (.sql) | _(none)_ | `sql` |
+| TypeDB | `typeql` (.typeql) | _(none)_ | `typeql` |
 
 See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for complete documentation including Redis merge vs replace behavior.
 
@@ -408,6 +431,7 @@ spindb databases refresh <container>  # Query server, update registry
 | Qdrant | Returns `[config.database]` | N/A (uses collections) |
 | Meilisearch | Returns `[config.database]` | N/A (uses indexes) |
 | QuestDB | Returns `[config.database]` | N/A (single DB `qdb`) |
+| TypeDB | `database list` console command | — |
 
 ## Core Principles
 
@@ -541,7 +565,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 ## Implementation Details
 
 ### Port Management
-PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700 | CouchDB: 5984 | CockroachDB: 26257 | SurrealDB: 8000
+PostgreSQL: 5432 | MySQL: 3306 | MongoDB/FerretDB: 27017 | Redis/Valkey: 6379 | ClickHouse: 9000 | Qdrant: 6333 | Meilisearch: 7700 | CouchDB: 5984 | CockroachDB: 26257 | SurrealDB: 8000 | TypeDB: 1729
 
 Auto-increments on conflict (e.g., 5432 → 5433).
 

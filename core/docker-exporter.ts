@@ -70,6 +70,7 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.CockroachDB]: 'CockroachDB',
     [Engine.SurrealDB]: 'SurrealDB',
     [Engine.QuestDB]: 'QuestDB',
+    [Engine.TypeDB]: 'TypeDB',
   }
   return displayNames[engine] || engine
 }
@@ -137,6 +138,9 @@ const _ENGINE_BINARY_CONFIG: Record<
   [Engine.QuestDB]: {
     primaryBinaries: [], // Uses psql from PostgreSQL for connections
   },
+  [Engine.TypeDB]: {
+    primaryBinaries: ['typedb', 'typedb_console_bin'],
+  },
 }
 
 /**
@@ -200,6 +204,9 @@ function getConnectionStringTemplate(
       return useTLS
         ? `wss://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}`
         : `ws://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}`
+
+    case Engine.TypeDB:
+      return `typedb://<host>:${port}`
 
     case Engine.SQLite:
     case Engine.DuckDB:
@@ -485,6 +492,13 @@ echo "User configured via server settings"
       userCreationCommands = `
 # API key is configured at server start
 echo "API key configured via server settings"
+`
+      break
+
+    case Engine.TypeDB:
+      userCreationCommands = `
+# TypeDB community edition does not support user management
+echo "No authentication required"
 `
       break
 
@@ -1277,6 +1291,9 @@ export async function getDockerConnectionString(
 
     case Engine.SurrealDB:
       return `ws://${username}:${password}@${host}:${port}`
+
+    case Engine.TypeDB:
+      return `typedb://${host}:${port}`
 
     case Engine.SQLite:
     case Engine.DuckDB:

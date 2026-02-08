@@ -98,6 +98,7 @@ describe('ConfigManager', () => {
         COCKROACHDB_TOOLS,
         SURREALDB_TOOLS,
         QUESTDB_TOOLS,
+        TYPEDB_TOOLS,
         SQLITE_TOOLS,
         DUCKDB_TOOLS,
         ENHANCED_SHELLS,
@@ -117,6 +118,7 @@ describe('ConfigManager', () => {
         COCKROACHDB_TOOLS.length +
         SURREALDB_TOOLS.length +
         QUESTDB_TOOLS.length +
+        TYPEDB_TOOLS.length +
         SQLITE_TOOLS.length +
         DUCKDB_TOOLS.length +
         ENHANCED_SHELLS.length

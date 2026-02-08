@@ -20,6 +20,7 @@ import { getEngine } from '../../../engines'
 import { sqliteRegistry } from '../../../engines/sqlite/registry'
 import { duckdbRegistry } from '../../../engines/duckdb/registry'
 import { defaults } from '../../../config/defaults'
+import { getEngineConfig } from '../../../config/engines-registry'
 import { getPageSize } from '../../constants'
 import { paths } from '../../../config/paths'
 import {
@@ -809,22 +810,11 @@ export async function showContainerSubmenu(
       : disabledItem('>', 'Open shell'),
   )
 
-  // Run SQL/script - requires database selection for multi-db containers
-  // REST API engines (Qdrant, Meilisearch, CouchDB) don't support script files - hide the option entirely
-  if (
-    config.engine !== Engine.Qdrant &&
-    config.engine !== Engine.Meilisearch &&
-    config.engine !== Engine.CouchDB
-  ) {
-    // Engine-specific terminology: Redis/Valkey use commands, MongoDB/FerretDB use scripts, SurrealDB uses SurrealQL, others use SQL
-    const runScriptLabel =
-      config.engine === Engine.Redis || config.engine === Engine.Valkey
-        ? 'Run command file'
-        : config.engine === Engine.MongoDB || config.engine === Engine.FerretDB
-          ? 'Run script file'
-          : config.engine === Engine.SurrealDB
-            ? 'Run SurrealQL file'
-            : 'Run SQL file'
+  // Run script file - requires database selection for multi-db containers
+  // Label comes from engines.json scriptFileLabel; null means no script support (REST API engines)
+  const engineConfig = await getEngineConfig(config.engine)
+  if (engineConfig.scriptFileLabel) {
+    const runScriptLabel = engineConfig.scriptFileLabel
     actionChoices.push(
       canDoDbAction
         ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
@@ -932,6 +922,7 @@ export async function showContainerSubmenu(
       name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: 'main',
     },
+    new inquirer.Separator(),
   )
 
   const { action } = await escapeablePrompt<{ action: string }>([

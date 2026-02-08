@@ -207,6 +207,11 @@ function validateConnectionString(
         return 'Connection string must start with postgresql:// or postgres://'
       }
       break
+    case Engine.TypeDB:
+      if (!input.startsWith('typedb://')) {
+        return 'Connection string must start with typedb://'
+      }
+      break
     case Engine.SQLite:
     case Engine.DuckDB:
       return 'File-based engines do not support remote connection strings'

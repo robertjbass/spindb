@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.2] - 2026-02-08
+
+### Added
+- **TypeDB engine support** - 17th database engine. Knowledge graph database with TypeQL query language, Rust-native binary, port 1729. Supports backup/restore via TypeQL export/import, database management, and interactive console via `spindb connect`. Version 3.8.0, all 5 platforms supported.
+
+### Fixed
+- **TypeDB console commands** - Use temp script files with `--script` instead of `--command` for transaction-based operations (queries, schema changes, data modifications). TypeDB console `--command` mode only supports standalone top-level commands, not multi-step transaction flows.
+- **TypeDB backup/restore** - Handle schema/data pair files (`-schema.typeql`, `-data.typeql`) in format detection and file existence checks
+- **TypeDB rename/port change** - Regenerate `config.yml` on every start to ensure paths and port are correct after rename or port reassignment
+- **CI full matrix** - Added `test-typedb` job to `ci-full.yml` weekly workflow and wired into `ci-success` gate
+- **TEST_COVERAGE.md** - Corrected FerretDB Windows exception reason (postgresql-documentdb startup issues, not missing binaries)
+- **Docker E2E log paths** - Use `${SPINDB_HOME:-$HOME/.spindb}` for container log directory instead of hardcoded `$HOME/.spindb`
+
 ## [0.32.1] - 2026-02-07
 
 ### Fixed

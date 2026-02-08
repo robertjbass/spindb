@@ -10,7 +10,7 @@ import { promptInstallDependencies, escapeablePrompt } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
 import { followFile, getLastNLines } from '../../utils/file-follower'
-import { Engine, assertExhaustive } from '../../../types'
+import { getEngineConfig } from '../../../config/engines-registry'
 
 export async function handleRunSql(
   containerName: string,
@@ -56,52 +56,12 @@ export async function handleRunSql(
   // Strip quotes that terminals add when drag-and-dropping files
   const stripQuotes = (path: string) => path.replace(/^['"]|['"]$/g, '').trim()
 
-  // Get script type terminology based on engine
-  // IMPORTANT: When adding a new engine, update this function and ENGINE_CHECKLIST.md
-  // - SQL: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, ClickHouse, CockroachDB
-  // - SurrealQL: SurrealDB (SQL-like but distinct language)
-  // - Script: MongoDB, FerretDB (JavaScript via mongosh), Qdrant, Meilisearch (REST API)
-  // - Command: Redis, Valkey (Redis commands)
-  const getScriptType = (engine: Engine): { type: string; lower: string } => {
-    switch (engine) {
-      // Redis-like engines use "Command" terminology
-      case Engine.Redis:
-      case Engine.Valkey:
-        return { type: 'Command', lower: 'command' }
-
-      // Document/search engines use "Script" terminology
-      // MongoDB and FerretDB use JavaScript via mongosh
-      // Qdrant, Meilisearch, and CouchDB use REST API (JSON)
-      case Engine.MongoDB:
-      case Engine.FerretDB:
-      case Engine.Qdrant:
-      case Engine.Meilisearch:
-      case Engine.CouchDB:
-        return { type: 'Script', lower: 'script' }
-
-      // SurrealDB uses SurrealQL (distinct from SQL)
-      case Engine.SurrealDB:
-        return { type: 'SurrealQL', lower: 'SurrealQL' }
-
-      // SQL engines use "SQL" terminology
-      case Engine.PostgreSQL:
-      case Engine.MySQL:
-      case Engine.MariaDB:
-      case Engine.SQLite:
-      case Engine.DuckDB:
-      case Engine.ClickHouse:
-      case Engine.CockroachDB:
-      case Engine.QuestDB:
-        return { type: 'SQL', lower: 'sql' }
-
-      default:
-        assertExhaustive(engine)
-    }
-  }
-
-  const { type: scriptType, lower: scriptTypeLower } = getScriptType(
-    config.engine,
-  )
+  // Script type terminology derived from engines.json scriptFileLabel
+  // e.g., "Run SQL file" → type: "SQL", "Run TypeQL file" → type: "TypeQL"
+  const engineConfig = await getEngineConfig(config.engine)
+  const scriptType = (engineConfig.scriptFileLabel ?? 'Script file')
+    .replace(/^Run\s+/, '')
+    .replace(/\s+file$/, '')
 
   // Prompt for file path (empty input = go back)
   console.log(
@@ -135,9 +95,7 @@ export async function handleRunSql(
   const databaseName = database || config.database
 
   console.log()
-  console.log(
-    uiInfo(`Running ${scriptTypeLower} file against "${databaseName}"...`),
-  )
+  console.log(uiInfo(`Running ${scriptType} file against "${databaseName}"...`))
   console.log()
 
   try {
