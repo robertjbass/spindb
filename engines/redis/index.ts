@@ -238,6 +238,11 @@ dbfilename dump.rdb
 
 # Append Only File (disabled for local dev)
 appendonly no
+
+# Suppress ARM64 copy-on-write warning with Transparent Huge Pages.
+# Redis refuses to start on ARM64 with THP enabled unless this is set.
+# Safe for local development (SpinDB's use case).
+ignore-warnings ARM64-COW-BUG
 `
 }
 
