@@ -18,6 +18,7 @@ import {
   logDebug,
   logWarning,
   assertValidDatabaseName,
+  assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { mongodbBinaryManager } from './binary-manager'
@@ -43,6 +44,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseMongoDBResult } from '../../core/query-parser'
 
@@ -1030,6 +1033,85 @@ export class MongoDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database || 'admin'
+    assertValidDatabaseName(db)
+    const mongosh = await this.getMongoshPath()
+
+    // Create user with readWrite role on the target database
+    // Auth is not enforced (no --auth flag) but user is still created
+    // Use JSON.stringify for password to safely escape all special characters in JS context
+    // Pass script via stdin to avoid exposing passwords in process listings
+    const jsonPwd = JSON.stringify(password)
+    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
+
+    const mongoshArgs = ['--host', '127.0.0.1', '--port', String(port), 'admin']
+
+    const runMongoshViaStdin = (js: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const proc = spawn(mongosh, mongoshArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        let stderr = ''
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        const timeout = setTimeout(() => {
+          proc.kill('SIGTERM')
+          reject(new Error('mongosh timed out after 10 seconds'))
+        }, 10000)
+
+        proc.on('error', (err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          clearTimeout(timeout)
+          if (code === 0) resolve()
+          else reject(new Error(stderr || `mongosh exited with code ${code}`))
+        })
+
+        proc.stdin?.write(js)
+        proc.stdin?.end()
+      })
+
+    try {
+      await runMongoshViaStdin(script)
+    } catch (error) {
+      const err = error as Error
+      if (
+        err.message.includes('51003') ||
+        err.message.includes('already exists')
+      ) {
+        // User exists — update password instead
+        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:${jsonPwd}})`
+        await runMongoshViaStdin(updateScript)
+      } else {
+        throw error
+      }
+    }
+
+    const connectionString = `mongodb://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

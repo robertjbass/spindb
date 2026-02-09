@@ -22,7 +22,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { surrealdbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -51,6 +55,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseSurrealDBResult } from '../../core/query-parser'
 
@@ -394,7 +400,7 @@ export class SurrealDBEngine extends BaseEngine {
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 30000,
+    timeoutMs = 60000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for port ${port}, version ${version}`)
     const startTime = Date.now()
@@ -1140,6 +1146,100 @@ export class SurrealDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port, version, name } = container
+    const namespace = name.replace(/-/g, '_')
+    const db = database || container.database || 'default'
+
+    const surreal = await this.getSurrealPath(version)
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+
+    // DEFINE USER OVERWRITE with EDITOR role (idempotent)
+    // Scope to database when options.database is provided, otherwise namespace-level
+    // Escape backslashes first, then single quotes for SurrealQL string literals
+    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    const scopeClause = database
+      ? `ON DATABASE ${escapeSurrealIdentifier(database)}`
+      : 'ON NAMESPACE'
+    const sql = `DEFINE USER OVERWRITE ${escapeSurrealIdentifier(username)} ${scopeClause} PASSWORD '${escapedPass}' ROLES EDITOR;`
+
+    const args = [
+      'sql',
+      '--endpoint',
+      `ws://127.0.0.1:${port}`,
+      '--user',
+      'root',
+      '--pass',
+      'root',
+      '--ns',
+      namespace,
+      '--db',
+      db,
+      '--hide-welcome',
+    ]
+
+    const timeoutMs = 15000
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(surreal, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: containerDir,
+      })
+
+      let stderr = ''
+      let settled = false
+      const timeoutId = setTimeout(() => {
+        if (settled) return
+        settled = true
+        proc.kill()
+        reject(
+          new Error(
+            `Timed out creating SurrealDB user "${username}" after ${timeoutMs}ms`,
+          ),
+        )
+      }, timeoutMs)
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.stdin?.write(sql + '\n')
+      proc.stdin?.end()
+
+      proc.on('close', (code) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutId)
+        if (code === 0) {
+          logDebug(`Created SurrealDB user: ${username}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to create user: ${stderr}`))
+        }
+      })
+      proc.on('error', (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutId)
+        reject(error)
+      })
+    })
+
+    const connectionString = `ws://127.0.0.1:${port}/rpc`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

@@ -1,0 +1,167 @@
+/**
+ * TypeDB backup module
+ *
+ * TypeDB exports databases as two files: schema (.typeql) and data (.typeql).
+ * We use the console's `database export` command which creates both files.
+ */
+
+import { spawn } from 'child_process'
+import { mkdir } from 'fs/promises'
+import { stat } from 'fs/promises'
+import { dirname } from 'path'
+import { logDebug } from '../../core/error-handler'
+import { requireTypeDBConsolePath, getConsoleBaseArgs } from './cli-utils'
+import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+
+/**
+ * Create a TypeQL backup using typedb console export
+ *
+ * TypeDB export creates two files derived from outputPath:
+ * - {base}-schema.typeql (schema definitions)
+ * - {base}-data.typeql (data inserts)
+ *
+ * The returned BackupResult.path is the original outputPath (base path),
+ * NOT a single backup file. Callers (e.g., restore) must derive the actual
+ * file paths using the same `-schema.typeql` / `-data.typeql` convention.
+ * See also: restore.ts restoreTypeQLBackup() which mirrors this derivation.
+ */
+async function createTypeQLBackup(
+  container: ContainerConfig,
+  outputPath: string,
+  database: string,
+): Promise<BackupResult> {
+  const consolePath = await requireTypeDBConsolePath(container.version)
+  const { port } = container
+
+  // Ensure output directory exists
+  await mkdir(dirname(outputPath), { recursive: true })
+
+  // Derive schema and data paths from output path
+  const schemaPath = outputPath.endsWith('.typeql')
+    ? outputPath.replace(/\.typeql$/, '-schema.typeql')
+    : outputPath + '-schema.typeql'
+  const dataPath = outputPath.endsWith('.typeql')
+    ? outputPath.replace(/\.typeql$/, '-data.typeql')
+    : outputPath + '-data.typeql'
+
+  const args = [
+    ...getConsoleBaseArgs(port),
+    '--command',
+    `database export ${database} ${schemaPath} ${dataPath}`,
+  ]
+
+  const sanitizedArgs = args.map((a, i) =>
+    args[i - 1] === '--password' ? '***' : a,
+  )
+  logDebug(`Running: typedb_console_bin ${sanitizedArgs.join(' ')}`)
+
+  return new Promise<BackupResult>((resolve, reject) => {
+    const proc = spawn(consolePath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('error', reject)
+
+    proc.on('close', async (code) => {
+      if (code === 0) {
+        try {
+          // Calculate total size of both files (schema + data)
+          let schemaSize: number | null = null
+          let dataSize: number | null = null
+          const errors: string[] = []
+          try {
+            const schemaStats = await stat(schemaPath)
+            schemaSize = schemaStats.size
+          } catch (err) {
+            errors.push(`schema(${schemaPath}): ${err}`)
+          }
+          try {
+            const dataStats = await stat(dataPath)
+            dataSize = dataStats.size
+          } catch (err) {
+            errors.push(`data(${dataPath}): ${err}`)
+          }
+
+          if (
+            errors.length > 0 ||
+            schemaSize === null ||
+            dataSize === null ||
+            schemaSize === 0 ||
+            dataSize === 0
+          ) {
+            reject(
+              new Error(
+                `Backup produced empty or missing files: schema=${schemaPath}, data=${dataPath}` +
+                  (errors.length > 0
+                    ? `. Stat errors: ${errors.join('; ')}`
+                    : ''),
+              ),
+            )
+            return
+          }
+
+          // path is the base outputPath; actual files are schemaPath and dataPath
+          resolve({
+            path: outputPath,
+            format: 'typeql',
+            size: schemaSize + dataSize,
+          })
+        } catch (error) {
+          reject(new Error(`Backup files not created: ${error}`))
+        }
+      } else if (code === null) {
+        const detail = stderr || stdout
+        reject(
+          new Error(
+            `typedb console export was terminated by signal${detail ? `: ${detail}` : ''}`,
+          ),
+        )
+      } else {
+        const detail = stderr || stdout
+        reject(
+          new Error(
+            `typedb console export exited with code ${code}${detail ? `: ${detail}` : ''}`,
+          ),
+        )
+      }
+    })
+  })
+}
+
+/**
+ * Create a backup
+ *
+ * @param container - Container configuration
+ * @param outputPath - Path to write backup file
+ * @param options - Backup options
+ */
+export async function createBackup(
+  container: ContainerConfig,
+  outputPath: string,
+  options: BackupOptions,
+): Promise<BackupResult> {
+  const database = options.database || container.database
+
+  return createTypeQLBackup(container, outputPath, database)
+}
+
+/**
+ * Create a backup for cloning purposes
+ * Uses TypeQL format for reliability
+ */
+export async function createCloneBackup(
+  container: ContainerConfig,
+  outputPath: string,
+): Promise<BackupResult> {
+  return createTypeQLBackup(container, outputPath, container.database)
+}

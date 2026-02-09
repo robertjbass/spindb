@@ -285,6 +285,27 @@ DB=$(spindb databases list myapp --default)
 spindb run myapp -d "$DB" -c "SELECT * FROM users"
 ```
 
+## User Management
+
+```bash
+spindb users create mydb                # Create user (default: "spindb")
+spindb users create mydb devuser        # Create user with specific name
+spindb users create mydb --password p   # Use specific password
+spindb users create mydb --copy         # Copy connection string to clipboard
+spindb users create mydb --json         # JSON output for scripting
+spindb users create mydb --no-save      # Don't save credential file
+spindb users create mydb --force        # Overwrite existing credential file
+
+spindb users list mydb                  # List saved credentials
+spindb users list mydb --json           # JSON output
+```
+
+> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB.
+>
+> **Credentials** are saved as `.env.{username}` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
+>
+> **API key engines** (Meilisearch, Qdrant) generate API keys instead of user/password pairs.
+
 ## Edit & Configure
 
 ```bash
@@ -501,6 +522,8 @@ spindb create mydb --json
 spindb url mydb --json
 spindb backup mydb --json
 spindb backups --json
+spindb users create mydb --json
+spindb users list mydb --json
 spindb export docker mydb --json
 ```
 

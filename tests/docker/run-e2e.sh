@@ -33,10 +33,42 @@ VERBOSE="${VERBOSE:-false}"
 # Set SMOKE_TEST=false for full test with all phases
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
+# Space-separated list of engines to skip (e.g., SKIP_ENGINES="surrealdb questdb")
+# Useful for QEMU where large Rust/Java binaries may hang during verification
+SKIP_ENGINES="${SKIP_ENGINES:-}"
+
+# Engine groups for parallel CI execution
+# Usage: ./run-e2e.sh --group sql
+GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
+GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
+# "other" = REST API engines + file-based engines, grouped for CI load balancing
+GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb"
+
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb"
 VALID_UTILITY_TESTS="self-update"
+VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
+
+# Handle --group flag
+ENGINE_GROUP=""
+if [ "$ENGINE_FILTER" = "--group" ]; then
+  ENGINE_GROUP="${2:-}"
+  ENGINE_FILTER=""
+  if [ -z "$ENGINE_GROUP" ]; then
+    echo "Error: --group requires a group name"
+    echo "Valid groups: $VALID_GROUPS"
+    exit 1
+  fi
+  if ! echo "$VALID_GROUPS" | grep -qw "$ENGINE_GROUP"; then
+    echo "Error: Invalid group '$ENGINE_GROUP'"
+    echo "Valid groups: $VALID_GROUPS"
+    echo "  sql:   $GROUP_SQL"
+    echo "  nosql: $GROUP_NOSQL"
+    echo "  other: $GROUP_OTHER"
+    exit 1
+  fi
+fi
 
 # Validate filter (accepts engine names OR utility test names)
 if [ -n "$ENGINE_FILTER" ]; then
@@ -44,6 +76,7 @@ if [ -n "$ENGINE_FILTER" ]; then
     echo "Error: Invalid test '$ENGINE_FILTER'"
     echo "Valid engines: $VALID_ENGINES"
     echo "Valid utility tests: $VALID_UTILITY_TESTS"
+    echo "Valid groups (--group): $VALID_GROUPS"
     exit 1
   fi
   # FerretDB is skipped in Docker E2E due to timeout/signal issues
@@ -56,6 +89,7 @@ fi
 
 # Timeouts
 STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-60}
+START_TIMEOUT=${START_TIMEOUT:-120}  # Max seconds for `spindb start` command
 
 # Directories
 BACKUP_DIR=$(mktemp -d)
@@ -111,6 +145,8 @@ handle_interrupt() {
 }
 trap handle_interrupt INT TERM
 trap cleanup EXIT
+# TypeDB HTTP port is main port + this offset (default: 1729 + 6271 = 8000)
+TYPEDB_HTTP_PORT_OFFSET=6271
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 
@@ -119,7 +155,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -137,6 +173,7 @@ declare -A BACKUP_FORMATS=(
   [cockroachdb]="sql"
   [surrealdb]="surql"
   [questdb]="sql"
+  [typedb]="typeql"
 )
 
 # Results tracking
@@ -341,6 +378,10 @@ insert_seed_data() {
     questdb)
       seed_file="$FIXTURES_DIR/questdb/seeds/sample-db.sql"
       ;;
+    typedb)
+      # TypeDB uses .tqls console script format (includes transaction directives + db creation)
+      seed_file="$FIXTURES_DIR/typedb/seeds/sample-db.tqls"
+      ;;
   esac
 
   # Qdrant uses REST API for seeding, not a file
@@ -453,6 +494,10 @@ insert_seed_data() {
       # QuestDB uses 'qdb' as the default database
       run_cmd spindb run "$container_name" "$seed_file" -d qdb
       ;;
+    typedb)
+      # TypeDB .tqls script includes database creation and transactions
+      run_cmd spindb run "$container_name" "$seed_file"
+      ;;
     *)
       run_cmd spindb run "$container_name" "$seed_file" -d testdb
       ;;
@@ -534,6 +579,25 @@ get_data_count() {
       output=$(spindb run "$container_name" -c "SELECT COUNT(*) FROM test_user;" -d "$database" 2>/dev/null)
       echo "$output" | grep -oE '[0-9]+' | head -1
       ;;
+    typedb)
+      # TypeDB console --command mode doesn't support multi-step transaction flows;
+      # each --command is a standalone top-level command. Use temp script for queries.
+      local typedb_port
+      typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$typedb_port" ]; then
+        output=$(spindb which typedb_console_bin 2>/dev/null)
+        if [ -n "$output" ] && [ -f "$output" ]; then
+          local count_script
+          count_script=$(mktemp /tmp/spindb-typedb-count-XXXXXX.tqls)
+          printf 'transaction read %s\n\nmatch $u isa test_user; reduce $c = count;\n\nclose\n' "$database" > "$count_script"
+          local count_output
+          count_output=$("$output" --address "127.0.0.1:${typedb_port}" --tls-disabled --username admin --password password \
+            --script "$count_script" 2>/dev/null)
+          rm -f "$count_script"
+          echo "$count_output" | grep -oE '[0-9]+' | head -1
+        fi
+      fi
+      ;;
   esac
 }
 
@@ -598,6 +662,9 @@ get_backup_extension() {
     surrealdb)
       # SurrealDB uses SurrealQL format for backups
       echo ".surql" ;;
+    typedb)
+      # TypeDB uses TypeQL format for backups
+      echo ".typeql" ;;
     *)
       echo ".$format" ;;
   esac
@@ -632,6 +699,10 @@ create_backup() {
       # QuestDB uses 'qdb' as the default database
       run_cmd spindb backup "$container_name" -d qdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    typedb)
+      # TypeDB exports schema + data from test_tdb (seed file creates this database)
+      run_cmd spindb backup "$container_name" -d test_tdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -662,6 +733,10 @@ create_restore_target() {
       ;;
     questdb)
       # QuestDB: Tables are created in the same qdb database, no explicit target needed
+      return 0
+      ;;
+    typedb)
+      # TypeDB: import creates the database, no explicit target needed
       return 0
       ;;
     *)
@@ -728,6 +803,10 @@ restore_backup() {
     questdb)
       run_cmd spindb restore "$container_name" "$backup_file" -d qdb --force
       ;;
+    typedb)
+      # TypeDB import creates the database from the backup
+      run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
+      ;;
   esac
 }
 
@@ -756,6 +835,9 @@ verify_restored_data() {
       ;;
     questdb)
       actual=$(get_data_count "$engine" "$container_name" "qdb")
+      ;;
+    typedb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
   esac
 
@@ -790,6 +872,9 @@ verify_restored_data_with_count() {
     questdb)
       actual=$(get_data_count "$engine" "$container_name" "qdb")
       ;;
+    typedb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
   esac
 
   actual=$(echo "$actual" | tr -d '[:space:]')
@@ -822,6 +907,20 @@ cleanup_restore_target() {
     questdb)
       # QuestDB: tables are stored in qdb, cleanup would drop the table but we skip it
       # since the container will be deleted anyway
+      ;;
+    typedb)
+      # TypeDB: delete the restored database via console directly
+      # (spindb run -c wraps in transaction context which doesn't work for database commands)
+      local typedb_port
+      typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$typedb_port" ]; then
+        local console_bin
+        console_bin=$(spindb which typedb_console_bin 2>/dev/null)
+        if [ -n "$console_bin" ] && [ -f "$console_bin" ]; then
+          "$console_bin" --address "127.0.0.1:${typedb_port}" --tls-disabled --username admin --password password \
+            --command "database delete restored_db" &>/dev/null || true
+        fi
+      fi
       ;;
   esac
 }
@@ -1096,15 +1195,24 @@ run_test() {
     log_step "Start container"
     local start_output
     local start_exit_code
-    local start_timeout=120  # 2 minute timeout for start command
+    local start_timeout="$START_TIMEOUT"
     # Use timeout command if available (Linux), otherwise run without timeout (macOS for local testing)
+    # Wrap in `if` to prevent `set -e` from aborting the script on non-zero exit.
+    # Without this, a failed `spindb start` inside $(...) causes the script to exit
+    # immediately via the EXIT trap, skipping the error handler below.
     if command -v timeout &>/dev/null; then
-      start_output=$(timeout "$start_timeout" spindb start "$container_name" 2>&1)
-      start_exit_code=$?
+      if start_output=$(timeout --foreground "$start_timeout" spindb start "$container_name" 2>&1); then
+        start_exit_code=0
+      else
+        start_exit_code=$?
+      fi
     else
       # macOS doesn't have timeout command by default
-      start_output=$(spindb start "$container_name" 2>&1)
-      start_exit_code=$?
+      if start_output=$(spindb start "$container_name" 2>&1); then
+        start_exit_code=0
+      else
+        start_exit_code=$?
+      fi
     fi
 
     if [ $start_exit_code -ne 0 ]; then
@@ -1122,6 +1230,17 @@ run_test() {
         echo "$start_output" | sed 's/^/    /'
         echo ""
       fi
+      # Dump container log file if it exists (critical for CI debugging)
+      local container_dir="${SPINDB_HOME:-$HOME/.spindb}/containers/$engine/$container_name"
+      local log_candidates=("$container_dir/logs/$engine.log" "$container_dir/$engine.log" "$container_dir/logs/postgres.log")
+      for log_candidate in "${log_candidates[@]}"; do
+        if [ -f "$log_candidate" ]; then
+          echo "  ${RED}Server log ($log_candidate):${RESET}"
+          tail -50 "$log_candidate" | sed 's/^/    /'
+          echo ""
+          break
+        fi
+      done
       spindb delete "$container_name" --yes &>/dev/null || true
       failure_reason="Container start failed (exit code: $start_exit_code)"
       record_result "$engine" "$version" "FAILED" "$failure_reason"
@@ -1201,6 +1320,17 @@ run_test() {
         query_ok=true
       fi
       ;;
+    typedb)
+      # TypeDB uses HTTP endpoint for health check
+      local typedb_port
+      typedb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$typedb_port" ]; then
+        local http_port=$((typedb_port + TYPEDB_HTTP_PORT_OFFSET))
+        if curl -sf "http://127.0.0.1:${http_port}/health" &>/dev/null; then
+          query_ok=true
+        fi
+      fi
+      ;;
   esac
 
   if [ "$query_ok" = "false" ]; then
@@ -1253,6 +1383,10 @@ run_test() {
     questdb)
       # QuestDB uses "qdb" as the default database
       initial_count=$(get_data_count "$engine" "$container_name" "qdb")
+      ;;
+    typedb)
+      # TypeDB seed file creates database "test_tdb"
+      initial_count=$(get_data_count "$engine" "$container_name" "test_tdb")
       ;;
     *)
       initial_count=$(get_data_count "$engine" "$container_name" "testdb")
@@ -1439,6 +1573,10 @@ run_test() {
         # QuestDB uses "qdb" as the default database
         renamed_count=$(get_data_count "$engine" "$renamed_container" "qdb")
         ;;
+      typedb)
+        # TypeDB seed file creates database "test_tdb"
+        renamed_count=$(get_data_count "$engine" "$renamed_container" "test_tdb")
+        ;;
       *)
         renamed_count=$(get_data_count "$engine" "$renamed_container" "testdb")
         ;;
@@ -1552,6 +1690,10 @@ run_test() {
         # QuestDB uses single database 'qdb'
         cloned_count=$(get_data_count "$engine" "$cloned_container" "qdb")
         ;;
+      typedb)
+        # TypeDB seed file creates database "test_tdb"
+        cloned_count=$(get_data_count "$engine" "$cloned_container" "test_tdb")
+        ;;
       *)
         cloned_count=$(get_data_count "$engine" "$cloned_container" "testdb")
         ;;
@@ -1642,9 +1784,25 @@ get_default_version() {
 }
 
 should_run_test() {
-  [ -z "$ENGINE_FILTER" ] && return 0
-  [ "$ENGINE_FILTER" = "$1" ] && return 0
-  return 1
+  local engine=$1
+  # Check SKIP_ENGINES list first
+  if [ -n "$SKIP_ENGINES" ] && echo "$SKIP_ENGINES" | grep -qw "$engine"; then
+    return 1
+  fi
+  # If a specific engine filter is set, only run that engine
+  [ -n "$ENGINE_FILTER" ] && [ "$ENGINE_FILTER" = "$engine" ] && return 0
+  [ -n "$ENGINE_FILTER" ] && [ "$ENGINE_FILTER" != "$engine" ] && return 1
+  # If a group filter is set, check membership
+  if [ -n "$ENGINE_GROUP" ]; then
+    case $ENGINE_GROUP in
+      sql)   echo "$GROUP_SQL" | grep -qw "$engine" && return 0 ;;
+      nosql) echo "$GROUP_NOSQL" | grep -qw "$engine" && return 0 ;;
+      other) echo "$GROUP_OTHER" | grep -qw "$engine" && return 0 ;;
+    esac
+    return 1
+  fi
+  # No filter - run everything
+  return 0
 }
 
 # ============================================================================
@@ -1698,6 +1856,11 @@ print_final_summary() {
     echo "  ${RED}${BOLD}✗ $FAILED TEST(S) FAILED${RESET}"
     echo ""
   fi
+
+  # Note excluded engines so the count isn't confusing
+  echo "  ${DIM}Excluded from Docker E2E: ferretdb (composite architecture;${RESET}"
+  echo "  ${DIM}tested via 'pnpm test:engine ferretdb' in CI instead)${RESET}"
+  echo ""
 }
 
 # ============================================================================
@@ -1712,6 +1875,14 @@ echo "${BOLD}${CYAN}════════════════════
 echo ""
 if [ -n "$ENGINE_FILTER" ]; then
   echo "  ${BOLD}Filter:${RESET}    $ENGINE_FILTER"
+elif [ -n "$ENGINE_GROUP" ]; then
+  _group_engines=""
+  case $ENGINE_GROUP in
+    sql)   _group_engines="$GROUP_SQL" ;;
+    nosql) _group_engines="$GROUP_NOSQL" ;;
+    other) _group_engines="$GROUP_OTHER" ;;
+  esac
+  echo "  ${BOLD}Group:${RESET}     $ENGINE_GROUP ($_group_engines)"
 fi
 if [ "$SMOKE_TEST" = "true" ]; then
   echo "  ${BOLD}Mode:${RESET}      ${YELLOW}smoke test${RESET} (download + start + query only)"
@@ -1795,7 +1966,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

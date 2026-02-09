@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { createWriteStream, existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
@@ -9,7 +9,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { qdrantBinaryManager } from './binary-manager'
@@ -39,6 +43,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRESTAPIResult } from '../../core/query-parser'
 
@@ -1201,6 +1207,105 @@ export class QdrantEngine extends BaseEngine {
     // Qdrant uses collections, not databases
     // Return the container's configured database
     return [container.database]
+  }
+
+  /**
+   * Create/update the global API key for Qdrant.
+   *
+   * Qdrant supports only a single global API key (set in config.yaml).
+   * Calling createUser multiple times will overwrite the previous key.
+   * The caller-provided username is stored in the credential file for
+   * bookkeeping but has no effect on Qdrant itself — authentication
+   * is solely via the api-key header.
+   */
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password } = options
+    assertValidUsername(username)
+    const { port, name } = container
+
+    // Qdrant uses a single global API key in config.yaml.
+    // Read current config, set/replace api_key, write back, and restart.
+    const containerDir = paths.getContainerPath(name, { engine: ENGINE })
+    const configPath = join(containerDir, 'config.yaml')
+
+    const currentConfig = await readFile(configPath, 'utf-8')
+
+    // Parse YAML config line-by-line to find service section and api_key.
+    // Assumes 2-space indentation, no inline comments on api_key lines, and simple scalar values.
+    // This is a lightweight string-edit approach; use a YAML parser if those cases must be supported.
+    const lines = currentConfig.split('\n')
+    const serviceIdx = lines.findIndex((l) => /^service:/.test(l))
+
+    if (serviceIdx < 0) {
+      throw new Error('Could not find service section in Qdrant config')
+    }
+
+    // Scan the service section for existing api_key and last property line
+    let apiKeyIdx = -1
+    let lastServicePropIdx = serviceIdx
+    for (let i = serviceIdx + 1; i < lines.length; i++) {
+      if (/^\s+\S/.test(lines[i])) {
+        lastServicePropIdx = i
+        if (/^\s+api_key:/.test(lines[i])) {
+          apiKeyIdx = i
+        }
+      } else if (/^\S/.test(lines[i]) && lines[i].trim() !== '') {
+        break // Next top-level section
+      }
+    }
+
+    const yamlSafePassword = JSON.stringify(password)
+    if (apiKeyIdx >= 0) {
+      lines[apiKeyIdx] = `  api_key: ${yamlSafePassword}`
+    } else {
+      lines.splice(lastServicePropIdx + 1, 0, `  api_key: ${yamlSafePassword}`)
+    }
+
+    const updatedConfig = lines.join('\n')
+
+    // Validate the modified config is structurally sound before writing
+    // Check that service section and api_key line are present
+    const updatedLines = updatedConfig.split('\n')
+    const hasService = updatedLines.some((l) => /^service:/.test(l))
+    const hasApiKey = updatedLines.some((l) => /^\s+api_key:/.test(l))
+    if (!hasService || !hasApiKey) {
+      throw new Error(
+        'Failed to update Qdrant config: modified YAML is structurally invalid. ' +
+          'The service section or api_key entry is missing after modification.',
+      )
+    }
+
+    // Only restart if the container is currently running
+    const statusResult = await this.status(container)
+    if (statusResult.running) {
+      logWarning(
+        `Restarting Qdrant container "${name}" to apply API key change. ` +
+          'Active client connections will be disconnected.',
+      )
+      await this.stop(container)
+      await writeFile(configPath, updatedConfig)
+      await chmod(configPath, 0o600)
+      await this.start(container)
+    } else {
+      await writeFile(configPath, updatedConfig)
+      await chmod(configPath, 0o600)
+    }
+
+    logDebug(`Configured Qdrant global API key (credential label: ${username})`)
+
+    const connectionString = `http://127.0.0.1:${port}`
+
+    return {
+      username,
+      password: '',
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      apiKey: password,
+    }
   }
 }
 

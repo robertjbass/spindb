@@ -1,13 +1,17 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, chmod } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { clickhouseBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -39,6 +43,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseClickHouseJSONResult } from '../../core/query-parser'
 
@@ -86,6 +92,15 @@ function generateClickHouseConfig(options: {
 
     <mark_cache_size>5368709120</mark_cache_size>
     <max_concurrent_queries>100</max_concurrent_queries>
+
+    <user_directories>
+        <users_xml>
+            <path>users.xml</path>
+        </users_xml>
+        <local_directory>
+            <path>${dataDir}/access/</path>
+        </local_directory>
+    </user_directories>
 </clickhouse>
 `
 }
@@ -297,6 +312,11 @@ export class ClickHouseEngine extends BaseEngine {
     await mkdir(dataDir, { recursive: true })
     await mkdir(tmpDir, { recursive: true })
     await mkdir(join(dataDir, 'user_files'), { recursive: true })
+    const accessDir = join(dataDir, 'access')
+    await mkdir(accessDir, { recursive: true, mode: 0o700 })
+    await chmod(accessDir, 0o700).catch((err) => {
+      logDebug(`Failed to chmod ${accessDir}: ${err}`)
+    })
 
     logDebug(`Created ClickHouse data directory: ${dataDir}`)
 
@@ -337,6 +357,18 @@ export class ClickHouseEngine extends BaseEngine {
     const logDir = containerDir
     const tmpDir = join(dataDir, 'tmp')
     const httpPort = port + 1
+
+    const accessDir = join(dataDir, 'access')
+    try {
+      await mkdir(accessDir, { recursive: true, mode: 0o700 })
+      await chmod(accessDir, 0o700).catch((err) => {
+        logDebug(`Failed to chmod ${accessDir}: ${err}`)
+      })
+    } catch (error) {
+      logWarning(
+        `Failed to create ClickHouse access directory ${accessDir}: ${error}`,
+      )
+    }
 
     const configPath = join(containerDir, 'config.xml')
     const pidFile = join(containerDir, engineDef.pidFileName)
@@ -528,7 +560,7 @@ export class ClickHouseEngine extends BaseEngine {
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 90000,
+    timeoutMs = 120000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for port ${port}, version ${version}`)
     const startTime = Date.now()
@@ -1243,6 +1275,70 @@ export class ClickHouseEngine extends BaseEngine {
         resolve(databases)
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port, version } = container
+    const db = database || container.database || 'default'
+
+    validateClickHouseIdentifier(username, 'username')
+    validateClickHouseIdentifier(db, 'database')
+    const escapedUser = escapeClickHouseIdentifier(username)
+    const escapedDb = escapeClickHouseIdentifier(db)
+
+    const clickhouse = await this.getClickHouseClientPath(version)
+
+    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
+    const sql = `CREATE USER IF NOT EXISTS ${escapedUser} IDENTIFIED BY '${escapedPass}'; ALTER USER ${escapedUser} IDENTIFIED BY '${escapedPass}'; GRANT ALL ON ${escapedDb}.* TO ${escapedUser};`
+
+    const args = [
+      'client',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--multiquery',
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(clickhouse, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          logDebug(`Created ClickHouse user: ${username}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to create user: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+
+      proc.stdin?.write(sql)
+      proc.stdin?.end()
+    })
+
+    const connectionString = `clickhouse://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

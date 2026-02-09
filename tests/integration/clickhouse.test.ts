@@ -232,8 +232,8 @@ describe(
       await engine.start(config!)
       await containerManager.updateConfig(containerName, { status: 'running' })
 
-      // Wait for ClickHouse to be ready (90s timeout for slow CI runners)
-      const ready = await waitForReady(ENGINE, testPorts[0], 90000)
+      // Wait for ClickHouse to be ready (120s timeout for slow CI runners)
+      const ready = await waitForReady(ENGINE, testPorts[0], 120000)
       assert(ready, 'ClickHouse should be ready to accept connections')
 
       const running = await processManager.isRunning(containerName, {
@@ -314,6 +314,36 @@ describe(
       logDebug(`Query returned ${result.rowCount} rows with correct data`)
     })
 
+    it('should create a user and update password on re-create', async () => {
+      logDebug(`Testing createUser...`)
+
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Container config should exist')
+
+      const engine = getEngine(ENGINE)
+
+      const creds1 = await engine.createUser(config!, {
+        username: 'testuser',
+        password: 'firstpass123',
+        database: DATABASE,
+      })
+      assertEqual(creds1.username, 'testuser', 'Username should match')
+      assertEqual(creds1.password, 'firstpass123', 'Password should match')
+      logDebug('Created user with initial password')
+
+      const creds2 = await engine.createUser(config!, {
+        username: 'testuser',
+        password: 'secondpass456',
+        database: DATABASE,
+      })
+      assertEqual(
+        creds2.password,
+        'secondpass456',
+        'Password should be updated',
+      )
+      logDebug('Re-created user with new password (idempotent)')
+    })
+
     it('should clone container using backup/restore', async () => {
       console.log(
         `\n Creating container "${clonedContainerName}" via backup/restore...`,
@@ -342,7 +372,7 @@ describe(
       })
 
       // Wait for it to be ready
-      const ready = await waitForReady(ENGINE, testPorts[1], 90000)
+      const ready = await waitForReady(ENGINE, testPorts[1], 120000)
       assert(ready, 'Cloned ClickHouse should be ready before restore')
 
       // Create backup from source
@@ -501,7 +531,7 @@ describe(
       })
 
       // Wait for ready
-      const ready = await waitForReady(ENGINE, testPorts[2], 90000)
+      const ready = await waitForReady(ENGINE, testPorts[2], 120000)
       assert(ready, 'Renamed ClickHouse should be ready')
 
       // Verify row count reflects deletion

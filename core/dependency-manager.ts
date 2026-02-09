@@ -81,6 +81,9 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'surreal',
   // QuestDB
   'questdb',
+  // TypeDB
+  'typedb',
+  'typedb_console_bin',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

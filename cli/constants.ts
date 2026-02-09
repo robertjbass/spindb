@@ -75,6 +75,7 @@ export const ENGINE_BRAND_COLORS: Record<Engine, BrandColor> = {
   [Engine.CockroachDB]: { foreground: '#FFFFFF', background: '#6933FF' }, // White on purple
   [Engine.SurrealDB]: { foreground: '#FFFFFF', background: '#FF00A0' }, // White on pink
   [Engine.QuestDB]: { foreground: '#000000', background: '#02FC04' }, // Black on green
+  [Engine.TypeDB]: { foreground: '#FFFFFF', background: '#7B2D8E' }, // White on purple
 }
 
 // ASCII fallback icons - work in any terminal
@@ -95,6 +96,7 @@ const ASCII_ICONS: Record<Engine, string> = {
   [Engine.CockroachDB]: '[CR]',
   [Engine.SurrealDB]: '[SR]',
   [Engine.QuestDB]: '[QS]',
+  [Engine.TypeDB]: '[TB]',
 }
 
 // Nerd Font icons - require a patched font
@@ -116,6 +118,7 @@ const NERD_ICONS: Record<Engine, string> = {
   [Engine.CockroachDB]: '\ue269', // nf-fae-cockroach
   [Engine.SurrealDB]: '\uedfe', // nf-fa-infinity (multi-model)
   [Engine.QuestDB]: '\ued2f', // nf-fa-gauge-high (time-series performance)
+  [Engine.TypeDB]: '\ue706', // nf-dev-database (knowledge graph)
 }
 
 // Emoji icons - original icons, inconsistent width across terminals
@@ -136,6 +139,7 @@ const EMOJI_ICONS: Record<Engine, string> = {
   [Engine.CockroachDB]: '🪳',
   [Engine.SurrealDB]: '🌀',
   [Engine.QuestDB]: '⏱',
+  [Engine.TypeDB]: '🤖',
 }
 
 const DEFAULT_ICONS: Record<IconMode, string> = {

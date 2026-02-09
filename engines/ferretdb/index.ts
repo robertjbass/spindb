@@ -15,8 +15,15 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import net from 'net'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join, basename } from 'path'
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  symlink,
+  unlink,
+  readdir,
+} from 'fs/promises'
+import { join, basename, dirname } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -27,6 +34,7 @@ import {
   logDebug,
   logWarning,
   assertValidDatabaseName,
+  assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
@@ -57,6 +65,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseMongoDBResult } from '../../core/query-parser'
 
@@ -332,12 +342,130 @@ export class FerretDBEngine extends BaseEngine {
         arch,
       )
 
+      // Homebrew-derived x64 binaries have compiled-in absolute paths for
+      // sharedir, pkglibdir ($libdir), and libdir that don't exist when running
+      // from ~/.spindb/bin/. We fix this by:
+      // 1. Using initdb's -L flag to explicitly set the share directory
+      // 2. Creating symlinks at compiled-in paths for pkglibdir and libdir
+      //    (these are needed by the bootstrap postgres subprocess during initdb)
+      const shareDirBase = join(documentdbPath, 'share')
+      const actualShareDir = existsSync(join(shareDirBase, 'postgres.bki'))
+        ? shareDirBase
+        : existsSync(join(shareDirBase, 'postgresql', 'postgres.bki'))
+          ? join(shareDirBase, 'postgresql')
+          : shareDirBase
+
+      // Homebrew-derived binaries have compiled-in absolute paths that only
+      // need fixup on macOS. On Linux the paths are relative or handled by
+      // LD_LIBRARY_PATH, so skip the pg_config symlink fixups entirely.
+      if (platform === 'darwin') {
+        const pgConfigBin = join(documentdbPath, 'bin', `pg_config${ext}`)
+        if (existsSync(pgConfigBin)) {
+          // Query all relevant compiled-in paths and create symlinks where needed
+          const pathFixups: Array<{
+            flag: string
+            actualDir: string
+            label: string
+          }> = [
+            { flag: '--sharedir', actualDir: actualShareDir, label: 'share' },
+            {
+              flag: '--pkglibdir',
+              actualDir: existsSync(join(documentdbPath, 'lib', 'postgresql'))
+                ? join(documentdbPath, 'lib', 'postgresql')
+                : join(documentdbPath, 'lib'),
+              label: 'pkglib',
+            },
+            {
+              flag: '--libdir',
+              actualDir: join(documentdbPath, 'lib'),
+              label: 'lib',
+            },
+          ]
+
+          // Create symlinks at compiled-in paths so PostgreSQL can find its
+          // libraries. These paths may be in system directories (e.g. /usr/local/),
+          // which require elevated privileges to write to.
+          for (const { flag, actualDir, label } of pathFixups) {
+            try {
+              const { stdout: out } = await execAsync(
+                `"${pgConfigBin}" ${flag}`,
+                { timeout: 5000 },
+              )
+              const compiledDir = out.trim()
+              logDebug(`pg_config ${flag}: ${compiledDir}`)
+              if (compiledDir && !existsSync(compiledDir)) {
+                await mkdir(dirname(compiledDir), { recursive: true })
+                await symlink(actualDir, compiledDir)
+                logDebug(
+                  `Created ${label} symlink: ${compiledDir} -> ${actualDir}`,
+                )
+              }
+            } catch (error) {
+              const e = error as NodeJS.ErrnoException
+              const isPermission =
+                e.code === 'EACCES' ||
+                e.code === 'EPERM' ||
+                (e.message && /permission denied/i.test(e.message))
+              if (isPermission) {
+                logWarning(
+                  `Cannot create ${label} symlink (permission denied). ` +
+                    `This can be caused by macOS SIP or container/sudo limitations when compiled-in paths point to system directories. ` +
+                    `Workaround: use a non-system install path, or run with elevated privileges if available (e.g., sudo spindb engines download ferretdb <version>). ` +
+                    `See https://github.com/robertjbass/spindb#ferretdb for details. ` +
+                    `Target: ${flag} -> ${actualDir}`,
+                )
+              } else {
+                logDebug(`Could not fix compiled ${label} path: ${e.message}`)
+              }
+            }
+          }
+        }
+      } else {
+        logDebug(
+          'Skipping pg_config symlink fixups (not required on this platform)',
+        )
+      }
+
+      // On macOS, fix hardcoded Homebrew dylib paths in extension libraries.
+      // The x64 build may have extensions (e.g. pg_documentdb_core.dylib) that
+      // reference Homebrew libraries (e.g. libbson2.2.dylib from mongo-c-driver)
+      // via absolute paths that don't exist on the target machine.
+      if (platform === 'darwin') {
+        const dylibMarker = join(documentdbPath, '.dylib_fix_done')
+        if (!existsSync(dylibMarker)) {
+          await this.fixDylibDependencies(documentdbPath)
+          try {
+            await writeFile(dylibMarker, '', { flag: 'wx' })
+          } catch {
+            // Marker may already exist from a parallel init — safe to ignore
+          }
+        }
+      }
+
+      // On macOS, set DYLD_FALLBACK_LIBRARY_PATH as additional library search path.
+      // Unlike DYLD_LIBRARY_PATH, this is NOT stripped by SIP.
+      const initdbEnv =
+        platform === 'darwin'
+          ? {
+              ...spawnEnv,
+              DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
+            }
+          : spawnEnv
+
       try {
-        // Add timeout to prevent hanging on Windows
         await spawnAsync(
           initdb,
-          ['-D', pgDataDir, '-U', 'postgres', '--encoding=UTF8', '--locale=C'],
-          { env: spawnEnv, timeout: 60000 },
+          [
+            '-D',
+            pgDataDir,
+            '-U',
+            'postgres',
+            '--encoding=UTF8',
+            '--locale=C',
+            '-L',
+            actualShareDir,
+          ],
+          { env: initdbEnv, timeout: 60000 },
         )
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
       } catch (error) {
@@ -347,11 +475,11 @@ export class FerretDBEngine extends BaseEngine {
 
       // Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
       // This is critical for DocumentDB extension to load properly
-      const bundledConf = join(
-        documentdbPath,
-        'share',
-        'postgresql.conf.sample',
+      const bundledConf = existsSync(
+        join(shareDirBase, 'postgresql.conf.sample'),
       )
+        ? join(shareDirBase, 'postgresql.conf.sample')
+        : join(shareDirBase, 'postgresql', 'postgresql.conf.sample')
       const pgConf = join(pgDataDir, 'postgresql.conf')
 
       if (existsSync(bundledConf)) {
@@ -433,12 +561,21 @@ export class FerretDBEngine extends BaseEngine {
       arch,
     )
 
-    // Get spawn env for Linux (LD_LIBRARY_PATH for postgresql-documentdb binaries)
-    const pgSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+    // Get spawn env for postgresql-documentdb binaries:
+    // - Linux: LD_LIBRARY_PATH for shared libraries
+    // - macOS: DYLD_FALLBACK_LIBRARY_PATH (not stripped by SIP)
+    const baseSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
       fullBackendVersion,
       platform,
       arch,
     )
+    const pgSpawnEnv =
+      platform === 'darwin'
+        ? {
+            ...baseSpawnEnv,
+            DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
+          }
+        : baseSpawnEnv
 
     const ext = platformService.getExecutableExtension()
     const ferretdbBinary = join(ferretdbPath, 'bin', `ferretdb${ext}`)
@@ -466,6 +603,20 @@ export class FerretDBEngine extends BaseEngine {
 
     // Allocate backend port
     const backendPort = existingBackendPort || (await allocateBackendPort())
+
+    // Fix hardcoded Homebrew dylib paths (darwin-x64 binaries)
+    // Skip if already completed (marker written by initDataDir or a previous start)
+    if (platform === 'darwin') {
+      const dylibMarker = join(documentdbPath, '.dylib_fix_done')
+      if (!existsSync(dylibMarker)) {
+        await this.fixDylibDependencies(documentdbPath)
+        try {
+          await writeFile(dylibMarker, '', { flag: 'wx' })
+        } catch {
+          // Marker may already exist — safe to ignore
+        }
+      }
+    }
 
     let pgStarted = false
     let ferretStarted = false
@@ -699,12 +850,19 @@ export class FerretDBEngine extends BaseEngine {
       arch,
     )
 
-    // Get spawn env for Linux (LD_LIBRARY_PATH for postgresql-documentdb binaries)
-    const pgSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
+    // Get spawn env for postgresql-documentdb binaries
+    const baseStopEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
       fullBackendVersion,
       platform,
       arch,
     )
+    const pgSpawnEnv =
+      platform === 'darwin'
+        ? {
+            ...baseStopEnv,
+            DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
+          }
+        : baseStopEnv
 
     const ext = platformService.getExecutableExtension()
     const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
@@ -723,6 +881,99 @@ export class FerretDBEngine extends BaseEngine {
     }
 
     logDebug('FerretDB stopped')
+  }
+
+  /**
+   * Fix hardcoded Homebrew dylib paths in extension libraries.
+   *
+   * The x64 darwin build of postgresql-documentdb has extensions whose dylib
+   * load commands reference absolute Homebrew paths (e.g.
+   * /usr/local/opt/mongo-c-driver/lib/libbson2.2.dylib). When these paths
+   * don't exist on the target machine, the extension fails to load.
+   *
+   * This method scans extension dylibs with `otool -L`, finds missing
+   * dependencies, searches our bundle for matching libraries, and creates
+   * symlinks at the expected Homebrew paths.
+   */
+  private async fixDylibDependencies(documentdbPath: string): Promise<void> {
+    const libDir = join(documentdbPath, 'lib')
+    const pkgLibDir = join(libDir, 'postgresql')
+
+    if (!existsSync(pkgLibDir)) return
+
+    // Collect all .dylib files in our bundle's lib/ directory
+    const bundledLibNames = new Set<string>()
+    const bundledLibPaths = new Map<string, string>()
+    try {
+      const libFiles = await readdir(libDir)
+      for (const f of libFiles) {
+        if (f.endsWith('.dylib')) {
+          bundledLibNames.add(f)
+          bundledLibPaths.set(f, join(libDir, f))
+        }
+      }
+    } catch {
+      return
+    }
+
+    // Scan extension dylibs for missing dependencies
+    let extFiles: string[]
+    try {
+      extFiles = (await readdir(pkgLibDir)).filter((f) => f.endsWith('.dylib'))
+    } catch {
+      return
+    }
+
+    for (const extFile of extFiles) {
+      const extPath = join(pkgLibDir, extFile)
+      try {
+        const { stdout } = await execAsync(`otool -L "${extPath}"`, {
+          timeout: 5000,
+        })
+
+        for (const line of stdout.split('\n')) {
+          const match = line.trim().match(/^(\/[^\s]+\.dylib)\s/)
+          if (!match) continue
+          const depPath = match[1]
+
+          // Skip system libs, @-prefixed paths, and paths in our bundle
+          if (depPath.startsWith('/usr/lib/')) continue
+          if (depPath.startsWith('/System/')) continue
+          if (depPath.startsWith('@')) continue
+          if (depPath.includes(documentdbPath)) continue
+
+          if (!existsSync(depPath)) {
+            const depName = basename(depPath)
+
+            // Check if we have this exact library in our bundle
+            if (bundledLibPaths.has(depName)) {
+              try {
+                await mkdir(dirname(depPath), { recursive: true })
+              } catch {
+                logDebug(
+                  `Cannot create directory for dylib dep: ${dirname(depPath)} (skipping)`,
+                )
+                continue
+              }
+              try {
+                await symlink(bundledLibPaths.get(depName)!, depPath)
+                logDebug(
+                  `Fixed dylib dep: ${depPath} -> ${bundledLibPaths.get(depName)}`,
+                )
+              } catch {
+                // Symlink may already exist from a parallel fix
+              }
+            } else {
+              logDebug(
+                `Missing dylib dependency: ${depPath} (not found in bundle)`,
+              )
+            }
+          }
+        }
+      } catch {
+        logDebug(`Could not scan dylib deps for ${extFile}`)
+      }
+    }
   }
 
   /**
@@ -1342,6 +1593,84 @@ export class FerretDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database ?? container.database ?? 'admin'
+    assertValidDatabaseName(db)
+    const mongosh = await this.getMongoshPath()
+
+    // Same as MongoDB - auth disabled with --no-auth but user is still created
+    // Use JSON.stringify for password to safely escape all special characters in JS context
+    // Pass script via stdin to avoid exposing passwords in process listings
+    const jsonPwd = JSON.stringify(password)
+    const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
+
+    const mongoshArgs = ['--host', '127.0.0.1', '--port', String(port), 'admin']
+
+    const runMongoshViaStdin = (js: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const proc = spawn(mongosh, mongoshArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        let stderr = ''
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        const timeout = setTimeout(() => {
+          proc.kill('SIGTERM')
+          reject(new Error('mongosh timed out after 10 seconds'))
+        }, 10000)
+
+        proc.on('error', (err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+        proc.on('close', (code) => {
+          clearTimeout(timeout)
+          if (code === 0) resolve()
+          else reject(new Error(stderr || `mongosh exited with code ${code}`))
+        })
+
+        proc.stdin?.write(js)
+        proc.stdin?.end()
+      })
+
+    try {
+      await runMongoshViaStdin(script)
+    } catch (error) {
+      const err = error as Error
+      if (
+        err.message.includes('51003') ||
+        err.message.includes('already exists')
+      ) {
+        // User exists — update password instead
+        const updateScript = `db.getSiblingDB('${db}').updateUser('${username}',{pwd:${jsonPwd}})`
+        await runMongoshViaStdin(updateScript)
+      } else {
+        throw error
+      }
+    }
+
+    const connectionString = `mongodb://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

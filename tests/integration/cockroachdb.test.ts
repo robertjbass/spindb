@@ -128,8 +128,8 @@ describe('CockroachDB Integration Tests', () => {
     await engine.start(config!)
     await containerManager.updateConfig(containerName, { status: 'running' })
 
-    // Wait for CockroachDB to be ready (90s timeout for slow CI runners)
-    const ready = await waitForReady(ENGINE, testPorts[0], 90000)
+    // Wait for CockroachDB to be ready (120s timeout for slow CI runners, especially Windows)
+    const ready = await waitForReady(ENGINE, testPorts[0], 120000)
     assert(ready, 'CockroachDB should be ready to accept connections')
 
     const running = await processManager.isRunning(containerName, {
@@ -160,6 +160,32 @@ describe('CockroachDB Integration Tests', () => {
     )
 
     console.log(`   Seeded ${rowCount} rows using engine.runScript`)
+  })
+
+  it('should create a user and update password on re-create', async () => {
+    console.log(`\n👤 Testing createUser...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    const creds1 = await engine.createUser(config!, {
+      username: 'testuser',
+      password: 'firstpass123',
+      database: DATABASE,
+    })
+    assertEqual(creds1.username, 'testuser', 'Username should match')
+    assertEqual(creds1.password, 'firstpass123', 'Password should match')
+    console.log('   ✓ Created user with initial password')
+
+    const creds2 = await engine.createUser(config!, {
+      username: 'testuser',
+      password: 'secondpass456',
+      database: DATABASE,
+    })
+    assertEqual(creds2.password, 'secondpass456', 'Password should be updated')
+    console.log('   ✓ Re-created user with new password (idempotent)')
   })
 
   it('should clone container using backup/restore', async () => {

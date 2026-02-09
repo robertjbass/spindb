@@ -37,6 +37,7 @@ export enum Engine {
   CockroachDB = 'cockroachdb',
   SurrealDB = 'surrealdb',
   QuestDB = 'questdb',
+  TypeDB = 'typedb',
 }
 
 // Icon display mode for engine icons in CLI output
@@ -76,6 +77,7 @@ export const ALL_ENGINES = [
   Engine.CockroachDB,
   Engine.SurrealDB,
   Engine.QuestDB,
+  Engine.TypeDB,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -205,6 +207,7 @@ export type CouchDBFormat = 'json'
 export type CockroachDBFormat = 'sql'
 export type SurrealDBFormat = 'surql'
 export type QuestDBFormat = 'sql'
+export type TypeDBFormat = 'typeql'
 
 // Query command types
 export type QueryResultRow = Record<string, unknown>
@@ -220,6 +223,23 @@ export type QueryOptions = {
   database?: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' // For REST API engines
   body?: Record<string, unknown> // For REST API engines
+}
+
+// User management types
+export type CreateUserOptions = {
+  username: string
+  password: string
+  database?: string
+}
+
+export type UserCredentials = {
+  username: string
+  password: string
+  connectionString: string
+  engine: Engine
+  container: string
+  database?: string
+  apiKey?: string // Meilisearch, Qdrant
 }
 
 // Pull command types
@@ -265,6 +285,7 @@ export type BackupFormatType =
   | CockroachDBFormat
   | SurrealDBFormat
   | QuestDBFormat
+  | TypeDBFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -284,6 +305,7 @@ type EngineFormatMap = {
   [Engine.CockroachDB]: CockroachDBFormat
   [Engine.SurrealDB]: SurrealDBFormat
   [Engine.QuestDB]: QuestDBFormat
+  [Engine.TypeDB]: TypeDBFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -395,6 +417,9 @@ export type BinaryTool =
   | 'surreal'
   // QuestDB tools
   | 'questdb'
+  // TypeDB tools
+  | 'typedb'
+  | 'typedb_console_bin'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -482,6 +507,9 @@ export type SpinDBConfig = {
     surreal?: BinaryConfig
     // QuestDB tools
     questdb?: BinaryConfig
+    // TypeDB tools
+    typedb?: BinaryConfig
+    typedb_console_bin?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

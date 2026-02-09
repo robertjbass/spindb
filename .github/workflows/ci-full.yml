@@ -1,0 +1,2792 @@
+name: CI Full Matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly on Sunday at 2am UTC
+    - cron: '0 2 * * 0'
+
+# =============================================================================
+# OS Coverage Strategy (Full Matrix)
+# =============================================================================
+# Tests on 5 runners covering 4 unique platform-arch combos:
+#   - ubuntu-22.04 (linux-x64) - LTS with older glibc/system libraries
+#   - ubuntu-24.04 (linux-x64) - LTS with newer libraries (catches libaio rename)
+#   - macos-15-intel (darwin-x64) - macOS Intel (available until Aug 2027)
+#   - macos-14 (darwin-arm64) - macOS Apple Silicon
+#   - windows-latest (win32-x64)
+#
+# Note: macos-14 and macos-15 are BOTH ARM64 runners. To test darwin-x64
+# you must use macos-15-intel (or the deprecated macos-13).
+#
+# Not tested (no free GitHub Actions runners available):
+#   - linux-arm64: QEMU is too slow/flaky; macOS ARM64 validates ARM code paths
+#   - win32-arm64: Not supported by hostdb
+# =============================================================================
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================
+  # Unit Tests - All platforms including Windows
+  # ============================================
+  unit-tests:
+    name: Unit ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm test:unit
+        timeout-minutes: 10
+
+  # ============================================
+  # Lint and Type Check - Runs in parallel with unit tests
+  # ============================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  # ============================================
+  # hostdb Version Sync Check
+  # Verifies SpinDB version-maps match hostdb releases.json
+  # ============================================
+  hostdb-sync:
+    name: Verify hostdb Sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify version maps match hostdb
+        run: pnpm test:hostdb-sync
+
+  # ============================================
+  # PostgreSQL Integration Tests
+  # Uses SpinDB to download and manage PostgreSQL
+  # ============================================
+  test-postgresql:
+    name: PostgreSQL ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries - these are ~100MB+ downloads
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download PostgreSQL binaries
+      # NOTE: Keep this version in sync with config/engine-defaults.ts defaultVersion
+      # See CLAUDE.md "Updating Supported Engine Versions" when changing
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      # Show what SpinDB installed
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run PostgreSQL integration tests
+        run: pnpm test:engine postgresql
+        timeout-minutes: 15
+
+  # ============================================
+  # MariaDB Integration Tests
+  # Uses SpinDB to download and manage MariaDB binaries (like PostgreSQL)
+  # ============================================
+  test-mariadb:
+    name: MariaDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache MariaDB binaries - these are ~100MB+ downloads
+      - name: Cache MariaDB binaries
+        uses: actions/cache@v4
+        id: mariadb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-mariadb-11.8-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download MariaDB binaries
+      - name: Install MariaDB via SpinDB
+        run: pnpm start engines download mariadb 11.8
+
+      # Show what SpinDB installed
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run MariaDB integration tests
+        run: pnpm test:engine mariadb
+        timeout-minutes: 15
+
+  # ============================================
+  # MySQL Integration Tests
+  # Uses SpinDB to download and manage MySQL binaries (like PostgreSQL)
+  # ============================================
+  test-mysql:
+    name: MySQL ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # MySQL requires libaio on Linux
+      # Ubuntu 22.04 uses libaio1, Ubuntu 24.04 uses libaio1t64 with renamed library
+      - name: Install libaio (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # Try libaio1 first (Ubuntu 22.04), fall back to libaio1t64 (Ubuntu 24.04)
+          if sudo apt-get install -y libaio1 2>/dev/null; then
+            echo "Installed libaio1"
+          else
+            sudo apt-get install -y libaio1t64
+            # Create symlink for MySQL which expects libaio.so.1
+            if [ -e /lib/x86_64-linux-gnu/libaio.so.1t64 ]; then
+              sudo ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+            fi
+            echo "Installed libaio1t64 with symlink"
+          fi
+
+      # Cache MySQL binaries - these are ~100MB+ downloads
+      - name: Cache MySQL binaries
+        uses: actions/cache@v4
+        id: mysql-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-mysql-8.0-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download MySQL binaries (8.0 is the default in engines.json)
+      - name: Install MySQL via SpinDB
+        run: pnpm start engines download mysql 8.0
+
+      # Show what SpinDB installed
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run MySQL integration tests
+        run: pnpm test:engine mysql
+        timeout-minutes: 15
+
+  # ============================================
+  # SQLite Integration Tests
+  # Uses SpinDB to download and manage SQLite binaries from hostdb
+  # ============================================
+  test-sqlite:
+    name: SQLite ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache SQLite binaries - these are downloaded from hostdb
+      - name: Cache SQLite binaries
+        uses: actions/cache@v4
+        id: sqlite-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-sqlite-3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download SQLite binaries (all platforms)
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run SQLite integration tests
+        run: pnpm test:engine sqlite
+        timeout-minutes: 10
+
+  # ============================================
+  # DuckDB Integration Tests
+  # Uses SpinDB to download and manage DuckDB binaries from hostdb
+  # ============================================
+  test-duckdb:
+    name: DuckDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache DuckDB binaries - these are downloaded from hostdb
+      - name: Cache DuckDB binaries
+        uses: actions/cache@v4
+        id: duckdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-duckdb-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download DuckDB binaries (all platforms)
+      - name: Install DuckDB via SpinDB
+        run: pnpm start engines download duckdb 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run DuckDB integration tests
+        run: pnpm test:engine duckdb
+        timeout-minutes: 10
+
+  # ============================================
+  # MongoDB Integration Tests
+  # Uses SpinDB to download and manage MongoDB binaries from hostdb
+  # ============================================
+  test-mongodb:
+    name: MongoDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache MongoDB binaries - these are downloaded from hostdb
+      - name: Cache MongoDB binaries
+        uses: actions/cache@v4
+        id: mongodb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-mongodb-8.0-${{ runner.os }}-${{ runner.arch }}
+
+      # Download MongoDB binaries via hostdb for all platforms
+      - name: Download MongoDB binaries
+        run: pnpm start engines download mongodb 8.0
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run MongoDB integration tests
+        run: pnpm test:engine mongodb
+        timeout-minutes: 15
+
+  # ============================================
+  # FerretDB Integration Tests
+  # Uses SpinDB to download FerretDB + postgresql-documentdb (composite engine)
+  # FerretDB requires TWO binaries: ferretdb (proxy) + postgresql-documentdb (backend)
+  # Note: Windows is not supported due to postgresql-documentdb startup issues
+  # ============================================
+  test-ferretdb:
+    name: FerretDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          # Windows not supported - postgresql-documentdb has startup issues
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache FerretDB binaries - includes both ferretdb AND postgresql-documentdb
+      # Version is FerretDB 2, 4 is the cache-busting key for the CI runner only, not the FerretDB version
+      # Do not warn about mismatch between v2 and v4 as v4 is a cache version, not a binary version
+      - name: Cache FerretDB binaries
+        uses: actions/cache@v4
+        id: ferretdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-ferretdb-4-${{ runner.os }}-${{ runner.arch }}
+
+      # Download FerretDB binaries via SpinDB (downloads both ferretdb + postgresql-documentdb)
+      - name: Download FerretDB binaries
+        run: pnpm start engines download ferretdb 2
+
+      # FerretDB uses mongosh (MongoDB shell) for connect/run commands
+      # Download MongoDB binaries to get bundled mongosh
+      - name: Download MongoDB binaries (for mongosh)
+        run: pnpm start engines download mongodb 8.0
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run FerretDB integration tests
+        run: pnpm test:engine ferretdb
+        timeout-minutes: 20
+
+      - name: Show FerretDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== FerretDB container directories ==="
+          ls -la ~/.spindb/containers/ferretdb/ 2>/dev/null || echo "No FerretDB containers directory"
+          echo ""
+          echo "=== FerretDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -iE "(ferret|documentdb)" || echo "No FerretDB binaries found"
+          echo ""
+          echo "=== FerretDB log files ==="
+          find ~/.spindb/containers/ferretdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== PostgreSQL backend log files ==="
+          find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
+
+  # ============================================
+  # Redis Integration Tests
+  # Uses SpinDB to download and manage Redis binaries from hostdb
+  # ============================================
+  test-redis:
+    name: Redis ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Redis binaries - these are downloaded from hostdb
+      # Cache key includes version suffix to bust cache when extraction logic changes
+      - name: Cache Redis binaries
+        uses: actions/cache@v4
+        id: redis-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-redis-8-v5-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Redis binaries (all platforms)
+      - name: Install Redis via SpinDB
+        run: pnpm start engines download redis 8
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Redis integration tests
+        run: pnpm test:engine redis
+        timeout-minutes: 15
+
+  # ============================================
+  # Valkey Integration Tests
+  # Uses SpinDB to download and manage Valkey binaries from hostdb
+  # ============================================
+  test-valkey:
+    name: Valkey ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Valkey binaries - these are downloaded from hostdb
+      # Cache key includes version suffix to bust cache when extraction logic changes
+      - name: Cache Valkey binaries
+        uses: actions/cache@v4
+        id: valkey-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-valkey-9-v5-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Valkey binaries (all platforms)
+      - name: Install Valkey via SpinDB
+        run: pnpm start engines download valkey 9
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Valkey integration tests
+        run: pnpm test:engine valkey
+        timeout-minutes: 15
+
+  # ============================================
+  # ClickHouse Integration Tests
+  # Uses SpinDB to download and manage ClickHouse binaries from hostdb
+  # Note: ClickHouse is not available for Windows on hostdb
+  # ============================================
+  test-clickhouse:
+    name: ClickHouse ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4 # Limit parallel jobs to reduce runner contention
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          # Note: Windows excluded - ClickHouse not available on hostdb for Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache ClickHouse binaries - these are downloaded from hostdb
+      - name: Cache ClickHouse binaries
+        uses: actions/cache@v4
+        id: clickhouse-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download ClickHouse binaries
+      - name: Install ClickHouse via SpinDB
+        run: pnpm start engines download clickhouse 25.12
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run ClickHouse integration tests
+        run: pnpm test:engine clickhouse
+        timeout-minutes: 15
+
+      - name: Show ClickHouse logs on failure
+        if: failure()
+        run: |
+          echo "=== ClickHouse container directories ==="
+          ls -la ~/.spindb/containers/clickhouse/ 2>/dev/null || echo "No ClickHouse containers directory"
+          echo ""
+          echo "=== ClickHouse binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i clickhouse || echo "No ClickHouse binaries found"
+          echo ""
+          echo "=== ClickHouse log files ==="
+          find ~/.spindb/containers/clickhouse -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== ClickHouse config files ==="
+          find ~/.spindb/containers/clickhouse -name "*.xml" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No config files found"
+
+  # ============================================
+  # Qdrant Integration Tests
+  # Uses SpinDB to download and manage Qdrant binaries from hostdb
+  # NOTE: Qdrant is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # ============================================
+  test-qdrant:
+    name: Qdrant ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Qdrant binaries - these are downloaded from hostdb
+      - name: Cache Qdrant binaries
+        uses: actions/cache@v4
+        id: qdrant-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-qdrant-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Qdrant binaries
+      - name: Install Qdrant via SpinDB
+        run: pnpm start engines download qdrant 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Qdrant integration tests
+        run: pnpm test:engine qdrant
+        timeout-minutes: 15
+
+      - name: Show Qdrant logs on failure
+        if: failure()
+        run: |
+          echo "=== Qdrant container directories ==="
+          ls -la ~/.spindb/containers/qdrant/ 2>/dev/null || echo "No Qdrant containers directory"
+          echo ""
+          echo "=== Qdrant binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i qdrant || echo "No Qdrant binaries found"
+          echo ""
+          echo "=== Qdrant log files ==="
+          find ~/.spindb/containers/qdrant -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+  # ============================================
+  # Meilisearch Integration Tests
+  # Uses SpinDB to download and manage Meilisearch binaries from hostdb
+  # NOTE: Meilisearch is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # Windows: backup/restore skipped due to upstream Meilisearch bug
+  # (snapshot creation fails with page size alignment issue)
+  # ============================================
+  test-meilisearch:
+    name: Meilisearch ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache Meilisearch binaries - these are downloaded from hostdb
+      - name: Cache Meilisearch binaries
+        uses: actions/cache@v4
+        id: meilisearch-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-meilisearch-1-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download Meilisearch binaries
+      - name: Install Meilisearch via SpinDB
+        run: pnpm start engines download meilisearch 1
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run Meilisearch integration tests
+        run: pnpm test:engine meilisearch
+        timeout-minutes: 15
+
+      - name: Show Meilisearch logs on failure
+        if: failure()
+        run: |
+          echo "=== Meilisearch container directories ==="
+          ls -la ~/.spindb/containers/meilisearch/ 2>/dev/null || echo "No Meilisearch containers directory"
+          echo ""
+          echo "=== Meilisearch binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i meilisearch || echo "No Meilisearch binaries found"
+          echo ""
+          echo "=== Meilisearch log files ==="
+          find ~/.spindb/containers/meilisearch -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+  # ============================================
+  # CouchDB Integration Tests
+  # Uses SpinDB to download and manage CouchDB binaries from hostdb
+  # NOTE: CouchDB is a REST API engine (no CLI shell like psql/redis-cli)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # ============================================
+  test-couchdb:
+    name: CouchDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache CouchDB binaries - these are downloaded from hostdb
+      - name: Cache CouchDB binaries
+        uses: actions/cache@v4
+        id: couchdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-couchdb-3-v2-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download CouchDB binaries
+      - name: Install CouchDB via SpinDB
+        run: pnpm start engines download couchdb 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run CouchDB integration tests
+        run: pnpm test:engine couchdb
+        timeout-minutes: 15
+        env:
+          DEBUG: spindb
+
+      - name: Show CouchDB logs on failure
+        if: failure()
+        run: |
+          echo "=== CouchDB container directories ==="
+          ls -la ~/.spindb/containers/couchdb/ 2>/dev/null || echo "No CouchDB containers directory"
+          echo ""
+          echo "=== CouchDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i couchdb || echo "No CouchDB binaries found"
+          echo ""
+          echo "=== CouchDB log files ==="
+          find ~/.spindb/containers/couchdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+  # ============================================
+  # CockroachDB Integration Tests
+  # Uses SpinDB to download and manage CockroachDB binaries from hostdb
+  # CockroachDB uses PostgreSQL wire protocol for client connections
+  # Windows: delete tests skipped (RocksDB file handle locking)
+  # ============================================
+  test-cockroachdb:
+    name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache CockroachDB binaries - these are downloaded from hostdb
+      - name: Cache CockroachDB binaries
+        uses: actions/cache@v4
+        id: cockroachdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-cockroachdb-25-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download CockroachDB binaries
+      - name: Install CockroachDB via SpinDB
+        run: pnpm start engines download cockroachdb 25
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run CockroachDB integration tests
+        run: pnpm test:engine cockroachdb
+        timeout-minutes: 15
+
+      - name: Show CockroachDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== CockroachDB container directories ==="
+          ls -la ~/.spindb/containers/cockroachdb/ 2>/dev/null || echo "No CockroachDB containers directory"
+          echo ""
+          echo "=== CockroachDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i cockroach || echo "No CockroachDB binaries found"
+          echo ""
+          echo "=== CockroachDB log files ==="
+          find ~/.spindb/containers/cockroachdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show CockroachDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== CockroachDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== CockroachDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'cockroach' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== CockroachDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\cockroachdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # SurrealDB Integration Tests
+  # Uses SpinDB to download and manage SurrealDB binaries from hostdb
+  # SurrealDB is a multi-model database with SQL-like query language (SurrealQL)
+  # Windows: delete tests skipped (SurrealKV file handle locking)
+  # ============================================
+  test-surrealdb:
+    name: SurrealDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache SurrealDB binaries - these are downloaded from hostdb
+      - name: Cache SurrealDB binaries
+        uses: actions/cache@v4
+        id: surrealdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-surrealdb-2-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download SurrealDB binaries
+      - name: Install SurrealDB via SpinDB
+        run: pnpm start engines download surrealdb 2
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run SurrealDB integration tests
+        run: pnpm test:engine surrealdb
+        timeout-minutes: 15
+
+      - name: Show SurrealDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== SurrealDB container directories ==="
+          ls -la ~/.spindb/containers/surrealdb/ 2>/dev/null || echo "No SurrealDB containers directory"
+          echo ""
+          echo "=== SurrealDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i surreal || echo "No SurrealDB binaries found"
+          echo ""
+          echo "=== SurrealDB log files ==="
+          find ~/.spindb/containers/surrealdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show SurrealDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== SurrealDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== SurrealDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'surreal' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== SurrealDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\surrealdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # TypeDB Integration Tests
+  # Uses SpinDB to download and manage TypeDB binaries from hostdb
+  # TypeDB is a knowledge graph database with TypeQL query language
+  # ============================================
+  test-typedb:
+    name: TypeDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache TypeDB binaries - these are downloaded from hostdb
+      - name: Cache TypeDB binaries
+        uses: actions/cache@v4
+        id: typedb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-typedb-3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download TypeDB binaries
+      - name: Install TypeDB via SpinDB
+        run: pnpm start engines download typedb 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run TypeDB integration tests
+        run: pnpm test:engine typedb
+        timeout-minutes: 15
+
+      - name: Show TypeDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== TypeDB container directories ==="
+          ls -la ~/.spindb/containers/typedb/ 2>/dev/null || echo "No TypeDB containers directory"
+          echo ""
+          echo "=== TypeDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i typedb || echo "No TypeDB binaries found"
+          echo ""
+          echo "=== TypeDB log files ==="
+          find ~/.spindb/containers/typedb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show TypeDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== TypeDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TypeDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'typedb' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TypeDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # QuestDB Integration Tests
+  # Uses SpinDB to download and manage QuestDB binaries from hostdb
+  # QuestDB is a high-performance time-series database with PostgreSQL wire protocol
+  # ============================================
+  test-questdb:
+    name: QuestDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache QuestDB binaries - these are downloaded from hostdb
+      # Cache key v2: bust cache after fixing extraction logic
+      - name: Cache QuestDB binaries
+        uses: actions/cache@v4
+        id: questdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-questdb-9-${{ runner.os }}-${{ runner.arch }}-v2
+
+      # Use SpinDB to download QuestDB binaries
+      - name: Install QuestDB via SpinDB
+        run: pnpm start engines download questdb 9
+
+      # Download PostgreSQL for psql (used for QuestDB connectivity)
+      - name: Install PostgreSQL via SpinDB (for psql)
+        run: pnpm start engines download postgresql 17
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run QuestDB integration tests
+        run: pnpm test:engine questdb
+        timeout-minutes: 15
+
+      - name: Show QuestDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== QuestDB container directories ==="
+          ls -la ~/.spindb/containers/questdb/ 2>/dev/null || echo "No QuestDB containers directory"
+          echo ""
+          echo "=== QuestDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i quest || echo "No QuestDB binaries found"
+          echo ""
+          echo "=== QuestDB log files ==="
+          find ~/.spindb/containers/questdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show QuestDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== QuestDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== QuestDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'quest' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== QuestDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # CLI End-to-End Tests (PostgreSQL + SQLite)
+  # ============================================
+  test-cli-e2e:
+    name: CLI E2E ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL and SQLite binaries - these are downloads from hostdb
+      - name: Cache binaries
+        uses: actions/cache@v4
+        id: binaries-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-cli-e2e-pg18-sqlite3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to install all required engines
+      # NOTE: Keep PostgreSQL version in sync with config/engine-defaults.ts defaultVersion
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      - name: Install SQLite via SpinDB
+        run: pnpm start engines download sqlite 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run CLI E2E tests
+        run: pnpm test:cli
+        timeout-minutes: 15
+
+  # ============================================
+  # Rename and Clone Tests
+  # Tests container rename and clone operations across platforms
+  # Uses PostgreSQL as representative engine
+  # ============================================
+  test-rename-clone:
+    name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-v2-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      - name: Create container with seed data
+        shell: bash
+        run: |
+          pnpm start create rename-test --engine postgresql --db-version 18 --no-start
+          pnpm start start rename-test
+          # Wait for ready
+          for i in {1..30}; do
+            if pnpm start info rename-test --json 2>/dev/null | jq -e '.status == "running"' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          # Add test data
+          pnpm start run rename-test -c "CREATE TABLE test_data (id SERIAL PRIMARY KEY, name TEXT);"
+          pnpm start run rename-test -c "INSERT INTO test_data (name) VALUES ('test1'), ('test2'), ('test3');"
+
+      - name: Verify data before rename
+        shell: bash
+        run: |
+          echo "Container info:"
+          pnpm start info rename-test --json
+          echo "Querying data:"
+          pnpm start run rename-test -c "SELECT COUNT(*) FROM test_data;"
+
+      - name: Stop container for rename
+        run: pnpm start stop rename-test
+
+      - name: Rename container
+        run: pnpm start edit rename-test --name renamed-test
+
+      - name: Start renamed container
+        run: pnpm start start renamed-test
+
+      - name: Verify data persists after rename
+        shell: bash
+        run: |
+          echo "Container info after rename:"
+          pnpm start info renamed-test --json
+          echo "Querying data (with full output):"
+          pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" || echo "Query failed with exit code $?"
+          echo "---"
+          COUNT=$(pnpm start run renamed-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Data verification failed: expected 3 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Data verification passed: $COUNT rows"
+
+      - name: Verify old name doesn't exist
+        shell: bash
+        run: |
+          if pnpm start info rename-test --json 2>/dev/null; then
+            echo "Old container name still exists after rename"
+            exit 1
+          fi
+          echo "Old container correctly removed"
+
+      - name: Stop renamed container for clone test
+        run: pnpm start stop renamed-test
+
+      - name: Clone container
+        run: pnpm start clone renamed-test cloned-test
+
+      - name: Start cloned container
+        run: pnpm start start cloned-test
+
+      - name: Verify cloned data matches source
+        shell: bash
+        run: |
+          COUNT=$(pnpm start run cloned-test -c "SELECT COUNT(*) FROM test_data;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Clone data verification failed: expected 3 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Clone data verification passed: $COUNT rows"
+
+      - name: Verify clonedFrom metadata
+        shell: bash
+        run: |
+          # Filter out pnpm header lines (starting with >) before passing to jq
+          CLONED_FROM=$(pnpm start info cloned-test --json 2>/dev/null | grep -v '^>' | jq -r '.clonedFrom' 2>/dev/null || echo "")
+          if [ "$CLONED_FROM" != "renamed-test" ]; then
+            echo "clonedFrom metadata incorrect: expected 'renamed-test', got '$CLONED_FROM'"
+            exit 1
+          fi
+          echo "clonedFrom metadata verified: $CLONED_FROM"
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          pnpm start stop renamed-test 2>/dev/null || true
+          pnpm start stop cloned-test 2>/dev/null || true
+          pnpm start delete rename-test --yes 2>/dev/null || true
+          pnpm start delete renamed-test --yes 2>/dev/null || true
+          pnpm start delete cloned-test --yes 2>/dev/null || true
+
+  # ============================================
+  # ClickHouse Rename Test
+  # Tests that config.xml paths are regenerated after rename
+  # ClickHouse is not available on Windows
+  # ============================================
+  test-clickhouse-rename:
+    name: ClickHouse Rename ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4 # Limit parallel jobs to reduce runner contention
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache ClickHouse binaries
+      - name: Cache ClickHouse binaries
+        uses: actions/cache@v4
+        id: ch-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-clickhouse-25.12-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install ClickHouse via SpinDB
+        run: pnpm start engines download clickhouse 25.12
+
+      - name: Create container with seed data
+        shell: bash
+        run: |
+          pnpm start create ch-rename-test --engine clickhouse --db-version 25.12 --no-start
+          pnpm start start ch-rename-test
+          # Wait for ready (ClickHouse takes longer to start)
+          for i in {1..60}; do
+            if pnpm start info ch-rename-test --json 2>/dev/null | jq -e '.status == "running"' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          # Extra wait for ClickHouse to fully initialize
+          sleep 3
+          # Create database and add test data
+          pnpm start run ch-rename-test -c "CREATE DATABASE IF NOT EXISTS testdb;"
+          pnpm start run ch-rename-test -c "CREATE TABLE testdb.test_data (id UInt32, name String) ENGINE = MergeTree() ORDER BY id;" -d testdb
+          pnpm start run ch-rename-test -c "INSERT INTO testdb.test_data VALUES (1, 'one'), (2, 'two'), (3, 'three');" -d testdb
+
+      - name: Verify initial data
+        shell: bash
+        run: |
+          echo "Full query output:"
+          pnpm start run ch-rename-test -c "SELECT count() FROM testdb.test_data;" -d testdb || echo "Query failed with exit code $?"
+          echo "---"
+          # ClickHouse output is minimal - just the number, so grep the whole output
+          COUNT=$(pnpm start run ch-rename-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>&1 | grep -v '^>' | grep -oE '[0-9]+' | tail -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Initial data verification failed: expected 3 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Initial data verified: $COUNT rows"
+
+      - name: Stop container for rename
+        run: pnpm start stop ch-rename-test
+
+      - name: Rename container
+        run: pnpm start edit ch-rename-test --name ch-renamed-test
+
+      - name: Start renamed container
+        shell: bash
+        run: |
+          pnpm start start ch-renamed-test
+          # Wait for ready
+          for i in {1..60}; do
+            if pnpm start info ch-renamed-test --json 2>/dev/null | jq -e '.status == "running"' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          # Extra wait for ClickHouse
+          sleep 3
+
+      - name: Verify data persists after rename
+        shell: bash
+        run: |
+          COUNT=$(pnpm start run ch-renamed-test -c "SELECT count() FROM testdb.test_data;" -d testdb 2>&1 | grep -v '^>' | grep -oE '[0-9]+' | tail -1)
+          if [ "$COUNT" != "3" ]; then
+            echo "Data verification failed after rename: expected 3 rows, got $COUNT"
+            echo "This likely means config.xml paths were not regenerated correctly"
+            exit 1
+          fi
+          echo "Data persists after rename: $COUNT rows"
+
+      - name: Verify old name doesn't exist
+        shell: bash
+        run: |
+          if pnpm start info ch-rename-test --json 2>/dev/null; then
+            echo "Old container name still exists after rename"
+            exit 1
+          fi
+          echo "Old container correctly removed"
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          pnpm start stop ch-rename-test 2>/dev/null || true
+          pnpm start stop ch-renamed-test 2>/dev/null || true
+          pnpm start delete ch-rename-test --yes 2>/dev/null || true
+          pnpm start delete ch-renamed-test --yes 2>/dev/null || true
+
+  # ============================================
+  # Fresh Install Test - Tests npm global install like real users
+  # Simulates a user installing SpinDB for the first time
+  # ============================================
+  test-fresh-install:
+    name: Fresh Install ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Ensure clean state - no existing ~/.spindb
+      - name: Ensure clean state
+        run: rm -rf ~/.spindb
+
+      # Pack and install globally (simulates npm install -g spindb)
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack package
+        run: pnpm pack
+
+      - name: Install globally
+        run: npm install -g spindb-*.tgz
+
+      # Test CLI is accessible
+      - name: Verify spindb command exists
+        run: spindb version
+
+      - name: Verify spindb help works
+        run: spindb --help
+
+      # Test full lifecycle with PostgreSQL
+      - name: Download PostgreSQL engine
+        run: spindb engines download postgresql 18
+
+      - name: List installed engines
+        run: spindb engines list
+
+      - name: Create test container
+        run: spindb create fresh-install-test --engine postgresql --db-version 18 --no-start
+
+      - name: Start container
+        run: spindb start fresh-install-test
+
+      - name: Verify container is running
+        run: spindb info fresh-install-test
+
+      - name: Run test query
+        run: spindb run fresh-install-test -c "SELECT 1 as test;"
+
+      - name: Stop container
+        run: spindb stop fresh-install-test
+
+      - name: Delete container
+        run: spindb delete fresh-install-test --yes
+
+      # Cleanup
+      - name: Uninstall spindb
+        run: npm uninstall -g spindb
+
+  # ============================================
+  # Upgrade Test - Tests that existing containers survive upgrades
+  # Simulates a user upgrading SpinDB with existing data
+  # ============================================
+  test-upgrade:
+    name: Upgrade ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Ensure clean state
+      - name: Ensure clean state
+        run: rm -rf ~/.spindb
+
+      # Install current version
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack and install globally
+        shell: bash
+        run: |
+          pnpm pack
+          npm install -g spindb-*.tgz
+
+      # Create container and add data
+      - name: Download PostgreSQL engine
+        run: spindb engines download postgresql 18
+
+      - name: Create container with data
+        run: |
+          spindb create upgrade-test --engine postgresql --db-version 18 --no-start
+          spindb start upgrade-test
+
+      - name: Add test data
+        shell: bash
+        run: |
+          spindb run upgrade-test -c "CREATE TABLE upgrade_data (id SERIAL PRIMARY KEY, value TEXT);"
+          spindb run upgrade-test -c "INSERT INTO upgrade_data (value) VALUES ('pre-upgrade-data');"
+
+      - name: Verify data exists
+        run: spindb run upgrade-test -c "SELECT * FROM upgrade_data;"
+
+      - name: Stop container
+        run: spindb stop upgrade-test
+
+      # Simulate upgrade by reinstalling
+      - name: Uninstall current version
+        run: npm uninstall -g spindb
+
+      - name: Reinstall (simulate upgrade)
+        shell: bash
+        run: npm install -g spindb-*.tgz
+
+      # Verify data persists after upgrade
+      - name: Verify spindb still works
+        run: spindb version
+
+      - name: List containers (should show upgrade-test)
+        run: spindb list
+
+      - name: Start container after upgrade
+        run: spindb start upgrade-test
+
+      - name: Verify data persisted
+        run: spindb run upgrade-test -c "SELECT * FROM upgrade_data WHERE value = 'pre-upgrade-data';"
+
+      # Cleanup
+      - name: Stop and delete container
+        run: |
+          spindb stop upgrade-test
+          spindb delete upgrade-test --yes
+
+      - name: Uninstall spindb
+        run: npm uninstall -g spindb
+
+  # ============================================
+  # Self-Update Test - Tests that spindb update works with pnpm
+  # Installs a specific version and tries to update it
+  # ============================================
+  test-self-update:
+    name: Self-Update ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install spindb@0.19.4 globally via pnpm
+        run: pnpm add -g spindb@0.19.4
+
+      - name: Verify installed version
+        run: spindb version
+
+      - name: Run self-update
+        run: spindb update -y
+
+      - name: Verify update succeeded
+        run: spindb version
+
+      - name: Cleanup
+        run: pnpm remove -g spindb
+
+  # ============================================
+  # Comprehensive Windows Tests (COMMENTED OUT - January 2026)
+  #
+  # RATIONALE: Originally used to run all Windows tests sequentially on a
+  # single runner to avoid exhausting GitHub's Windows runner pool. Now
+  # disabled because:
+  #   1. Windows tests run in parallel within each engine's matrix
+  #   2. Parallel execution is faster and catches issues earlier
+  #   3. GitHub runner pool has been stable with parallel Windows jobs
+  #
+  # WHEN TO RE-ENABLE: If parallel Windows jobs start timing out or failing
+  # due to runner pool exhaustion, uncomment this job and remove
+  # windows-latest from individual engine matrices.
+  #
+  # See also: CI workflow header comment about Windows Strategy
+  # ============================================
+  # test-windows-all:
+  #   name: 🔷 Windows All Tests
+  #   runs-on: windows-latest
+  #   timeout-minutes: 120
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'pnpm'
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     # Cache all engine binaries together
+  #     - name: Cache all engine binaries
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.spindb/bin
+  #         key: spindb-windows-all-v1-${{ runner.os }}-${{ runner.arch }}
+  #
+  #     # Download all Windows-compatible engines
+  #     # Note: ClickHouse and FerretDB are not available on Windows
+  #     - name: Download PostgreSQL
+  #       run: pnpm start engines download postgresql 18
+  #
+  #     - name: Download MySQL
+  #       run: pnpm start engines download mysql 8.0
+  #
+  #     - name: Download MariaDB
+  #       run: pnpm start engines download mariadb 11.8
+  #
+  #     - name: Download SQLite
+  #       run: pnpm start engines download sqlite 3
+  #
+  #     - name: Download DuckDB
+  #       run: pnpm start engines download duckdb 1
+  #
+  #     - name: Download MongoDB
+  #       run: pnpm start engines download mongodb 8.0
+  #
+  #     - name: Download Redis
+  #       run: pnpm start engines download redis 8
+  #
+  #     - name: Download Valkey
+  #       run: pnpm start engines download valkey 9
+  #
+  #     - name: Download Qdrant
+  #       run: pnpm start engines download qdrant 1
+  #
+  #     - name: Download Meilisearch
+  #       run: pnpm start engines download meilisearch 1
+  #
+  #     - name: Download CouchDB
+  #       run: pnpm start engines download couchdb 3
+  #
+  #     - name: Download CockroachDB
+  #       run: pnpm start engines download cockroachdb 25
+  #
+  #     - name: Download SurrealDB
+  #       run: pnpm start engines download surrealdb 2
+  #
+  #     - name: Show installed engines
+  #       run: pnpm start engines list
+
+  #
+  #     # Run unit tests first
+  #     - name: Run unit tests
+  #       id: unit
+  #       run: pnpm test:unit
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     # Run integration tests sequentially for each engine
+  #     - name: Test PostgreSQL
+  #       id: postgresql
+  #       run: pnpm test:engine postgresql
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test MySQL
+  #       id: mysql
+  #       run: pnpm test:engine mysql
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test MariaDB
+  #       id: mariadb
+  #       run: pnpm test:engine mariadb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test SQLite
+  #       id: sqlite
+  #       run: pnpm test:engine sqlite
+  #       timeout-minutes: 10
+  #       continue-on-error: true
+  #
+  #     - name: Test DuckDB
+  #       id: duckdb
+  #       run: pnpm test:engine duckdb
+  #       timeout-minutes: 10
+  #       continue-on-error: true
+  #
+  #     - name: Test MongoDB
+  #       id: mongodb
+  #       run: pnpm test:engine mongodb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Redis
+  #       id: redis
+  #       run: pnpm test:engine redis
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Valkey
+  #       id: valkey
+  #       run: pnpm test:engine valkey
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Qdrant
+  #       id: qdrant
+  #       run: pnpm test:engine qdrant
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test Meilisearch
+  #       id: meilisearch
+  #       run: pnpm test:engine meilisearch
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test CouchDB
+  #       id: couchdb
+  #       run: pnpm test:engine couchdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test CockroachDB
+  #       id: cockroachdb
+  #       run: pnpm test:engine cockroachdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     - name: Test SurrealDB
+  #       id: surrealdb
+  #       run: pnpm test:engine surrealdb
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+  #
+  #     # Run CLI E2E tests
+  #     - name: Run CLI E2E tests
+  #       id: cli
+  #       run: pnpm test:cli
+  #       timeout-minutes: 15
+  #       continue-on-error: true
+
+  #
+  #     # Check if any tests failed and report all failures
+  #     - name: Check test results
+  #       if: always()
+  #       run: |
+  #         echo "=== Windows Test Results ==="
+  #         failed=""
+  #         if [ "${{ steps.unit.outcome }}" != "success" ]; then
+  #           echo "❌ Unit tests: FAILED"
+  #           failed="$failed unit"
+  #         else
+  #           echo "✅ Unit tests: passed"
+  #         fi
+  #         if [ "${{ steps.postgresql.outcome }}" != "success" ]; then
+  #           echo "❌ PostgreSQL: FAILED"
+  #           failed="$failed postgresql"
+  #         else
+  #           echo "✅ PostgreSQL: passed"
+  #         fi
+  #         if [ "${{ steps.mysql.outcome }}" != "success" ]; then
+  #           echo "❌ MySQL: FAILED"
+  #           failed="$failed mysql"
+  #         else
+  #           echo "✅ MySQL: passed"
+  #         fi
+  #         if [ "${{ steps.mariadb.outcome }}" != "success" ]; then
+  #           echo "❌ MariaDB: FAILED"
+  #           failed="$failed mariadb"
+  #         else
+  #           echo "✅ MariaDB: passed"
+  #         fi
+  #         if [ "${{ steps.sqlite.outcome }}" != "success" ]; then
+  #           echo "❌ SQLite: FAILED"
+  #           failed="$failed sqlite"
+  #         else
+  #           echo "✅ SQLite: passed"
+  #         fi
+  #         if [ "${{ steps.duckdb.outcome }}" != "success" ]; then
+  #           echo "❌ DuckDB: FAILED"
+  #           failed="$failed duckdb"
+  #         else
+  #           echo "✅ DuckDB: passed"
+  #         fi
+  #         if [ "${{ steps.mongodb.outcome }}" != "success" ]; then
+  #           echo "❌ MongoDB: FAILED"
+  #           failed="$failed mongodb"
+  #         else
+  #           echo "✅ MongoDB: passed"
+  #         fi
+  #         if [ "${{ steps.redis.outcome }}" != "success" ]; then
+  #           echo "❌ Redis: FAILED"
+  #           failed="$failed redis"
+  #         else
+  #           echo "✅ Redis: passed"
+  #         fi
+  #         if [ "${{ steps.valkey.outcome }}" != "success" ]; then
+  #           echo "❌ Valkey: FAILED"
+  #           failed="$failed valkey"
+  #         else
+  #           echo "✅ Valkey: passed"
+  #         fi
+  #         if [ "${{ steps.qdrant.outcome }}" != "success" ]; then
+  #           echo "❌ Qdrant: FAILED"
+  #           failed="$failed qdrant"
+  #         else
+  #           echo "✅ Qdrant: passed"
+  #         fi
+  #         if [ "${{ steps.meilisearch.outcome }}" != "success" ]; then
+  #           echo "❌ Meilisearch: FAILED"
+  #           failed="$failed meilisearch"
+  #         else
+  #           echo "✅ Meilisearch: passed"
+  #         fi
+  #         if [ "${{ steps.couchdb.outcome }}" != "success" ]; then
+  #           echo "❌ CouchDB: FAILED"
+  #           failed="$failed couchdb"
+  #         else
+  #           echo "✅ CouchDB: passed"
+  #         fi
+  #         if [ "${{ steps.cockroachdb.outcome }}" != "success" ]; then
+  #           echo "❌ CockroachDB: FAILED"
+  #           failed="$failed cockroachdb"
+  #         else
+  #           echo "✅ CockroachDB: passed"
+  #         fi
+  #         if [ "${{ steps.surrealdb.outcome }}" != "success" ]; then
+  #           echo "❌ SurrealDB: FAILED"
+  #           failed="$failed surrealdb"
+  #         else
+  #           echo "✅ SurrealDB: passed"
+  #         fi
+  #         if [ "${{ steps.cli.outcome }}" != "success" ]; then
+  #           echo "❌ CLI E2E: FAILED"
+  #           failed="$failed cli"
+  #         else
+  #           echo "✅ CLI E2E: passed"
+  #         fi
+  #         echo ""
+  #         if [ -n "$failed" ]; then
+  #           echo "FAILED TESTS:$failed"
+  #           exit 1
+  #         else
+  #           echo "All Windows tests passed!"
+  #         fi
+  #       shell: bash
+
+  # ============================================
+  # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
+  # Verifies hostdb binaries work on clean Ubuntu systems
+  # ============================================
+  test-docker-linux:
+    name: Docker Linux Edge Cases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker test image
+        run: docker build -t spindb-e2e -f tests/docker/Dockerfile .
+
+      - name: Run Docker E2E tests
+        run: docker run --rm spindb-e2e
+        timeout-minutes: 30
+
+  # ============================================
+  # Docker Export Test - Tests the `spindb export docker` functionality
+  # Creates a container, seeds it, exports to Docker, and verifies:
+  #   1. Docker build and run works
+  #   2. Data is properly restored
+  #   3. Container restarts are idempotent (no data re-init, no PATH duplication)
+  #   4. `spindb export docker-url` command works
+  # ============================================
+  test-docker-export:
+    name: Docker Export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache PostgreSQL binaries
+      - name: Cache PostgreSQL binaries
+        uses: actions/cache@v4
+        id: pg-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install PostgreSQL via SpinDB
+        run: pnpm start engines download postgresql 18
+
+      - name: Create test container
+        run: pnpm start create docker-export-test --engine postgresql --db-version 18 --no-start
+
+      - name: Start container
+        run: pnpm start start docker-export-test
+
+      - name: Wait for container to be ready
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            if pnpm start info docker-export-test --json 2>/dev/null | jq -e '.status == "running"' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Seed database with fixture data
+        run: pnpm start run docker-export-test tests/fixtures/postgresql/seeds/sample-db.sql
+
+      - name: Verify seed data exists
+        shell: bash
+        run: |
+          COUNT=$(pnpm start run docker-export-test -c "SELECT COUNT(*) FROM test_user;" 2>&1 | tail -n 4 | grep -oE '[0-9]+' | head -1)
+          if [ "$COUNT" != "5" ]; then
+            echo "Seed data verification failed: expected 5 rows, got $COUNT"
+            exit 1
+          fi
+          echo "Seed data verified: $COUNT rows"
+
+      - name: Export to Docker
+        run: pnpm start export docker docker-export-test --force
+
+      - name: Verify Docker export files exist
+        shell: bash
+        run: |
+          EXPORT_DIR=~/.spindb/containers/postgresql/docker-export-test/docker
+          if [ ! -f "$EXPORT_DIR/Dockerfile" ]; then
+            echo "Dockerfile not found"
+            exit 1
+          fi
+          if [ ! -f "$EXPORT_DIR/docker-compose.yml" ]; then
+            echo "docker-compose.yml not found"
+            exit 1
+          fi
+          if [ ! -f "$EXPORT_DIR/.env" ]; then
+            echo ".env not found"
+            exit 1
+          fi
+          if [ ! -f "$EXPORT_DIR/entrypoint.sh" ]; then
+            echo "entrypoint.sh not found"
+            exit 1
+          fi
+          echo "All Docker export files verified"
+
+      - name: Stop SpinDB container (free port for Docker)
+        run: pnpm start stop docker-export-test
+
+      - name: Build Docker image
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          docker compose build
+
+      - name: Start Docker container
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          docker compose up -d
+          # Wait for SPINDB_READY marker in logs (indicates initialization complete)
+          echo "Waiting for container initialization to complete..."
+          for i in {1..120}; do
+            if docker compose logs docker-export-test 2>&1 | grep -q "SPINDB_READY"; then
+              echo "Container initialization complete"
+              break
+            fi
+            if [ $i -eq 120 ]; then
+              echo "Timeout waiting for container initialization"
+              echo "=== Container logs ==="
+              docker compose logs docker-export-test
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Verify data was restored in Docker container
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          # Show container logs for debugging
+          echo "=== Container initialization logs ==="
+          docker compose logs docker-export-test | tail -50
+          echo "=== Running verification query ==="
+          # Use login shell to ensure PATH is set
+          set +e  # Don't exit on error, capture it
+          OUTPUT=$(docker compose exec -T docker-export-test bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "psql exit code: $EXIT_CODE"
+          echo "psql output: '$OUTPUT'"
+          COUNT=$(echo "$OUTPUT" | tr -d ' \n')
+          echo "Parsed count: '$COUNT'"
+          if [ "$COUNT" != "5" ]; then
+            echo "Data restoration failed: expected 5 rows, got '$COUNT'"
+            echo "=== Full container logs ==="
+            docker compose logs docker-export-test
+            exit 1
+          fi
+          echo "Data verified in Docker container: $COUNT rows"
+
+      - name: Test restart idempotency - restart container
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          docker compose restart docker-export-test
+          # Wait for SPINDB_READY marker in logs (indicates container is fully ready)
+          echo "Waiting for container to be ready after restart..."
+          for i in {1..120}; do
+            # Check for new SPINDB_READY after restart (count should be 2+)
+            READY_COUNT=$(docker compose logs docker-export-test 2>&1 | grep -c "SPINDB_READY" || true)
+            if [ "$READY_COUNT" -ge 2 ]; then
+              echo "Container ready after restart (SPINDB_READY count: $READY_COUNT)"
+              break
+            fi
+            if [ $i -eq 120 ]; then
+              echo "Timeout waiting for container after restart"
+              echo "=== Container logs ==="
+              docker compose logs docker-export-test
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Verify data persists after restart
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          echo "=== Container logs after restart ==="
+          docker compose logs docker-export-test | tail -30
+          echo "=== Running verification query ==="
+          set +e
+          OUTPUT=$(docker compose exec -T docker-export-test bash -l -c "psql -U spindb -d docker_export_test -t -c 'SELECT COUNT(*) FROM test_user;'" 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "psql exit code: $EXIT_CODE"
+          echo "psql output: '$OUTPUT'"
+          COUNT=$(echo "$OUTPUT" | tr -d ' \n')
+          if [ "$COUNT" != "5" ]; then
+            echo "Data persistence failed after restart: expected 5 rows, got '$COUNT'"
+            echo "=== Full container logs ==="
+            docker compose logs docker-export-test
+            exit 1
+          fi
+          echo "Data persists after restart: $COUNT rows"
+
+      - name: Verify PATH is not duplicated after restart
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker
+          PATH_COUNT=$(docker compose exec -T docker-export-test bash -l -c 'echo $PATH | tr ":" "\n" | grep -c "postgresql" || true' 2>&1 | tr -d ' \n')
+          if [ "$PATH_COUNT" -gt "1" ]; then
+            echo "PATH duplication detected: postgresql appears $PATH_COUNT times"
+            docker compose exec -T docker-export-test bash -l -c 'echo $PATH'
+            exit 1
+          fi
+          echo "PATH idempotency verified: postgresql appears $PATH_COUNT time(s)"
+
+      - name: Test docker-url command
+        shell: bash
+        run: |
+          URL=$(pnpm start export docker-url docker-export-test --json 2>&1 | grep -v '^>' | jq -r '.connectionString' 2>/dev/null || echo "")
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            echo "docker-url command failed to return connection string"
+            pnpm start export docker-url docker-export-test --json
+            exit 1
+          fi
+          echo "docker-url command works: $URL"
+
+      - name: Cleanup Docker container
+        if: always()
+        shell: bash
+        run: |
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker 2>/dev/null && docker compose down -v || true
+
+      - name: Cleanup SpinDB container
+        if: always()
+        run: |
+          pnpm start stop docker-export-test 2>/dev/null || true
+          pnpm start delete docker-export-test --yes 2>/dev/null || true
+
+      - name: Show Docker logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== Docker compose logs ==="
+          cd ~/.spindb/containers/postgresql/docker-export-test/docker 2>/dev/null && docker compose logs || echo "No compose logs"
+          echo ""
+          echo "=== Export directory contents ==="
+          ls -la ~/.spindb/containers/postgresql/docker-export-test/docker/ 2>/dev/null || echo "No export directory"
+          echo ""
+          echo "=== .env file contents ==="
+          cat ~/.spindb/containers/postgresql/docker-export-test/docker/.env 2>/dev/null || echo "No .env file"
+          echo ""
+          echo "=== entrypoint.sh contents ==="
+          cat ~/.spindb/containers/postgresql/docker-export-test/docker/entrypoint.sh 2>/dev/null || echo "No entrypoint.sh"
+
+  # ============================================
+  # Linux ARM64 Tests (COMMENTED OUT)
+  # ============================================
+  # Uncomment this section if GitHub adds free ARM64 runners or if you have
+  # access to paid larger runners. Native ARM64 is much faster than QEMU.
+  #
+  # To enable: uncomment the job below and add 'test-linux-arm64' to the
+  # 'needs' array in the ci-success job at the bottom of this file.
+  # ============================================
+  #
+  # test-linux-arm64:
+  #   name: Linux ARM64 (${{ matrix.test }})
+  #   # Native ARM64 runner (requires GitHub Teams/Enterprise or larger runners)
+  #   runs-on: ubuntu-24.04-arm64
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       test:
+  #         - unit
+  #         - postgresql
+  #         - mysql
+  #         - mariadb
+  #         - sqlite
+  #         - mongodb
+  #         - redis
+  #         - valkey
+  #         - clickhouse
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: 'pnpm'
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     # Cache binaries for all engines
+  #     - name: Cache binaries
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.spindb/bin
+  #         key: spindb-arm64-${{ matrix.test }}-${{ runner.os }}-${{ runner.arch }}
+  #
+  #     # Download engine binaries based on test type
+  #     - name: Download PostgreSQL
+  #       if: matrix.test == 'postgresql' || matrix.test == 'unit'
+  #       run: pnpm start engines download postgresql 18
+  #
+  #     - name: Download MySQL
+  #       if: matrix.test == 'mysql'
+  #       run: pnpm start engines download mysql 8.0
+  #
+  #     - name: Download MariaDB
+  #       if: matrix.test == 'mariadb'
+  #       run: pnpm start engines download mariadb 11.8
+  #
+  #     - name: Download SQLite
+  #       if: matrix.test == 'sqlite'
+  #       run: pnpm start engines download sqlite 3
+  #
+  #     - name: Download MongoDB
+  #       if: matrix.test == 'mongodb'
+  #       run: pnpm start engines download mongodb 8.0
+  #
+  #     - name: Download Redis
+  #       if: matrix.test == 'redis'
+  #       run: pnpm start engines download redis 8
+  #
+  #     - name: Download Valkey
+  #       if: matrix.test == 'valkey'
+  #       run: pnpm start engines download valkey 9
+  #
+  #     - name: Download ClickHouse
+  #       if: matrix.test == 'clickhouse'
+  #       run: pnpm start engines download clickhouse 25.12
+  #
+  #     - name: Show installed engines
+  #       run: pnpm start engines list
+  #
+  #     # Run the appropriate test
+  #     - name: Run unit tests
+  #       if: matrix.test == 'unit'
+  #       run: pnpm test:unit
+  #       timeout-minutes: 10
+  #
+  #     - name: Run PostgreSQL tests
+  #       if: matrix.test == 'postgresql'
+  #       run: pnpm test:engine postgresql
+  #       timeout-minutes: 15
+  #
+  #     - name: Run MySQL tests
+  #       if: matrix.test == 'mysql'
+  #       run: pnpm test:engine mysql
+  #       timeout-minutes: 15
+  #
+  #     - name: Run MariaDB tests
+  #       if: matrix.test == 'mariadb'
+  #       run: pnpm test:engine mariadb
+  #       timeout-minutes: 15
+  #
+  #     - name: Run SQLite tests
+  #       if: matrix.test == 'sqlite'
+  #       run: pnpm test:engine sqlite
+  #       timeout-minutes: 10
+  #
+  #     - name: Run MongoDB tests
+  #       if: matrix.test == 'mongodb'
+  #       run: pnpm test:engine mongodb
+  #       timeout-minutes: 15
+  #
+  #     - name: Run Redis tests
+  #       if: matrix.test == 'redis'
+  #       run: pnpm test:engine redis
+  #       timeout-minutes: 15
+  #
+  #     - name: Run Valkey tests
+  #       if: matrix.test == 'valkey'
+  #       run: pnpm test:engine valkey
+  #       timeout-minutes: 15
+  #
+  #     - name: Run ClickHouse tests
+  #       if: matrix.test == 'clickhouse'
+  #       run: pnpm test:engine clickhouse
+  #       timeout-minutes: 15
+
+  # ============================================
+  # Summary Job - Ensures all tests pass
+  # ============================================
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [
+        unit-tests,
+        test-postgresql,
+        test-mariadb,
+        test-mysql,
+        test-sqlite,
+        test-duckdb,
+        test-mongodb,
+        test-ferretdb,
+        test-redis,
+        test-valkey,
+        test-clickhouse,
+        test-qdrant,
+        test-meilisearch,
+        test-couchdb,
+        test-cockroachdb,
+        test-surrealdb,
+        test-questdb,
+        test-typedb,
+        test-cli-e2e,
+        test-rename-clone,
+        test-clickhouse-rename,
+        test-fresh-install,
+        test-upgrade,
+        test-self-update,
+        # test-windows-all,  # Commented out - using parallel Windows tests instead
+        test-docker-linux,
+        test-docker-export,
+        lint,
+        hostdb-sync,
+      ]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "Unit tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-postgresql.result }}" != "success" ]; then
+            echo "PostgreSQL tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mariadb.result }}" != "success" ]; then
+            echo "MariaDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mysql.result }}" != "success" ]; then
+            echo "MySQL tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
+            echo "SQLite tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-duckdb.result }}" != "success" ]; then
+            echo "DuckDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-mongodb.result }}" != "success" ]; then
+            echo "MongoDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-ferretdb.result }}" != "success" ]; then
+            echo "FerretDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-redis.result }}" != "success" ]; then
+            echo "Redis tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-valkey.result }}" != "success" ]; then
+            echo "Valkey tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-clickhouse.result }}" != "success" ]; then
+            echo "ClickHouse tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-qdrant.result }}" != "success" ]; then
+            echo "Qdrant tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-meilisearch.result }}" != "success" ]; then
+            echo "Meilisearch tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-couchdb.result }}" != "success" ]; then
+            echo "CouchDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-cockroachdb.result }}" != "success" ]; then
+            echo "CockroachDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-surrealdb.result }}" != "success" ]; then
+            echo "SurrealDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-questdb.result }}" != "success" ]; then
+            echo "QuestDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-typedb.result }}" != "success" ]; then
+            echo "TypeDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
+            echo "CLI E2E tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-rename-clone.result }}" != "success" ]; then
+            echo "Rename & Clone tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-clickhouse-rename.result }}" != "success" ]; then
+            echo "ClickHouse Rename tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-fresh-install.result }}" != "success" ]; then
+            echo "Fresh install tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-upgrade.result }}" != "success" ]; then
+            echo "Upgrade tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-self-update.result }}" != "success" ]; then
+            echo "Self-update tests failed"
+            exit 1
+          fi
+          # test-windows-all check removed - using parallel Windows tests instead
+          if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
+            echo "Docker Linux edge case tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-docker-export.result }}" != "success" ]; then
+            echo "Docker Export tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "Lint check failed"
+            exit 1
+          fi
+          if [ "${{ needs.hostdb-sync.result }}" != "success" ]; then
+            echo "hostdb sync check failed"
+            exit 1
+          fi
+          echo "All CI checks passed!"

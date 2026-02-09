@@ -239,6 +239,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['questdb'],
     maxConnections: 0, // Not applicable - managed internally
   },
+  [Engine.TypeDB]: {
+    defaultVersion: '3',
+    defaultPort: 1729, // TypeDB main port (gRPC protocol)
+    portRange: { start: 1729, end: 1829 },
+    latestVersion: '3',
+    superuser: 'admin', // Default admin user (password: 'password')
+    connectionScheme: 'typedb', // TypeDB proprietary protocol
+    logFileName: 'typedb.log',
+    pidFileName: 'typedb.pid',
+    dataSubdir: 'data',
+    clientTools: ['typedb', 'typedb_console_bin'],
+    maxConnections: 0, // Not applicable - managed internally
+  },
 }
 
 /**

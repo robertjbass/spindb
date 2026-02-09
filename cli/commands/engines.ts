@@ -44,6 +44,10 @@ import {
   type InstalledQdrantEngine,
   type InstalledMeilisearchEngine,
   type InstalledCouchDBEngine,
+  type InstalledCockroachDBEngine,
+  type InstalledSurrealDBEngine,
+  type InstalledQuestDBEngine,
+  type InstalledTypeDBEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -65,6 +69,7 @@ import { couchdbBinaryManager } from '../../engines/couchdb/binary-manager'
 import { cockroachdbBinaryManager } from '../../engines/cockroachdb/binary-manager'
 import { surrealdbBinaryManager } from '../../engines/surrealdb/binary-manager'
 import { questdbBinaryManager } from '../../engines/questdb/binary-manager'
+import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
@@ -458,6 +463,18 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const couchdbEngines = engines.filter(
     (e): e is InstalledCouchDBEngine => e.engine === 'couchdb',
   )
+  const cockroachdbEngines = engines.filter(
+    (e): e is InstalledCockroachDBEngine => e.engine === 'cockroachdb',
+  )
+  const surrealdbEngines = engines.filter(
+    (e): e is InstalledSurrealDBEngine => e.engine === 'surrealdb',
+  )
+  const questdbEngines = engines.filter(
+    (e): e is InstalledQuestDBEngine => e.engine === 'questdb',
+  )
+  const typedbEngines = engines.filter(
+    (e): e is InstalledTypeDBEngine => e.engine === 'typedb',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -626,6 +643,62 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // CockroachDB rows
+  for (const engine of cockroachdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('cockroachdb') +
+        chalk.cyan('cockroachdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // SurrealDB rows
+  for (const engine of surrealdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('surrealdb') +
+        chalk.cyan('surrealdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // QuestDB rows
+  for (const engine of questdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('questdb') +
+        chalk.cyan('questdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
+  // TypeDB rows
+  for (const engine of typedbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('typedb') +
+        chalk.cyan('typedb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(59)))
 
   // Summary
@@ -732,6 +805,50 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  CouchDB: ${couchdbEngines.length} version(s), ${formatBytes(totalCouchDBSize)}`,
+      ),
+    )
+  }
+  if (cockroachdbEngines.length > 0) {
+    const totalCockroachDBSize = cockroachdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  CockroachDB: ${cockroachdbEngines.length} version(s), ${formatBytes(totalCockroachDBSize)}`,
+      ),
+    )
+  }
+  if (surrealdbEngines.length > 0) {
+    const totalSurrealDBSize = surrealdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  SurrealDB: ${surrealdbEngines.length} version(s), ${formatBytes(totalSurrealDBSize)}`,
+      ),
+    )
+  }
+  if (questdbEngines.length > 0) {
+    const totalQuestDBSize = questdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  QuestDB: ${questdbEngines.length} version(s), ${formatBytes(totalQuestDBSize)}`,
+      ),
+    )
+  }
+  if (typedbEngines.length > 0) {
+    const totalTypeDBSize = typedbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  TypeDB: ${typedbEngines.length} version(s), ${formatBytes(totalTypeDBSize)}`,
       ),
     )
   }
@@ -1835,9 +1952,70 @@ enginesCommand
         return
       }
 
+      if (['typedb', 'tdb'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('TypeDB requires a version (e.g., 3)'))
+          process.exit(1)
+        }
+
+        const { platform, arch } = platformService.getPlatformInfo()
+        const platformKey = `${platform}-${arch}`
+        const supportedPlatforms = new Set([
+          'darwin-x64',
+          'darwin-arm64',
+          'linux-x64',
+          'linux-arm64',
+          'win32-x64',
+        ])
+        if (!supportedPlatforms.has(platformKey)) {
+          console.error(
+            uiError(
+              `TypeDB binaries are not available for ${platformKey}. Supported: darwin-x64, darwin-arm64, linux-x64, linux-arm64, win32-x64.`,
+            ),
+          )
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.TypeDB)
+
+        const spinner = createSpinner(`Checking TypeDB ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `TypeDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`TypeDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`TypeDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: typedbPlatform, arch: typedbArch } =
+          platformService.getPlatformInfo()
+        const typedbFullVersion = typedbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'typedb',
+          version: typedbFullVersion,
+          platform: typedbPlatform,
+          arch: typedbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check - TypeDB console is bundled
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb`,
         ),
       )
       process.exit(1)

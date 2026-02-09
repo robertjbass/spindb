@@ -17,9 +17,11 @@ import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
 import { processManager } from '../../../core/process-manager'
 import { getEngine } from '../../../engines'
+import { BaseEngine } from '../../../engines/base-engine'
 import { sqliteRegistry } from '../../../engines/sqlite/registry'
 import { duckdbRegistry } from '../../../engines/duckdb/registry'
 import { defaults } from '../../../config/defaults'
+import { getEngineConfig } from '../../../config/engines-registry'
 import { getPageSize } from '../../constants'
 import { paths } from '../../../config/paths'
 import {
@@ -52,6 +54,16 @@ import {
   box,
 } from '../../ui/theme'
 import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
+import { generatePassword } from '../../../core/credential-generator'
+import {
+  saveCredentials,
+  credentialsExist,
+  getDefaultUsername,
+} from '../../../core/credential-manager'
+import {
+  UnsupportedOperationError,
+  isValidUsername,
+} from '../../../core/error-handler'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
 import {
   handleBackupForContainer,
@@ -525,8 +537,11 @@ export async function handleList(
     // (padEnd counts code points, not visual width)
     const icon = getEngineIcon(c.engine)
     const engineName = c.engine.padEnd(COL_ENGINE)
+    const isRunning = c.status === 'running'
     const row =
-      chalk.cyan(displayName.padEnd(COL_NAME)) +
+      (isRunning
+        ? chalk.cyan.bold(displayName.padEnd(COL_NAME))
+        : chalk.cyan(displayName.padEnd(COL_NAME))) +
       chalk.white(`${icon}${engineName}`) +
       chalk.yellow(c.version.padEnd(COL_VERSION)) +
       chalk.green(portDisplay.padEnd(COL_PORT)) +
@@ -796,22 +811,11 @@ export async function showContainerSubmenu(
       : disabledItem('>', 'Open shell'),
   )
 
-  // Run SQL/script - requires database selection for multi-db containers
-  // REST API engines (Qdrant, Meilisearch, CouchDB) don't support script files - hide the option entirely
-  if (
-    config.engine !== Engine.Qdrant &&
-    config.engine !== Engine.Meilisearch &&
-    config.engine !== Engine.CouchDB
-  ) {
-    // Engine-specific terminology: Redis/Valkey use commands, MongoDB/FerretDB use scripts, SurrealDB uses SurrealQL, others use SQL
-    const runScriptLabel =
-      config.engine === Engine.Redis || config.engine === Engine.Valkey
-        ? 'Run command file'
-        : config.engine === Engine.MongoDB || config.engine === Engine.FerretDB
-          ? 'Run script file'
-          : config.engine === Engine.SurrealDB
-            ? 'Run SurrealQL file'
-            : 'Run SQL file'
+  // Run script file - requires database selection for multi-db containers
+  // Label comes from engines.json scriptFileLabel; null means no script support (REST API engines)
+  const engineConfig = await getEngineConfig(config.engine)
+  if (engineConfig.scriptFileLabel) {
+    const runScriptLabel = engineConfig.scriptFileLabel
     actionChoices.push(
       canDoDbAction
         ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
@@ -825,6 +829,20 @@ export async function showContainerSubmenu(
       ? { name: `${chalk.green('⎘')} Copy connection string`, value: 'copy' }
       : disabledItem('⎘', 'Copy connection string'),
   )
+
+  // Create user - only for engines that override createUser from BaseEngine
+  const engine = getEngine(config.engine)
+  const supportsUsers = engine.createUser !== BaseEngine.prototype.createUser
+  if (supportsUsers) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.yellow('+')} Create user`,
+            value: 'create_user',
+          }
+        : disabledItem('+', 'Create user'),
+    )
+  }
 
   // Backup - requires database selection for multi-db containers
   actionChoices.push(
@@ -903,6 +921,7 @@ export async function showContainerSubmenu(
       name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
       value: 'main',
     },
+    new inquirer.Separator(),
   )
 
   const { action } = await escapeablePrompt<{ action: string }>([
@@ -989,6 +1008,10 @@ export async function showContainerSubmenu(
       return
     case 'copy':
       await handleCopyConnectionString(containerName, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      return
+    case 'create_user':
+      await handleCreateUser(containerName, activeDatabase)
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
     case 'backup':
@@ -2089,4 +2112,132 @@ async function handleExportDocker(
 
   await pressEnterToContinue()
   await showContainerSubmenu(containerName, showMainMenu, undefined)
+}
+
+async function handleCreateUser(
+  containerName: string,
+  activeDatabase?: string,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  try {
+    // Prompt for username
+    const defaultUser = getDefaultUsername(config.engine)
+    const { username } = await escapeablePrompt<{ username: string }>([
+      {
+        type: 'input',
+        name: 'username',
+        message: 'Username:',
+        default: defaultUser,
+        validate: (input: string) => {
+          if (!input.trim()) return 'Username is required'
+          if (!isValidUsername(input)) {
+            return 'Must start with a letter, contain only letters/numbers/underscores'
+          }
+          return true
+        },
+      },
+    ])
+
+    // Check for existing credentials
+    if (credentialsExist(containerName, config.engine, username)) {
+      const overwrite = await promptConfirm(
+        `Credentials for "${username}" already exist. Overwrite?`,
+        false,
+      )
+      if (!overwrite) {
+        console.log(chalk.yellow('Credential creation cancelled.'))
+        await pressEnterToContinue()
+        return
+      }
+    }
+
+    const password = generatePassword({ length: 20, alphanumericOnly: true })
+    const engine = getEngine(config.engine)
+
+    const spinner = createSpinner(`Creating user "${username}"...`)
+    spinner.start()
+
+    let credentials
+    try {
+      credentials = await engine.createUser(config, {
+        username,
+        password,
+        database: activeDatabase || config.database,
+      })
+      spinner.succeed(`Created user "${username}"`)
+    } catch (error) {
+      spinner.fail(`Failed to create user "${username}"`)
+      throw error
+    }
+
+    // Save credentials (non-fatal — credentials are already created)
+    let credentialFile: string | undefined
+    try {
+      credentialFile = await saveCredentials(
+        containerName,
+        config.engine,
+        credentials,
+      )
+    } catch (error) {
+      console.log(
+        uiWarning(
+          `Could not save credentials to disk: ${(error as Error).message}`,
+        ),
+      )
+    }
+
+    console.log()
+    if (credentials.apiKey) {
+      console.log(`  ${chalk.gray('Key name:')}  ${credentials.username}`)
+      console.log(`  ${chalk.gray('API key:')}   ${credentials.apiKey}`)
+      console.log(
+        `  ${chalk.gray('API URL:')}   ${credentials.connectionString}`,
+      )
+    } else {
+      console.log(`  ${chalk.gray('Username:')}  ${credentials.username}`)
+      console.log(`  ${chalk.gray('Password:')}  ${credentials.password}`)
+      if (credentials.database) {
+        console.log(`  ${chalk.gray('Database:')}  ${credentials.database}`)
+      }
+      console.log(
+        `  ${chalk.gray('URL:')}       ${credentials.connectionString}`,
+      )
+    }
+    if (credentialFile) {
+      console.log()
+      console.log(`  ${chalk.gray('Saved to:')} ${credentialFile}`)
+    }
+    console.log()
+
+    // Offer to copy to clipboard
+    try {
+      const copyText = credentials.apiKey || credentials.connectionString
+      const copied = await platformService.copyToClipboard(copyText)
+      if (copied) {
+        console.log(
+          uiSuccess(
+            credentials.apiKey
+              ? 'API key copied to clipboard'
+              : 'Connection string copied to clipboard',
+          ),
+        )
+      }
+    } catch {
+      // Clipboard failure is non-critical — credentials are already displayed above
+    }
+  } catch (error) {
+    if (error instanceof UnsupportedOperationError) {
+      console.log(uiError('User management is not supported for this engine'))
+    } else {
+      console.log(uiError((error as Error).message))
+    }
+  }
+
+  await pressEnterToContinue()
 }

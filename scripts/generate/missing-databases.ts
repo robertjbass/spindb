@@ -34,6 +34,7 @@ const SUPPORTED_ENGINES = [
   'cockroachdb',
   'surrealdb',
   'questdb',
+  'typedb',
 ] as const
 
 type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]

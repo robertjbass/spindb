@@ -51,6 +51,7 @@ import { getEngineIcon, getPageSize } from '../../constants'
 import { Engine, assertExhaustive } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
+import { validateTypedbConnectionString } from './validators'
 
 // Strip surrounding quotes from paths (handles drag-and-drop paths)
 function stripQuotes(path: string): string {
@@ -205,6 +206,12 @@ function validateConnectionString(
         !input.startsWith('postgres://')
       ) {
         return 'Connection string must start with postgresql:// or postgres://'
+      }
+      break
+    case Engine.TypeDB:
+      {
+        const typedbError = validateTypedbConnectionString(input)
+        if (typedbError) return typedbError
       }
       break
     case Engine.SQLite:

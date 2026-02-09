@@ -224,6 +224,16 @@ export type InstalledQuestDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledTypeDBEngine = {
+  engine: 'typedb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -241,6 +251,7 @@ export type InstalledEngine =
   | InstalledCockroachDBEngine
   | InstalledSurrealDBEngine
   | InstalledQuestDBEngine
+  | InstalledTypeDBEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1088,6 +1099,57 @@ async function getInstalledQuestDBEngines(): Promise<InstalledQuestDBEngine[]> {
   return engines
 }
 
+// Get TypeDB version from binary path
+// TypeDB is a Rust binary but uses a launcher script. Check for server binary existence.
+async function getTypeDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const serverPath = join(binPath, 'bin', 'server', `typedb_server_bin${ext}`)
+  if (!existsSync(serverPath)) {
+    return null
+  }
+  // TypeDB server binary doesn't have a simple --version flag
+  // Return null to use directory-parsed version
+  return null
+}
+
+// Get installed TypeDB engines from downloaded binaries
+async function getInstalledTypeDBEngines(): Promise<InstalledTypeDBEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledTypeDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('typedb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'typedb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getTypeDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'typedb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 // Get FerretDB version from binary path
 async function getFerretDBVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1182,6 +1244,7 @@ const ENGINE_PREFIXES = [
   'cockroachdb-',
   'surrealdb-',
   'questdb-',
+  'typedb-',
 ] as const
 
 /**
@@ -1228,6 +1291,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     cockroachdbEngines,
     surrealdbEngines,
     questdbEngines,
+    typedbEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1245,6 +1309,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledCockroachDBEngines(),
     getInstalledSurrealDBEngines(),
     getInstalledQuestDBEngines(),
+    getInstalledTypeDBEngines(),
   ])
 
   return [
@@ -1264,6 +1329,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...cockroachdbEngines,
     ...surrealdbEngines,
     ...questdbEngines,
+    ...typedbEngines,
   ]
 }
 
@@ -1283,4 +1349,5 @@ export {
   getInstalledCockroachDBEngines,
   getInstalledSurrealDBEngines,
   getInstalledQuestDBEngines,
+  getInstalledTypeDBEngines,
 }

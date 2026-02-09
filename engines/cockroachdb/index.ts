@@ -22,7 +22,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { findBinary } from '../../core/dependency-manager'
 import { processManager } from '../../core/process-manager'
 import { cockroachdbBinaryManager } from './binary-manager'
@@ -59,6 +63,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseCSVToQueryResult } from '../../core/query-parser'
 
@@ -347,7 +353,7 @@ export class CockroachDBEngine extends BaseEngine {
 
     // Wait for server to be ready
     // Windows needs a longer timeout since CockroachDB initialization takes more time
-    const timeout = isWindows ? 90000 : 60000
+    const timeout = isWindows ? 120000 : 60000
     logDebug(
       `Waiting for CockroachDB server to be ready on port ${port}... (timeout: ${timeout}ms)`,
     )
@@ -1200,6 +1206,67 @@ export class CockroachDBEngine extends BaseEngine {
         resolve(databases)
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port, version } = container
+    const db = database || container.database || 'defaultdb'
+
+    validateCockroachIdentifier(username, 'user')
+    validateCockroachIdentifier(db, 'database')
+    const escapedUser = escapeCockroachIdentifier(username)
+    const escapedDb = escapeCockroachIdentifier(db)
+
+    const cockroach = await this.getCockroachPath(version)
+
+    // CockroachDB in insecure mode doesn't support passwords.
+    // Create user without password and grant privileges.
+    // SQL is sent via stdin to avoid shell escaping issues with --execute.
+    const sql = `CREATE USER IF NOT EXISTS ${escapedUser}; GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser};`
+
+    const args = ['sql', '--insecure', '--host', `127.0.0.1:${port}`]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(cockroach, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Failed to create user: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+
+      proc.stdin?.write(sql)
+      proc.stdin?.end()
+    })
+
+    // In insecure mode, connections don't use passwords
+    const connectionString = `postgresql://${encodeURIComponent(username)}@127.0.0.1:${port}/${db}?sslmode=disable`
+
+    return {
+      username,
+      // CockroachDB insecure mode does not enforce password authentication,
+      // but we return the caller-provided password for credential file consistency.
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

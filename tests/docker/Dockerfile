@@ -32,6 +32,7 @@
 # - SQLite: sqlite3, sqldiff, sqlite3_analyzer, sqlite3_rsync
 # - DuckDB: duckdb
 # - Qdrant: qdrant (REST API engine - tests use curl instead of CLI)
+# - TypeDB: typedb, typedb_console_bin
 
 FROM ubuntu:22.04
 
@@ -99,18 +100,22 @@ ENV PATH="$PNPM_HOME:$PATH"
 # Set CI=true so SpinDB knows sudo is passwordless
 ENV CI=true
 
-# Copy SpinDB source and set ownership
-COPY --chown=spindb:spindb . /home/spindb/spindb
-
 # Switch to non-root user
 USER spindb
-WORKDIR /home/spindb/spindb
 
 # Create pnpm directories
 RUN mkdir -p $PNPM_HOME
 
-# Install dependencies
+# Copy package files first for better layer caching
+# These rarely change, so the install layer is cached across most builds
+COPY --chown=spindb:spindb package.json pnpm-lock.yaml /home/spindb/spindb/
+WORKDIR /home/spindb/spindb
+
+# Install dependencies (cached unless package.json/lockfile change)
 RUN pnpm install --frozen-lockfile
+
+# Now copy the rest of the source (changes frequently, but install is cached)
+COPY --chown=spindb:spindb . /home/spindb/spindb/
 
 # Link globally so 'spindb' command works
 RUN pnpm link --global

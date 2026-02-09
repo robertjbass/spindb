@@ -1,0 +1,21 @@
+transaction schema test_tdb
+
+define
+  entity test_user;
+  attribute id value integer;
+  attribute name value string;
+  attribute email value string;
+  test_user owns id, owns name, owns email;
+
+commit
+
+transaction write test_tdb
+
+insert
+$u1 isa test_user, has id 1, has name "Alice", has email "alice@example.com";
+$u2 isa test_user, has id 2, has name "Bob", has email "bob@example.com";
+$u3 isa test_user, has id 3, has name "Charlie", has email "charlie@example.com";
+$u4 isa test_user, has id 4, has name "Diana", has email "diana@example.com";
+$u5 isa test_user, has id 5, has name "Eve", has email "eve@example.com";
+
+commit

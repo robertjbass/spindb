@@ -164,3 +164,9 @@ tests/fixtures/qdrant/snapshots/*.snapshot
 
 # Private docs
 MONETIZATION.md
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*

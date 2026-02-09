@@ -78,6 +78,8 @@ const SURREALDB_TOOLS: BinaryTool[] = ['surreal']
 
 const QUESTDB_TOOLS: BinaryTool[] = ['questdb']
 
+const TYPEDB_TOOLS: BinaryTool[] = ['typedb', 'typedb_console_bin']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -100,6 +102,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...COCKROACHDB_TOOLS,
   ...SURREALDB_TOOLS,
   ...QUESTDB_TOOLS,
+  ...TYPEDB_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -121,6 +124,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.CockroachDB]: COCKROACHDB_TOOLS,
   [Engine.SurrealDB]: SURREALDB_TOOLS,
   [Engine.QuestDB]: QUESTDB_TOOLS,
+  [Engine.TypeDB]: TYPEDB_TOOLS,
 }
 
 export class ConfigManager {
@@ -352,6 +356,7 @@ export class ConfigManager {
     redis: { found: BinaryTool[]; missing: BinaryTool[] }
     valkey: { found: BinaryTool[]; missing: BinaryTool[] }
     meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
+    typedb: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
     // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
@@ -404,6 +409,10 @@ export class ConfigManager {
       meilisearch: {
         found: found.filter((t) => MEILISEARCH_TOOLS.includes(t)),
         missing: missing.filter((t) => MEILISEARCH_TOOLS.includes(t)),
+      },
+      typedb: {
+        found: found.filter((t) => TYPEDB_TOOLS.includes(t)),
+        missing: missing.filter((t) => TYPEDB_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
@@ -601,6 +610,7 @@ export {
   COCKROACHDB_TOOLS,
   SURREALDB_TOOLS,
   QUESTDB_TOOLS,
+  TYPEDB_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

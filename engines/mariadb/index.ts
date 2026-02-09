@@ -23,6 +23,7 @@ import {
   ErrorCodes,
   SpinDBError,
   assertValidDatabaseName,
+  assertValidUsername,
 } from '../../core/error-handler'
 import { mariadbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -47,6 +48,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseTSVToQueryResult } from '../../core/query-parser'
 
@@ -432,7 +435,7 @@ export class MariaDBEngine extends BaseEngine {
 
         // Wait for MariaDB to be ready
         let attempts = 0
-        const maxAttempts = 30
+        const maxAttempts = 60
         const checkInterval = 500
 
         const checkReady = async () => {
@@ -1167,6 +1170,98 @@ export class MariaDBEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database || 'mysql'
+    assertValidDatabaseName(db)
+    const mariadb = await this.getMariadbClientPath()
+
+    // Check if NO_BACKSLASH_ESCAPES is enabled — if so, only escape single quotes
+    let noBackslashEscapes = false
+    try {
+      const modeArgs = [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
+        engineDef.superuser,
+        '-N',
+        '-B',
+        '-e',
+        'SELECT @@sql_mode',
+      ]
+      const modeResult = await new Promise<string>((resolve, reject) => {
+        const proc = spawn(mariadb, modeArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        let stdout = ''
+        proc.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.on('close', (code) => {
+          if (code === 0) resolve(stdout.trim())
+          else reject(new Error(`Failed to query sql_mode`))
+        })
+        proc.on('error', reject)
+      })
+      noBackslashEscapes = modeResult.includes('NO_BACKSLASH_ESCAPES')
+    } catch {
+      // Default to backslash-escaping if query fails
+    }
+
+    const escapedPass = noBackslashEscapes
+      ? password.replace(/'/g, "''")
+      : password.replace(/\\/g, '\\\\').replace(/'/g, "''")
+    const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
+
+    // Send SQL via stdin to avoid leaking password in process argv
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-P',
+      String(port),
+      '-u',
+      engineDef.superuser,
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(mariadb, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`Failed to create user: ${stderr}`))
+      })
+      proc.on('error', reject)
+
+      proc.stdin?.write(sql)
+      proc.stdin?.end()
+    })
+
+    const connectionString = `mysql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

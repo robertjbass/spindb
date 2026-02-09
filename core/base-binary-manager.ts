@@ -44,6 +44,9 @@ export type BinaryManagerConfig = {
 export abstract class BaseBinaryManager {
   protected abstract readonly config: BinaryManagerConfig
 
+  /** Timeout for `--version` verification after download (ms). Override in subclass if needed. */
+  protected verifyTimeoutMs = 30_000
+
   /**
    * Get the download URL for a version.
    * Must be implemented by subclass to use engine-specific binary-urls module.
@@ -446,7 +449,9 @@ export abstract class BaseBinaryManager {
     }
 
     try {
-      const { stdout, stderr } = await spawnAsync(serverPath, ['--version'])
+      const { stdout, stderr } = await spawnAsync(serverPath, ['--version'], {
+        timeout: this.verifyTimeoutMs,
+      })
       // Log stderr if present (may contain warnings)
       if (stderr && stderr.trim()) {
         logDebug(`${this.config.serverBinary} stderr`, {

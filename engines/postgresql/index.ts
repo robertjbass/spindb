@@ -30,6 +30,7 @@ import {
 import { switchHomebrewVersion } from '../../core/homebrew-version-manager'
 import {
   assertValidDatabaseName,
+  assertValidUsername,
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
@@ -47,6 +48,8 @@ import type {
   StatusResult,
   QueryResult,
   QueryOptions,
+  CreateUserOptions,
+  UserCredentials,
 } from '../../types'
 
 const execAsync = promisify(exec)
@@ -1042,6 +1045,95 @@ export class PostgreSQLEngine extends BaseEngine {
         }
       })
     })
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password, database } = options
+    assertValidUsername(username)
+    const { port } = container
+    const db = database || container.database
+    if (!db) {
+      throw new Error(
+        'No target database specified. Provide a database name with --database or ensure the container has a default database.',
+      )
+    }
+    assertValidDatabaseName(db)
+    const psqlPath = await this.getPsqlPath()
+
+    // Pass SQL via stdin (psql -f -) to avoid exposing passwords in process listings
+    const psqlBaseArgs = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      defaults.superuser,
+      '-d',
+      'postgres',
+      '-f',
+      '-',
+    ]
+
+    const runPsqlViaStdin = (sql: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const proc = spawn(psqlPath, psqlBaseArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          ...getWindowsSpawnOptions(),
+        })
+
+        let stderr = ''
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
+
+        proc.on('error', reject)
+
+        proc.on('close', (code) => {
+          if (code === 0) resolve()
+          else reject(new Error(stderr || `psql exited with code ${code}`))
+        })
+
+        proc.stdin?.write(sql)
+        proc.stdin?.end()
+      })
+
+    // Escape username for safe identifier interpolation (defense-in-depth)
+    const escapedIdent = username.replace(/"/g, '""')
+    const escapedPass = password.replace(/'/g, "''")
+
+    // Create the role with login and password
+    const createRoleSql = `CREATE ROLE "${escapedIdent}" WITH LOGIN PASSWORD '${escapedPass}'`
+
+    try {
+      await runPsqlViaStdin(createRoleSql)
+    } catch (error) {
+      const err = error as Error
+      if (err.message.includes('already exists')) {
+        // User exists — update password instead
+        const alterSql = `ALTER ROLE "${escapedIdent}" WITH PASSWORD '${escapedPass}'`
+        await runPsqlViaStdin(alterSql)
+      } else {
+        throw error
+      }
+    }
+
+    // Grant all privileges on the target database
+    const grantSql = `GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${escapedIdent}"`
+    await runPsqlViaStdin(grantSql)
+
+    const connectionString = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 

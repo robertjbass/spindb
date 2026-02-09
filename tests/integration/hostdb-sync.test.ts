@@ -22,8 +22,23 @@ import { MARIADB_VERSION_MAP } from '../../engines/mariadb/version-maps'
 import { MONGODB_VERSION_MAP } from '../../engines/mongodb/version-maps'
 import { REDIS_VERSION_MAP } from '../../engines/redis/version-maps'
 import { SQLITE_VERSION_MAP } from '../../engines/sqlite/version-maps'
+import { CLICKHOUSE_VERSION_MAP } from '../../engines/clickhouse/version-maps'
+import { COCKROACHDB_VERSION_MAP } from '../../engines/cockroachdb/version-maps'
+import { COUCHDB_VERSION_MAP } from '../../engines/couchdb/version-maps'
+import { DUCKDB_VERSION_MAP } from '../../engines/duckdb/version-maps'
+import {
+  FERRETDB_VERSION_MAP,
+  DOCUMENTDB_VERSION_MAP,
+} from '../../engines/ferretdb/version-maps'
+import { MEILISEARCH_VERSION_MAP } from '../../engines/meilisearch/version-maps'
+import { QDRANT_VERSION_MAP } from '../../engines/qdrant/version-maps'
+import { QUESTDB_VERSION_MAP } from '../../engines/questdb/version-maps'
+import { SURREALDB_VERSION_MAP } from '../../engines/surrealdb/version-maps'
+import { TYPEDB_VERSION_MAP } from '../../engines/typedb/version-maps'
+import { VALKEY_VERSION_MAP } from '../../engines/valkey/version-maps'
 
 // Engine configurations for testing
+// Names must match the keys in hostdb releases.json
 const ENGINES = [
   { name: 'postgresql', map: POSTGRESQL_VERSION_MAP },
   { name: 'mysql', map: MYSQL_VERSION_MAP },
@@ -31,6 +46,18 @@ const ENGINES = [
   { name: 'mongodb', map: MONGODB_VERSION_MAP },
   { name: 'redis', map: REDIS_VERSION_MAP },
   { name: 'sqlite', map: SQLITE_VERSION_MAP },
+  { name: 'clickhouse', map: CLICKHOUSE_VERSION_MAP },
+  { name: 'cockroachdb', map: COCKROACHDB_VERSION_MAP },
+  { name: 'couchdb', map: COUCHDB_VERSION_MAP },
+  { name: 'duckdb', map: DUCKDB_VERSION_MAP },
+  { name: 'ferretdb', map: FERRETDB_VERSION_MAP },
+  { name: 'postgresql-documentdb', map: DOCUMENTDB_VERSION_MAP },
+  { name: 'meilisearch', map: MEILISEARCH_VERSION_MAP },
+  { name: 'qdrant', map: QDRANT_VERSION_MAP },
+  { name: 'questdb', map: QUESTDB_VERSION_MAP },
+  { name: 'surrealdb', map: SURREALDB_VERSION_MAP },
+  { name: 'typedb', map: TYPEDB_VERSION_MAP },
+  { name: 'valkey', map: VALKEY_VERSION_MAP },
 ] as const
 
 describe('hostdb Version Sync Verification', () => {

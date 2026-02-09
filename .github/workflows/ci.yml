@@ -3,32 +3,34 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  # TODO - uncomment to test on dev branch push
-  # push:
-  #   branches: [dev]
+  push:
+    branches: [dev]
   workflow_dispatch:
 
 # =============================================================================
-# OS Coverage Strategy
+# OS Coverage Strategy (Tiered)
 # =============================================================================
-# We test on 5 OS variants to cover different platforms and architectures:
-#   - ubuntu-22.04 (x64) - LTS with older glibc/system libraries
-#   - ubuntu-24.04 (x64) - LTS with newer libraries (catches issues like libaio rename)
-#   - macos-15 (Intel x64) - Sequoia
-#   - macos-14 (ARM64/Apple Silicon) - Sonoma
-#   - windows-latest (x64)
+# Platform-arch combos we test (all 5 supported):
+#   - linux-x64:     ubuntu-22.04 (older glibc) + ubuntu-24.04 (newer glibc)
+#   - linux-arm64:   Docker + QEMU smoke test (download, start, query, stop)
+#   - darwin-x64:    macos-15-intel (Intel, available until Aug 2027)
+#   - darwin-arm64:  macos-14 (Apple Silicon)
+#   - win32-x64:     windows-latest
 #
-# Note: We test two Ubuntu versions instead of Linux ARM64 because:
-#   1. GitHub Actions doesn't offer free native Linux ARM64 runners
-#   2. QEMU emulation is too slow and flaky for CI
-#   3. Two Ubuntu LTS versions catch real library compatibility issues
-#   4. macOS ARM64 validates ARM code paths
-#   5. A commented-out ARM64 job exists below if native runners become available
+# Note: macos-14 and macos-15 are BOTH ARM64 runners. To test darwin-x64
+# you must use macos-15-intel (or the deprecated macos-13).
 #
-# Windows Strategy:
-# Windows tests run in parallel within each engine's matrix (windows-latest).
-# A sequential test-windows-all job is commented out below as a fallback if
-# parallel Windows jobs ever exhaust the runner pool again.
+# All engines (5 runners): ubuntu-22.04, ubuntu-24.04, macos-15-intel, macos-14,
+#   windows-latest
+#
+# Exceptions:
+#   - ClickHouse, FerretDB: No Windows (no hostdb binaries) → 4 runners
+#   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
+#
+# Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
+#
+# Full matrix available via: ci-full.yml (manual dispatch or weekly)
+# See TESTING_STRATEGY.md for rollback instructions.
 # =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
@@ -47,15 +49,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            icon: 🐧
-            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64 24.04
-          - os: macos-15
-            icon: 🍎
-            label: macOS x64
+            label: Linux x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -150,7 +146,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -214,7 +210,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -276,7 +272,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -356,7 +352,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -417,7 +413,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -478,7 +474,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -541,13 +537,12 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
-          # Windows not supported - postgresql-documentdb has startup issues
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -636,7 +631,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -698,7 +693,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -753,7 +748,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
       matrix:
         include:
           - os: ubuntu-22.04
@@ -762,13 +756,12 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
-          # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -839,7 +832,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -917,7 +910,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -993,7 +986,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -1070,7 +1063,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -1161,7 +1154,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -1251,7 +1244,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -1329,10 +1322,12 @@ jobs:
           }
 
   # ============================================
-  # CLI End-to-End Tests (PostgreSQL + SQLite)
+  # TypeDB Integration Tests
+  # Uses SpinDB to download and manage TypeDB binaries from hostdb
+  # TypeDB is a knowledge graph database with TypeQL query language
   # ============================================
-  test-cli-e2e:
-    name: CLI E2E ${{ matrix.icon }} ${{ matrix.label }}
+  test-typedb:
+    name: TypeDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -1344,7 +1339,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15
+          - os: macos-15-intel
             icon: 🍎
             label: macOS x64
           - os: macos-14
@@ -1353,6 +1348,85 @@ jobs:
           - os: windows-latest
             icon: 🪟
             label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache TypeDB binaries - these are downloaded from hostdb
+      - name: Cache TypeDB binaries
+        uses: actions/cache@v4
+        id: typedb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-typedb-3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download TypeDB binaries
+      - name: Install TypeDB via SpinDB
+        run: pnpm start engines download typedb 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run TypeDB integration tests
+        run: pnpm test:engine typedb
+        timeout-minutes: 15
+
+      - name: Show TypeDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== TypeDB container directories ==="
+          ls -la ~/.spindb/containers/typedb/ 2>/dev/null || echo "No TypeDB containers directory"
+          echo ""
+          echo "=== TypeDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i typedb || echo "No TypeDB binaries found"
+          echo ""
+          echo "=== TypeDB log files ==="
+          find ~/.spindb/containers/typedb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show TypeDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== TypeDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TypeDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'typedb' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TypeDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # CLI End-to-End Tests (PostgreSQL + SQLite)
+  # ============================================
+  test-cli-e2e:
+    name: CLI E2E ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1547,12 +1621,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
+      max-parallel: 4 # Limit parallel jobs to reduce runner contention
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -2174,11 +2254,11 @@ jobs:
   #       shell: bash
 
   # ============================================
-  # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
+  # Docker Linux x64 - Tests library dependencies on minimal Linux
   # Verifies hostdb binaries work on clean Ubuntu systems
   # ============================================
   test-docker-linux:
-    name: Docker Linux Edge Cases
+    name: Docker Linux x64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -2190,6 +2270,52 @@ jobs:
       - name: Run Docker E2E tests
         run: docker run --rm spindb-e2e
         timeout-minutes: 30
+
+  # ============================================
+  # Docker Linux ARM64 (QEMU) - Smoke tests for linux-arm64 binaries
+  # Verifies each engine's hostdb arm64 binary can start and handle a query.
+  # Runs under QEMU emulation so it's slow (~30-45 min) but catches broken
+  # arm64 binaries that no other CI job tests.
+  # ============================================
+  test-docker-linux-arm64:
+    name: Docker Linux ARM64 (QEMU)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ARM64 Docker test image
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -t spindb-e2e-arm64 \
+            -f tests/docker/Dockerfile \
+            --load .
+        timeout-minutes: 30
+
+      - name: Run ARM64 smoke tests
+        # QEMU emulation is ~5-10x slower than native; increase timeouts so
+        # engines with 30-90s internal waitForReady don't get killed.
+        # SurrealDB is skipped: its large Rust binary hangs during --version
+        # verification under QEMU user-mode emulation.
+        # ClickHouse is skipped: its heavy binary consistently exceeds startup
+        # timeouts under QEMU (~120s+ native, far longer emulated). Tested
+        # natively on macOS/Linux CI runners instead.
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -e START_TIMEOUT=600 \
+            -e STARTUP_TIMEOUT=180 \
+            -e "SKIP_ENGINES=surrealdb clickhouse" \
+            spindb-e2e-arm64
+        timeout-minutes: 90
 
   # ============================================
   # Docker Export Test - Tests the `spindb export docker` functionality
@@ -2590,6 +2716,7 @@ jobs:
         test-cockroachdb,
         test-surrealdb,
         test-questdb,
+        test-typedb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -2598,6 +2725,7 @@ jobs:
         test-self-update,
         # test-windows-all,  # Commented out - using parallel Windows tests instead
         test-docker-linux,
+        test-docker-linux-arm64,
         test-docker-export,
         lint,
         hostdb-sync,
@@ -2674,6 +2802,10 @@ jobs:
             echo "QuestDB tests failed"
             exit 1
           fi
+          if [ "${{ needs.test-typedb.result }}" != "success" ]; then
+            echo "TypeDB tests failed"
+            exit 1
+          fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
             echo "CLI E2E tests failed"
             exit 1
@@ -2700,7 +2832,11 @@ jobs:
           fi
           # test-windows-all check removed - using parallel Windows tests instead
           if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
-            echo "Docker Linux edge case tests failed"
+            echo "Docker Linux x64 tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-docker-linux-arm64.result }}" != "success" ]; then
+            echo "Docker Linux ARM64 smoke tests failed"
             exit 1
           fi
           if [ "${{ needs.test-docker-export.result }}" != "success" ]; then

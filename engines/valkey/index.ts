@@ -8,7 +8,11 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import { valkeyBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
@@ -37,6 +41,8 @@ import {
   type StatusResult,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRedisResult } from '../../core/query-parser'
 
@@ -241,6 +247,11 @@ dbfilename dump.rdb
 
 # Append Only File (disabled for local dev)
 appendonly no
+
+# Suppress ARM64 copy-on-write warning with Transparent Huge Pages.
+# Redis/Valkey refuses to start on ARM64 with THP enabled unless this is set.
+# Safe for local development (SpinDB's use case).
+ignore-warnings ARM64-COW-BUG
 `
 }
 
@@ -689,7 +700,7 @@ export class ValkeyEngine extends BaseEngine {
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 30000,
+    timeoutMs = 60000,
   ): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 500
@@ -1460,6 +1471,63 @@ export class ValkeyEngine extends BaseEngine {
     // Valkey has numbered databases, not named ones
     // Return the container's configured database
     return [container.database]
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { username, password } = options
+    assertValidUsername(username)
+    const { port, version } = container
+    const db = options.database ?? container.database ?? '0'
+    const valkeyCli = await this.getValkeyCliPath(version)
+
+    // Reject passwords with characters that break ACL SETUSER syntax:
+    // '>' sets password, '#' sets hash, '<' removes password — all are ACL delimiters.
+    // Whitespace and newlines would split the command unexpectedly.
+    if (/[>#<\s\n\r]/.test(password)) {
+      throw new Error(
+        'Password contains invalid characters for Valkey ACL. Passwords must not contain ">", "#", "<", whitespace, or newlines.',
+      )
+    }
+
+    // ACL SETUSER is idempotent - sets user with full access
+    // Send ACL command via stdin to avoid leaking password in process argv
+    const cliArgs = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(valkeyCli, cliArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`Failed to create user: ${stderr}`))
+      })
+      proc.on('error', reject)
+
+      proc.stdin?.write(`ACL SETUSER ${username} on >${password} ~* &* +@all\n`)
+      proc.stdin?.end()
+    })
+    logDebug(`Created Valkey user: ${username}`)
+
+    // Valkey uses redis:// scheme for compatibility
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+
+    return {
+      username,
+      password,
+      connectionString,
+      engine: container.engine,
+      container: container.name,
+      database: db,
+    }
   }
 }
 
