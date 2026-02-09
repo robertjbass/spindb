@@ -128,8 +128,8 @@ describe('CockroachDB Integration Tests', () => {
     await engine.start(config!)
     await containerManager.updateConfig(containerName, { status: 'running' })
 
-    // Wait for CockroachDB to be ready (90s timeout for slow CI runners)
-    const ready = await waitForReady(ENGINE, testPorts[0], 90000)
+    // Wait for CockroachDB to be ready (120s timeout for slow CI runners, especially Windows)
+    const ready = await waitForReady(ENGINE, testPorts[0], 120000)
     assert(ready, 'CockroachDB should be ready to accept connections')
 
     const running = await processManager.isRunning(containerName, {

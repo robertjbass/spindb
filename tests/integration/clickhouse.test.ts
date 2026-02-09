@@ -232,8 +232,8 @@ describe(
       await engine.start(config!)
       await containerManager.updateConfig(containerName, { status: 'running' })
 
-      // Wait for ClickHouse to be ready (90s timeout for slow CI runners)
-      const ready = await waitForReady(ENGINE, testPorts[0], 90000)
+      // Wait for ClickHouse to be ready (120s timeout for slow CI runners)
+      const ready = await waitForReady(ENGINE, testPorts[0], 120000)
       assert(ready, 'ClickHouse should be ready to accept connections')
 
       const running = await processManager.isRunning(containerName, {
@@ -372,7 +372,7 @@ describe(
       })
 
       // Wait for it to be ready
-      const ready = await waitForReady(ENGINE, testPorts[1], 90000)
+      const ready = await waitForReady(ENGINE, testPorts[1], 120000)
       assert(ready, 'Cloned ClickHouse should be ready before restore')
 
       // Create backup from source
@@ -531,7 +531,7 @@ describe(
       })
 
       // Wait for ready
-      const ready = await waitForReady(ENGINE, testPorts[2], 90000)
+      const ready = await waitForReady(ENGINE, testPorts[2], 120000)
       assert(ready, 'Renamed ClickHouse should be ready')
 
       // Verify row count reflects deletion

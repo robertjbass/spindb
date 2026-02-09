@@ -353,7 +353,7 @@ export class CockroachDBEngine extends BaseEngine {
 
     // Wait for server to be ready
     // Windows needs a longer timeout since CockroachDB initialization takes more time
-    const timeout = isWindows ? 90000 : 60000
+    const timeout = isWindows ? 120000 : 60000
     logDebug(
       `Waiting for CockroachDB server to be ready on port ${port}... (timeout: ${timeout}ms)`,
     )
