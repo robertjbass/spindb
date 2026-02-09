@@ -1334,13 +1334,20 @@ export class CouchDBEngine extends BaseEngine {
         'GET',
         `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
       )
-      const rev = (getResponse.data as Record<string, unknown>)?._rev as string
-      if (!rev) {
+
+      if (getResponse.status !== 200 || !getResponse.data) {
         throw new Error(
-          `User "${username}" already exists and could not be updated`,
+          `Failed to fetch existing user "${username}" (status ${getResponse.status}): ${JSON.stringify(getResponse.data)}`,
         )
       }
+
       const existingDoc = getResponse.data as Record<string, unknown>
+      const rev = existingDoc._rev as string
+      if (!rev) {
+        throw new Error(
+          `User "${username}" already exists but document has no _rev field: ${JSON.stringify(getResponse.data)}`,
+        )
+      }
       const updateResponse = await couchdbApiRequest(
         port,
         'PUT',

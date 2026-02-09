@@ -1266,9 +1266,25 @@ export class QdrantEngine extends BaseEngine {
 
     const updatedConfig = lines.join('\n')
 
+    // Validate the modified config is structurally sound before writing
+    // Check that service section and api_key line are present
+    const updatedLines = updatedConfig.split('\n')
+    const hasService = updatedLines.some((l) => /^service:/.test(l))
+    const hasApiKey = updatedLines.some((l) => /^\s+api_key:/.test(l))
+    if (!hasService || !hasApiKey) {
+      throw new Error(
+        'Failed to update Qdrant config: modified YAML is structurally invalid. ' +
+          'The service section or api_key entry is missing after modification.',
+      )
+    }
+
     // Only restart if the container is currently running
     const statusResult = await this.status(container)
     if (statusResult.running) {
+      logWarning(
+        `Restarting Qdrant container "${name}" to apply API key change. ` +
+          'Active client connections will be disconnected.',
+      )
       await this.stop(container)
       await writeFile(configPath, updatedConfig)
       await chmod(configPath, 0o600)

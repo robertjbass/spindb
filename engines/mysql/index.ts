@@ -1274,7 +1274,8 @@ export class MySQLEngine extends BaseEngine {
 
     const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
     const escapedDb = db.replace(/`/g, '``')
-    const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${escapedDb}\`.* TO '${username}'@'%'; GRANT ALL ON \`${escapedDb}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
+    const escapedUser = username.replace(/\\/g, '\\\\').replace(/'/g, "''")
+    const sql = `CREATE USER IF NOT EXISTS '${escapedUser}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${escapedUser}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${escapedUser}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${escapedUser}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${escapedDb}\`.* TO '${escapedUser}'@'%'; GRANT ALL ON \`${escapedDb}\`.* TO '${escapedUser}'@'localhost'; FLUSH PRIVILEGES;`
 
     // Send SQL via stdin to avoid leaking password in process argv
     const args = [

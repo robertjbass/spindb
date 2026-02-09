@@ -1183,7 +1183,43 @@ export class MariaDBEngine extends BaseEngine {
     assertValidDatabaseName(db)
     const mariadb = await this.getMariadbClientPath()
 
-    const escapedPass = password.replace(/\\/g, '\\\\').replace(/'/g, "''")
+    // Check if NO_BACKSLASH_ESCAPES is enabled — if so, only escape single quotes
+    let noBackslashEscapes = false
+    try {
+      const modeArgs = [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
+        engineDef.superuser,
+        '-N',
+        '-B',
+        '-e',
+        'SELECT @@sql_mode',
+      ]
+      const modeResult = await new Promise<string>((resolve, reject) => {
+        const proc = spawn(mariadb, modeArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        let stdout = ''
+        proc.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.on('close', (code) => {
+          if (code === 0) resolve(stdout.trim())
+          else reject(new Error(`Failed to query sql_mode`))
+        })
+        proc.on('error', reject)
+      })
+      noBackslashEscapes = modeResult.includes('NO_BACKSLASH_ESCAPES')
+    } catch {
+      // Default to backslash-escaping if query fails
+    }
+
+    const escapedPass = noBackslashEscapes
+      ? password.replace(/'/g, "''")
+      : password.replace(/\\/g, '\\\\').replace(/'/g, "''")
     const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
 
     // Send SQL via stdin to avoid leaking password in process argv

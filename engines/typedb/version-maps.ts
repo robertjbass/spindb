@@ -5,6 +5,8 @@
  * MUST stay in sync with hostdb releases.json
  */
 
+import { logDebug } from '../../core/error-handler'
+
 // Full version map for TypeDB
 export const TYPEDB_VERSION_MAP: Record<string, string> = {
   '3': '3.8.0',
@@ -23,6 +25,11 @@ export const DEFAULT_VERSION = '3'
  * e.g., '3' -> '3.8.0', '3.8' -> '3.8.0'
  */
 export function normalizeVersion(version: string): string {
+  if (!TYPEDB_VERSION_MAP[version]) {
+    logDebug(
+      `TypeDB version "${version}" not found in TYPEDB_VERSION_MAP (available: ${Object.keys(TYPEDB_VERSION_MAP).join(', ')}), using as-is`,
+    )
+  }
   return TYPEDB_VERSION_MAP[version] || version
 }
 

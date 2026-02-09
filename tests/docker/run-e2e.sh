@@ -1856,6 +1856,11 @@ print_final_summary() {
     echo "  ${RED}${BOLD}✗ $FAILED TEST(S) FAILED${RESET}"
     echo ""
   fi
+
+  # Note excluded engines so the count isn't confusing
+  echo "  ${DIM}Excluded from Docker E2E: ferretdb (composite architecture;${RESET}"
+  echo "  ${DIM}tested via 'pnpm test:engine ferretdb' in CI instead)${RESET}"
+  echo ""
 }
 
 # ============================================================================

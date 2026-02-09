@@ -1100,8 +1100,12 @@ export class PostgreSQLEngine extends BaseEngine {
         proc.stdin?.end()
       })
 
+    // Escape username for safe identifier interpolation (defense-in-depth)
+    const escapedIdent = username.replace(/"/g, '""')
+    const escapedPass = password.replace(/'/g, "''")
+
     // Create the role with login and password
-    const createRoleSql = `CREATE ROLE "${username}" WITH LOGIN PASSWORD '${password.replace(/'/g, "''")}'`
+    const createRoleSql = `CREATE ROLE "${escapedIdent}" WITH LOGIN PASSWORD '${escapedPass}'`
 
     try {
       await runPsqlViaStdin(createRoleSql)
@@ -1109,7 +1113,7 @@ export class PostgreSQLEngine extends BaseEngine {
       const err = error as Error
       if (err.message.includes('already exists')) {
         // User exists — update password instead
-        const alterSql = `ALTER ROLE "${username}" WITH PASSWORD '${password.replace(/'/g, "''")}'`
+        const alterSql = `ALTER ROLE "${escapedIdent}" WITH PASSWORD '${escapedPass}'`
         await runPsqlViaStdin(alterSql)
       } else {
         throw error
@@ -1117,7 +1121,7 @@ export class PostgreSQLEngine extends BaseEngine {
     }
 
     // Grant all privileges on the target database
-    const grantSql = `GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${username}"`
+    const grantSql = `GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${escapedIdent}"`
     await runPsqlViaStdin(grantSql)
 
     const connectionString = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`

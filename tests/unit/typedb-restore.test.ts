@@ -2,7 +2,7 @@
  * TypeDB restore module unit tests
  */
 
-import { describe, it, after } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import { join } from 'path'
 import { writeFile, rm, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -24,8 +24,11 @@ describe('TypeDB Restore Module', () => {
   })
 
   describe('detectBackupFormat', () => {
-    it('should detect .typeql file by extension', async () => {
+    before(async () => {
       await mkdir(testDir, { recursive: true })
+    })
+
+    it('should detect .typeql file by extension', async () => {
       const typeqlPath = join(testDir, 'backup.typeql')
       await writeFile(
         typeqlPath,
@@ -44,7 +47,6 @@ describe('TypeDB Restore Module', () => {
     })
 
     it('should detect .tql file by extension', async () => {
-      await mkdir(testDir, { recursive: true })
       const tqlPath = join(testDir, 'backup.tql')
       await writeFile(
         tqlPath,
@@ -58,7 +60,6 @@ describe('TypeDB Restore Module', () => {
     })
 
     it('should detect TypeQL content by keywords', async () => {
-      await mkdir(testDir, { recursive: true })
       const backupPath = join(testDir, 'backup.bak')
       await writeFile(
         backupPath,
@@ -72,7 +73,6 @@ describe('TypeDB Restore Module', () => {
     })
 
     it('should return unknown for non-TypeQL files', async () => {
-      await mkdir(testDir, { recursive: true })
       const textPath = join(testDir, 'backup.txt')
       await writeFile(textPath, 'This is not a TypeQL backup')
 

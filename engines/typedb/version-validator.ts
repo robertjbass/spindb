@@ -50,10 +50,11 @@ export function isVersionSupported(version: string): boolean {
 /**
  * Get major version from full version string
  * e.g., "3.8.0" -> "3"
+ * Returns null if the version string cannot be parsed.
  */
-export function getMajorVersion(version: string): string {
+export function getMajorVersion(version: string): string | null {
   const parsed = parseVersion(version)
-  return parsed ? String(parsed.major) : version
+  return parsed ? String(parsed.major) : null
 }
 
 /**

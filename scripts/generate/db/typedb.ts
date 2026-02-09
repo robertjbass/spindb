@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     DEFAULT_TYPEDB_HTTP_PORT,
   )
   console.log(`Waiting for TypeDB to be ready (HTTP port ${httpPort})...`)
-  const isReady = await waitForHttpReady(httpPort, '/')
+  const isReady = await waitForHttpReady(httpPort, '/health')
 
   if (!isReady) {
     console.error('Error: TypeDB did not become ready in time')

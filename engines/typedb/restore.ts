@@ -189,8 +189,10 @@ async function restoreTypeQLBackup(
   validateTypeDBIdentifier(database)
   const consolePath = await requireTypeDBConsolePath(version)
 
-  // Derive base name by stripping known extensions (.typeql or .tql)
-  const baseName = backupPath.replace(/\.(typeql|tql)$/, '')
+  // Derive base name by stripping optional -schema/-data suffix and extension
+  const baseName = backupPath
+    .replace(/\.(typeql|tql)$/, '')
+    .replace(/-(schema|data)$/, '')
   const schemaPath = `${baseName}-schema.typeql`
   const dataPath = `${baseName}-data.typeql`
 

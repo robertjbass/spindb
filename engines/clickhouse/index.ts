@@ -357,7 +357,9 @@ export class ClickHouseEngine extends BaseEngine {
     const accessDir = join(dataDir, 'access')
     try {
       await mkdir(accessDir, { recursive: true, mode: 0o700 })
-      await chmod(accessDir, 0o700).catch(() => {})
+      await chmod(accessDir, 0o700).catch((err) => {
+        logDebug(`Failed to chmod ${accessDir}: ${err}`)
+      })
     } catch (error) {
       logWarning(
         `Failed to create ClickHouse access directory ${accessDir}: ${error}`,

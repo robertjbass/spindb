@@ -60,6 +60,7 @@ export async function getTypeDBPath(): Promise<string | null> {
   for (const version of Object.values(TYPEDB_VERSION_MAP)) {
     const found = await getTypeDBPathForVersion(version)
     if (found) {
+      await configManager.setBinaryPath('typedb', found, 'bundled')
       return found
     }
   }
@@ -161,6 +162,15 @@ export async function requireTypeDBConsolePath(
   const cached = await configManager.getBinaryPath('typedb_console_bin')
   if (cached && existsSync(cached)) {
     return cached
+  }
+
+  // Fall back to scanning all installed versions (same pattern as requireTypeDBPath)
+  const { TYPEDB_VERSION_MAP } = await import('./version-maps')
+  for (const ver of Object.values(TYPEDB_VERSION_MAP)) {
+    const found = await getTypeDBConsolePath(ver)
+    if (found) {
+      return found
+    }
   }
 
   throw new Error(

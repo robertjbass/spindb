@@ -1621,7 +1621,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      max-parallel: 4 # Limit parallel jobs to reduce Windows runner contention
+      max-parallel: 4 # Limit parallel jobs to reduce runner contention
       matrix:
         include:
           - os: ubuntu-22.04

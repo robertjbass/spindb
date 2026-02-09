@@ -95,6 +95,14 @@ describe('TypeDB Version Validator', () => {
     it('should extract major version from major only', () => {
       assertEqual(getMajorVersion('3'), '3', 'Should extract 3 from 3')
     })
+
+    it('should return null for invalid version', () => {
+      assertEqual(
+        getMajorVersion('invalid'),
+        null,
+        'Should return null for invalid',
+      )
+    })
   })
 
   describe('compareVersions', () => {

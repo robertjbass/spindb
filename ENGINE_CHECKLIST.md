@@ -977,22 +977,9 @@ if (engine === 'redis' || engine === 'valkey' || engine === 'yourengine') {
 
 **"Create user" menu item:**
 
-The "Create user" option is shown in the Data Operations section of the container submenu. It is hidden for engines that don't support user creation (file-based engines and QuestDB). If your engine supports `createUser()`, ensure it is NOT in the exclusion list:
+The "Create user" option is shown in the Data Operations section of the container submenu. Visibility is determined automatically via capability-based gating: the UI checks whether the engine overrides `createUser` from `BaseEngine` by comparing `engine.createUser !== BaseEngine.prototype.createUser`. Engines that inherit the default `createUser` (which throws `UnsupportedOperationError`) are hidden automatically — no exclusion list to maintain.
 
-```ts
-// Engines that don't support createUser - hide the menu item
-const ENGINES_WITHOUT_USERS = [
-  Engine.SQLite,
-  Engine.DuckDB,
-  Engine.QuestDB,
-]
-
-if (!ENGINES_WITHOUT_USERS.includes(config.engine)) {
-  // Show "Create user" option (disabled when container is not running)
-}
-```
-
-If your engine does NOT support users (throws `UnsupportedOperationError`), add it to this exclusion list.
+If your engine supports user creation, override `createUser()` in your engine's `index.ts`. If it does not, simply leave the default `BaseEngine` implementation in place and the menu item will be hidden.
 
 **Important:** Always use the `Engine` enum (e.g., `Engine.Qdrant`) instead of string literals (e.g., `'qdrant'`) for type safety.
 

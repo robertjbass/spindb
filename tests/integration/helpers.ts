@@ -665,6 +665,7 @@ export async function waitForReady(
   engine: Engine,
   port: number,
   timeoutMs = 30000,
+  options?: { httpPort?: number },
 ): Promise<boolean> {
   const startTime = Date.now()
   const checkInterval = 500
@@ -806,8 +807,8 @@ export async function waitForReady(
           { timeout: 5000 },
         )
       } else if (engine === Engine.TypeDB) {
-        // TypeDB health check via HTTP GET to HTTP port (main port + 6271)
-        const httpPort = port + 6271
+        // TypeDB health check via HTTP GET to HTTP port
+        const httpPort = options?.httpPort ?? port + 6271
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         try {

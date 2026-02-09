@@ -1259,8 +1259,8 @@ export class CockroachDBEngine extends BaseEngine {
 
     return {
       username,
-      // Note: CockroachDB insecure mode doesn't enforce passwords, but we
-      // return it for credential file consistency
+      // CockroachDB insecure mode does not enforce password authentication,
+      // but we return the caller-provided password for credential file consistency.
       password,
       connectionString,
       engine: container.engine,

@@ -355,66 +355,75 @@ export class FerretDBEngine extends BaseEngine {
           ? join(shareDirBase, 'postgresql')
           : shareDirBase
 
-      const pgConfigBin = join(documentdbPath, 'bin', `pg_config${ext}`)
-      if (existsSync(pgConfigBin)) {
-        // Query all relevant compiled-in paths and create symlinks where needed
-        const pathFixups: Array<{
-          flag: string
-          actualDir: string
-          label: string
-        }> = [
-          { flag: '--sharedir', actualDir: actualShareDir, label: 'share' },
-          {
-            flag: '--pkglibdir',
-            actualDir: existsSync(join(documentdbPath, 'lib', 'postgresql'))
-              ? join(documentdbPath, 'lib', 'postgresql')
-              : join(documentdbPath, 'lib'),
-            label: 'pkglib',
-          },
-          {
-            flag: '--libdir',
-            actualDir: join(documentdbPath, 'lib'),
-            label: 'lib',
-          },
-        ]
+      // Homebrew-derived binaries have compiled-in absolute paths that only
+      // need fixup on macOS. On Linux the paths are relative or handled by
+      // LD_LIBRARY_PATH, so skip the pg_config symlink fixups entirely.
+      if (platform === 'darwin') {
+        const pgConfigBin = join(documentdbPath, 'bin', `pg_config${ext}`)
+        if (existsSync(pgConfigBin)) {
+          // Query all relevant compiled-in paths and create symlinks where needed
+          const pathFixups: Array<{
+            flag: string
+            actualDir: string
+            label: string
+          }> = [
+            { flag: '--sharedir', actualDir: actualShareDir, label: 'share' },
+            {
+              flag: '--pkglibdir',
+              actualDir: existsSync(join(documentdbPath, 'lib', 'postgresql'))
+                ? join(documentdbPath, 'lib', 'postgresql')
+                : join(documentdbPath, 'lib'),
+              label: 'pkglib',
+            },
+            {
+              flag: '--libdir',
+              actualDir: join(documentdbPath, 'lib'),
+              label: 'lib',
+            },
+          ]
 
-        // Create symlinks at compiled-in paths so PostgreSQL can find its
-        // libraries. These paths may be in system directories (e.g. /usr/local/),
-        // which require elevated privileges to write to.
-        for (const { flag, actualDir, label } of pathFixups) {
-          try {
-            const { stdout: out } = await execAsync(
-              `"${pgConfigBin}" ${flag}`,
-              { timeout: 5000 },
-            )
-            const compiledDir = out.trim()
-            logDebug(`pg_config ${flag}: ${compiledDir}`)
-            if (compiledDir && !existsSync(compiledDir)) {
-              await mkdir(dirname(compiledDir), { recursive: true })
-              await symlink(actualDir, compiledDir)
-              logDebug(
-                `Created ${label} symlink: ${compiledDir} -> ${actualDir}`,
+          // Create symlinks at compiled-in paths so PostgreSQL can find its
+          // libraries. These paths may be in system directories (e.g. /usr/local/),
+          // which require elevated privileges to write to.
+          for (const { flag, actualDir, label } of pathFixups) {
+            try {
+              const { stdout: out } = await execAsync(
+                `"${pgConfigBin}" ${flag}`,
+                { timeout: 5000 },
               )
-            }
-          } catch (error) {
-            const e = error as NodeJS.ErrnoException
-            const isPermission =
-              e.code === 'EACCES' ||
-              e.code === 'EPERM' ||
-              (e.message && /permission denied/i.test(e.message))
-            if (isPermission) {
-              logWarning(
-                `Cannot create ${label} symlink (permission denied). ` +
-                  `This can be caused by macOS SIP or container/sudo limitations when compiled-in paths point to system directories. ` +
-                  `Workaround: use a non-system install path, or run with elevated privileges if available (e.g., sudo spindb engines download ferretdb <version>). ` +
-                  `See https://github.com/robertjbass/spindb#ferretdb for details. ` +
-                  `Target: ${flag} -> ${actualDir}`,
-              )
-            } else {
-              logDebug(`Could not fix compiled ${label} path: ${e.message}`)
+              const compiledDir = out.trim()
+              logDebug(`pg_config ${flag}: ${compiledDir}`)
+              if (compiledDir && !existsSync(compiledDir)) {
+                await mkdir(dirname(compiledDir), { recursive: true })
+                await symlink(actualDir, compiledDir)
+                logDebug(
+                  `Created ${label} symlink: ${compiledDir} -> ${actualDir}`,
+                )
+              }
+            } catch (error) {
+              const e = error as NodeJS.ErrnoException
+              const isPermission =
+                e.code === 'EACCES' ||
+                e.code === 'EPERM' ||
+                (e.message && /permission denied/i.test(e.message))
+              if (isPermission) {
+                logWarning(
+                  `Cannot create ${label} symlink (permission denied). ` +
+                    `This can be caused by macOS SIP or container/sudo limitations when compiled-in paths point to system directories. ` +
+                    `Workaround: use a non-system install path, or run with elevated privileges if available (e.g., sudo spindb engines download ferretdb <version>). ` +
+                    `See https://github.com/robertjbass/spindb#ferretdb for details. ` +
+                    `Target: ${flag} -> ${actualDir}`,
+                )
+              } else {
+                logDebug(`Could not fix compiled ${label} path: ${e.message}`)
+              }
             }
           }
         }
+      } else {
+        logDebug(
+          'Skipping pg_config symlink fixups (not required on this platform)',
+        )
       }
 
       // On macOS, fix hardcoded Homebrew dylib paths in extension libraries.

@@ -16,11 +16,14 @@ import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 /**
  * Create a TypeQL backup using typedb console export
  *
- * TypeDB export creates two files:
- * - {name}-schema.typeql (schema definitions)
- * - {name}-data.typeql (data inserts)
+ * TypeDB export creates two files derived from outputPath:
+ * - {base}-schema.typeql (schema definitions)
+ * - {base}-data.typeql (data inserts)
  *
- * We use the provided outputPath as the schema file path and derive the data path.
+ * The returned BackupResult.path is the original outputPath (base path),
+ * NOT a single backup file. Callers (e.g., restore) must derive the actual
+ * file paths using the same `-schema.typeql` / `-data.typeql` convention.
+ * See also: restore.ts restoreTypeQLBackup() which mirrors this derivation.
  */
 async function createTypeQLBackup(
   container: ContainerConfig,
@@ -104,6 +107,7 @@ async function createTypeQLBackup(
             return
           }
 
+          // path is the base outputPath; actual files are schemaPath and dataPath
           resolve({
             path: outputPath,
             format: 'typeql',
