@@ -405,8 +405,8 @@ export class FerretDBEngine extends BaseEngine {
             if (isPermission) {
               logWarning(
                 `Cannot create ${label} symlink (permission denied). ` +
-                  `Try running with elevated privileges: sudo spindb engines download ferretdb <version>. ` +
-                  `This is needed when compiled-in paths point to system directories. ` +
+                  `This can be caused by macOS SIP or container/sudo limitations when compiled-in paths point to system directories. ` +
+                  `Workaround: use a non-system install path, or run with elevated privileges if available (e.g., sudo spindb engines download ferretdb <version>). ` +
                   `See https://github.com/robertjbass/spindb#ferretdb for details. ` +
                   `Target: ${flag} -> ${actualDir}`,
               )
@@ -938,7 +938,14 @@ export class FerretDBEngine extends BaseEngine {
 
             // Check if we have this exact library in our bundle
             if (bundledLibPaths.has(depName)) {
-              await mkdir(dirname(depPath), { recursive: true })
+              try {
+                await mkdir(dirname(depPath), { recursive: true })
+              } catch {
+                logDebug(
+                  `Cannot create directory for dylib dep: ${dirname(depPath)} (skipping)`,
+                )
+                continue
+              }
               try {
                 await symlink(bundledLibPaths.get(depName)!, depPath)
                 logDebug(

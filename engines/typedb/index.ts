@@ -883,8 +883,16 @@ export class TypeDBEngine extends BaseEngine {
     }
 
     // TypeDB exports schema and data as separate files
-    const schemaPath = outputPath.replace('.typeql', '-schema.typeql')
-    const dataPath = outputPath.replace('.typeql', '-data.typeql')
+    let schemaPath: string
+    let dataPath: string
+    if (outputPath.endsWith('.typeql')) {
+      const basePath = outputPath.slice(0, -'.typeql'.length)
+      schemaPath = `${basePath}-schema.typeql`
+      dataPath = `${basePath}-data.typeql`
+    } else {
+      schemaPath = outputPath + '-schema.typeql'
+      dataPath = outputPath + '-data.typeql'
+    }
 
     // Build console args with URL credentials (may differ from local defaults)
     const tlsDisabled = url.protocol !== 'https:'
@@ -943,7 +951,12 @@ export class TypeDBEngine extends BaseEngine {
   // Run a TypeQL file or inline statement
   async runScript(
     container: ContainerConfig,
-    options: { file?: string; sql?: string; database?: string },
+    options: {
+      file?: string
+      sql?: string
+      database?: string
+      transactionType?: 'read' | 'write' | 'schema'
+    },
   ): Promise<void> {
     const { port, version } = container
     const db = options.database || container.database
@@ -971,7 +984,20 @@ export class TypeDBEngine extends BaseEngine {
       // Run inline TypeQL via temp script file
       // TypeDB console --command mode doesn't support multi-step transaction flows;
       // each --command is a standalone top-level command. Transactions require --script.
-      const scriptContent = `transaction schema ${db}\n\n${options.sql}\n\ncommit\n`
+      const upperSql = options.sql.trim().toUpperCase()
+      let txType: 'read' | 'write' | 'schema'
+      if (options.transactionType) {
+        txType = options.transactionType
+      } else if (
+        upperSql.startsWith('DEFINE') ||
+        upperSql.startsWith('UNDEFINE')
+      ) {
+        txType = 'schema'
+      } else {
+        txType = 'write'
+      }
+      const txEnd = txType === 'read' ? 'close' : 'commit'
+      const scriptContent = `transaction ${txType} ${db}\n\n${options.sql}\n\n${txEnd}\n`
       const tempScript = join(
         tmpdir(),
         `spindb-typedb-${Date.now()}-${Math.random().toString(36).slice(2)}.tqls`,

@@ -372,15 +372,16 @@ export async function executeSQL(
     const { tmpdir } = await import('os')
     const { join } = await import('path')
 
-    // Detect if the query is a write operation (INSERT, DELETE, PUT, UNDEFINE, DEFINE with schema changes)
+    // Detect transaction type: schema (DEFINE/UNDEFINE), write (INSERT/DELETE/PUT), or read
     const upperSql = sql.trim().toUpperCase()
+    const isSchema =
+      upperSql.startsWith('DEFINE') || upperSql.startsWith('UNDEFINE')
     const isWrite =
       upperSql.startsWith('INSERT') ||
       upperSql.startsWith('DELETE') ||
-      upperSql.startsWith('PUT') ||
-      upperSql.startsWith('UNDEFINE')
-    const txType = isWrite ? 'write' : 'read'
-    const txEnd = isWrite ? 'commit' : 'close'
+      upperSql.startsWith('PUT')
+    const txType = isSchema ? 'schema' : isWrite ? 'write' : 'read'
+    const txEnd = isSchema || isWrite ? 'commit' : 'close'
     const scriptContent = `transaction ${txType} ${database}\n\n${sql}\n\n${txEnd}\n`
     const tempScript = join(
       tmpdir(),
@@ -813,14 +814,14 @@ export async function waitForReady(
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         try {
-          const response = await fetch(`http://127.0.0.1:${httpPort}/`, {
+          const response = await fetch(`http://127.0.0.1:${httpPort}/health`, {
             signal: controller.signal,
           })
           clearTimeout(timeoutId)
-          // TypeDB HTTP endpoint returns 200+ on success
-          if (response.status < 500) {
+          if (response.status === 204) {
             return true
           }
+          throw new Error(`TypeDB health check returned ${response.status}`)
         } catch {
           clearTimeout(timeoutId)
           throw new Error('TypeDB health check failed or timed out')

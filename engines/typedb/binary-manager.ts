@@ -155,6 +155,8 @@ class TypeDBBinaryManager extends BaseBinaryManager {
     })
 
     const ext = platform === Platform.Win32 ? '.exe' : ''
+    const batExt = platform === Platform.Win32 ? '.bat' : ''
+    const launcherPath = join(binPath, 'bin', `typedb${batExt}`)
     const serverPath = join(binPath, 'bin', 'server', `typedb_server_bin${ext}`)
     const consolePath = join(
       binPath,
@@ -162,6 +164,10 @@ class TypeDBBinaryManager extends BaseBinaryManager {
       'console',
       `typedb_console_bin${ext}`,
     )
+
+    if (!existsSync(launcherPath)) {
+      throw new Error(`TypeDB launcher not found at ${launcherPath}`)
+    }
 
     if (!existsSync(serverPath)) {
       throw new Error(`TypeDB server binary not found at ${serverPath}`)

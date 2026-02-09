@@ -356,6 +356,7 @@ export class ConfigManager {
     redis: { found: BinaryTool[]; missing: BinaryTool[] }
     valkey: { found: BinaryTool[]; missing: BinaryTool[] }
     meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
+    typedb: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
     // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
@@ -408,6 +409,10 @@ export class ConfigManager {
       meilisearch: {
         found: found.filter((t) => MEILISEARCH_TOOLS.includes(t)),
         missing: missing.filter((t) => MEILISEARCH_TOOLS.includes(t)),
+      },
+      typedb: {
+        found: found.filter((t) => TYPEDB_TOOLS.includes(t)),
+        missing: missing.filter((t) => TYPEDB_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),

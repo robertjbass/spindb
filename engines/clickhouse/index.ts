@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, chmod } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -353,6 +353,16 @@ export class ClickHouseEngine extends BaseEngine {
     const logDir = containerDir
     const tmpDir = join(dataDir, 'tmp')
     const httpPort = port + 1
+
+    const accessDir = join(dataDir, 'access')
+    try {
+      await mkdir(accessDir, { recursive: true, mode: 0o700 })
+      await chmod(accessDir, 0o700).catch(() => {})
+    } catch (error) {
+      logWarning(
+        `Failed to create ClickHouse access directory ${accessDir}: ${error}`,
+      )
+    }
 
     const configPath = join(containerDir, 'config.xml')
     const pidFile = join(containerDir, engineDef.pidFileName)

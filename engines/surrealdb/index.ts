@@ -1185,6 +1185,7 @@ export class SurrealDBEngine extends BaseEngine {
       '--hide-welcome',
     ]
 
+    const timeoutMs = 15000
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(surreal, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -1192,6 +1193,17 @@ export class SurrealDBEngine extends BaseEngine {
       })
 
       let stderr = ''
+      let settled = false
+      const timeoutId = setTimeout(() => {
+        if (settled) return
+        settled = true
+        proc.kill()
+        reject(
+          new Error(
+            `Timed out creating SurrealDB user "${username}" after ${timeoutMs}ms (sql: ${sql})`,
+          ),
+        )
+      }, timeoutMs)
       proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
@@ -1200,6 +1212,9 @@ export class SurrealDBEngine extends BaseEngine {
       proc.stdin?.end()
 
       proc.on('close', (code) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutId)
         if (code === 0) {
           logDebug(`Created SurrealDB user: ${username}`)
           resolve()
@@ -1207,7 +1222,12 @@ export class SurrealDBEngine extends BaseEngine {
           reject(new Error(`Failed to create user: ${stderr}`))
         }
       })
-      proc.on('error', reject)
+      proc.on('error', (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutId)
+        reject(error)
+      })
     })
 
     const connectionString = `ws://127.0.0.1:${port}/rpc`

@@ -1958,6 +1958,24 @@ enginesCommand
           process.exit(1)
         }
 
+        const { platform, arch } = platformService.getPlatformInfo()
+        const platformKey = `${platform}-${arch}`
+        const supportedPlatforms = new Set([
+          'darwin-x64',
+          'darwin-arm64',
+          'linux-x64',
+          'linux-arm64',
+          'win32-x64',
+        ])
+        if (!supportedPlatforms.has(platformKey)) {
+          console.error(
+            uiError(
+              `TypeDB binaries are not available for ${platformKey}. Supported: darwin-x64, darwin-arm64, linux-x64, linux-arm64, win32-x64.`,
+            ),
+          )
+          process.exit(1)
+        }
+
         const engine = getEngine(Engine.TypeDB)
 
         const spinner = createSpinner(`Checking TypeDB ${version} binaries...`)

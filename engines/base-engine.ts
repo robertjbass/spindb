@@ -245,7 +245,12 @@ export abstract class BaseEngine {
    */
   abstract runScript(
     container: ContainerConfig,
-    options: { file?: string; sql?: string; database?: string },
+    options: {
+      file?: string
+      sql?: string
+      database?: string
+      transactionType?: 'read' | 'write' | 'schema'
+    },
   ): Promise<void>
 
   /**

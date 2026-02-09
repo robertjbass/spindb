@@ -7,6 +7,8 @@
  */
 
 import { existsSync } from 'fs'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
 import {
   parseArgs,
   runSpindb,
@@ -20,6 +22,44 @@ import {
 const ENGINE = 'typedb'
 const DEFAULT_CONTAINER_NAME = `demo-${ENGINE}`
 const SEED_FILE = getSeedFile(ENGINE, 'sample-db.tqls')
+const DEFAULT_TYPEDB_HTTP_PORT = 8000
+
+async function resolveHttpPort(
+  containerName: string,
+  fallback: number,
+): Promise<number> {
+  const homeDir = process.env.HOME || process.env.USERPROFILE
+  if (!homeDir) {
+    return fallback
+  }
+
+  const configPath = join(
+    homeDir,
+    '.spindb',
+    'containers',
+    ENGINE,
+    containerName,
+    'config.yml',
+  )
+
+  try {
+    const content = await readFile(configPath, 'utf-8')
+    const addressMatch = content.match(
+      /^\s*http:\s*$[\s\S]*?^\s*address:\s*[^:\n]+:(\d+)/m,
+    )
+    if (addressMatch) {
+      return parseInt(addressMatch[1], 10)
+    }
+    const portMatch = content.match(/^\s*http:\s*$[\s\S]*?^\s*port:\s*(\d+)/m)
+    if (portMatch) {
+      return parseInt(portMatch[1], 10)
+    }
+  } catch {
+    return fallback
+  }
+
+  return fallback
+}
 
 async function main(): Promise<void> {
   const { containerName, port } = parseArgs(DEFAULT_CONTAINER_NAME)
@@ -78,8 +118,10 @@ async function main(): Promise<void> {
 
   console.log(`Container running on port ${config.port}\n`)
 
-  // TypeDB HTTP port is main port + 6271
-  const httpPort = config.port + 6271
+  const httpPort = await resolveHttpPort(
+    containerName,
+    DEFAULT_TYPEDB_HTTP_PORT,
+  )
   console.log(`Waiting for TypeDB to be ready (HTTP port ${httpPort})...`)
   const isReady = await waitForHttpReady(httpPort, '/')
 
