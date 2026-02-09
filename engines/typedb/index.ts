@@ -368,20 +368,28 @@ export class TypeDBEngine extends BaseEngine {
     // TypeDB server start using direct server binary with config
     const args = ['server', '--config', configFile]
 
-    // Try launcher first, fall back to direct server binary
+    // On Windows, use server binary directly to avoid .bat launcher's cmd.exe wrapper
+    // which creates orphaned processes that prevent clean test/CLI exit.
+    // On other platforms, try launcher first, fall back to direct server binary.
+    const isWindows = process.platform === 'win32'
     let launcherPath: string
-    try {
-      launcherPath = await this.getTypeDBLauncherPath(version)
-    } catch {
+    if (isWindows && serverBinary) {
       launcherPath = serverBinary
       // When using server binary directly, don't pass 'server' subcommand
       args.splice(0, 1)
+    } else {
+      try {
+        launcherPath = await this.getTypeDBLauncherPath(version)
+      } catch {
+        launcherPath = serverBinary!
+        // When using server binary directly, don't pass 'server' subcommand
+        args.splice(0, 1)
+      }
     }
 
     // Spawn the server process
     // Use 'ignore' for all stdio to prevent pipes from keeping the event loop alive
-    // On Windows, .bat launcher files require shell: true to avoid spawn EINVAL
-    const isWindows = process.platform === 'win32'
+    // On Windows, .bat/.cmd files would require shell: true, but we use the .exe directly
     const needsShell =
       isWindows &&
       (launcherPath.endsWith('.bat') || launcherPath.endsWith('.cmd'))
