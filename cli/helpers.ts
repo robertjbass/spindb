@@ -1103,7 +1103,7 @@ async function getInstalledQuestDBEngines(): Promise<InstalledQuestDBEngine[]> {
 // TypeDB is a Rust binary but uses a launcher script. Check for server binary existence.
 async function getTypeDBVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
-  const serverPath = join(binPath, 'bin', `typedb_server_bin${ext}`)
+  const serverPath = join(binPath, 'bin', 'server', `typedb_server_bin${ext}`)
   if (!existsSync(serverPath)) {
     return null
   }

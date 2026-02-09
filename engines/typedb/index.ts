@@ -564,7 +564,7 @@ export class TypeDBEngine extends BaseEngine {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 5000)
       try {
-        const response = await fetch(`http://127.0.0.1:${httpPort}/`, {
+        const response = await fetch(`http://127.0.0.1:${httpPort}/health`, {
           signal: controller.signal,
         })
         clearTimeout(timer)
@@ -649,7 +649,7 @@ export class TypeDBEngine extends BaseEngine {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 5000)
 
-      const response = await fetch(`http://127.0.0.1:${httpPort}/`, {
+      const response = await fetch(`http://127.0.0.1:${httpPort}/health`, {
         signal: controller.signal,
       })
       clearTimeout(timer)
@@ -1166,9 +1166,15 @@ export class TypeDBEngine extends BaseEngine {
               line.length > 0,
           )
 
-          resolve(databases.length > 0 ? databases : [container.database])
+          resolve(
+            databases.length > 0
+              ? databases
+              : container.database
+                ? [container.database]
+                : [],
+          )
         } catch {
-          resolve([container.database])
+          resolve(container.database ? [container.database] : [])
         }
       })
     })

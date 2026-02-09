@@ -50,7 +50,10 @@ async function createTypeQLBackup(
     `database export ${database} ${schemaPath} ${dataPath}`,
   ]
 
-  logDebug(`Running: typedb_console_bin ${args.join(' ')}`)
+  const sanitizedArgs = args.map((a, i) =>
+    args[i - 1] === '--password' ? '***' : a,
+  )
+  logDebug(`Running: typedb_console_bin ${sanitizedArgs.join(' ')}`)
 
   return new Promise<BackupResult>((resolve, reject) => {
     const proc = spawn(consolePath, args, {

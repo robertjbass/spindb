@@ -1724,7 +1724,7 @@ describe('YourEngine Integration Tests', () => {
 - [ ] Import the engine's version map (e.g., `YOURENGINE_VERSION_MAP`)
 - [ ] Add entry to the `ENGINES` array with the hostdb engine name and version map
 
-The `ENGINES` array maps hostdb engine names to SpinDB version maps. The test verifies that every version in the version map exists in hostdb's `releases.json`, and warns if hostdb has engines not covered by SpinDB.
+The `ENGINES` array maps HostDB engine names to SpinDB version maps. The test verifies that every version in the version map exists in HostDB's `releases.json`, and warns if HostDB has engines not covered by SpinDB.
 
 ```ts
 // Add import
@@ -2524,19 +2524,19 @@ export function getDefaultUsername(engine: Engine): string {
 Credentials are saved to `~/.spindb/containers/{engine}/{name}/credentials/.env.{username}` by the credential manager. The engine's `createUser()` method does NOT handle file storage — that's done by `core/credential-manager.ts`.
 
 **Standard `.env.{username}` format:**
-```
+```dotenv
 DB_USER=spindb
-DB_PASSWORD=xA9bK2mQ7nR4wE1s
+DB_PASSWORD=example_password
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_NAME=mydb
-DB_URL=postgresql://spindb:xA9bK2mQ7nR4wE1s@127.0.0.1:5432/mydb
+DB_URL=postgresql://spindb:example_password@127.0.0.1:5432/mydb
 ```
 
 **API key `.env.{keyname}` format:**
-```
+```dotenv
 API_KEY_NAME=search_key
-API_KEY=actual_generated_key_value
+API_KEY=example_api_key
 API_URL=http://127.0.0.1:7700
 ```
 
@@ -2586,7 +2586,7 @@ For engines that don't support users (SQLite, DuckDB, QuestDB), skip this test e
 
 - [ ] Decide: does the engine support user creation?
   - **Yes**: Override `createUser()` in `engines/{engine}/index.ts`
-  - **No**: Add engine to `ENGINES_WITHOUT_USERS` in `container-handlers.ts`
+  - **No**: Leave the default `BaseEngine.createUser()` in place (the menu item is hidden automatically via override detection)
 - [ ] Implement `createUser()` with idempotency (create or update)
 - [ ] Handle MySQL/MariaDB localhost host issue (if applicable)
 - [ ] Update `getDefaultUsername()` in `core/credential-manager.ts` (if API key engine)
@@ -3103,10 +3103,9 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Verified data restore works correctly
 
 ### User Management
-- [ ] Decided: engine supports users? (Yes → override `createUser()`, No → add to exclusion list)
+- [ ] Decided: engine supports users? (Yes → override `createUser()`, No → leave default)
 - [ ] Overrode `createUser()` in `engines/{engine}/index.ts` (if supported)
 - [ ] `createUser()` is idempotent (re-create updates password, does not error)
-- [ ] Added engine to `ENGINES_WITHOUT_USERS` in `container-handlers.ts` (if unsupported)
 - [ ] Updated `getDefaultUsername()` in `core/credential-manager.ts` (if API key engine)
 - [ ] Added createUser integration test with idempotency check
 - [ ] Verified "Create user" menu item visibility

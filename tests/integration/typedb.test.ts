@@ -396,54 +396,15 @@ describe('TypeDB Integration Tests', () => {
       `\n Deleting one entity using engine.runScript with inline command...`,
     )
 
-    // Delete an entity via a write transaction using temp script
-    // TypeDB console --command mode doesn't support multi-step transaction flows
     const config = await containerManager.getConfig(containerName)
     assert(config !== null, 'Container config should exist')
 
     const engine = getEngine(ENGINE)
-    const consolePath = await engine.getTypeDBConsolePath(TEST_VERSION)
-    const { getConsoleBaseArgs } = await import(
-      '../../engines/typedb/cli-utils'
-    )
-    const { spawn } = await import('child_process')
-    const { writeFile: writeTempFile, unlink: unlinkTemp } = await import(
-      'fs/promises'
-    )
-    const { tmpdir: getTmpdir } = await import('os')
-    const { join: joinPath } = await import('path')
-
-    const deleteScript = `transaction write ${DATABASE}\n\nmatch $u isa test_user, has id 5; delete $u;\n\ncommit\n`
-    const tempScript = joinPath(
-      getTmpdir(),
-      `spindb-typedb-delete-${Date.now()}.tqls`,
-    )
-
-    try {
-      await writeTempFile(tempScript, deleteScript, 'utf-8')
-
-      await new Promise<void>((resolve, reject) => {
-        const args = [
-          ...getConsoleBaseArgs(testPorts[0]),
-          '--script',
-          tempScript,
-        ]
-        const proc = spawn(consolePath, args, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-        let stderr = ''
-        proc.stderr?.on('data', (data: Buffer) => {
-          stderr += data.toString()
-        })
-        proc.on('close', (code) => {
-          if (code === 0) resolve()
-          else reject(new Error(stderr || `Exit code ${code}`))
-        })
-        proc.on('error', reject)
-      })
-    } finally {
-      await unlinkTemp(tempScript).catch(() => {})
-    }
+    await engine.runScript(config, {
+      sql: 'match $u isa test_user, has id 5; delete $u;',
+      transactionType: 'write',
+      database: DATABASE,
+    })
 
     const rowCount = await getTypeDBRowCount(
       testPorts[0],

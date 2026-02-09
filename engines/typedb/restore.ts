@@ -229,7 +229,10 @@ async function runConsoleCommand(
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = [...getConsoleBaseArgs(port), '--command', command]
 
-    logDebug(`Running: typedb_console_bin ${args.join(' ')}`)
+    const sanitizedArgs = args.map((a, i) =>
+      args[i - 1] === '--password' ? '***' : a,
+    )
+    logDebug(`Running: typedb_console_bin ${sanitizedArgs.join(' ')}`)
 
     const proc = spawn(consolePath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -352,7 +355,18 @@ export function parseConnectionString(connectionString: string): {
   }
 
   const host = url.hostname || '127.0.0.1'
-  const port = parseInt(url.port, 10) || 1729
+
+  let port = 1729
+  if (url.port) {
+    const parsed = Number(url.port)
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      throw new Error(
+        `Invalid TypeDB connection string: invalid port '${url.port}'`,
+      )
+    }
+    port = parsed
+  }
+
   const database = url.pathname.replace(/^\//, '') || 'default'
 
   return {

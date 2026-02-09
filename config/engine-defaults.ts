@@ -249,7 +249,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     logFileName: 'typedb.log',
     pidFileName: 'typedb.pid',
     dataSubdir: 'data',
-    clientTools: ['typedb', 'typedb-console'],
+    clientTools: ['typedb', 'typedb_console_bin'],
     maxConnections: 0, // Not applicable - managed internally
   },
 }

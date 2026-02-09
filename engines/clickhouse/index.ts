@@ -312,7 +312,11 @@ export class ClickHouseEngine extends BaseEngine {
     await mkdir(dataDir, { recursive: true })
     await mkdir(tmpDir, { recursive: true })
     await mkdir(join(dataDir, 'user_files'), { recursive: true })
-    await mkdir(join(dataDir, 'access'), { recursive: true })
+    const accessDir = join(dataDir, 'access')
+    await mkdir(accessDir, { recursive: true, mode: 0o700 })
+    await chmod(accessDir, 0o700).catch((err) => {
+      logDebug(`Failed to chmod ${accessDir}: ${err}`)
+    })
 
     logDebug(`Created ClickHouse data directory: ${dataDir}`)
 

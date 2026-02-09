@@ -315,7 +315,7 @@ describe(
     })
 
     it('should create a user and update password on re-create', async () => {
-      console.log(`\n👤 Testing createUser...`)
+      logDebug(`Testing createUser...`)
 
       const config = await containerManager.getConfig(containerName)
       assert(config !== null, 'Container config should exist')
@@ -329,7 +329,7 @@ describe(
       })
       assertEqual(creds1.username, 'testuser', 'Username should match')
       assertEqual(creds1.password, 'firstpass123', 'Password should match')
-      console.log('   ✓ Created user with initial password')
+      logDebug('Created user with initial password')
 
       const creds2 = await engine.createUser(config!, {
         username: 'testuser',
@@ -341,7 +341,7 @@ describe(
         'secondpass456',
         'Password should be updated',
       )
-      console.log('   ✓ Re-created user with new password (idempotent)')
+      logDebug('Re-created user with new password (idempotent)')
     })
 
     it('should clone container using backup/restore', async () => {

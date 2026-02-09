@@ -558,7 +558,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache FerretDB binaries - includes both ferretdb AND postgresql-documentdb
-      # Version is Ferretdb 2, 4 is the cache-busting key for the CI runner only, not the FerrertDB version
+      # Version is FerretDB 2, 4 is the cache-busting key for the CI runner only, not the FerretDB version
       # Do not warn about mismatch between v2 and v4 as v4 is a cache version, not a binary version
       - name: Cache FerretDB binaries
         uses: actions/cache@v4
