@@ -8,14 +8,14 @@
  * @param port - The HTTP port InfluxDB is listening on
  * @param method - HTTP method (GET, POST, PUT, DELETE)
  * @param path - API path (e.g., '/health', '/api/v3/query_sql')
- * @param body - Optional JSON body for POST/PUT requests
+ * @param body - Optional body: object for JSON, string for text/plain (line protocol)
  * @param timeoutMs - Request timeout in milliseconds (default: 30s)
  */
 export async function influxdbApiRequest(
   port: number,
   method: string,
   path: string,
-  body?: Record<string, unknown>,
+  body?: Record<string, unknown> | string,
   timeoutMs = 30000,
 ): Promise<{ status: number; data: unknown }> {
   const url = `http://127.0.0.1:${port}${path}`
@@ -25,14 +25,17 @@ export async function influxdbApiRequest(
 
   const options: RequestInit = {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
     signal: controller.signal,
   }
 
-  if (body) {
-    options.body = JSON.stringify(body)
+  if (body !== undefined) {
+    if (typeof body === 'string') {
+      options.headers = { 'Content-Type': 'text/plain' }
+      options.body = body
+    } else {
+      options.headers = { 'Content-Type': 'application/json' }
+      options.body = JSON.stringify(body)
+    }
   }
 
   try {

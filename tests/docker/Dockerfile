@@ -33,6 +33,7 @@
 # - DuckDB: duckdb
 # - Qdrant: qdrant (REST API engine - tests use curl instead of CLI)
 # - TypeDB: typedb, typedb_console_bin
+# - InfluxDB: influxdb3 (REST API engine - tests use curl instead of CLI)
 
 FROM ubuntu:22.04
 

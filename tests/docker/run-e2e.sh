@@ -42,10 +42,10 @@ SKIP_ENGINES="${SKIP_ENGINES:-}"
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
 GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
 # "other" = REST API engines + file-based engines, grouped for CI load balancing
-GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb"
+GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb"
 VALID_UTILITY_TESTS="self-update"
 VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
@@ -155,7 +155,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -174,6 +174,7 @@ declare -A BACKUP_FORMATS=(
   [surrealdb]="surql"
   [questdb]="sql"
   [typedb]="typeql"
+  [influxdb]="sql"
 )
 
 # Results tracking
@@ -382,7 +383,35 @@ insert_seed_data() {
       # TypeDB uses .tqls console script format (includes transaction directives + db creation)
       seed_file="$FIXTURES_DIR/typedb/seeds/sample-db.tqls"
       ;;
+    influxdb)
+      # InfluxDB uses REST API for seeding (no seed file)
+      seed_file=""
+      ;;
   esac
+
+  # InfluxDB uses REST API for seeding, not a file
+  if [ "$engine" = "influxdb" ]; then
+    local influxdb_port
+    influxdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+    if [ -z "$influxdb_port" ]; then
+      LAST_ERROR="Could not get InfluxDB port"
+      return 1
+    fi
+    # Write test data using line protocol (creates database implicitly, 5 records to match EXPECTED_COUNTS[influxdb]=5)
+    if ! curl -sf -X POST "http://127.0.0.1:${influxdb_port}/api/v3/write_lp?db=testdb" \
+      -H 'Content-Type: text/plain' \
+      -d 'test_user,id=1 name="Alice",email="alice@example.com"
+test_user,id=2 name="Bob",email="bob@example.com"
+test_user,id=3 name="Charlie",email="charlie@example.com"
+test_user,id=4 name="Diana",email="diana@example.com"
+test_user,id=5 name="Eve",email="eve@example.com"' &>/dev/null; then
+      LAST_ERROR="Failed to write InfluxDB seed data"
+      return 1
+    fi
+    # Allow time for data to be indexed
+    sleep 2
+    return 0
+  fi
 
   # Qdrant uses REST API for seeding, not a file
   if [ "$engine" = "qdrant" ]; then
@@ -598,6 +627,17 @@ get_data_count() {
         fi
       fi
       ;;
+    influxdb)
+      # InfluxDB uses REST API - get record count via SQL query
+      local influxdb_port
+      influxdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$influxdb_port" ]; then
+        output=$(curl -sf -X POST "http://127.0.0.1:${influxdb_port}/api/v3/query_sql" \
+          -H 'Content-Type: application/json' \
+          -d "{\"db\":\"${database}\",\"q\":\"SELECT COUNT(*) as count FROM test_user\",\"format\":\"json\"}" 2>/dev/null)
+        echo "$output" | jq -r '.[0].count // empty' 2>/dev/null
+      fi
+      ;;
   esac
 }
 
@@ -665,6 +705,9 @@ get_backup_extension() {
     typedb)
       # TypeDB uses TypeQL format for backups
       echo ".typeql" ;;
+    influxdb)
+      # InfluxDB uses SQL format for backups
+      echo ".sql" ;;
     *)
       echo ".$format" ;;
   esac
@@ -703,6 +746,10 @@ create_backup() {
       # TypeDB exports schema + data from test_tdb (seed file creates this database)
       run_cmd spindb backup "$container_name" -d test_tdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    influxdb)
+      # InfluxDB exports data via REST API SQL dump
+      run_cmd spindb backup "$container_name" -d testdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -737,6 +784,10 @@ create_restore_target() {
       ;;
     typedb)
       # TypeDB: import creates the database, no explicit target needed
+      return 0
+      ;;
+    influxdb)
+      # InfluxDB: databases created implicitly on first write, no explicit target needed
       return 0
       ;;
     *)
@@ -807,6 +858,10 @@ restore_backup() {
       # TypeDB import creates the database from the backup
       run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
       ;;
+    influxdb)
+      # InfluxDB restore executes SQL statements via REST API
+      run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
+      ;;
   esac
 }
 
@@ -837,6 +892,9 @@ verify_restored_data() {
       actual=$(get_data_count "$engine" "$container_name" "qdb")
       ;;
     typedb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
+    influxdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
   esac
@@ -873,6 +931,9 @@ verify_restored_data_with_count() {
       actual=$(get_data_count "$engine" "$container_name" "qdb")
       ;;
     typedb)
+      actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
+    influxdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
   esac
@@ -920,6 +981,16 @@ cleanup_restore_target() {
           "$console_bin" --address "127.0.0.1:${typedb_port}" --tls-disabled --username admin --password password \
             --command "database delete restored_db" &>/dev/null || true
         fi
+      fi
+      ;;
+    influxdb)
+      # InfluxDB: drop tables in restored database via REST API
+      local influxdb_port
+      influxdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$influxdb_port" ]; then
+        curl -sf -X POST "http://127.0.0.1:${influxdb_port}/api/v3/query_sql" \
+          -H 'Content-Type: application/json' \
+          -d '{"db":"restored_db","q":"DROP TABLE test_user","format":"json"}' &>/dev/null || true
       fi
       ;;
   esac
@@ -1329,6 +1400,14 @@ run_test() {
         if curl -sf "http://127.0.0.1:${http_port}/health" &>/dev/null; then
           query_ok=true
         fi
+      fi
+      ;;
+    influxdb)
+      # InfluxDB uses REST API - check health endpoint via curl
+      local influxdb_port
+      influxdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$influxdb_port" ] && curl -sf "http://127.0.0.1:${influxdb_port}/health" &>/dev/null; then
+        query_ok=true
       fi
       ;;
   esac
@@ -1966,7 +2045,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

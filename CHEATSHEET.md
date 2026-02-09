@@ -21,6 +21,8 @@ spindb create mydb -e couchdb           # Create CouchDB
 spindb create mydb -e cockroachdb       # Create CockroachDB
 spindb create mydb -e surrealdb         # Create SurrealDB
 spindb create mydb -e questdb           # Create QuestDB
+spindb create mydb -e typedb            # Create TypeDB
+spindb create mydb -e influxdb          # Create InfluxDB
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -53,8 +55,8 @@ spindb run mysurreal -c "SELECT * FROM users"  # Run SurrealQL
 spindb run myquest -c "SELECT * FROM sensors"  # Run QuestDB SQL
 ```
 
-> **REST API Engines:** Qdrant, Meilisearch, and CouchDB use REST APIs instead of CLI shells.
-> `spindb connect` opens their web dashboards in your browser. `spindb run` is not available for these engines.
+> **REST API Engines:** Qdrant, Meilisearch, CouchDB, and InfluxDB use REST APIs instead of CLI shells.
+> `spindb connect` shows REST API info. Qdrant, Meilisearch, and CouchDB have web dashboards. InfluxDB is API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
 
 ## Connection Strings
 
@@ -108,6 +110,7 @@ spindb restore mydb --from-url "http://user:pass@host:5984/db" # CouchDB
 spindb restore mydb --from-url "postgresql://root@host:26257/db?sslmode=disable"  # CockroachDB
 spindb restore mydb --from-url "ws://root:root@host:8000/ns/db"  # SurrealDB
 spindb restore mydb --from-url "postgresql://admin:quest@host:8812/qdb"  # QuestDB
+spindb restore mydb --from-url "http://host:8086"                      # InfluxDB
 ```
 
 ## Clone
@@ -300,7 +303,7 @@ spindb users list mydb                  # List saved credentials
 spindb users list mydb --json           # JSON output
 ```
 
-> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB.
+> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB, InfluxDB.
 >
 > **Credentials** are saved as `.env.{username}` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 >
@@ -385,6 +388,8 @@ spindb doctor --json                    # JSON output for scripting
 | CockroachDB | 26257   | 26257-26357   | HTTP UI on port+1 |
 | SurrealDB   | 8000    | 8000-8100     | HTTP/WebSocket |
 | QuestDB     | 8812    | 8812-8912     | Web Console at PG+188 |
+| TypeDB      | 1729    | 1729-1829     | HTTP on port+6271 |
+| InfluxDB    | 8086    | 8086-8186     | REST API only |
 | SQLite      | N/A     | File-based    | |
 | DuckDB      | N/A     | File-based    | |
 
@@ -407,6 +412,8 @@ CouchDB:     http://admin:admin@127.0.0.1:5984/mydb
 CockroachDB: postgresql://root@127.0.0.1:26257/defaultdb?sslmode=disable
 SurrealDB:   ws://root:root@127.0.0.1:8000/test/test
 QuestDB:     postgresql://admin:quest@127.0.0.1:8812/qdb
+TypeDB:      typedb://127.0.0.1:1729
+InfluxDB:    http://127.0.0.1:8086
 SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```
@@ -415,6 +422,8 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **SurrealDB:** Format is `ws://user:pass@host:port/namespace/database`. Defaults: root/root, test/test.
 > **CouchDB:** Default credentials are admin/admin.
 > **QuestDB:** Uses PostgreSQL wire protocol. Default credentials are admin/quest. Single database `qdb`.
+> **TypeDB:** Uses gRPC protocol. Default credentials: admin/password.
+> **InfluxDB:** REST API only. Databases created implicitly on first write. No authentication in local dev mode.
 
 ## Export to Docker
 
@@ -568,6 +577,8 @@ pnpm generate:db couchdb       # couch (REST API)
 pnpm generate:db cockroachdb   # crdb, cockroach
 pnpm generate:db surrealdb     # surreal
 pnpm generate:db questdb       # quest
+pnpm generate:db typedb        # tdb
+pnpm generate:db influxdb      # influx (REST API)
 
 # Examples:
 pnpm generate:db pg                      # Create "demo-postgresql" with seed data

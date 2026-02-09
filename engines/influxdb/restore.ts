@@ -88,7 +88,122 @@ export type RestoreOptions = {
 }
 
 /**
- * Restore from SQL backup by executing SQL statements via REST API
+ * Parse SQL VALUES clause into an array of string values.
+ * Handles SQL string escaping ('' for embedded single quotes).
+ */
+function parseSqlValues(valuesStr: string): string[] {
+  const values: string[] = []
+  let current = ''
+  let inString = false
+
+  for (let i = 0; i < valuesStr.length; i++) {
+    const ch = valuesStr[i]
+
+    if (inString) {
+      if (ch === "'" && valuesStr[i + 1] === "'") {
+        // Escaped single quote
+        current += "'"
+        i++
+      } else if (ch === "'") {
+        // End of string
+        inString = false
+        values.push(current)
+        current = ''
+      } else {
+        current += ch
+      }
+    } else {
+      if (ch === "'") {
+        inString = true
+        current = ''
+      } else if (ch === ',') {
+        const trimmed = current.trim()
+        if (trimmed) {
+          values.push(trimmed)
+        }
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+  }
+
+  const trimmed = current.trim()
+  if (trimmed) {
+    values.push(trimmed)
+  }
+
+  return values
+}
+
+/**
+ * Convert parsed INSERT data to InfluxDB line protocol format.
+ * Format: measurement,tag1=val1 field1="val1",field2="val2" timestamp_ns
+ *
+ * Tag columns (from backup metadata) become line protocol tags,
+ * remaining columns become fields. This preserves the original schema
+ * so that records with the same timestamp remain distinct.
+ */
+function toLineProtocol(
+  table: string,
+  columns: string[],
+  values: string[],
+  tagColumns: Set<string>,
+): string | null {
+  const tags: string[] = []
+  const fields: string[] = []
+  let timestampNs = ''
+
+  for (let i = 0; i < columns.length; i++) {
+    const col = columns[i]
+    const val = values[i]
+
+    if (!val || val === 'NULL') continue
+
+    if (col === 'time') {
+      const ms = new Date(val).getTime()
+      if (!isNaN(ms)) {
+        timestampNs = String(ms * 1_000_000)
+      } else {
+        logDebug(`Warning: unparseable timestamp value "${val}" in restore`)
+      }
+      continue
+    }
+
+    if (tagColumns.has(col)) {
+      // Tags: key=value (no quotes, escape spaces/commas/equals)
+      const escaped = val
+        .replace(/\\/g, '\\\\')
+        .replace(/ /g, '\\ ')
+        .replace(/,/g, '\\,')
+        .replace(/=/g, '\\=')
+      tags.push(`${col}=${escaped}`)
+    } else {
+      // Fields: key="value" (string fields are quoted)
+      const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+      fields.push(`${col}="${escaped}"`)
+    }
+  }
+
+  if (fields.length === 0) return null
+
+  let line = table
+  if (tags.length > 0) {
+    line += `,${tags.join(',')}`
+  }
+  line += ` ${fields.join(',')}`
+  if (timestampNs) {
+    line += ` ${timestampNs}`
+  }
+  return line
+}
+
+/**
+ * Restore from SQL backup by parsing INSERT statements, converting to
+ * line protocol, and writing via the write_lp endpoint.
+ *
+ * InfluxDB 3.x does not support INSERT via the query_sql endpoint —
+ * data writes must go through /api/v3/write_lp.
  */
 async function restoreSqlBackup(
   backupPath: string,
@@ -100,51 +215,73 @@ async function restoreSqlBackup(
     `Restoring SQL backup to InfluxDB on port ${port}, database ${database}`,
   )
 
-  // Read the SQL file and execute statements
   const content = await readFileAsync(backupPath, 'utf-8')
 
-  // Parse SQL statements (skip comments and empty lines)
-  const statements = content
-    .split('\n')
-    .filter((line) => !line.startsWith('--') && line.trim().length > 0)
-    .join('\n')
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
+  // Parse tag metadata from backup comments (-- Tags: col1, col2)
+  const tagsByTable = new Map<string, Set<string>>()
+  const tagsRegex = /-- Table: (\S+)\n-- Tags: (.+)/g
+  let tagsMatch
+  while ((tagsMatch = tagsRegex.exec(content)) !== null) {
+    const table = tagsMatch[1]
+    const tags = new Set(tagsMatch[2].split(',').map((t) => t.trim()))
+    tagsByTable.set(table, tags)
+  }
 
-  logDebug(`Found ${statements.length} SQL statements to execute`)
+  // Parse INSERT INTO statements and convert to line protocol
+  const insertRegex =
+    /INSERT INTO "([^"]+)"\s*\(([^)]+)\)\s*VALUES\s*\((.+)\);/g
+  const linesByTable = new Map<string, string[]>()
 
-  let executedCount = 0
+  let match
+  while ((match = insertRegex.exec(content)) !== null) {
+    const table = match[1]
+    const columns = match[2].split(',').map((c) => c.trim().replace(/"/g, ''))
+    const values = parseSqlValues(match[3])
+    const tableTags = tagsByTable.get(table) ?? new Set<string>()
+    const line = toLineProtocol(table, columns, values, tableTags)
+
+    if (line) {
+      if (!linesByTable.has(table)) linesByTable.set(table, [])
+      linesByTable.get(table)!.push(line)
+    }
+  }
+
+  logDebug(
+    `Parsed ${[...linesByTable.values()].reduce((sum, l) => sum + l.length, 0)} records from ${linesByTable.size} tables`,
+  )
+
+  let totalRecords = 0
   const errors: string[] = []
 
-  for (const sql of statements) {
+  for (const [table, lines] of linesByTable) {
+    const body = lines.join('\n')
     try {
       const response = await influxdbApiRequest(
         port,
         'POST',
-        '/api/v3/query_sql',
-        {
-          db: database,
-          q: sql,
-          format: 'json',
-        },
+        `/api/v3/write_lp?db=${encodeURIComponent(database)}`,
+        body,
       )
 
-      if (response.status >= 400) {
-        errors.push(`Statement failed: ${sql.substring(0, 100)}...`)
-        logDebug(`SQL error: ${JSON.stringify(response.data)}`)
+      if (response.status < 300) {
+        totalRecords += lines.length
       } else {
-        executedCount++
+        errors.push(
+          `Failed to write ${table}: ${JSON.stringify(response.data)}`,
+        )
+        logDebug(
+          `write_lp error for ${table}: ${JSON.stringify(response.data)}`,
+        )
       }
     } catch (error) {
       errors.push(
-        `Statement error: ${error instanceof Error ? error.message : String(error)}`,
+        `Error writing ${table}: ${error instanceof Error ? error.message : String(error)}`,
       )
     }
   }
 
   const message =
-    `Executed ${executedCount}/${statements.length} statements` +
+    `Restored ${totalRecords} records from ${linesByTable.size} tables` +
     (errors.length > 0 ? `. ${errors.length} errors.` : '')
 
   return {

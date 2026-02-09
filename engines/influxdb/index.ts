@@ -383,15 +383,19 @@ export class InfluxDBEngine extends BaseEngine {
     onProgress?.({ stage: 'starting', message: 'Starting InfluxDB...' })
 
     // Build command arguments
-    // InfluxDB 3.x uses 'serve' subcommand
+    // InfluxDB 3.x uses 'serve' subcommand with required --node-id
+    // Use fixed node-id so data persists across container renames
     const args = [
       'serve',
+      '--node-id',
+      'spindb',
       '--object-store',
       'file',
       '--data-dir',
       dataDir,
       '--http-bind',
       `127.0.0.1:${port}`,
+      '--without-auth',
     ]
 
     logDebug(`Starting influxdb3 with args: ${args.join(' ')}`)
@@ -847,6 +851,9 @@ export class InfluxDBEngine extends BaseEngine {
       const tables = tablesResponse.data as Array<Record<string, unknown>>
       if (Array.isArray(tables)) {
         for (const row of tables) {
+          // Only drop user tables (iox schema), skip system/information_schema
+          const schema = row.table_schema as string | undefined
+          if (schema && schema !== 'iox') continue
           const tableName =
             (row.table_name as string) ||
             (row.name as string) ||
@@ -876,7 +883,7 @@ export class InfluxDBEngine extends BaseEngine {
 
   /**
    * Dump from a remote InfluxDB connection
-   * Uses InfluxDB's REST API to query and export data
+   * Uses InfluxDB's REST API to query tables and export data as SQL
    */
   async dumpFromConnectionString(
     connectionString: string,
@@ -901,6 +908,7 @@ export class InfluxDBEngine extends BaseEngine {
     }
 
     const db = database || 'mydb'
+    const warnings: string[] = []
 
     // Get list of tables
     const tablesResponse = await remoteInfluxDBRequest(
@@ -911,18 +919,110 @@ export class InfluxDBEngine extends BaseEngine {
       { db, q: 'SHOW TABLES', format: 'json' },
     )
 
-    const tables = tablesResponse.data as Array<Record<string, unknown>>
-    const tableCount = Array.isArray(tables) ? tables.length : 0
+    const tablesData = tablesResponse.data as Array<Record<string, unknown>>
+    const tables: string[] = []
+    if (Array.isArray(tablesData)) {
+      for (const row of tablesData) {
+        const schema = row.table_schema as string | undefined
+        if (schema && schema !== 'iox') continue
+        const tableName =
+          (row.table_name as string) ||
+          (row.name as string) ||
+          (Object.values(row)[0] as string)
+        if (tableName) tables.push(tableName)
+      }
+    }
 
-    logDebug(`Found ${tableCount} tables on remote server`)
+    logDebug(`Found ${tables.length} tables on remote server`)
+
+    if (tables.length === 0) {
+      warnings.push(
+        `Remote InfluxDB instance has no tables in database "${db}"`,
+      )
+    }
+
+    // Build SQL dump (same format as local backup)
+    let sqlContent = `-- InfluxDB SQL Backup\n`
+    sqlContent += `-- Database: ${db}\n`
+    sqlContent += `-- Source: ${baseUrl}\n`
+    sqlContent += `-- Created: ${new Date().toISOString()}\n\n`
+
+    for (const table of tables) {
+      // Query column metadata for tag identification
+      const tagColumns: string[] = []
+      try {
+        const colResponse = await remoteInfluxDBRequest(
+          baseUrl,
+          'POST',
+          '/api/v3/query_sql',
+          headers,
+          {
+            db,
+            q: `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '${table.replace(/'/g, "''")}'`,
+            format: 'json',
+          },
+        )
+        if (colResponse.status === 200 && Array.isArray(colResponse.data)) {
+          for (const col of colResponse.data as Array<
+            Record<string, unknown>
+          >) {
+            if (String(col.data_type || '').includes('Dictionary')) {
+              tagColumns.push(String(col.column_name))
+            }
+          }
+        }
+      } catch {
+        logDebug(`Warning: Could not query column metadata for ${table}`)
+      }
+
+      // Query all data from the table
+      const dataResponse = await remoteInfluxDBRequest(
+        baseUrl,
+        'POST',
+        '/api/v3/query_sql',
+        headers,
+        {
+          db,
+          q: `SELECT * FROM "${table.replace(/"/g, '""')}"`,
+          format: 'json',
+        },
+      )
+
+      if (dataResponse.status !== 200) {
+        const msg = `Failed to export table ${table}: ${JSON.stringify(dataResponse.data)}`
+        logDebug(`Warning: ${msg}`)
+        warnings.push(msg)
+        continue
+      }
+
+      const rows = dataResponse.data as Array<Record<string, unknown>>
+      if (Array.isArray(rows) && rows.length > 0) {
+        sqlContent += `-- Table: ${table}\n`
+        if (tagColumns.length > 0) {
+          sqlContent += `-- Tags: ${tagColumns.join(', ')}\n`
+        }
+
+        for (const row of rows) {
+          const columns = Object.keys(row)
+          const values = columns.map((col) => {
+            const val = row[col]
+            if (val === null || val === undefined) return 'NULL'
+            if (typeof val === 'number') return String(val)
+            if (typeof val === 'boolean') return val ? 'true' : 'false'
+            return `'${String(val).replace(/'/g, "''")}'`
+          })
+          sqlContent += `INSERT INTO "${table.replace(/"/g, '""')}" (${columns.map((c) => `"${c.replace(/"/g, '""')}"`).join(', ')}) VALUES (${values.join(', ')});\n`
+        }
+        sqlContent += '\n'
+      }
+    }
+
+    // Write SQL content to file
+    await writeFile(outputPath, sqlContent, 'utf-8')
 
     return {
       filePath: outputPath,
-      warnings: [
-        tableCount === 0
-          ? `Remote InfluxDB instance has no tables in database "${db}"`
-          : undefined,
-      ].filter((w): w is string => w !== undefined),
+      warnings,
     }
   }
 
@@ -1090,7 +1190,7 @@ export class InfluxDBEngine extends BaseEngine {
 
   /**
    * List databases for InfluxDB.
-   * InfluxDB 3.x uses SHOW DATABASES via SQL.
+   * InfluxDB 3.x uses GET /api/v3/configure/database?format=json
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
     const { port } = container
@@ -1098,13 +1198,8 @@ export class InfluxDBEngine extends BaseEngine {
     try {
       const response = await influxdbApiRequest(
         port,
-        'POST',
-        '/api/v3/query_sql',
-        {
-          db: container.database || '_internal',
-          q: 'SHOW DATABASES',
-          format: 'json',
-        },
+        'GET',
+        '/api/v3/configure/database?format=json',
       )
 
       if (response.status === 200 && response.data) {
@@ -1113,8 +1208,7 @@ export class InfluxDBEngine extends BaseEngine {
           const databases = data
             .map((row) => {
               return (
-                (row.iox_name as string) ||
-                (row.db_name as string) ||
+                (row['iox::database'] as string) ||
                 (row.name as string) ||
                 (Object.values(row)[0] as string)
               )

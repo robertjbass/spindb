@@ -494,10 +494,16 @@ echo "User configured via server settings"
 
     case Engine.Qdrant:
     case Engine.Meilisearch:
-    case Engine.InfluxDB:
       userCreationCommands = `
 # API key is configured at server start
 echo "API key configured via server settings"
+`
+      break
+
+    case Engine.InfluxDB:
+      userCreationCommands = `
+# InfluxDB 3.x local dev runs without authentication
+echo "No authentication required for local InfluxDB 3.x"
 `
       break
 

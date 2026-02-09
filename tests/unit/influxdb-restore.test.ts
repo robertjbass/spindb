@@ -2,7 +2,7 @@
  * InfluxDB restore module unit tests
  */
 
-import { describe, it, after } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import { join } from 'path'
 import { writeFile, rm, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -24,8 +24,11 @@ describe('InfluxDB Restore Module', () => {
   })
 
   describe('detectBackupFormat', () => {
-    it('should detect .sql file by extension', async () => {
+    before(async () => {
       await mkdir(testDir, { recursive: true })
+    })
+
+    it('should detect .sql file by extension', async () => {
       const sqlPath = join(testDir, 'test.sql')
       await writeFile(
         sqlPath,
@@ -43,7 +46,6 @@ describe('InfluxDB Restore Module', () => {
     })
 
     it('should detect SQL content by magic content', async () => {
-      await mkdir(testDir, { recursive: true })
       const contentPath = join(testDir, 'backup.dat')
       await writeFile(
         contentPath,
@@ -57,7 +59,6 @@ describe('InfluxDB Restore Module', () => {
     })
 
     it('should return unknown for non-SQL files', async () => {
-      await mkdir(testDir, { recursive: true })
       const textPath = join(testDir, 'backup.txt')
       await writeFile(textPath, 'This is not a SQL dump')
 

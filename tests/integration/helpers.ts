@@ -807,6 +807,22 @@ export async function waitForReady(
           `"${psqlPath}" "postgresql://admin:quest@127.0.0.1:${port}/qdb" -c "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.InfluxDB) {
+        // InfluxDB health check via HTTP GET to /health endpoint
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/health`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('InfluxDB health check failed or timed out')
+        }
       } else if (engine === Engine.TypeDB) {
         // TypeDB health check via HTTP GET to HTTP port
         const httpPort = options?.httpPort ?? port + 6271
@@ -997,6 +1013,9 @@ export function getConnectionString(
   }
   if (engine === Engine.TypeDB) {
     return `typedb://127.0.0.1:${port}`
+  }
+  if (engine === Engine.InfluxDB) {
+    return `http://127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

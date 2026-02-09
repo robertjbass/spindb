@@ -54,6 +54,7 @@
     "duckdb",
     "questdb",
     "typedb",
+    "influxdb",
     "tui",
     "cli",
     "package manager"
