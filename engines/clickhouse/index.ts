@@ -554,7 +554,7 @@ export class ClickHouseEngine extends BaseEngine {
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 90000,
+    timeoutMs = 120000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for port ${port}, version ${version}`)
     const startTime = Date.now()

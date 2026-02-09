@@ -2306,11 +2306,14 @@ jobs:
         # engines with 30-90s internal waitForReady don't get killed.
         # SurrealDB is skipped: its large Rust binary hangs during --version
         # verification under QEMU user-mode emulation.
+        # ClickHouse is skipped: its heavy binary consistently exceeds startup
+        # timeouts under QEMU (~120s+ native, far longer emulated). Tested
+        # natively on macOS/Linux CI runners instead.
         run: |
           docker run --rm --platform linux/arm64 \
             -e START_TIMEOUT=600 \
             -e STARTUP_TIMEOUT=180 \
-            -e SKIP_ENGINES=surrealdb \
+            -e "SKIP_ENGINES=surrealdb clickhouse" \
             spindb-e2e-arm64
         timeout-minutes: 90
 
