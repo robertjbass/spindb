@@ -24,7 +24,7 @@ export function parseVersion(versionString: string): {
   const parts = cleaned.split('.')
 
   // Only allow 1-3 segments (major, major.minor, major.minor.patch)
-  if (parts.length < 1 || parts.length > 3) return null
+  if (parts.length > 3) return null
 
   // Reject segments that aren't purely numeric (e.g., "3b", "8rc1")
   if (parts.some((p) => !/^\d+$/.test(p))) return null

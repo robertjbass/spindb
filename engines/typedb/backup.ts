@@ -69,23 +69,30 @@ async function createTypeQLBackup(
     proc.on('close', async (code) => {
       if (code === 0) {
         try {
-          // Calculate total size of both files
-          let totalSize = 0
+          // Calculate total size of both files (schema + data)
+          let schemaSize: number | null = null
+          let dataSize: number | null = null
           const errors: string[] = []
           try {
             const schemaStats = await stat(schemaPath)
-            totalSize += schemaStats.size
+            schemaSize = schemaStats.size
           } catch (err) {
             errors.push(`schema(${schemaPath}): ${err}`)
           }
           try {
             const dataStats = await stat(dataPath)
-            totalSize += dataStats.size
+            dataSize = dataStats.size
           } catch (err) {
             errors.push(`data(${dataPath}): ${err}`)
           }
 
-          if (totalSize === 0) {
+          if (
+            errors.length > 0 ||
+            schemaSize === null ||
+            dataSize === null ||
+            schemaSize === 0 ||
+            dataSize === 0
+          ) {
             reject(
               new Error(
                 `Backup produced empty or missing files: schema=${schemaPath}, data=${dataPath}` +
@@ -100,7 +107,7 @@ async function createTypeQLBackup(
           resolve({
             path: outputPath,
             format: 'typeql',
-            size: totalSize,
+            size: schemaSize + dataSize,
           })
         } catch (error) {
           reject(new Error(`Backup files not created: ${error}`))

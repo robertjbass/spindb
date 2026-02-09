@@ -51,6 +51,7 @@ import { getEngineIcon, getPageSize } from '../../constants'
 import { Engine, assertExhaustive } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
+import { validateTypedbConnectionString } from './validators'
 
 // Strip surrounding quotes from paths (handles drag-and-drop paths)
 function stripQuotes(path: string): string {
@@ -208,14 +209,9 @@ function validateConnectionString(
       }
       break
     case Engine.TypeDB:
-      if (
-        !input.startsWith('typedb://') &&
-        !input.startsWith('typedb-core://') &&
-        !input.startsWith('http://') &&
-        !input.startsWith('https://') &&
-        !/^[\w.-]+:\d+/.test(input)
-      ) {
-        return 'Connection string must be host:port, typedb://, typedb-core://, or http(s)://'
+      {
+        const typedbError = validateTypedbConnectionString(input)
+        if (typedbError) return typedbError
       }
       break
     case Engine.SQLite:

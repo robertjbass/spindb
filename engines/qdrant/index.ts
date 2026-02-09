@@ -1233,7 +1233,9 @@ export class QdrantEngine extends BaseEngine {
 
     const currentConfig = await readFile(configPath, 'utf-8')
 
-    // Parse YAML config line-by-line to find service section and api_key
+    // Parse YAML config line-by-line to find service section and api_key.
+    // Assumes 2-space indentation, no inline comments on api_key lines, and simple scalar values.
+    // This is a lightweight string-edit approach; use a YAML parser if those cases must be supported.
     const lines = currentConfig.split('\n')
     const serviceIdx = lines.findIndex((l) => /^service:/.test(l))
 

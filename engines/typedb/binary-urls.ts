@@ -25,7 +25,7 @@ export function getBinaryUrl(
   arch: Arch,
 ): string {
   const fullVersion = normalizeVersion(version)
-  const ext = platform === 'win32' ? 'zip' : 'tar.gz'
+  const ext = getArchiveExtension(platform)
 
   return `${HOSTDB_BASE_URL}/typedb-${fullVersion}/typedb-${fullVersion}-${platform}-${arch}.${ext}`
 }

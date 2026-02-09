@@ -150,4 +150,4 @@ Every database engine supported by SpinDB and its managed cloud (DBaaS/BaaS) equ
 
 | Service | Type | Databases | Notes |
 |---------|------|-----------|-------|
-| [TypeDB Cloud](https://typedb.com/cloud) | DBaaS | TypeDB | Official managed TypeDB on AWS/GCP |
+| [TypeDB Cloud](https://cloud.typedb.com) | DBaaS | TypeDB | Official managed TypeDB on AWS/GCP |

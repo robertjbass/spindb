@@ -23,6 +23,10 @@ This is a **composite engine** with unique binary management requirements.
 
 FerretDB is **not available on Windows** due to postgresql-documentdb startup issues. The Windows binaries exist in hostdb, but the PostgreSQL backend fails to initialize properly. This has been extensively tested and currently requires WSL as a workaround.
 
+### macOS SIP / Container Limitations
+
+On macOS, System Integrity Protection (SIP) can block creating symlinks in system directories (e.g., `/usr/local`). In containerized or locked-down environments, even `sudo` may not permit writes to those paths. If you hit permission errors during setup, use a non-system install location or run with elevated privileges when available. See https://github.com/robertjbass/spindb#ferretdb for details.
+
 ## Binary Packaging
 
 ### Archive Format

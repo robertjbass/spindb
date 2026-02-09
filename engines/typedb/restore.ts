@@ -7,7 +7,11 @@ import { spawn } from 'child_process'
 import { open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { logDebug } from '../../core/error-handler'
-import { requireTypeDBConsolePath, getConsoleBaseArgs } from './cli-utils'
+import {
+  requireTypeDBConsolePath,
+  getConsoleBaseArgs,
+  validateTypeDBIdentifier,
+} from './cli-utils'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 /**
@@ -89,6 +93,17 @@ async function looksLikeTypeQL(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Check if a .typeql backup path has companion schema/data pair files
+ */
+function hasSchemaDataPair(filePath: string): boolean {
+  return (
+    filePath.endsWith('.typeql') &&
+    (existsSync(filePath.replace(/\.typeql$/, '-schema.typeql')) ||
+      existsSync(filePath.replace(/\.typeql$/, '-data.typeql')))
+  )
+}
+
+/**
  * Detect backup format from file
  * Supports:
  * - TypeQL: Schema + data statements
@@ -98,17 +113,14 @@ export async function detectBackupFormat(
 ): Promise<BackupFormat> {
   // TypeDB backup creates schema/data pair files (-schema.typeql, -data.typeql)
   // rather than a single file, so also check for those variants
-  const hasSchemaDataPair =
-    filePath.endsWith('.typeql') &&
-    (existsSync(filePath.replace(/\.typeql$/, '-schema.typeql')) ||
-      existsSync(filePath.replace(/\.typeql$/, '-data.typeql')))
+  const hasPair = hasSchemaDataPair(filePath)
 
-  if (!existsSync(filePath) && !hasSchemaDataPair) {
+  if (!existsSync(filePath) && !hasPair) {
     throw new Error(`Backup file not found: ${filePath}`)
   }
 
   // If schema/data pair exists, it's a TypeQL backup
-  if (hasSchemaDataPair) {
+  if (hasPair) {
     return {
       format: 'typeql',
       description: 'TypeDB TypeQL backup (schema + data pair)',
@@ -174,6 +186,7 @@ async function restoreTypeQLBackup(
   database: string,
   version?: string,
 ): Promise<RestoreResult> {
+  validateTypeDBIdentifier(database)
   const consolePath = await requireTypeDBConsolePath(version)
 
   // Derive base name by stripping known extensions (.typeql or .tql)
@@ -264,11 +277,7 @@ export async function restoreBackup(
 
   // TypeDB backup creates schema/data pair files (-schema.typeql, -data.typeql)
   // rather than a single file at backupPath, so check for those too
-  const hasSchemaDataVariant =
-    backupPath.endsWith('.typeql') &&
-    (existsSync(backupPath.replace(/\.typeql$/, '-schema.typeql')) ||
-      existsSync(backupPath.replace(/\.typeql$/, '-data.typeql')))
-  if (!existsSync(backupPath) && !hasSchemaDataVariant) {
+  if (!existsSync(backupPath) && !hasSchemaDataPair(backupPath)) {
     throw new Error(`Backup file not found: ${backupPath}`)
   }
 

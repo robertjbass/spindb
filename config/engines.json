@@ -278,7 +278,7 @@
       "scriptFileLabel": "Run TypeQL file",
       "connectionScheme": "typedb",
       "superuser": "admin",
-      "clientTools": ["typedb", "typedb_console_bin"],
+      "clientTools": ["typedb", "typedb-console"],
       "licensing": "MPL-2.0",
       "notes": "Strongly-typed database for knowledge representation and reasoning. TypeQL query language. Main port 1729, HTTP port 8000. Default credentials: admin/password."
     }

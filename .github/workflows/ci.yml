@@ -2304,10 +2304,13 @@ jobs:
       - name: Run ARM64 smoke tests
         # QEMU emulation is ~5-10x slower than native; increase timeouts so
         # engines with 30-90s internal waitForReady don't get killed.
+        # SurrealDB is skipped: its large Rust binary hangs during --version
+        # verification under QEMU user-mode emulation.
         run: |
           docker run --rm --platform linux/arm64 \
             -e START_TIMEOUT=600 \
             -e STARTUP_TIMEOUT=180 \
+            -e SKIP_ENGINES=surrealdb \
             spindb-e2e-arm64
         timeout-minutes: 90
 

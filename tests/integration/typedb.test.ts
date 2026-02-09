@@ -134,8 +134,8 @@ describe('TypeDB Integration Tests', () => {
       const httpPort = port + 6271
       const httpFree = await portManager.isPortAvailable(httpPort)
       if (!httpFree) {
-        console.log(
-          `   WARNING: HTTP port ${httpPort} (for main port ${port}) is in use`,
+        throw new Error(
+          `HTTP port ${httpPort} (for main port ${port}) is in use; cannot proceed with TypeDB tests.`,
         )
       }
     }
