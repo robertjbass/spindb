@@ -158,7 +158,8 @@ export async function cleanupTestContainers(): Promise<string[]> {
       (c) =>
         c.engine !== Engine.CockroachDB &&
         c.engine !== Engine.SurrealDB &&
-        c.engine !== Engine.QuestDB,
+        c.engine !== Engine.QuestDB &&
+        c.engine !== Engine.TypeDB,
     )
   }
 
