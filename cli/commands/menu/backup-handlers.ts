@@ -214,6 +214,15 @@ function validateConnectionString(
         if (typedbError) return typedbError
       }
       break
+    case Engine.InfluxDB:
+      if (
+        !input.startsWith('influxdb://') &&
+        !input.startsWith('http://') &&
+        !input.startsWith('https://')
+      ) {
+        return 'Connection string must start with influxdb://, http://, or https://'
+      }
+      break
     case Engine.SQLite:
     case Engine.DuckDB:
       return 'File-based engines do not support remote connection strings'

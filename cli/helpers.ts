@@ -234,6 +234,16 @@ export type InstalledTypeDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledInfluxDBEngine = {
+  engine: 'influxdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -252,6 +262,7 @@ export type InstalledEngine =
   | InstalledSurrealDBEngine
   | InstalledQuestDBEngine
   | InstalledTypeDBEngine
+  | InstalledInfluxDBEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1150,6 +1161,63 @@ async function getInstalledTypeDBEngines(): Promise<InstalledTypeDBEngine[]> {
   return engines
 }
 
+// Get InfluxDB version from binary path
+async function getInfluxDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const influxdbPath = join(binPath, 'bin', `influxdb3${ext}`)
+  if (!existsSync(influxdbPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(influxdbPath, ['--version'])
+    const match = stdout.match(/v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed InfluxDB engines from downloaded binaries
+async function getInstalledInfluxDBEngines(): Promise<
+  InstalledInfluxDBEngine[]
+> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledInfluxDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('influxdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'influxdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getInfluxDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'influxdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 // Get FerretDB version from binary path
 async function getFerretDBVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1245,6 +1313,7 @@ const ENGINE_PREFIXES = [
   'surrealdb-',
   'questdb-',
   'typedb-',
+  'influxdb-',
 ] as const
 
 /**
@@ -1292,6 +1361,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     surrealdbEngines,
     questdbEngines,
     typedbEngines,
+    influxdbEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1310,6 +1380,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledSurrealDBEngines(),
     getInstalledQuestDBEngines(),
     getInstalledTypeDBEngines(),
+    getInstalledInfluxDBEngines(),
   ])
 
   return [
@@ -1330,6 +1401,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...surrealdbEngines,
     ...questdbEngines,
     ...typedbEngines,
+    ...influxdbEngines,
   ]
 }
 
@@ -1350,4 +1422,5 @@ export {
   getInstalledSurrealDBEngines,
   getInstalledQuestDBEngines,
   getInstalledTypeDBEngines,
+  getInstalledInfluxDBEngines,
 }

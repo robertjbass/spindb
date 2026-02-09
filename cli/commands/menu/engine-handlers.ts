@@ -31,6 +31,7 @@ import {
   type InstalledSurrealDBEngine,
   type InstalledQuestDBEngine,
   type InstalledTypeDBEngine,
+  type InstalledInfluxDBEngine,
 } from '../../helpers'
 
 import { type MenuChoice } from './shared'
@@ -97,6 +98,9 @@ export async function handleEngines(): Promise<void> {
       (e): e is InstalledQuestDBEngine => e.engine === 'questdb',
     ),
     ...engines.filter((e): e is InstalledTypeDBEngine => e.engine === 'typedb'),
+    ...engines.filter(
+      (e): e is InstalledInfluxDBEngine => e.engine === 'influxdb',
+    ),
   ]
 
   // Calculate total size

@@ -38,6 +38,7 @@ export enum Engine {
   SurrealDB = 'surrealdb',
   QuestDB = 'questdb',
   TypeDB = 'typedb',
+  InfluxDB = 'influxdb',
 }
 
 // Icon display mode for engine icons in CLI output
@@ -78,6 +79,7 @@ export const ALL_ENGINES = [
   Engine.SurrealDB,
   Engine.QuestDB,
   Engine.TypeDB,
+  Engine.InfluxDB,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -208,6 +210,7 @@ export type CockroachDBFormat = 'sql'
 export type SurrealDBFormat = 'surql'
 export type QuestDBFormat = 'sql'
 export type TypeDBFormat = 'typeql'
+export type InfluxDBFormat = 'sql'
 
 // Query command types
 export type QueryResultRow = Record<string, unknown>
@@ -286,6 +289,7 @@ export type BackupFormatType =
   | SurrealDBFormat
   | QuestDBFormat
   | TypeDBFormat
+  | InfluxDBFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -306,6 +310,7 @@ type EngineFormatMap = {
   [Engine.SurrealDB]: SurrealDBFormat
   [Engine.QuestDB]: QuestDBFormat
   [Engine.TypeDB]: TypeDBFormat
+  [Engine.InfluxDB]: InfluxDBFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -420,6 +425,8 @@ export type BinaryTool =
   // TypeDB tools
   | 'typedb'
   | 'typedb_console_bin'
+  // InfluxDB tools
+  | 'influxdb3'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -510,6 +517,8 @@ export type SpinDBConfig = {
     // TypeDB tools
     typedb?: BinaryConfig
     typedb_console_bin?: BinaryConfig
+    // InfluxDB tools
+    influxdb3?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

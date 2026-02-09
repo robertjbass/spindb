@@ -72,6 +72,7 @@ export const TEST_PORTS = {
   surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
   questdb: { base: 8820, clone: 8822, renamed: 8821 },
   typedb: { base: 1730, clone: 1732, renamed: 1731 },
+  influxdb: { base: 8087, clone: 8089, renamed: 8088 },
 }
 
 // Default test versions for each engine

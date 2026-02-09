@@ -32,6 +32,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   surrealdb: 'surrealdb.test.ts',
   questdb: 'questdb.test.ts',
   typedb: 'typedb.test.ts',
+  influxdb: 'influxdb.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
@@ -63,6 +64,8 @@ const ENGINE_ALIASES: Record<string, string> = {
   quest: 'questdb',
   // TypeDB aliases
   tdb: 'typedb',
+  // InfluxDB aliases
+  influx: 'influxdb',
 }
 
 // Test run order (matches test:integration script order)
@@ -84,6 +87,7 @@ const TEST_ORDER = [
   'surrealdb',
   'questdb',
   'typedb',
+  'influxdb',
 ]
 
 function resolveEngine(input: string): string | null {
@@ -130,6 +134,7 @@ function printUsage(): void {
   console.log('  surrealdb     (aliases: surreal)')
   console.log('  questdb       (aliases: quest)')
   console.log('  typedb        (aliases: tdb)')
+  console.log('  influxdb      (aliases: influx)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')
