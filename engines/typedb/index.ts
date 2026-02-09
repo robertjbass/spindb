@@ -561,10 +561,9 @@ export class TypeDBEngine extends BaseEngine {
     let attempt = 0
     while (Date.now() - startTime < timeoutMs) {
       attempt++
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 5000)
       try {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 5000)
-
         const response = await fetch(`http://127.0.0.1:${httpPort}/`, {
           signal: controller.signal,
         })
@@ -575,6 +574,7 @@ export class TypeDBEngine extends BaseEngine {
           return true
         }
       } catch {
+        clearTimeout(timer)
         if (attempt <= 3 || attempt % 10 === 0) {
           logDebug(`Health check attempt ${attempt} failed`)
         }
@@ -960,6 +960,12 @@ export class TypeDBEngine extends BaseEngine {
   ): Promise<void> {
     const { port, version } = container
     const db = options.database || container.database
+
+    if (!db) {
+      throw new Error(
+        'Database name is required. Specify --database or set a default database on the container.',
+      )
+    }
 
     const consolePath = await this.getConsolePath(version)
 

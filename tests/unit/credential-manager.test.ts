@@ -62,9 +62,8 @@ describe('Credential Manager', () => {
     it('should save SQL credentials as .env file', async () => {
       const credentials: UserCredentials = {
         username: 'appuser',
-        password: 'xA9bK2mQ7nR4wE1s',
-        connectionString:
-          'postgresql://appuser:xA9bK2mQ7nR4wE1s@127.0.0.1:5432/mydb',
+        password: 'PASSWORD',
+        connectionString: 'postgresql://appuser:PASSWORD@127.0.0.1:5432/mydb',
         engine: Engine.PostgreSQL,
         container: TEST_CONTAINER,
         database: 'mydb',
@@ -85,7 +84,7 @@ describe('Credential Manager', () => {
       const content = readFileSync(filePath, 'utf-8')
       assert(content.includes('DB_USER=appuser'), 'Should contain DB_USER')
       assert(
-        content.includes('DB_PASSWORD=xA9bK2mQ7nR4wE1s'),
+        content.includes('DB_PASSWORD=PASSWORD'),
         'Should contain DB_PASSWORD',
       )
       assert(content.includes('DB_HOST=127.0.0.1'), 'Should contain DB_HOST')
@@ -93,7 +92,7 @@ describe('Credential Manager', () => {
       assert(content.includes('DB_NAME=mydb'), 'Should contain DB_NAME')
       assert(
         content.includes(
-          'DB_URL=postgresql://appuser:xA9bK2mQ7nR4wE1s@127.0.0.1:5432/mydb',
+          'DB_URL=postgresql://appuser:PASSWORD@127.0.0.1:5432/mydb',
         ),
         'Should contain DB_URL',
       )
@@ -106,7 +105,7 @@ describe('Credential Manager', () => {
         connectionString: 'http://127.0.0.1:7700',
         engine: Engine.Meilisearch,
         container: TEST_CONTAINER_MS,
-        apiKey: 'abc123def456',
+        apiKey: 'DUMMY_API_KEY',
       }
 
       const filePath = await saveCredentials(
@@ -120,7 +119,10 @@ describe('Credential Manager', () => {
         content.includes('API_KEY_NAME=search_key'),
         'Should contain API_KEY_NAME',
       )
-      assert(content.includes('API_KEY=abc123def456'), 'Should contain API_KEY')
+      assert(
+        content.includes('API_KEY=DUMMY_API_KEY'),
+        'Should contain API_KEY',
+      )
       assert(
         content.includes('API_URL=http://127.0.0.1:7700'),
         'Should contain API_URL',

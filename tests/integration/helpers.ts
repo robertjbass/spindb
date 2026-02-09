@@ -373,13 +373,10 @@ export async function executeSQL(
     const { join } = await import('path')
 
     // Detect transaction type: schema (DEFINE/UNDEFINE), write (INSERT/DELETE/PUT), or read
+    // Check anywhere in query, not just start, to handle MATCH ... DELETE/INSERT patterns
     const upperSql = sql.trim().toUpperCase()
-    const isSchema =
-      upperSql.startsWith('DEFINE') || upperSql.startsWith('UNDEFINE')
-    const isWrite =
-      upperSql.startsWith('INSERT') ||
-      upperSql.startsWith('DELETE') ||
-      upperSql.startsWith('PUT')
+    const isSchema = /\b(?:DEFINE|UNDEFINE)\b/.test(upperSql)
+    const isWrite = /\b(?:INSERT|DELETE|PUT)\b/.test(upperSql)
     const txType = isSchema ? 'schema' : isWrite ? 'write' : 'read'
     const txEnd = isSchema || isWrite ? 'commit' : 'close'
     const scriptContent = `transaction ${txType} ${database}\n\n${sql}\n\n${txEnd}\n`

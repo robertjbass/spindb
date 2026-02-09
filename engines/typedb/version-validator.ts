@@ -93,8 +93,9 @@ export function isVersionCompatible(
 
   if (!backup || !restore) {
     return {
-      compatible: true,
-      warning: 'Could not parse versions, proceeding with restore',
+      compatible: false,
+      warning:
+        'Could not parse versions, refusing to proceed without valid version information',
     }
   }
 
