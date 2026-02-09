@@ -35,6 +35,7 @@ import {
 } from '../../core/base-binary-manager'
 import { moveEntry } from '../../core/fs-error-utils'
 import { logDebug } from '../../core/error-handler'
+import { paths } from '../../config/paths'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, Platform, type Arch } from '../../types'
@@ -60,10 +61,25 @@ class TypeDBBinaryManager extends BaseBinaryManager {
   }
 
   protected parseVersionFromOutput(stdout: string): string | null {
-    // TypeDB version output format varies
-    // Try matching "X.Y.Z" pattern
-    const match = stdout.match(/(\d+\.\d+\.\d+)/)
-    return match?.[1] ?? null
+    // Try standard three-part semver (e.g., "3.8.0")
+    const threePartMatch = stdout.match(/(\d+\.\d+\.\d+)/)
+    if (threePartMatch) {
+      return threePartMatch[1]
+    }
+
+    // Fallback: two-part version (e.g., "3.8")
+    const twoPartMatch = stdout.match(/(\d+\.\d+)/)
+    if (twoPartMatch) {
+      logDebug(
+        `TypeDB version parsed as two-part: ${twoPartMatch[1]} (from: ${stdout.trim().slice(0, 100)})`,
+      )
+      return twoPartMatch[1]
+    }
+
+    logDebug(
+      `Could not parse TypeDB version from output: ${stdout.trim().slice(0, 100)}`,
+    )
+    return null
   }
 
   /**
@@ -147,7 +163,7 @@ class TypeDBBinaryManager extends BaseBinaryManager {
     arch: Arch,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
-    const binPath = (await import('../../config/paths')).paths.getBinaryPath({
+    const binPath = paths.getBinaryPath({
       engine: this.config.engineName,
       version: fullVersion,
       platform,

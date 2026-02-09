@@ -199,6 +199,8 @@ async function restoreTypeQLBackup(
 
   if (hasSchema || hasData) {
     // Import schema and data separately
+    // NOTE: Do NOT quote paths here. TypeDB console's --command parser treats
+    // double quotes as literal characters, not delimiters. Quoting breaks all imports.
     const paths = [
       ...(hasSchema ? [schemaPath] : []),
       ...(hasData ? [dataPath] : []),
@@ -220,6 +222,7 @@ async function runConsoleCommand(
   consolePath: string,
   port: number,
   command: string,
+  timeoutMs = 30 * 60 * 1000,
 ): Promise<RestoreResult> {
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = [...getConsoleBaseArgs(port), '--command', command]
@@ -232,6 +235,18 @@ async function runConsoleCommand(
 
     let stdout = ''
     let stderr = ''
+    let settled = false
+
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      proc.kill()
+      reject(
+        new Error(
+          `typedb console timed out after ${Math.round(timeoutMs / 1000)}s running: ${command}`,
+        ),
+      )
+    }, timeoutMs)
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -242,6 +257,9 @@ async function runConsoleCommand(
     })
 
     proc.on('close', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
       if (code === 0) {
         resolve({
           format: 'typeql',
@@ -259,6 +277,9 @@ async function runConsoleCommand(
     })
 
     proc.on('error', (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
       reject(new Error(`Failed to spawn typedb console: ${error.message}`))
     })
   })

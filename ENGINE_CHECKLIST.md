@@ -2548,7 +2548,7 @@ DB_URL=postgresql://spindb:xA9bK2mQ7nR4wE1s@127.0.0.1:5432/mydb
 
 **API key `.env.{keyname}` format:**
 ```
-API_KEY_NAME=search-key
+API_KEY_NAME=search_key
 API_KEY=actual_generated_key_value
 API_URL=http://127.0.0.1:7700
 ```

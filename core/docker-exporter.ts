@@ -206,7 +206,7 @@ function getConnectionStringTemplate(
         : `ws://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}`
 
     case Engine.TypeDB:
-      return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
+      return `typedb://<host>:${port}`
 
     case Engine.SQLite:
     case Engine.DuckDB:

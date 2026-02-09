@@ -112,10 +112,10 @@ export function isVersionCompatible(
     return { compatible: true }
   }
 
-  // Allow upgrading from older major version
+  // TypeDB disallows cross-major restores (major versions have incompatible formats)
   return {
-    compatible: true,
-    warning: `Restoring TypeDB ${backupVersion} backup to ${restoreVersion} server. Data format may be upgraded.`,
+    compatible: false,
+    warning: `Cannot restore TypeDB ${backupVersion} backup to ${restoreVersion} server. Cross-major version restores are not supported. Use TypeDB Export/Import for version migration.`,
   }
 }
 

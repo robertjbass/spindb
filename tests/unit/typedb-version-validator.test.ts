@@ -161,11 +161,15 @@ describe('TypeDB Version Validator', () => {
       assert(result.compatible, 'Same major should be compatible')
     })
 
-    it('should be compatible for restoring to newer major version', () => {
+    it('should not be compatible for cross-major version restores', () => {
       const result = isVersionCompatible('2.0.0', '3.0.0')
       assert(
-        result.compatible,
-        'Restoring from 2.x to 3.x should be compatible',
+        !result.compatible,
+        'Restoring from 2.x to 3.x should not be compatible (cross-major)',
+      )
+      assert(
+        result.warning?.includes('Cross-major') === true,
+        'Should include cross-major warning',
       )
     })
 

@@ -1047,6 +1047,12 @@ export class TypeDBEngine extends BaseEngine {
     const { port, version } = container
     const db = container.database
 
+    if (!db) {
+      throw new Error(
+        'Database name is required. Specify --database or set a default database on the container.',
+      )
+    }
+
     const consolePath = await this.getConsolePath(version)
 
     // TypeDB console --command mode doesn't support multi-step transaction flows;

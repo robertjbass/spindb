@@ -1200,7 +1200,7 @@ export class SurrealDBEngine extends BaseEngine {
         proc.kill()
         reject(
           new Error(
-            `Timed out creating SurrealDB user "${username}" after ${timeoutMs}ms (sql: ${sql})`,
+            `Timed out creating SurrealDB user "${username}" after ${timeoutMs}ms`,
           ),
         )
       }, timeoutMs)
