@@ -33,6 +33,10 @@ VERBOSE="${VERBOSE:-false}"
 # Set SMOKE_TEST=false for full test with all phases
 SMOKE_TEST="${SMOKE_TEST:-true}"
 
+# Space-separated list of engines to skip (e.g., SKIP_ENGINES="surrealdb questdb")
+# Useful for QEMU where large Rust/Java binaries may hang during verification
+SKIP_ENGINES="${SKIP_ENGINES:-}"
+
 # Engine groups for parallel CI execution
 # Usage: ./run-e2e.sh --group sql
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
@@ -1781,6 +1785,10 @@ get_default_version() {
 
 should_run_test() {
   local engine=$1
+  # Check SKIP_ENGINES list first
+  if [ -n "$SKIP_ENGINES" ] && echo "$SKIP_ENGINES" | grep -qw "$engine"; then
+    return 1
+  fi
   # If a specific engine filter is set, only run that engine
   [ -n "$ENGINE_FILTER" ] && [ "$ENGINE_FILTER" = "$engine" ] && return 0
   [ -n "$ENGINE_FILTER" ] && [ "$ENGINE_FILTER" != "$engine" ] && return 1
