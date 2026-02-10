@@ -2676,13 +2676,6 @@ Every engine must have a comprehensive README.md documenting implementation deta
 
 - [ ] Update engine count in any hardcoded references (e.g., "All 17 engine implementations")
 
-### USE_CASES.md
-
-- [ ] Update engine count in Core Features table
-- [ ] Add engine name to Multi-Engine feature list
-- [ ] Update "all N database engines" references
-- [ ] Update comparison table engine counts (DBngin, Postgres.app rows)
-
 ### TEST_COVERAGE.md
 
 - [ ] Update engine count in coverage table (e.g., "All 18 engines")
@@ -2882,7 +2875,7 @@ ls -la tests/integration/{engine}.test.ts
 ls -la tests/unit/{engine}-*.test.ts
 
 # Check documentation changes
-git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md TODO.md USE_CASES.md TEST_COVERAGE.md
+git diff --stat README.md ARCHITECTURE.md CLAUDE.md CHANGELOG.md TODO.md TEST_COVERAGE.md
 ```
 
 ### Manual Verification

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-02-10
+
+### Fixed
+- **SurrealDB rename test** - Fixed ENOENT error when verifying data after container rename. The `getSurrealDBRowCount` test helper used the original container name for `cwd`, but the directory moves to the new name during rename. Added `actualContainerName` parameter to resolve the correct path.
+
+### Changed
+- **Documentation cleanup** - Consolidated CLI examples into CHEATSHEET.md, removed redundant CONTRIBUTING.md, EXAMPLES.md, and USE_CASES.md files. Updated ARCHITECTURE.md, README.md, LICENSE, and other docs.
+
 ## [0.33.0] - 2026-02-09
 
 ### Added
@@ -1171,8 +1179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.12.3] - 2025-12-30
 
 ### Added
-- **EXAMPLES.md** - Comprehensive command examples showing all permutations for every CLI command
-- **CHEATSHEET.md** - Quick reference card with common commands and workflows
+- **CHEATSHEET.md** - Quick reference card with common commands, workflows, and scripting patterns (EXAMPLES.md content consolidated here)
 
 ## [0.12.2] - 2025-12-30
 

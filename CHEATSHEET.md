@@ -1,6 +1,6 @@
 # SpinDB Cheatsheet
 
-Quick reference for all commands. For detailed examples, see [EXAMPLES.md](EXAMPLES.md).
+Quick reference for all SpinDB commands.
 
 ## Container Lifecycle
 
@@ -550,6 +550,190 @@ spindb backup mydb --format sql -o ~/backups
 
 # Reset database
 spindb delete mydb -f && spindb create mydb --start
+```
+
+## Scripting & Automation
+
+### Scripting Patterns
+
+```bash
+# Export connection string to environment
+export DATABASE_URL=$(spindb url mydb)
+
+# Use in psql
+psql $(spindb url mydb)
+
+# Backup all PostgreSQL containers
+for container in $(spindb list --json | jq -r '.[] | select(.engine=="postgresql") | .name'); do
+  spindb backup "$container" --output ./backups/
+done
+
+# Start all stopped containers
+spindb list --json | jq -r '.[] | select(.status=="stopped") | .name' | while read name; do
+  spindb start "$name"
+done
+
+# Check if container is running
+if spindb info mydb --json | jq -e '.status == "running"' > /dev/null; then
+  echo "Container is running"
+fi
+
+# Create test database, run migrations, seed data
+spindb create testdb --start --database app
+spindb run testdb ./migrations/schema.sql --database app
+spindb run testdb ./seeds/test-data.sql --database app
+
+# Switch between database versions
+spindb stop pgdb
+spindb create pgdb-16 --db-version 16 --port 5433
+spindb clone pgdb pgdb-backup
+spindb start pgdb-16
+
+# Clean up old engine versions
+spindb engines                              # List installed
+spindb engines delete postgresql 14         # Remove old version
+spindb engines delete postgresql 15         # Remove another
+```
+
+### TestDatabase Helper
+
+A reusable helper class for integration tests that manages SpinDB containers:
+
+```javascript
+// test/helpers/db.js
+import { execSync } from 'node:child_process'
+import pg from 'pg'
+
+export class TestDatabase {
+  constructor(name) {
+    this.containerName = `test-${name}-${Date.now()}`
+    this.connectionString = null
+    this.client = null
+  }
+
+  async setup() {
+    const output = execSync(
+      `spindb create ${this.containerName} --start --json`,
+      { encoding: 'utf-8' },
+    )
+    const result = JSON.parse(output)
+    this.connectionString = result.connectionString
+    this.client = new pg.Client({ connectionString: this.connectionString })
+    await this.client.connect()
+    return this.client
+  }
+
+  async run(sql) {
+    return this.client.query(sql)
+  }
+
+  loadSchema(schemaPath) {
+    execSync(`spindb run ${this.containerName} ${schemaPath}`)
+  }
+
+  async teardown() {
+    if (this.client) await this.client.end()
+    execSync(`spindb delete ${this.containerName} --force --yes`, {
+      stdio: 'ignore',
+    })
+  }
+}
+```
+
+Use in tests — each test file gets its own isolated database:
+
+```javascript
+import { describe, it, before, after } from 'node:test'
+import assert from 'node:assert'
+import { TestDatabase } from './helpers/db.js'
+
+describe('User Tests', () => {
+  const db = new TestDatabase('users')
+
+  before(async () => {
+    await db.setup()
+    db.loadSchema('./schema/users.sql')
+  })
+
+  after(async () => {
+    await db.teardown()
+  })
+
+  it('should create user', async () => {
+    const result = await db.run(
+      `INSERT INTO users (email, name) VALUES ('test@example.com', 'Test') RETURNING *`,
+    )
+    assert.strictEqual(result.rows[0].email, 'test@example.com')
+  })
+})
+```
+
+### CI/CD Integration
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install SpinDB
+        run: npm install -g spindb
+      - name: Install database tools
+        run: spindb deps install --engine postgresql
+      - name: Run tests
+        run: npm test
+      - name: Show containers
+        if: failure()
+        run: spindb list
+```
+
+### package.json Scripts
+
+```json
+{
+  "scripts": {
+    "db:create": "spindb create myapp --start",
+    "db:drop": "spindb delete myapp --force --yes",
+    "db:reset": "npm run db:drop && npm run db:create && npm run db:migrate && npm run db:seed",
+    "db:migrate": "spindb run myapp ./migrations/*.sql",
+    "db:seed": "spindb run myapp ./seeds/dev-data.sql",
+    "db:backup": "spindb backup myapp --format sql --output ./backups"
+  }
+}
+```
+
+### Snapshot Testing with Clones
+
+Test migrations without risk by cloning:
+
+```javascript
+// scripts/test-migration.js
+import { execSync } from 'node:child_process'
+
+const PROD = 'production'
+const TEST = 'migration-test-' + Date.now()
+
+execSync(`spindb stop ${PROD}`)
+execSync(`spindb clone ${PROD} ${TEST}`)
+execSync(`spindb start ${TEST}`)
+execSync(`spindb start ${PROD}`)
+
+try {
+  execSync(`spindb run ${TEST} ./migrations/005-add-users-table.sql`)
+  execSync(`spindb run ${TEST} -c "SELECT * FROM users LIMIT 1"`)
+  console.log('Migration successful!')
+} catch (error) {
+  console.error('Migration failed:', error.message)
+} finally {
+  execSync(`spindb delete ${TEST} --force --yes`)
+}
 ```
 
 ## Development-Only Scripts

@@ -193,8 +193,10 @@ function toLineProtocol(
       } else {
         const num = Number(val)
         if (!isNaN(num) && val !== '') {
-          if (Number.isInteger(num)) {
+          if (Number.isInteger(num) && !/[.eE]/.test(val)) {
             // Integers: trailing 'i' per line protocol spec
+            // Only when the raw string has no decimal point or exponent,
+            // so "123.0" is preserved as a float rather than truncated to 123i
             fields.push(`${col}=${num}i`)
           } else {
             // Floats: unquoted
