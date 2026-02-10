@@ -9,6 +9,7 @@ import { tmpdir } from 'os'
 import { assert, assertEqual } from '../utils/assertions'
 import {
   detectBackupFormat,
+  encodeFieldValue,
   parseConnectionString,
 } from '../../engines/influxdb/restore'
 
@@ -79,6 +80,61 @@ describe('InfluxDB Restore Module', () => {
           'Error should mention file not found',
         )
       }
+    })
+  })
+
+  describe('encodeFieldValue', () => {
+    it('should encode plain integers with trailing "i"', () => {
+      assertEqual(encodeFieldValue('123'), '123i', '"123" should be integer')
+      assertEqual(encodeFieldValue('0'), '0i', '"0" should be integer')
+      assertEqual(encodeFieldValue('-42'), '-42i', '"-42" should be integer')
+    })
+
+    it('should encode values with decimal point as floats (no "i")', () => {
+      assertEqual(encodeFieldValue('123.0'), '123', '"123.0" should be float')
+      assertEqual(encodeFieldValue('3.14'), '3.14', '"3.14" should be float')
+      assertEqual(encodeFieldValue('-0.5'), '-0.5', '"-0.5" should be float')
+    })
+
+    it('should encode values with exponent notation as floats (no "i")', () => {
+      assertEqual(encodeFieldValue('1e3'), '1000', '"1e3" should be float')
+      assertEqual(encodeFieldValue('1E3'), '1000', '"1E3" should be float')
+      assertEqual(encodeFieldValue('2.5e2'), '250', '"2.5e2" should be float')
+    })
+
+    it('should encode booleans unquoted', () => {
+      assertEqual(encodeFieldValue('true'), 'true', 'true should be unquoted')
+      assertEqual(
+        encodeFieldValue('false'),
+        'false',
+        'false should be unquoted',
+      )
+    })
+
+    it('should encode strings with double quotes and escaping', () => {
+      assertEqual(
+        encodeFieldValue('hello'),
+        '"hello"',
+        'Strings should be quoted',
+      )
+      assertEqual(
+        encodeFieldValue('say "hi"'),
+        '"say \\"hi\\""',
+        'Embedded quotes should be escaped',
+      )
+      assertEqual(
+        encodeFieldValue('back\\slash'),
+        '"back\\\\slash"',
+        'Backslashes should be escaped',
+      )
+    })
+
+    it('should encode empty string as quoted string', () => {
+      assertEqual(
+        encodeFieldValue(''),
+        '""',
+        'Empty string should be quoted empty',
+      )
     })
   })
 

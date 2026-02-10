@@ -151,6 +151,31 @@ function parseSqlValues(valuesStr: string): string[] {
  * remaining columns become fields. This preserves the original schema
  * so that records with the same timestamp remain distinct.
  */
+/**
+ * Encode a SQL value as an InfluxDB line protocol field value.
+ * - Booleans: unquoted (true/false)
+ * - Integers: trailing 'i' (e.g. 123i) — only when the raw string has no
+ *   decimal point or exponent, so "123.0" is preserved as a float
+ * - Floats: unquoted numeric (e.g. 3.14)
+ * - Strings: double-quoted with escaping
+ */
+export function encodeFieldValue(val: string): string {
+  if (val === 'true' || val === 'false') {
+    return val
+  }
+
+  const num = Number(val)
+  if (!isNaN(num) && val !== '') {
+    if (Number.isInteger(num) && !/[.eE]/.test(val)) {
+      return `${num}i`
+    }
+    return `${num}`
+  }
+
+  const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return `"${escaped}"`
+}
+
 function toLineProtocol(
   table: string,
   columns: string[],
@@ -186,28 +211,7 @@ function toLineProtocol(
         .replace(/=/g, '\\=')
       tags.push(`${col}=${escaped}`)
     } else {
-      // Fields: detect type for correct line protocol encoding
-      if (val === 'true' || val === 'false') {
-        // Booleans: unquoted
-        fields.push(`${col}=${val}`)
-      } else {
-        const num = Number(val)
-        if (!isNaN(num) && val !== '') {
-          if (Number.isInteger(num) && !/[.eE]/.test(val)) {
-            // Integers: trailing 'i' per line protocol spec
-            // Only when the raw string has no decimal point or exponent,
-            // so "123.0" is preserved as a float rather than truncated to 123i
-            fields.push(`${col}=${num}i`)
-          } else {
-            // Floats: unquoted
-            fields.push(`${col}=${num}`)
-          }
-        } else {
-          // Strings: quoted with escaping
-          const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-          fields.push(`${col}="${escaped}"`)
-        }
-      }
+      fields.push(`${col}=${encodeFieldValue(val)}`)
     }
   }
 
