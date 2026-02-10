@@ -490,8 +490,6 @@ export class ContainerManager {
         }
       }
 
-      await this.saveConfig(targetName, { engine }, config)
-
       return config
     } catch (error) {
       // Clean up the copied directory on failure

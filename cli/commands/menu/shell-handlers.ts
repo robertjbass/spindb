@@ -4,7 +4,7 @@ import { spawn } from 'child_process'
 import { escapeablePrompt } from '../../ui/prompts'
 import { getPageSize } from '../../constants'
 import { existsSync } from 'fs'
-import { chmod, mkdir, readFile, writeFile, rm, unlink } from 'fs/promises'
+import { chmod, mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname, resolve, sep } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
@@ -28,6 +28,11 @@ import {
 import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
 import { configManager } from '../../../core/config-manager'
+import {
+  getPgwebStatus,
+  stopPgweb,
+  PGWEB_VERSION,
+} from '../../../core/pgweb-utils'
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
@@ -868,62 +873,20 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
 }
 
 /**
- * Check if pgweb is running for a container
- */
-export async function getPgwebStatus(
-  containerName: string,
-  engine: string,
-): Promise<{ running: boolean; port?: number; pid?: number }> {
-  const containerDir = paths.getContainerPath(containerName, { engine })
-  const pidFile = join(containerDir, 'pgweb.pid')
-  const portFile = join(containerDir, 'pgweb.port')
-
-  if (!existsSync(pidFile)) return { running: false }
-
-  try {
-    const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
-    if (platformService.isProcessRunning(pid)) {
-      const port = parseInt(await readFile(portFile, 'utf8'), 10)
-      return { running: true, port, pid }
-    }
-  } catch {
-    // PID file invalid or process dead
-  }
-
-  // Clean up stale files
-  await unlink(pidFile).catch(() => {})
-  await unlink(portFile).catch(() => {})
-  return { running: false }
-}
-
-/**
- * Stop a running pgweb process for a container
+ * Stop a running pgweb process for a container (with UI feedback)
  */
 export async function stopPgwebProcess(
   containerName: string,
   engine: string,
 ): Promise<void> {
-  const status = await getPgwebStatus(containerName, engine)
-  if (!status.running || !status.pid) {
-    console.log()
-    console.log(uiInfo('pgweb is not running'))
-    console.log()
-    await pressEnterToContinue()
-    return
-  }
-
-  try {
-    await platformService.terminateProcess(status.pid, false)
-  } catch {
-    // Already gone
-  }
-
-  const containerDir = paths.getContainerPath(containerName, { engine })
-  await unlink(join(containerDir, 'pgweb.pid')).catch(() => {})
-  await unlink(join(containerDir, 'pgweb.port')).catch(() => {})
+  const stopped = await stopPgweb(containerName, engine)
 
   console.log()
-  console.log(uiSuccess('pgweb stopped'))
+  if (stopped) {
+    console.log(uiSuccess('pgweb stopped'))
+  } else {
+    console.log(uiInfo('pgweb is not running'))
+  }
   console.log()
   await pressEnterToContinue()
 }
@@ -955,10 +918,9 @@ async function downloadPgweb(): Promise<string | null> {
       throw new Error(`Unsupported platform: ${platform} ${arch}`)
     }
 
-    const version = '0.17.0'
-    const zipUrl = `https://github.com/sosedoff/pgweb/releases/download/v${version}/pgweb_${suffix}.zip`
+    const zipUrl = `https://github.com/sosedoff/pgweb/releases/download/v${PGWEB_VERSION}/pgweb_${suffix}.zip`
 
-    spinner.text = `Downloading pgweb v${version}...`
+    spinner.text = `Downloading pgweb v${PGWEB_VERSION}...`
 
     const response = await fetch(zipUrl)
     if (!response.ok || !response.body) {
@@ -970,7 +932,7 @@ async function downloadPgweb(): Promise<string | null> {
     const platformArch = `${platform}-${arch}`
     const installDir = join(
       paths.bin,
-      `pgweb-${version}-${platformArch}`,
+      `pgweb-${PGWEB_VERSION}-${platformArch}`,
       'bin',
     )
     await mkdir(installDir, { recursive: true })
@@ -1021,7 +983,7 @@ async function downloadPgweb(): Promise<string | null> {
     // Register in config
     await configManager.setBinaryPath('pgweb', binaryPath, 'bundled')
 
-    spinner.succeed(`pgweb v${version} installed`)
+    spinner.succeed(`pgweb v${PGWEB_VERSION} installed`)
     console.log()
 
     return binaryPath
@@ -1078,7 +1040,12 @@ async function launchPgweb(
   }
 
   if (port >= 8200) {
-    console.error(uiError('Could not find an available port for pgweb'))
+    console.error(
+      uiError(
+        'Could not find an available port for pgweb (scanned 8081–8199). ' +
+          'Check for other pgweb or server processes using those ports.',
+      ),
+    )
     await pressEnterToContinue()
     return
   }

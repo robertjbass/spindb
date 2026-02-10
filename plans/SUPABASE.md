@@ -67,6 +67,7 @@ Binaries:
 - **URL pattern:** `https://github.com/PostgREST/postgrest/releases/download/v{tag}/postgrest-v{tag}-{platform}.{ext}`
 - **Platform mapping:**
   - `darwin-arm64` → `macos-aarch64`
+  - `darwin-x64` → not provided by upstream (PostgREST only ships macOS ARM64)
   - `linux-x64` → `linux-static-x86-64`
   - `linux-arm64` → `linux-static-aarch64`
   - `win32-x64` → `windows-x86-64`

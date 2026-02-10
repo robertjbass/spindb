@@ -56,9 +56,9 @@ import {
 import {
   handleOpenShell,
   handleCopyConnectionString,
-  getPgwebStatus,
   stopPgwebProcess,
 } from './shell-handlers'
+import { getPgwebStatus } from '../../../core/pgweb-utils'
 import { generatePassword } from '../../../core/credential-generator'
 import {
   saveCredentials,

@@ -1,12 +1,9 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { existsSync } from 'fs'
-import { readFile } from 'fs/promises'
-import { join } from 'path'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
-import { platformService } from '../../core/platform-service'
-import { paths } from '../../config/paths'
+import { getPgwebStatus } from '../../core/pgweb-utils'
 import { uiError, uiInfo } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { Engine, type ContainerConfig } from '../../types'
@@ -40,29 +37,6 @@ function getSecondaryPorts(
       break
   }
   return ports
-}
-
-async function getPgwebPort(
-  containerName: string,
-  engine: string,
-): Promise<number | null> {
-  const containerDir = paths.getContainerPath(containerName, { engine })
-  const pidFile = join(containerDir, 'pgweb.pid')
-  const portFile = join(containerDir, 'pgweb.port')
-
-  if (!existsSync(pidFile)) return null
-
-  try {
-    const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
-    if (platformService.isProcessRunning(pid)) {
-      const port = parseInt(await readFile(portFile, 'utf8'), 10)
-      return port
-    }
-  } catch {
-    // PID file invalid or process dead
-  }
-
-  return null
 }
 
 export type PortEntry = { port: number; label: string }
@@ -101,9 +75,9 @@ export async function getContainerPorts(config: ContainerConfig): Promise<{
     config.engine === 'cockroachdb' ||
     config.engine === 'ferretdb'
   ) {
-    const pgwebPort = await getPgwebPort(config.name, config.engine)
-    if (pgwebPort) {
-      ports.push({ port: pgwebPort, label: 'pgweb' })
+    const pgweb = await getPgwebStatus(config.name, config.engine)
+    if (pgweb.running && pgweb.port) {
+      ports.push({ port: pgweb.port, label: 'pgweb' })
     }
   }
 
