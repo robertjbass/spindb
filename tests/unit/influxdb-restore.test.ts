@@ -59,6 +59,23 @@ describe('InfluxDB Restore Module', () => {
       await rm(contentPath, { force: true })
     })
 
+    it('should detect generic SQL content with warning description', async () => {
+      const genericPath = join(testDir, 'generic.dat')
+      await writeFile(
+        genericPath,
+        'INSERT INTO "cpu" ("time", "value") VALUES (\'2024-01-01\', 42);',
+      )
+
+      const format = await detectBackupFormat(genericPath)
+      assertEqual(format.format, 'sql', 'Should detect as sql')
+      assert(
+        format.description.includes('generic markers'),
+        'Description should mention generic markers',
+      )
+
+      await rm(genericPath, { force: true })
+    })
+
     it('should return unknown for non-SQL files', async () => {
       const textPath = join(testDir, 'backup.txt')
       await writeFile(textPath, 'This is not a SQL dump')

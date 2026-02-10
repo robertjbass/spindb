@@ -55,15 +55,25 @@ export async function detectBackupFormat(
 
     const content = buffer.toString('utf-8', 0, bytesRead)
 
-    // Check for SQL content markers
-    if (
-      content.includes('-- InfluxDB SQL Backup') ||
-      content.includes('INSERT INTO') ||
-      content.includes('CREATE TABLE')
-    ) {
+    // Check for InfluxDB-specific marker first
+    if (content.includes('-- InfluxDB SQL Backup')) {
       return {
         format: 'sql',
         description: 'InfluxDB SQL dump file (detected by content)',
+        restoreCommand:
+          'Restore via InfluxDB REST API (spindb restore handles this)',
+      }
+    }
+
+    // Fall back to generic SQL markers with a warning
+    if (content.includes('INSERT INTO') || content.includes('CREATE TABLE')) {
+      logDebug(
+        `Backup file "${filePath}" detected as SQL by generic markers (INSERT INTO / CREATE TABLE) — not the InfluxDB-specific header. Verify this is an InfluxDB backup.`,
+      )
+      return {
+        format: 'sql',
+        description:
+          'SQL dump file (detected by generic markers, may not be InfluxDB-specific)',
         restoreCommand:
           'Restore via InfluxDB REST API (spindb restore handles this)',
       }
@@ -249,7 +259,7 @@ async function restoreSqlBackup(
 
   // Parse tag metadata from backup comments (-- Tags: col1, col2)
   const tagsByTable = new Map<string, Set<string>>()
-  const tagsRegex = /-- Table: (\S+)\n-- Tags: (.+)/g
+  const tagsRegex = /-- Table: (\S+)\r?\n-- Tags: (.+)/g
   let tagsMatch
   while ((tagsMatch = tagsRegex.exec(content)) !== null) {
     const table = tagsMatch[1]

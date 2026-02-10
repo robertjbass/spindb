@@ -314,11 +314,8 @@ describe('InfluxDB Integration Tests', () => {
   it('should verify cloned data matches source', async () => {
     console.log('\n Verifying cloned data matches source...')
 
-    // Allow time for data to be indexed on clone
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
     // Verify record count on cloned container
-    const count = await getRowCount(testPorts[1], DATABASE, 'test_user')
+    const count = await waitForRowCount(testPorts[1], DATABASE, 'test_user', 5)
     assertEqual(count, 5, 'Cloned container should have 5 records')
 
     console.log(`   Cloned data verified: ${count} records`)
@@ -359,11 +356,8 @@ describe('InfluxDB Integration Tests', () => {
     )
     assert(writeOk, 'Should write additional data')
 
-    // Allow time for data to be indexed
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
     // Verify the new record
-    const count = await getRowCount(testPorts[0], DATABASE, 'test_user')
+    const count = await waitForRowCount(testPorts[0], DATABASE, 'test_user', 6)
     assertEqual(count, 6, 'Should have 6 records after insert')
 
     console.log(`   Data modified: now ${count} records`)
