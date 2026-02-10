@@ -411,6 +411,8 @@ export async function executeSQL(
     } finally {
       await unlink(tempScript).catch(() => {})
     }
+  } else if (engine === Engine.InfluxDB) {
+    throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -524,6 +526,8 @@ export async function executeSQLFile(
     const args = [...getConsoleBaseArgs(port), '--script', filePath]
     const cmd = `"${consolePath}" ${args.map((a) => `"${a}"`).join(' ')}`
     return execAsync(cmd)
+  } else if (engine === Engine.InfluxDB) {
+    throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)

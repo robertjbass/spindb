@@ -956,10 +956,10 @@ spindb backup mydb --format typeql      # TypeQL export (only format)
 
 | Format | Extension | Tool | Use Case |
 |--------|-----------|------|----------|
-| json | `.json` | REST API | JSON export via query API |
+| sql | `.sql` | REST API | SQL INSERT export via query API |
 
 ```bash
-spindb backup mydb --format json        # JSON export (only format)
+spindb backup mydb --format sql         # SQL dump (only format)
 ```
 
 ---

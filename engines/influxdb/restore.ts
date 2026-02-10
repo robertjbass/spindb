@@ -3,9 +3,8 @@
  * Supports SQL-based restore using InfluxDB's REST API
  */
 
-import { open } from 'fs/promises'
+import { open, readFile as readFileAsync } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
-import { readFile as readFileAsync } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
 import type { BackupFormat, RestoreResult } from '../../types'
@@ -90,6 +89,14 @@ export type RestoreOptions = {
 /**
  * Parse SQL VALUES clause into an array of string values.
  * Handles SQL string escaping ('' for embedded single quotes).
+ *
+ * NOTE: The `if (trimmed)` check on comma is intentional. Quoted strings push
+ * their value when the closing quote is encountered, leaving `current` empty.
+ * The subsequent comma separator sees that empty `current` and correctly skips
+ * it — it's a delimiter between quoted values, not an empty field. The backup
+ * code (backup.ts) never produces truly empty values (always NULL, numbers,
+ * booleans, or quoted strings), so this is safe. Do NOT change to always-push
+ * without also fixing the quoted-string-then-comma double-push problem.
  */
 function parseSqlValues(valuesStr: string): string[] {
   const values: string[] = []
@@ -179,9 +186,26 @@ function toLineProtocol(
         .replace(/=/g, '\\=')
       tags.push(`${col}=${escaped}`)
     } else {
-      // Fields: key="value" (string fields are quoted)
-      const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-      fields.push(`${col}="${escaped}"`)
+      // Fields: detect type for correct line protocol encoding
+      if (val === 'true' || val === 'false') {
+        // Booleans: unquoted
+        fields.push(`${col}=${val}`)
+      } else {
+        const num = Number(val)
+        if (!isNaN(num) && val !== '') {
+          if (Number.isInteger(num)) {
+            // Integers: trailing 'i' per line protocol spec
+            fields.push(`${col}=${num}i`)
+          } else {
+            // Floats: unquoted
+            fields.push(`${col}=${num}`)
+          }
+        } else {
+          // Strings: quoted with escaping
+          const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+          fields.push(`${col}="${escaped}"`)
+        }
+      }
     }
   }
 

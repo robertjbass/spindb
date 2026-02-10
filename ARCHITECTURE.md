@@ -211,7 +211,7 @@ The core layer contains business logic independent of CLI concerns.
 The engine layer implements database-specific logic via the abstract `BaseEngine` class.
 
 **Engine Types:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB): Process management, port allocation
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB): Process management, port allocation
 - **File-based** (SQLite, DuckDB): No server, files in project directories
 - **Composite** (FerretDB): Multiple processes working together (see [FerretDB Architecture](#ferretdb-architecture))
 
@@ -396,6 +396,8 @@ getEngine('couchdb')     // or 'couch' - Document database
 getEngine('cockroachdb') // or 'crdb' - Distributed SQL
 getEngine('surrealdb')   // or 'surreal' - Multi-model database
 getEngine('questdb')     // or 'quest' - Time-series database
+getEngine('typedb')      // or 'tdb' - Knowledge graph database
+getEngine('influxdb')    // or 'influx' - Time-series database (REST API)
 ```
 
 ---
@@ -564,7 +566,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb' | 'surrealdb' | 'questdb'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb' | 'surrealdb' | 'questdb' | 'typedb' | 'influxdb'
   version: string
   port: number
   database: string        // Primary database
@@ -744,7 +746,7 @@ Core types are centralized in `types/index.ts`:
 | Type | Purpose |
 |------|---------|
 | `ContainerConfig` | Container state and metadata |
-| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB |
+| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB |
 | `BackupFormat` | Backup file format detection |
 | `BackupOptions` | Backup command options |
 | `BackupResult` | Backup operation result |

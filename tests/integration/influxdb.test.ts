@@ -277,35 +277,36 @@ describe('InfluxDB Integration Tests', () => {
     const { tmpdir } = await import('os')
     const backupPath = `${tmpdir()}/influxdb-test-backup-${Date.now()}.sql`
 
-    const sourceConfig = await containerManager.getConfig(containerName)
-    assert(sourceConfig !== null, 'Source container config should exist')
+    try {
+      const sourceConfig = await containerManager.getConfig(containerName)
+      assert(sourceConfig !== null, 'Source container config should exist')
 
-    await engine.backup(sourceConfig!, backupPath, {
-      database: DATABASE,
-      format: 'sql',
-    })
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
 
-    // Start cloned container first (InfluxDB restore needs running instance)
-    const clonedConfig = await containerManager.getConfig(clonedContainerName)
-    assert(clonedConfig !== null, 'Cloned container config should exist')
+      // Start cloned container first (InfluxDB restore needs running instance)
+      const clonedConfig = await containerManager.getConfig(clonedContainerName)
+      assert(clonedConfig !== null, 'Cloned container config should exist')
 
-    await engine.start(clonedConfig!)
-    await containerManager.updateConfig(clonedContainerName, {
-      status: 'running',
-    })
+      await engine.start(clonedConfig!)
+      await containerManager.updateConfig(clonedContainerName, {
+        status: 'running',
+      })
 
-    // Wait for ready
-    const clonedReady = await waitForReady(ENGINE, testPorts[1])
-    assert(clonedReady, 'Cloned InfluxDB should be ready before restore')
+      // Wait for ready
+      const clonedReady = await waitForReady(ENGINE, testPorts[1])
+      assert(clonedReady, 'Cloned InfluxDB should be ready before restore')
 
-    // Restore to cloned container
-    await engine.restore(clonedConfig!, backupPath, {
-      database: DATABASE,
-    })
-
-    // Clean up backup file
-    const { rm } = await import('fs/promises')
-    await rm(backupPath, { force: true })
+      // Restore to cloned container
+      await engine.restore(clonedConfig!, backupPath, {
+        database: DATABASE,
+      })
+    } finally {
+      const { rm } = await import('fs/promises')
+      await rm(backupPath, { force: true }).catch(() => {})
+    }
 
     console.log('   Container cloned via backup/restore')
   })

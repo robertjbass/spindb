@@ -316,12 +316,7 @@ export async function handleOpenShell(
       value: 'api-info',
     })
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: REST API only, no interactive shell
-    choices.push({
-      name: `◎ Open Dashboard in browser`,
-      value: 'default',
-    })
-    // Always show API info option for InfluxDB
+    // InfluxDB: REST API only, no web dashboard or interactive shell
     choices.push({
       name: `ℹ Show API info`,
       value: 'api-info',
@@ -338,7 +333,7 @@ export async function handleOpenShell(
       value: 'api-info',
     })
   } else {
-    // Non-Qdrant/Meilisearch/CouchDB engines: show default shell option
+    // Non-REST-API engines: show default shell option
     choices.push({
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
@@ -450,7 +445,7 @@ export async function handleOpenShell(
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
       console.log(
         chalk.gray(
-          `  curl http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"q": "SELECT 1"}'`,
+          `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
         ),
       )
     } else if (config.engine === 'couchdb') {
@@ -949,12 +944,21 @@ async function launchShell(
     await pressEnterToContinue()
     return
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: Open dashboard in browser (served at root URL)
-    const dashboardUrl = `http://127.0.0.1:${config.port}`
-    console.log(uiInfo(`Opening InfluxDB Dashboard in browser...`))
-    console.log(chalk.gray(`  ${dashboardUrl}`))
+    // InfluxDB: REST API only, no web dashboard
+    // This branch shouldn't be reached since we removed the 'default' choice,
+    // but handle gracefully just in case
     console.log()
-    openInBrowser(dashboardUrl)
+    console.log(chalk.cyan('InfluxDB REST API:'))
+    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+    console.log()
+    console.log(chalk.gray('Example curl commands:'))
+    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
+    console.log(
+      chalk.gray(
+        `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
+      ),
+    )
+    console.log()
     await pressEnterToContinue()
     return
   } else if (config.engine === 'couchdb') {
