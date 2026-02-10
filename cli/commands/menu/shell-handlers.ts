@@ -33,6 +33,12 @@ import {
   stopPgweb,
   PGWEB_VERSION,
 } from '../../../core/pgweb-utils'
+import {
+  DBLAB_ENGINES,
+  DBLAB_VERSION,
+  getDblabArgs,
+  getDblabPlatformSuffix,
+} from '../../../core/dblab-utils'
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
@@ -143,6 +149,8 @@ export async function handleOpenShell(
     | 'pgweb'
     | 'install-pgweb'
     | 'stop-pgweb'
+    | 'dblab'
+    | 'install-dblab'
     | 'usql'
     | 'install-usql'
     | 'pgcli'
@@ -376,6 +384,22 @@ export async function handleOpenShell(
       choices.push({
         name: '↓ Install usql (universal SQL client)',
         value: 'install-usql',
+      })
+    }
+  }
+
+  // dblab visual TUI (supports PostgreSQL, MySQL, MariaDB, CockroachDB, SQLite, QuestDB)
+  if (DBLAB_ENGINES.has(config.engine)) {
+    const dblabPath = await configManager.getBinaryPath('dblab')
+    if (dblabPath) {
+      choices.push({
+        name: '⚡ Use dblab (visual TUI)',
+        value: 'dblab',
+      })
+    } else {
+      choices.push({
+        name: '↓ Download dblab (visual TUI)',
+        value: 'install-dblab',
       })
     }
   }
@@ -712,6 +736,21 @@ export async function handleOpenShell(
     return
   }
 
+  // Handle dblab download → launch immediately after install
+  if (shellChoice === 'install-dblab') {
+    const dblabBinaryPath = await downloadDblabCli()
+    if (dblabBinaryPath) {
+      await launchDblab(config, activeDatabase)
+    }
+    return
+  }
+
+  // Handle dblab launch
+  if (shellChoice === 'dblab') {
+    await launchDblab(config, activeDatabase)
+    return
+  }
+
   // Handle pgweb download → launch immediately after install
   if (shellChoice === 'install-pgweb') {
     const pgwebBinaryPath = await downloadPgweb()
@@ -997,6 +1036,153 @@ async function downloadPgweb(): Promise<string | null> {
     await pressEnterToContinue()
     return null
   }
+}
+
+/**
+ * Download and install dblab from GitHub releases.
+ * Exported as downloadDblabCli for use from the CLI connect command.
+ */
+export async function downloadDblabCli(): Promise<string | null> {
+  console.log()
+  const spinner = createSpinner('Downloading dblab...')
+  spinner.start()
+
+  try {
+    const suffix = getDblabPlatformSuffix()
+    const tarUrl = `https://github.com/danvergara/dblab/releases/download/v${DBLAB_VERSION}/dblab_${DBLAB_VERSION}_${suffix}.tar.gz`
+
+    spinner.text = `Downloading dblab v${DBLAB_VERSION}...`
+
+    const response = await fetch(tarUrl)
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to download: ${response.status}`)
+    }
+
+    const isWin = process.platform === 'win32'
+    const binaryName = isWin ? 'dblab.exe' : 'dblab'
+    const platformArch = `${process.platform}-${process.arch}`
+    const installDir = join(
+      paths.bin,
+      `dblab-${DBLAB_VERSION}-${platformArch}`,
+      'bin',
+    )
+    await mkdir(installDir, { recursive: true })
+
+    const tempTar = join(paths.bin, 'dblab-temp.tar.gz')
+    const buffer = Buffer.from(await response.arrayBuffer())
+    await writeFile(tempTar, buffer)
+
+    spinner.text = 'Extracting dblab...'
+
+    try {
+      const { spawnSync } = await import('child_process')
+      const result = spawnSync('tar', ['-xzf', tempTar, '-C', installDir], {
+        stdio: 'pipe',
+      })
+      if (result.status !== 0) {
+        throw new Error(
+          `tar extraction failed: ${result.stderr?.toString() || 'unknown error'}`,
+        )
+      }
+    } finally {
+      await rm(tempTar, { force: true })
+    }
+
+    const binaryPath = join(installDir, binaryName)
+
+    if (!existsSync(binaryPath)) {
+      throw new Error('Could not find dblab binary after extraction')
+    }
+
+    // chmod on Unix
+    if (!isWin) {
+      await chmod(binaryPath, 0o755)
+    }
+
+    // Register in config
+    await configManager.setBinaryPath('dblab', binaryPath, 'bundled')
+
+    spinner.succeed(`dblab v${DBLAB_VERSION} installed`)
+    console.log()
+
+    return binaryPath
+  } catch (error) {
+    spinner.fail('Failed to download dblab')
+    console.error(uiError((error as Error).message))
+    console.log()
+    console.log(chalk.gray('You can manually download from:'))
+    console.log(chalk.cyan('  https://github.com/danvergara/dblab/releases'))
+    console.log()
+    await pressEnterToContinue()
+    return null
+  }
+}
+
+/**
+ * Launch dblab visual TUI for a container
+ */
+async function launchDblab(
+  config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
+  database: string,
+): Promise<void> {
+  const dblabPath = await configManager.getBinaryPath('dblab')
+  if (!dblabPath) {
+    console.error(uiError('dblab not found. Download it first.'))
+    await pressEnterToContinue()
+    return
+  }
+
+  const args = getDblabArgs(config, database)
+
+  console.log()
+  console.log(chalk.gray('  dblab keybindings:'))
+  console.log(
+    chalk.gray(
+      '  Ctrl+Space: run query | Ctrl+H/J/K/L: navigate panels | Ctrl+S: structure view',
+    ),
+  )
+  console.log()
+  await escapeablePrompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to launch dblab...'),
+    },
+  ])
+
+  const dblabProcess = spawn(dblabPath, args, {
+    stdio: 'inherit',
+  })
+
+  await new Promise<void>((resolve) => {
+    let settled = false
+
+    const settle = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+
+    dblabProcess.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        console.log(uiWarning('dblab not found on your system.'))
+        console.log()
+        console.log(chalk.gray('  Download it with:'))
+        console.log(chalk.cyan('  spindb connect --install-dblab'))
+      } else {
+        console.log(uiError(`Failed to start dblab: ${err.message}`))
+      }
+      settle()
+    })
+
+    dblabProcess.on('close', () => {
+      if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[2J\x1b[3J\x1b[H')
+      }
+      settle()
+    })
+  })
 }
 
 /**

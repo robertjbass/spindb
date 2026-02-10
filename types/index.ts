@@ -429,6 +429,8 @@ export type BinaryTool =
   | 'influxdb3'
   // Web panels
   | 'pgweb'
+  // TUI tools
+  | 'dblab'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -523,6 +525,8 @@ export type SpinDBConfig = {
     influxdb3?: BinaryConfig
     // Web panels
     pgweb?: BinaryConfig
+    // TUI tools
+    dblab?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

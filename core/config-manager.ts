@@ -84,6 +84,8 @@ const INFLUXDB_TOOLS: BinaryTool[] = ['influxdb3']
 
 const PGWEB_TOOLS: BinaryTool[] = ['pgweb']
 
+const DBLAB_TOOLS: BinaryTool[] = ['dblab']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -109,6 +111,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...TYPEDB_TOOLS,
   ...INFLUXDB_TOOLS,
   ...PGWEB_TOOLS,
+  ...DBLAB_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -625,6 +628,7 @@ export {
   TYPEDB_TOOLS,
   INFLUXDB_TOOLS,
   PGWEB_TOOLS,
+  DBLAB_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

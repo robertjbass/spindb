@@ -88,6 +88,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'influxdb3',
   // Web panels
   'pgweb',
+  // TUI tools
+  'dblab',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',
