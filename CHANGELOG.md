@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-02-09
+
 ### Added
-- **InfluxDB engine support** - 18th database engine. REST API time-series database (InfluxDB 3.x Rust rewrite) with SQL query support via HTTP API. Default port 8086, binary `influxdb3`. Databases created implicitly on first write, no auth by default for local development. Health check via `GET /health`, queries via `POST /api/v3/query_sql`. Version 3.8.0, all 5 platforms supported (macOS ARM/x64, Linux ARM/x64, Windows x64). License: Apache-2.0 AND MIT.
+- **InfluxDB engine support** - 18th database engine. REST API time-series database (InfluxDB 3.x Rust rewrite) with SQL query support via HTTP API. Default port 8086, binary `influxdb3`. Databases created implicitly on first write, no auth by default for local development. Health check via `GET /health`, queries via `POST /api/v3/query_sql`, writes via `POST /api/v3/write_lp` (line protocol). Version 3.8.0, all 5 platforms supported (macOS ARM/x64, Linux ARM/x64, Windows x64). License: Apache-2.0 AND MIT.
+- **InfluxDB backup/restore** - SQL-based backup exports data as INSERT statements with tag column metadata; restore parses SQL, converts to line protocol, and writes via write_lp endpoint for faithful round-trip including tag/field distinction
+- **InfluxDB remote dump** - `dumpFromConnectionString` queries remote InfluxDB instances via REST API and exports SQL backup files
+- **InfluxDB connection string detection** - `influxdb://` scheme recognized in `detectLocationType` for `spindb create` from connection strings
+
+### Fixed
+- **InfluxDB node-id stability** - Fixed `--node-id` to `"spindb"` instead of container name so data persists through container renames
+- **InfluxDB identifier escaping** - Escape single quotes in SQL WHERE clauses and double quotes in SQL identifiers defensively in backup and remote dump
+- **InfluxDB remote dump warnings** - Failed table exports now surfaced in warnings array instead of silently logged
 
 ## [0.32.2] - 2026-02-08
 
