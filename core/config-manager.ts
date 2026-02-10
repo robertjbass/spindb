@@ -82,6 +82,8 @@ const TYPEDB_TOOLS: BinaryTool[] = ['typedb', 'typedb_console_bin']
 
 const INFLUXDB_TOOLS: BinaryTool[] = ['influxdb3']
 
+const PGWEB_TOOLS: BinaryTool[] = ['pgweb']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -106,6 +108,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...QUESTDB_TOOLS,
   ...TYPEDB_TOOLS,
   ...INFLUXDB_TOOLS,
+  ...PGWEB_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -621,6 +624,7 @@ export {
   QUESTDB_TOOLS,
   TYPEDB_TOOLS,
   INFLUXDB_TOOLS,
+  PGWEB_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

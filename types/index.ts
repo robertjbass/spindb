@@ -427,6 +427,8 @@ export type BinaryTool =
   | 'typedb_console_bin'
   // InfluxDB tools
   | 'influxdb3'
+  // Web panels
+  | 'pgweb'
   // Enhanced shells (optional)
   | 'pgcli'
   | 'mycli'
@@ -519,6 +521,8 @@ export type SpinDBConfig = {
     typedb_console_bin?: BinaryConfig
     // InfluxDB tools
     influxdb3?: BinaryConfig
+    // Web panels
+    pgweb?: BinaryConfig
     // Enhanced shells (optional)
     pgcli?: BinaryConfig
     mycli?: BinaryConfig

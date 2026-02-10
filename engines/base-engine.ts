@@ -1,3 +1,6 @@
+import { existsSync } from 'fs'
+import { readFile, unlink } from 'fs/promises'
+import { join } from 'path'
 import type {
   ContainerConfig,
   ProgressCallback,
@@ -13,6 +16,8 @@ import type {
   UserCredentials,
 } from '../types'
 import { UnsupportedOperationError } from '../core/error-handler'
+import { platformService } from '../core/platform-service'
+import { paths } from '../config/paths'
 
 /**
  * Base class for database engines
@@ -265,6 +270,32 @@ export abstract class BaseEngine {
     _database: string,
   ): Promise<void> {
     // Default: no-op. Override in engines that support connection termination.
+  }
+
+  /**
+   * Stop pgweb if running for this container.
+   * Called from stop() in engines that support pgweb (PostgreSQL, CockroachDB, FerretDB).
+   */
+  protected async stopPgweb(containerName: string): Promise<void> {
+    const containerDir = paths.getContainerPath(containerName, {
+      engine: this.name,
+    })
+    const pidFile = join(containerDir, 'pgweb.pid')
+    const portFile = join(containerDir, 'pgweb.port')
+
+    if (!existsSync(pidFile)) return
+
+    try {
+      const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
+      if (platformService.isProcessRunning(pid)) {
+        await platformService.terminateProcess(pid, false)
+      }
+    } catch {
+      // Process already gone or PID file invalid
+    }
+
+    await unlink(pidFile).catch(() => {})
+    await unlink(portFile).catch(() => {})
   }
 
   /**

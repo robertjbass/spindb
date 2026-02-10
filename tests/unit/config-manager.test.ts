@@ -100,6 +100,7 @@ describe('ConfigManager', () => {
         QUESTDB_TOOLS,
         TYPEDB_TOOLS,
         INFLUXDB_TOOLS,
+        PGWEB_TOOLS,
         SQLITE_TOOLS,
         DUCKDB_TOOLS,
         ENHANCED_SHELLS,
@@ -121,6 +122,7 @@ describe('ConfigManager', () => {
         QUESTDB_TOOLS.length +
         TYPEDB_TOOLS.length +
         INFLUXDB_TOOLS.length +
+        PGWEB_TOOLS.length +
         SQLITE_TOOLS.length +
         DUCKDB_TOOLS.length +
         ENHANCED_SHELLS.length

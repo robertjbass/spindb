@@ -4,7 +4,7 @@ import { spawn } from 'child_process'
 import { escapeablePrompt } from '../../ui/prompts'
 import { getPageSize } from '../../constants'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, rm } from 'fs/promises'
+import { chmod, mkdir, readFile, writeFile, rm, unlink } from 'fs/promises'
 import { join, dirname, resolve, sep } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
@@ -26,6 +26,7 @@ import {
   getIredisManualInstructions,
 } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
+import { portManager } from '../../../core/port-manager'
 import { configManager } from '../../../core/config-manager'
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
@@ -134,6 +135,9 @@ export async function handleOpenShell(
     | 'browser'
     | 'api-info'
     | 'install-webui'
+    | 'pgweb'
+    | 'install-pgweb'
+    | 'stop-pgweb'
     | 'usql'
     | 'install-usql'
     | 'pgcli'
@@ -340,15 +344,6 @@ export async function handleOpenShell(
     })
   }
 
-  // Add browser option for ClickHouse (Play UI on HTTP port = native port + 1)
-  if (config.engine === 'clickhouse') {
-    const httpPort = config.port + 1
-    choices.push({
-      name: `◎ Open Play UI in browser (port ${httpPort})`,
-      value: 'browser',
-    })
-  }
-
   // Only show engine-specific CLI option if one exists (MongoDB's mongosh IS the default)
   if (engineSpecificCli !== null) {
     if (engineSpecificInstalled) {
@@ -380,6 +375,48 @@ export async function handleOpenShell(
     }
   }
 
+  // Web Panel section for engines with browser-based UIs
+  if (config.engine === 'clickhouse') {
+    const httpPort = config.port + 1
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    choices.push({
+      name: `◎ Open Play UI (port ${httpPort})`,
+      value: 'browser',
+    })
+  }
+
+  if (
+    config.engine === 'postgresql' ||
+    config.engine === 'cockroachdb' ||
+    config.engine === 'ferretdb'
+  ) {
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    const pgwebPath = await configManager.getBinaryPath('pgweb')
+    if (pgwebPath) {
+      const pgwebStatus = await getPgwebStatus(containerName, config.engine)
+      if (pgwebStatus.running) {
+        choices.push({
+          name: `◎ Open pgweb (port ${pgwebStatus.port})`,
+          value: 'pgweb',
+        })
+        choices.push({
+          name: `■ Stop pgweb`,
+          value: 'stop-pgweb',
+        })
+      } else {
+        choices.push({
+          name: `◎ Open pgweb`,
+          value: 'pgweb',
+        })
+      }
+    } else {
+      choices.push({
+        name: `↓ Download pgweb`,
+        value: 'install-pgweb',
+      })
+    }
+  }
+
   choices.push(new inquirer.Separator())
   choices.push({
     name: `${chalk.blue('←')} Back`,
@@ -390,7 +427,7 @@ export async function handleOpenShell(
     {
       type: 'list',
       name: 'shellChoice',
-      message: 'Select shell option:',
+      message: 'Select console option:',
       choices,
       pageSize: getPageSize(),
     },
@@ -670,6 +707,27 @@ export async function handleOpenShell(
     return
   }
 
+  // Handle pgweb download → launch immediately after install
+  if (shellChoice === 'install-pgweb') {
+    const pgwebBinaryPath = await downloadPgweb()
+    if (pgwebBinaryPath) {
+      await launchPgweb(containerName, config, activeDatabase)
+    }
+    return
+  }
+
+  // Handle pgweb launch
+  if (shellChoice === 'pgweb') {
+    await launchPgweb(containerName, config, activeDatabase)
+    return
+  }
+
+  // Handle pgweb stop
+  if (shellChoice === 'stop-pgweb') {
+    await stopPgwebProcess(containerName, config.engine)
+    return
+  }
+
   // Handle install-webui option for Qdrant
   if (shellChoice === 'install-webui') {
     if (config.engine === 'qdrant') {
@@ -806,6 +864,274 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
     console.log()
   }
 
+  await pressEnterToContinue()
+}
+
+/**
+ * Check if pgweb is running for a container
+ */
+export async function getPgwebStatus(
+  containerName: string,
+  engine: string,
+): Promise<{ running: boolean; port?: number; pid?: number }> {
+  const containerDir = paths.getContainerPath(containerName, { engine })
+  const pidFile = join(containerDir, 'pgweb.pid')
+  const portFile = join(containerDir, 'pgweb.port')
+
+  if (!existsSync(pidFile)) return { running: false }
+
+  try {
+    const pid = parseInt(await readFile(pidFile, 'utf8'), 10)
+    if (platformService.isProcessRunning(pid)) {
+      const port = parseInt(await readFile(portFile, 'utf8'), 10)
+      return { running: true, port, pid }
+    }
+  } catch {
+    // PID file invalid or process dead
+  }
+
+  // Clean up stale files
+  await unlink(pidFile).catch(() => {})
+  await unlink(portFile).catch(() => {})
+  return { running: false }
+}
+
+/**
+ * Stop a running pgweb process for a container
+ */
+export async function stopPgwebProcess(
+  containerName: string,
+  engine: string,
+): Promise<void> {
+  const status = await getPgwebStatus(containerName, engine)
+  if (!status.running || !status.pid) {
+    console.log()
+    console.log(uiInfo('pgweb is not running'))
+    console.log()
+    await pressEnterToContinue()
+    return
+  }
+
+  try {
+    await platformService.terminateProcess(status.pid, false)
+  } catch {
+    // Already gone
+  }
+
+  const containerDir = paths.getContainerPath(containerName, { engine })
+  await unlink(join(containerDir, 'pgweb.pid')).catch(() => {})
+  await unlink(join(containerDir, 'pgweb.port')).catch(() => {})
+
+  console.log()
+  console.log(uiSuccess('pgweb stopped'))
+  console.log()
+  await pressEnterToContinue()
+}
+
+/**
+ * Download and install pgweb from GitHub releases
+ */
+async function downloadPgweb(): Promise<string | null> {
+  console.log()
+  const spinner = createSpinner('Downloading pgweb...')
+  spinner.start()
+
+  try {
+    const platform = process.platform
+    const arch = process.arch
+    let suffix: string
+
+    if (platform === 'darwin' && arch === 'arm64') {
+      suffix = 'darwin_arm64'
+    } else if (platform === 'darwin' && arch === 'x64') {
+      suffix = 'darwin_amd64'
+    } else if (platform === 'linux' && arch === 'arm64') {
+      suffix = 'linux_arm64'
+    } else if (platform === 'linux' && arch === 'x64') {
+      suffix = 'linux_amd64'
+    } else if (platform === 'win32' && arch === 'x64') {
+      suffix = 'windows_amd64.exe'
+    } else {
+      throw new Error(`Unsupported platform: ${platform} ${arch}`)
+    }
+
+    const version = '0.17.0'
+    const zipUrl = `https://github.com/sosedoff/pgweb/releases/download/v${version}/pgweb_${suffix}.zip`
+
+    spinner.text = `Downloading pgweb v${version}...`
+
+    const response = await fetch(zipUrl)
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to download: ${response.status}`)
+    }
+
+    const isWin = platform === 'win32'
+    const binaryName = isWin ? 'pgweb.exe' : 'pgweb'
+    const platformArch = `${platform}-${arch}`
+    const installDir = join(
+      paths.bin,
+      `pgweb-${version}-${platformArch}`,
+      'bin',
+    )
+    await mkdir(installDir, { recursive: true })
+
+    const tempZip = join(paths.bin, 'pgweb-temp.zip')
+    const buffer = Buffer.from(await response.arrayBuffer())
+    await writeFile(tempZip, buffer)
+
+    spinner.text = 'Extracting pgweb...'
+
+    try {
+      const unzipper = await import('unzipper')
+      const directory = await unzipper.Open.file(tempZip)
+
+      const resolvedInstallDir = resolve(installDir)
+      let extracted = false
+
+      for (const entry of directory.files) {
+        if (entry.type === 'Directory') continue
+
+        // Zip-slip protection
+        const targetPath = resolve(installDir, binaryName)
+        if (!targetPath.startsWith(resolvedInstallDir + sep)) {
+          continue
+        }
+
+        // The zip contains the binary (possibly named pgweb_<platform>_<arch> or pgweb_<platform>_<arch>.exe)
+        const content = await entry.buffer()
+        await writeFile(targetPath, content)
+        extracted = true
+        break // Only one file in the zip
+      }
+
+      if (!extracted) {
+        throw new Error('Could not find pgweb binary in zip archive')
+      }
+    } finally {
+      await rm(tempZip, { force: true })
+    }
+
+    const binaryPath = join(installDir, binaryName)
+
+    // chmod on Unix
+    if (!isWin) {
+      await chmod(binaryPath, 0o755)
+    }
+
+    // Register in config
+    await configManager.setBinaryPath('pgweb', binaryPath, 'bundled')
+
+    spinner.succeed(`pgweb v${version} installed`)
+    console.log()
+
+    return binaryPath
+  } catch (error) {
+    spinner.fail('Failed to download pgweb')
+    console.error(uiError((error as Error).message))
+    console.log()
+    console.log(chalk.gray('You can manually download from:'))
+    console.log(chalk.cyan('  https://github.com/sosedoff/pgweb/releases'))
+    console.log()
+    await pressEnterToContinue()
+    return null
+  }
+}
+
+/**
+ * Launch pgweb for a PostgreSQL-compatible container
+ */
+async function launchPgweb(
+  containerName: string,
+  config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
+  database: string,
+): Promise<void> {
+  const pgwebPath = await configManager.getBinaryPath('pgweb')
+  if (!pgwebPath) {
+    console.error(uiError('pgweb not found. Download it first.'))
+    await pressEnterToContinue()
+    return
+  }
+
+  const containerDir = paths.getContainerPath(containerName, {
+    engine: config.engine,
+  })
+  const pidFile = join(containerDir, 'pgweb.pid')
+  const portFile = join(containerDir, 'pgweb.port')
+
+  // Check if already running — just open browser
+  const status = await getPgwebStatus(containerName, config.engine)
+  if (status.running && status.port) {
+    const url = `http://127.0.0.1:${status.port}`
+    console.log()
+    console.log(uiInfo(`Opening pgweb`))
+    console.log(chalk.gray(`  ${url}`))
+    console.log()
+    openInBrowser(url)
+    await pressEnterToContinue()
+    return
+  }
+
+  // Find available port starting at 8081
+  let port = 8081
+  while (!(await portManager.isPortAvailable(port)) && port < 8200) {
+    port++
+  }
+
+  if (port >= 8200) {
+    console.error(uiError('Could not find an available port for pgweb'))
+    await pressEnterToContinue()
+    return
+  }
+
+  // Build connection URL
+  let connectionUrl: string
+  if (config.engine === 'ferretdb') {
+    // FerretDB has a PostgreSQL backend on backendPort — always connects to 'ferretdb' database
+    if (!config.backendPort) {
+      console.log()
+      console.error(
+        uiError(
+          'PostgreSQL backend port not set — restart the container first',
+        ),
+      )
+      console.log()
+      await pressEnterToContinue()
+      return
+    }
+    connectionUrl = `postgresql://postgres@127.0.0.1:${config.backendPort}/ferretdb?sslmode=disable`
+  } else if (config.engine === 'cockroachdb') {
+    connectionUrl = `postgresql://root@127.0.0.1:${config.port}/${database}?sslmode=disable`
+  } else {
+    connectionUrl = `postgresql://postgres@127.0.0.1:${config.port}/${database}?sslmode=disable`
+  }
+
+  // Spawn pgweb detached
+  const pgwebProcess = spawn(
+    pgwebPath,
+    ['--url', connectionUrl, '--bind', '127.0.0.1', '--listen', String(port)],
+    {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      detached: true,
+    },
+  )
+
+  pgwebProcess.unref()
+
+  // Write PID and port files
+  if (pgwebProcess.pid) {
+    await writeFile(pidFile, String(pgwebProcess.pid))
+    await writeFile(portFile, String(port))
+  }
+
+  // Brief wait for startup
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+
+  const url = `http://127.0.0.1:${port}`
+  console.log()
+  console.log(uiSuccess(`pgweb started on ${url}`))
+  console.log(chalk.gray(`  PID: ${pgwebProcess.pid}`))
+  console.log()
+  openInBrowser(url)
   await pressEnterToContinue()
 }
 

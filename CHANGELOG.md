@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **pgweb web panel** - Browser-based database viewer for PostgreSQL, CockroachDB, and FerretDB. Downloaded on-demand from GitHub releases (v0.17.0, MIT license). Spawns as a background process per container, auto-stops when the database stops. Available from the console menu under "Web Panel" section.
+- **`spindb ports` command** - Show all ports used by containers (primary, secondary HTTP/gRPC/ILP, and pgweb). Supports `--json` and `--running` flags. Also available as "Ports" in the interactive main menu.
+- **pgweb stop in container submenu** - Stop pgweb directly from the container view without navigating into the console submenu
+
+### Fixed
+- **FerretDB pgweb connection** - pgweb was connecting to the wrong database (user's MongoDB database name instead of `ferretdb`) and falling back to the MongoDB port (27017) when `backendPort` was unset
+- **FerretDB start with orphaned PostgreSQL backend** - Starting a FerretDB container no longer fails if the PostgreSQL backend is still running from a previous partial shutdown. Uses `pg_ctl status` to detect and skip redundant backend startup.
+
+### Changed
+- **"Open shell" renamed to "Open console"** - Container menu and submenu labels updated to reflect that both CLI shells and web panels are available
+- **Console menu grouping** - Web panels (pgweb, ClickHouse Play UI) are separated from CLI tools with a labeled "Web Panel" section header
+
 ## [0.33.1] - 2026-02-10
 
 ### Fixed

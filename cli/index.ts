@@ -3,6 +3,7 @@ import { createRequire } from 'module'
 import chalk from 'chalk'
 import { createCommand } from './commands/create'
 import { listCommand } from './commands/list'
+import { portsCommand } from './commands/ports'
 import { startCommand } from './commands/start'
 import { stopCommand } from './commands/stop'
 import { deleteCommand } from './commands/delete'
@@ -117,6 +118,7 @@ export async function run(): Promise<void> {
 
   program.addCommand(createCommand)
   program.addCommand(listCommand)
+  program.addCommand(portsCommand)
   program.addCommand(startCommand)
   program.addCommand(stopCommand)
   program.addCommand(deleteCommand)

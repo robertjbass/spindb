@@ -53,7 +53,12 @@ import {
   formatBytes,
   box,
 } from '../../ui/theme'
-import { handleOpenShell, handleCopyConnectionString } from './shell-handlers'
+import {
+  handleOpenShell,
+  handleCopyConnectionString,
+  getPgwebStatus,
+  stopPgwebProcess,
+} from './shell-handlers'
 import { generatePassword } from '../../../core/credential-generator'
 import {
   saveCredentials,
@@ -591,16 +596,16 @@ export async function handleList(
   // Build the full choice list with footer items
   // IMPORTANT: Containers must come FIRST because filterableCount slices from index 0
   const summary = `${containers.length} container(s): ${parts.join('; ')}`
+  const headerItems = hasServerContainers
+    ? [
+        new inquirer.Separator(
+          chalk.cyan('── [Shift+Tab] toggle start/stop ──'),
+        ),
+      ]
+    : []
   const allChoices: (FilterableChoice | inquirer.Separator)[] = [
     ...containerChoices,
-    // Show toggle hint after containers (before footer) when server-based containers exist
-    ...(hasServerContainers
-      ? [
-          new inquirer.Separator(
-            chalk.cyan('── [Shift+Tab] toggle start/stop ──'),
-          ),
-        ]
-      : [new inquirer.Separator()]),
+    new inquirer.Separator(),
     new inquirer.Separator(summary),
     new inquirer.Separator(),
     { name: `${chalk.green('+')} Create new`, value: 'create' },
@@ -620,6 +625,7 @@ export async function handleList(
       emptyText: 'No containers match filter',
       enableToggle: hasServerContainers,
       defaultValue: options?.focusContainer,
+      headerItems,
     },
   )
 
@@ -660,6 +666,8 @@ export async function handleList(
     const result = await handleCreate()
     if (result === 'main') {
       await showMainMenu()
+    } else if (result) {
+      await showContainerSubmenu(result, showMainMenu)
     } else {
       await handleList(showMainMenu)
     }
@@ -775,6 +783,21 @@ export async function showContainerSubmenu(
         name: `${chalk.red('■')} Stop container`,
         value: 'stop',
       })
+
+      // Stop pgweb - only for PG-wire-protocol engines when pgweb is running
+      if (
+        config.engine === 'postgresql' ||
+        config.engine === 'cockroachdb' ||
+        config.engine === 'ferretdb'
+      ) {
+        const pgwebStatus = await getPgwebStatus(containerName, config.engine)
+        if (pgwebStatus.running) {
+          actionChoices.push({
+            name: `${chalk.redBright('■')} Stop pgweb (port ${pgwebStatus.port})`,
+            value: 'stop-pgweb',
+          })
+        }
+      }
     }
 
     // View logs - available anytime for server-based DBs
@@ -806,11 +829,11 @@ export async function showContainerSubmenu(
     new inquirer.Separator(chalk.gray(`── ${dataSectionLabel} ──`)),
   )
 
-  // Open shell - requires database selection for multi-db containers
+  // Open console - requires database selection for multi-db containers
   actionChoices.push(
     canDoDbAction
-      ? { name: `${chalk.blue('>')} Open shell`, value: 'shell' }
-      : disabledItem('>', 'Open shell'),
+      ? { name: `${chalk.blue('>')} Open console`, value: 'shell' }
+      : disabledItem('>', 'Open console'),
   )
 
   // Run script file - requires database selection for multi-db containers
@@ -989,6 +1012,10 @@ export async function showContainerSubmenu(
       return
     case 'logs':
       await handleViewLogs(containerName)
+      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      return
+    case 'stop-pgweb':
+      await stopPgwebProcess(containerName, config.engine)
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
     case 'edit': {
