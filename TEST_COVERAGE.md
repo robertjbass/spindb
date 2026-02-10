@@ -8,11 +8,11 @@ For CI platform coverage, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 
 | Category | Tested | Gaps | Confidence if CI passes |
 |----------|--------|------|-------------------------|
-| Engine lifecycle (create/start/stop/delete) | All 17 engines | None | High |
+| Engine lifecycle (create/start/stop/delete) | All 18 engines | None | High |
 | Backup & restore (local) | All engines | None | High |
 | Clone & rename | All engines | None | High |
 | Query execution (run/executeQuery) | All engines | None | High |
-| User management (users create) | 13 of 17 engines (excludes SQLite, DuckDB, QuestDB, TypeDB) | N/A (excluded engines have no user management) | High |
+| User management (users create) | 13 of 18 engines (excludes SQLite, DuckDB, QuestDB, TypeDB, InfluxDB) | N/A (excluded engines have no user management) | High |
 | Binary management | All engines | None | High |
 | Doctor | Unit + CLI E2E | None | High |
 | JSON output (--json) | 442-line suite | None | High |
@@ -107,7 +107,7 @@ For CI platform coverage, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 
 These features have solid test coverage and don't need additional work:
 
-- **Engine lifecycle** (create, start, stop, delete, list, info) -- integration tests for all 17 engines
+- **Engine lifecycle** (create, start, stop, delete, list, info) -- integration tests for all 18 engines
 - **Backup & restore** (local files, all formats) -- integration tests per engine
 - **Clone** -- integration tests per engine
 - **Rename & port change** -- integration tests per engine

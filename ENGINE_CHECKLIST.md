@@ -2685,7 +2685,7 @@ Every engine must have a comprehensive README.md documenting implementation deta
 
 ### TEST_COVERAGE.md
 
-- [ ] Update engine count in coverage table (e.g., "All 17 engines")
+- [ ] Update engine count in coverage table (e.g., "All 18 engines")
 - [ ] Update user management exclusion list if engine lacks user management
 - [ ] Update "well-covered" section engine count
 
@@ -2696,7 +2696,7 @@ Every engine must have a comprehensive README.md documenting implementation deta
 
 ### Hostdb Acknowledgment (README.md)
 
-- [ ] Update engine count in Acknowledgments section (e.g., "Pre-compiled database binaries for 17 engines")
+- [ ] Update engine count in Acknowledgments section (e.g., "Pre-compiled database binaries for 18 engines")
 
 ---
 

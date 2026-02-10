@@ -15,6 +15,7 @@ import { cockroachdbEngine } from './cockroachdb'
 import { surrealdbEngine } from './surrealdb'
 import { questdbEngine } from './questdb'
 import { typedbEngine } from './typedb'
+import { influxdbEngine } from './influxdb'
 import { platformService } from '../core/platform-service'
 import { Engine, Platform } from '../types'
 import type { BaseEngine } from './base-engine'
@@ -80,6 +81,9 @@ export const engines: Record<string, BaseEngine> = {
   // TypeDB and aliases
   [Engine.TypeDB]: typedbEngine,
   tdb: typedbEngine,
+  // InfluxDB and aliases
+  [Engine.InfluxDB]: influxdbEngine,
+  influx: influxdbEngine,
 }
 
 // Get an engine by name

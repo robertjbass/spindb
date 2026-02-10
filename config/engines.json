@@ -281,6 +281,23 @@
       "clientTools": ["typedb", "typedb-console"],
       "licensing": "MPL-2.0",
       "notes": "Strongly-typed database for knowledge representation and reasoning. TypeQL query language. Main port 1729, HTTP port 8000. Default credentials: admin/password."
+    },
+    "influxdb": {
+      "displayName": "InfluxDB",
+      "icon": "📈",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["3.8.0"],
+      "defaultVersion": "3.8.0",
+      "defaultPort": 8086,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "scriptFileLabel": null,
+      "connectionScheme": "http",
+      "superuser": null,
+      "clientTools": ["influxdb3"],
+      "licensing": ["Apache-2.0", "MIT"],
+      "notes": "Purpose-built time-series database with SQL support. InfluxDB 3.x is a Rust rewrite using Apache Arrow/DataFusion. HTTP API on port 8086."
     }
   }
 }

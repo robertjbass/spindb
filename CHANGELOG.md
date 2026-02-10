@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **InfluxDB engine support** - 18th database engine. REST API time-series database (InfluxDB 3.x Rust rewrite) with SQL query support via HTTP API. Default port 8086, binary `influxdb3`. Databases created implicitly on first write, no auth by default for local development. Health check via `GET /health`, queries via `POST /api/v3/query_sql`. Version 3.8.0, all 5 platforms supported (macOS ARM/x64, Linux ARM/x64, Windows x64). License: Apache-2.0 AND MIT.
+
 ## [0.32.2] - 2026-02-08
 
 ### Added

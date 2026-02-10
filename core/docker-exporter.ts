@@ -71,6 +71,7 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.SurrealDB]: 'SurrealDB',
     [Engine.QuestDB]: 'QuestDB',
     [Engine.TypeDB]: 'TypeDB',
+    [Engine.InfluxDB]: 'InfluxDB',
   }
   return displayNames[engine] || engine
 }
@@ -141,6 +142,9 @@ const _ENGINE_BINARY_CONFIG: Record<
   [Engine.TypeDB]: {
     primaryBinaries: ['typedb', 'typedb_console_bin'],
   },
+  [Engine.InfluxDB]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
 }
 
 /**
@@ -193,6 +197,7 @@ function getConnectionStringTemplate(
       return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
 
     case Engine.Meilisearch:
+    case Engine.InfluxDB:
       return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
 
     case Engine.CouchDB:
@@ -492,6 +497,13 @@ echo "User configured via server settings"
       userCreationCommands = `
 # API key is configured at server start
 echo "API key configured via server settings"
+`
+      break
+
+    case Engine.InfluxDB:
+      userCreationCommands = `
+# InfluxDB 3.x local dev runs without authentication
+echo "No authentication required for local InfluxDB 3.x"
 `
       break
 
@@ -1284,6 +1296,7 @@ export async function getDockerConnectionString(
       return `http://${host}:${port}`
 
     case Engine.Meilisearch:
+    case Engine.InfluxDB:
       return `http://${host}:${port}`
 
     case Engine.CouchDB:

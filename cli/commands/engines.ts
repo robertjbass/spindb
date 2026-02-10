@@ -48,6 +48,7 @@ import {
   type InstalledSurrealDBEngine,
   type InstalledQuestDBEngine,
   type InstalledTypeDBEngine,
+  type InstalledInfluxDBEngine,
 } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
@@ -70,6 +71,7 @@ import { cockroachdbBinaryManager } from '../../engines/cockroachdb/binary-manag
 import { surrealdbBinaryManager } from '../../engines/surrealdb/binary-manager'
 import { questdbBinaryManager } from '../../engines/questdb/binary-manager'
 import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
+import { influxdbBinaryManager } from '../../engines/influxdb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   normalizeDocumentDBVersion,
@@ -475,6 +477,9 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const typedbEngines = engines.filter(
     (e): e is InstalledTypeDBEngine => e.engine === 'typedb',
   )
+  const influxdbEngines = engines.filter(
+    (e): e is InstalledInfluxDBEngine => e.engine === 'influxdb',
+  )
 
   // Calculate total size for PostgreSQL
   const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
@@ -699,6 +704,20 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
+  // InfluxDB rows
+  for (const engine of influxdbEngines) {
+    const platformInfo = `${engine.platform}-${engine.arch}`
+
+    console.log(
+      chalk.gray('  ') +
+        getEngineIcon('influxdb') +
+        chalk.cyan('influxdb'.padEnd(13)) +
+        chalk.yellow(engine.version.padEnd(12)) +
+        chalk.gray(platformInfo.padEnd(18)) +
+        chalk.white(formatBytes(engine.sizeBytes)),
+    )
+  }
+
   console.log(chalk.gray('  ' + '─'.repeat(59)))
 
   // Summary
@@ -849,6 +868,17 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     console.log(
       chalk.gray(
         `  TypeDB: ${typedbEngines.length} version(s), ${formatBytes(totalTypeDBSize)}`,
+      ),
+    )
+  }
+  if (influxdbEngines.length > 0) {
+    const totalInfluxDBSize = influxdbEngines.reduce(
+      (acc, e) => acc + e.sizeBytes,
+      0,
+    )
+    console.log(
+      chalk.gray(
+        `  InfluxDB: ${influxdbEngines.length} version(s), ${formatBytes(totalInfluxDBSize)}`,
       ),
     )
   }
@@ -2013,9 +2043,56 @@ enginesCommand
         return
       }
 
+      if (['influxdb', 'influx'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('InfluxDB requires a version (e.g., 3)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.InfluxDB)
+
+        const spinner = createSpinner(
+          `Checking InfluxDB ${version} binaries...`,
+        )
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `InfluxDB ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`InfluxDB ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`InfluxDB ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: influxdbPlatform, arch: influxdbArch } =
+          platformService.getPlatformInfo()
+        const influxdbFullVersion =
+          influxdbBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'influxdb',
+          version: influxdbFullVersion,
+          platform: influxdbPlatform,
+          arch: influxdbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for InfluxDB - it's a REST API server
+        // with no CLI client tools (uses HTTP protocols instead)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb`,
         ),
       )
       process.exit(1)

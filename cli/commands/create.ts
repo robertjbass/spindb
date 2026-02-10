@@ -398,6 +398,10 @@ export function detectLocationType(location: string): {
     return { type: 'connection', inferredEngine: Engine.Meilisearch }
   }
 
+  if (location.startsWith('influxdb://')) {
+    return { type: 'connection', inferredEngine: Engine.InfluxDB }
+  }
+
   if (existsSync(location)) {
     // Check if it's a SQLite file (case-insensitive)
     const lowerLocation = location.toLowerCase()
@@ -423,7 +427,7 @@ export const createCommand = new Command('create')
   .argument('[name]', 'Container name')
   .option(
     '-e, --engine <engine>',
-    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch)',
+    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb)',
   )
   .option('--db-version <version>', 'Database version (e.g., 17, 8.0)')
   .option('-d, --database <database>', 'Database name')

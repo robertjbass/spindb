@@ -133,6 +133,8 @@ export async function handleCreate(): Promise<'main' | string | void> {
     database = '0'
   } else if (engine === 'qdrant' || engine === 'meilisearch') {
     database = 'default'
+  } else if (engine === 'influxdb') {
+    database = 'mydb'
   } else {
     database = await promptDatabaseName(name, engine)
   }

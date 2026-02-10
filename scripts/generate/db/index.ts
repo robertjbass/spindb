@@ -37,6 +37,7 @@ const ENGINE_DEFS = [
   { engine: 'surrealdb', aliases: ['surreal'] },
   { engine: 'questdb', aliases: ['quest'] },
   { engine: 'typedb', aliases: ['tdb'] },
+  { engine: 'influxdb', aliases: ['influx'] },
 ] as const
 
 type SupportedEngine = (typeof ENGINE_DEFS)[number]['engine']

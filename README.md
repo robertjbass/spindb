@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 17 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 18 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -28,7 +28,7 @@ spindb create cache --engine redis
 
 ## Supported Engines & Platforms
 
-SpinDB supports **17 database engines** across **5 platform architectures**—all with a consistent API.
+SpinDB supports **18 database engines** across **5 platform architectures**—all with a consistent API.
 
 | Engine | Type | macOS ARM | macOS Intel | Linux x64 | Linux ARM | Windows |
 |--------|------|:---------:|:-----------:|:---------:|:---------:|:-------:|
@@ -49,8 +49,9 @@ SpinDB supports **17 database engines** across **5 platform architectures**—al
 | 🌀 **SurrealDB** | Multi-Model | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ⏱️ **QuestDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🤖 **TypeDB** | Knowledge Graph | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 📈 **InfluxDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**83 combinations. One CLI. Zero configuration.**
+**88 combinations. One CLI. Zero configuration.**
 
 > ClickHouse and FerretDB are available on Windows via WSL.
 
@@ -78,7 +79,7 @@ One consistent interface across SQL databases, document stores, key-value stores
 
 ```bash
 # Same commands work for ANY database
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -174,7 +175,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | DBngin | Postgres.app | Laragon |
 |---------|--------|--------|--------------|---------|
-| **Engines supported** | 17 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
+| **Engines supported** | 18 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
 | CLI-first | ✅ | ❌ GUI-only | ❌ GUI-only | ⚠️ Limited CLI |
 | Multi-version support | ✅ | ✅ | ✅ | ✅ |
 | Built-in backup/restore | ✅ | ✅ | ❌ | ⚠️ Manual |
@@ -190,7 +191,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Docker Desktop | Podman | OrbStack |
 |---------|--------|----------------|--------|----------|
-| **Engines supported** | 17 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
+| **Engines supported** | 18 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
 | Daemon required | ❌ | ✅ | ❌ (rootless) | ✅ |
 | Resource overhead | Native | VM + containers | VM + containers | VM + containers |
 | Built-in backup/restore | ✅ | ❌ Manual | ❌ Manual | ❌ Manual |
@@ -206,7 +207,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Homebrew | apt/winget | asdf-vm |
 |---------|--------|----------|------------|---------|
-| **Engines supported** | 17 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
+| **Engines supported** | 18 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
 | Multi-version side-by-side | ✅ | ⚠️ Complex | ❌ | ✅ |
 | Isolated data directories | ✅ | ❌ System-wide | ❌ System-wide | ❌ |
 | Built-in backup/restore | ✅ | ❌ | ❌ | ❌ |
@@ -223,7 +224,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 ## Supported Databases
 
-SpinDB supports **17 database engines** with **multiple versions** for each:
+SpinDB supports **18 database engines** with **multiple versions** for each:
 
 | Engine | Type | Versions | Default Port | Query Language |
 |--------|------|----------|--------------|----------------|
@@ -244,10 +245,11 @@ SpinDB supports **17 database engines** with **multiple versions** for each:
 | 🌀 **SurrealDB** | Multi-Model | 2 | 8000 | SurrealQL |
 | ⏱️ **QuestDB** | Time-Series SQL | 9 | 8812 (PG), 9000 (HTTP) | SQL |
 | 🤖 **TypeDB** | Knowledge Graph | 3 | 1729, 8000 (HTTP) | TypeQL |
+| 📈 **InfluxDB** | Time-Series | 3 | 8086 | SQL via REST API |
 
 ### Engine Categories
 
-**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB):
+**Server-Based Databases** (PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB):
 - Start/stop server processes
 - Bind to localhost ports
 - Data stored in `~/.spindb/containers/{engine}/{name}/`
@@ -339,7 +341,7 @@ spindb users list mydb                         # List usernames
 spindb users list mydb --json                  # JSON output
 ```
 
-Supports PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB. Credentials are saved as `.env.<username>` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
+Supports PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, and Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB, InfluxDB. Credentials are saved as `.env.<username>` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 
 ### Backup & Restore
 
@@ -582,6 +584,7 @@ Databases run as **native processes**, and **data persists across restarts**. Wh
 | CockroachDB | Raft consensus | Strongly consistent, distributed replication |
 | QuestDB | Write-ahead logging | Committed transactions survive crashes |
 | TypeDB | Write-ahead logging | Committed transactions survive crashes |
+| InfluxDB | Write-ahead logging | Committed transactions survive crashes |
 
 ---
 
@@ -761,6 +764,28 @@ spindb connect cluster
 
 CockroachDB is a distributed SQL database with automatic replication and failover. Single-node mode is used for local development.
 
+### InfluxDB 📈
+
+```bash
+# Create InfluxDB database (time-series)
+spindb create metrics --engine influxdb
+spindb start metrics
+
+# Access via REST API
+curl http://127.0.0.1:8086/health
+curl -X POST http://127.0.0.1:8086/api/v3/query_sql -H "Content-Type: application/json" -d '{"q": "SELECT * FROM my_measurement"}'
+```
+
+**Version:** 3 (3.8.0)
+**Platforms:** macOS, Linux, Windows (all platforms)
+**Port:** 8086 (HTTP)
+**Query interface:** SQL via REST API (`POST /api/v3/query_sql`)
+**Tools:** `influxdb3` (included)
+**No authentication** by default for local development
+**Databases** created implicitly on first write
+
+InfluxDB 3.x is a Rust rewrite of InfluxDB, optimized for high-performance time-series workloads with SQL query support via HTTP API.
+
 ---
 
 ## Enhanced CLI Tools
@@ -785,6 +810,7 @@ SpinDB supports enhanced database shells with auto-completion, syntax highlighti
 | CockroachDB | `cockroach sql` | - | - |
 | QuestDB | `psql` | `pgcli` | `usql` |
 | TypeDB | `typedb console` | - | - |
+| InfluxDB | REST API | - | - |
 
 Install and use in one command:
 
@@ -926,6 +952,16 @@ spindb backup mydb --format sql         # SQL dump (only format)
 spindb backup mydb --format typeql      # TypeQL export (only format)
 ```
 
+### InfluxDB
+
+| Format | Extension | Tool | Use Case |
+|--------|-----------|------|----------|
+| json | `.json` | REST API | JSON export via query API |
+
+```bash
+spindb backup mydb --format json        # JSON export (only format)
+```
+
 ---
 
 ## Advanced Features
@@ -971,6 +1007,7 @@ spindb restore mydb --from-url "postgresql://user:pass@prod-host:5432/production
 | CockroachDB | `postgresql://` or `postgres://` | `postgresql://root@host:26257/db?sslmode=disable` |
 | QuestDB | `postgresql://` or `postgres://` | `postgresql://admin:quest@host:8812/qdb` |
 | TypeDB | `typedb://` | `typedb://host:1729` |
+| InfluxDB | `http://` | `http://host:8086` |
 
 ### Multi-Version Support
 
@@ -1038,7 +1075,6 @@ The following engines may be added based on community interest:
 |--------|------|-------|
 | **libSQL** | Embedded relational | SQLite fork with replication |
 | **OpenSearch** | Search engine | Elasticsearch alternative |
-| **InfluxDB** | Time-series | Metrics and IoT data |
 | **Neo4j** | Graph database | Relationships and network data |
 
 ---
@@ -1048,7 +1084,7 @@ The following engines may be added based on community interest:
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
 - **FerretDB Windows** - Not supported (postgresql-documentdb has startup issues on Windows).
-- **Qdrant, Meilisearch & CouchDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
+- **Qdrant, Meilisearch, CouchDB & InfluxDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---
 
@@ -1125,7 +1161,7 @@ See [USE_CASES.md](USE_CASES.md) for detailed use cases and infrastructure oppor
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 17 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 18 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 

@@ -218,6 +218,13 @@ export async function handleOpenShell(
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'influxdb') {
+    // InfluxDB uses REST API, no interactive shell
+    defaultShellName = 'Web Dashboard'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else if (config.engine === 'couchdb') {
     // CouchDB uses REST API, open Fauxton dashboard in browser
     defaultShellName = 'Fauxton Dashboard'
@@ -304,6 +311,17 @@ export async function handleOpenShell(
       value: 'default',
     })
     // Always show API info option for Meilisearch
+    choices.push({
+      name: `ℹ Show API info`,
+      value: 'api-info',
+    })
+  } else if (config.engine === 'influxdb') {
+    // InfluxDB: REST API only, no interactive shell
+    choices.push({
+      name: `◎ Open Dashboard in browser`,
+      value: 'default',
+    })
+    // Always show API info option for InfluxDB
     choices.push({
       name: `ℹ Show API info`,
       value: 'api-info',
@@ -424,6 +442,17 @@ export async function handleOpenShell(
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/indexes`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/stats`))
+    } else if (config.engine === 'influxdb') {
+      console.log(chalk.cyan('InfluxDB REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
+      console.log(
+        chalk.gray(
+          `  curl http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"q": "SELECT 1"}'`,
+        ),
+      )
     } else if (config.engine === 'couchdb') {
       console.log(chalk.cyan('CouchDB REST API:'))
       console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
@@ -914,6 +943,15 @@ async function launchShell(
     // Meilisearch: Open dashboard in browser (served at root URL)
     const dashboardUrl = `http://127.0.0.1:${config.port}`
     console.log(uiInfo(`Opening Meilisearch Dashboard in browser...`))
+    console.log(chalk.gray(`  ${dashboardUrl}`))
+    console.log()
+    openInBrowser(dashboardUrl)
+    await pressEnterToContinue()
+    return
+  } else if (config.engine === 'influxdb') {
+    // InfluxDB: Open dashboard in browser (served at root URL)
+    const dashboardUrl = `http://127.0.0.1:${config.port}`
+    console.log(uiInfo(`Opening InfluxDB Dashboard in browser...`))
     console.log(chalk.gray(`  ${dashboardUrl}`))
     console.log()
     openInBrowser(dashboardUrl)

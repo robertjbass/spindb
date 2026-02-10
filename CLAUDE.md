@@ -11,7 +11,7 @@
 
 ## Overview
 
-SpinDB is a CLI tool for running local databases without Docker. Downloads binaries from [hostdb](https://github.com/robertjbass/hostdb). 17 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB.
+SpinDB is a CLI tool for running local databases without Docker. Downloads binaries from [hostdb](https://github.com/robertjbass/hostdb). 18 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB.
 
 **Stack**: Node.js 18+, TypeScript, tsx (no build step), pnpm, Commander.js, Inquirer.js, Chalk, Ora, ESM
 
@@ -32,9 +32,9 @@ tests/fixtures/       # Test data and seed files
 ## Architecture
 
 **Engine categories:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
 - **File-based** (SQLite, DuckDB): data in CWD, no server process, `start()`/`stop()` are no-ops, tracked via registry in `~/.spindb/config.json`
-- **REST API** (Qdrant, Meilisearch, CouchDB): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard
+- **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
 

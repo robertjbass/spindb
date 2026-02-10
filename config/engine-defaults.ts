@@ -252,6 +252,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['typedb', 'typedb_console_bin'],
     maxConnections: 0, // Not applicable - managed internally
   },
+  [Engine.InfluxDB]: {
+    defaultVersion: '3',
+    defaultPort: 8086, // InfluxDB HTTP API port
+    portRange: { start: 8086, end: 8186 },
+    latestVersion: '3',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'http',
+    logFileName: 'influxdb.log',
+    pidFileName: 'influxdb.pid',
+    dataSubdir: 'data',
+    clientTools: [], // InfluxDB uses REST API, no separate CLI tools
+    maxConnections: 0, // Not applicable for time-series DB
+  },
 }
 
 /**

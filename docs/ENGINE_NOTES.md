@@ -118,6 +118,21 @@ Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:
 
 See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details including hostdb build process.
 
+## InfluxDB
+
+- **REST API time-series database**: InfluxDB 3.x is a complete Rust rewrite, optimized for high-performance time-series workloads
+- **Binary**: `influxdb3` (single binary, no separate CLI client tools)
+- **Default port**: 8086 (HTTP)
+- **Health endpoint**: `/health`
+- **Query endpoint**: `POST /api/v3/query_sql` with JSON body `{"q": "SELECT ..."}`
+- **No authentication**: No auth by default for local development
+- **Implicit database creation**: Databases are created automatically on first write (no explicit CREATE DATABASE needed)
+- **Connection scheme**: `http://` (e.g., `http://127.0.0.1:8086`)
+- **Backup/restore**: JSON export via query API
+- **Version**: 3.8.0 (semver, major=3), Apache-2.0 AND MIT license
+- **Platforms**: macOS ARM/x64, Linux ARM/x64, Windows x64 (all 5 platforms)
+- **Emoji**: 📈, **Alias**: `influx`
+
 ## Web UI Engines
 
 Engines with built-in web UIs use `openInBrowser()` in `cli/commands/menu/shell-handlers.ts`:
