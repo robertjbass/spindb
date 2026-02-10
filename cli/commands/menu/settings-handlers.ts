@@ -47,6 +47,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.SurrealDB]: '[SR]',
       [Engine.QuestDB]: '[QS]',
       [Engine.TypeDB]: '[TB]',
+      [Engine.InfluxDB]: '[IX]',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = ASCII_ICONS[engine] || '[??]'
@@ -75,6 +76,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.SurrealDB]: '\uedfe',
       [Engine.QuestDB]: '\ued2f',
       [Engine.TypeDB]: '\ue706',
+      [Engine.InfluxDB]: '\udb85\udf95',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = NERD_ICONS[engine] || '\ue706'
@@ -103,6 +105,7 @@ function generatePreviewLine(mode: IconMode): string {
     [Engine.SurrealDB]: '\u{1F300}',
     [Engine.QuestDB]: '\u23F1',
     [Engine.TypeDB]: '\u{1F916}',
+    [Engine.InfluxDB]: '\u{1F4C8}',
   }
   const icons = PREVIEW_ENGINES.map((engine) => EMOJI_ICONS[engine] || '\u25A3')
   return icons.join(' ')

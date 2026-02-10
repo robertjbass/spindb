@@ -218,6 +218,13 @@ export async function handleOpenShell(
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'influxdb') {
+    // InfluxDB uses REST API, no interactive shell
+    defaultShellName = 'Web Dashboard'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else if (config.engine === 'couchdb') {
     // CouchDB uses REST API, open Fauxton dashboard in browser
     defaultShellName = 'Fauxton Dashboard'
@@ -308,6 +315,12 @@ export async function handleOpenShell(
       name: `ℹ Show API info`,
       value: 'api-info',
     })
+  } else if (config.engine === 'influxdb') {
+    // InfluxDB: REST API only, no web dashboard or interactive shell
+    choices.push({
+      name: `ℹ Show API info`,
+      value: 'api-info',
+    })
   } else if (config.engine === 'couchdb') {
     // CouchDB: Fauxton dashboard is built-in at /_utils
     choices.push({
@@ -320,7 +333,7 @@ export async function handleOpenShell(
       value: 'api-info',
     })
   } else {
-    // Non-Qdrant/Meilisearch/CouchDB engines: show default shell option
+    // Non-REST-API engines: show default shell option
     choices.push({
       name: `>_ Use default shell (${defaultShellName})`,
       value: 'default',
@@ -424,6 +437,17 @@ export async function handleOpenShell(
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/indexes`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
       console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/stats`))
+    } else if (config.engine === 'influxdb') {
+      console.log(chalk.cyan('InfluxDB REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
+      console.log(
+        chalk.gray(
+          `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
+        ),
+      )
     } else if (config.engine === 'couchdb') {
       console.log(chalk.cyan('CouchDB REST API:'))
       console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
@@ -917,6 +941,24 @@ async function launchShell(
     console.log(chalk.gray(`  ${dashboardUrl}`))
     console.log()
     openInBrowser(dashboardUrl)
+    await pressEnterToContinue()
+    return
+  } else if (config.engine === 'influxdb') {
+    // InfluxDB: REST API only, no web dashboard
+    // This branch shouldn't be reached since we removed the 'default' choice,
+    // but handle gracefully just in case
+    console.log()
+    console.log(chalk.cyan('InfluxDB REST API:'))
+    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+    console.log()
+    console.log(chalk.gray('Example curl commands:'))
+    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
+    console.log(
+      chalk.gray(
+        `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
+      ),
+    )
+    console.log()
     await pressEnterToContinue()
     return
   } else if (config.engine === 'couchdb') {

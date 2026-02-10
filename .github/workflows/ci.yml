@@ -1412,6 +1412,95 @@ jobs:
           }
 
   # ============================================
+  # InfluxDB Integration Tests
+  # Uses SpinDB to download and manage InfluxDB binaries from hostdb
+  # ============================================
+  test-influxdb:
+    name: InfluxDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache InfluxDB binaries - these are downloaded from hostdb
+      - name: Cache InfluxDB binaries
+        uses: actions/cache@v4
+        id: influxdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-influxdb-3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download InfluxDB binaries
+      - name: Install InfluxDB via SpinDB
+        run: pnpm start engines download influxdb 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run InfluxDB integration tests
+        run: pnpm test:engine influxdb
+        timeout-minutes: 15
+
+      - name: Show InfluxDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== InfluxDB container directories ==="
+          ls -la ~/.spindb/containers/influxdb/ 2>/dev/null || echo "No InfluxDB containers directory"
+          echo ""
+          echo "=== InfluxDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i influx || echo "No InfluxDB binaries found"
+          echo ""
+          echo "=== InfluxDB log files ==="
+          find ~/.spindb/containers/influxdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show InfluxDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== InfluxDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\influxdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== InfluxDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'influx' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== InfluxDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\influxdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -2717,6 +2806,7 @@ jobs:
         test-surrealdb,
         test-questdb,
         test-typedb,
+        test-influxdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -2804,6 +2894,10 @@ jobs:
           fi
           if [ "${{ needs.test-typedb.result }}" != "success" ]; then
             echo "TypeDB tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-influxdb.result }}" != "success" ]; then
+            echo "InfluxDB tests failed"
             exit 1
           fi
           if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then

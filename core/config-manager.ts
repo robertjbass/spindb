@@ -80,6 +80,8 @@ const QUESTDB_TOOLS: BinaryTool[] = ['questdb']
 
 const TYPEDB_TOOLS: BinaryTool[] = ['typedb', 'typedb_console_bin']
 
+const INFLUXDB_TOOLS: BinaryTool[] = ['influxdb3']
+
 const ENHANCED_SHELLS: BinaryTool[] = [
   'pgcli',
   'mycli',
@@ -103,6 +105,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...SURREALDB_TOOLS,
   ...QUESTDB_TOOLS,
   ...TYPEDB_TOOLS,
+  ...INFLUXDB_TOOLS,
   ...SQLITE_TOOLS,
   ...DUCKDB_TOOLS,
   ...ENHANCED_SHELLS,
@@ -125,6 +128,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.SurrealDB]: SURREALDB_TOOLS,
   [Engine.QuestDB]: QUESTDB_TOOLS,
   [Engine.TypeDB]: TYPEDB_TOOLS,
+  [Engine.InfluxDB]: INFLUXDB_TOOLS,
 }
 
 export class ConfigManager {
@@ -357,6 +361,7 @@ export class ConfigManager {
     valkey: { found: BinaryTool[]; missing: BinaryTool[] }
     meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
     typedb: { found: BinaryTool[]; missing: BinaryTool[] }
+    influxdb: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
     // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
@@ -413,6 +418,10 @@ export class ConfigManager {
       typedb: {
         found: found.filter((t) => TYPEDB_TOOLS.includes(t)),
         missing: missing.filter((t) => TYPEDB_TOOLS.includes(t)),
+      },
+      influxdb: {
+        found: found.filter((t) => INFLUXDB_TOOLS.includes(t)),
+        missing: missing.filter((t) => INFLUXDB_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
@@ -611,6 +620,7 @@ export {
   SURREALDB_TOOLS,
   QUESTDB_TOOLS,
   TYPEDB_TOOLS,
+  INFLUXDB_TOOLS,
   SQLITE_TOOLS,
   DUCKDB_TOOLS,
   ENHANCED_SHELLS,

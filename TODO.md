@@ -10,7 +10,7 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
-- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 17 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
+- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 18 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
 - [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure
@@ -47,6 +47,16 @@ Quick capture for ideas that need review and prioritization:
 - [ ] **Scheduled backups** - Cron-like backup scheduling
 - [ ] **Import from Docker** - Migrate data from Docker containers
 
+### Future Engines Under Consideration
+
+The following engines may be added based on community interest:
+
+| Engine | Type | Notes |
+|--------|------|-------|
+| **libSQL** | Embedded relational | SQLite fork with replication |
+| **OpenSearch** | Search engine | Elasticsearch alternative |
+| **Neo4j** | Graph database | Relationships and network data |
+
 ---
 
 ## Backlog
@@ -59,7 +69,7 @@ Quick capture for ideas that need review and prioritization:
 - [ ] **Add `--json` to remaining commands** - clone, connect, logs, edit, attach, detach
 - [ ] **Add `--json` to `spindb run`** - Capture stdout/stderr and return as JSON instead of inheriting stdio
   - Requires updating `runScript` signature in `BaseEngine` (line 233-236 of `engines/base-engine.ts`)
-  - All 17 engine implementations need to be updated to support output capture mode
+  - All 18 engine implementations need to be updated to support output capture mode
   - Output format: `{ success: boolean, stdout: string, stderr: string, exitCode: number, container: string, engine: string, database: string }`
   - Once implemented, update layerbase query logic to use this for programmatic SQL execution
 
@@ -257,7 +267,7 @@ Items noted in source code that need attention:
 
 ## Maintenance
 
-- [ ] Add examples for each database in `CHEATSHEET.md`
+- [x] ~~Add examples for each database in `CHEATSHEET.md`~~ - Covered by existing CHEATSHEET.md content for all 18 engines
 
 ---
 
@@ -276,3 +286,81 @@ Container configs store a `databases` array that can get stale when databases ar
 - Hybrid: auto-populate from server, cache on stop
 
 **Decision needed:** Is the maintenance burden worth the benefit?
+
+---
+
+## Contributing
+
+### Development Setup
+
+See [CLAUDE.md](CLAUDE.md) for architecture documentation and development guidelines.
+
+### Pull Request Requirements
+
+All PRs must:
+
+1. **Target the `dev` branch** (not `main`)
+2. **Pass the linter:** `pnpm lint`
+3. **Be formatted with Prettier:** `pnpm format`
+4. **Pass all unit/integration tests:** `pnpm test:unit`
+5. **Pass all Docker integration tests:** `pnpm test:docker`
+
+Please run all commands before opening a PR.
+
+### Adding a New Engine
+
+1. `git checkout dev && git pull && git checkout -b feature/<engine-name>`
+2. Ensure the engine binaries are available for all supported platforms (macOS, Linux, Windows) using all architectures (x64 and ARM64) for darwin and linux and hosted on hostdb
+3. Add unit and integration tests for the new engine
+4. Add CI.yml tests for each architecture and platform following the established patterns
+5. See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for the full 20+ file checklist
+
+### Running Tests
+
+```bash
+pnpm test:unit         # Unit tests (1113+ tests)
+pnpm test:engine       # All integration tests (17+ per engine)
+pnpm test:engine pg    # PostgreSQL integration (aliases: postgres, postgresql)
+pnpm test:engine mysql # MySQL integration
+pnpm test:engine mongo # MongoDB integration (alias: mongodb)
+pnpm test:engine --help # Show all available engines and aliases
+pnpm test:docker       # Docker Linux E2E
+```
+
+### Why `--experimental-test-isolation=none`?
+
+All test scripts use `--experimental-test-isolation=none` due to a Node 22 macOS worker thread bug where worker thread IPC fails with "Unable to deserialize cloned data." Running tests without worker isolation is reliable cross-platform. Don't remove this flag.
+
+### Test Ports
+
+Integration tests use reserved ports (not defaults) to avoid conflicts:
+
+- PostgreSQL: 5454-5456
+- MySQL: 3333-3335
+- Redis: 6399-6401
+
+### Silent Catch Blocks (By Design)
+
+These catch blocks intentionally suppress errors because they handle expected failure scenarios:
+
+| Location | Purpose |
+|----------|---------|
+| `mysql/binary-detection.ts:71,87` | Version/MariaDB detection probes |
+| `mysql/binary-detection.ts:231,261,278,295,312` | Package manager detection |
+| `mysql/index.ts:315` | MySQL readiness probe loop |
+| `mysql/index.ts:356` | MySQL ping check (no PID file) |
+| `cli/commands/list.ts:28` | Database size fetch (container not running) |
+| `postgresql/binary-urls.ts:75` | Maven version fetch (fallback to hardcoded) |
+| `cli/index.ts:78,88` | Update check notification (non-critical) |
+
+### Desktop GUI (Separate Repository)
+
+**Framework:** Tauri v2 (Rust + React)
+**Architecture:** GUI shells out to `spindb` CLI commands
+
+Features:
+- System tray with running container status
+- Start/stop/delete containers
+- Create new containers
+- View connection strings
+- Auto-updates and launch on startup (opt-in)

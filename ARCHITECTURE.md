@@ -1,6 +1,6 @@
 # SpinDB Architecture
 
-This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, and QuestDB.
+This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, and InfluxDB.
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ SpinDB follows a **three-tier layered architecture**:
 │                   Engine Layer (engines/)                   │
 │  PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis,      │
 │  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch,   │
-│  CouchDB, CockroachDB, SurrealDB, QuestDB                   │
+│  CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -211,7 +211,7 @@ The core layer contains business logic independent of CLI concerns.
 The engine layer implements database-specific logic via the abstract `BaseEngine` class.
 
 **Engine Types:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB): Process management, port allocation
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB): Process management, port allocation
 - **File-based** (SQLite, DuckDB): No server, files in project directories
 - **Composite** (FerretDB): Multiple processes working together (see [FerretDB Architecture](#ferretdb-architecture))
 
@@ -396,6 +396,8 @@ getEngine('couchdb')     // or 'couch' - Document database
 getEngine('cockroachdb') // or 'crdb' - Distributed SQL
 getEngine('surrealdb')   // or 'surreal' - Multi-model database
 getEngine('questdb')     // or 'quest' - Time-series database
+getEngine('typedb')      // or 'tdb' - Knowledge graph database
+getEngine('influxdb')    // or 'influx' - Time-series database (REST API)
 ```
 
 ---
@@ -564,7 +566,7 @@ Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 ```ts
 type ContainerConfig = {
   name: string
-  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb' | 'surrealdb' | 'questdb'
+  engine: 'postgresql' | 'mysql' | 'mariadb' | 'mongodb' | 'ferretdb' | 'redis' | 'valkey' | 'clickhouse' | 'sqlite' | 'duckdb' | 'qdrant' | 'meilisearch' | 'couchdb' | 'cockroachdb' | 'surrealdb' | 'questdb' | 'typedb' | 'influxdb'
   version: string
   port: number
   database: string        // Primary database
@@ -744,7 +746,7 @@ Core types are centralized in `types/index.ts`:
 | Type | Purpose |
 |------|---------|
 | `ContainerConfig` | Container state and metadata |
-| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB |
+| `Engine` | Enum: PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB |
 | `BackupFormat` | Backup file format detection |
 | `BackupOptions` | Backup command options |
 | `BackupResult` | Backup operation result |
@@ -801,267 +803,3 @@ Database binaries are downloaded from [hostdb](https://github.com/robertjbass/ho
 - **hostdb**: https://github.com/robertjbass/hostdb - Pre-built database binaries for all platforms
 - **Future**: [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) may be integrated for smaller embedded PostgreSQL binaries
 
----
-
-## CLI Command Reference
-
-Comprehensive examples of CLI commands grouped by engine and utility.
-
-### PostgreSQL Commands
-
-```bash
-# Container Lifecycle
-spindb create pgdb                              # Create with defaults (v17, port 5432)
-spindb create pgdb --db-version 16              # Specific version
-spindb create pgdb --port 5433                  # Custom port
-spindb create pgdb --database myapp             # Custom database name
-spindb create pgdb --max-connections 300        # Custom max connections
-spindb create pgdb --no-start                   # Create without starting
-spindb create pgdb --start --connect            # Create, start, and connect
-spindb start pgdb                               # Start container
-spindb stop pgdb                                # Stop container
-spindb delete pgdb                              # Delete (with confirmation)
-spindb delete pgdb --force                      # Delete without confirmation
-
-# Connection & Shell
-spindb connect pgdb                             # Connect with psql
-spindb connect pgdb --database myapp            # Connect to specific database
-spindb connect pgdb --pgcli                     # Connect with pgcli (enhanced)
-spindb connect pgdb --tui                       # Connect with usql (universal)
-spindb connect pgdb --install-pgcli             # Install pgcli and connect
-spindb url pgdb                                 # Print connection string
-spindb url pgdb --copy                          # Copy to clipboard
-spindb url pgdb --json                          # JSON output with details
-
-# SQL Execution
-spindb run pgdb script.sql                      # Run SQL file
-spindb run pgdb -c "SELECT * FROM users"        # Run inline SQL
-spindb run pgdb seed.sql --database myapp       # Target specific database
-
-# Backup & Restore
-spindb backup pgdb                              # Backup with auto-generated name
-spindb backup pgdb --name production-backup     # Custom backup name
-spindb backup pgdb --output ./backups/          # Custom output directory
-spindb backup pgdb --format sql                 # Plain SQL format (.sql)
-spindb backup pgdb --format custom              # Custom binary format (.dump)
-spindb backup pgdb --database myapp             # Backup specific database
-spindb restore pgdb backup.dump                 # Restore from backup
-spindb restore pgdb backup.sql --database myapp # Restore to specific database
-
-# Clone
-spindb stop source-db                           # Source must be stopped
-spindb clone source-db new-db                   # Clone container
-spindb start new-db                             # Start cloned container
-
-# Create from Backup/Remote
-spindb create pgdb --from ./backup.dump         # Create and restore from file
-spindb create pgdb --from "postgresql://user:pass@host:5432/prod"  # From remote
-
-# Container Info & Logs
-spindb info pgdb                                # Show container details
-spindb info pgdb --json                         # JSON output
-spindb logs pgdb                                # View logs
-spindb logs pgdb --follow                       # Follow mode (tail -f)
-spindb logs pgdb -n 50                          # Last 50 lines
-spindb logs pgdb --editor                       # Open in $EDITOR
-
-# Edit Container
-spindb edit pgdb --name newname                 # Rename (must be stopped)
-spindb edit pgdb --port 5433                    # Change port
-spindb edit pgdb --set-config max_connections=300  # Edit PostgreSQL config
-spindb edit pgdb                                # Interactive mode
-```
-
-### MySQL Commands
-
-```bash
-# Container Lifecycle
-spindb create mydb --engine mysql               # Create MySQL container
-spindb create mydb -e mysql --port 3307         # Custom port
-spindb create mydb -e mysql --database app      # Custom database name
-spindb create mydb -e mysql --no-start          # Create without starting
-spindb start mydb                               # Start container
-spindb stop mydb                                # Stop container
-spindb delete mydb                              # Delete container
-spindb delete mydb --force                      # Delete without confirmation
-
-# Connection & Shell
-spindb connect mydb                             # Connect with mysql client
-spindb connect mydb --database app              # Connect to specific database
-spindb connect mydb --mycli                     # Connect with mycli (enhanced)
-spindb connect mydb --tui                       # Connect with usql (universal)
-spindb connect mydb --install-mycli             # Install mycli and connect
-spindb url mydb                                 # Print connection string
-spindb url mydb --copy                          # Copy to clipboard
-
-# SQL Execution
-spindb run mydb script.sql                      # Run SQL file
-spindb run mydb -c "SHOW TABLES"                # Run inline SQL
-spindb run mydb seed.sql --database app         # Target specific database
-
-# Backup & Restore
-spindb backup mydb                              # Backup with mysqldump
-spindb backup mydb --name backup-2024           # Custom backup name
-spindb backup mydb --format sql                 # Plain SQL (.sql)
-spindb backup mydb --format compressed          # Compressed (.sql.gz)
-spindb backup mydb --database app               # Backup specific database
-spindb restore mydb backup.sql                  # Restore from backup
-spindb restore mydb backup.sql.gz               # Restore from compressed
-
-# Clone
-spindb stop source-mysql                        # Source must be stopped
-spindb clone source-mysql new-mysql             # Clone container
-spindb start new-mysql                          # Start cloned container
-
-# Container Info & Logs
-spindb info mydb                                # Show container details
-spindb logs mydb                                # View logs
-spindb logs mydb --follow                       # Follow mode
-
-# Edit Container
-spindb edit mydb --name newname                 # Rename (must be stopped)
-spindb edit mydb --port 3307                    # Change port
-```
-
-### SQLite Commands
-
-```bash
-# Container Lifecycle (file-based, no start/stop needed)
-spindb create lite --engine sqlite              # Create in current directory
-spindb create lite -e sqlite --path ./data/app.sqlite  # Custom path
-spindb create lite -e sqlite --database myapp   # Custom filename (myapp.sqlite)
-spindb delete lite                              # Remove from registry
-spindb delete lite --force                      # Remove without confirmation
-
-# Attach/Detach (registry management)
-spindb attach ./existing.sqlite                 # Register existing file
-spindb attach ./existing.sqlite --name mydb     # Register with custom name
-spindb detach lite                              # Remove from registry (keeps file)
-
-# Connection & Shell
-spindb connect lite                             # Connect with sqlite3
-spindb connect lite --litecli                   # Connect with litecli (enhanced)
-spindb connect lite --tui                       # Connect with usql (universal)
-spindb connect lite --install-litecli           # Install litecli and connect
-spindb url lite                                 # Print file path
-
-# SQL Execution
-spindb run lite script.sql                      # Run SQL file
-spindb run lite -c "SELECT * FROM users"        # Run inline SQL
-
-# Backup (file copy)
-spindb backup lite                              # Copy database file
-spindb backup lite --name backup                # Custom backup name
-spindb backup lite --output ./backups/          # Custom output directory
-
-# Container Info
-spindb info lite                                # Show file path and size
-
-# Edit Container
-spindb edit lite --name newname                 # Rename in registry
-spindb edit lite --relocate ~/new/path/         # Move database file
-```
-
-### System & Utility Commands
-
-```bash
-# List Containers
-spindb list                                     # List all containers
-spindb list --json                              # JSON output
-
-# Container Info
-spindb info                                     # Info for all containers
-spindb info mydb                                # Specific container
-spindb info --json                              # JSON output
-
-# Engine Management
-spindb engines                                  # List installed engines
-spindb engines delete postgresql 16             # Delete specific version
-
-# Dependency Management
-spindb deps check                               # Check all dependencies
-spindb deps check --engine postgresql           # Check specific engine
-spindb deps check --engine mysql                # Check MySQL dependencies
-spindb deps install                             # Install missing tools
-spindb deps install --engine postgresql         # Install for specific engine
-
-# Configuration
-spindb config show                              # Show current config
-spindb config detect                            # Re-detect tool paths
-spindb config update-check on                   # Enable update notifications
-spindb config update-check off                  # Disable update notifications
-
-# Health Check
-spindb doctor                                   # Interactive health check
-spindb doctor --json                            # JSON output for scripting
-
-# Version & Updates
-spindb version                                  # Show version
-spindb version --check                          # Check for updates
-spindb self-update                              # Update SpinDB
-
-# Interactive Menu
-spindb                                          # Open interactive menu
-spindb menu                                     # Explicit menu command
-```
-
-### Scripting Examples
-
-```bash
-# Export connection string to environment
-export DATABASE_URL=$(spindb url pgdb)
-
-# Use in psql
-psql $(spindb url pgdb)
-
-# Backup all PostgreSQL containers
-for container in $(spindb list --json | jq -r '.[] | select(.engine=="postgresql") | .name'); do
-  spindb backup "$container" --output ./backups/
-done
-
-# Start all stopped containers
-spindb list --json | jq -r '.[] | select(.status=="stopped") | .name' | while read name; do
-  spindb start "$name"
-done
-
-# Check if container is running
-if spindb info mydb --json | jq -e '.status == "running"' > /dev/null; then
-  echo "Container is running"
-fi
-
-# Create test database, run migrations, seed data
-spindb create testdb --start --database app
-spindb run testdb ./migrations/schema.sql --database app
-spindb run testdb ./seeds/test-data.sql --database app
-```
-
-### Common Workflows
-
-```bash
-# New project setup
-spindb create myproject --database app --start
-spindb run myproject ./schema.sql --database app
-spindb connect myproject --database app
-
-# Clone production for local testing
-spindb create prod-clone --from "postgresql://user:pass@prod.example.com/app"
-spindb start prod-clone
-spindb connect prod-clone
-
-# Backup before risky migration
-spindb backup mydb --name before-migration --format custom
-spindb run mydb ./migrations/risky-change.sql
-# If something goes wrong:
-spindb restore mydb ./backups/before-migration.dump
-
-# Switch between database versions
-spindb stop pgdb
-spindb create pgdb-16 --db-version 16 --port 5433
-spindb clone pgdb pgdb-backup              # Backup current
-spindb start pgdb-16
-
-# Clean up old engine versions
-spindb engines                              # List installed
-spindb engines delete postgresql 14         # Remove old version
-spindb engines delete postgresql 15         # Remove another
-```

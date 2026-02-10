@@ -72,6 +72,7 @@ export const TEST_PORTS = {
   surrealdb: { base: 8010, clone: 8012, renamed: 8011 },
   questdb: { base: 8820, clone: 8822, renamed: 8821 },
   typedb: { base: 1730, clone: 1732, renamed: 1731 },
+  influxdb: { base: 8087, clone: 8089, renamed: 8088 },
 }
 
 // Default test versions for each engine
@@ -410,6 +411,8 @@ export async function executeSQL(
     } finally {
       await unlink(tempScript).catch(() => {})
     }
+  } else if (engine === Engine.InfluxDB) {
+    throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -523,6 +526,8 @@ export async function executeSQLFile(
     const args = [...getConsoleBaseArgs(port), '--script', filePath]
     const cmd = `"${consolePath}" ${args.map((a) => `"${a}"`).join(' ')}`
     return execAsync(cmd)
+  } else if (engine === Engine.InfluxDB) {
+    throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -806,6 +811,22 @@ export async function waitForReady(
           `"${psqlPath}" "postgresql://admin:quest@127.0.0.1:${port}/qdb" -c "SELECT 1"`,
           { timeout: 5000 },
         )
+      } else if (engine === Engine.InfluxDB) {
+        // InfluxDB health check via HTTP GET to /health endpoint
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/health`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('InfluxDB health check failed or timed out')
+        }
       } else if (engine === Engine.TypeDB) {
         // TypeDB health check via HTTP GET to HTTP port
         const httpPort = options?.httpPort ?? port + 6271
@@ -996,6 +1017,9 @@ export function getConnectionString(
   }
   if (engine === Engine.TypeDB) {
     return `typedb://127.0.0.1:${port}`
+  }
+  if (engine === Engine.InfluxDB) {
+    return `http://127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

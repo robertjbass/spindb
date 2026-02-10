@@ -27,6 +27,7 @@ import {
   type SurrealDBFormat,
   type QuestDBFormat,
   type TypeDBFormat,
+  type InfluxDBFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -63,6 +64,7 @@ export const BACKUP_FORMATS: {
   [Engine.SurrealDB]: EngineBackupFormats<SurrealDBFormat>
   [Engine.QuestDB]: EngineBackupFormats<QuestDBFormat>
   [Engine.TypeDB]: EngineBackupFormats<TypeDBFormat>
+  [Engine.InfluxDB]: EngineBackupFormats<InfluxDBFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -321,6 +323,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only TypeQL format supported
     defaultFormat: 'typeql',
+  },
+  [Engine.InfluxDB]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - time-series data as SQL statements',
+        spinnerLabel: 'SQL',
+      },
+    },
+    supportsFormatChoice: false, // Only SQL format supported
+    defaultFormat: 'sql',
   },
 }
 

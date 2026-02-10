@@ -84,6 +84,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   // TypeDB
   'typedb',
   'typedb_console_bin',
+  // InfluxDB
+  'influxdb3',
   // Enhanced shells (optional)
   'pgcli',
   'mycli',

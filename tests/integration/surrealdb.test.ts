@@ -32,6 +32,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
+import { paths } from '../../config/paths'
 
 const ENGINE = Engine.SurrealDB
 const DATABASE = 'test' // SurrealDB namespace/database
@@ -48,6 +49,7 @@ async function getSurrealDBRowCount(
   containerName: string,
   database: string,
   table: string,
+  actualContainerName?: string,
 ): Promise<number> {
   const { spawn } = await import('child_process')
 
@@ -80,7 +82,15 @@ async function getSurrealDBRowCount(
         '--json',
         '--hide-welcome',
       ]
-      const proc = spawn(surrealPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+      // Set cwd to container directory so history.txt goes there, not project root
+      // After rename, the directory is at the new name but namespace uses the original
+      const cwd = paths.getContainerPath(actualContainerName || containerName, {
+        engine: ENGINE,
+      })
+      const proc = spawn(surrealPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd,
+      })
       let output = ''
       let stderr = ''
       proc.stdout.on('data', (data: Buffer) => {
@@ -504,6 +514,7 @@ describe('SurrealDB Integration Tests', () => {
       containerName,
       DATABASE,
       'test_user',
+      renamedContainerName,
     )
     assertEqual(
       rowCount,
