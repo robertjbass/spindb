@@ -353,7 +353,7 @@ export async function handleOpenShell(
   } else {
     // Non-REST-API engines: show default shell option
     choices.push({
-      name: `>_ Use default shell (${defaultShellName})`,
+      name: `▸ Use default shell (${defaultShellName})`,
       value: 'default',
     })
   }
@@ -362,7 +362,7 @@ export async function handleOpenShell(
   if (engineSpecificCli !== null) {
     if (engineSpecificInstalled) {
       choices.push({
-        name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
+        name: `★ Use ${engineSpecificCli} (enhanced features, recommended)`,
         value: engineSpecificValue!,
       })
     } else {
@@ -378,7 +378,7 @@ export async function handleOpenShell(
   if (engineConfig.queryLanguage === 'sql') {
     if (usqlInstalled) {
       choices.push({
-        name: '⚡ Use usql (universal SQL client)',
+        name: '★ Use usql (universal SQL client)',
         value: 'usql',
       })
     } else {
@@ -394,7 +394,7 @@ export async function handleOpenShell(
     const dblabPath = await configManager.getBinaryPath('dblab')
     if (dblabPath) {
       choices.push({
-        name: '⚡ Use dblab (visual TUI)',
+        name: '★ Use dblab (visual TUI)',
         value: 'dblab',
       })
     } else {

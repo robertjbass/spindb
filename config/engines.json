@@ -291,7 +291,7 @@
       "defaultVersion": "3.8.0",
       "defaultPort": 8086,
       "runtime": "server",
-      "queryLanguage": "sql",
+      "queryLanguage": "rest",
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
