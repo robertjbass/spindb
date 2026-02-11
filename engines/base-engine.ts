@@ -13,6 +13,7 @@ import type {
   UserCredentials,
 } from '../types'
 import { UnsupportedOperationError } from '../core/error-handler'
+import { stopPgweb } from '../core/pgweb-utils'
 
 /**
  * Base class for database engines
@@ -265,6 +266,14 @@ export abstract class BaseEngine {
     _database: string,
   ): Promise<void> {
     // Default: no-op. Override in engines that support connection termination.
+  }
+
+  /**
+   * Stop pgweb if running for this container.
+   * Called from stop() in engines that support pgweb (PostgreSQL, CockroachDB, FerretDB).
+   */
+  protected async stopPgweb(containerName: string): Promise<void> {
+    await stopPgweb(containerName, this.name)
   }
 
   /**

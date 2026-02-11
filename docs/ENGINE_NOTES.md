@@ -136,10 +136,35 @@ See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details in
 ## Web UI Engines
 
 Engines with built-in web UIs use `openInBrowser()` in `cli/commands/menu/shell-handlers.ts`:
-- **Qdrant**: `http://localhost:{port}/dashboard`
-- **Meilisearch**: `http://localhost:{port}/`
-- **ClickHouse**: `http://localhost:8123/play`
-- **CouchDB**: `http://localhost:{port}/_utils`
+- **DuckDB**: `http://localhost:4213` (built-in UI extension, launched via `duckdb <file> -ui`)
+- **Qdrant**: `http://localhost:{port}/dashboard` (Web UI downloaded separately)
+- **Meilisearch**: `http://localhost:{port}/` (built-in)
+- **ClickHouse**: `http://localhost:8123/play` (built-in Play UI)
+- **CouchDB**: `http://localhost:{port}/_utils` (built-in Fauxton)
 - **QuestDB**: `http://localhost:{http_port}/` (default 9000, or PG port + 188)
 
 Platform commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
+
+### pgweb (PostgreSQL web panel)
+
+[pgweb](https://github.com/sosedoff/pgweb) is an optional standalone Go binary (MIT license) that provides a web-based database browser for PostgreSQL-compatible engines. Available in the console menu for **PostgreSQL**, **CockroachDB**, and **FerretDB**.
+
+- **On-demand**: Downloaded from GitHub releases on first use, not bundled with SpinDB
+- **No schema changes**: Read/write access via standard PostgreSQL protocol, never modifies database internals
+- **Lifecycle**: Spawned as a detached background process per container. Stopped via the "Stop pgweb" menu option or automatically when the database engine stops.
+- **Port**: Dynamically allocated starting at 8081
+- **PID/port tracking**: `{containerDir}/pgweb.pid` and `{containerDir}/pgweb.port`
+- **Platforms**: macOS ARM/x64, Linux ARM/x64, Windows x64
+- **Version**: 0.17.0 (pinned)
+
+### dblab (visual TUI)
+
+[dblab](https://github.com/danvergara/dblab) is an optional standalone Go binary (MIT license) that provides a visual terminal UI with table browsing, query editor, and scrollable results. Available in the console menu for **PostgreSQL**, **MySQL**, **MariaDB**, **CockroachDB**, **SQLite**, and **QuestDB**.
+
+- **On-demand**: Downloaded from GitHub releases on first use, not bundled with SpinDB
+- **Interactive TUI**: Spawned with `stdio: 'inherit'` (foreground, not detached like pgweb)
+- **Drivers**: `postgres` (PostgreSQL, CockroachDB, QuestDB), `mysql` (MySQL, MariaDB), `sqlite3` (SQLite)
+- **Connection**: Flag-based (`--host`, `--port`, `--user`, `--db`, `--driver`) to avoid MySQL `tcp()` URL issues
+- **Platforms**: macOS ARM/x64, Linux ARM/x64, Windows x64 (tar.gz archives)
+- **Version**: 0.34.2 (pinned)
+- **CLI flags**: `spindb connect --dblab` or `spindb connect --install-dblab`

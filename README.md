@@ -103,6 +103,7 @@ spindb run cache -c "SET mykey myvalue"
 spindb run cache -c "GET mykey"
 spindb connect cache                             # Open redis-cli
 spindb connect cache --iredis                    # Enhanced shell
+spindb connect mydb --dblab                      # Visual TUI (table browser)
 ```
 
 ### Any Engine

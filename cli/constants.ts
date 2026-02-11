@@ -3,12 +3,12 @@ import { Engine, type IconMode } from '../types'
 
 /**
  * Get the page size for list prompts based on terminal height.
- * Returns 20 for tall terminals (>= 30 rows), 15 for shorter ones.
- * This provides a consistent experience while avoiding rendering issues on small terminals.
+ * Scales dynamically with the terminal — reserves ~8 lines for header, prompt, and margin,
+ * then uses the remaining height for list items (clamped to 10–30).
  */
 export function getPageSize(): number {
   const terminalHeight = process.stdout.rows || 24
-  return terminalHeight >= 30 ? 20 : 15
+  return Math.max(10, Math.min(30, terminalHeight - 8))
 }
 
 // Engine icons with three display modes:

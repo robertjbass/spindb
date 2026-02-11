@@ -27,6 +27,9 @@ import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../ui/theme'
 import { Engine } from '../../types'
+import { configManager } from '../../core/config-manager'
+import { DBLAB_ENGINES, getDblabArgs } from '../../core/dblab-utils'
+import { downloadDblabCli } from './menu/shell-handlers'
 
 export const connectCommand = new Command('connect')
   .alias('shell')
@@ -55,6 +58,9 @@ export const connectCommand = new Command('connect')
     'Use iredis for enhanced Redis shell (auto-completion, syntax highlighting)',
   )
   .option('--install-iredis', 'Install iredis if not present, then connect')
+  .option('--dblab', 'Use dblab visual TUI (table browser, query editor)')
+  .option('--install-dblab', 'Download dblab if not present, then connect')
+  .option('--ui', 'Open built-in Web UI (DuckDB only)')
   .action(
     async (
       name: string | undefined,
@@ -70,6 +76,9 @@ export const connectCommand = new Command('connect')
         installLitecli?: boolean
         iredis?: boolean
         installIredis?: boolean
+        dblab?: boolean
+        installDblab?: boolean
+        ui?: boolean
       },
     ) => {
       try {
@@ -454,6 +463,96 @@ export const connectCommand = new Command('connect')
               process.exit(1)
             }
           }
+        }
+
+        const useDblab = options.dblab || options.installDblab
+        if (useDblab) {
+          if (!DBLAB_ENGINES.has(engineName)) {
+            console.error(
+              uiError(`dblab is not supported for ${engineName} containers`),
+            )
+            process.exit(1)
+          }
+
+          let dblabPath = await configManager.getBinaryPath('dblab')
+
+          if (!dblabPath) {
+            if (options.installDblab) {
+              dblabPath = await downloadDblabCli()
+              if (!dblabPath) {
+                process.exit(1)
+              }
+            } else {
+              console.error(uiError('dblab is not installed'))
+              console.log()
+              console.log(chalk.gray('Download dblab:'))
+              console.log(chalk.cyan('  spindb connect --install-dblab'))
+              console.log()
+              console.log(chalk.gray('Or download manually from:'))
+              console.log(
+                chalk.cyan('  https://github.com/danvergara/dblab/releases'),
+              )
+              process.exit(1)
+            }
+          }
+
+          const dblabArgs = getDblabArgs(config, database)
+          const dblabProcess = spawn(dblabPath, dblabArgs, {
+            stdio: 'inherit',
+          })
+
+          await new Promise<void>((resolve) => {
+            dblabProcess.on('error', (err: NodeJS.ErrnoException) => {
+              if (err.code === 'ENOENT') {
+                console.log(uiWarning('dblab not found.'))
+                console.log(chalk.gray('  Download it with:'))
+                console.log(chalk.cyan('  spindb connect --install-dblab'))
+              } else {
+                console.error(uiError(err.message))
+              }
+              resolve()
+            })
+            dblabProcess.on('close', () => resolve())
+          })
+
+          return
+        }
+
+        if (options.ui) {
+          if (engineName !== Engine.DuckDB) {
+            console.error(
+              uiError('--ui is only available for DuckDB containers'),
+            )
+            process.exit(1)
+          }
+
+          const duckdbPath = await configManager.getBinaryPath('duckdb')
+          if (!duckdbPath) {
+            console.error(
+              uiError(
+                'DuckDB binary not found. Download it with: spindb engines download duckdb',
+              ),
+            )
+            process.exit(1)
+          }
+
+          const uiProcess = spawn(duckdbPath, [config.database, '-ui'], {
+            stdio: 'inherit',
+          })
+
+          await new Promise<void>((resolve) => {
+            uiProcess.on('error', (err: NodeJS.ErrnoException) => {
+              if (err.code === 'ENOENT') {
+                console.log(uiWarning('DuckDB binary not found.'))
+              } else {
+                console.error(uiError(err.message))
+              }
+              resolve()
+            })
+            uiProcess.on('close', () => resolve())
+          })
+
+          return
         }
 
         console.log(uiInfo(`Connecting to ${containerName}:${database}...`))

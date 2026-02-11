@@ -47,6 +47,14 @@ Quick capture for ideas that need review and prioritization:
 - [ ] **Scheduled backups** - Cron-like backup scheduling
 - [ ] **Import from Docker** - Migrate data from Docker containers
 
+### Supabase Enhancements
+
+- [ ] **GoTrue macOS/Windows binaries** - Build and host via hostdb (currently Linux-only from GitHub)
+- [ ] **Studio + pg_meta support** - Download and manage Supabase Studio (web dashboard) and pg_meta (metadata API)
+- [ ] **Docker export with Supabase** - Include Supabase services in `spindb export docker` output
+- [ ] **Supabase Storage** - File storage service integration
+- [ ] **Supabase Realtime** - WebSocket-based realtime subscriptions (Elixir app, complex)
+
 ### Future Engines Under Consideration
 
 The following engines may be added based on community interest:
