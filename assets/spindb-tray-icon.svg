@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Database cylinder: top ellipse, middle ring, bottom ellipse, side walls -->
+  <!-- Matches the programmatic tray icon from layerbase-desktop -->
+
+  <!-- Side walls -->
+  <rect x="3" y="3.5" width="2" height="9" fill="black"/>
+  <rect x="11" y="3.5" width="2" height="9" fill="black"/>
+
+  <!-- Top ellipse -->
+  <ellipse cx="8" cy="3.5" rx="5" ry="2" fill="none" stroke="black" stroke-width="1.5"/>
+
+  <!-- Middle ellipse -->
+  <ellipse cx="8" cy="8" rx="5" ry="2" fill="none" stroke="black" stroke-width="1.5"/>
+
+  <!-- Bottom ellipse -->
+  <ellipse cx="8" cy="12.5" rx="5" ry="2" fill="none" stroke="black" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="topGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Bottom ellipse (shadow/base) -->
+  <ellipse cx="64" cy="100" rx="40" ry="14" fill="#3730a3"/>
+
+  <!-- Lower body (between middle and bottom) -->
+  <rect x="24" y="64" width="80" height="36" fill="url(#bodyGrad)"/>
+
+  <!-- Upper body (between top and middle) -->
+  <rect x="24" y="28" width="80" height="36" fill="url(#bodyGrad)"/>
+
+  <!-- Bottom ellipse -->
+  <ellipse cx="64" cy="100" rx="40" ry="14" fill="#4338ca"/>
+
+  <!-- Middle ring -->
+  <ellipse cx="64" cy="64" rx="40" ry="14" fill="url(#ringGrad)"/>
+
+  <!-- Top ellipse surface -->
+  <ellipse cx="64" cy="28" rx="40" ry="14" fill="url(#topGrad)"/>
+
+  <!-- Highlight on top ellipse -->
+  <ellipse cx="64" cy="25" rx="28" ry="7" fill="rgba(255,255,255,0.15)"/>
+</svg>

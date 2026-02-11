@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="smTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="smBot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Stylized "S" made from two opposing curved swoops — suggests spin/rotation -->
+  <!-- Upper half: curves right -->
+  <path d="M44,16 C20,16 16,40 40,52 L88,68" fill="none" stroke="url(#smTop)" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Lower half: curves left -->
+  <path d="M88,68 C112,80 108,108 84,112" fill="none" stroke="url(#smBot)" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Circular arrow head at top to suggest rotation -->
+  <polygon points="44,10 52,18 42,22" fill="#a5b4fc"/>
+
+  <!-- Circular arrow head at bottom -->
+  <polygon points="84,118 76,110 86,106" fill="#3730a3"/>
+</svg>

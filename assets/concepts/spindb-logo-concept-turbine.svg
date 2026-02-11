@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bl1" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a5b4fc"/>
+    </linearGradient>
+    <linearGradient id="bl2" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#4338ca"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="bl3" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#3730a3"/>
+      <stop offset="100%" stop-color="#c7d2fe"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Wide symmetric 3-blade turbine using rotation transforms -->
+  <g transform="rotate(0,64,64)">
+    <path d="M56,58 Q48,36 48,20 Q48,10 64,10 Q80,10 80,20 Q80,36 72,58Z" fill="url(#bl1)"/>
+  </g>
+  <g transform="rotate(120,64,64)">
+    <path d="M56,58 Q48,36 48,20 Q48,10 64,10 Q80,10 80,20 Q80,36 72,58Z" fill="url(#bl2)"/>
+  </g>
+  <g transform="rotate(240,64,64)">
+    <path d="M56,58 Q48,36 48,20 Q48,10 64,10 Q80,10 80,20 Q80,36 72,58Z" fill="url(#bl3)"/>
+  </g>
+
+  <!-- Center hub -->
+  <circle cx="64" cy="64" r="8" fill="#4f46e5"/>
+  <circle cx="64" cy="64" r="4" fill="#e0e7ff"/>
+</svg>

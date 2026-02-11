@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="vnDisc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Vinyl record / disc — data on a spinning platter -->
+  <!-- Main disc -->
+  <circle cx="64" cy="64" r="56" fill="url(#vnDisc)"/>
+
+  <!-- Grooves (concentric rings = data tracks) -->
+  <circle cx="64" cy="64" r="48" fill="none" stroke="#6366f1" stroke-width="0.75" opacity="0.5"/>
+  <circle cx="64" cy="64" r="42" fill="none" stroke="#6366f1" stroke-width="0.75" opacity="0.5"/>
+  <circle cx="64" cy="64" r="36" fill="none" stroke="#818cf8" stroke-width="0.75" opacity="0.4"/>
+  <circle cx="64" cy="64" r="30" fill="none" stroke="#818cf8" stroke-width="0.75" opacity="0.4"/>
+  <circle cx="64" cy="64" r="24" fill="none" stroke="#a5b4fc" stroke-width="0.75" opacity="0.3"/>
+
+  <!-- Highlight sheen across surface -->
+  <path d="M30,30 Q64,50 98,30 Q80,64 98,98 Q64,78 30,98 Q50,64 30,30Z" fill="rgba(255,255,255,0.06)"/>
+
+  <!-- Label area (center) -->
+  <circle cx="64" cy="64" r="16" fill="#6366f1"/>
+  <circle cx="64" cy="64" r="15" fill="#818cf8"/>
+
+  <!-- Spindle hole -->
+  <circle cx="64" cy="64" r="4" fill="#3730a3"/>
+
+  <!-- Outer rim -->
+  <circle cx="64" cy="64" r="56" fill="none" stroke="#312e81" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="topBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Spinning top: wide disc that tapers to a point -->
+  <!-- Upper dome -->
+  <path d="M64,20 C40,20 24,52 24,58 L104,58 C104,52 88,20 64,20Z" fill="url(#topBody)"/>
+
+  <!-- Wide disc/rim at the equator -->
+  <ellipse cx="64" cy="58" rx="44" ry="12" fill="#6366f1"/>
+  <ellipse cx="64" cy="56" rx="44" ry="12" fill="#818cf8"/>
+
+  <!-- Lower taper to point -->
+  <path d="M24,58 C24,62 64,108 64,108 C64,108 104,62 104,58" fill="url(#topBody)"/>
+
+  <!-- Highlight on dome -->
+  <ellipse cx="56" cy="40" rx="16" ry="8" fill="rgba(255,255,255,0.2)"/>
+
+  <!-- Tip dot -->
+  <circle cx="64" cy="108" r="2.5" fill="#4338ca"/>
+
+  <!-- Spin motion arcs -->
+  <path d="M16,54 Q10,48 18,42" fill="none" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  <path d="M112,54 Q118,48 110,42" fill="none" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+</svg>
