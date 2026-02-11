@@ -103,7 +103,15 @@ spindb run cache -c "SET mykey myvalue"
 spindb run cache -c "GET mykey"
 spindb connect cache                             # Open redis-cli
 spindb connect cache --iredis                    # Enhanced shell
-spindb connect mydb --dblab                      # Visual TUI (table browser)
+```
+
+### Enhanced Shells & Visual Tools
+
+```bash
+spindb connect myapp --pgcli                     # Enhanced PostgreSQL shell
+spindb connect myapp --dblab                     # Visual TUI (table browser)
+spindb connect mydb --mycli                      # Enhanced MySQL/MariaDB shell
+spindb connect mydb --ui                         # Built-in Web UI (DuckDB)
 ```
 
 ### Any Engine
