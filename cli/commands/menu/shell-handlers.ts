@@ -1505,22 +1505,107 @@ async function launchShell(
     await pressEnterToContinue()
     return
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: use influxdb3 query subcommand (same binary as server)
+    // InfluxDB: influxdb3 query is one-shot (no REPL), use interactive loop
     const engine = getEngine(config.engine)
     const influxdbPath = await engine
       .getInfluxDBPath(config.version)
-      .catch(() => 'influxdb3')
-    shellCmd = influxdbPath
-    shellArgs = [
-      'query',
-      '--host',
-      `http://127.0.0.1:${config.port}`,
-      '--database',
-      database || config.name,
-      '--token',
-      '',
-    ]
-    installHint = 'spindb engines download influxdb'
+      .catch(() => null)
+    if (!influxdbPath) {
+      console.log(
+        uiWarning('influxdb3 not found. Run: spindb engines download influxdb'),
+      )
+      await pressEnterToContinue()
+      return
+    }
+    // Query available databases from the REST API
+    let db = database || config.name
+    try {
+      const resp = await fetch(
+        `http://127.0.0.1:${config.port}/api/v3/configure/database?format=json`,
+      )
+      if (resp.ok) {
+        const databases = (await resp.json()) as Array<Record<string, string>>
+        const dbNames = databases
+          .map((d) => d['iox::database'] || d.name)
+          .filter((n) => n && n !== '_internal')
+        if (dbNames.length === 0) {
+          console.log(
+            uiWarning(
+              'No databases exist yet. Write data first to create a database.',
+            ),
+          )
+          console.log(
+            chalk.gray(
+              `  curl -X POST "http://127.0.0.1:${config.port}/api/v3/write_lp?db=${db}" -H "Content-Type: text/plain" -d 'measurement,tag=value field=1'`,
+            ),
+          )
+          console.log()
+          await pressEnterToContinue()
+          return
+        }
+        if (!dbNames.includes(db)) {
+          if (dbNames.length === 1) {
+            db = dbNames[0]
+          } else {
+            const { chosenDb } = await escapeablePrompt<{ chosenDb: string }>([
+              {
+                type: 'list',
+                name: 'chosenDb',
+                message: 'Select database:',
+                choices: dbNames,
+              },
+            ])
+            db = chosenDb
+          }
+        }
+      }
+    } catch {
+      // Server may not support this endpoint; proceed with default db
+    }
+    console.log(chalk.cyan(`InfluxDB SQL Console (${db})`))
+    console.log(chalk.gray(`  Type SQL queries, or "exit" to quit.\n`))
+    let running = true
+    while (running) {
+      const { sql } = await escapeablePrompt<{ sql: string }>([
+        {
+          type: 'input',
+          name: 'sql',
+          message: chalk.blue('sql>'),
+        },
+      ])
+      const trimmed = (sql || '').trim()
+      if (
+        !trimmed ||
+        trimmed.toLowerCase() === 'exit' ||
+        trimmed.toLowerCase() === 'quit'
+      ) {
+        running = false
+        break
+      }
+      const queryProcess = spawn(
+        influxdbPath,
+        [
+          'query',
+          '--host',
+          `http://127.0.0.1:${config.port}`,
+          '--database',
+          db,
+          trimmed,
+        ],
+        { stdio: 'inherit' },
+      )
+      await new Promise<void>((resolve) => {
+        queryProcess.on('error', (err) => {
+          console.log(uiError(`Query failed: ${err.message}`))
+          resolve()
+        })
+        queryProcess.on('close', () => {
+          console.log()
+          resolve()
+        })
+      })
+    }
+    return
   } else if (config.engine === 'couchdb') {
     // CouchDB: Open Fauxton dashboard in browser (served at /_utils)
     const dashboardUrl = `http://127.0.0.1:${config.port}/_utils`
