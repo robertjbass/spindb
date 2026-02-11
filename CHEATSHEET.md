@@ -48,6 +48,9 @@ spindb connect mydb --pgcli             # Use pgcli (PostgreSQL/CockroachDB)
 spindb connect mydb --mycli             # Use mycli (MySQL/MariaDB)
 spindb connect mydb --litecli           # Use litecli (SQLite)
 spindb connect mydb --iredis            # Use iredis (Redis/Valkey)
+spindb connect mydb --dblab             # Use dblab visual TUI
+spindb connect mydb --install-dblab     # Download dblab + connect
+spindb connect mydb --ui                # Open built-in Web UI (DuckDB only)
 
 spindb run mydb -c "SELECT 1"           # Run inline SQL/JS/command
 spindb run mydb ./schema.sql            # Run SQL file
@@ -71,6 +74,7 @@ Some engines have browser-based interfaces available from the console menu (`spi
 | PostgreSQL | pgweb | Downloaded on first use, runs as background process |
 | CockroachDB | pgweb | Same pgweb binary, uses PG wire protocol |
 | FerretDB | pgweb | Same pgweb binary, connects to PG backend |
+| DuckDB | Web UI | Built-in extension at `http://localhost:4213` |
 | ClickHouse | Play UI | Built-in at `http://localhost:{http_port}/play` |
 | Qdrant | Web UI | Downloaded separately, served by Qdrant |
 | Meilisearch | Dashboard | Built-in at `http://localhost:{port}/` |
