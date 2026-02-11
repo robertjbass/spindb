@@ -6,6 +6,7 @@
  */
 
 import { describe, it, before, after } from 'node:test'
+import net from 'net'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -27,8 +28,11 @@ import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
+import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
+import { readFile, unlink } from 'fs/promises'
 
 const ENGINE = Engine.FerretDB
 const DATABASE = 'testdb'
@@ -573,6 +577,105 @@ describe('FerretDB Integration Tests', () => {
     console.log(
       '   ✓ Container is already running (duplicate start handled gracefully)',
     )
+  })
+
+  it('should restart after partial shutdown (orphaned PG backend)', async () => {
+    console.log(
+      `\n🔄 Testing restart after partial shutdown (proxy killed, PG backend alive)...`,
+    )
+
+    // Container should already be running from earlier test
+    const config = await containerManager.getConfig(renamedContainerName)
+    assert(config !== null, 'Container config should exist')
+    assert(config!.backendPort !== undefined, 'backendPort should be set')
+
+    const containerDir = paths.getContainerPath(renamedContainerName, {
+      engine: ENGINE,
+    })
+    const ferretPidFile = join(containerDir, 'ferretdb.pid')
+
+    // 1. Read the FerretDB proxy PID and kill only the proxy
+    const pidContent = await readFile(ferretPidFile, 'utf8')
+    const proxyPid = parseInt(pidContent.trim(), 10)
+    assert(!isNaN(proxyPid), 'FerretDB proxy PID should be valid')
+    assert(
+      platformService.isProcessRunning(proxyPid),
+      'FerretDB proxy should be running',
+    )
+
+    // Kill the proxy process directly (simulating a crash)
+    await platformService.terminateProcess(proxyPid, true)
+
+    // Wait for the process to actually die (SIGKILL is async)
+    const killStart = Date.now()
+    while (
+      platformService.isProcessRunning(proxyPid) &&
+      Date.now() - killStart < 5000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    await unlink(ferretPidFile).catch(() => {})
+
+    // 2. Verify proxy is dead but PG backend is still alive on backendPort
+    assert(
+      !platformService.isProcessRunning(proxyPid),
+      'FerretDB proxy should be dead after kill',
+    )
+
+    // processManager.isRunning checks the ferretdb.pid file — should be false now
+    const proxyRunning = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(
+      !proxyRunning,
+      'processManager should report not running (proxy dead)',
+    )
+
+    // But the PG backend should still be listening
+    const pgAlive = await new Promise<boolean>((resolve) => {
+      const socket = net.createConnection(config!.backendPort!, '127.0.0.1')
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('error', () => resolve(false))
+      socket.setTimeout(2000, () => {
+        socket.destroy()
+        resolve(false)
+      })
+    })
+    assert(pgAlive, 'PostgreSQL backend should still be running on backendPort')
+
+    // 3. Call start() again — this should succeed (detect PG running, only start proxy)
+    const engine = getEngine(ENGINE)
+    await engine.start(config!)
+    await containerManager.updateConfig(renamedContainerName, {
+      status: 'running',
+    })
+
+    // 4. Verify everything is working
+    const ready = await waitForReady(ENGINE, config!.port)
+    assert(ready, 'FerretDB should be ready after restart')
+
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(running, 'FerretDB should be running after restart')
+
+    // Verify data is still accessible
+    const rowCount = await getRowCount(
+      ENGINE,
+      config!.port,
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Data should be intact after partial shutdown restart',
+    )
+
+    console.log('   ✓ Restart after partial shutdown succeeded, data intact')
   })
 
   it('should show warning when stopping already stopped container', async () => {

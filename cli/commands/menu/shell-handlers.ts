@@ -4,7 +4,7 @@ import { spawn } from 'child_process'
 import { escapeablePrompt } from '../../ui/prompts'
 import { getPageSize } from '../../constants'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, rm } from 'fs/promises'
+import { chmod, mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname, resolve, sep } from 'path'
 import { containerManager } from '../../../core/container-manager'
 import {
@@ -26,7 +26,19 @@ import {
   getIredisManualInstructions,
 } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
+import { portManager } from '../../../core/port-manager'
 import { configManager } from '../../../core/config-manager'
+import {
+  getPgwebStatus,
+  stopPgweb,
+  PGWEB_VERSION,
+} from '../../../core/pgweb-utils'
+import {
+  DBLAB_ENGINES,
+  DBLAB_VERSION,
+  getDblabArgs,
+  getDblabPlatformSuffix,
+} from '../../../core/dblab-utils'
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
@@ -134,6 +146,12 @@ export async function handleOpenShell(
     | 'browser'
     | 'api-info'
     | 'install-webui'
+    | 'pgweb'
+    | 'install-pgweb'
+    | 'stop-pgweb'
+    | 'dblab'
+    | 'install-dblab'
+    | 'duckdb-ui'
     | 'usql'
     | 'install-usql'
     | 'pgcli'
@@ -340,15 +358,6 @@ export async function handleOpenShell(
     })
   }
 
-  // Add browser option for ClickHouse (Play UI on HTTP port = native port + 1)
-  if (config.engine === 'clickhouse') {
-    const httpPort = config.port + 1
-    choices.push({
-      name: `◎ Open Play UI in browser (port ${httpPort})`,
-      value: 'browser',
-    })
-  }
-
   // Only show engine-specific CLI option if one exists (MongoDB's mongosh IS the default)
   if (engineSpecificCli !== null) {
     if (engineSpecificInstalled) {
@@ -380,6 +389,72 @@ export async function handleOpenShell(
     }
   }
 
+  // dblab visual TUI (supports PostgreSQL, MySQL, MariaDB, CockroachDB, SQLite, QuestDB)
+  if (DBLAB_ENGINES.has(config.engine)) {
+    const dblabPath = await configManager.getBinaryPath('dblab')
+    if (dblabPath) {
+      choices.push({
+        name: '⚡ Use dblab (visual TUI)',
+        value: 'dblab',
+      })
+    } else {
+      choices.push({
+        name: '↓ Download dblab (visual TUI)',
+        value: 'install-dblab',
+      })
+    }
+  }
+
+  // Web Panel section for engines with browser-based UIs
+  if (config.engine === 'clickhouse') {
+    const httpPort = config.port + 1
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    choices.push({
+      name: `◎ Open Play UI (port ${httpPort})`,
+      value: 'browser',
+    })
+  }
+
+  if (config.engine === 'duckdb') {
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    choices.push({
+      name: `◎ Open Web UI (built-in, port 4213)`,
+      value: 'duckdb-ui',
+    })
+  }
+
+  if (
+    config.engine === 'postgresql' ||
+    config.engine === 'cockroachdb' ||
+    config.engine === 'ferretdb'
+  ) {
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    const pgwebPath = await configManager.getBinaryPath('pgweb')
+    if (pgwebPath) {
+      const pgwebStatus = await getPgwebStatus(containerName, config.engine)
+      if (pgwebStatus.running) {
+        choices.push({
+          name: `◎ Open pgweb (port ${pgwebStatus.port})`,
+          value: 'pgweb',
+        })
+        choices.push({
+          name: `■ Stop pgweb`,
+          value: 'stop-pgweb',
+        })
+      } else {
+        choices.push({
+          name: `◎ Open pgweb`,
+          value: 'pgweb',
+        })
+      }
+    } else {
+      choices.push({
+        name: `↓ Download pgweb`,
+        value: 'install-pgweb',
+      })
+    }
+  }
+
   choices.push(new inquirer.Separator())
   choices.push({
     name: `${chalk.blue('←')} Back`,
@@ -390,7 +465,7 @@ export async function handleOpenShell(
     {
       type: 'list',
       name: 'shellChoice',
-      message: 'Select shell option:',
+      message: 'Select console option:',
       choices,
       pageSize: getPageSize(),
     },
@@ -413,6 +488,56 @@ export async function handleOpenShell(
       openInBrowser(playUrl)
       await pressEnterToContinue()
     }
+    return
+  }
+
+  // Handle DuckDB built-in Web UI (duckdb -ui)
+  if (shellChoice === 'duckdb-ui') {
+    const duckdbPath = await configManager.getBinaryPath('duckdb')
+    if (!duckdbPath) {
+      console.error(
+        uiError(
+          'DuckDB binary not found. Download it with: spindb engines download duckdb',
+        ),
+      )
+      await pressEnterToContinue()
+      return
+    }
+
+    console.log()
+    console.log(uiInfo('Launching DuckDB Web UI...'))
+    console.log(chalk.gray('  http://localhost:4213'))
+    console.log()
+
+    const uiProcess = spawn(duckdbPath, [config.database, '-ui'], {
+      stdio: 'inherit',
+    })
+
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const settle = () => {
+        if (!settled) {
+          settled = true
+          resolve()
+        }
+      }
+
+      uiProcess.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT') {
+          console.log(uiWarning('DuckDB binary not found.'))
+        } else {
+          console.log(uiError(`Failed to start DuckDB UI: ${err.message}`))
+        }
+        settle()
+      })
+
+      uiProcess.on('close', () => {
+        if (process.stdout.isTTY) {
+          process.stdout.write('\x1b[2J\x1b[3J\x1b[H')
+        }
+        settle()
+      })
+    })
     return
   }
 
@@ -670,6 +795,42 @@ export async function handleOpenShell(
     return
   }
 
+  // Handle dblab download → launch immediately after install
+  if (shellChoice === 'install-dblab') {
+    const dblabBinaryPath = await downloadDblabCli()
+    if (dblabBinaryPath) {
+      await launchDblab(config, activeDatabase)
+    }
+    return
+  }
+
+  // Handle dblab launch
+  if (shellChoice === 'dblab') {
+    await launchDblab(config, activeDatabase)
+    return
+  }
+
+  // Handle pgweb download → launch immediately after install
+  if (shellChoice === 'install-pgweb') {
+    const pgwebBinaryPath = await downloadPgweb()
+    if (pgwebBinaryPath) {
+      await launchPgweb(containerName, config, activeDatabase)
+    }
+    return
+  }
+
+  // Handle pgweb launch
+  if (shellChoice === 'pgweb') {
+    await launchPgweb(containerName, config, activeDatabase)
+    return
+  }
+
+  // Handle pgweb stop
+  if (shellChoice === 'stop-pgweb') {
+    await stopPgwebProcess(containerName, config.engine)
+    return
+  }
+
   // Handle install-webui option for Qdrant
   if (shellChoice === 'install-webui') {
     if (config.engine === 'qdrant') {
@@ -806,6 +967,383 @@ async function downloadQdrantWebUI(containerName: string): Promise<void> {
     console.log()
   }
 
+  await pressEnterToContinue()
+}
+
+/**
+ * Stop a running pgweb process for a container (with UI feedback)
+ */
+export async function stopPgwebProcess(
+  containerName: string,
+  engine: string,
+): Promise<void> {
+  const stopped = await stopPgweb(containerName, engine)
+
+  console.log()
+  if (stopped) {
+    console.log(uiSuccess('pgweb stopped'))
+  } else {
+    console.log(uiInfo('pgweb is not running'))
+  }
+  console.log()
+  await pressEnterToContinue()
+}
+
+/**
+ * Download and install pgweb from GitHub releases
+ */
+async function downloadPgweb(): Promise<string | null> {
+  console.log()
+  const spinner = createSpinner('Downloading pgweb...')
+  spinner.start()
+
+  try {
+    const platform = process.platform
+    const arch = process.arch
+    let suffix: string
+
+    if (platform === 'darwin' && arch === 'arm64') {
+      suffix = 'darwin_arm64'
+    } else if (platform === 'darwin' && arch === 'x64') {
+      suffix = 'darwin_amd64'
+    } else if (platform === 'linux' && arch === 'arm64') {
+      suffix = 'linux_arm64'
+    } else if (platform === 'linux' && arch === 'x64') {
+      suffix = 'linux_amd64'
+    } else if (platform === 'win32' && arch === 'x64') {
+      suffix = 'windows_amd64.exe'
+    } else {
+      throw new Error(`Unsupported platform: ${platform} ${arch}`)
+    }
+
+    const zipUrl = `https://github.com/sosedoff/pgweb/releases/download/v${PGWEB_VERSION}/pgweb_${suffix}.zip`
+
+    spinner.text = `Downloading pgweb v${PGWEB_VERSION}...`
+
+    const response = await fetch(zipUrl)
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to download: ${response.status}`)
+    }
+
+    const isWin = platform === 'win32'
+    const binaryName = isWin ? 'pgweb.exe' : 'pgweb'
+    const platformArch = `${platform}-${arch}`
+    const installDir = join(
+      paths.bin,
+      `pgweb-${PGWEB_VERSION}-${platformArch}`,
+      'bin',
+    )
+    await mkdir(installDir, { recursive: true })
+
+    const tempZip = join(paths.bin, 'pgweb-temp.zip')
+    const buffer = Buffer.from(await response.arrayBuffer())
+    await writeFile(tempZip, buffer)
+
+    spinner.text = 'Extracting pgweb...'
+
+    try {
+      const unzipper = await import('unzipper')
+      const directory = await unzipper.Open.file(tempZip)
+
+      const resolvedInstallDir = resolve(installDir)
+      let extracted = false
+
+      for (const entry of directory.files) {
+        if (entry.type === 'Directory') continue
+
+        // Zip-slip protection
+        const targetPath = resolve(installDir, binaryName)
+        if (!targetPath.startsWith(resolvedInstallDir + sep)) {
+          continue
+        }
+
+        // The zip contains the binary (possibly named pgweb_<platform>_<arch> or pgweb_<platform>_<arch>.exe)
+        const content = await entry.buffer()
+        await writeFile(targetPath, content)
+        extracted = true
+        break // Only one file in the zip
+      }
+
+      if (!extracted) {
+        throw new Error('Could not find pgweb binary in zip archive')
+      }
+    } finally {
+      await rm(tempZip, { force: true })
+    }
+
+    const binaryPath = join(installDir, binaryName)
+
+    // chmod on Unix
+    if (!isWin) {
+      await chmod(binaryPath, 0o755)
+    }
+
+    // Register in config
+    await configManager.setBinaryPath('pgweb', binaryPath, 'bundled')
+
+    spinner.succeed(`pgweb v${PGWEB_VERSION} installed`)
+    console.log()
+
+    return binaryPath
+  } catch (error) {
+    spinner.fail('Failed to download pgweb')
+    console.error(uiError((error as Error).message))
+    console.log()
+    console.log(chalk.gray('You can manually download from:'))
+    console.log(chalk.cyan('  https://github.com/sosedoff/pgweb/releases'))
+    console.log()
+    await pressEnterToContinue()
+    return null
+  }
+}
+
+/**
+ * Download and install dblab from GitHub releases.
+ * Exported as downloadDblabCli for use from the CLI connect command.
+ */
+export async function downloadDblabCli(): Promise<string | null> {
+  console.log()
+  const spinner = createSpinner('Downloading dblab...')
+  spinner.start()
+
+  try {
+    const suffix = getDblabPlatformSuffix()
+    const tarUrl = `https://github.com/danvergara/dblab/releases/download/v${DBLAB_VERSION}/dblab_${DBLAB_VERSION}_${suffix}.tar.gz`
+
+    spinner.text = `Downloading dblab v${DBLAB_VERSION}...`
+
+    const response = await fetch(tarUrl)
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to download: ${response.status}`)
+    }
+
+    const isWin = process.platform === 'win32'
+    const binaryName = isWin ? 'dblab.exe' : 'dblab'
+    const platformArch = `${process.platform}-${process.arch}`
+    const installDir = join(
+      paths.bin,
+      `dblab-${DBLAB_VERSION}-${platformArch}`,
+      'bin',
+    )
+    await mkdir(installDir, { recursive: true })
+
+    const tempTar = join(paths.bin, 'dblab-temp.tar.gz')
+    const buffer = Buffer.from(await response.arrayBuffer())
+    await writeFile(tempTar, buffer)
+
+    spinner.text = 'Extracting dblab...'
+
+    try {
+      const { spawnSync } = await import('child_process')
+      const result = spawnSync('tar', ['-xzf', tempTar, '-C', installDir], {
+        stdio: 'pipe',
+      })
+      if (result.status !== 0) {
+        throw new Error(
+          `tar extraction failed: ${result.stderr?.toString() || 'unknown error'}`,
+        )
+      }
+    } finally {
+      await rm(tempTar, { force: true })
+    }
+
+    const binaryPath = join(installDir, binaryName)
+
+    if (!existsSync(binaryPath)) {
+      throw new Error('Could not find dblab binary after extraction')
+    }
+
+    // chmod on Unix
+    if (!isWin) {
+      await chmod(binaryPath, 0o755)
+    }
+
+    // Register in config
+    await configManager.setBinaryPath('dblab', binaryPath, 'bundled')
+
+    spinner.succeed(`dblab v${DBLAB_VERSION} installed`)
+    console.log()
+
+    return binaryPath
+  } catch (error) {
+    spinner.fail('Failed to download dblab')
+    console.error(uiError((error as Error).message))
+    console.log()
+    console.log(chalk.gray('You can manually download from:'))
+    console.log(chalk.cyan('  https://github.com/danvergara/dblab/releases'))
+    console.log()
+    await pressEnterToContinue()
+    return null
+  }
+}
+
+/**
+ * Launch dblab visual TUI for a container
+ */
+async function launchDblab(
+  config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
+  database: string,
+): Promise<void> {
+  const dblabPath = await configManager.getBinaryPath('dblab')
+  if (!dblabPath) {
+    console.error(uiError('dblab not found. Download it first.'))
+    await pressEnterToContinue()
+    return
+  }
+
+  const args = getDblabArgs(config, database)
+
+  console.log()
+  console.log(chalk.gray('  dblab keybindings:'))
+  console.log(
+    chalk.gray(
+      '  Ctrl+Space: run query | Ctrl+H/J/K/L: navigate panels | Ctrl+S: structure view',
+    ),
+  )
+  console.log()
+  await escapeablePrompt([
+    {
+      type: 'input',
+      name: 'continue',
+      message: chalk.gray('Press Enter to launch dblab...'),
+    },
+  ])
+
+  const dblabProcess = spawn(dblabPath, args, {
+    stdio: 'inherit',
+  })
+
+  await new Promise<void>((resolve) => {
+    let settled = false
+
+    const settle = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+
+    dblabProcess.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        console.log(uiWarning('dblab not found on your system.'))
+        console.log()
+        console.log(chalk.gray('  Download it with:'))
+        console.log(chalk.cyan('  spindb connect --install-dblab'))
+      } else {
+        console.log(uiError(`Failed to start dblab: ${err.message}`))
+      }
+      settle()
+    })
+
+    dblabProcess.on('close', () => {
+      if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[2J\x1b[3J\x1b[H')
+      }
+      settle()
+    })
+  })
+}
+
+/**
+ * Launch pgweb for a PostgreSQL-compatible container
+ */
+async function launchPgweb(
+  containerName: string,
+  config: NonNullable<Awaited<ReturnType<typeof containerManager.getConfig>>>,
+  database: string,
+): Promise<void> {
+  const pgwebPath = await configManager.getBinaryPath('pgweb')
+  if (!pgwebPath) {
+    console.error(uiError('pgweb not found. Download it first.'))
+    await pressEnterToContinue()
+    return
+  }
+
+  const containerDir = paths.getContainerPath(containerName, {
+    engine: config.engine,
+  })
+  const pidFile = join(containerDir, 'pgweb.pid')
+  const portFile = join(containerDir, 'pgweb.port')
+
+  // Check if already running — just open browser
+  const status = await getPgwebStatus(containerName, config.engine)
+  if (status.running && status.port) {
+    const url = `http://127.0.0.1:${status.port}`
+    console.log()
+    console.log(uiInfo(`Opening pgweb`))
+    console.log(chalk.gray(`  ${url}`))
+    console.log()
+    openInBrowser(url)
+    await pressEnterToContinue()
+    return
+  }
+
+  // Find available port starting at 8081
+  let port = 8081
+  while (!(await portManager.isPortAvailable(port)) && port < 8200) {
+    port++
+  }
+
+  if (port >= 8200) {
+    console.error(
+      uiError(
+        'Could not find an available port for pgweb (scanned 8081–8199). ' +
+          'Check for other pgweb or server processes using those ports.',
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  // Build connection URL
+  let connectionUrl: string
+  if (config.engine === 'ferretdb') {
+    // FerretDB has a PostgreSQL backend on backendPort — always connects to 'ferretdb' database
+    if (!config.backendPort) {
+      console.log()
+      console.error(
+        uiError(
+          'PostgreSQL backend port not set — restart the container first',
+        ),
+      )
+      console.log()
+      await pressEnterToContinue()
+      return
+    }
+    connectionUrl = `postgresql://postgres@127.0.0.1:${config.backendPort}/ferretdb?sslmode=disable`
+  } else if (config.engine === 'cockroachdb') {
+    connectionUrl = `postgresql://root@127.0.0.1:${config.port}/${database}?sslmode=disable`
+  } else {
+    connectionUrl = `postgresql://postgres@127.0.0.1:${config.port}/${database}?sslmode=disable`
+  }
+
+  // Spawn pgweb detached
+  const pgwebProcess = spawn(
+    pgwebPath,
+    ['--url', connectionUrl, '--bind', '127.0.0.1', '--listen', String(port)],
+    {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      detached: true,
+    },
+  )
+
+  pgwebProcess.unref()
+
+  // Write PID and port files
+  if (pgwebProcess.pid) {
+    await writeFile(pidFile, String(pgwebProcess.pid))
+    await writeFile(portFile, String(port))
+  }
+
+  // Brief wait for startup
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+
+  const url = `http://127.0.0.1:${port}`
+  console.log()
+  console.log(uiSuccess(`pgweb started on ${url}`))
+  console.log(chalk.gray(`  PID: ${pgwebProcess.pid}`))
+  console.log()
+  openInBrowser(url)
   await pressEnterToContinue()
 }
 

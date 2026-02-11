@@ -33,6 +33,10 @@ spindb stop --all                       # Stop all containers
 spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
 spindb list                             # List all containers
 spindb info mydb                        # Show container details
+spindb ports                            # Show ports for all containers
+spindb ports mydb                       # Show ports for one container
+spindb ports --running                  # Only running containers
+spindb ports --json                     # JSON output
 ```
 
 ## Connect & Query
@@ -44,6 +48,9 @@ spindb connect mydb --pgcli             # Use pgcli (PostgreSQL/CockroachDB)
 spindb connect mydb --mycli             # Use mycli (MySQL/MariaDB)
 spindb connect mydb --litecli           # Use litecli (SQLite)
 spindb connect mydb --iredis            # Use iredis (Redis/Valkey)
+spindb connect mydb --dblab             # Use dblab visual TUI
+spindb connect mydb --install-dblab     # Download dblab + connect
+spindb connect mydb --ui                # Open built-in Web UI (DuckDB only)
 
 spindb run mydb -c "SELECT 1"           # Run inline SQL/JS/command
 spindb run mydb ./schema.sql            # Run SQL file
@@ -57,6 +64,28 @@ spindb run myquest -c "SELECT * FROM sensors"  # Run QuestDB SQL
 
 > **REST API Engines:** Qdrant, Meilisearch, CouchDB, and InfluxDB use REST APIs instead of CLI shells.
 > `spindb connect` shows REST API info. Qdrant, Meilisearch, and CouchDB have web dashboards. InfluxDB is API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
+
+## Web Panels
+
+Some engines have browser-based interfaces available from the console menu (`spindb connect` or interactive menu → Open console).
+
+| Engine | Web Panel | Notes |
+|--------|-----------|-------|
+| PostgreSQL | pgweb | Downloaded on first use, runs as background process |
+| CockroachDB | pgweb | Same pgweb binary, uses PG wire protocol |
+| FerretDB | pgweb | Same pgweb binary, connects to PG backend |
+| DuckDB | Web UI | Built-in extension at `http://localhost:4213` |
+| ClickHouse | Play UI | Built-in at `http://localhost:{http_port}/play` |
+| Qdrant | Web UI | Downloaded separately, served by Qdrant |
+| Meilisearch | Dashboard | Built-in at `http://localhost:{port}/` |
+| CouchDB | Fauxton | Built-in at `http://localhost:{port}/_utils` |
+| QuestDB | Web Console | Built-in at `http://localhost:{http_port}/` |
+
+**pgweb** is a standalone web panel for browsing and querying PostgreSQL-compatible databases. It runs as a background process and opens in your browser.
+
+- **Start**: Select "Open pgweb" from the console menu (downloads automatically on first use)
+- **Stop**: Select "Stop pgweb" from the container submenu or console menu, or it stops automatically when the database stops
+- **Port**: Dynamically allocated starting at 8081
 
 ## Connection Strings
 

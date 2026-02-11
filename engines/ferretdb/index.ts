@@ -622,41 +622,57 @@ export class FerretDBEngine extends BaseEngine {
     let ferretStarted = false
 
     try {
-      // 1. Start PostgreSQL
+      // 1. Start PostgreSQL (skip if already running)
       onProgress?.({
         stage: 'starting',
         message: 'Starting PostgreSQL backend...',
       })
 
-      // Use pg_ctl to start PostgreSQL
-      // Add 60s timeout to prevent hanging if PostgreSQL fails to start (especially on Windows)
+      // Check if PostgreSQL backend is already running in this data dir
+      let pgAlreadyRunning = false
       try {
-        await spawnAsync(
-          pgCtl,
-          [
-            'start',
-            '-D',
-            pgDataDir,
-            '-l',
-            pgLogFile,
-            '-o',
-            `-p ${backendPort} -h 127.0.0.1`,
-            '-w', // Wait for startup
-          ],
-          { env: pgSpawnEnv, timeout: 60000 },
-        )
-      } catch (pgError) {
-        // Read PostgreSQL log for debugging
-        let pgLog = ''
+        await spawnAsync(pgCtl, ['status', '-D', pgDataDir], {
+          env: pgSpawnEnv,
+          timeout: 5000,
+        })
+        // pg_ctl status exits 0 if server is running
+        pgAlreadyRunning = true
+        logDebug('PostgreSQL backend already running, skipping start')
+      } catch {
+        // Exit code != 0 means not running — proceed to start
+      }
+
+      if (!pgAlreadyRunning) {
+        // Use pg_ctl to start PostgreSQL
+        // Add 60s timeout to prevent hanging if PostgreSQL fails to start (especially on Windows)
         try {
-          pgLog = await readFile(pgLogFile, 'utf8')
-        } catch {
-          pgLog = '(no log available)'
+          await spawnAsync(
+            pgCtl,
+            [
+              'start',
+              '-D',
+              pgDataDir,
+              '-l',
+              pgLogFile,
+              '-o',
+              `-p ${backendPort} -h 127.0.0.1`,
+              '-w', // Wait for startup
+            ],
+            { env: pgSpawnEnv, timeout: 60000 },
+          )
+        } catch (pgError) {
+          // Read PostgreSQL log for debugging
+          let pgLog = ''
+          try {
+            pgLog = await readFile(pgLogFile, 'utf8')
+          } catch {
+            pgLog = '(no log available)'
+          }
+          throw new Error(
+            `PostgreSQL backend failed to start: ${pgError instanceof Error ? pgError.message : pgError}\n` +
+              `PostgreSQL log:\n${pgLog.slice(-2000)}`, // Last 2KB of log
+          )
         }
-        throw new Error(
-          `PostgreSQL backend failed to start: ${pgError instanceof Error ? pgError.message : pgError}\n` +
-            `PostgreSQL log:\n${pgLog.slice(-2000)}`, // Last 2KB of log
-        )
       }
 
       pgStarted = true
@@ -879,6 +895,9 @@ export class FerretDBEngine extends BaseEngine {
     if (existsSync(pgCtl)) {
       await this.stopPostgreSQLProcess(pgCtl, pgDataDir, pgSpawnEnv)
     }
+
+    // Kill pgweb if running for this container
+    await this.stopPgweb(name)
 
     logDebug('FerretDB stopped')
   }

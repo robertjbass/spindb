@@ -105,6 +105,15 @@ spindb connect cache                             # Open redis-cli
 spindb connect cache --iredis                    # Enhanced shell
 ```
 
+### Enhanced Shells & Visual Tools
+
+```bash
+spindb connect myapp --pgcli                     # Enhanced PostgreSQL shell
+spindb connect myapp --dblab                     # Visual TUI (table browser)
+spindb connect mydb --mycli                      # Enhanced MySQL/MariaDB shell
+spindb connect mydb --ui                         # Built-in Web UI (DuckDB)
+```
+
 ### Any Engine
 
 ```bash

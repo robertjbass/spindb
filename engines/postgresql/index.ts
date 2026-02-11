@@ -461,6 +461,9 @@ export class PostgreSQLEngine extends BaseEngine {
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
 
     await processManager.stop(pgCtlPath, dataDir)
+
+    // Kill pgweb if running for this container
+    await this.stopPgweb(name)
   }
 
   async status(container: ContainerConfig): Promise<StatusResult> {

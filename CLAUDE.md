@@ -23,6 +23,7 @@ core/                 # Business logic (container-manager, process-manager, conf
 config/               # engines.json (registry), engine-defaults.ts, backup-formats.ts
 engines/{engine}/     # Each engine: index.ts, backup.ts, restore.ts, version-maps.ts, binary-manager.ts, etc.
 engines/base-engine.ts
+services/supabase/    # Supabase service layer (attaches to PostgreSQL containers)
 types/index.ts        # Engine enum, ALL_ENGINES, BinaryTool type
 tests/unit/           # Unit tests
 tests/integration/    # Integration tests (reserved ports)
@@ -37,6 +38,8 @@ tests/fixtures/       # Test data and seed files
 - **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
+
+**Supabase service layer** (not an engine): Optional enhancement for PostgreSQL containers. Adds GoTrue (auth), PostgREST (REST API), and an API proxy. Managed via `spindb supabase enable/disable/start/stop/status/info`. Config stored in `container.json` under `supabase` key. Services auto-start/stop with PostgreSQL. JWT secrets regenerated on clone.
 
 ### Critical: When Adding/Modifying Engines
 

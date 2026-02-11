@@ -301,6 +301,7 @@ export async function filterableListPrompt(
     emptyText?: string
     enableToggle?: boolean
     defaultValue?: string // Pre-select this value (cursor starts here)
+    headerItems?: (FilterableChoice | inquirer.Separator)[] // Shown above filterable items
   },
 ): Promise<string> {
   // Split choices into filterable items and static footer (separators, back buttons, etc.)
@@ -318,6 +319,7 @@ export async function filterableListPrompt(
   }
 
   // Source function for autocomplete - filters items based on input
+  const header = options.headerItems || []
   async function source(
     _answers: Record<string, unknown>,
     input: string | undefined,
@@ -328,7 +330,7 @@ export async function filterableListPrompt(
 
     if (!searchTerm) {
       // No filter - show all items
-      result = [...filterableItems, ...footerItems]
+      result = [...header, ...filterableItems, ...footerItems]
     } else {
       // Filter items by matching search term against the display name
       // Strip ANSI codes for matching but keep them for display
@@ -349,7 +351,7 @@ export async function filterableListPrompt(
           ...footerItems,
         ]
       } else {
-        result = [...filtered, ...footerItems]
+        result = [...header, ...filtered, ...footerItems]
       }
     }
 

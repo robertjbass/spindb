@@ -506,6 +506,9 @@ export class CockroachDBEngine extends BaseEngine {
       }
     }
 
+    // Kill pgweb if running for this container
+    await this.stopPgweb(name)
+
     logDebug('CockroachDB stopped')
   }
 

@@ -24,7 +24,8 @@ import { handleSettings } from './settings-handlers'
 import { configManager } from '../../../core/config-manager'
 import { createSpinner } from '../../ui/spinner'
 import { type MenuChoice, pressEnterToContinue } from './shared'
-import { getPageSize } from '../../constants'
+import { getPageSize, getEngineIcon } from '../../constants'
+import { getContainerPorts } from '../ports'
 
 // Track update check state for this session (only check once on first menu load)
 let updateCheckPromise: Promise<UpdateCheckResult | null> | null = null
@@ -76,6 +77,7 @@ async function showMainMenu(): Promise<void> {
       ? [
           { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
           { name: `${chalk.green('+')} Create container`, value: 'create' },
+          { name: `${chalk.magenta('⊞')} Ports`, value: 'ports' },
         ]
       : [
           { name: `${chalk.green('+')} Create container`, value: 'create' },
@@ -138,6 +140,9 @@ async function showMainMenu(): Promise<void> {
     case 'list':
       await handleList(showMainMenu)
       break
+    case 'ports':
+      await handlePorts()
+      break
     case 'settings':
       await handleSettings()
       break
@@ -148,6 +153,72 @@ async function showMainMenu(): Promise<void> {
       console.log(chalk.gray('\n  Goodbye!\n'))
       process.exit(0)
   }
+}
+
+async function handlePorts(): Promise<void> {
+  console.clear()
+  console.log(header('Ports'))
+  console.log()
+
+  const containers = await containerManager.list()
+
+  if (containers.length === 0) {
+    console.log(chalk.gray('  No containers found.'))
+    console.log()
+    await pressEnterToContinue()
+    return
+  }
+
+  const results = await Promise.all(
+    containers.map(async (config) => {
+      const { status, ports } = await getContainerPorts(config)
+      return { config, status, ports }
+    }),
+  )
+
+  // Only show containers that have ports (skip file-based DBs)
+  const withPorts = results.filter((r) => r.ports.length > 0)
+
+  if (withPorts.length === 0) {
+    console.log(chalk.gray('  No port-based containers found.'))
+    console.log()
+    await pressEnterToContinue()
+    return
+  }
+
+  console.log(
+    chalk.gray('  ') +
+      chalk.bold.white('NAME'.padEnd(22)) +
+      chalk.bold.white('ENGINE'.padEnd(18)) +
+      chalk.bold.white('PORT(S)'),
+  )
+  console.log(chalk.gray('  ' + '─'.repeat(66)))
+
+  for (const { config, status, ports } of withPorts) {
+    const engineIcon = getEngineIcon(config.engine)
+    const engineName = config.engine.padEnd(13)
+
+    const parts = ports.map((p, i) =>
+      i === 0 ? String(p.port) : `${p.port} ${chalk.gray(`(${p.label})`)}`,
+    )
+    const portDisplay = parts.join(chalk.gray(', '))
+
+    const statusIndicator =
+      status === 'running' ? chalk.green('●') : chalk.gray('○')
+
+    console.log(
+      chalk.gray('  ') +
+        statusIndicator +
+        ' ' +
+        chalk.cyan(config.name.padEnd(20)) +
+        engineIcon +
+        chalk.white(engineName) +
+        portDisplay,
+    )
+  }
+
+  console.log()
+  await pressEnterToContinue()
 }
 
 async function handleUpdate(): Promise<void> {
