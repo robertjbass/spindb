@@ -1,39 +1,33 @@
 # InfluxDB Test Fixtures
 
-## Why No Seed File?
+## Seed Files
 
-Unlike SQL databases that use `.sql` files or Redis/Valkey that use command files,
-InfluxDB uses a REST API for all operations. Seed data is written via HTTP
-requests to the `/api/v3/write_lp` endpoint (line protocol), while queries use
-`/api/v3/query_sql` (SQL).
+InfluxDB 3.x does not support `CREATE TABLE` or `INSERT` via SQL — data writes use line protocol. The `.lp` file is the seed fixture (equivalent to `sample-db.sql` for PostgreSQL).
 
-## How Integration Tests Work
+- **`sample-db.lp`** — Seed fixture. Writes 5 test_user records via line protocol.
+- **`sample-queries.sql`** — Verification queries. Run after seeding to confirm data.
 
-Integration tests seed data directly via the InfluxDB REST API:
+### Seeding
 
-1. **Write data**: `POST /api/v3/write_lp?db={database}` with line protocol body
-2. **Query data**: `POST /api/v3/query_sql` with SQL query
-
-### Sample Seed Data (inserted via REST API)
-
-Line protocol format:
+```bash
+spindb run my-influxdb sample-db.lp --database mydb        # Seed data
+spindb run my-influxdb sample-queries.sql --database mydb   # Verify
 ```
-test_user,id=1 name="Alice",email="alice@example.com"
-test_user,id=2 name="Bob",email="bob@example.com"
-test_user,id=3 name="Charlie",email="charlie@example.com"
-test_user,id=4 name="Diana",email="diana@example.com"
-test_user,id=5 name="Eve",email="eve@example.com"
-```
+
+### File Format Reference
+
+| Extension | Endpoint | Purpose |
+|-----------|----------|---------|
+| `.lp` | `POST /api/v3/write_lp` | Write data (line protocol) |
+| `.sql` | `POST /api/v3/query_sql` | Run queries (SELECT, SHOW) |
 
 ## Expected Count
 
-Tests expect 5 records after seeding (matching the standard `EXPECTED_COUNTS[influxdb]=5`
-in `run-e2e.sh`).
+Tests expect 5 records after seeding (matching `EXPECTED_COUNTS[influxdb]=5` in `run-e2e.sh`).
 
 ## Backup/Restore
 
-InfluxDB backup uses SQL dump format via the REST API:
 - Backup: Queries table schemas and exports data as SQL INSERT statements
 - Restore: Converts SQL INSERT statements to line protocol and writes via `POST /api/v3/write_lp`
 
-See integration tests (`tests/integration/influxdb.test.ts`) for backup/restore coverage.
+See `tests/integration/influxdb.test.ts` for backup/restore coverage.

@@ -10,6 +10,7 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
+- [ ] **Pick logo and branding assets** - Review SVG concepts in `assets/` and `assets/concepts/`, finalize a logo for the tray icon, app badge, and wordmark
 - [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 18 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="vxGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="40%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Vortex / spiral funnel — data spiraling into storage -->
+  <!-- Outer ring (widest) -->
+  <ellipse cx="64" cy="36" rx="48" ry="16" fill="none" stroke="#a5b4fc" stroke-width="3" opacity="0.3"/>
+
+  <!-- Progressively smaller rings going down -->
+  <ellipse cx="64" cy="48" rx="40" ry="13" fill="none" stroke="#818cf8" stroke-width="3" opacity="0.4"/>
+  <ellipse cx="64" cy="58" rx="32" ry="10.5" fill="none" stroke="#6366f1" stroke-width="3" opacity="0.55"/>
+  <ellipse cx="64" cy="67" rx="24" ry="8" fill="none" stroke="#4f46e5" stroke-width="3" opacity="0.7"/>
+  <ellipse cx="64" cy="75" rx="16" ry="5.5" fill="none" stroke="#4338ca" stroke-width="3" opacity="0.85"/>
+  <ellipse cx="64" cy="82" rx="8" ry="3" fill="none" stroke="#3730a3" stroke-width="3"/>
+
+  <!-- Funnel body connecting outer to inner (side guides) -->
+  <line x1="16" y1="36" x2="56" y2="82" stroke="#4f46e5" stroke-width="1" opacity="0.15"/>
+  <line x1="112" y1="36" x2="72" y2="82" stroke="#4f46e5" stroke-width="1" opacity="0.15"/>
+
+  <!-- Data point at bottom (stored) -->
+  <circle cx="64" cy="88" r="4" fill="#6366f1"/>
+  <circle cx="64" cy="88" r="2" fill="#c7d2fe"/>
+
+  <!-- Floating data particles spiraling in -->
+  <circle cx="24" cy="28" r="2.5" fill="#a5b4fc" opacity="0.5"/>
+  <circle cx="100" cy="42" r="2" fill="#818cf8" opacity="0.6"/>
+  <circle cx="40" cy="52" r="1.5" fill="#6366f1" opacity="0.7"/>
+  <circle cx="86" cy="62" r="1.5" fill="#4f46e5" opacity="0.8"/>
+</svg>

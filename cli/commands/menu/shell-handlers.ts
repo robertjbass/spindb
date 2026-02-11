@@ -42,6 +42,7 @@ import {
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
+import { logDebug } from '../../../core/error-handler'
 import { pressEnterToContinue } from './shared'
 import { paths } from '../../../config/paths'
 import { getEngineConfig } from '../../../config/engines-registry'
@@ -237,8 +238,8 @@ export async function handleOpenShell(
     engineSpecificValue = null
     engineSpecificInstallValue = null
   } else if (config.engine === 'influxdb') {
-    // InfluxDB uses REST API, no interactive shell
-    defaultShellName = 'Web Dashboard'
+    // InfluxDB uses influxdb3 query subcommand (same binary as server)
+    defaultShellName = 'influxdb3 query'
     engineSpecificCli = null
     engineSpecificInstalled = false
     engineSpecificValue = null
@@ -334,7 +335,11 @@ export async function handleOpenShell(
       value: 'api-info',
     })
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: REST API only, no web dashboard or interactive shell
+    // InfluxDB: influxdb3 query CLI + API info
+    choices.push({
+      name: `▸ Use default shell (influxdb3 query)`,
+      value: 'default',
+    })
     choices.push({
       name: `ℹ Show API info`,
       value: 'api-info',
@@ -353,7 +358,7 @@ export async function handleOpenShell(
   } else {
     // Non-REST-API engines: show default shell option
     choices.push({
-      name: `>_ Use default shell (${defaultShellName})`,
+      name: `▸ Use default shell (${defaultShellName})`,
       value: 'default',
     })
   }
@@ -362,7 +367,7 @@ export async function handleOpenShell(
   if (engineSpecificCli !== null) {
     if (engineSpecificInstalled) {
       choices.push({
-        name: `⚡ Use ${engineSpecificCli} (enhanced features, recommended)`,
+        name: `★ Use ${engineSpecificCli} (enhanced features, recommended)`,
         value: engineSpecificValue!,
       })
     } else {
@@ -378,7 +383,7 @@ export async function handleOpenShell(
   if (engineConfig.queryLanguage === 'sql') {
     if (usqlInstalled) {
       choices.push({
-        name: '⚡ Use usql (universal SQL client)',
+        name: '★ Use usql (universal SQL client)',
         value: 'usql',
       })
     } else {
@@ -394,7 +399,7 @@ export async function handleOpenShell(
     const dblabPath = await configManager.getBinaryPath('dblab')
     if (dblabPath) {
       choices.push({
-        name: '⚡ Use dblab (visual TUI)',
+        name: '★ Use dblab (visual TUI)',
         value: 'dblab',
       })
     } else {
@@ -411,6 +416,15 @@ export async function handleOpenShell(
     choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
     choices.push({
       name: `◎ Open Play UI (port ${httpPort})`,
+      value: 'browser',
+    })
+  }
+
+  if (config.engine === 'questdb') {
+    const httpPort = config.port + 188
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    choices.push({
+      name: `◎ Open Web Console (port ${httpPort})`,
       value: 'browser',
     })
   }
@@ -486,6 +500,16 @@ export async function handleOpenShell(
       console.log(chalk.gray(`  ${playUrl}`))
       console.log()
       openInBrowser(playUrl)
+      await pressEnterToContinue()
+    } else if (config.engine === 'questdb') {
+      // QuestDB Web Console on HTTP port (PG port + 188)
+      const httpPort = config.port + 188
+      const consoleUrl = `http://127.0.0.1:${httpPort}`
+      console.log()
+      console.log(uiInfo(`Opening QuestDB Web Console in browser...`))
+      console.log(chalk.gray(`  ${consoleUrl}`))
+      console.log()
+      openInBrowser(consoleUrl)
       await pressEnterToContinue()
     }
     return
@@ -1482,22 +1506,109 @@ async function launchShell(
     await pressEnterToContinue()
     return
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: REST API only, no web dashboard
-    // This branch shouldn't be reached since we removed the 'default' choice,
-    // but handle gracefully just in case
-    console.log()
-    console.log(chalk.cyan('InfluxDB REST API:'))
-    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
-    console.log()
-    console.log(chalk.gray('Example curl commands:'))
-    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
-    console.log(
-      chalk.gray(
-        `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
-      ),
-    )
-    console.log()
-    await pressEnterToContinue()
+    // InfluxDB: influxdb3 query is one-shot (no REPL), use interactive loop
+    const engine = getEngine(config.engine)
+    const influxdbPath = await engine
+      .getInfluxDBPath(config.version)
+      .catch(() => null)
+    if (!influxdbPath) {
+      console.log(
+        uiWarning('influxdb3 not found. Run: spindb engines download influxdb'),
+      )
+      await pressEnterToContinue()
+      return
+    }
+    // Query available databases from the REST API
+    let db = database || config.name
+    try {
+      const resp = await fetch(
+        `http://127.0.0.1:${config.port}/api/v3/configure/database?format=json`,
+      )
+      if (resp.ok) {
+        const databases = (await resp.json()) as Array<Record<string, string>>
+        const dbNames = databases
+          .map((d) => d['iox::database'] || d.name)
+          .filter((n) => n && n !== '_internal')
+        if (dbNames.length === 0) {
+          console.log(
+            uiWarning(
+              'No databases exist yet. Write data first to create a database.',
+            ),
+          )
+          console.log(
+            chalk.gray(
+              `  curl -X POST "http://127.0.0.1:${config.port}/api/v3/write_lp?db=${db}" -H "Content-Type: text/plain" -d 'measurement,tag=value field=1'`,
+            ),
+          )
+          console.log()
+          await pressEnterToContinue()
+          return
+        }
+        if (!dbNames.includes(db)) {
+          if (dbNames.length === 1) {
+            db = dbNames[0]
+          } else {
+            const { chosenDb } = await escapeablePrompt<{ chosenDb: string }>([
+              {
+                type: 'list',
+                name: 'chosenDb',
+                message: 'Select database:',
+                choices: dbNames,
+              },
+            ])
+            db = chosenDb
+          }
+        }
+      }
+    } catch {
+      // Server may not support this endpoint; proceed with default db
+    }
+    console.log(chalk.cyan(`InfluxDB SQL Console (${db})`))
+    console.log(chalk.gray(`  Type SQL queries, or "exit" to quit.\n`))
+    let running = true
+    while (running) {
+      const { sql } = await escapeablePrompt<{ sql: string }>([
+        {
+          type: 'input',
+          name: 'sql',
+          message: chalk.blue('sql>'),
+        },
+      ])
+      const trimmed = (sql || '').trim()
+      if (
+        trimmed.toLowerCase() === 'exit' ||
+        trimmed.toLowerCase() === 'quit'
+      ) {
+        running = false
+        break
+      }
+      if (!trimmed) {
+        continue
+      }
+      const queryProcess = spawn(
+        influxdbPath,
+        [
+          'query',
+          '--host',
+          `http://127.0.0.1:${config.port}`,
+          '--database',
+          db,
+          '--',
+          trimmed,
+        ],
+        { stdio: 'inherit' },
+      )
+      await new Promise<void>((resolve) => {
+        queryProcess.on('error', (err) => {
+          console.error(uiError(`Query failed: ${err.message}`))
+          resolve()
+        })
+        queryProcess.on('close', () => {
+          logDebug('influxdb query process exited')
+          resolve()
+        })
+      })
+    }
     return
   } else if (config.engine === 'couchdb') {
     // CouchDB: Open Fauxton dashboard in browser (served at /_utils)

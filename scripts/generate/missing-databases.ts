@@ -6,15 +6,23 @@
  * type for testing purposes.
  *
  * Usage:
- *   pnpm generate:missing           # Create missing demo containers
- *   pnpm generate:missing --all     # Create demo containers for ALL engines
- *   pnpm generate:missing --dry-run # Show what would be created
+ *   pnpm generate:missing                # Create missing demo containers
+ *   pnpm generate:missing --all          # Create demo containers for ALL engines
+ *   pnpm generate:missing --seed         # Create and seed with demo data
+ *   pnpm generate:missing --all --seed   # Create all and seed with demo data
+ *   pnpm generate:missing --dry-run      # Show what would be created
  *
- * Containers are created but NOT started or seeded. Use `pnpm generate:db <engine>`
- * to seed individual containers with sample data.
+ * Without --seed, containers are created but NOT started or seeded.
+ * With --seed, each container is created, started, and seeded via `generate:db`.
  */
 
-import { runSpindb, type ContainerConfig } from './db/_shared.js'
+import { spawn } from 'child_process'
+import { existsSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import { runSpindb, PROJECT_ROOT, type ContainerConfig } from './db/_shared.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // TODO - source from hostdb if possible
 const SUPPORTED_ENGINES = [
@@ -42,6 +50,7 @@ type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]
 
 type ParsedArgs = {
   all: boolean
+  seed: boolean
   dryRun: boolean
   help: boolean
 }
@@ -56,6 +65,7 @@ function printUsage(): void {
   console.log('Options:')
   console.log('  --all       Create demo containers for ALL engines,')
   console.log('              even if containers already exist')
+  console.log('  --seed      Start and seed each container with demo data')
   console.log('  --dry-run   Show what would be created without creating')
   console.log('  --help, -h  Show this help message')
   console.log('')
@@ -65,6 +75,9 @@ function printUsage(): void {
   )
   console.log('  pnpm generate:missing --all     # Create one for each engine')
   console.log(
+    '  pnpm generate:missing --seed    # Create missing and seed with demo data',
+  )
+  console.log(
     '  pnpm generate:missing --dry-run # Preview what would be created',
   )
 }
@@ -73,9 +86,45 @@ function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2)
   return {
     all: args.includes('--all'),
+    seed: args.includes('--seed'),
     dryRun: args.includes('--dry-run'),
     help: args.includes('--help') || args.includes('-h'),
   }
+}
+
+function hasSeedScript(engine: string): boolean {
+  return existsSync(join(__dirname, 'db', `${engine}.ts`))
+}
+
+function runGenerateDb(engine: string, containerName: string): Promise<number> {
+  const scriptPath = join(__dirname, 'db', `${engine}.ts`)
+
+  if (!existsSync(scriptPath)) {
+    console.log(`  No seed script for ${engine}, skipping seed`)
+    return Promise.resolve(0)
+  }
+
+  return new Promise((resolve) => {
+    let settled = false
+    const child = spawn('tsx', [scriptPath, containerName], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+    })
+
+    child.on('close', (code) => {
+      if (!settled) {
+        settled = true
+        resolve(code ?? 1)
+      }
+    })
+    child.on('error', (err) => {
+      console.error(`  Seed script error for ${engine}: ${err.message}`)
+      if (!settled) {
+        settled = true
+        resolve(1)
+      }
+    })
+  })
 }
 
 function getExistingContainers(): ContainerConfig[] {
@@ -125,7 +174,7 @@ function getNextAvailableName(
 }
 
 async function main(): Promise<void> {
-  const { all, dryRun, help } = parseArgs()
+  const { all, seed, dryRun, help } = parseArgs()
 
   if (help) {
     printUsage()
@@ -137,6 +186,10 @@ async function main(): Promise<void> {
 
   if (dryRun) {
     console.log('DRY RUN MODE - no containers will be created\n')
+  }
+
+  if (seed) {
+    console.log('SEED MODE - containers will be started and seeded\n')
   }
 
   console.log('Checking existing containers...')
@@ -168,44 +221,85 @@ async function main(): Promise<void> {
   )
 
   const created: string[] = []
+  const seeded: string[] = []
   const failed: { engine: string; error: string }[] = []
 
   for (const engine of enginesToCreate) {
     const baseName = `demo-${engine}`
     const containerName = getNextAvailableName(baseName, existingNames)
 
-    console.log(`Creating ${containerName}...`)
-
     if (dryRun) {
-      console.log(`  [dry-run] Would create: ${containerName}\n`)
+      const action = seed ? 'create and seed' : 'create'
+      console.log(`  [dry-run] Would ${action}: ${containerName}`)
       created.push(containerName)
       existingNames.add(containerName)
       continue
     }
 
-    const result = runSpindb(['create', containerName, '--engine', engine])
+    if (seed && hasSeedScript(engine)) {
+      // Use generate:db which handles create + start + seed
+      console.log(`\nCreating and seeding ${containerName} (${engine})...`)
+      console.log('─'.repeat(50))
+      const exitCode = await runGenerateDb(engine, containerName)
 
-    if (result.success) {
-      console.log(`  Created successfully\n`)
-      created.push(containerName)
-      existingNames.add(containerName)
+      if (exitCode === 0) {
+        created.push(containerName)
+        seeded.push(containerName)
+        existingNames.add(containerName)
+      } else {
+        failed.push({ engine, error: 'generate:db failed' })
+      }
+    } else if (seed && !hasSeedScript(engine)) {
+      // No seed script — fall back to create-only
+      console.log(`Creating ${containerName} (no seed script for ${engine})...`)
+      const result = runSpindb(['create', containerName, '--engine', engine])
+
+      if (result.success) {
+        console.log(`  Created successfully (no seed available)\n`)
+        created.push(containerName)
+        existingNames.add(containerName)
+      } else {
+        const errorLine =
+          result.output
+            .split('\n')
+            .find((line) => line.toLowerCase().includes('error')) ||
+          'Unknown error'
+        console.log(`  Failed: ${errorLine}\n`)
+        failed.push({ engine, error: errorLine })
+      }
     } else {
-      const errorLine =
-        result.output
-          .split('\n')
-          .find((line) => line.toLowerCase().includes('error')) ||
-        'Unknown error'
-      console.log(`  Failed: ${errorLine}\n`)
-      failed.push({ engine, error: errorLine })
+      console.log(`Creating ${containerName}...`)
+      const result = runSpindb(['create', containerName, '--engine', engine])
+
+      if (result.success) {
+        console.log(`  Created successfully\n`)
+        created.push(containerName)
+        existingNames.add(containerName)
+      } else {
+        const errorLine =
+          result.output
+            .split('\n')
+            .find((line) => line.toLowerCase().includes('error')) ||
+          'Unknown error'
+        console.log(`  Failed: ${errorLine}\n`)
+        failed.push({ engine, error: errorLine })
+      }
     }
   }
 
   // Summary
-  console.log('Summary')
+  console.log('\n\nSummary')
   console.log('-------')
   console.log(`Created: ${created.length}`)
   if (created.length > 0) {
     for (const name of created) {
+      console.log(`  - ${name}`)
+    }
+  }
+
+  if (seeded.length > 0) {
+    console.log(`Seeded: ${seeded.length}`)
+    for (const name of seeded) {
       console.log(`  - ${name}`)
     }
   }
@@ -217,9 +311,11 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('\nContainers are created but NOT started.')
-  console.log('To start: spindb start <name>')
-  console.log('To seed with demo data: pnpm generate:db <engine> <name>')
+  if (!seed) {
+    console.log('\nContainers are created but NOT started.')
+    console.log('To start: spindb start <name>')
+    console.log('To seed with demo data: pnpm generate:db <engine> <name>')
+  }
 }
 
 main().catch((error) => {

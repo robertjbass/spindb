@@ -7,9 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.3] - 2026-02-10
+
+### Added
+- **InfluxDB script file support** - `spindb run` now supports both `.lp` (line protocol) and `.sql` files for InfluxDB. Line protocol files write data via REST API, SQL files execute queries.
+- **InfluxDB auto-database creation** - Databases are automatically created before running scripts or inline SQL, so SQL queries work without prior LP seeding.
+- **InfluxDB database discovery** - Console and "Run SQL/LP file" menu now discover real databases via REST API instead of relying on the container's configured database name (which may not exist yet in InfluxDB).
+- **InfluxDB test fixtures** - Added `sample-db.lp` seed fixture and `sample-queries.sql` verification queries.
+
+## [0.34.2] - 2026-02-10
+
+### Added
+- **InfluxDB query shell** - InfluxDB console now offers `influxdb3 query` as the default shell, using the same binary as the server. Supports SQL queries via stdin.
+- **QuestDB Web Console** - QuestDB console menu now shows "Open Web Console" under the Web Panel section, launching the built-in browser-based SQL IDE on the HTTP port (PG port + 188).
+
+### Fixed
+- **InfluxDB usql removed** - InfluxDB was incorrectly offered `usql` as a console option. InfluxDB 3.x only supports HTTP REST API / FlightSQL, not a SQL wire protocol that usql can connect to. Changed `queryLanguage` from `sql` to `rest`.
+- **Console menu icon alignment** - Replaced wide emoji icons (`⚡`, `>_`) with consistent single-width characters (`★`, `▸`) so menu items align properly across terminals.
+
+## [0.34.1] - 2026-02-10
+
 ### Added
 - **dblab visual TUI** - Interactive terminal UI for browsing tables, editing queries, and viewing results. Downloaded on-demand from GitHub releases (v0.34.2, MIT license). Supports PostgreSQL, MySQL, MariaDB, CockroachDB, SQLite, QuestDB. Available from the console menu and via `spindb connect --dblab` / `--install-dblab` CLI flags.
 - **DuckDB built-in Web UI** - Open DuckDB's built-in browser UI (port 4213) from the console menu under "Web Panel" section. Also available via `spindb connect --ui` CLI flag.
+- **Branding assets** - SVG logo concepts in `assets/` (tray icon, gradient, wordmark, smark) and `assets/concepts/` for future finalization
+- **Ports status column** - `spindb ports` now shows a colored status indicator (running/available/missing/stopped) for each port
 
 ### Changed
 - **Dynamic menu page sizing** - Interactive menu lists now scale with terminal height (10–30 visible items) instead of a fixed 15 or 20, making better use of tall terminals

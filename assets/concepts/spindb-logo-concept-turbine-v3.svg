@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="t3a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c7d2fe"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="t3b" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Abstract pinwheel — 4 quadrant segments with gaps, very clean -->
+  <!-- Top-right quadrant -->
+  <path d="M68,60 L68,12 A52,52 0 0,1 116,60Z" fill="url(#t3a)"/>
+
+  <!-- Bottom-right quadrant -->
+  <path d="M68,68 L116,68 A52,52 0 0,1 68,116Z" fill="url(#t3b)"/>
+
+  <!-- Bottom-left quadrant -->
+  <path d="M60,68 L60,116 A52,52 0 0,1 12,68Z" fill="url(#t3a)"/>
+
+  <!-- Top-left quadrant -->
+  <path d="M60,60 L12,60 A52,52 0 0,1 60,12Z" fill="url(#t3b)"/>
+
+  <!-- Center circle (creates the hub + gap between quadrants) -->
+  <circle cx="64" cy="64" r="8" fill="white"/>
+  <circle cx="64" cy="64" r="4" fill="#6366f1"/>
+</svg>
