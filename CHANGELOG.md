@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.2] - 2026-02-10
+
+### Added
+- **InfluxDB query shell** - InfluxDB console now offers `influxdb3 query` as the default shell, using the same binary as the server. Supports SQL queries via stdin.
+- **QuestDB Web Console** - QuestDB console menu now shows "Open Web Console" under the Web Panel section, launching the built-in browser-based SQL IDE on the HTTP port (PG port + 188).
+
+### Fixed
+- **InfluxDB usql removed** - InfluxDB was incorrectly offered `usql` as a console option. InfluxDB 3.x only supports HTTP REST API / FlightSQL, not a SQL wire protocol that usql can connect to. Changed `queryLanguage` from `sql` to `rest`.
+- **Console menu icon alignment** - Replaced wide emoji icons (`⚡`, `>_`) with consistent single-width characters (`★`, `▸`) so menu items align properly across terminals.
+
 ## [0.34.1] - 2026-02-10
 
 ### Added

@@ -419,6 +419,15 @@ export async function handleOpenShell(
     })
   }
 
+  if (config.engine === 'questdb') {
+    const httpPort = config.port + 188
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    choices.push({
+      name: `◎ Open Web Console (port ${httpPort})`,
+      value: 'browser',
+    })
+  }
+
   if (config.engine === 'duckdb') {
     choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
     choices.push({
@@ -490,6 +499,16 @@ export async function handleOpenShell(
       console.log(chalk.gray(`  ${playUrl}`))
       console.log()
       openInBrowser(playUrl)
+      await pressEnterToContinue()
+    } else if (config.engine === 'questdb') {
+      // QuestDB Web Console on HTTP port (PG port + 188)
+      const httpPort = config.port + 188
+      const consoleUrl = `http://127.0.0.1:${httpPort}`
+      console.log()
+      console.log(uiInfo(`Opening QuestDB Web Console in browser...`))
+      console.log(chalk.gray(`  ${consoleUrl}`))
+      console.log()
+      openInBrowser(consoleUrl)
       await pressEnterToContinue()
     }
     return
