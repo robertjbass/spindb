@@ -96,6 +96,9 @@ export async function handleRunSql(
   let databaseName = database || config.database
 
   // InfluxDB: discover real databases (they're created implicitly on write)
+  // Cannot use engine.listDatabases() here because it falls back to
+  // container.database when the list is empty, hiding the "no databases"
+  // state that we need to detect for the .lp warning.
   if (config.engine === Engine.InfluxDB) {
     try {
       const resp = await fetch(

@@ -92,6 +92,10 @@ function parseArgs(): ParsedArgs {
   }
 }
 
+function hasSeedScript(engine: string): boolean {
+  return existsSync(join(__dirname, 'db', `${engine}.ts`))
+}
+
 function runGenerateDb(engine: string, containerName: string): Promise<number> {
   const scriptPath = join(__dirname, 'db', `${engine}.ts`)
 
@@ -101,13 +105,25 @@ function runGenerateDb(engine: string, containerName: string): Promise<number> {
   }
 
   return new Promise((resolve) => {
+    let settled = false
     const child = spawn('tsx', [scriptPath, containerName], {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     })
 
-    child.on('close', (code) => resolve(code ?? 1))
-    child.on('error', () => resolve(1))
+    child.on('close', (code) => {
+      if (!settled) {
+        settled = true
+        resolve(code ?? 1)
+      }
+    })
+    child.on('error', (err) => {
+      console.error(`  Seed script error for ${engine}: ${err.message}`)
+      if (!settled) {
+        settled = true
+        resolve(1)
+      }
+    })
   })
 }
 
@@ -220,7 +236,7 @@ async function main(): Promise<void> {
       continue
     }
 
-    if (seed) {
+    if (seed && hasSeedScript(engine)) {
       // Use generate:db which handles create + start + seed
       console.log(`\nCreating and seeding ${containerName} (${engine})...`)
       console.log('─'.repeat(50))
@@ -232,6 +248,24 @@ async function main(): Promise<void> {
         existingNames.add(containerName)
       } else {
         failed.push({ engine, error: 'generate:db failed' })
+      }
+    } else if (seed && !hasSeedScript(engine)) {
+      // No seed script — fall back to create-only
+      console.log(`Creating ${containerName} (no seed script for ${engine})...`)
+      const result = runSpindb(['create', containerName, '--engine', engine])
+
+      if (result.success) {
+        console.log(`  Created successfully (no seed available)\n`)
+        created.push(containerName)
+        existingNames.add(containerName)
+      } else {
+        const errorLine =
+          result.output
+            .split('\n')
+            .find((line) => line.toLowerCase().includes('error')) ||
+          'Unknown error'
+        console.log(`  Failed: ${errorLine}\n`)
+        failed.push({ engine, error: errorLine })
       }
     } else {
       console.log(`Creating ${containerName}...`)
