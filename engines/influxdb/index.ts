@@ -1044,8 +1044,33 @@ export class InfluxDBEngine extends BaseEngine {
     const database = options.database || container.database
 
     if (options.file) {
-      // Read file content and execute as SQL
       const content = await readFile(options.file, 'utf-8')
+
+      // Ensure the database exists (InfluxDB creates DBs implicitly on write,
+      // but SQL queries fail if the DB doesn't exist yet)
+      await influxdbApiRequest(port, 'POST', '/api/v3/configure/database', {
+        db: database,
+      })
+
+      // Line protocol files (.lp) → write via /api/v3/write_lp
+      if (options.file.endsWith('.lp')) {
+        const lines = content
+          .split('\n')
+          .filter((line) => line.trim().length > 0 && !line.startsWith('#'))
+          .join('\n')
+        const response = await influxdbApiRequest(
+          port,
+          'POST',
+          `/api/v3/write_lp?db=${encodeURIComponent(database)}`,
+          lines,
+        )
+        if (response.status >= 400) {
+          throw new Error(`Write error: ${JSON.stringify(response.data)}`)
+        }
+        return
+      }
+
+      // SQL files → execute via /api/v3/query_sql
       const statements = content
         .split('\n')
         .filter((line) => !line.startsWith('--') && line.trim().length > 0)
@@ -1076,6 +1101,10 @@ export class InfluxDBEngine extends BaseEngine {
     }
 
     if (options.sql) {
+      // Ensure database exists for inline SQL too
+      await influxdbApiRequest(port, 'POST', '/api/v3/configure/database', {
+        db: database,
+      })
       const response = await influxdbApiRequest(
         port,
         'POST',

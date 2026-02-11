@@ -121,10 +121,13 @@ See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details in
 ## InfluxDB
 
 - **REST API time-series database**: InfluxDB 3.x is a complete Rust rewrite, optimized for high-performance time-series workloads
-- **Binary**: `influxdb3` (single binary, no separate CLI client tools)
+- **Binary**: `influxdb3` (single binary serves as both server and CLI client)
+- **Console**: `influxdb3 query` subcommand provides interactive SQL console (one-shot, wrapped in a prompt loop)
+- **Script support**: `.lp` files write data via line protocol, `.sql` files execute queries via REST API
 - **Default port**: 8086 (HTTP)
 - **Health endpoint**: `/health`
 - **Query endpoint**: `POST /api/v3/query_sql` with JSON body `{"q": "SELECT ..."}`
+- **Write endpoint**: `POST /api/v3/write_lp?db=<name>` with line protocol body
 - **No authentication**: No auth by default for local development
 - **Implicit database creation**: Databases are created automatically on first write (no explicit CREATE DATABASE needed)
 - **Connection scheme**: `http://` (e.g., `http://127.0.0.1:8086`)

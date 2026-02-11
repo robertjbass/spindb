@@ -5,6 +5,7 @@ import { spawn } from 'child_process'
 import { containerManager } from '../../../core/container-manager'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { getEngine } from '../../../engines'
+import { Engine } from '../../../types'
 import { paths } from '../../../config/paths'
 import { promptInstallDependencies, escapeablePrompt } from '../../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
@@ -92,7 +93,48 @@ export async function handleRunSql(
   const filePath = stripQuotes(rawFilePath)
 
   // Use provided database or fall back to container's default
-  const databaseName = database || config.database
+  let databaseName = database || config.database
+
+  // InfluxDB: discover real databases (they're created implicitly on write)
+  if (config.engine === Engine.InfluxDB) {
+    try {
+      const resp = await fetch(
+        `http://127.0.0.1:${config.port}/api/v3/configure/database?format=json`,
+      )
+      if (resp.ok) {
+        const databases = (await resp.json()) as Array<Record<string, string>>
+        const dbNames = databases
+          .map((d) => d['iox::database'] || d.name)
+          .filter((n) => n && n !== '_internal')
+        if (dbNames.length === 0 && !filePath.endsWith('.lp')) {
+          console.log(
+            uiWarning(
+              'No databases exist yet. Seed data with a .lp file first.',
+            ),
+          )
+          await pressEnterToContinue()
+          return
+        }
+        if (!dbNames.includes(databaseName)) {
+          if (dbNames.length === 1) {
+            databaseName = dbNames[0]
+          } else if (dbNames.length > 1) {
+            const { chosenDb } = await escapeablePrompt<{ chosenDb: string }>([
+              {
+                type: 'list',
+                name: 'chosenDb',
+                message: 'Select database:',
+                choices: dbNames,
+              },
+            ])
+            databaseName = chosenDb
+          }
+        }
+      }
+    } catch {
+      // Proceed with default
+    }
+  }
 
   console.log()
   console.log(uiInfo(`Running ${scriptType} file against "${databaseName}"...`))

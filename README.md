@@ -105,6 +105,18 @@ spindb connect cache                             # Open redis-cli
 spindb connect cache --iredis                    # Enhanced shell
 ```
 
+### InfluxDB
+
+```bash
+spindb create tsdata --engine influxdb --start
+spindb run tsdata ./seed.lp                      # Seed with line protocol
+spindb run tsdata -c "SHOW TABLES"               # Run inline SQL
+spindb run tsdata ./queries.sql                   # Run SQL file
+spindb connect tsdata                             # Interactive SQL console
+```
+
+> InfluxDB supports two file formats: `.lp` (line protocol) for writing data, `.sql` for queries.
+
 ### Enhanced Shells & Visual Tools
 
 ```bash
@@ -261,7 +273,7 @@ See [DEPLOY.md](DEPLOY.md) for comprehensive deployment documentation.
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
 - **FerretDB Windows** - Not supported (postgresql-documentdb has startup issues on Windows).
-- **Qdrant, Meilisearch, CouchDB & InfluxDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
+- **Qdrant, Meilisearch, CouchDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---
 
