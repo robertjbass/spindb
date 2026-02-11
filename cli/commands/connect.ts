@@ -60,6 +60,7 @@ export const connectCommand = new Command('connect')
   .option('--install-iredis', 'Install iredis if not present, then connect')
   .option('--dblab', 'Use dblab visual TUI (table browser, query editor)')
   .option('--install-dblab', 'Download dblab if not present, then connect')
+  .option('--ui', 'Open built-in Web UI (DuckDB only)')
   .action(
     async (
       name: string | undefined,
@@ -77,6 +78,7 @@ export const connectCommand = new Command('connect')
         installIredis?: boolean
         dblab?: boolean
         installDblab?: boolean
+        ui?: boolean
       },
     ) => {
       try {
@@ -511,6 +513,43 @@ export const connectCommand = new Command('connect')
               resolve()
             })
             dblabProcess.on('close', () => resolve())
+          })
+
+          return
+        }
+
+        if (options.ui) {
+          if (engineName !== Engine.DuckDB) {
+            console.error(
+              uiError('--ui is only available for DuckDB containers'),
+            )
+            process.exit(1)
+          }
+
+          const duckdbPath = await configManager.getBinaryPath('duckdb')
+          if (!duckdbPath) {
+            console.error(
+              uiError(
+                'DuckDB binary not found. Download it with: spindb engines download duckdb',
+              ),
+            )
+            process.exit(1)
+          }
+
+          const uiProcess = spawn(duckdbPath, [config.database, '-ui'], {
+            stdio: 'inherit',
+          })
+
+          await new Promise<void>((resolve) => {
+            uiProcess.on('error', (err: NodeJS.ErrnoException) => {
+              if (err.code === 'ENOENT') {
+                console.log(uiWarning('DuckDB binary not found.'))
+              } else {
+                console.error(uiError(err.message))
+              }
+              resolve()
+            })
+            uiProcess.on('close', () => resolve())
           })
 
           return

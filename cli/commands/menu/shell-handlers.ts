@@ -151,6 +151,7 @@ export async function handleOpenShell(
     | 'stop-pgweb'
     | 'dblab'
     | 'install-dblab'
+    | 'duckdb-ui'
     | 'usql'
     | 'install-usql'
     | 'pgcli'
@@ -414,6 +415,14 @@ export async function handleOpenShell(
     })
   }
 
+  if (config.engine === 'duckdb') {
+    choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
+    choices.push({
+      name: `◎ Open Web UI (built-in, port 4213)`,
+      value: 'duckdb-ui',
+    })
+  }
+
   if (
     config.engine === 'postgresql' ||
     config.engine === 'cockroachdb' ||
@@ -479,6 +488,56 @@ export async function handleOpenShell(
       openInBrowser(playUrl)
       await pressEnterToContinue()
     }
+    return
+  }
+
+  // Handle DuckDB built-in Web UI (duckdb -ui)
+  if (shellChoice === 'duckdb-ui') {
+    const duckdbPath = await configManager.getBinaryPath('duckdb')
+    if (!duckdbPath) {
+      console.error(
+        uiError(
+          'DuckDB binary not found. Download it with: spindb engines download duckdb',
+        ),
+      )
+      await pressEnterToContinue()
+      return
+    }
+
+    console.log()
+    console.log(uiInfo('Launching DuckDB Web UI...'))
+    console.log(chalk.gray('  http://localhost:4213'))
+    console.log()
+
+    const uiProcess = spawn(duckdbPath, [config.database, '-ui'], {
+      stdio: 'inherit',
+    })
+
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const settle = () => {
+        if (!settled) {
+          settled = true
+          resolve()
+        }
+      }
+
+      uiProcess.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT') {
+          console.log(uiWarning('DuckDB binary not found.'))
+        } else {
+          console.log(uiError(`Failed to start DuckDB UI: ${err.message}`))
+        }
+        settle()
+      })
+
+      uiProcess.on('close', () => {
+        if (process.stdout.isTTY) {
+          process.stdout.write('\x1b[2J\x1b[3J\x1b[H')
+        }
+        settle()
+      })
+    })
     return
   }
 

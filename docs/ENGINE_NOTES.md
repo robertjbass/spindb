@@ -136,6 +136,7 @@ See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details in
 ## Web UI Engines
 
 Engines with built-in web UIs use `openInBrowser()` in `cli/commands/menu/shell-handlers.ts`:
+- **DuckDB**: `http://localhost:4213` (built-in UI extension, launched via `duckdb <file> -ui`)
 - **Qdrant**: `http://localhost:{port}/dashboard` (Web UI downloaded separately)
 - **Meilisearch**: `http://localhost:{port}/` (built-in)
 - **ClickHouse**: `http://localhost:8123/play` (built-in Play UI)
