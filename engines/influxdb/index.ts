@@ -1048,9 +1048,17 @@ export class InfluxDBEngine extends BaseEngine {
 
       // Ensure the database exists (InfluxDB creates DBs implicitly on write,
       // but SQL queries fail if the DB doesn't exist yet)
-      await influxdbApiRequest(port, 'POST', '/api/v3/configure/database', {
-        db: database,
-      })
+      const createDbResp = await influxdbApiRequest(
+        port,
+        'POST',
+        '/api/v3/configure/database',
+        { db: database },
+      )
+      if (createDbResp.status >= 400) {
+        throw new Error(
+          `Failed to create database "${database}": HTTP ${createDbResp.status} — ${JSON.stringify(createDbResp.data)}`,
+        )
+      }
 
       // Line protocol files (.lp) → write via /api/v3/write_lp
       if (options.file.endsWith('.lp')) {
@@ -1102,9 +1110,17 @@ export class InfluxDBEngine extends BaseEngine {
 
     if (options.sql) {
       // Ensure database exists for inline SQL too
-      await influxdbApiRequest(port, 'POST', '/api/v3/configure/database', {
-        db: database,
-      })
+      const createDbResp2 = await influxdbApiRequest(
+        port,
+        'POST',
+        '/api/v3/configure/database',
+        { db: database },
+      )
+      if (createDbResp2.status >= 400) {
+        throw new Error(
+          `Failed to create database "${database}": HTTP ${createDbResp2.status} — ${JSON.stringify(createDbResp2.data)}`,
+        )
+      }
       const response = await influxdbApiRequest(
         port,
         'POST',

@@ -42,6 +42,7 @@ import {
 import { getEngine } from '../../../engines'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
+import { logDebug } from '../../../core/error-handler'
 import { pressEnterToContinue } from './shared'
 import { paths } from '../../../config/paths'
 import { getEngineConfig } from '../../../config/engines-registry'
@@ -1575,12 +1576,14 @@ async function launchShell(
       ])
       const trimmed = (sql || '').trim()
       if (
-        !trimmed ||
         trimmed.toLowerCase() === 'exit' ||
         trimmed.toLowerCase() === 'quit'
       ) {
         running = false
         break
+      }
+      if (!trimmed) {
+        continue
       }
       const queryProcess = spawn(
         influxdbPath,
@@ -1590,17 +1593,18 @@ async function launchShell(
           `http://127.0.0.1:${config.port}`,
           '--database',
           db,
+          '--',
           trimmed,
         ],
         { stdio: 'inherit' },
       )
       await new Promise<void>((resolve) => {
         queryProcess.on('error', (err) => {
-          console.log(uiError(`Query failed: ${err.message}`))
+          console.error(uiError(`Query failed: ${err.message}`))
           resolve()
         })
         queryProcess.on('close', () => {
-          console.log()
+          logDebug('influxdb query process exited')
           resolve()
         })
       })
