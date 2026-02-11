@@ -237,8 +237,8 @@ export async function handleOpenShell(
     engineSpecificValue = null
     engineSpecificInstallValue = null
   } else if (config.engine === 'influxdb') {
-    // InfluxDB uses REST API, no interactive shell
-    defaultShellName = 'Web Dashboard'
+    // InfluxDB uses influxdb3 query subcommand (same binary as server)
+    defaultShellName = 'influxdb3 query'
     engineSpecificCli = null
     engineSpecificInstalled = false
     engineSpecificValue = null
@@ -334,7 +334,11 @@ export async function handleOpenShell(
       value: 'api-info',
     })
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: REST API only, no web dashboard or interactive shell
+    // InfluxDB: influxdb3 query CLI + API info
+    choices.push({
+      name: `▸ Use default shell (influxdb3 query)`,
+      value: 'default',
+    })
     choices.push({
       name: `ℹ Show API info`,
       value: 'api-info',
@@ -1482,23 +1486,22 @@ async function launchShell(
     await pressEnterToContinue()
     return
   } else if (config.engine === 'influxdb') {
-    // InfluxDB: REST API only, no web dashboard
-    // This branch shouldn't be reached since we removed the 'default' choice,
-    // but handle gracefully just in case
-    console.log()
-    console.log(chalk.cyan('InfluxDB REST API:'))
-    console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
-    console.log()
-    console.log(chalk.gray('Example curl commands:'))
-    console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
-    console.log(
-      chalk.gray(
-        `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
-      ),
-    )
-    console.log()
-    await pressEnterToContinue()
-    return
+    // InfluxDB: use influxdb3 query subcommand (same binary as server)
+    const engine = getEngine(config.engine)
+    const influxdbPath = await engine
+      .getInfluxDBPath(config.version)
+      .catch(() => 'influxdb3')
+    shellCmd = influxdbPath
+    shellArgs = [
+      'query',
+      '--host',
+      `http://127.0.0.1:${config.port}`,
+      '--database',
+      database || config.name,
+      '--token',
+      '',
+    ]
+    installHint = 'spindb engines download influxdb'
   } else if (config.engine === 'couchdb') {
     // CouchDB: Open Fauxton dashboard in browser (served at /_utils)
     const dashboardUrl = `http://127.0.0.1:${config.port}/_utils`

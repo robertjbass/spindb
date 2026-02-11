@@ -162,6 +162,14 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the influxdb3 binary if available
+   * Default implementation throws; InfluxDB engine overrides this method.
+   */
+  async getInfluxDBPath(_version?: string): Promise<string> {
+    throw new Error('influxdb3 not found')
+  }
+
+  /**
    * Get the path to the sqlite3 client if available
    * Default implementation returns null; SQLite engine overrides this method.
    */
