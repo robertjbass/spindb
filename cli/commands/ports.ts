@@ -157,13 +157,23 @@ export const portsCommand = new Command('ports')
           chalk.gray('  ') +
             chalk.bold.white('NAME'.padEnd(22)) +
             chalk.bold.white('ENGINE'.padEnd(18)) +
+            chalk.bold.white('STATUS'.padEnd(12)) +
             chalk.bold.white('PORT(S)'),
         )
-        console.log(chalk.gray('  ' + '─'.repeat(66)))
+        console.log(chalk.gray('  ' + '─'.repeat(78)))
 
-        for (const { config, ports } of filtered) {
+        for (const { config, status, ports } of filtered) {
           const engineIcon = getEngineIcon(config.engine)
           const engineName = config.engine.padEnd(13)
+
+          const statusDisplay =
+            status === 'running'
+              ? chalk.green('● running'.padEnd(12))
+              : status === 'available'
+                ? chalk.blue('● available'.padEnd(12))
+                : status === 'missing'
+                  ? chalk.gray('○ missing'.padEnd(12))
+                  : chalk.gray('○ stopped'.padEnd(12))
 
           let portDisplay: string
           if (ports.length === 0) {
@@ -182,6 +192,7 @@ export const portsCommand = new Command('ports')
               chalk.cyan(config.name.padEnd(22)) +
               engineIcon +
               chalk.white(engineName) +
+              statusDisplay +
               portDisplay,
           )
         }
