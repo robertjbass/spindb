@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.3] - 2026-02-10
+
+### Added
+- **InfluxDB script file support** - `spindb run` now supports both `.lp` (line protocol) and `.sql` files for InfluxDB. Line protocol files write data via REST API, SQL files execute queries.
+- **InfluxDB auto-database creation** - Databases are automatically created before running scripts or inline SQL, so SQL queries work without prior LP seeding.
+- **InfluxDB database discovery** - Console and "Run SQL/LP file" menu now discover real databases via REST API instead of relying on the container's configured database name (which may not exist yet in InfluxDB).
+- **InfluxDB test fixtures** - Added `sample-db.lp` seed fixture and `sample-queries.sql` verification queries.
+
 ## [0.34.2] - 2026-02-10
 
 ### Added

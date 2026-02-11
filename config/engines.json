@@ -292,7 +292,7 @@
       "defaultPort": 8086,
       "runtime": "server",
       "queryLanguage": "rest",
-      "scriptFileLabel": "Run SQL or LP file",
+      "scriptFileLabel": "Run LP/SQL file",
       "connectionScheme": "http",
       "superuser": null,
       "clientTools": ["influxdb3"],
