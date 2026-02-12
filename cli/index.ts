@@ -27,6 +27,7 @@ import { doctorCommand } from './commands/doctor'
 import { attachCommand } from './commands/attach'
 import { detachCommand } from './commands/detach'
 import { sqliteCommand } from './commands/sqlite'
+import { duckdbCommand } from './commands/duckdb'
 import { databasesCommand } from './commands/databases'
 import { pullCommand } from './commands/pull'
 import { whichCommand } from './commands/which'
@@ -142,6 +143,7 @@ export async function run(): Promise<void> {
   program.addCommand(attachCommand)
   program.addCommand(detachCommand)
   program.addCommand(sqliteCommand)
+  program.addCommand(duckdbCommand)
   program.addCommand(databasesCommand)
   program.addCommand(pullCommand)
   program.addCommand(whichCommand)

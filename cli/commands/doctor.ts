@@ -24,7 +24,7 @@ import { paths } from '../../config/paths'
 import { getSupportedEngines } from '../../config/engine-defaults'
 import { checkEngineDependencies } from '../../core/dependency-manager'
 import { header, uiSuccess } from '../ui/theme'
-import { Engine } from '../../types'
+import { type Engine, isFileBasedEngine } from '../../types'
 import {
   findOutdatedContainers,
   migrateContainerVersion,
@@ -178,7 +178,7 @@ async function checkContainers(): Promise<HealthCheckResult> {
     }
 
     const details = Object.entries(byEngine).map(([engine, counts]) => {
-      if (engine === Engine.SQLite) {
+      if (isFileBasedEngine(engine as Engine)) {
         return `${engine}: ${counts.running} exist, ${counts.stopped} missing`
       }
       return `${engine}: ${counts.running} running, ${counts.stopped} stopped`

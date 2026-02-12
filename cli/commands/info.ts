@@ -9,7 +9,7 @@ import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
 import { uiError, uiInfo, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import { Engine, type ContainerConfig } from '../../types'
+import { isFileBasedEngine, type ContainerConfig } from '../../types'
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -19,8 +19,8 @@ function formatDate(dateString: string): string {
 async function getActualStatus(
   config: ContainerConfig,
 ): Promise<'running' | 'stopped' | 'available' | 'missing'> {
-  // SQLite: check file existence instead of running status
-  if (config.engine === Engine.SQLite) {
+  // File-based engines: check file existence instead of running status
+  if (isFileBasedEngine(config.engine)) {
     const fileExists = existsSync(config.database)
     return fileExists ? 'available' : 'missing'
   }
@@ -59,11 +59,11 @@ async function displayContainerInfo(
   }
 
   const icon = getEngineIcon(config.engine)
-  const isSQLite = config.engine === Engine.SQLite
+  const isFileBased = isFileBasedEngine(config.engine)
 
   // Status display based on engine type
   let statusDisplay: string
-  if (isSQLite) {
+  if (isFileBased) {
     statusDisplay =
       actualStatus === 'available'
         ? chalk.blue('🔵 available')
@@ -87,8 +87,8 @@ async function displayContainerInfo(
     chalk.gray('  ') + chalk.white('Status:'.padEnd(14)) + statusDisplay,
   )
 
-  // Show file path for SQLite, port for server databases
-  if (isSQLite) {
+  // Show file path for file-based engines, port for server databases
+  if (isFileBased) {
     console.log(
       chalk.gray('  ') +
         chalk.white('File:'.padEnd(14)) +
@@ -113,8 +113,8 @@ async function displayContainerInfo(
       chalk.gray(formatDate(config.created)),
   )
 
-  // Don't show data dir for SQLite (file path is already shown)
-  if (!isSQLite) {
+  // Don't show data dir for file-based engines (file path is already shown)
+  if (!isFileBased) {
     console.log(
       chalk.gray('  ') +
         chalk.white('Data Dir:'.padEnd(14)) +
@@ -176,11 +176,11 @@ async function displayAllContainersInfo(
 
   for (const container of containers) {
     const actualStatus = await getActualStatus(container)
-    const isSQLite = container.engine === Engine.SQLite
+    const isFileBased = isFileBasedEngine(container.engine)
 
     // Status display based on engine type
     let statusDisplay: string
-    if (isSQLite) {
+    if (isFileBased) {
       statusDisplay =
         actualStatus === 'available'
           ? chalk.blue('🔵 available')
@@ -195,9 +195,9 @@ async function displayAllContainersInfo(
     // getEngineIcon() includes trailing space for consistent alignment
     const engineDisplay = `${getEngineIcon(container.engine)}${container.engine}`
 
-    // Show truncated file path for SQLite instead of port
+    // Show truncated file path for file-based engines instead of port
     let portOrPath: string
-    if (isSQLite) {
+    if (isFileBased) {
       const fileName = basename(container.database)
       // Truncate if longer than 8 chars to fit in 8-char column
       portOrPath = fileName.length > 8 ? fileName.slice(0, 7) + '…' : fileName
@@ -223,11 +223,21 @@ async function displayAllContainersInfo(
   )
   const running = statusChecks.filter((s) => s === 'running').length
   const stopped = statusChecks.filter((s) => s === 'stopped').length
+  const fileAvailable = statusChecks.filter((s) => s === 'available').length
+  const fileMissing = statusChecks.filter((s) => s === 'missing').length
+
+  const parts: string[] = []
+  if (running + stopped > 0) {
+    parts.push(`${running} running, ${stopped} stopped`)
+  }
+  if (fileAvailable + fileMissing > 0) {
+    parts.push(
+      `${fileAvailable} file-based available${fileMissing > 0 ? `, ${fileMissing} missing` : ''}`,
+    )
+  }
 
   console.log(
-    chalk.gray(
-      `  ${containers.length} container(s): ${running} running, ${stopped} stopped`,
-    ),
+    chalk.gray(`  ${containers.length} container(s): ${parts.join('; ')}`),
   )
   console.log()
 

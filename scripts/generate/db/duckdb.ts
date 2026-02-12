@@ -8,7 +8,7 @@
  * Note: DuckDB is file-based, so --port is not applicable.
  */
 
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { homedir } from 'os'
 import {
@@ -18,6 +18,14 @@ import {
   runContainerCommand,
 } from './_shared.js'
 import { join } from 'path'
+
+function getDemoDir(): string {
+  const dir = join(homedir(), '.spindb', 'demo')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
 
 const ENGINE = 'duckdb'
 const DEFAULT_CONTAINER_NAME = `demo-${ENGINE}`
@@ -70,13 +78,15 @@ async function main(): Promise<void> {
   if (!config) {
     console.log(`Container not found. Creating "${containerName}"...`)
 
-    // DuckDB creates file in CWD
-    const dbPath = join(process.cwd(), `${containerName}.duckdb`)
+    // Create in ~/.spindb/demo/ to avoid polluting CWD
+    const dbPath = join(getDemoDir(), `${containerName}.duckdb`)
     const createResult = runSpindb([
       'create',
       containerName,
       '--engine',
       ENGINE,
+      '--path',
+      dbPath,
     ])
 
     if (!createResult.success) {

@@ -11,7 +11,7 @@ import { checkEngineDependencies } from '../../../core/dependency-manager'
 import { createSpinner } from '../../ui/spinner'
 import { header, uiSuccess, uiError, uiWarning, uiInfo } from '../../ui/theme'
 import { pressEnterToContinue } from './shared'
-import { Engine } from '../../../types'
+import { type Engine, isFileBasedEngine } from '../../../types'
 
 export async function handleCheckUpdate(): Promise<void> {
   console.clear()
@@ -189,7 +189,7 @@ async function checkContainers(): Promise<HealthCheckResult> {
     }
 
     const details = Object.entries(byEngine).map(([engine, counts]) => {
-      if (engine === Engine.SQLite) {
+      if (isFileBasedEngine(engine as Engine)) {
         return `${engine}: ${counts.running} exist, ${counts.stopped} missing`
       }
       return `${engine}: ${counts.running} running, ${counts.stopped} stopped`

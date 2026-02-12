@@ -17,8 +17,9 @@
  */
 
 import { spawn } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
+import { homedir } from 'os'
 import { fileURLToPath } from 'url'
 import { runSpindb, PROJECT_ROOT, type ContainerConfig } from './db/_shared.js'
 
@@ -47,6 +48,25 @@ const SUPPORTED_ENGINES = [
 ] as const
 
 type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]
+
+const FILE_BASED_ENGINES: ReadonlySet<string> = new Set(['sqlite', 'duckdb'])
+
+const FILE_BASED_EXTENSIONS: Record<string, string> = {
+  sqlite: '.sqlite',
+  duckdb: '.duckdb',
+}
+
+/**
+ * Directory for generated file-based databases.
+ * Uses ~/.spindb/demo/ to avoid polluting the project CWD.
+ */
+function getDemoDir(): string {
+  const dir = join(homedir(), '.spindb', 'demo')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
 
 type ParsedArgs = {
   all: boolean
@@ -94,6 +114,16 @@ function parseArgs(): ParsedArgs {
 
 function hasSeedScript(engine: string): boolean {
   return existsSync(join(__dirname, 'db', `${engine}.ts`))
+}
+
+function getCreateArgs(engine: string, containerName: string): string[] {
+  const args = ['create', containerName, '--engine', engine]
+  if (FILE_BASED_ENGINES.has(engine)) {
+    const ext = FILE_BASED_EXTENSIONS[engine]
+    const dbPath = join(getDemoDir(), `${containerName}${ext}`)
+    args.push('--path', dbPath)
+  }
+  return args
 }
 
 function runGenerateDb(engine: string, containerName: string): Promise<number> {
@@ -252,7 +282,7 @@ async function main(): Promise<void> {
     } else if (seed && !hasSeedScript(engine)) {
       // No seed script — fall back to create-only
       console.log(`Creating ${containerName} (no seed script for ${engine})...`)
-      const result = runSpindb(['create', containerName, '--engine', engine])
+      const result = runSpindb(getCreateArgs(engine, containerName))
 
       if (result.success) {
         console.log(`  Created successfully (no seed available)\n`)
@@ -269,7 +299,7 @@ async function main(): Promise<void> {
       }
     } else {
       console.log(`Creating ${containerName}...`)
-      const result = runSpindb(['create', containerName, '--engine', engine])
+      const result = runSpindb(getCreateArgs(engine, containerName))
 
       if (result.success) {
         console.log(`  Created successfully\n`)
