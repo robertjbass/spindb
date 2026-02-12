@@ -26,7 +26,7 @@ import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../ui/theme'
-import { Engine } from '../../types'
+import { Engine, isFileBasedEngine } from '../../types'
 import { configManager } from '../../core/config-manager'
 import { DBLAB_ENGINES, getDblabArgs } from '../../core/dblab-utils'
 import { downloadDblabCli } from './menu/shell-handlers'
@@ -86,9 +86,9 @@ export const connectCommand = new Command('connect')
 
         if (!containerName) {
           const containers = await containerManager.list()
-          // SQLite containers are always "available" if file exists, server containers need to be running
+          // File-based containers are always "available" if file exists, server containers need to be running
           const connectable = containers.filter((c) => {
-            if (c.engine === Engine.SQLite) {
+            if (isFileBasedEngine(c.engine)) {
               return existsSync(c.database)
             }
             return c.status === 'running'
@@ -131,11 +131,11 @@ export const connectCommand = new Command('connect')
         const database =
           options.database ?? config.database ?? engineDefaults.superuser
 
-        // SQLite: check file exists instead of running status
-        if (engineName === Engine.SQLite) {
+        // File-based engines: check file exists instead of running status
+        if (isFileBasedEngine(engineName)) {
           if (!existsSync(config.database)) {
             console.error(
-              uiError(`SQLite database file not found: ${config.database}`),
+              uiError(`Database file not found: ${config.database}`),
             )
             process.exit(1)
           }

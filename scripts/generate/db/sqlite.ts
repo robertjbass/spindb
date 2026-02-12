@@ -8,7 +8,7 @@
  * Note: SQLite is file-based, so --port is not applicable.
  */
 
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { homedir } from 'os'
 import {
@@ -18,6 +18,14 @@ import {
   runContainerCommand,
 } from './_shared.js'
 import { join } from 'path'
+
+function getDemoDir(): string {
+  const dir = join(homedir(), '.spindb', 'demo')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
 
 const ENGINE = 'sqlite'
 const DEFAULT_CONTAINER_NAME = `demo-${ENGINE}`
@@ -70,13 +78,15 @@ async function main(): Promise<void> {
   if (!config) {
     console.log(`Container not found. Creating "${containerName}"...`)
 
-    // SQLite creates file in CWD
-    const dbPath = join(process.cwd(), `${containerName}.sqlite`)
+    // Create in ~/.spindb/demo/ to avoid polluting CWD
+    const dbPath = join(getDemoDir(), `${containerName}.sqlite`)
     const createResult = runSpindb([
       'create',
       containerName,
       '--engine',
       ENGINE,
+      '--path',
+      dbPath,
     ])
 
     if (!createResult.success) {

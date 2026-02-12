@@ -15,12 +15,17 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { getEngine } from '../../engines'
-import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiSuccess, uiInfo } from '../ui/theme'
-import { Engine } from '../../types'
+import { Engine, isFileBasedEngine } from '../../types'
+import {
+  FILE_BASED_EXTENSION_REGEX,
+  isValidExtensionForEngine,
+  formatExtensionsForEngine,
+  getRegistryForEngine,
+} from '../../engines/file-based-utils'
 
 function isValidName(name: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)
@@ -32,8 +37,8 @@ async function promptEditAction(
 ): Promise<'name' | 'port' | 'config' | 'relocate' | null> {
   const choices = [{ name: 'Rename container', value: 'name' }]
 
-  // SQLite: show relocate instead of port
-  if (engine === Engine.SQLite) {
+  // File-based engines: show relocate instead of port
+  if (isFileBasedEngine(engine as Engine)) {
     choices.push({ name: 'Relocate database file', value: 'relocate' })
   } else {
     choices.push({ name: 'Change port', value: 'port' })
@@ -207,8 +212,11 @@ async function promptNewPort(currentPort: number): Promise<number | null> {
   return newPort
 }
 
-// Prompt for new file location (SQLite relocate)
-async function promptNewLocation(currentPath: string): Promise<string | null> {
+// Prompt for new file location (file-based engine relocate)
+async function promptNewLocation(
+  currentPath: string,
+  engine: Engine.SQLite | Engine.DuckDB,
+): Promise<string | null> {
   console.log()
   console.log(chalk.gray(`  Current location: ${currentPath}`))
   console.log(
@@ -224,13 +232,8 @@ async function promptNewLocation(currentPath: string): Promise<string | null> {
       default: currentPath,
       validate: (input: string) => {
         if (!input.trim()) return 'Path is required'
-        const resolvedPath = resolve(input).toLowerCase()
-        if (
-          !resolvedPath.endsWith('.sqlite') &&
-          !resolvedPath.endsWith('.db') &&
-          !resolvedPath.endsWith('.sqlite3')
-        ) {
-          return 'Path should end with .sqlite, .sqlite3, or .db'
+        if (!isValidExtensionForEngine(resolve(input), engine)) {
+          return `Path should end with ${formatExtensionsForEngine(engine)}`
         }
         return true
       },
@@ -272,7 +275,7 @@ export const editCommand = new Command('edit')
   .option('-p, --port <port>', 'New port number', parseInt)
   .option(
     '--relocate <path>',
-    'New file location for SQLite database (moves the file)',
+    'New file location for file-based database (moves the file)',
   )
   .option(
     '--overwrite',
@@ -346,7 +349,10 @@ export const editCommand = new Command('edit')
               return
             }
           } else if (action === 'relocate') {
-            const newLocation = await promptNewLocation(config.database)
+            const newLocation = await promptNewLocation(
+              config.database,
+              config.engine as Engine.SQLite | Engine.DuckDB,
+            )
             if (newLocation) {
               options.relocate = newLocation
             } else {
@@ -438,11 +444,13 @@ export const editCommand = new Command('edit')
           }
         }
 
-        // Handle SQLite relocate
+        // Handle file-based engine relocate
         if (options.relocate) {
-          if (config.engine !== Engine.SQLite) {
+          if (!isFileBasedEngine(config.engine)) {
             console.error(
-              uiError('Relocate is only available for SQLite containers'),
+              uiError(
+                'Relocate is only available for file-based containers (SQLite, DuckDB)',
+              ),
             )
             process.exit(1)
           }
@@ -461,7 +469,7 @@ export const editCommand = new Command('edit')
           }
 
           // Check if path looks like a file (has db extension) or directory
-          const hasDbExtension = /\.(sqlite3?|db)$/i.test(expandedPath)
+          const hasDbExtension = FILE_BASED_EXTENSION_REGEX.test(expandedPath)
 
           // Treat as directory if:
           // - ends with /
@@ -553,11 +561,13 @@ export const editCommand = new Command('edit')
               }
             }
 
-            // Update the container config and SQLite registry
+            // Update the container config and file-based registry
             await containerManager.updateConfig(containerName, {
               database: newPath,
             })
-            await sqliteRegistry.update(containerName, { filePath: newPath })
+            await getRegistryForEngine(config.engine).update(containerName, {
+              filePath: newPath,
+            })
 
             // Now safe to delete source file for cross-device moves
             if (needsSourceCleanup && existsSync(originalPath)) {

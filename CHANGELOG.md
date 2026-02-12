@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.5] - 2026-02-11
+
+### Added
+- **`spindb duckdb` command group** - New `spindb duckdb scan/attach/detach/ignore/unignore/ignored` subcommands, mirroring the existing `spindb sqlite` command group
+- **DuckDB CWD scanning** - `spindb list` now scans for unregistered `.duckdb` and `.ddb` files in the current directory (alongside existing SQLite scanning)
+- **DuckDB backup detection** - `.duckdb` and `.ddb` files are now recognized in `spindb backups`
+- **Centralized file-based engine utilities** - New `engines/file-based-utils.ts` module as single source of truth for extension mapping, engine detection, registry access, container name derivation, and file scanning. Adding a future file-based engine requires changes in only one file.
+
+### Changed
+- **Generalized file-based engine support** - All SQLite-specific behavior (attach, detach, connect, edit relocate, list, info, doctor) now applies to all file-based engines (SQLite and DuckDB) via `isFileBasedEngine()` checks
+- **`spindb attach`** - Now auto-detects engine from file extension (`.sqlite/.sqlite3/.db` → SQLite, `.duckdb/.ddb` → DuckDB) instead of assuming SQLite
+- **`spindb detach`** - Works with any file-based container, not just SQLite
+- **`spindb edit --relocate`** - Extension validation is now engine-aware (SQLite containers only accept SQLite extensions, DuckDB only DuckDB)
+- **Extension guards on engine-specific attach** - `spindb sqlite attach foo.duckdb` and `spindb duckdb attach foo.sqlite` now reject with helpful error messages pointing to the correct command
+- **SQLite/DuckDB scanners refactored** - Both are now thin wrappers around the centralized `file-based-utils` module, eliminating code duplication
+
+### Fixed
+- **`generate:missing` demo databases** - File-based engines (SQLite, DuckDB) now create demo databases in `~/.spindb/demo/` instead of polluting the current working directory
+
 ## [0.34.3] - 2026-02-10
 
 ### Added

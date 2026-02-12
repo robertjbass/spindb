@@ -6,20 +6,31 @@ import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { uiInfo, uiError, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import { Engine } from '../../types'
+import { Engine, isFileBasedEngine } from '../../types'
 import type { ContainerConfig } from '../../types'
-import { sqliteRegistry } from '../../engines/sqlite/registry'
 import {
-  scanForUnregisteredSqliteFiles,
+  scanForUnregisteredFiles,
   deriveContainerName,
-} from '../../engines/sqlite/scanner'
+  getRegistryForEngine,
+  type UnregisteredFile,
+} from '../../engines/file-based-utils'
+
+type UnregisteredFileWithEngine = UnregisteredFile & { engine: Engine }
 
 /**
- * Prompt user about unregistered SQLite files in CWD
+ * Prompt user about unregistered file-based database files in CWD
  * Returns true if user registered any files (refresh needed)
  */
 async function promptUnregisteredFiles(): Promise<boolean> {
-  const unregistered = await scanForUnregisteredSqliteFiles()
+  const [sqliteFiles, duckdbFiles] = await Promise.all([
+    scanForUnregisteredFiles(Engine.SQLite),
+    scanForUnregisteredFiles(Engine.DuckDB),
+  ])
+
+  const unregistered: UnregisteredFileWithEngine[] = [
+    ...sqliteFiles.map((f) => ({ ...f, engine: Engine.SQLite as Engine })),
+    ...duckdbFiles.map((f) => ({ ...f, engine: Engine.DuckDB as Engine })),
+  ]
 
   if (unregistered.length === 0) {
     return false
@@ -29,6 +40,7 @@ async function promptUnregisteredFiles(): Promise<boolean> {
 
   for (let i = 0; i < unregistered.length; i++) {
     const file = unregistered[i]
+    const engineLabel = file.engine === Engine.SQLite ? 'SQLite' : 'DuckDB'
     const prompt =
       unregistered.length > 1 ? `[${i + 1} of ${unregistered.length}] ` : ''
 
@@ -36,7 +48,7 @@ async function promptUnregisteredFiles(): Promise<boolean> {
       {
         type: 'list',
         name: 'action',
-        message: `${prompt}Unregistered SQLite database "${file.fileName}" found in current directory. Register with SpinDB?`,
+        message: `${prompt}Unregistered ${engineLabel} database "${file.fileName}" found in current directory. Register with SpinDB?`,
         choices: [
           { name: 'Yes', value: 'yes' },
           { name: 'No', value: 'no' },
@@ -46,7 +58,11 @@ async function promptUnregisteredFiles(): Promise<boolean> {
     ])
 
     if (action === 'yes') {
-      const suggestedName = deriveContainerName(file.fileName)
+      const registry = getRegistryForEngine(file.engine)
+      const suggestedName = deriveContainerName(
+        file.fileName,
+        file.engine as Engine.SQLite | Engine.DuckDB,
+      )
       const { containerName } = await inquirer.prompt<{
         containerName: string
       }>([
@@ -66,7 +82,7 @@ async function promptUnregisteredFiles(): Promise<boolean> {
       ])
 
       // Check if name already exists
-      if (await sqliteRegistry.exists(containerName)) {
+      if (await registry.exists(containerName)) {
         console.log(
           chalk.yellow(
             `  Container "${containerName}" already exists. Skipping.`,
@@ -75,7 +91,7 @@ async function promptUnregisteredFiles(): Promise<boolean> {
         continue
       }
 
-      await sqliteRegistry.add({
+      await registry.add({
         name: containerName,
         filePath: file.absolutePath,
         created: new Date().toISOString(),
@@ -85,7 +101,9 @@ async function promptUnregisteredFiles(): Promise<boolean> {
       )
       anyRegistered = true
     } else if (action === 'ignore') {
-      await sqliteRegistry.addIgnoreFolder(dirname(file.absolutePath))
+      await getRegistryForEngine(file.engine).addIgnoreFolder(
+        dirname(file.absolutePath),
+      )
       console.log(chalk.gray('  Folder will be ignored in future scans.'))
       break // Exit early
     }
@@ -101,8 +119,8 @@ async function promptUnregisteredFiles(): Promise<boolean> {
 async function getContainerSize(
   container: ContainerConfig,
 ): Promise<number | null> {
-  // SQLite can always get size (it's just file size)
-  if (container.engine === Engine.SQLite) {
+  // File-based engines can always get size (it's just file size)
+  if (isFileBasedEngine(container.engine)) {
     try {
       const engine = getEngine(container.engine)
       return await engine.getDatabaseSize(container)
@@ -127,10 +145,10 @@ export const listCommand = new Command('list')
   .alias('ls')
   .description('List all containers')
   .option('--json', 'Output as JSON')
-  .option('--no-scan', 'Skip scanning for unregistered SQLite files in CWD')
+  .option('--no-scan', 'Skip scanning for unregistered database files in CWD')
   .action(async (options: { json?: boolean; scan?: boolean }) => {
     try {
-      // Scan for unregistered SQLite files in CWD (unless JSON mode or --no-scan)
+      // Scan for unregistered file-based database files in CWD (unless JSON mode or --no-scan)
       if (!options.json && options.scan !== false) {
         await promptUnregisteredFiles()
       }
@@ -173,9 +191,9 @@ export const listCommand = new Command('list')
         const container = containers[i]
         const size = sizes[i]
 
-        // SQLite uses different status labels (blue/white icons)
+        // File-based engines use different status labels (blue/white icons)
         let statusDisplay: string
-        if (container.engine === Engine.SQLite) {
+        if (isFileBasedEngine(container.engine)) {
           statusDisplay =
             container.status === 'running'
               ? chalk.blue('🔵 available')
@@ -193,9 +211,9 @@ export const listCommand = new Command('list')
 
         const sizeDisplay = size !== null ? formatBytes(size) : '—'
 
-        // SQLite shows truncated file name instead of port
+        // File-based engines show truncated file name instead of port
         let portOrPath: string
-        if (container.engine === Engine.SQLite) {
+        if (isFileBasedEngine(container.engine)) {
           const fileName = basename(container.database)
           // Truncate if longer than 8 chars to fit in 8-char column
           portOrPath =
@@ -219,10 +237,10 @@ export const listCommand = new Command('list')
       console.log()
 
       const serverContainers = containers.filter(
-        (c) => c.engine !== Engine.SQLite,
+        (c) => !isFileBasedEngine(c.engine),
       )
-      const sqliteContainers = containers.filter(
-        (c) => c.engine === Engine.SQLite,
+      const fileBasedContainers = containers.filter((c) =>
+        isFileBasedEngine(c.engine),
       )
 
       const running = serverContainers.filter(
@@ -231,10 +249,10 @@ export const listCommand = new Command('list')
       const stopped = serverContainers.filter(
         (c) => c.status !== 'running',
       ).length
-      const available = sqliteContainers.filter(
+      const available = fileBasedContainers.filter(
         (c) => c.status === 'running',
       ).length
-      const missing = sqliteContainers.filter(
+      const missing = fileBasedContainers.filter(
         (c) => c.status !== 'running',
       ).length
 
@@ -242,9 +260,9 @@ export const listCommand = new Command('list')
       if (serverContainers.length > 0) {
         parts.push(`${running} running, ${stopped} stopped`)
       }
-      if (sqliteContainers.length > 0) {
+      if (fileBasedContainers.length > 0) {
         parts.push(
-          `${available} SQLite available${missing > 0 ? `, ${missing} missing` : ''}`,
+          `${available} file-based available${missing > 0 ? `, ${missing} missing` : ''}`,
         )
       }
 

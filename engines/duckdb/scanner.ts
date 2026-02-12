@@ -1,5 +1,5 @@
 /**
- * SQLite Scanner — thin wrapper around shared file-based-utils
+ * DuckDB Scanner — thin wrapper around shared file-based-utils
  */
 
 import { Engine } from '../../types'
@@ -11,12 +11,12 @@ import {
 
 export type { UnregisteredFile }
 
-export async function scanForUnregisteredSqliteFiles(
+export async function scanForUnregisteredDuckDBFiles(
   directory?: string,
 ): Promise<UnregisteredFile[]> {
-  return scanForUnregisteredFiles(Engine.SQLite, directory)
+  return scanForUnregisteredFiles(Engine.DuckDB, directory)
 }
 
 export function deriveContainerName(fileName: string): string {
-  return sharedDeriveContainerName(fileName, Engine.SQLite)
+  return sharedDeriveContainerName(fileName, Engine.DuckDB)
 }

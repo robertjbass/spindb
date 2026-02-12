@@ -1,13 +1,15 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { containerManager } from '../../core/container-manager'
+import { getRegistryForEngine } from '../../engines/file-based-utils'
 import { promptConfirm } from '../ui/prompts'
 import { uiSuccess, uiError, uiWarning } from '../ui/theme'
-import { Engine } from '../../types'
+import { isFileBasedEngine } from '../../types'
 
 export const detachCommand = new Command('detach')
-  .description('Unregister a SQLite database from SpinDB (keeps file on disk)')
+  .description(
+    'Unregister a file-based database from SpinDB (keeps file on disk)',
+  )
   .argument('<name>', 'Container name')
   .option('-f, --force', 'Skip confirmation prompt')
   .option('--json', 'Output as JSON')
@@ -31,18 +33,22 @@ export const detachCommand = new Command('detach')
           process.exit(1)
         }
 
-        // Verify it's a SQLite container
-        if (config.engine !== Engine.SQLite) {
+        // Verify it's a file-based container
+        if (!isFileBasedEngine(config.engine)) {
           if (options.json) {
             console.log(
               JSON.stringify({
                 success: false,
                 error:
-                  'Not a SQLite container. Use "spindb delete" for server databases.',
+                  'Not a file-based container. Use "spindb delete" for server databases.',
               }),
             )
           } else {
-            console.error(uiError(`"${name}" is not a SQLite container`))
+            console.error(
+              uiError(
+                `"${name}" is not a file-based container (SQLite/DuckDB)`,
+              ),
+            )
             console.log(
               chalk.gray(
                 '  Use "spindb delete" for server databases (PostgreSQL, MySQL)',
@@ -64,11 +70,12 @@ export const detachCommand = new Command('detach')
           }
         }
 
-        const entry = await sqliteRegistry.get(name)
+        const registry = getRegistryForEngine(config.engine)
+        const entry = await registry.get(name)
         const filePath = entry?.filePath
 
         // Remove from registry only (not the file)
-        await sqliteRegistry.remove(name)
+        await registry.remove(name)
 
         if (options.json) {
           console.log(

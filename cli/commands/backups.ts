@@ -44,6 +44,9 @@ function detectBackupType(filename: string): {
     case '.db':
     case '.sqlite3':
       return { engine: 'sqlite', format: 'Binary copy' }
+    case '.duckdb':
+    case '.ddb':
+      return { engine: 'duckdb', format: 'Binary copy' }
     case '.archive':
       return { engine: 'mongodb', format: 'BSON archive' }
     case '.rdb':
@@ -65,6 +68,8 @@ function isBackupFile(filename: string): boolean {
     '.sqlite',
     '.sqlite3',
     '.db',
+    '.duckdb',
+    '.ddb',
     '.archive',
     '.rdb',
     '.redis',

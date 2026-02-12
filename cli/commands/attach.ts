@@ -2,14 +2,24 @@ import { Command } from 'commander'
 import { existsSync } from 'fs'
 import { resolve, basename } from 'path'
 import chalk from 'chalk'
-import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { containerManager } from '../../core/container-manager'
-import { deriveContainerName } from '../../engines/sqlite/scanner'
+import {
+  detectEngineFromPath,
+  getRegistryForEngine,
+  deriveContainerName,
+  formatAllExtensions,
+} from '../../engines/file-based-utils'
 import { uiSuccess, uiError } from '../ui/theme'
+import type { Engine } from '../../types'
 
 export const attachCommand = new Command('attach')
-  .description('Register an existing SQLite database with SpinDB')
-  .argument('<path>', 'Path to SQLite database file')
+  .description(
+    'Register an existing file-based database with SpinDB (SQLite or DuckDB)',
+  )
+  .argument(
+    '<path>',
+    'Path to database file (.sqlite, .db, .sqlite3, .duckdb, .ddb)',
+  )
   .option('-n, --name <name>', 'Container name (defaults to filename)')
   .option('--json', 'Output as JSON')
   .action(
@@ -19,6 +29,20 @@ export const attachCommand = new Command('attach')
     ): Promise<void> => {
       try {
         const absolutePath = resolve(path)
+
+        // Detect engine from file extension
+        const engine = detectEngineFromPath(absolutePath)
+        if (!engine) {
+          const msg = `Unrecognized file extension. Expected one of: ${formatAllExtensions()}`
+          if (options.json) {
+            console.log(JSON.stringify({ success: false, error: msg }))
+          } else {
+            console.error(uiError(msg))
+          }
+          process.exit(1)
+        }
+
+        const registry = getRegistryForEngine(engine)
 
         // Verify file exists
         if (!existsSync(absolutePath)) {
@@ -33,8 +57,8 @@ export const attachCommand = new Command('attach')
         }
 
         // Check if already registered
-        if (await sqliteRegistry.isPathRegistered(absolutePath)) {
-          const entry = await sqliteRegistry.getByPath(absolutePath)
+        if (await registry.isPathRegistered(absolutePath)) {
+          const entry = await registry.getByPath(absolutePath)
           if (options.json) {
             console.log(
               JSON.stringify({
@@ -53,7 +77,11 @@ export const attachCommand = new Command('attach')
 
         // Determine container name
         const containerName =
-          options.name || deriveContainerName(basename(absolutePath))
+          options.name ||
+          deriveContainerName(
+            basename(absolutePath),
+            engine as Engine.SQLite | Engine.DuckDB,
+          )
 
         // Check if container name exists
         if (await containerManager.exists(containerName)) {
@@ -73,7 +101,7 @@ export const attachCommand = new Command('attach')
         }
 
         // Register the file
-        await sqliteRegistry.add({
+        await registry.add({
           name: containerName,
           filePath: absolutePath,
           created: new Date().toISOString(),
@@ -83,6 +111,7 @@ export const attachCommand = new Command('attach')
           console.log(
             JSON.stringify({
               success: true,
+              engine,
               name: containerName,
               filePath: absolutePath,
             }),
@@ -90,7 +119,7 @@ export const attachCommand = new Command('attach')
         } else {
           console.log(
             uiSuccess(
-              `Registered "${basename(absolutePath)}" as "${containerName}"`,
+              `Registered "${basename(absolutePath)}" as "${containerName}" (${engine})`,
             ),
           )
           console.log()

@@ -2,11 +2,11 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { existsSync } from 'fs'
 import { resolve, basename } from 'path'
-import { sqliteRegistry } from '../../engines/sqlite/registry'
+import { duckdbRegistry } from '../../engines/duckdb/registry'
 import {
-  scanForUnregisteredSqliteFiles,
+  scanForUnregisteredDuckDBFiles,
   deriveContainerName,
-} from '../../engines/sqlite/scanner'
+} from '../../engines/duckdb/scanner'
 import {
   isValidExtensionForEngine,
   formatExtensionsForEngine,
@@ -16,14 +16,14 @@ import { uiSuccess, uiError, uiInfo } from '../ui/theme'
 import { Engine } from '../../types'
 import { detachCommand } from './detach'
 
-export const sqliteCommand = new Command('sqlite').description(
-  'SQLite-specific operations',
+export const duckdbCommand = new Command('duckdb').description(
+  'DuckDB-specific operations',
 )
 
-// sqlite scan
-sqliteCommand
+// duckdb scan
+duckdbCommand
   .command('scan')
-  .description('Scan folder for unregistered SQLite files')
+  .description('Scan folder for unregistered DuckDB files')
   .option('-p, --path <dir>', 'Directory to scan (default: current directory)')
   .option('--json', 'Output as JSON')
   .action(async (options: { path?: string; json?: boolean }): Promise<void> => {
@@ -40,7 +40,7 @@ sqliteCommand
       process.exit(1)
     }
 
-    const unregistered = await scanForUnregisteredSqliteFiles(dir)
+    const unregistered = await scanForUnregisteredDuckDBFiles(dir)
 
     if (options.json) {
       console.log(JSON.stringify({ directory: dir, files: unregistered }))
@@ -48,12 +48,12 @@ sqliteCommand
     }
 
     if (unregistered.length === 0) {
-      console.log(uiInfo(`No unregistered SQLite files found in ${dir}`))
+      console.log(uiInfo(`No unregistered DuckDB files found in ${dir}`))
       return
     }
 
     console.log(
-      chalk.cyan(`Found ${unregistered.length} unregistered SQLite file(s):`),
+      chalk.cyan(`Found ${unregistered.length} unregistered DuckDB file(s):`),
     )
     for (const file of unregistered) {
       console.log(chalk.gray(`  ${file.fileName}`))
@@ -62,8 +62,8 @@ sqliteCommand
     console.log(chalk.gray('  Register with: spindb attach <path>'))
   })
 
-// sqlite ignore
-sqliteCommand
+// duckdb ignore
+duckdbCommand
   .command('ignore')
   .description('Add folder to ignore list for CWD scanning')
   .argument('[folder]', 'Folder path to ignore (default: current directory)')
@@ -74,7 +74,7 @@ sqliteCommand
       options: { json?: boolean },
     ): Promise<void> => {
       const absolutePath = resolve(folder || process.cwd())
-      await sqliteRegistry.addIgnoreFolder(absolutePath)
+      await duckdbRegistry.addIgnoreFolder(absolutePath)
 
       if (options.json) {
         console.log(JSON.stringify({ success: true, folder: absolutePath }))
@@ -84,8 +84,8 @@ sqliteCommand
     },
   )
 
-// sqlite unignore
-sqliteCommand
+// duckdb unignore
+duckdbCommand
   .command('unignore')
   .description('Remove folder from ignore list')
   .argument('[folder]', 'Folder path to unignore (default: current directory)')
@@ -96,7 +96,7 @@ sqliteCommand
       options: { json?: boolean },
     ): Promise<void> => {
       const absolutePath = resolve(folder || process.cwd())
-      const removed = await sqliteRegistry.removeIgnoreFolder(absolutePath)
+      const removed = await duckdbRegistry.removeIgnoreFolder(absolutePath)
 
       if (options.json) {
         console.log(JSON.stringify({ success: removed, folder: absolutePath }))
@@ -110,13 +110,13 @@ sqliteCommand
     },
   )
 
-// sqlite ignored (list ignored folders)
-sqliteCommand
+// duckdb ignored (list ignored folders)
+duckdbCommand
   .command('ignored')
   .description('List ignored folders')
   .option('--json', 'Output as JSON')
   .action(async (options: { json?: boolean }): Promise<void> => {
-    const folders = await sqliteRegistry.listIgnoredFolders()
+    const folders = await duckdbRegistry.listIgnoredFolders()
 
     if (options.json) {
       console.log(JSON.stringify({ folders }))
@@ -134,13 +134,13 @@ sqliteCommand
     }
   })
 
-// sqlite attach (alias to top-level attach)
-sqliteCommand
+// duckdb attach (alias to top-level attach)
+duckdbCommand
   .command('attach')
   .description(
-    'Register an existing SQLite database (alias for "spindb attach")',
+    'Register an existing DuckDB database (alias for "spindb attach")',
   )
-  .argument('<path>', 'Path to SQLite database file')
+  .argument('<path>', 'Path to DuckDB database file')
   .option('-n, --name <name>', 'Container name')
   .option('--json', 'Output as JSON')
   .action(
@@ -151,16 +151,16 @@ sqliteCommand
       try {
         const absolutePath = resolve(path)
 
-        // Validate extension matches SQLite
-        if (!isValidExtensionForEngine(absolutePath, Engine.SQLite)) {
-          const msg = `File extension must be one of: ${formatExtensionsForEngine(Engine.SQLite)}`
+        // Validate extension matches DuckDB
+        if (!isValidExtensionForEngine(absolutePath, Engine.DuckDB)) {
+          const msg = `File extension must be one of: ${formatExtensionsForEngine(Engine.DuckDB)}`
           if (options.json) {
             console.log(JSON.stringify({ success: false, error: msg }))
           } else {
             console.error(uiError(msg))
             console.log(
               chalk.gray(
-                '  For DuckDB files, use: spindb duckdb attach <path>',
+                '  For SQLite files, use: spindb sqlite attach <path>',
               ),
             )
           }
@@ -178,8 +178,8 @@ sqliteCommand
           process.exit(1)
         }
 
-        if (await sqliteRegistry.isPathRegistered(absolutePath)) {
-          const entry = await sqliteRegistry.getByPath(absolutePath)
+        if (await duckdbRegistry.isPathRegistered(absolutePath)) {
+          const entry = await duckdbRegistry.getByPath(absolutePath)
           if (options.json) {
             console.log(
               JSON.stringify({
@@ -215,7 +215,7 @@ sqliteCommand
           process.exit(1)
         }
 
-        await sqliteRegistry.add({
+        await duckdbRegistry.add({
           name: containerName,
           filePath: absolutePath,
           created: new Date().toISOString(),
@@ -251,10 +251,10 @@ sqliteCommand
     },
   )
 
-// sqlite detach (alias to top-level detach)
-sqliteCommand
+// duckdb detach (alias to top-level detach)
+duckdbCommand
   .command('detach')
-  .description('Unregister a SQLite database (alias for "spindb detach")')
+  .description('Unregister a DuckDB database (alias for "spindb detach")')
   .argument('<name>', 'Container name')
   .option('-f, --force', 'Skip confirmation')
   .option('--json', 'Output as JSON')
