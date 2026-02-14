@@ -1,9 +1,15 @@
 /**
  * FerretDB Composite Binary Manager
  *
- * Handles downloading and managing both FerretDB binaries:
- * 1. ferretdb - The MongoDB-compatible Go proxy
- * 2. postgresql-documentdb - PostgreSQL 17 with DocumentDB extension
+ * Handles downloading and managing FerretDB binaries:
+ *
+ * v2 (default): Two binaries required:
+ *   1. ferretdb - The MongoDB-compatible Go proxy
+ *   2. postgresql-documentdb - PostgreSQL 17 with DocumentDB extension
+ *
+ * v1: Two binaries, but backend is shared:
+ *   1. ferretdb (from hostdb "ferretdb-v1") - The MongoDB-compatible Go proxy
+ *   2. Plain PostgreSQL - Managed by postgresqlBinaryManager (shared with standalone PG containers)
  *
  * This is a composite manager that coordinates the installation of both
  * binaries, which are required for FerretDB to function.
@@ -15,7 +21,7 @@ import { join } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { paths } from '../../config/paths'
-import { spawnAsync } from '../../core/spawn-utils'
+import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
 import { isRenameFallbackError } from '../../core/fs-error-utils'
 import { logDebug } from '../../core/error-handler'
 import {
@@ -31,12 +37,15 @@ import {
   normalizeVersion,
   normalizeDocumentDBVersion,
   DEFAULT_DOCUMENTDB_VERSION,
+  DEFAULT_V1_POSTGRESQL_VERSION,
+  isV1,
 } from './version-maps'
 import {
   isPlatformSupported,
   getFerretDBBinaryUrl,
   getDocumentDBBinaryUrl,
 } from './binary-urls'
+import { postgresqlBinaryManager } from '../postgresql/binary-manager'
 
 const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -45,7 +54,7 @@ const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
  */
 export type FerretDBBinaryPaths = {
   ferretdbPath: string // Path to ferretdb binary directory
-  documentdbPath: string // Path to postgresql-documentdb binary directory
+  backendPath: string // Path to backend binary directory (postgresql-documentdb for v2, postgresql for v1)
 }
 
 /**
@@ -56,9 +65,14 @@ export type FerretDBBinaryPaths = {
 class FerretDBCompositeBinaryManager {
   /**
    * Check if the current platform supports FerretDB
+   * @param version - Optional version to check platform support for (v1 supports Windows, v2 does not)
    */
-  isPlatformSupported(platform: Platform, arch: Arch): boolean {
-    return isPlatformSupported(platform, arch)
+  isPlatformSupported(
+    platform: Platform,
+    arch: Arch,
+    version?: string,
+  ): boolean {
+    return isPlatformSupported(platform, arch, version)
   }
 
   /**
@@ -85,7 +99,6 @@ class FerretDBCompositeBinaryManager {
     backendVersion: string = DEFAULT_DOCUMENTDB_VERSION,
   ): Promise<boolean> {
     const fullVersion = this.getFullVersion(version)
-    const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
 
     // Check FerretDB proxy
     const ferretdbPath = this.getFerretDBBinaryPath(fullVersion, platform, arch)
@@ -95,7 +108,18 @@ class FerretDBCompositeBinaryManager {
       return false
     }
 
-    // Check postgresql-documentdb
+    // Check backend
+    if (isV1(version)) {
+      // v1: check plain PostgreSQL via postgresqlBinaryManager
+      return postgresqlBinaryManager.isInstalled(
+        DEFAULT_V1_POSTGRESQL_VERSION,
+        platform,
+        arch,
+      )
+    }
+
+    // v2: check postgresql-documentdb
+    const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
     const documentdbPath = this.getDocumentDBBinaryPath(
       fullBackendVersion,
       platform,
@@ -177,6 +201,82 @@ class FerretDBCompositeBinaryManager {
   }
 
   /**
+   * Get the backend binary directory path for a FerretDB version.
+   * For v1: returns the plain PostgreSQL binary path
+   * For v2: returns the postgresql-documentdb binary path
+   *
+   * @param ferretdbVersion - FerretDB version (e.g., "1.24.2" or "2.7.0")
+   * @param backendVersion - Backend version (PostgreSQL version for v1, DocumentDB version for v2)
+   * @param platform - Operating system
+   * @param arch - Architecture
+   */
+  getBackendBinaryPath(
+    ferretdbVersion: string,
+    backendVersion: string,
+    platform: Platform,
+    arch: Arch,
+  ): string {
+    if (isV1(ferretdbVersion)) {
+      const pgFullVersion = postgresqlBinaryManager.getFullVersion(
+        backendVersion || DEFAULT_V1_POSTGRESQL_VERSION,
+      )
+      return paths.getBinaryPath({
+        engine: 'postgresql',
+        version: pgFullVersion,
+        platform,
+        arch,
+      })
+    }
+
+    const fullBackendVersion = this.getFullDocumentDBVersion(
+      backendVersion || DEFAULT_DOCUMENTDB_VERSION,
+    )
+    return this.getDocumentDBBinaryPath(fullBackendVersion, platform, arch)
+  }
+
+  /**
+   * Get environment variables needed to run backend binaries.
+   * For v1: delegates to PostgreSQL's standard env (usually none needed)
+   * For v2: delegates to getDocumentDBSpawnEnv
+   *
+   * @param ferretdbVersion - FerretDB version
+   * @param backendVersion - Backend version
+   * @param platform - Operating system
+   * @param arch - Architecture
+   */
+  getBackendSpawnEnv(
+    ferretdbVersion: string,
+    backendVersion: string,
+    platform: Platform,
+    arch: Arch,
+  ): Record<string, string> | undefined {
+    if (isV1(ferretdbVersion)) {
+      // Plain PostgreSQL doesn't need special env vars on most platforms
+      // Linux may need LD_LIBRARY_PATH
+      if (platform !== Platform.Linux) {
+        return undefined
+      }
+      const pgPath = this.getBackendBinaryPath(
+        ferretdbVersion,
+        backendVersion,
+        platform,
+        arch,
+      )
+      const libPath = join(pgPath, 'lib')
+      const existingLdPath = process.env['LD_LIBRARY_PATH'] || ''
+      const newLdPath = existingLdPath
+        ? `${libPath}:${existingLdPath}`
+        : libPath
+      return { LD_LIBRARY_PATH: newLdPath }
+    }
+
+    const fullBackendVersion = this.getFullDocumentDBVersion(
+      backendVersion || DEFAULT_DOCUMENTDB_VERSION,
+    )
+    return this.getDocumentDBSpawnEnv(fullBackendVersion, platform, arch)
+  }
+
+  /**
    * List all installed FerretDB versions
    */
   async listInstalled(): Promise<InstalledBinary[]> {
@@ -223,7 +323,7 @@ class FerretDBCompositeBinaryManager {
    * @param platform - Operating system
    * @param arch - Architecture
    * @param onProgress - Progress callback
-   * @param backendVersion - postgresql-documentdb version (optional)
+   * @param backendVersion - Backend version (postgresql-documentdb for v2, PostgreSQL major for v1)
    * @returns Paths to both binary directories
    */
   async ensureInstalled(
@@ -231,26 +331,96 @@ class FerretDBCompositeBinaryManager {
     platform: Platform,
     arch: Arch,
     onProgress?: ProgressCallback,
-    backendVersion: string = DEFAULT_DOCUMENTDB_VERSION,
+    backendVersion?: string,
   ): Promise<FerretDBBinaryPaths> {
     const fullVersion = this.getFullVersion(version)
-    const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
+    const v1 = isV1(version)
+    const effectiveBackendVersion =
+      backendVersion ||
+      (v1 ? DEFAULT_V1_POSTGRESQL_VERSION : DEFAULT_DOCUMENTDB_VERSION)
 
     // Check if already installed
-    if (await this.isInstalled(version, platform, arch, backendVersion)) {
+    if (
+      await this.isInstalled(version, platform, arch, effectiveBackendVersion)
+    ) {
       onProgress?.({
         stage: 'cached',
         message: 'Using cached FerretDB binaries',
       })
       return {
         ferretdbPath: this.getFerretDBBinaryPath(fullVersion, platform, arch),
-        documentdbPath: this.getDocumentDBBinaryPath(
-          fullBackendVersion,
+        backendPath: this.getBackendBinaryPath(
+          fullVersion,
+          effectiveBackendVersion,
           platform,
           arch,
         ),
       }
     }
+
+    if (v1) {
+      return this.ensureInstalledV1(
+        version,
+        platform,
+        arch,
+        onProgress,
+        effectiveBackendVersion,
+      )
+    }
+
+    return this.ensureInstalledV2(
+      version,
+      platform,
+      arch,
+      onProgress,
+      effectiveBackendVersion,
+    )
+  }
+
+  /**
+   * Ensure v1 FerretDB binaries are installed (proxy + plain PostgreSQL)
+   */
+  private async ensureInstalledV1(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+    onProgress?: ProgressCallback,
+    backendVersion: string = DEFAULT_V1_POSTGRESQL_VERSION,
+  ): Promise<FerretDBBinaryPaths> {
+    // Download FerretDB v1 proxy
+    const ferretdbPath = await this.downloadFerretDB(
+      version,
+      platform,
+      arch,
+      onProgress,
+    )
+
+    // Ensure plain PostgreSQL is installed via postgresqlBinaryManager
+    onProgress?.({
+      stage: 'downloading',
+      message: 'Ensuring PostgreSQL backend is available...',
+    })
+    const backendPath = await postgresqlBinaryManager.ensureInstalled(
+      backendVersion,
+      platform,
+      arch,
+      onProgress,
+    )
+
+    return { ferretdbPath, backendPath }
+  }
+
+  /**
+   * Ensure v2 FerretDB binaries are installed (proxy + postgresql-documentdb)
+   */
+  private async ensureInstalledV2(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+    onProgress?: ProgressCallback,
+    backendVersion: string = DEFAULT_DOCUMENTDB_VERSION,
+  ): Promise<FerretDBBinaryPaths> {
+    const fullVersion = this.getFullVersion(version)
 
     // Check if FerretDB is already installed (DocumentDB might be missing)
     const ext = platform === Platform.Win32 ? '.exe' : ''
@@ -271,9 +441,9 @@ class FerretDBCompositeBinaryManager {
       onProgress,
     )
 
-    let documentdbPath: string
+    let backendPath: string
     try {
-      documentdbPath = await this.downloadDocumentDB(
+      backendPath = await this.downloadDocumentDB(
         backendVersion,
         platform,
         arch,
@@ -292,7 +462,7 @@ class FerretDBCompositeBinaryManager {
       throw error
     }
 
-    return { ferretdbPath, documentdbPath }
+    return { ferretdbPath, backendPath }
   }
 
   /**
@@ -585,19 +755,24 @@ class FerretDBCompositeBinaryManager {
   /**
    * Extract Windows binaries from ZIP file
    *
-   * FerretDB does not support Windows due to postgresql-documentdb startup issues.
-   * Override to throw a clear error.
+   * FerretDB v1 supports Windows. v2 does not (postgresql-documentdb startup issues).
    */
   private async extractWindowsBinaries(
-    _zipFile: string,
-    _binPath: string,
-    _tempDir: string,
-    _onProgress?: ProgressCallback,
+    zipFile: string,
+    binPath: string,
+    tempDir: string,
+    onProgress?: ProgressCallback,
   ): Promise<void> {
-    throw new Error(
-      'FerretDB binaries are not available for Windows. ' +
-        'FerretDB is only supported on macOS and Linux.',
-    )
+    onProgress?.({
+      stage: 'extracting',
+      message: 'Extracting binaries...',
+    })
+
+    const extractDir = join(tempDir, 'extract')
+    await mkdir(extractDir, { recursive: true })
+
+    await extractWindowsArchive(zipFile, extractDir)
+    await this.moveExtractedEntries(extractDir, binPath)
   }
 
   /**
@@ -609,7 +784,7 @@ class FerretDBCompositeBinaryManager {
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
-    // Look for engine directory (ferretdb-* or postgresql-documentdb-*)
+    // Look for engine directory (ferretdb-*, ferretdb-v1-*, or postgresql-documentdb-*)
     const engineDir = entries.find(
       (e) =>
         e.isDirectory() &&
@@ -654,6 +829,12 @@ class FerretDBCompositeBinaryManager {
 
     if (!existsSync(ferretdbBinary)) {
       throw new Error(`FerretDB binary not found at ${binPath}/bin/`)
+    }
+
+    // FerretDB v1 hostdb builds panic on --version due to missing version.txt
+    // at build time. For v1, just verify the binary exists (checked above).
+    if (isV1(version)) {
+      return
     }
 
     try {
@@ -794,6 +975,11 @@ class FerretDBCompositeBinaryManager {
 
   /**
    * Delete installed binaries for a specific version
+   *
+   * For v1: Only deletes the FerretDB proxy. Plain PostgreSQL binaries are shared
+   * with standalone PostgreSQL containers and should NOT be deleted.
+   *
+   * For v2: Deletes both FerretDB proxy and postgresql-documentdb backend.
    */
   async delete(
     version: string,
@@ -802,18 +988,27 @@ class FerretDBCompositeBinaryManager {
     backendVersion: string = DEFAULT_DOCUMENTDB_VERSION,
   ): Promise<void> {
     const fullVersion = this.getFullVersion(version)
-    const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
 
     const ferretdbPath = this.getFerretDBBinaryPath(fullVersion, platform, arch)
+    if (existsSync(ferretdbPath)) {
+      await rm(ferretdbPath, { recursive: true, force: true })
+    }
+
+    // v1: Don't delete shared PostgreSQL binaries (cascadeDelete: false)
+    if (isV1(version)) {
+      logDebug(
+        'Skipping PostgreSQL backend deletion for FerretDB v1 (shared with standalone PG containers)',
+      )
+      return
+    }
+
+    // v2: Delete postgresql-documentdb backend
+    const fullBackendVersion = this.getFullDocumentDBVersion(backendVersion)
     const documentdbPath = this.getDocumentDBBinaryPath(
       fullBackendVersion,
       platform,
       arch,
     )
-
-    if (existsSync(ferretdbPath)) {
-      await rm(ferretdbPath, { recursive: true, force: true })
-    }
     if (existsSync(documentdbPath)) {
       await rm(documentdbPath, { recursive: true, force: true })
     }

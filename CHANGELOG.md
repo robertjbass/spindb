@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.6] - 2026-02-14
+
+### Added
+- **FerretDB v1 support** - FerretDB now supports both v1 (1.24.2) and v2 (2.7.0). v1 uses plain PostgreSQL as backend (lighter, all platforms including Windows), v2 uses postgresql-documentdb (macOS/Linux only). Version number determines which backend is used automatically.
+- **FerretDB Windows support** - FerretDB v1 enables Windows compatibility. `spindb create` auto-selects v1 on Windows when no version is specified.
+
+### Changed
+- **FerretDB engine download** - `spindb engines download ferretdb` now supports version selection. On Windows, v2 is blocked with a helpful message suggesting v1.
+- **FerretDB engine deletion** - v1 installations skip PostgreSQL backend cleanup (shared with standalone PostgreSQL containers). v2 continues to clean up postgresql-documentdb as before.
+- **FerretDB platform support** - Removed blanket Windows block; platform checks are now version-aware.
+
+### Fixed
+- **FerretDB v1 startup** - Auth flag (`--no-auth`) only passed for v2 (v1 has auth disabled by default). PostgreSQL URL includes `sslmode=disable` for v1 (pgx driver defaults to TLS).
+- **FerretDB database creation** - When psql is unavailable in the PostgreSQL backend, uses `postgres --single` mode pre-start to create the ferretdb database.
+- **Menu container creation** - Added error handling around engine start in interactive menu. On start failure, orphaned containers are now cleaned up automatically.
+
 ## [0.34.5] - 2026-02-11
 
 ### Added

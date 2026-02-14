@@ -185,7 +185,7 @@
       "icon": "🦔",
       "status": "integrated",
       "binarySource": "hostdb",
-      "supportedVersions": ["2.7.0"],
+      "supportedVersions": ["1.24.2", "2.7.0"],
       "defaultVersion": "2.7.0",
       "defaultPort": 27017,
       "runtime": "server",
@@ -195,7 +195,7 @@
       "superuser": null,
       "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
       "licensing": "Apache-2.0",
-      "notes": "MongoDB-compatible proxy using PostgreSQL as backend. Requires postgresql-documentdb."
+      "notes": "MongoDB-compatible proxy. v2 uses postgresql-documentdb (macOS/Linux). v1 uses plain PostgreSQL (all platforms incl. Windows)."
     },
     "couchdb": {
       "displayName": "CouchDB",

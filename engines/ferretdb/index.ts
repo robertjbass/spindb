@@ -11,7 +11,12 @@
  * - Stop: Stop FerretDB → Stop PostgreSQL
  */
 
-import { spawn, exec, type SpawnOptions } from 'child_process'
+import {
+  spawn,
+  exec,
+  type ChildProcess,
+  type SpawnOptions,
+} from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import net from 'net'
@@ -43,8 +48,10 @@ import {
   SUPPORTED_MAJOR_VERSIONS,
   FALLBACK_VERSION_MAP,
   DEFAULT_DOCUMENTDB_VERSION,
+  DEFAULT_V1_POSTGRESQL_VERSION,
   normalizeVersion,
   normalizeDocumentDBVersion,
+  isV1,
 } from './version-maps'
 import { getBinaryUrls, isPlatformSupported } from './binary-urls'
 import {
@@ -157,6 +164,76 @@ function waitForPort(port: number, timeoutMs = 30000): Promise<boolean> {
   })
 }
 
+/**
+ * Spawn a process and pipe input to its stdin.
+ * Used for `postgres --single` which reads SQL from stdin.
+ */
+function spawnWithInput(
+  command: string,
+  args: string[],
+  input: string,
+  options?: { env?: Record<string, string>; timeout?: number },
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    let proc: ChildProcess
+    try {
+      proc = spawn(command, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: options?.env ? { ...process.env, ...options.env } : undefined,
+      })
+    } catch (error) {
+      reject(error)
+      return
+    }
+
+    let stdout = ''
+    let stderr = ''
+    let timedOut = false
+
+    const timer = options?.timeout
+      ? setTimeout(() => {
+          timedOut = true
+          proc.kill('SIGKILL')
+          reject(
+            new Error(
+              `Command "${command}" timed out after ${options.timeout}ms`,
+            ),
+          )
+        }, options.timeout)
+      : undefined
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (timer) clearTimeout(timer)
+      if (timedOut) return
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        reject(
+          new Error(
+            `Command "${command}" failed with code ${code}: ${stderr || stdout}`,
+          ),
+        )
+      }
+    })
+
+    proc.on('error', (err) => {
+      if (timer) clearTimeout(timer)
+      if (timedOut) return
+      reject(err)
+    })
+
+    proc.stdin?.write(input)
+    proc.stdin?.end()
+  })
+}
+
 export class FerretDBEngine extends BaseEngine {
   name = ENGINE
   displayName = 'FerretDB'
@@ -170,10 +247,11 @@ export class FerretDBEngine extends BaseEngine {
 
   /**
    * Check if the current platform supports FerretDB
+   * @param version - Optional version to check (v1 supports Windows, v2 does not)
    */
-  isPlatformSupported(): boolean {
+  isPlatformSupported(version?: string): boolean {
     const { platform, arch } = this.getPlatformInfo()
-    return isPlatformSupported(platform, arch)
+    return isPlatformSupported(platform, arch, version)
   }
 
   /**
@@ -193,12 +271,10 @@ export class FerretDBEngine extends BaseEngine {
 
   // Get binary download URL from hostdb
   getBinaryUrl(version: string, platform: Platform, arch: Arch): string {
-    const urls = getBinaryUrls(
-      version,
-      DEFAULT_DOCUMENTDB_VERSION,
-      platform,
-      arch,
-    )
+    const backendVersion = isV1(version)
+      ? DEFAULT_V1_POSTGRESQL_VERSION
+      : DEFAULT_DOCUMENTDB_VERSION
+    const urls = getBinaryUrls(version, backendVersion, platform, arch)
     return urls.ferretdb
   }
 
@@ -224,12 +300,10 @@ export class FerretDBEngine extends BaseEngine {
     const { platform: p, arch: a } = this.getPlatformInfo()
 
     if (version) {
-      return ferretdbBinaryManager.isInstalled(
-        version,
-        p,
-        a,
-        DEFAULT_DOCUMENTDB_VERSION,
-      )
+      const backendVersion = isV1(version)
+        ? DEFAULT_V1_POSTGRESQL_VERSION
+        : DEFAULT_DOCUMENTDB_VERSION
+      return ferretdbBinaryManager.isInstalled(version, p, a, backendVersion)
     }
 
     // Fallback: extract version from directory name
@@ -237,11 +311,14 @@ export class FerretDBEngine extends BaseEngine {
     const match = dirName.match(/^ferretdb-([\d.]+)-/)
     if (match) {
       const extractedVersion = match[1]
+      const backendVersion = isV1(extractedVersion)
+        ? DEFAULT_V1_POSTGRESQL_VERSION
+        : DEFAULT_DOCUMENTDB_VERSION
       return ferretdbBinaryManager.isInstalled(
         extractedVersion,
         p,
         a,
-        DEFAULT_DOCUMENTDB_VERSION,
+        backendVersion,
       )
     }
 
@@ -254,11 +331,14 @@ export class FerretDBEngine extends BaseEngine {
   // Check if a specific FerretDB version is installed
   async isBinaryInstalled(version: string): Promise<boolean> {
     const { platform, arch } = this.getPlatformInfo()
+    const backendVersion = isV1(version)
+      ? DEFAULT_V1_POSTGRESQL_VERSION
+      : DEFAULT_DOCUMENTDB_VERSION
     return ferretdbBinaryManager.isInstalled(
       version,
       platform,
       arch,
-      DEFAULT_DOCUMENTDB_VERSION,
+      backendVersion,
     )
   }
 
@@ -270,14 +350,17 @@ export class FerretDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()
+    const backendVersion = isV1(version)
+      ? DEFAULT_V1_POSTGRESQL_VERSION
+      : DEFAULT_DOCUMENTDB_VERSION
 
-    // Download both binaries
+    // Download binaries (proxy + backend)
     const { ferretdbPath } = await ferretdbBinaryManager.ensureInstalled(
       version,
       platform,
       arch,
       onProgress,
-      DEFAULT_DOCUMENTDB_VERSION,
+      backendVersion,
     )
 
     // Register ferretdb binary in config
@@ -291,6 +374,41 @@ export class FerretDBEngine extends BaseEngine {
   }
 
   /**
+   * Get backend binary paths and spawn environment for a container.
+   * Centralizes the v1/v2 branching logic for backend resolution.
+   */
+  private getBackendPaths(
+    version: string,
+    backendVersion: string,
+    platform: Platform,
+    arch: Arch,
+  ): { backendPath: string; pgSpawnEnv: Record<string, string> | undefined } {
+    const fullVersion = normalizeVersion(version)
+    const backendPath = ferretdbBinaryManager.getBackendBinaryPath(
+      fullVersion,
+      backendVersion,
+      platform,
+      arch,
+    )
+
+    const baseSpawnEnv = ferretdbBinaryManager.getBackendSpawnEnv(
+      fullVersion,
+      backendVersion,
+      platform,
+      arch,
+    )
+    const pgSpawnEnv =
+      platform === 'darwin'
+        ? {
+            ...baseSpawnEnv,
+            DYLD_FALLBACK_LIBRARY_PATH: join(backendPath, 'lib'),
+          }
+        : baseSpawnEnv
+
+    return { backendPath, pgSpawnEnv }
+  }
+
+  /**
    * Initialize a new FerretDB container directory
    * Creates both the PostgreSQL data directory and FerretDB config
    */
@@ -300,17 +418,16 @@ export class FerretDBEngine extends BaseEngine {
     options: Record<string, unknown> = {},
   ): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()
+    const version = normalizeVersion(_version)
+    const v1 = isV1(version)
 
-    // Get binary paths
-    const backendVersion =
-      (options.backendVersion as string) || DEFAULT_DOCUMENTDB_VERSION
-    const fullBackendVersion = normalizeDocumentDBVersion(backendVersion)
+    // Get binary paths - resolve backend based on v1/v2
+    const backendVersion = v1
+      ? (options.backendVersion as string) || DEFAULT_V1_POSTGRESQL_VERSION
+      : (options.backendVersion as string) || DEFAULT_DOCUMENTDB_VERSION
 
-    const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-      fullBackendVersion,
-      platform,
-      arch,
-    )
+    const { backendPath: documentdbPath, pgSpawnEnv: initSpawnEnv } =
+      this.getBackendPaths(version, backendVersion, platform, arch)
 
     // Container directory structure
     const containerDir = paths.getContainerPath(containerName, {
@@ -335,13 +452,6 @@ export class FerretDBEngine extends BaseEngine {
         throw new Error(`initdb not found at ${initdb}`)
       }
 
-      // Get spawn env for Linux (LD_LIBRARY_PATH)
-      const spawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
-        fullBackendVersion,
-        platform,
-        arch,
-      )
-
       // Homebrew-derived x64 binaries have compiled-in absolute paths for
       // sharedir, pkglibdir ($libdir), and libdir that don't exist when running
       // from ~/.spindb/bin/. We fix this by:
@@ -355,10 +465,9 @@ export class FerretDBEngine extends BaseEngine {
           ? join(shareDirBase, 'postgresql')
           : shareDirBase
 
-      // Homebrew-derived binaries have compiled-in absolute paths that only
-      // need fixup on macOS. On Linux the paths are relative or handled by
-      // LD_LIBRARY_PATH, so skip the pg_config symlink fixups entirely.
-      if (platform === 'darwin') {
+      // v2 only: Homebrew-derived DocumentDB binaries need compiled-in path fixups
+      // v1 uses plain PostgreSQL which has correct relative paths
+      if (!v1 && platform === 'darwin') {
         const pgConfigBin = join(documentdbPath, 'bin', `pg_config${ext}`)
         if (existsSync(pgConfigBin)) {
           // Query all relevant compiled-in paths and create symlinks where needed
@@ -420,17 +529,15 @@ export class FerretDBEngine extends BaseEngine {
             }
           }
         }
-      } else {
+      } else if (!v1) {
         logDebug(
           'Skipping pg_config symlink fixups (not required on this platform)',
         )
       }
 
-      // On macOS, fix hardcoded Homebrew dylib paths in extension libraries.
-      // The x64 build may have extensions (e.g. pg_documentdb_core.dylib) that
-      // reference Homebrew libraries (e.g. libbson2.2.dylib from mongo-c-driver)
-      // via absolute paths that don't exist on the target machine.
-      if (platform === 'darwin') {
+      // v2 only: Fix hardcoded Homebrew dylib paths in DocumentDB extension libraries
+      // v1 uses plain PostgreSQL which doesn't have DocumentDB extensions
+      if (!v1 && platform === 'darwin') {
         const dylibMarker = join(documentdbPath, '.dylib_fix_done')
         if (!existsSync(dylibMarker)) {
           await this.fixDylibDependencies(documentdbPath)
@@ -441,16 +548,6 @@ export class FerretDBEngine extends BaseEngine {
           }
         }
       }
-
-      // On macOS, set DYLD_FALLBACK_LIBRARY_PATH as additional library search path.
-      // Unlike DYLD_LIBRARY_PATH, this is NOT stripped by SIP.
-      const initdbEnv =
-        platform === 'darwin'
-          ? {
-              ...spawnEnv,
-              DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
-            }
-          : spawnEnv
 
       try {
         await spawnAsync(
@@ -465,7 +562,7 @@ export class FerretDBEngine extends BaseEngine {
             '-L',
             actualShareDir,
           ],
-          { env: initdbEnv, timeout: 60000 },
+          { env: initSpawnEnv, timeout: 60000 },
         )
         logDebug(`Initialized PostgreSQL data directory: ${pgDataDir}`)
       } catch (error) {
@@ -473,37 +570,40 @@ export class FerretDBEngine extends BaseEngine {
         throw new Error(`Failed to initialize PostgreSQL: ${err.message}`)
       }
 
-      // Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
+      // v2 only: Copy the bundled postgresql.conf.sample to ensure shared_preload_libraries is set
       // This is critical for DocumentDB extension to load properly
-      const bundledConf = existsSync(
-        join(shareDirBase, 'postgresql.conf.sample'),
-      )
-        ? join(shareDirBase, 'postgresql.conf.sample')
-        : join(shareDirBase, 'postgresql', 'postgresql.conf.sample')
-      const pgConf = join(pgDataDir, 'postgresql.conf')
+      // v1 uses initdb defaults (no DocumentDB extensions to preload)
+      if (!v1) {
+        const bundledConf = existsSync(
+          join(shareDirBase, 'postgresql.conf.sample'),
+        )
+          ? join(shareDirBase, 'postgresql.conf.sample')
+          : join(shareDirBase, 'postgresql', 'postgresql.conf.sample')
+        const pgConf = join(pgDataDir, 'postgresql.conf')
 
-      if (existsSync(bundledConf)) {
-        try {
-          // Read the bundled config
-          let confContent = await readFile(bundledConf, 'utf8')
+        if (existsSync(bundledConf)) {
+          try {
+            // Read the bundled config
+            let confContent = await readFile(bundledConf, 'utf8')
 
-          // Update cron.database_name to 'ferretdb' (required for pg_cron to work with DocumentDB)
-          confContent = confContent.replace(
-            /cron\.database_name\s*=\s*'[^']*'/,
-            "cron.database_name = 'ferretdb'",
-          )
+            // Update cron.database_name to 'ferretdb' (required for pg_cron to work with DocumentDB)
+            confContent = confContent.replace(
+              /cron\.database_name\s*=\s*'[^']*'/,
+              "cron.database_name = 'ferretdb'",
+            )
 
-          // Write the modified config
-          await writeFile(pgConf, confContent)
-          logDebug(`Copied and configured postgresql.conf to ${pgConf}`)
-        } catch (copyError) {
-          logDebug(
-            `Warning: Could not copy postgresql.conf.sample: ${copyError}`,
-          )
-          // Continue anyway - initdb creates a default config
+            // Write the modified config
+            await writeFile(pgConf, confContent)
+            logDebug(`Copied and configured postgresql.conf to ${pgConf}`)
+          } catch (copyError) {
+            logDebug(
+              `Warning: Could not copy postgresql.conf.sample: ${copyError}`,
+            )
+            // Continue anyway - initdb creates a default config
+          }
+        } else {
+          logDebug(`Bundled postgresql.conf.sample not found at ${bundledConf}`)
         }
-      } else {
-        logDebug(`Bundled postgresql.conf.sample not found at ${bundledConf}`)
       }
     }
 
@@ -545,42 +645,32 @@ export class FerretDBEngine extends BaseEngine {
 
     const { platform, arch } = this.getPlatformInfo()
     const fullVersion = normalizeVersion(version)
-    const fullBackendVersion = normalizeDocumentDBVersion(
-      backendVersion || DEFAULT_DOCUMENTDB_VERSION,
-    )
+    const v1 = isV1(version)
+    const effectiveBackendVersion = v1
+      ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
+      : normalizeDocumentDBVersion(backendVersion || DEFAULT_DOCUMENTDB_VERSION)
 
-    // Get binary paths
+    // Get binary paths using version-aware helper
     const ferretdbPath = ferretdbBinaryManager.getFerretDBBinaryPath(
       fullVersion,
       platform,
       arch,
     )
-    const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-      fullBackendVersion,
+    const { backendPath: documentdbPath, pgSpawnEnv } = this.getBackendPaths(
+      version,
+      effectiveBackendVersion,
       platform,
       arch,
     )
-
-    // Get spawn env for postgresql-documentdb binaries:
-    // - Linux: LD_LIBRARY_PATH for shared libraries
-    // - macOS: DYLD_FALLBACK_LIBRARY_PATH (not stripped by SIP)
-    const baseSpawnEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
-      fullBackendVersion,
-      platform,
-      arch,
-    )
-    const pgSpawnEnv =
-      platform === 'darwin'
-        ? {
-            ...baseSpawnEnv,
-            DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
-          }
-        : baseSpawnEnv
 
     const ext = platformService.getExecutableExtension()
     const ferretdbBinary = join(ferretdbPath, 'bin', `ferretdb${ext}`)
     const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)
-    const psql = join(documentdbPath, 'bin', `psql${ext}`)
+    // v1 backend may be a minimal PostgreSQL install (shared with DocumentDB) that
+    // lacks client tools. Use postgres --single as fallback for database creation.
+    const psqlCandidate = join(documentdbPath, 'bin', `psql${ext}`)
+    const psql = existsSync(psqlCandidate) ? psqlCandidate : null
+    const postgresBinary = join(documentdbPath, 'bin', `postgres${ext}`)
 
     // Verify binaries exist
     if (!existsSync(ferretdbBinary)) {
@@ -604,9 +694,10 @@ export class FerretDBEngine extends BaseEngine {
     // Allocate backend port
     const backendPort = existingBackendPort || (await allocateBackendPort())
 
-    // Fix hardcoded Homebrew dylib paths (darwin-x64 binaries)
+    // v2 only: Fix hardcoded Homebrew dylib paths (darwin-x64 binaries)
     // Skip if already completed (marker written by initDataDir or a previous start)
-    if (platform === 'darwin') {
+    // v1 uses plain PostgreSQL which doesn't have DocumentDB extensions
+    if (!v1 && platform === 'darwin') {
       const dylibMarker = join(documentdbPath, '.dylib_fix_done')
       if (!existsSync(dylibMarker)) {
         await this.fixDylibDependencies(documentdbPath)
@@ -640,6 +731,30 @@ export class FerretDBEngine extends BaseEngine {
         logDebug('PostgreSQL backend already running, skipping start')
       } catch {
         // Exit code != 0 means not running — proceed to start
+      }
+
+      // v1 pre-start: Create ferretdb database using postgres --single mode
+      // when psql is unavailable (minimal PG install may lack client tools).
+      // postgres --single requires exclusive data dir access, so this MUST
+      // happen before pg_ctl start.
+      if (v1 && !psql && !pgAlreadyRunning) {
+        logDebug(
+          'psql not found in backend, using postgres --single to pre-create database',
+        )
+        try {
+          await spawnWithInput(
+            postgresBinary,
+            ['--single', '-D', pgDataDir, 'postgres'],
+            "CREATE DATABASE ferretdb ENCODING 'UTF8';\n",
+            { env: pgSpawnEnv, timeout: 30000 },
+          )
+          logDebug('Pre-created ferretdb database via postgres --single')
+        } catch {
+          // Database may already exist from a previous start — safe to ignore
+          logDebug(
+            'postgres --single CREATE DATABASE failed (may already exist)',
+          )
+        }
       }
 
       if (!pgAlreadyRunning) {
@@ -686,56 +801,60 @@ export class FerretDBEngine extends BaseEngine {
       }
 
       // 3. Create ferretdb database and extension (first start)
-      onProgress?.({
-        stage: 'starting',
-        message: 'Initializing FerretDB database...',
-      })
-      try {
-        // Create ferretdb database if it doesn't exist
-        // Add timeout to prevent hanging on Windows
-        await spawnAsync(
-          psql,
-          [
-            '-h',
-            '127.0.0.1',
-            '-p',
-            String(backendPort),
-            '-U',
-            'postgres',
-            '-c',
-            "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
-          ],
-          { env: pgSpawnEnv, timeout: 30000 },
-        ).catch(() => {
-          // Ignore error if database already exists (error code 42P04)
+      // For v1 without psql, database was already created pre-start via postgres --single
+      if (psql) {
+        onProgress?.({
+          stage: 'starting',
+          message: 'Initializing FerretDB database...',
         })
+        try {
+          // Create ferretdb database if it doesn't exist
+          await spawnAsync(
+            psql,
+            [
+              '-h',
+              '127.0.0.1',
+              '-p',
+              String(backendPort),
+              '-U',
+              'postgres',
+              '-c',
+              "CREATE DATABASE ferretdb WITH ENCODING 'UTF8';",
+            ],
+            { env: pgSpawnEnv, timeout: 30000 },
+          ).catch(() => {
+            // Ignore error if database already exists (error code 42P04)
+          })
 
-        // Create DocumentDB extension
-        // Add timeout to prevent hanging on Windows
-        await spawnAsync(
-          psql,
-          [
-            '-h',
-            '127.0.0.1',
-            '-p',
-            String(backendPort),
-            '-U',
-            'postgres',
-            '-d',
-            'ferretdb',
-            '-c',
-            'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;',
-          ],
-          { env: pgSpawnEnv, timeout: 30000 },
-        ).catch((error) => {
-          logWarning(`Failed to create documentdb extension: ${error}`)
-          // Continue anyway - extension might already exist
-        })
+          // v2 only: Create DocumentDB extension
+          // v1 uses plain PostgreSQL without DocumentDB
+          if (!v1) {
+            await spawnAsync(
+              psql,
+              [
+                '-h',
+                '127.0.0.1',
+                '-p',
+                String(backendPort),
+                '-U',
+                'postgres',
+                '-d',
+                'ferretdb',
+                '-c',
+                'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;',
+              ],
+              { env: pgSpawnEnv, timeout: 30000 },
+            ).catch((error) => {
+              logWarning(`Failed to create documentdb extension: ${error}`)
+              // Continue anyway - extension might already exist
+            })
+          }
 
-        logDebug('FerretDB database initialized')
-      } catch (error) {
-        logDebug(`Database initialization warning: ${error}`)
-        // Continue - might already be initialized
+          logDebug('FerretDB database initialized')
+        } catch (error) {
+          logDebug(`Database initialization warning: ${error}`)
+          // Continue - might already be initialized
+        }
       }
 
       // 4. Start FerretDB proxy
@@ -773,14 +892,22 @@ export class FerretDBEngine extends BaseEngine {
 
       logDebug(`Using debug port ${debugPort} for FerretDB HTTP debug handler`)
 
+      // v1 uses plain PostgreSQL without TLS configured, so sslmode=disable is required
+      // v2 uses postgresql-documentdb which handles SSL negotiation internally
+      const pgUrl = isV1(version)
+        ? `postgres://postgres@127.0.0.1:${backendPort}/ferretdb?sslmode=disable`
+        : `postgres://postgres@127.0.0.1:${backendPort}/ferretdb`
+
       const ferretArgs = [
         '--listen-addr',
         `127.0.0.1:${port}`,
         '--postgresql-url',
-        `postgres://postgres@127.0.0.1:${backendPort}/ferretdb`,
+        pgUrl,
         '--state-dir',
         containerDir,
-        '--no-auth',
+        // v2 requires --no-auth to disable SCRAM authentication
+        // v1 has auth disabled by default (flag doesn't exist)
+        ...(isV1(version) ? [] : ['--no-auth']),
         '--debug-addr',
         `127.0.0.1:${debugPort}`,
       ]
@@ -853,32 +980,20 @@ export class FerretDBEngine extends BaseEngine {
    * Stop FerretDB (reverse order: FerretDB first, then PostgreSQL)
    */
   async stop(container: ContainerConfig): Promise<void> {
-    const { name, backendVersion } = container
+    const { name, version, backendVersion } = container
     const { platform, arch } = this.getPlatformInfo()
+    const v1 = isV1(version)
 
-    const fullBackendVersion = normalizeDocumentDBVersion(
-      backendVersion || DEFAULT_DOCUMENTDB_VERSION,
-    )
+    const effectiveBackendVersion = v1
+      ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
+      : backendVersion || DEFAULT_DOCUMENTDB_VERSION
 
-    const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-      fullBackendVersion,
+    const { backendPath: documentdbPath, pgSpawnEnv } = this.getBackendPaths(
+      version,
+      effectiveBackendVersion,
       platform,
       arch,
     )
-
-    // Get spawn env for postgresql-documentdb binaries
-    const baseStopEnv = ferretdbBinaryManager.getDocumentDBSpawnEnv(
-      fullBackendVersion,
-      platform,
-      arch,
-    )
-    const pgSpawnEnv =
-      platform === 'darwin'
-        ? {
-            ...baseStopEnv,
-            DYLD_FALLBACK_LIBRARY_PATH: join(documentdbPath, 'lib'),
-          }
-        : baseStopEnv
 
     const ext = platformService.getExecutableExtension()
     const pgCtl = join(documentdbPath, 'bin', `pg_ctl${ext}`)

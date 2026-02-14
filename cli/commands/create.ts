@@ -22,7 +22,8 @@ import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
 import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
 import { resolve } from 'path'
-import { Engine } from '../../types'
+import { Engine, Platform } from '../../types'
+import { FERRETDB_VERSION_MAP } from '../../engines/ferretdb/version-maps'
 import type { BaseEngine } from '../../engines/base-engine'
 
 /**
@@ -517,6 +518,23 @@ export const createCommand = new Command('create')
 
         if (!version) {
           version = engineDefaults.defaultVersion
+        }
+
+        // FerretDB: auto-select v1 on Windows when no explicit version given
+        // v2 requires postgresql-documentdb which is not available on Windows
+        if (
+          engine === Engine.FerretDB &&
+          !options.dbVersion &&
+          platformService.getPlatformInfo().platform === Platform.Win32
+        ) {
+          version = FERRETDB_VERSION_MAP['1']
+          if (!options.json) {
+            console.log(
+              chalk.gray(
+                `  Using FerretDB v1 (${version}) for Windows compatibility`,
+              ),
+            )
+          }
         }
 
         if (!containerName) {

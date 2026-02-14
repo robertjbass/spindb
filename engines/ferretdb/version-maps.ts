@@ -5,11 +5,16 @@
  * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
  * https://github.com/robertjbass/hostdb/blob/main/releases.json
  *
- * FerretDB requires two binaries:
+ * FerretDB v2 requires two binaries:
  * - ferretdb: The MongoDB-compatible proxy
  * - postgresql-documentdb: PostgreSQL 17 with DocumentDB extension
  *
- * To update: Check releases.json, find databases.ferretdb, copy all version strings.
+ * FerretDB v1 requires:
+ * - ferretdb (from hostdb engine "ferretdb-v1"): The MongoDB-compatible proxy
+ * - Plain PostgreSQL (reuses postgresqlBinaryManager)
+ *
+ * To update: Check releases.json, find databases.ferretdb and databases.ferretdb-v1,
+ * copy all version strings.
  */
 
 import { logDebug } from '../../core/error-handler'
@@ -17,15 +22,20 @@ import { compareVersions } from '../../core/version-utils'
 
 /**
  * Map major versions to full versions for FerretDB proxy
- * Keys are major versions (e.g., "2")
+ * Keys are major versions (e.g., "1", "2")
  * Values are full versions from hostdb releases.json
+ *
+ * v1.x uses plain PostgreSQL as backend (all platforms incl. Windows)
+ * v2.x uses postgresql-documentdb as backend (macOS/Linux only)
  */
 export const FERRETDB_VERSION_MAP: Record<string, string> = {
-  // 1-part: major version -> latest
+  // v1: uses plain PostgreSQL backend
+  '1': '1.24.2',
+  '1.24': '1.24.2',
+  '1.24.2': '1.24.2',
+  // v2: uses postgresql-documentdb backend
   '2': '2.7.0',
-  // 2-part: major.minor -> latest patch
   '2.7': '2.7.0',
-  // 3-part: exact version (identity mapping)
   '2.7.0': '2.7.0',
 }
 
@@ -45,12 +55,30 @@ export const DOCUMENTDB_VERSION_MAP: Record<string, string> = {
  * Supported major FerretDB versions (1-part format).
  * Used for grouping and display purposes.
  */
-export const SUPPORTED_MAJOR_VERSIONS = ['2']
+export const SUPPORTED_MAJOR_VERSIONS = ['1', '2']
 
 /**
- * Default postgresql-documentdb version to use with FerretDB
+ * Default postgresql-documentdb version to use with FerretDB v2
  */
 export const DEFAULT_DOCUMENTDB_VERSION = '17-0.107.0'
+
+/**
+ * Default PostgreSQL version to use as backend for FerretDB v1
+ * v1 uses plain PostgreSQL (no DocumentDB extension needed)
+ */
+export const DEFAULT_V1_POSTGRESQL_VERSION = '17'
+
+/**
+ * Check if a FerretDB version is v1.x (uses plain PostgreSQL backend)
+ * vs v2.x (uses postgresql-documentdb backend)
+ *
+ * @param version - Version string (can be major, major.minor, or full)
+ * @returns true if the version is v1.x
+ */
+export function isV1(version: string): boolean {
+  const normalized = normalizeVersion(version)
+  return normalized.startsWith('1.')
+}
 
 /**
  * Fallback map of major versions to stable patch versions
