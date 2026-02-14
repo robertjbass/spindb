@@ -1251,10 +1251,23 @@ export class FerretDBEngine extends BaseEngine {
     // Validate database name before restore (defense-in-depth)
     assertValidDatabaseName(database)
 
-    return restoreBackup(container, backupPath, {
+    const result = await restoreBackup(container, backupPath, {
       database,
       drop: options.drop !== false,
     })
+
+    // Restart FerretDB proxy so it picks up the restored data.
+    // pg_restore writes directly to PostgreSQL, but FerretDB's proxy
+    // caches schema/collection metadata in memory and won't see
+    // the restored collections until restarted.
+    const containerDir = paths.getContainerPath(container.name, {
+      engine: ENGINE,
+    })
+    await this.stopFerretDBProcess(containerDir)
+    // start() detects PG is already running and only launches the proxy
+    await this.start(container)
+
+    return result
   }
 
   // Get connection string (MongoDB-compatible)
