@@ -74,7 +74,9 @@ import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
 import { influxdbBinaryManager } from '../../engines/influxdb/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
+  DEFAULT_V1_POSTGRESQL_VERSION,
   normalizeDocumentDBVersion,
+  isV1,
 } from '../../engines/ferretdb/version-maps'
 
 // Display manual installation instructions for missing dependencies
@@ -1727,26 +1729,41 @@ enginesCommand
       }
 
       if (['ferretdb', 'ferret'].includes(normalizedEngine)) {
-        // Check platform support
         const { platform } = platformService.getPlatformInfo()
-        if (platform === Platform.Win32) {
+
+        if (!version) {
+          // Auto-select v1 on Windows (v2 not supported)
+          if (platform === Platform.Win32) {
+            version = '1'
+            console.log(
+              chalk.gray(
+                '  Auto-selecting FerretDB v1 (v2 is not available on Windows)',
+              ),
+            )
+          } else {
+            console.error(uiError('FerretDB requires a version (e.g., 1 or 2)'))
+            process.exit(1)
+          }
+        }
+
+        // Block v2 on Windows with helpful message
+        if (platform === Platform.Win32 && !isV1(version)) {
           console.error(
-            uiError('FerretDB is not supported on Windows via hostdb'),
+            uiError(
+              'FerretDB v2 is not supported on Windows (postgresql-documentdb has startup issues)',
+            ),
           )
           console.log(
             chalk.gray(
-              '  FerretDB binaries are only available for macOS and Linux.',
+              '  Use FerretDB v1 instead, which uses plain PostgreSQL:',
             ),
           )
-          process.exit(1)
-        }
-
-        if (!version) {
-          console.error(uiError('FerretDB requires a version (e.g., 2)'))
+          console.log(chalk.cyan('    spindb engines download ferretdb 1'))
           process.exit(1)
         }
 
         const engine = getEngine(Engine.FerretDB)
+        const v1 = isV1(version)
 
         const spinner = createSpinner(
           `Checking FerretDB ${version} binaries...`,
@@ -1780,18 +1797,31 @@ enginesCommand
         )
         console.log(chalk.gray(`  FerretDB location: ${binPath}`))
 
-        // Also show postgresql-documentdb location
-        const fullDocumentDBVersion = normalizeDocumentDBVersion(
-          DEFAULT_DOCUMENTDB_VERSION,
-        )
-        const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-          fullDocumentDBVersion,
-          ferretPlatform,
-          ferretArch,
-        )
-        console.log(
-          chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`),
-        )
+        // Show backend location (version-dependent)
+        if (v1) {
+          const pgFullVersion = postgresqlBinaryManager.getFullVersion(
+            DEFAULT_V1_POSTGRESQL_VERSION,
+          )
+          const pgPath = paths.getBinaryPath({
+            engine: 'postgresql',
+            version: pgFullVersion,
+            platform: ferretPlatform,
+            arch: ferretArch,
+          })
+          console.log(chalk.gray(`  PostgreSQL backend location: ${pgPath}`))
+        } else {
+          const fullDocumentDBVersion = normalizeDocumentDBVersion(
+            DEFAULT_DOCUMENTDB_VERSION,
+          )
+          const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
+            fullDocumentDBVersion,
+            ferretPlatform,
+            ferretArch,
+          )
+          console.log(
+            chalk.gray(`  postgresql-documentdb location: ${documentdbPath}`),
+          )
+        }
 
         // Skip client tools check - FerretDB uses MongoDB client tools (mongosh)
         // which are installed separately via: spindb engines download mongodb

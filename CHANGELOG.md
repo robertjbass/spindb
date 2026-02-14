@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.6] - 2026-02-14
+
+### Added
+- **FerretDB v1 support** - FerretDB now supports both v1 (1.24.2) and v2 (2.7.0). v1 uses plain PostgreSQL as backend (lighter, all platforms including Windows), v2 uses postgresql-documentdb (macOS/Linux only). Version number determines which backend is used automatically.
+- **FerretDB Windows support** - FerretDB v1 enables Windows compatibility. `spindb create` auto-selects v1 on Windows when no version is specified.
+- **FerretDB v1 integration tests** - Full integration test suite for FerretDB v1 (`tests/integration/ferretdb-v1.test.ts`) covering container lifecycle, seed, backup/restore, rename, port conflict, and partial shutdown recovery. v1 restore asserts exact row count (no DocumentDB metadata conflicts).
+- **FerretDB v1 CI job** - New `test-ferretdb-v1` CI job runs on all 5 platforms including Windows. Runs after v2 job to avoid backend port conflicts.
+- **FerretDB binary URL unit tests** - New `tests/unit/ferretdb-binary-urls.test.ts` tests v1 vs v2 platform support (5 vs 4 platforms), Windows support, and binary URL generation differences.
+- **FerretDB v1 version validator tests** - Added `isV1()`, `FERRETDB_VERSION_MAP['1']`, and `DEFAULT_V1_POSTGRESQL_VERSION` test coverage to existing version validator test file.
+- **FerretDB v1 test runner support** - `pnpm test:engine ferretdb-v1` (aliases: ferret-v1, fdb-v1, fdb1) runs v1 integration tests independently from v2.
+- **FerretDB v1 demo containers** - `pnpm generate:missing` now creates both `demo-ferretdb` (v2) and `demo-ferretdb-v1` (v1) via `VERSION_OVERRIDES` map.
+
+### Changed
+- **FerretDB engine download** - `spindb engines download ferretdb` now supports version selection. On Windows, v2 is blocked with a helpful message suggesting v1.
+- **FerretDB engine deletion** - v1 installations skip PostgreSQL backend cleanup (shared with standalone PostgreSQL containers). v2 continues to clean up postgresql-documentdb as before.
+- **FerretDB platform support** - Removed blanket Windows block; platform checks are now version-aware.
+
+### Fixed
+- **FerretDB v1 startup** - Auth flag (`--no-auth`) only passed for v2 (v1 has auth disabled by default). PostgreSQL URL includes `sslmode=disable` for v1 (pgx driver defaults to TLS).
+- **FerretDB database creation** - When psql is unavailable in the PostgreSQL backend, uses `postgres --single` mode pre-start to create the ferretdb database.
+- **Menu container creation** - Added error handling around engine start in interactive menu. On start failure, orphaned containers are now cleaned up automatically.
+
 ## [0.34.5] - 2026-02-11
 
 ### Added

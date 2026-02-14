@@ -55,7 +55,7 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 
 ### Binary Sources
 
-All engines from hostdb except: PostgreSQL/Windows uses EDB binaries (`engines/postgresql/edb-binary-urls.ts`). ClickHouse and FerretDB are macOS/Linux only.
+All engines from hostdb except: PostgreSQL/Windows uses EDB binaries (`engines/postgresql/edb-binary-urls.ts`). ClickHouse is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
 
 ## Common Tasks
 
