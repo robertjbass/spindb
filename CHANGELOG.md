@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.7] - 2026-02-14
+
+### Fixed
+- **FerretDB restore data visibility** - After `pg_restore`, the FerretDB proxy is now automatically restarted so it picks up the restored collections and documents. Previously, FerretDB's in-memory metadata cache would show 0 documents after a restore because the proxy didn't know about data written directly to PostgreSQL.
+
 ## [0.34.6] - 2026-02-14
 
 ### Added
