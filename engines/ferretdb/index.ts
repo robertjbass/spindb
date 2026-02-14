@@ -759,23 +759,34 @@ export class FerretDBEngine extends BaseEngine {
 
       if (!pgAlreadyRunning) {
         // Use pg_ctl to start PostgreSQL
-        // On Windows, pg_ctl -w (wait mode) hangs indefinitely even after PG reports
-        // "ready to accept connections". Skip -w on Windows and rely on waitForPort() below.
-        const pgCtlArgs = [
-          'start',
-          '-D',
-          pgDataDir,
-          '-l',
-          pgLogFile,
-          '-o',
-          `-p ${backendPort} -h 127.0.0.1`,
-          ...(isWindows() ? [] : ['-w']),
-        ]
+        // On Windows, spawnAsync pipes stdout/stderr which get inherited by the
+        // PostgreSQL background process, preventing the 'close' event from firing
+        // until PG itself exits (causing a 60s timeout even though PG is ready).
+        // Use exec() on Windows (matches process-manager.ts approach) which runs
+        // through the shell and doesn't hold pipes open. On Unix, use -w (wait mode).
         try {
-          await spawnAsync(pgCtl, pgCtlArgs, {
-            env: pgSpawnEnv,
-            timeout: 60000,
-          })
+          if (isWindows()) {
+            const cmd = `"${pgCtl}" start -D "${pgDataDir}" -l "${pgLogFile}" -o "-p ${backendPort} -h 127.0.0.1"`
+            await execAsync(cmd, {
+              env: { ...process.env, ...pgSpawnEnv },
+              timeout: 30000,
+            })
+          } else {
+            const pgCtlArgs = [
+              'start',
+              '-D',
+              pgDataDir,
+              '-l',
+              pgLogFile,
+              '-o',
+              `-p ${backendPort} -h 127.0.0.1`,
+              '-w',
+            ]
+            await spawnAsync(pgCtl, pgCtlArgs, {
+              env: pgSpawnEnv,
+              timeout: 60000,
+            })
+          }
         } catch (pgError) {
           // Read PostgreSQL log for debugging
           let pgLog = ''
