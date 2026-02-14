@@ -133,6 +133,7 @@ Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL backend (:543
 4. **Connection strings**: No auth needed: `mongodb://127.0.0.1:${port}/${db}`
 5. **v1 hostdb build**: FerretDB v1 source uses `//go:embed *.txt` for `build/version/version.txt`. The hostdb build script must create this file before `go build`, otherwise the binary panics on `--version`.
 6. **v1 psql missing**: If `postgresqlBinaryManager.isInstalled()` finds an existing minimal PG install that lacks client tools, v1 falls back to `postgres --single` for pre-start database creation.
+7. **hostdb-sync test**: FerretDB uses two hostdb engine names: `ferretdb` (v2) and `ferretdb-v1` (v1). The hostdb-sync test uses `FERRETDB_V2_VERSION_MAP` and `FERRETDB_V1_VERSION_MAP` (filtered from the combined `FERRETDB_VERSION_MAP`) so each version set is verified against the correct hostdb engine. Adding new FerretDB versions to the combined map automatically propagates to the correct filtered map based on the `1.`/`2.` prefix.
 
 See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details including hostdb build process.
 

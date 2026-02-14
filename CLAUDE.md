@@ -57,6 +57,10 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 
 All engines from hostdb except: PostgreSQL/Windows uses EDB binaries (`engines/postgresql/edb-binary-urls.ts`). ClickHouse is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
 
+### hostdb Engine Names vs SpinDB Engines
+
+Most SpinDB engines map 1:1 to hostdb engine names. Exception: **FerretDB uses two hostdb engines** — `ferretdb` (v2 binaries) and `ferretdb-v1` (v1 binaries). The `tests/integration/hostdb-sync.test.ts` test verifies version maps against hostdb releases.json. When an engine has split hostdb names, use filtered version maps (e.g., `FERRETDB_V1_VERSION_MAP`, `FERRETDB_V2_VERSION_MAP`) so each is verified against the correct hostdb engine. The combined `FERRETDB_VERSION_MAP` is still the primary map used by the engine at runtime.
+
 ## Common Tasks
 
 ### Dev Commands
