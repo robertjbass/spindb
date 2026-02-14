@@ -525,7 +525,7 @@ jobs:
   # Note: Windows is not supported due to postgresql-documentdb startup issues
   # ============================================
   test-ferretdb:
-    name: FerretDB ${{ matrix.icon }} ${{ matrix.label }}
+    name: FerretDB v2 ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -607,6 +607,105 @@ jobs:
           Write-Host ""
           Write-Host "=== FerretDB binary directory ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*documentdb*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== FerretDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # FerretDB v1 Integration Tests
+  # v1 uses plain PostgreSQL backend (no DocumentDB) - supports all platforms incl. Windows
+  # Runs after test-ferretdb to avoid backend port conflicts (both use dynamic PG ports)
+  # ============================================
+  test-ferretdb-v1:
+    name: FerretDB v1 ${{ matrix.icon }} ${{ matrix.label }}
+    needs: [test-ferretdb]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache FerretDB v1 binaries - ferretdb-v1 proxy + plain PostgreSQL
+      - name: Cache FerretDB v1 binaries
+        uses: actions/cache@v4
+        id: ferretdb-v1-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-ferretdb-1-pg-17-${{ runner.os }}-${{ runner.arch }}
+
+      # Download FerretDB v1 binaries (proxy only, backend is plain PostgreSQL)
+      - name: Download FerretDB v1 binaries
+        run: pnpm start engines download ferretdb 1
+
+      # FerretDB uses mongosh (MongoDB shell) for connect/run commands
+      # Download MongoDB binaries to get bundled mongosh
+      - name: Download MongoDB binaries (for mongosh)
+        run: pnpm start engines download mongodb 8.0
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run FerretDB v1 integration tests
+        run: pnpm test:engine ferretdb-v1
+        timeout-minutes: 20
+
+      - name: Show FerretDB v1 logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== FerretDB container directories ==="
+          ls -la ~/.spindb/containers/ferretdb/ 2>/dev/null || echo "No FerretDB containers directory"
+          echo ""
+          echo "=== FerretDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -iE "(ferret|postgresql)" || echo "No FerretDB binaries found"
+          echo ""
+          echo "=== FerretDB log files ==="
+          find ~/.spindb/containers/ferretdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== PostgreSQL backend log files ==="
+          find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
+
+      - name: Show FerretDB v1 logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== FerretDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== FerretDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*postgresql*" } | Select-Object FullName
           Write-Host ""
           Write-Host "=== FerretDB log files ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
@@ -2796,6 +2895,7 @@ jobs:
         test-duckdb,
         test-mongodb,
         test-ferretdb,
+        test-ferretdb-v1,
         test-redis,
         test-valkey,
         test-clickhouse,
@@ -2853,7 +2953,11 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.test-ferretdb.result }}" != "success" ]; then
-            echo "FerretDB tests failed"
+            echo "FerretDB v2 tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-ferretdb-v1.result }}" != "success" ]; then
+            echo "FerretDB v1 tests failed"
             exit 1
           fi
           if [ "${{ needs.test-redis.result }}" != "success" ]; then
