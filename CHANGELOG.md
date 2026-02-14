@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.8] - 2026-02-14
+
+### Fixed
+- **FerretDB v1 Windows startup** - `pg_ctl -w` (wait mode) hangs indefinitely on Windows even after PostgreSQL reports ready. Now omits `-w` on Windows and relies on `waitForPort()` for readiness detection.
+
 ## [0.34.7] - 2026-02-14
 
 ### Fixed

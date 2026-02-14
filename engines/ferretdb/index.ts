@@ -759,22 +759,23 @@ export class FerretDBEngine extends BaseEngine {
 
       if (!pgAlreadyRunning) {
         // Use pg_ctl to start PostgreSQL
-        // Add 60s timeout to prevent hanging if PostgreSQL fails to start (especially on Windows)
+        // On Windows, pg_ctl -w (wait mode) hangs indefinitely even after PG reports
+        // "ready to accept connections". Skip -w on Windows and rely on waitForPort() below.
+        const pgCtlArgs = [
+          'start',
+          '-D',
+          pgDataDir,
+          '-l',
+          pgLogFile,
+          '-o',
+          `-p ${backendPort} -h 127.0.0.1`,
+          ...(isWindows() ? [] : ['-w']),
+        ]
         try {
-          await spawnAsync(
-            pgCtl,
-            [
-              'start',
-              '-D',
-              pgDataDir,
-              '-l',
-              pgLogFile,
-              '-o',
-              `-p ${backendPort} -h 127.0.0.1`,
-              '-w', // Wait for startup
-            ],
-            { env: pgSpawnEnv, timeout: 60000 },
-          )
+          await spawnAsync(pgCtl, pgCtlArgs, {
+            env: pgSpawnEnv,
+            timeout: 60000,
+          })
         } catch (pgError) {
           // Read PostgreSQL log for debugging
           let pgLog = ''
