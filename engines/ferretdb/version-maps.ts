@@ -81,6 +81,24 @@ export function isV1(version: string): boolean {
 }
 
 /**
+ * Version map for FerretDB v2 only (hostdb engine: "ferretdb")
+ * Used by hostdb-sync tests to verify against the correct hostdb engine.
+ */
+export const FERRETDB_V2_VERSION_MAP: Record<string, string> =
+  Object.fromEntries(
+    Object.entries(FERRETDB_VERSION_MAP).filter(([, v]) => v.startsWith('2.')),
+  )
+
+/**
+ * Version map for FerretDB v1 only (hostdb engine: "ferretdb-v1")
+ * Used by hostdb-sync tests to verify against the correct hostdb engine.
+ */
+export const FERRETDB_V1_VERSION_MAP: Record<string, string> =
+  Object.fromEntries(
+    Object.entries(FERRETDB_VERSION_MAP).filter(([, v]) => v.startsWith('1.')),
+  )
+
+/**
  * Fallback map of major versions to stable patch versions
  * Used when hostdb repository is unreachable.
  * Spread into a new object so it can diverge from FERRETDB_VERSION_MAP if needed.
