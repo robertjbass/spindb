@@ -1327,9 +1327,25 @@ export class FerretDBEngine extends BaseEngine {
     const containerDir = paths.getContainerPath(container.name, {
       engine: ENGINE,
     })
-    await this.stopFerretDBProcess(containerDir)
-    // start() detects PG is already running and only launches the proxy
-    await this.start(container)
+    try {
+      await this.stopFerretDBProcess(containerDir)
+      // start() detects PG is already running and only launches the proxy
+      await this.start(container)
+    } catch (error) {
+      const err = error as Error
+      logWarning(`Failed to restart FerretDB proxy after restore: ${err.message}`)
+      // Retry once — transient issues (port race, slow PG) can resolve on second attempt
+      try {
+        await this.stopFerretDBProcess(containerDir).catch(() => {})
+        await this.start(container)
+      } catch {
+        throw new Error(
+          `Restore succeeded but FerretDB proxy failed to restart. ` +
+            `Data is safely in PostgreSQL. Run 'spindb start ${container.name}' to restart manually. ` +
+            `Original error: ${err.message}`,
+        )
+      }
+    }
 
     return result
   }
