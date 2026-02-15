@@ -24,7 +24,8 @@ on:
 #   windows-latest
 #
 # Exceptions:
-#   - ClickHouse, FerretDB: No Windows (no hostdb binaries) → 4 runners
+#   - ClickHouse, FerretDB v2: No Windows (no hostdb binaries) → 4 runners
+#   - FerretDB v1: All platforms including Windows (plain PostgreSQL backend)
 #   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
 #
 # Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)

@@ -4,7 +4,7 @@
  * Generates download URLs for TypeDB binaries from the layerbase registry.
  */
 
-import type { Platform, Arch } from '../../types'
+import { type Platform, type Arch, Engine } from '../../types'
 import { normalizeVersion } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 
@@ -25,7 +25,7 @@ export function getBinaryUrl(
   const fullVersion = normalizeVersion(version)
   const ext = getArchiveExtension(platform)
 
-  return buildHostdbUrl('typedb', {
+  return buildHostdbUrl(Engine.TypeDB, {
     version: fullVersion,
     hostdbPlatform: `${platform}-${arch}`,
     extension: ext,

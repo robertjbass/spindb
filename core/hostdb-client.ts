@@ -260,6 +260,34 @@ export async function fetchWithRegistryFallback(
   }
 }
 
+/**
+ * Try fetching from multiple registry URLs in order, returning the first
+ * successful (response.ok) Response. Logs per-URL failures via the
+ * supplied logger callback.
+ *
+ * @param urls - URLs to try in order (e.g., layerbase then GitHub)
+ * @param logger - Callback for logging per-URL failures
+ * @returns The first successful Response
+ * @throws Error if all URLs fail
+ */
+export async function fetchFromRegistryUrls(
+  urls: string[],
+  logger: (message: string) => void,
+): Promise<Response> {
+  let lastError: Error | null = null
+  for (const url of urls) {
+    try {
+      const response = await fetch(url)
+      if (response.ok) return response
+      logger(`Registry fetch from ${url}: HTTP ${response.status}`)
+    } catch (error) {
+      logger(`Registry fetch from ${url} failed: ${error}`)
+      lastError = error as Error
+    }
+  }
+  throw lastError ?? new Error('All release registries failed')
+}
+
 export type BuildDownloadUrlOptions = {
   version: string
   platform: Platform

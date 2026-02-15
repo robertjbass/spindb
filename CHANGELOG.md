@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.10] - 2026-02-15
+
+### Fixed
+- **Socket leak in FerretDB v1 test** - Added `socket.destroy()` in the error handler for the PostgreSQL backend connectivity check, preventing lingering handles.
+- **CI comment accuracy** - Updated OS Coverage Strategy comment to clarify that only FerretDB v2 (not v1) lacks Windows support.
+
+### Changed
+- **Type-safe engine names in binary URLs** - CockroachDB and TypeDB `binary-urls.ts` now use the `Engine` enum instead of string literals for `buildHostdbUrl` calls.
+- **Shared registry fetch utility** - Extracted the multi-URL fetch loop from QuestDB's `hostdb-releases.ts` into `fetchFromRegistryUrls()` in `core/hostdb-client.ts`.
+
 ## [0.34.9] - 2026-02-14
 
 ### Fixed

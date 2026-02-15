@@ -4,7 +4,7 @@
  * Generates download URLs for CockroachDB binaries from the layerbase registry.
  */
 
-import type { Platform, Arch } from '../../types'
+import { type Platform, type Arch, Engine } from '../../types'
 import { normalizeVersion } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 
@@ -25,7 +25,7 @@ export function getBinaryUrl(
   const fullVersion = normalizeVersion(version)
   const ext = platform === 'win32' ? 'zip' : 'tar.gz'
 
-  return buildHostdbUrl('cockroachdb', {
+  return buildHostdbUrl(Engine.CockroachDB, {
     version: fullVersion,
     hostdbPlatform: `${platform}-${arch}`,
     extension: ext,
