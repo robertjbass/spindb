@@ -2881,3 +2881,89 @@ jobs:
   #       run: pnpm test:engine clickhouse
   #       timeout-minutes: 15
 
+  # ============================================
+  # Summary Job - Ensures all tests pass
+  # ============================================
+  # Single required check in branch protection so you don't need to
+  # maintain 50+ individual required checks. Individual job results
+  # still appear on the PR checks page.
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [
+        unit-tests,
+        lint,
+        hostdb-sync,
+        test-postgresql,
+        test-mariadb,
+        test-mysql,
+        test-sqlite,
+        test-duckdb,
+        test-mongodb,
+        test-ferretdb,
+        test-ferretdb-v1,
+        test-redis,
+        test-valkey,
+        test-clickhouse,
+        test-qdrant,
+        test-meilisearch,
+        test-couchdb,
+        test-cockroachdb,
+        test-surrealdb,
+        test-questdb,
+        test-typedb,
+        test-influxdb,
+        test-cli-e2e,
+        test-rename-clone,
+        test-clickhouse-rename,
+        test-fresh-install,
+        test-upgrade,
+        test-self-update,
+        test-docker-linux,
+        test-docker-linux-arm64,
+        test-docker-export,
+      ]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          results=(
+            "${{ needs.unit-tests.result }}"
+            "${{ needs.lint.result }}"
+            "${{ needs.hostdb-sync.result }}"
+            "${{ needs.test-postgresql.result }}"
+            "${{ needs.test-mariadb.result }}"
+            "${{ needs.test-mysql.result }}"
+            "${{ needs.test-sqlite.result }}"
+            "${{ needs.test-duckdb.result }}"
+            "${{ needs.test-mongodb.result }}"
+            "${{ needs.test-ferretdb.result }}"
+            "${{ needs.test-ferretdb-v1.result }}"
+            "${{ needs.test-redis.result }}"
+            "${{ needs.test-valkey.result }}"
+            "${{ needs.test-clickhouse.result }}"
+            "${{ needs.test-qdrant.result }}"
+            "${{ needs.test-meilisearch.result }}"
+            "${{ needs.test-couchdb.result }}"
+            "${{ needs.test-cockroachdb.result }}"
+            "${{ needs.test-surrealdb.result }}"
+            "${{ needs.test-questdb.result }}"
+            "${{ needs.test-typedb.result }}"
+            "${{ needs.test-influxdb.result }}"
+            "${{ needs.test-cli-e2e.result }}"
+            "${{ needs.test-rename-clone.result }}"
+            "${{ needs.test-clickhouse-rename.result }}"
+            "${{ needs.test-fresh-install.result }}"
+            "${{ needs.test-upgrade.result }}"
+            "${{ needs.test-self-update.result }}"
+            "${{ needs.test-docker-linux.result }}"
+            "${{ needs.test-docker-linux-arm64.result }}"
+            "${{ needs.test-docker-export.result }}"
+          )
+          for result in "${results[@]}"; do
+            if [ "$result" != "success" ]; then
+              echo "One or more CI jobs failed or were cancelled"
+              exit 1
+            fi
+          done
+          echo "All CI checks passed!"
