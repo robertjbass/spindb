@@ -19,6 +19,8 @@ export type EngineConfig = {
   clientTools: string[]
   licensing?: string | string[]
   notes?: string
+  platforms?: string[]
+  versionPlatforms?: Record<string, string[]>
 }
 
 export type EnginesJson = {
@@ -91,4 +93,58 @@ export function getAllEngines(): Engine[] {
 
 export function clearEnginesCache(): void {
   cachedEngines = null
+}
+
+/**
+ * Filter engines data to only include engines and versions supported on the given platform.
+ *
+ * - If an engine has `platforms` and the platformKey isn't listed, the engine is removed.
+ * - If an engine has `versionPlatforms`, versions whose entry excludes the platformKey are removed.
+ *   Versions with no entry in `versionPlatforms` are kept (assumed all-platform).
+ * - If filtering removes all versions, the engine is removed.
+ * - If the defaultVersion is removed, it's set to the first remaining version.
+ */
+export function filterEnginesByPlatform(
+  enginesData: EnginesJson,
+  platformKey: string,
+): EnginesJson {
+  const filtered: Record<string, EngineConfig> = {}
+
+  for (const [name, config] of Object.entries(enginesData.engines)) {
+    // Engine-level platform check
+    if (config.platforms && !config.platforms.includes(platformKey)) {
+      continue
+    }
+
+    // Version-level platform check
+    if (config.versionPlatforms) {
+      const filteredVersions = config.supportedVersions.filter((version) => {
+        const platforms = config.versionPlatforms![version]
+        // If no entry for this version, it's available on all platforms
+        if (!platforms) return true
+        return platforms.includes(platformKey)
+      })
+
+      if (filteredVersions.length === 0) {
+        continue
+      }
+
+      const defaultVersion = filteredVersions.includes(config.defaultVersion)
+        ? config.defaultVersion
+        : filteredVersions[0]
+
+      filtered[name] = {
+        ...config,
+        supportedVersions: filteredVersions,
+        defaultVersion,
+      }
+    } else {
+      filtered[name] = config
+    }
+  }
+
+  return {
+    ...enginesData,
+    engines: filtered as Record<Engine, EngineConfig>,
+  }
 }

@@ -114,6 +114,19 @@
         "notes": {
           "type": "string",
           "description": "Additional notes about the engine"
+        },
+        "platforms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Supported platform-arch combos (e.g. 'darwin-arm64'). If omitted, all platforms are supported."
+        },
+        "versionPlatforms": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Per-version platform overrides. Keys are version strings, values are platform-arch arrays."
         }
       },
       "additionalProperties": false

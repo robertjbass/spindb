@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.3] - 2026-02-15
+
+### Added
+- **Platform-aware engine filtering** — `spindb engines supported` now filters engines and versions by the current platform. ClickHouse is hidden on Windows; FerretDB v2 is hidden on Windows (only v1 shown). Engines with no platform restrictions are unaffected.
+- **`platforms` and `versionPlatforms` fields in engines.json** — New optional schema fields allow declaring engine-level and per-version platform support in the registry.
+
 ## [0.35.2] - 2026-02-15
 
 ### Fixed

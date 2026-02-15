@@ -144,7 +144,8 @@
       "superuser": "default",
       "clientTools": ["clickhouse"],
       "licensing": "Apache-2.0",
-      "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123. WSL only on Windows."
+      "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123. WSL only on Windows.",
+      "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]
     },
     "qdrant": {
       "displayName": "Qdrant",
@@ -195,7 +196,17 @@
       "superuser": null,
       "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
       "licensing": "Apache-2.0",
-      "notes": "MongoDB-compatible proxy. v2 uses postgresql-documentdb (macOS/Linux). v1 uses plain PostgreSQL (all platforms incl. Windows)."
+      "notes": "MongoDB-compatible proxy. v2 uses postgresql-documentdb (macOS/Linux). v1 uses plain PostgreSQL (all platforms incl. Windows).",
+      "versionPlatforms": {
+        "1.24.2": [
+          "darwin-arm64",
+          "darwin-x64",
+          "linux-arm64",
+          "linux-x64",
+          "win32-x64"
+        ],
+        "2.7.0": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]
+      }
     },
     "couchdb": {
       "displayName": "CouchDB",
