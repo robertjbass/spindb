@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.9] - 2026-02-14
+
+### Fixed
+- **FerretDB Windows process termination** - `stopFerretDBProcess()` now force-kills the proxy directly on Windows. Previously, `taskkill` without `/F` sent `WM_CLOSE` (ignored by console processes), throwing an error that made the force-kill fallback and PID file cleanup unreachable. This caused the proxy to stay alive, blocking restores (0 documents), stops (`waitForStopped` timeout), and deletes (EBUSY file locks).
+- **FerretDB Windows PostgreSQL stop** - `stopPostgreSQLProcess()` now uses `exec()` on Windows instead of `spawnAsync()` with piped stdio, preventing pipe-related hangs (same pattern as the `pg_ctl start` Windows fix).
+
 ## [0.34.8] - 2026-02-14
 
 ### Fixed

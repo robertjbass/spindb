@@ -1129,13 +1129,32 @@ export class FerretDBEngine extends BaseEngine {
     const pidFile = join(containerDir, 'ferretdb.pid')
 
     if (existsSync(pidFile)) {
+      let pid = NaN
       try {
         const pidContent = await readFile(pidFile, 'utf8')
-        const pid = parseInt(pidContent.trim(), 10)
+        pid = parseInt(pidContent.trim(), 10)
+      } catch {
+        // PID file unreadable — clean it up below
+      }
 
-        if (!isNaN(pid) && platformService.isProcessRunning(pid)) {
-          logDebug(`Killing FerretDB process ${pid}`)
-          await platformService.terminateProcess(pid, false)
+      if (!isNaN(pid) && platformService.isProcessRunning(pid)) {
+        logDebug(`Killing FerretDB process ${pid}`)
+
+        // On Windows, taskkill without /F sends WM_CLOSE which console/server
+        // processes ignore, causing an error. Use force kill directly.
+        if (isWindows()) {
+          try {
+            await platformService.terminateProcess(pid, true)
+          } catch {
+            logDebug(`Force kill of FerretDB process ${pid} failed`)
+          }
+        } else {
+          // Unix: try graceful SIGTERM first, then SIGKILL
+          try {
+            await platformService.terminateProcess(pid, false)
+          } catch {
+            // Graceful termination failed — force kill below
+          }
 
           // Poll until process exits or timeout (10 seconds)
           const maxWaitMs = 10000
@@ -1152,15 +1171,29 @@ export class FerretDBEngine extends BaseEngine {
 
           // Force kill if still running after timeout
           if (platformService.isProcessRunning(pid)) {
-            logWarning(`Graceful termination timed out, force killing ${pid}`)
-            await platformService.terminateProcess(pid, true)
+            logWarning(
+              `Graceful termination timed out, force killing ${pid}`,
+            )
+            try {
+              await platformService.terminateProcess(pid, true)
+            } catch {
+              logDebug(`Force kill of FerretDB process ${pid} failed`)
+            }
           }
         }
 
-        await unlink(pidFile).catch(() => {})
-      } catch (error) {
-        logDebug(`Error stopping FerretDB: ${error}`)
+        // Wait briefly for process to fully exit after force kill
+        const exitWaitMs = isWindows() ? 3000 : 1000
+        const pollMs = 100
+        const exitStart = Date.now()
+        while (Date.now() - exitStart < exitWaitMs) {
+          if (!platformService.isProcessRunning(pid)) break
+          await new Promise((resolve) => setTimeout(resolve, pollMs))
+        }
       }
+
+      // Always clean up PID file
+      await unlink(pidFile).catch(() => {})
     }
   }
 
@@ -1172,24 +1205,49 @@ export class FerretDBEngine extends BaseEngine {
     pgDataDir: string,
     spawnEnv?: Record<string, string>,
   ): Promise<void> {
-    try {
-      // Add timeout to prevent hanging on Windows
-      await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'fast', '-w'], {
-        env: spawnEnv,
-        timeout: 30000,
-      })
-      logDebug('PostgreSQL stopped')
-    } catch (error) {
-      logDebug(`pg_ctl stop error: ${error}`)
-      // Try immediate mode if fast fails
+    if (isWindows()) {
+      // On Windows, use exec() instead of spawnAsync() to avoid pipe-related
+      // hangs (same issue as pg_ctl start -w). pg_ctl stop -w can block when
+      // stdout/stderr pipes prevent the child process from exiting cleanly.
+      try {
+        await execAsync(`"${pgCtl}" stop -D "${pgDataDir}" -m fast -w`, {
+          timeout: 30000,
+          env: spawnEnv ? { ...process.env, ...spawnEnv } : undefined,
+        })
+        logDebug('PostgreSQL stopped')
+      } catch (error) {
+        logDebug(`pg_ctl stop error: ${error}`)
+        try {
+          await execAsync(
+            `"${pgCtl}" stop -D "${pgDataDir}" -m immediate -w`,
+            {
+              timeout: 15000,
+              env: spawnEnv ? { ...process.env, ...spawnEnv } : undefined,
+            },
+          )
+        } catch {
+          logWarning('Failed to stop PostgreSQL gracefully')
+        }
+      }
+    } else {
       try {
         await spawnAsync(
           pgCtl,
-          ['stop', '-D', pgDataDir, '-m', 'immediate', '-w'],
-          { env: spawnEnv, timeout: 15000 },
+          ['stop', '-D', pgDataDir, '-m', 'fast', '-w'],
+          { env: spawnEnv, timeout: 30000 },
         )
-      } catch {
-        logWarning('Failed to stop PostgreSQL gracefully')
+        logDebug('PostgreSQL stopped')
+      } catch (error) {
+        logDebug(`pg_ctl stop error: ${error}`)
+        try {
+          await spawnAsync(
+            pgCtl,
+            ['stop', '-D', pgDataDir, '-m', 'immediate', '-w'],
+            { env: spawnEnv, timeout: 15000 },
+          )
+        } catch {
+          logWarning('Failed to stop PostgreSQL gracefully')
+        }
       }
     }
   }
