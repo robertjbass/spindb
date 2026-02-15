@@ -59,7 +59,7 @@ All engines from hostdb except: PostgreSQL/Windows uses EDB binaries (`engines/p
 
 ### hostdb Engine Names vs SpinDB Engines
 
-Most SpinDB engines map 1:1 to hostdb engine names. Exception: **FerretDB uses two hostdb engines** — `ferretdb` (v2 binaries) and `ferretdb-v1` (v1 binaries). The `tests/integration/hostdb-sync.test.ts` test verifies version maps against hostdb releases.json. When an engine has split hostdb names, use filtered version maps (e.g., `FERRETDB_V1_VERSION_MAP`, `FERRETDB_V2_VERSION_MAP`) so each is verified against the correct hostdb engine. The combined `FERRETDB_VERSION_MAP` is still the primary map used by the engine at runtime.
+Most SpinDB engines map 1:1 to hostdb engine names. FerretDB v1 and v2 both use the single `ferretdb` hostdb engine name. The `tests/integration/hostdb-sync.test.ts` test verifies the combined `FERRETDB_VERSION_MAP` against the `ferretdb` entry in hostdb releases.json.
 
 ## Common Tasks
 

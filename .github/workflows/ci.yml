@@ -658,7 +658,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache FerretDB v1 binaries - ferretdb-v1 proxy + plain PostgreSQL
+      # Cache FerretDB v1 binaries - ferretdb proxy + plain PostgreSQL
       - name: Cache FerretDB v1 binaries
         uses: actions/cache@v4
         id: ferretdb-v1-cache

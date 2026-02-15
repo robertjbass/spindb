@@ -9,7 +9,7 @@ FerretDB is a MongoDB-compatible proxy that stores data in PostgreSQL. It suppor
 2. **postgresql-documentdb** (hostdb: `postgresql-documentdb`) - PostgreSQL 17 with DocumentDB extension
 
 **v1 (all platforms including Windows):**
-1. **ferretdb** (hostdb: `ferretdb-v1`) - Stateless Go proxy (same protocol, older version)
+1. **ferretdb** (hostdb: `ferretdb`) - Stateless Go proxy (same protocol, older version)
 2. **Plain PostgreSQL** - Standard PostgreSQL via `postgresqlBinaryManager` (shared with standalone PG containers)
 
 This is a **composite engine** with unique binary management requirements. The `isV1(version)` helper in `version-maps.ts` is the single branching point for all version-dependent behavior.
@@ -258,5 +258,5 @@ FerretDB v2 CI tests are skipped on Windows runners. v1 tests should run on all 
 
 - [plans/FERRETDB.md](../../plans/FERRETDB.md) - Original implementation plan (may be outdated)
 - hostdb releases: [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) (v2 proxy)
-- hostdb releases: [ferretdb-v1-1.24.2](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-v1-1.24.2) (v1 proxy)
+- hostdb releases: [ferretdb-1.24.2](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-1.24.2) (v1 proxy)
 - hostdb releases: [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) (v2 backend)

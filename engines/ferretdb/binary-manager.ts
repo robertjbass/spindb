@@ -8,7 +8,7 @@
  *   2. postgresql-documentdb - PostgreSQL 17 with DocumentDB extension
  *
  * v1: Two binaries, but backend is shared:
- *   1. ferretdb (from hostdb "ferretdb-v1") - The MongoDB-compatible Go proxy
+ *   1. ferretdb - The MongoDB-compatible Go proxy
  *   2. Plain PostgreSQL - Managed by postgresqlBinaryManager (shared with standalone PG containers)
  *
  * This is a composite manager that coordinates the installation of both
@@ -24,6 +24,7 @@ import { paths } from '../../config/paths'
 import { spawnAsync, extractWindowsArchive } from '../../core/spawn-utils'
 import { isRenameFallbackError } from '../../core/fs-error-utils'
 import { logDebug } from '../../core/error-handler'
+import { fetchWithRegistryFallback } from '../../core/hostdb-client'
 import {
   Engine,
   Platform,
@@ -668,14 +669,16 @@ class FerretDBCompositeBinaryManager {
     const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
 
     try {
-      const response = await fetch(url, { signal: controller.signal })
+      const response = await fetchWithRegistryFallback(url, {
+        signal: controller.signal,
+      })
 
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error(
             `${displayName} binaries not found (404). ` +
               'This version may have been removed from hostdb. ' +
-              'Try a different version or check https://github.com/robertjbass/hostdb/releases',
+              'Try a different version or check https://registry.layerbase.host',
           )
         }
         throw new Error(
@@ -784,7 +787,7 @@ class FerretDBCompositeBinaryManager {
   ): Promise<void> {
     const entries = await readdir(extractDir, { withFileTypes: true })
 
-    // Look for engine directory (ferretdb-*, ferretdb-v1-*, or postgresql-documentdb-*)
+    // Look for engine directory (ferretdb-* or postgresql-documentdb-*)
     const engineDir = entries.find(
       (e) =>
         e.isDirectory() &&
