@@ -35,7 +35,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for ClickHouse binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/clickhouse-{version}/clickhouse-{version}-{platform}-{arch}.tar.gz
+ * Format: https://registry.layerbase.host/clickhouse-{version}/clickhouse-{version}-{platform}-{arch}.tar.gz
  *
  * @param version - ClickHouse version (e.g., '25.12', '25.12.3.21')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux')

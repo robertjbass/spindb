@@ -32,8 +32,8 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for MariaDB binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/mariadb-{version}/mariadb-{version}-{platform}-{arch}.tar.gz
- * Windows: https://github.com/robertjbass/hostdb/releases/download/mariadb-{version}/mariadb-{version}-{platform}-{arch}.zip
+ * Format: https://registry.layerbase.host/mariadb-{version}/mariadb-{version}-{platform}-{arch}.tar.gz
+ * Windows: https://registry.layerbase.host/mariadb-{version}/mariadb-{version}-{platform}-{arch}.zip
  *
  * @param version - MariaDB version (e.g., '11.8', '11.8.5')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux')

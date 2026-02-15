@@ -570,7 +570,7 @@ export class DuckDBEngine extends BaseEngine {
           throw new Error(
             `File not found (404) at ${url}. ` +
               `This version may have been removed from hostdb. ` +
-              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+              `Try a different version or check https://registry.layerbase.host`,
           )
         }
         throw new Error(

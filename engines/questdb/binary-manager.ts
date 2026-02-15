@@ -24,11 +24,12 @@ import { existsSync } from 'fs'
 import { join, dirname, relative } from 'path'
 import { chmod, symlink, readdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
+import {
+  LAYERBASE_RELEASES_URL,
+  GITHUB_RELEASES_URL,
+} from '../../core/hostdb-client'
 import { moveEntry } from '../../core/fs-error-utils'
 import { paths } from '../../config/paths'
-
-const RELEASES_URL =
-  'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 class QuestDBBinaryManager extends BaseBinaryManager {
   protected readonly config: BinaryManagerConfig = {
@@ -251,11 +252,20 @@ class QuestDBBinaryManager extends BaseBinaryManager {
    */
   private async checkHostdbAvailability(): Promise<boolean> {
     try {
-      // Use 10-second timeout to avoid hanging on slow/unresponsive networks
-      const response = await fetch(RELEASES_URL, {
-        signal: AbortSignal.timeout(10000),
-      })
-      if (!response.ok) return false
+      // Try layerbase first, fall back to GitHub
+      let response: Response | null = null
+      for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+        try {
+          response = await fetch(url, {
+            signal: AbortSignal.timeout(10000),
+          })
+          if (response.ok) break
+          response = null
+        } catch {
+          // Try next URL
+        }
+      }
+      if (!response || !response.ok) return false
 
       const releases = (await response.json()) as {
         databases?: Record<string, unknown>
@@ -287,7 +297,7 @@ class QuestDBBinaryManager extends BaseBinaryManager {
           `To use QuestDB now, you can:\n` +
           `  1. Wait for the next hostdb release with QuestDB binaries\n` +
           `  2. Download QuestDB manually from https://questdb.io/get-questdb/\n\n` +
-          `Check https://github.com/robertjbass/hostdb/releases for updates.`,
+          `Check https://registry.layerbase.host for updates.`,
       )
     }
 

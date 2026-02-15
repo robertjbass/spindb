@@ -36,7 +36,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for Meilisearch binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/meilisearch-{version}/meilisearch-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/meilisearch-{version}/meilisearch-{version}-{platform}-{arch}.{ext}
  *
  * @param version - Meilisearch version (e.g., '1', '1.33.1')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')

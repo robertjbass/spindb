@@ -1171,9 +1171,7 @@ export class FerretDBEngine extends BaseEngine {
 
           // Force kill if still running after timeout
           if (platformService.isProcessRunning(pid)) {
-            logWarning(
-              `Graceful termination timed out, force killing ${pid}`,
-            )
+            logWarning(`Graceful termination timed out, force killing ${pid}`)
             try {
               await platformService.terminateProcess(pid, true)
             } catch {
@@ -1218,24 +1216,20 @@ export class FerretDBEngine extends BaseEngine {
       } catch (error) {
         logDebug(`pg_ctl stop error: ${error}`)
         try {
-          await execAsync(
-            `"${pgCtl}" stop -D "${pgDataDir}" -m immediate -w`,
-            {
-              timeout: 15000,
-              env: spawnEnv ? { ...process.env, ...spawnEnv } : undefined,
-            },
-          )
+          await execAsync(`"${pgCtl}" stop -D "${pgDataDir}" -m immediate -w`, {
+            timeout: 15000,
+            env: spawnEnv ? { ...process.env, ...spawnEnv } : undefined,
+          })
         } catch {
           logWarning('Failed to stop PostgreSQL gracefully')
         }
       }
     } else {
       try {
-        await spawnAsync(
-          pgCtl,
-          ['stop', '-D', pgDataDir, '-m', 'fast', '-w'],
-          { env: spawnEnv, timeout: 30000 },
-        )
+        await spawnAsync(pgCtl, ['stop', '-D', pgDataDir, '-m', 'fast', '-w'], {
+          env: spawnEnv,
+          timeout: 30000,
+        })
         logDebug('PostgreSQL stopped')
       } catch (error) {
         logDebug(`pg_ctl stop error: ${error}`)

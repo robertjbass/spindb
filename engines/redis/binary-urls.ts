@@ -37,7 +37,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for Redis binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/redis-{version}/redis-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/redis-{version}/redis-{version}-{platform}-{arch}.{ext}
  *
  * @param version - Redis version (e.g., '7', '7.4.7')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')

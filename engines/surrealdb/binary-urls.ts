@@ -1,19 +1,17 @@
 /**
  * SurrealDB binary URL generation
  *
- * Generates download URLs for SurrealDB binaries from hostdb.
+ * Generates download URLs for SurrealDB binaries from the layerbase registry.
  */
 
 import type { Platform, Arch } from '../../types'
 import { normalizeVersion } from './version-maps'
-
-const HOSTDB_BASE_URL =
-  'https://github.com/robertjbass/hostdb/releases/download'
+import { buildHostdbUrl } from '../../core/hostdb-client'
 
 /**
  * Get the binary download URL for a specific version and platform
  *
- * URL format: https://github.com/robertjbass/hostdb/releases/download/surrealdb-{version}/surrealdb-{version}-{platform}-{arch}.{ext}
+ * URL format: https://registry.layerbase.host/surrealdb-{version}/surrealdb-{version}-{platform}-{arch}.{ext}
  *
  * @param version - SurrealDB version (e.g., '2.3.2' or '2')
  * @param platform - Target platform (darwin, linux, win32)
@@ -27,7 +25,11 @@ export function getBinaryUrl(
   const fullVersion = normalizeVersion(version)
   const ext = platform === 'win32' ? 'zip' : 'tar.gz'
 
-  return `${HOSTDB_BASE_URL}/surrealdb-${fullVersion}/surrealdb-${fullVersion}-${platform}-${arch}.${ext}`
+  return buildHostdbUrl('surrealdb', {
+    version: fullVersion,
+    hostdbPlatform: `${platform}-${arch}`,
+    extension: ext,
+  })
 }
 
 /**
