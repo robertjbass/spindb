@@ -22,7 +22,7 @@ const DEFAULT_CONTAINER_NAME = `demo-${ENGINE}`
 const SEED_FILE = getSeedFile(ENGINE, 'sample-db.js')
 
 async function main(): Promise<void> {
-  const { containerName, port } = parseArgs(DEFAULT_CONTAINER_NAME)
+  const { containerName, port, version } = parseArgs(DEFAULT_CONTAINER_NAME)
 
   console.log('FerretDB Database Generator')
   console.log('===========================\n')
@@ -38,6 +38,9 @@ async function main(): Promise<void> {
   if (!config) {
     console.log(`Container not found. Creating "${containerName}"...`)
     const createArgs = ['create', containerName, '--engine', ENGINE]
+    if (version) {
+      createArgs.push('--version', version)
+    }
     if (port) {
       createArgs.push('--port', port.toString())
     }

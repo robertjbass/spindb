@@ -148,7 +148,11 @@ function getCreateArgs(
   return args
 }
 
-function runGenerateDb(engine: string, containerName: string): Promise<number> {
+function runGenerateDb(
+  engine: string,
+  containerName: string,
+  version?: string,
+): Promise<number> {
   const scriptPath = join(__dirname, 'db', `${engine}.ts`)
 
   if (!existsSync(scriptPath)) {
@@ -158,7 +162,11 @@ function runGenerateDb(engine: string, containerName: string): Promise<number> {
 
   return new Promise((resolve) => {
     let settled = false
-    const child = spawn('tsx', [scriptPath, containerName], {
+    const args = [scriptPath, containerName]
+    if (version) {
+      args.push('--version', version)
+    }
+    const child = spawn('tsx', args, {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     })
@@ -320,7 +328,7 @@ async function main(): Promise<void> {
         `\nCreating and seeding ${containerName} (${engine}${versionLabel})...`,
       )
       console.log('─'.repeat(50))
-      const exitCode = await runGenerateDb(engine, containerName)
+      const exitCode = await runGenerateDb(engine, containerName, version)
 
       if (exitCode === 0) {
         created.push(containerName)
