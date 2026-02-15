@@ -6,10 +6,11 @@
  */
 
 import { logDebug } from '../../core/error-handler'
+import {
+  LAYERBASE_RELEASES_URL,
+  GITHUB_RELEASES_URL,
+} from '../../core/hostdb-client'
 import { TYPEDB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
-
-const HOSTDB_RELEASES_URL =
-  'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 // Cache for fetched versions (expires after 5 minutes)
 let cachedVersions: Record<string, string[]> | null = null
@@ -40,16 +41,25 @@ export async function fetchAvailableVersions(): Promise<
   }
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
-    let response: Response
-    try {
-      response = await fetch(HOSTDB_RELEASES_URL, { signal: controller.signal })
-    } finally {
-      clearTimeout(timeoutId)
+    let response: Response | null = null
+    for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+        try {
+          response = await fetch(url, { signal: controller.signal })
+        } finally {
+          clearTimeout(timeoutId)
+        }
+        if (response.ok) break
+        logDebug(`TypeDB releases fetch from ${url}: HTTP ${response.status}`)
+        response = null
+      } catch (error) {
+        logDebug(`TypeDB releases fetch from ${url} failed: ${error}`)
+      }
     }
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+    if (!response || !response.ok) {
+      throw new Error('All release registries failed')
     }
 
     const releases = (await response.json()) as HostdbReleases

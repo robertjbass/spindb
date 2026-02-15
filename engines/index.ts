@@ -23,10 +23,9 @@ import type { EngineInfo } from '../types'
 
 // Engines not supported on Windows
 // These engines either don't have Windows binaries or have issues running on Windows
-const WINDOWS_UNSUPPORTED_ENGINES = new Set([
-  Engine.ClickHouse,
-  Engine.FerretDB,
-])
+// Note: FerretDB v1 supports Windows (v2 does not), so it's not blanket-blocked here.
+// Version-specific platform checks are handled by the engine itself.
+const WINDOWS_UNSUPPORTED_ENGINES = new Set([Engine.ClickHouse])
 
 // Registry of available database engines
 export const engines: Record<string, BaseEngine> = {

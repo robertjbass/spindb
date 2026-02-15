@@ -52,7 +52,7 @@ describe('PostgreSQL BinaryManager', () => {
   })
 
   describe('getDownloadUrl', () => {
-    it('should generate valid hostdb GitHub releases URL for darwin-arm64', () => {
+    it('should generate valid layerbase registry URL for darwin-arm64', () => {
       const url = postgresqlBinaryManager.getDownloadUrl(
         '17',
         Platform.Darwin,
@@ -60,12 +60,8 @@ describe('PostgreSQL BinaryManager', () => {
       )
 
       assert(
-        url.includes('github.com/robertjbass/hostdb'),
-        'URL should use hostdb GitHub',
-      )
-      assert(
-        url.includes('releases/download'),
-        'URL should reference GitHub releases',
+        url.includes('registry.layerbase.host'),
+        'URL should use layerbase registry',
       )
       assert(
         url.includes('darwin-arm64'),
@@ -107,10 +103,9 @@ describe('PostgreSQL BinaryManager', () => {
         Arch.X64,
       )
 
-      // hostdb now hosts Windows binaries too
       assert(
-        url.includes('github.com/robertjbass/hostdb'),
-        'Windows URL should use hostdb GitHub',
+        url.includes('registry.layerbase.host'),
+        'Windows URL should use layerbase registry',
       )
       assert(
         url.includes('win32-x64'),

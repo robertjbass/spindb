@@ -12,7 +12,7 @@ import { Engine, type Platform, type Arch } from '../../types'
 /**
  * Build the download URL for SQLite binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/sqlite-{version}/sqlite-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/sqlite-{version}/sqlite-{version}-{platform}-{arch}.{ext}
  *
  * @param version - SQLite version (e.g., '3', '3.51.2')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')

@@ -22,6 +22,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   duckdb: 'duckdb.test.ts',
   mongodb: 'mongodb.test.ts',
   ferretdb: 'ferretdb.test.ts',
+  'ferretdb-v1': 'ferretdb-v1.test.ts',
   redis: 'redis.test.ts',
   valkey: 'valkey.test.ts',
   clickhouse: 'clickhouse.test.ts',
@@ -45,6 +46,10 @@ const ENGINE_ALIASES: Record<string, string> = {
   // FerretDB aliases
   ferret: 'ferretdb',
   fdb: 'ferretdb',
+  // FerretDB v1 aliases
+  'ferret-v1': 'ferretdb-v1',
+  'fdb-v1': 'ferretdb-v1',
+  fdb1: 'ferretdb-v1',
   // SQLite aliases
   lite: 'sqlite',
   // DuckDB aliases
@@ -77,6 +82,7 @@ const TEST_ORDER = [
   'duckdb',
   'mongodb',
   'ferretdb',
+  'ferretdb-v1',
   'redis',
   'valkey',
   'clickhouse',
@@ -124,6 +130,7 @@ function printUsage(): void {
   console.log('  duckdb        (aliases: duck)')
   console.log('  mongodb       (aliases: mongo)')
   console.log('  ferretdb      (aliases: ferret, fdb)')
+  console.log('  ferretdb-v1   (aliases: ferret-v1, fdb-v1, fdb1)')
   console.log('  redis')
   console.log('  valkey')
   console.log('  clickhouse')

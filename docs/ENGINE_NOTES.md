@@ -93,28 +93,47 @@ Detailed implementation notes for each engine. These are reference material for 
 
 ## FerretDB (Composite Engine)
 
-FerretDB is a MongoDB-compatible proxy that requires **two binaries** from hostdb:
+FerretDB is a MongoDB-compatible proxy that stores data in PostgreSQL. Supports **two major versions** with different backends:
 
-1. **ferretdb** - Stateless proxy (MongoDB wire protocol → PostgreSQL SQL)
-2. **postgresql-documentdb** - PostgreSQL 17 with DocumentDB extension
+**v2 (default, macOS/Linux only):**
+1. **ferretdb** (hostdb: `ferretdb`) - Stateless Go proxy
+2. **postgresql-documentdb** (hostdb: `postgresql-documentdb`) - PostgreSQL 17 with DocumentDB extension
 
-Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL+DocumentDB (:54320+)`
+**v1 (all platforms including Windows):**
+1. **ferretdb** (hostdb: `ferretdb`) - Stateless Go proxy (same protocol, older version)
+2. **Plain PostgreSQL** - Standard PostgreSQL via `postgresqlBinaryManager` (shared with standalone PG containers)
 
-**Key constraints:**
-- **FerretDB v2 only** - Requires DocumentDB extension (v1 not supported)
-- **Three ports per container** - MongoDB (27017), PostgreSQL backend (54320+), debug HTTP (37017+)
+Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL backend (:54320+)`
+
+**Key differences between v1 and v2:**
+- v1 uses plain PostgreSQL (lighter, all 5 platforms). v2 uses postgresql-documentdb (DocumentDB extension, macOS/Linux only).
+- v1 has auth disabled by default (no `--no-auth` flag). v2 requires `--no-auth` to disable SCRAM.
+- v1 needs `?sslmode=disable` on `--postgresql-url` (pgx defaults to TLS, plain PG has no SSL).
+- v1 binary verification skips `--version` (hostdb build lacks `version.txt` for go embed).
+- v1 engine deletion does NOT delete shared PostgreSQL binaries (v2 cleans up postgresql-documentdb).
+- v1 backend may lack `psql` (minimal PG install) — `postgres --single` used pre-start for database creation.
+
+**Windows support:**
+- hostdb has `ferretdb` v2 binaries for Windows but NOT `postgresql-documentdb` — v2 would download the proxy but fail to start (no backend).
+- `spindb create` auto-selects v1 on Windows. `spindb engines download ferretdb 2` on Windows is blocked with a helpful error.
+- `engines/index.ts` does NOT list FerretDB in `WINDOWS_UNSUPPORTED_ENGINES` — version-specific checks handled by the engine itself.
+
+**Three ports per container** — MongoDB (27017), PostgreSQL backend (54320+), debug HTTP (37017+)
 
 **FerretDB-specific flags (in `engines/ferretdb/index.ts`):**
-- `--no-auth` - Disables SCRAM authentication for local development (FerretDB 2.x enables auth by default)
+- `--no-auth` - v2 only: disables SCRAM authentication for local development
 - `--debug-addr=127.0.0.1:${port + 10000}` - Unique debug HTTP port per container (default 8088 causes conflicts)
 - `--listen-addr=127.0.0.1:${port}` - MongoDB wire protocol port
-- `--postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb` - Backend connection
+- `--postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb` - Backend connection (v1 appends `?sslmode=disable`)
 
 **Known issues & gotchas:**
-1. **Authentication**: FerretDB 2.x enables SCRAM by default. `--setup-username`/`--setup-password` flags do NOT exist. Use `--no-auth` for local dev.
+1. **Authentication**: FerretDB 2.x enables SCRAM by default. `--setup-username`/`--setup-password` flags do NOT exist. Use `--no-auth` for local dev. v1 has auth disabled by default.
 2. **Debug port conflicts**: Multiple containers fail if all use default debug port 8088. Solution: `--debug-addr=127.0.0.1:${port + 10000}`
-3. **Backup/restore limitations**: pg_dump/pg_restore has issues due to DocumentDB internal metadata tables. Use `custom` format with `--clean --if-exists`.
-4. **Connection strings**: No auth needed with `--no-auth`: `mongodb://127.0.0.1:${port}/${db}`
+3. **Backup/restore limitations**: pg_dump/pg_restore has issues due to DocumentDB internal metadata tables (v2). Use `custom` format with `--clean --if-exists`.
+4. **Connection strings**: No auth needed: `mongodb://127.0.0.1:${port}/${db}`
+5. **v1 hostdb build**: FerretDB v1 source uses `//go:embed *.txt` for `build/version/version.txt`. The hostdb build script must create this file before `go build`, otherwise the binary panics on `--version`.
+6. **v1 psql missing**: If `postgresqlBinaryManager.isInstalled()` finds an existing minimal PG install that lacks client tools, v1 falls back to `postgres --single` for pre-start database creation.
+7. **hostdb-sync test**: Both v1 and v2 FerretDB binaries use the same `ferretdb` hostdb engine name. The hostdb-sync test uses the combined `FERRETDB_VERSION_MAP` to verify all versions against the single `ferretdb` entry in hostdb releases.json.
 
 See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details including hostdb build process.
 

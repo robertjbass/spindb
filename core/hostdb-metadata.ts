@@ -2,15 +2,19 @@
  * Fetches metadata from hostdb (databases.json and downloads.json)
  * to understand what tools each engine needs and how to install them.
  *
+ * Primary registry: registry.layerbase.host
+ * Fallback registry: GitHub raw (robertjbass/hostdb)
+ *
  * Architecture:
  * - databases.json: Lists server, client, utilities, and enhanced CLI tools for each engine
  * - downloads.json: Provides package manager commands for installing tools
  */
 
 import { logDebug } from './error-handler'
+import { LAYERBASE_REGISTRY_BASE } from './hostdb-client'
 import type { Engine } from '../types'
 
-const HOSTDB_RAW_BASE =
+const GITHUB_RAW_BASE =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -22,12 +26,29 @@ type CliTools = {
   enhanced: string[]
 }
 
+export type VersionEntryObject = {
+  enabled?: boolean
+  platforms?: string[]
+  dependencies?: Array<{
+    database: string
+    cascadeDelete: boolean
+    note?: string
+  }>
+  cliTools?: CliTools
+}
+
 type DatabaseEntry = {
   displayName: string
   cliTools: CliTools
-  versions: Record<string, boolean> // version string -> available (true/false)
-  latestLts: string
-  // Other fields exist but we don't need them
+  versions: Record<string, boolean | VersionEntryObject>
+  platforms?: string[]
+  dependencies?: Array<{
+    database: string
+    cascadeDelete: boolean
+    note?: string
+  }>
+  spindbStatus?: string
+  hostedServiceAllowed?: boolean
 }
 
 type PackageManagerDef = {
@@ -69,7 +90,7 @@ let downloadsCache: { data: DownloadsJson; timestamp: number } | null = null
 const inFlightRequests = new Map<string, Promise<unknown>>()
 
 async function fetchWithCache<T>(
-  url: string,
+  urls: string[],
   getCache: () => { data: T; timestamp: number } | null,
   setCache: (cache: { data: T; timestamp: number }) => void,
 ): Promise<T> {
@@ -80,35 +101,48 @@ async function fetchWithCache<T>(
     return cache.data
   }
 
-  // Check for in-flight request to prevent duplicate fetches
-  const inFlight = inFlightRequests.get(url)
+  // Check for in-flight request using the primary URL as key
+  const cacheKey = urls[0]
+  const inFlight = inFlightRequests.get(cacheKey)
   if (inFlight) {
     return inFlight as Promise<T>
   }
 
-  // Create the fetch promise and store it
+  // Create the fetch promise — try each URL in order
   const fetchPromise = (async () => {
     try {
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${url}: ${response.status}`)
-      }
+      let lastError: Error | null = null
+      for (const url of urls) {
+        try {
+          const response = await fetch(url)
+          if (!response.ok) {
+            throw new Error(`Failed to fetch ${url}: ${response.status}`)
+          }
 
-      const data = (await response.json()) as T
-      setCache({ data, timestamp: Date.now() })
-      return data
+          const data = (await response.json()) as T
+          setCache({ data, timestamp: Date.now() })
+          return data
+        } catch (error) {
+          lastError = error as Error
+          logDebug(`Metadata fetch from ${url} failed: ${lastError.message}`)
+        }
+      }
+      throw lastError ?? new Error('All metadata URLs failed')
     } finally {
-      inFlightRequests.delete(url)
+      inFlightRequests.delete(cacheKey)
     }
   })()
 
-  inFlightRequests.set(url, fetchPromise)
+  inFlightRequests.set(cacheKey, fetchPromise)
   return fetchPromise
 }
 
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
   return fetchWithCache(
-    `${HOSTDB_RAW_BASE}/databases.json`,
+    [
+      `${LAYERBASE_REGISTRY_BASE}/databases.json`,
+      `${GITHUB_RAW_BASE}/databases.json`,
+    ],
     () => databasesCache,
     (c) => {
       databasesCache = c
@@ -118,7 +152,10 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
 
 export async function fetchDownloadsJson(): Promise<DownloadsJson> {
   return fetchWithCache(
-    `${HOSTDB_RAW_BASE}/downloads.json`,
+    [
+      `${LAYERBASE_REGISTRY_BASE}/downloads.json`,
+      `${GITHUB_RAW_BASE}/downloads.json`,
+    ],
     () => downloadsCache,
     (c) => {
       downloadsCache = c
@@ -276,6 +313,16 @@ export async function getPackagesForTools(
 }
 
 /**
+ * Check if a version entry is enabled.
+ * Handles both old schema (boolean) and new schema (object with optional enabled field).
+ * Objects are enabled by default unless explicitly `{ enabled: false }`.
+ */
+export function isVersionEnabled(value: boolean | VersionEntryObject): boolean {
+  if (typeof value === 'boolean') return value
+  return value.enabled !== false
+}
+
+/**
  * Get available versions for a database engine from databases.json
  * This is the authoritative source for what versions are actually available in hostdb.
  * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
@@ -290,34 +337,11 @@ export async function getAvailableVersions(
     const entry = data[key]
     if (!entry?.versions) return null
 
-    // Return only versions marked as available (true)
     return Object.entries(entry.versions)
-      .filter(([, available]) => available)
+      .filter(([, value]) => isVersionEnabled(value))
       .map(([version]) => version)
   } catch (error) {
     logDebug('Failed to fetch available versions from hostdb', {
-      engine,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return null
-  }
-}
-
-/**
- * Get the latest LTS version for a database engine
- * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
- * @returns Latest LTS version string, or null if not found
- */
-export async function getLatestLtsVersion(
-  engine: Engine | string,
-): Promise<string | null> {
-  try {
-    const data = await fetchDatabasesJson()
-    const key = engine.toLowerCase()
-    const entry = data[key]
-    return entry?.latestLts || null
-  } catch (error) {
-    logDebug('Failed to fetch latest LTS version from hostdb', {
       engine,
       error: error instanceof Error ? error.message : String(error),
     })

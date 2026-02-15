@@ -23,6 +23,7 @@ import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { moveEntry } from './fs-error-utils'
 import { compareVersions } from './version-utils'
+import { fetchWithRegistryFallback } from './hostdb-client'
 import {
   type Engine,
   Platform,
@@ -201,7 +202,9 @@ export abstract class BaseEmbeddedBinaryManager {
 
       let response: Response
       try {
-        response = await fetch(url, { signal: controller.signal })
+        response = await fetchWithRegistryFallback(url, {
+          signal: controller.signal,
+        })
       } catch (error) {
         const err = error as Error
         if (err.name === 'AbortError') {
@@ -220,7 +223,7 @@ export abstract class BaseEmbeddedBinaryManager {
           throw new Error(
             `${this.config.displayName} ${fullVersion} binaries not found (404). ` +
               `This version may have been removed from hostdb. ` +
-              `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+              `Try a different version or check https://registry.layerbase.host`,
           )
         }
         throw new Error(

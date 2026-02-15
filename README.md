@@ -38,7 +38,7 @@ SpinDB supports **18 database engines** across **5 platform architectures**—al
 | 🪶 **SQLite** | Embedded SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🦆 **DuckDB** | Embedded OLAP | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🍃 **MongoDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 🦔 **FerretDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 🦔 **FerretDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ⚠️ |
 | 🔴 **Redis** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔷 **Valkey** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🏠 **ClickHouse** | Columnar OLAP | ✅ | ✅ | ✅ | ✅ | ❌ |
@@ -51,9 +51,9 @@ SpinDB supports **18 database engines** across **5 platform architectures**—al
 | 🤖 **TypeDB** | Knowledge Graph | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 📈 **InfluxDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**88 combinations. One CLI. Zero configuration.**
+**89 combinations. One CLI. Zero configuration.**
 
-> ClickHouse and FerretDB are available on Windows via WSL.
+> ClickHouse is available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 
 ---
 
@@ -272,7 +272,7 @@ See [DEPLOY.md](DEPLOY.md) for comprehensive deployment documentation.
 
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
-- **FerretDB Windows** - Not supported (postgresql-documentdb has startup issues on Windows).
+- **FerretDB Windows** - v1 supported natively (plain PostgreSQL backend). v2 not supported (postgresql-documentdb has startup issues); use WSL for v2.
 - **Qdrant, Meilisearch, CouchDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---

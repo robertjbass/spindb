@@ -377,7 +377,23 @@ export async function handleCreate(): Promise<'main' | string | void> {
 
     const config = await containerManager.getConfig(containerNameFinal)
     if (config) {
-      await dbEngine.start(config)
+      try {
+        await dbEngine.start(config)
+      } catch (error) {
+        startSpinner.fail(`${dbEngine.displayName} failed to start`)
+        const e = error as Error
+        console.log()
+        console.log(uiError(e.message))
+        console.log()
+        // Clean up the container that was created but failed to start
+        try {
+          await containerManager.delete(containerNameFinal, { force: true })
+        } catch {
+          // Ignore cleanup errors
+        }
+        await pressEnterToContinue()
+        return
+      }
       await containerManager.updateConfig(containerNameFinal, {
         status: 'running',
       })

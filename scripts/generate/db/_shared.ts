@@ -22,12 +22,14 @@ export type ContainerConfig = {
 export type ParsedArgs = {
   containerName: string
   port: number | null
+  version: string | null
 }
 
 export function parseArgs(defaultName: string): ParsedArgs {
   const args = process.argv.slice(2)
   let containerName = defaultName
   let port: number | null = null
+  let version: string | null = null
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -45,12 +47,20 @@ export function parseArgs(defaultName: string): ParsedArgs {
         process.exit(1)
       }
       i++ // Skip the port value
+    } else if (arg === '--version') {
+      const versionValue = args[i + 1]
+      if (!versionValue || versionValue.startsWith('-')) {
+        console.error('Error: --version requires a value')
+        process.exit(1)
+      }
+      version = versionValue
+      i++ // Skip the version value
     } else if (!arg.startsWith('-')) {
       containerName = arg
     }
   }
 
-  return { containerName, port }
+  return { containerName, port, version }
 }
 
 export function runSpindb(args: string[]): {

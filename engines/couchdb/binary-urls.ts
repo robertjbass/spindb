@@ -37,7 +37,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for CouchDB binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/couchdb-{version}/couchdb-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/couchdb-{version}/couchdb-{version}-{platform}-{arch}.{ext}
  *
  * @param version - CouchDB version (e.g., '3', '3.5.1')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')

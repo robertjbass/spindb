@@ -36,8 +36,8 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for MySQL binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/mysql-{version}/mysql-{version}-{platform}-{arch}.tar.gz
- * Windows: https://github.com/robertjbass/hostdb/releases/download/mysql-{version}/mysql-{version}-{platform}-{arch}.zip
+ * Format: https://registry.layerbase.host/mysql-{version}/mysql-{version}-{platform}-{arch}.tar.gz
+ * Windows: https://registry.layerbase.host/mysql-{version}/mysql-{version}-{platform}-{arch}.zip
  *
  * @param version - MySQL version (e.g., '8.0', '8.0.40')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux')

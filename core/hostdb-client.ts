@@ -1,15 +1,21 @@
 /**
  * Shared hostdb Client Module
  *
- * Provides centralized access to the hostdb repository at
- * https://github.com/robertjbass/hostdb
+ * Provides centralized access to pre-built database binaries.
+ * Primary registry: registry.layerbase.host
+ * Fallback registry: GitHub releases (robertjbass/hostdb)
  *
- * hostdb provides pre-built database binaries for multiple platforms.
  * This module handles fetching releases.json with caching to avoid
  * repeated network requests.
  */
 
 import { Platform, type Arch, type Engine } from '../types'
+import { logDebug } from './error-handler'
+
+// Registry base URLs
+export const LAYERBASE_REGISTRY_BASE = 'https://registry.layerbase.host'
+export const GITHUB_REGISTRY_BASE =
+  'https://github.com/robertjbass/hostdb/releases/download'
 
 // Platform definition in hostdb releases.json
 export type HostdbPlatform = {
@@ -59,7 +65,9 @@ let cachedReleases: HostdbReleasesData | null = null
 let cacheTimestamp = 0
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
-const HOSTDB_RELEASES_URL =
+export const LAYERBASE_RELEASES_URL =
+  'https://registry.layerbase.host/releases.json'
+export const GITHUB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 /**
@@ -74,27 +82,36 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
     return cachedReleases
   }
 
-  try {
-    const response = await fetch(HOSTDB_RELEASES_URL, {
-      signal: AbortSignal.timeout(5000),
-    })
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  // Try layerbase registry first, fall back to GitHub
+  for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const data = (await response.json()) as HostdbReleasesData
+
+      // Cache the results
+      cachedReleases = data
+      cacheTimestamp = Date.now()
+
+      return data
+    } catch (error) {
+      const err = error as Error
+      logDebug(`Failed to fetch releases from ${url}: ${err.message}`)
+      // If this was the GitHub fallback, rethrow
+      if (url === GITHUB_RELEASES_URL) {
+        throw error
+      }
+      // Otherwise try the next URL
     }
-
-    const data = (await response.json()) as HostdbReleasesData
-
-    // Cache the results
-    cachedReleases = data
-    cacheTimestamp = Date.now()
-
-    return data
-  } catch (error) {
-    const err = error as Error
-    // Log the failure and rethrow - caller decides whether to use fallback
-    console.warn(`Warning: Failed to fetch hostdb releases: ${err.message}`)
-    throw error
   }
+
+  // Should be unreachable (loop always throws on last iteration)
+  throw new Error('Failed to fetch hostdb releases from all registries')
 }
 
 /**
@@ -175,7 +192,72 @@ export function buildHostdbUrl(
   const tag = `${engine}-${version}`
   const filename = `${engine}-${version}-${hostdbPlatform}.${extension}`
 
-  return `https://github.com/robertjbass/hostdb/releases/download/${tag}/${filename}`
+  return `${LAYERBASE_REGISTRY_BASE}/${tag}/${filename}`
+}
+
+/**
+ * Build a GitHub fallback URL for a hostdb release (same path scheme as layerbase).
+ */
+export function buildGithubFallbackUrl(
+  engine: Engine | string,
+  options: BuildHostdbUrlOptions,
+): string {
+  const { version, hostdbPlatform, extension = 'tar.gz' } = options
+  const tag = `${engine}-${version}`
+  const filename = `${engine}-${version}-${hostdbPlatform}.${extension}`
+
+  return `${GITHUB_REGISTRY_BASE}/${tag}/${filename}`
+}
+
+/**
+ * Convert a layerbase registry URL to its GitHub fallback equivalent.
+ * Returns null if the URL is not a layerbase URL.
+ */
+export function getRegistryFallbackUrl(url: string): string | null {
+  if (url.startsWith(LAYERBASE_REGISTRY_BASE)) {
+    return url.replace(LAYERBASE_REGISTRY_BASE, GITHUB_REGISTRY_BASE)
+  }
+  return null
+}
+
+/**
+ * Fetch wrapper that tries the primary URL first, then falls back to the
+ * GitHub registry if the primary is a layerbase URL and the request fails
+ * with a 404, 5xx, or network error.
+ *
+ * AbortError (timeout) is never retried — it propagates immediately.
+ */
+export async function fetchWithRegistryFallback(
+  url: string,
+  options?: RequestInit,
+): Promise<Response> {
+  try {
+    const response = await fetch(url, options)
+    if (response.status === 404 || response.status >= 500) {
+      const fallbackUrl = getRegistryFallbackUrl(url)
+      if (fallbackUrl) {
+        logDebug(
+          `Primary registry returned ${response.status}, trying GitHub fallback`,
+        )
+        return await fetch(fallbackUrl, options)
+      }
+    }
+    return response
+  } catch (error) {
+    const err = error as Error
+    // Never retry on timeout (AbortError)
+    if (err.name === 'AbortError') {
+      throw error
+    }
+    const fallbackUrl = getRegistryFallbackUrl(url)
+    if (fallbackUrl) {
+      logDebug(
+        `Primary registry fetch failed (${err.message}), trying GitHub fallback`,
+      )
+      return await fetch(fallbackUrl, options)
+    }
+    throw error
+  }
 }
 
 export type BuildDownloadUrlOptions = {

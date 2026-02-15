@@ -37,7 +37,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for Qdrant binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/qdrant-{version}/qdrant-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/qdrant-{version}/qdrant-{version}-{platform}-{arch}.{ext}
  *
  * @param version - Qdrant version (e.g., '1', '1.16.3')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')

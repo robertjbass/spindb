@@ -7,12 +7,13 @@
 
 import { logDebug } from '../../core/error-handler'
 import {
+  LAYERBASE_RELEASES_URL,
+  GITHUB_RELEASES_URL,
+} from '../../core/hostdb-client'
+import {
   COCKROACHDB_VERSION_MAP,
   SUPPORTED_MAJOR_VERSIONS,
 } from './version-maps'
-
-const HOSTDB_RELEASES_URL =
-  'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 // Cache for fetched versions (expires after 5 minutes)
 let cachedVersions: Record<string, string[]> | null = null
@@ -43,9 +44,21 @@ export async function fetchAvailableVersions(): Promise<
   }
 
   try {
-    const response = await fetch(HOSTDB_RELEASES_URL)
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+    let response: Response | null = null
+    for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+      try {
+        response = await fetch(url)
+        if (response.ok) break
+        logDebug(
+          `CockroachDB releases fetch from ${url}: HTTP ${response.status}`,
+        )
+        response = null
+      } catch (error) {
+        logDebug(`CockroachDB releases fetch from ${url} failed: ${error}`)
+      }
+    }
+    if (!response || !response.ok) {
+      throw new Error('All release registries failed')
     }
 
     const releases = (await response.json()) as HostdbReleases

@@ -14,29 +14,34 @@ import { logDebug } from '../../core/error-handler'
 import { platformService } from '../../core/platform-service'
 import { ferretdbBinaryManager } from './binary-manager'
 import {
-  normalizeDocumentDBVersion,
   DEFAULT_DOCUMENTDB_VERSION,
+  DEFAULT_V1_POSTGRESQL_VERSION,
+  isV1,
 } from './version-maps'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 /**
- * Get the path to pg_dump from the postgresql-documentdb installation
+ * Get the path to pg_dump from the backend installation
+ * Uses version-aware backend resolution (v1 = plain PostgreSQL, v2 = postgresql-documentdb)
  */
 function getPgDumpPath(container: ContainerConfig): string {
-  const { backendVersion } = container
+  const { version, backendVersion } = container
   const { platform, arch } = platformService.getPlatformInfo()
+  const v1 = isV1(version)
 
-  const fullBackendVersion = normalizeDocumentDBVersion(
-    backendVersion || DEFAULT_DOCUMENTDB_VERSION,
-  )
-  const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-    fullBackendVersion,
+  const effectiveBackendVersion = v1
+    ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
+    : backendVersion || DEFAULT_DOCUMENTDB_VERSION
+
+  const backendPath = ferretdbBinaryManager.getBackendBinaryPath(
+    version,
+    effectiveBackendVersion,
     platform,
     arch,
   )
 
   const ext = platformService.getExecutableExtension()
-  return join(documentdbPath, 'bin', `pg_dump${ext}`)
+  return join(backendPath, 'bin', `pg_dump${ext}`)
 }
 
 /**
@@ -63,8 +68,11 @@ export async function createBackup(
   const pgDump = getPgDumpPath(container)
 
   if (!existsSync(pgDump)) {
+    const backendName = isV1(container.version)
+      ? 'PostgreSQL'
+      : 'postgresql-documentdb'
     throw new Error(
-      `pg_dump not found at ${pgDump}. Make sure postgresql-documentdb is installed.`,
+      `pg_dump not found at ${pgDump}. Make sure ${backendName} is installed.`,
     )
   }
 

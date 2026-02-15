@@ -37,7 +37,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for Valkey binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/valkey-{version}/valkey-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/valkey-{version}/valkey-{version}-{platform}-{arch}.{ext}
  *
  * @param version - Valkey version (e.g., '8', '8.0.6')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')

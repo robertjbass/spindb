@@ -6,10 +6,11 @@
  */
 
 import { logDebug } from '../../core/error-handler'
+import {
+  LAYERBASE_RELEASES_URL,
+  GITHUB_RELEASES_URL,
+} from '../../core/hostdb-client'
 import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
-
-const RELEASES_URL =
-  'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 // Cache for fetched versions (5-minute TTL)
 let cachedVersions: Record<string, string[]> | null = null
@@ -39,9 +40,19 @@ export async function fetchAvailableVersions(): Promise<
   }
 
   try {
-    const response = await fetch(RELEASES_URL)
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+    let response: Response | null = null
+    for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+      try {
+        response = await fetch(url)
+        if (response.ok) break
+        logDebug(`QuestDB releases fetch from ${url}: HTTP ${response.status}`)
+        response = null
+      } catch (error) {
+        logDebug(`QuestDB releases fetch from ${url} failed: ${error}`)
+      }
+    }
+    if (!response || !response.ok) {
+      throw new Error('All release registries failed')
     }
 
     const releases = (await response.json()) as ReleasesJson

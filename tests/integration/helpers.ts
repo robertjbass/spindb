@@ -62,6 +62,7 @@ export const TEST_PORTS = {
   mariadb: { base: 3340, clone: 3342, renamed: 3341 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
   ferretdb: { base: 27060, clone: 27062, renamed: 27061 },
+  'ferretdb-v1': { base: 27070, clone: 27072, renamed: 27071 },
   redis: { base: 6399, clone: 6401, renamed: 6400 },
   valkey: { base: 6410, clone: 6412, renamed: 6411 },
   clickhouse: { base: 9050, clone: 9052, renamed: 9051 },

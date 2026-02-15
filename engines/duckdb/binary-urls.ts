@@ -12,7 +12,7 @@ import { Engine, type Platform, type Arch } from '../../types'
 /**
  * Build the download URL for DuckDB binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/duckdb-{version}/duckdb-{version}-{platform}-{arch}.{ext}
+ * Format: https://registry.layerbase.host/duckdb-{version}/duckdb-{version}-{platform}-{arch}.{ext}
  *
  * @param version - DuckDB version (e.g., '1', '1.4.3')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux', 'win32')
