@@ -35,6 +35,7 @@
     "spindb",
     "postgres",
     "postgresql",
+    "postgresql-documentdb",
     "mysql",
     "mariadb",
     "database",
@@ -55,6 +56,8 @@
     "questdb",
     "typedb",
     "influxdb",
+    "layerbase",
+    "docker-free",
     "tui",
     "cli",
     "package manager"
