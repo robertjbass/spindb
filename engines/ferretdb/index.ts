@@ -1488,7 +1488,8 @@ export class FerretDBEngine extends BaseEngine {
       const lastBrace = stdout.lastIndexOf('}')
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
         const stats = JSON.parse(stdout.substring(firstBrace, lastBrace + 1))
-        return stats?.dataSize || null
+        const dataSize = Number(stats?.dataSize)
+        return Number.isFinite(dataSize) && dataSize > 0 ? dataSize : null
       }
       return null
     } catch {
