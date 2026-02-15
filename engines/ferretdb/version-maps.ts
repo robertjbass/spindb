@@ -10,11 +10,11 @@
  * - postgresql-documentdb: PostgreSQL 17 with DocumentDB extension
  *
  * FerretDB v1 requires:
- * - ferretdb (from hostdb engine "ferretdb-v1"): The MongoDB-compatible proxy
+ * - ferretdb: The MongoDB-compatible proxy
  * - Plain PostgreSQL (reuses postgresqlBinaryManager)
  *
- * To update: Check releases.json, find databases.ferretdb and databases.ferretdb-v1,
- * copy all version strings.
+ * To update: Check releases.json, find databases.ferretdb,
+ * copy all version strings (both v1.x and v2.x are under the same engine).
  */
 
 import { logDebug } from '../../core/error-handler'
@@ -79,24 +79,6 @@ export function isV1(version: string): boolean {
   const normalized = normalizeVersion(version)
   return normalized.startsWith('1.')
 }
-
-/**
- * Version map for FerretDB v2 only (hostdb engine: "ferretdb")
- * Used by hostdb-sync tests to verify against the correct hostdb engine.
- */
-export const FERRETDB_V2_VERSION_MAP: Record<string, string> =
-  Object.fromEntries(
-    Object.entries(FERRETDB_VERSION_MAP).filter(([, v]) => v.startsWith('2.')),
-  )
-
-/**
- * Version map for FerretDB v1 only (hostdb engine: "ferretdb-v1")
- * Used by hostdb-sync tests to verify against the correct hostdb engine.
- */
-export const FERRETDB_V1_VERSION_MAP: Record<string, string> =
-  Object.fromEntries(
-    Object.entries(FERRETDB_VERSION_MAP).filter(([, v]) => v.startsWith('1.')),
-  )
 
 /**
  * Fallback map of major versions to stable patch versions

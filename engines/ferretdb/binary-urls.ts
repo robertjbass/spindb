@@ -4,13 +4,14 @@
  * Generates download URLs for FerretDB binaries from the hostdb GitHub releases.
  *
  * FerretDB v2 requires two binaries:
- * - ferretdb: MongoDB-compatible proxy (hostdb engine: "ferretdb")
+ * - ferretdb: MongoDB-compatible proxy
  * - postgresql-documentdb: PostgreSQL 17 + DocumentDB extension
  *
  * FerretDB v1 requires:
- * - ferretdb: MongoDB-compatible proxy (hostdb engine: "ferretdb-v1")
+ * - ferretdb: MongoDB-compatible proxy
  * - Plain PostgreSQL (managed by postgresqlBinaryManager, not downloaded here)
  *
+ * Both v1 and v2 use the same "ferretdb" hostdb engine name.
  * v1 supports all platforms including Windows.
  * v2 is macOS/Linux only (postgresql-documentdb has Windows startup issues).
  */
@@ -104,11 +105,7 @@ export function getFerretDBBinaryUrl(
 
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
-  // v1 binaries are published under the "ferretdb-v1" engine name in hostdb
-  // v2 binaries use the standard "ferretdb" engine name
-  const hostdbEngine = isV1(version) ? 'ferretdb-v1' : Engine.FerretDB
-
-  return buildHostdbUrl(hostdbEngine, {
+  return buildHostdbUrl(Engine.FerretDB, {
     version: fullVersion,
     hostdbPlatform,
     extension: ext,
