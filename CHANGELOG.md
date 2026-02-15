@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-02-15
+
+### Changed
+- **Migrate remaining engines to hostdb-releases factory pattern** — CockroachDB, SurrealDB, QuestDB, and TypeDB `hostdb-releases.ts` files replaced with the standard `createHostdbReleases()` factory (same as Redis, PostgreSQL, etc.). Eliminates ~400 lines of duplicated fetch/cache/fallback logic across the four engines.
+- **SQLite and DuckDB version lookups use factory** — Both file-based engines now delegate `fetchAvailableVersions()` to their existing factory-based `hostdb-releases.ts` modules instead of calling `fetchHostdbReleases()` (releases.json) directly.
+- **Version source migrated from releases.json to databases.json** — All engine version lookups now go through `databases.json` (via `core/hostdb-metadata.ts`) instead of the legacy `releases.json`. This provides a better offline fallback chain: databases.json → locally installed binaries → hardcoded version map.
+
+### Docs
+- **CLAUDE.md** — New "Version Lookups (hostdb-releases factory pattern)" section documenting the factory, the three-tier fallback chain, all three hostdb data files, and the canonical template.
+- **PRE_RELEASE_TASKS.md** — New "hostdb Data Sync" section with tasks for a GitHub Actions cron job to sync `databases.json`, `releases.json`, and `downloads.json` from hostdb, and long-term merge of hostdb into spindb.
+
 ## [0.35.0] - 2026-02-15
 
 ### Changed

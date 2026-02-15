@@ -40,7 +40,7 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 
 ### Critical: When Adding/Modifying Engines
 
-1. **Version maps** (`engines/{engine}/version-maps.ts`) MUST match [hostdb releases.json](https://github.com/robertjbass/hostdb/blob/main/releases.json) exactly. Mismatch = broken downloads or missing versions.
+1. **Version maps** (`engines/{engine}/version-maps.ts`) MUST match [hostdb databases.json](https://github.com/robertjbass/hostdb/blob/main/databases.json) exactly. Mismatch = broken downloads or missing versions.
 
 2. **KNOWN_BINARY_TOOLS** in `core/dependency-manager.ts` — all engine tools MUST be listed here. Missing entries cause `findBinary()` to skip config lookup and silently fall back to PATH.
 
@@ -49,6 +49,17 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 4. **Type enum** — `Engine` enum, `ALL_ENGINES` array (in `types/index.ts`), and `config/engines.json` MUST be updated together.
 
 5. See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for the full 20+ file checklist.
+
+### Version Lookups (hostdb-releases factory pattern)
+
+All engines use the factory in `core/hostdb-releases-factory.ts` (`createHostdbReleases()`) for version lookups. Each engine's `hostdb-releases.ts` is a ~25-line file that passes engine-specific config to the factory. See `engines/redis/hostdb-releases.ts` as the canonical template.
+
+The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the authoritative version source, with a three-tier fallback: **databases.json → locally installed binaries → hardcoded version map**. Do NOT write custom fetch/cache/fallback logic in engine files — use the factory.
+
+**hostdb data files** (fetched from `registry.layerbase.host`, fallback to GitHub raw):
+- `databases.json` — version listings, platform support, CLI tools per engine (used by factory for version lookups)
+- `downloads.json` — package manager install commands for tools
+- `releases.json` — legacy flat version list (still used by `tests/integration/hostdb-sync.test.ts` for validation, and by binary download URL resolution in `core/hostdb-client.ts`)
 
 ### Binary Sources
 

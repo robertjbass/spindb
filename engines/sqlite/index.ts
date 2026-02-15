@@ -26,18 +26,10 @@ import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { sqliteBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
-import {
-  SUPPORTED_MAJOR_VERSIONS,
-  SQLITE_VERSION_MAP,
-  normalizeVersion,
-} from './version-maps'
-import {
-  fetchHostdbReleases,
-  getEngineReleases,
-} from '../../core/hostdb-client'
+import { SUPPORTED_MAJOR_VERSIONS, normalizeVersion } from './version-maps'
+import { fetchAvailableVersions } from './hostdb-releases'
 import { logDebug } from '../../core/error-handler'
 import {
-  Engine,
   type Platform,
   type Arch,
   type ContainerConfig,
@@ -579,69 +571,7 @@ export class SQLiteEngine extends BaseEngine {
   }
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
-    // Try to fetch from hostdb first
-    try {
-      const releases = await fetchHostdbReleases()
-      const sqliteReleases = getEngineReleases(releases, Engine.SQLite)
-
-      if (sqliteReleases && Object.keys(sqliteReleases).length > 0) {
-        const result: Record<string, string[]> = {}
-
-        for (const major of SUPPORTED_MAJOR_VERSIONS) {
-          result[major] = []
-
-          // Find all versions matching this major version
-          for (const [, release] of Object.entries(sqliteReleases)) {
-            if (release.version.startsWith(`${major}.`)) {
-              result[major].push(release.version)
-            }
-          }
-
-          // Sort descending (latest first)
-          result[major].sort((a, b) => {
-            const partsA = a.split('.').map(Number)
-            const partsB = b.split('.').map(Number)
-            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-              const diff = (partsB[i] || 0) - (partsA[i] || 0)
-              if (diff !== 0) return diff
-            }
-            return 0
-          })
-        }
-
-        return result
-      }
-    } catch (error) {
-      logDebug('Failed to fetch SQLite versions from hostdb, checking local', {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-
-    // Offline fallback: return only locally installed versions
-    const installed = await sqliteBinaryManager.listInstalled()
-    if (installed.length > 0) {
-      const result: Record<string, string[]> = {}
-      for (const binary of installed) {
-        const major = binary.version.split('.')[0]
-        if (!result[major]) {
-          result[major] = []
-        }
-        if (!result[major].includes(binary.version)) {
-          result[major].push(binary.version)
-        }
-      }
-      return result
-    }
-
-    // Last resort: return hardcoded version map
-    const result: Record<string, string[]> = {}
-    for (const major of SUPPORTED_MAJOR_VERSIONS) {
-      const fullVersion = SQLITE_VERSION_MAP[major]
-      if (fullVersion) {
-        result[major] = [fullVersion]
-      }
-    }
-    return result
+    return fetchAvailableVersions()
   }
 
   // Helper to get sqlite3 path or throw a helpful error

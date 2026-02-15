@@ -2,7 +2,7 @@
  * CockroachDB version mapping
  *
  * Maps short version aliases to full versions from hostdb releases.
- * MUST stay in sync with hostdb releases.json
+ * MUST stay in sync with hostdb databases.json
  */
 
 // Full version map for CockroachDB
