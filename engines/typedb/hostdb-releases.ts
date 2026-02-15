@@ -6,10 +6,7 @@
  */
 
 import { logDebug } from '../../core/error-handler'
-import {
-  LAYERBASE_RELEASES_URL,
-  GITHUB_RELEASES_URL,
-} from '../../core/hostdb-client'
+import { getReleasesUrls } from '../../core/hostdb-client'
 import { TYPEDB_VERSION_MAP, SUPPORTED_MAJOR_VERSIONS } from './version-maps'
 
 // Cache for fetched versions (expires after 5 minutes)
@@ -42,7 +39,7 @@ export async function fetchAvailableVersions(): Promise<
 
   try {
     let response: Response | null = null
-    for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+    for (const url of getReleasesUrls()) {
       try {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 10000)

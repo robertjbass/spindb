@@ -7,9 +7,8 @@
 
 import { logDebug } from '../../core/error-handler'
 import {
-  LAYERBASE_RELEASES_URL,
-  GITHUB_RELEASES_URL,
   fetchFromRegistryUrls,
+  getReleasesUrls,
 } from '../../core/hostdb-client'
 import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
 
@@ -41,10 +40,7 @@ export async function fetchAvailableVersions(): Promise<
   }
 
   try {
-    const response = await fetchFromRegistryUrls(
-      [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL],
-      logDebug,
-    )
+    const response = await fetchFromRegistryUrls(getReleasesUrls(), logDebug)
 
     const releases = (await response.json()) as ReleasesJson
     const questdbReleases = releases.questdb || []

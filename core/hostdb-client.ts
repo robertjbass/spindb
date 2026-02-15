@@ -17,6 +17,13 @@ export const LAYERBASE_REGISTRY_BASE = 'https://registry.layerbase.host'
 export const GITHUB_REGISTRY_BASE =
   'https://github.com/robertjbass/hostdb/releases/download'
 
+/**
+ * Toggle GitHub fallback for binary downloads and releases.json fetches.
+ * Set to `false` to exclusively test the Layerbase registry.
+ * Must be re-enabled before release (see PRE_RELEASE_TASKS.md).
+ */
+export const ENABLE_GITHUB_FALLBACK = false
+
 // Platform definition in hostdb releases.json
 export type HostdbPlatform = {
   url: string
@@ -71,6 +78,16 @@ export const GITHUB_RELEASES_URL =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main/releases.json'
 
 /**
+ * Get the list of releases.json URLs to try, respecting ENABLE_GITHUB_FALLBACK.
+ * When fallback is disabled, only the Layerbase URL is returned.
+ */
+export function getReleasesUrls(): string[] {
+  return ENABLE_GITHUB_FALLBACK
+    ? [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]
+    : [LAYERBASE_RELEASES_URL]
+}
+
+/**
  * Fetch releases.json from hostdb repository with caching.
  *
  * @returns The full releases data from hostdb
@@ -82,8 +99,11 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
     return cachedReleases
   }
 
-  // Try layerbase registry first, fall back to GitHub
-  for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+  // Try layerbase registry first, fall back to GitHub (if enabled)
+  const urls = getReleasesUrls()
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i]
+    const isLast = i === urls.length - 1
     try {
       const response = await fetch(url, {
         signal: AbortSignal.timeout(5000),
@@ -102,8 +122,8 @@ export async function fetchHostdbReleases(): Promise<HostdbReleasesData> {
     } catch (error) {
       const err = error as Error
       logDebug(`Failed to fetch releases from ${url}: ${err.message}`)
-      // If this was the GitHub fallback, rethrow
-      if (url === GITHUB_RELEASES_URL) {
+      // If this was the last URL, rethrow
+      if (isLast) {
         throw error
       }
       // Otherwise try the next URL
@@ -211,9 +231,10 @@ export function buildGithubFallbackUrl(
 
 /**
  * Convert a layerbase registry URL to its GitHub fallback equivalent.
- * Returns null if the URL is not a layerbase URL.
+ * Returns null if the URL is not a layerbase URL or if GitHub fallback is disabled.
  */
 export function getRegistryFallbackUrl(url: string): string | null {
+  if (!ENABLE_GITHUB_FALLBACK) return null
   if (url.startsWith(LAYERBASE_REGISTRY_BASE)) {
     return url.replace(LAYERBASE_REGISTRY_BASE, GITHUB_REGISTRY_BASE)
   }

@@ -24,10 +24,7 @@ import { existsSync } from 'fs'
 import { join, dirname, relative } from 'path'
 import { chmod, symlink, readdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
-import {
-  LAYERBASE_RELEASES_URL,
-  GITHUB_RELEASES_URL,
-} from '../../core/hostdb-client'
+import { getReleasesUrls } from '../../core/hostdb-client'
 import { moveEntry } from '../../core/fs-error-utils'
 import { paths } from '../../config/paths'
 
@@ -254,7 +251,7 @@ class QuestDBBinaryManager extends BaseBinaryManager {
     try {
       // Try layerbase first, fall back to GitHub
       let response: Response | null = null
-      for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+      for (const url of getReleasesUrls()) {
         try {
           response = await fetch(url, {
             signal: AbortSignal.timeout(10000),

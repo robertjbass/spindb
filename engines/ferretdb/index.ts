@@ -1333,7 +1333,9 @@ export class FerretDBEngine extends BaseEngine {
       await this.start(container)
     } catch (error) {
       const err = error as Error
-      logWarning(`Failed to restart FerretDB proxy after restore: ${err.message}`)
+      logWarning(
+        `Failed to restart FerretDB proxy after restore: ${err.message}`,
+      )
       // Retry once — transient issues (port race, slow PG) can resolve on second attempt
       try {
         await this.stopFerretDBProcess(containerDir).catch(() => {})

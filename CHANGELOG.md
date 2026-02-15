@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-02-15
+
+### Changed
+- **Layerbase registry as primary binary source** - All binary downloads and `releases.json` fetches now use `registry.layerbase.host` as the primary registry, replacing direct GitHub hostdb downloads. GitHub remains available as a fallback, controlled by the `ENABLE_GITHUB_FALLBACK` constant in `core/hostdb-client.ts`.
+- **Centralized registry URL management** - All engine-specific `hostdb-releases.ts` files now use the shared `getReleasesUrls()` helper from `core/hostdb-client.ts` instead of hardcoding registry URLs. This ensures the fallback toggle is respected consistently across all 18 engines.
+
+### Added
+- **`ENABLE_GITHUB_FALLBACK` toggle** - New constant in `core/hostdb-client.ts` to enable/disable the GitHub fallback for testing the Layerbase registry in isolation. Currently set to `false` for pre-release registry testing.
+- **`PRE_RELEASE_TASKS.md`** - Tracking file for tasks that must be addressed before the next release (re-enable GitHub fallback, document registry data files).
+- **`spindb query` in cheatsheet** - Documented the `query` command with table and JSON output modes, including MongoDB/FerretDB query syntax.
+
+### Docs
+- **FerretDB v1 vs v2 documentation** - CLAUDE.md, ARCHITECTURE.md, and CHEATSHEET.md now document v1/v2 differences: backend type (plain PG vs DocumentDB), platform support (v1 includes Windows), cascade delete behavior (v1 does not delete shared PG binaries), auth/SSL differences, and startup sequences.
+- **Registry migration** - CLAUDE.md and ARCHITECTURE.md updated to reflect Layerbase as the primary binary source with GitHub as fallback. Platform support table in ARCHITECTURE.md now splits FerretDB into v1/v2 columns.
+
 ## [0.34.10] - 2026-02-15
 
 ### Fixed

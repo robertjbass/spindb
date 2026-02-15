@@ -6,10 +6,7 @@
  */
 
 import { logDebug } from '../../core/error-handler'
-import {
-  LAYERBASE_RELEASES_URL,
-  GITHUB_RELEASES_URL,
-} from '../../core/hostdb-client'
+import { getReleasesUrls } from '../../core/hostdb-client'
 import {
   COCKROACHDB_VERSION_MAP,
   SUPPORTED_MAJOR_VERSIONS,
@@ -45,7 +42,7 @@ export async function fetchAvailableVersions(): Promise<
 
   try {
     let response: Response | null = null
-    for (const url of [LAYERBASE_RELEASES_URL, GITHUB_RELEASES_URL]) {
+    for (const url of getReleasesUrls()) {
       try {
         response = await fetch(url)
         if (response.ok) break

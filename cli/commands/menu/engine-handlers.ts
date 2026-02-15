@@ -304,7 +304,8 @@ async function handleDeleteEngine(
 
       if (isV1(versionPart)) {
         // v1: Don't delete shared PostgreSQL binaries (used by standalone PG containers)
-        backendStatus = ' (PostgreSQL backend kept — shared with standalone containers)'
+        backendStatus =
+          ' (PostgreSQL backend kept — shared with standalone containers)'
       } else {
         // v2: Clean up postgresql-documentdb backend if no other v2 FerretDB installs share it
         const entries = await readdir(binDir, { withFileTypes: true })
