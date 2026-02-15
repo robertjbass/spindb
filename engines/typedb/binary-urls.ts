@@ -1,19 +1,17 @@
 /**
  * TypeDB binary URL generation
  *
- * Generates download URLs for TypeDB binaries from hostdb.
+ * Generates download URLs for TypeDB binaries from the layerbase registry.
  */
 
-import type { Platform, Arch } from '../../types'
+import { type Platform, type Arch, Engine } from '../../types'
 import { normalizeVersion } from './version-maps'
-
-const HOSTDB_BASE_URL =
-  'https://github.com/robertjbass/hostdb/releases/download'
+import { buildHostdbUrl } from '../../core/hostdb-client'
 
 /**
  * Get the binary download URL for a specific version and platform
  *
- * URL format: https://github.com/robertjbass/hostdb/releases/download/typedb-{version}/typedb-{version}-{platform}-{arch}.{ext}
+ * URL format: https://registry.layerbase.host/typedb-{version}/typedb-{version}-{platform}-{arch}.{ext}
  *
  * @param version - TypeDB version (e.g., '3.8.0' or '3')
  * @param platform - Target platform (darwin, linux, win32)
@@ -27,12 +25,16 @@ export function getBinaryUrl(
   const fullVersion = normalizeVersion(version)
   const ext = getArchiveExtension(platform)
 
-  return `${HOSTDB_BASE_URL}/typedb-${fullVersion}/typedb-${fullVersion}-${platform}-${arch}.${ext}`
+  return buildHostdbUrl(Engine.TypeDB, {
+    version: fullVersion,
+    hostdbPlatform: `${platform}-${arch}`,
+    extension: ext,
+  })
 }
 
 /**
  * Get the archive extension for a platform
  */
-export function getArchiveExtension(platform: Platform): string {
+export function getArchiveExtension(platform: Platform): 'tar.gz' | 'zip' {
   return platform === 'win32' ? 'zip' : 'tar.gz'
 }

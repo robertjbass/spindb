@@ -45,7 +45,7 @@ GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
 GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb"
 VALID_UTILITY_TESTS="self-update"
 VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
@@ -79,10 +79,12 @@ if [ -n "$ENGINE_FILTER" ]; then
     echo "Valid groups (--group): $VALID_GROUPS"
     exit 1
   fi
-  # FerretDB is skipped in Docker E2E due to timeout/signal issues
-  if [ "$ENGINE_FILTER" = "ferretdb" ]; then
+  # FerretDB (v1 and v2) is skipped in Docker E2E due to timeout/signal issues
+  if [ "$ENGINE_FILTER" = "ferretdb" ] || [ "$ENGINE_FILTER" = "ferretdb-v1" ]; then
     echo "FerretDB is skipped in Docker E2E tests due to timeout/signal handling issues."
-    echo "FerretDB tests run on GitHub Actions macOS/Linux runners via: pnpm test:engine ferretdb"
+    echo "FerretDB tests run on GitHub Actions macOS/Linux/Windows runners via:"
+    echo "  pnpm test:engine ferretdb      # v2 tests"
+    echo "  pnpm test:engine ferretdb-v1   # v1 tests"
     exit 0
   fi
 fi
@@ -1937,8 +1939,8 @@ print_final_summary() {
   fi
 
   # Note excluded engines so the count isn't confusing
-  echo "  ${DIM}Excluded from Docker E2E: ferretdb (composite architecture;${RESET}"
-  echo "  ${DIM}tested via 'pnpm test:engine ferretdb' in CI instead)${RESET}"
+  echo "  ${DIM}Excluded from Docker E2E: ferretdb, ferretdb-v1 (composite architecture;${RESET}"
+  echo "  ${DIM}tested via 'pnpm test:engine ferretdb[-v1]' in CI instead)${RESET}"
   echo ""
 }
 

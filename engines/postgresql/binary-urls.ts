@@ -34,7 +34,7 @@ export function getHostdbPlatform(
 /**
  * Build the download URL for PostgreSQL binaries from hostdb
  *
- * Format: https://github.com/robertjbass/hostdb/releases/download/postgresql-{version}/postgresql-{version}-{platform}-{arch}.tar.gz
+ * Format: https://registry.layerbase.host/postgresql-{version}/postgresql-{version}-{platform}-{arch}.tar.gz
  *
  * @param version - PostgreSQL version (e.g., '17', '17.7.0')
  * @param platform - Platform identifier (e.g., 'darwin', 'linux')

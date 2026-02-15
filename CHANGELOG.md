@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.2] - 2026-02-15
+
+### Fixed
+- **FerretDB v1 Windows auto-selection bypass** — Moved the Windows v1 guard in `create.ts` to run after both CLI and interactive prompt paths resolve engine + version. Previously, selecting FerretDB via the interactive menu on Windows would bypass the v2→v1 fallback. Also catches explicit `--db-version 2` on Windows (uses `isFerretDBv1()` instead of `!options.dbVersion`).
+- **`formatBytes` out-of-bounds** — Clamped unit index to prevent array overflow on extremely large byte values.
+
+### Changed
+- **Type-safe engine names** — QuestDB and SurrealDB `binary-urls.ts` now use `Engine` enum instead of string literals for `buildHostdbUrl` calls.
+- **Registry fetch timeout** — `fetchFromRegistryUrls()` now accepts an optional per-request timeout (default 5s) to prevent hanging on unresponsive registries.
+
+### Docs
+- **CLAUDE.md** — Fixed stale reference to removed `edb-binary-urls.ts`; PostgreSQL/Windows now correctly documented as EDB-sourced binaries uploaded to hostdb.
+
+## [0.35.1] - 2026-02-15
+
+### Changed
+- **Migrate remaining engines to hostdb-releases factory pattern** — CockroachDB, SurrealDB, QuestDB, and TypeDB `hostdb-releases.ts` files replaced with the standard `createHostdbReleases()` factory (same as Redis, PostgreSQL, etc.). Eliminates ~400 lines of duplicated fetch/cache/fallback logic across the four engines.
+- **SQLite and DuckDB version lookups use factory** — Both file-based engines now delegate `fetchAvailableVersions()` to their existing factory-based `hostdb-releases.ts` modules instead of calling `fetchHostdbReleases()` (releases.json) directly.
+- **Version source migrated from releases.json to databases.json** — All engine version lookups now go through `databases.json` (via `core/hostdb-metadata.ts`) instead of the legacy `releases.json`. This provides a better offline fallback chain: databases.json → locally installed binaries → hardcoded version map.
+
+### Docs
+- **CLAUDE.md** — New "Version Lookups (hostdb-releases factory pattern)" section documenting the factory, the three-tier fallback chain, all three hostdb data files, and the canonical template.
+- **PRE_RELEASE_TASKS.md** — New "hostdb Data Sync" section with tasks for a GitHub Actions cron job to sync `databases.json`, `releases.json`, and `downloads.json` from hostdb, and long-term merge of hostdb into spindb.
+
+## [0.35.0] - 2026-02-15
+
+### Changed
+- **Layerbase registry as primary binary source** - All binary downloads and `releases.json` fetches now use `registry.layerbase.host` as the primary registry, replacing direct GitHub hostdb downloads. GitHub remains available as a fallback, controlled by the `ENABLE_GITHUB_FALLBACK` constant in `core/hostdb-client.ts`.
+- **Centralized registry URL management** - All engine-specific `hostdb-releases.ts` files now use the shared `getReleasesUrls()` helper from `core/hostdb-client.ts` instead of hardcoding registry URLs. This ensures the fallback toggle is respected consistently across all 18 engines.
+
+### Added
+- **`ENABLE_GITHUB_FALLBACK` toggle** - New constant in `core/hostdb-client.ts` to enable/disable the GitHub fallback for testing the Layerbase registry in isolation. Currently set to `false` for pre-release registry testing.
+- **`PRE_RELEASE_TASKS.md`** - Tracking file for tasks that must be addressed before the next release (re-enable GitHub fallback, document registry data files).
+- **`spindb query` in cheatsheet** - Documented the `query` command with table and JSON output modes, including MongoDB/FerretDB query syntax.
+
+### Docs
+- **FerretDB v1 vs v2 documentation** - CLAUDE.md, ARCHITECTURE.md, and CHEATSHEET.md now document v1/v2 differences: backend type (plain PG vs DocumentDB), platform support (v1 includes Windows), cascade delete behavior (v1 does not delete shared PG binaries), auth/SSL differences, and startup sequences.
+- **Registry migration** - CLAUDE.md and ARCHITECTURE.md updated to reflect Layerbase as the primary binary source with GitHub as fallback. Platform support table in ARCHITECTURE.md now splits FerretDB into v1/v2 columns.
+
+## [0.34.10] - 2026-02-15
+
+### Fixed
+- **Socket leak in FerretDB v1 test** - Added `socket.destroy()` in the error handler for the PostgreSQL backend connectivity check, preventing lingering handles.
+- **CI comment accuracy** - Updated OS Coverage Strategy comment to clarify that only FerretDB v2 (not v1) lacks Windows support.
+
+### Changed
+- **Type-safe engine names in binary URLs** - CockroachDB and TypeDB `binary-urls.ts` now use the `Engine` enum instead of string literals for `buildHostdbUrl` calls.
+- **Shared registry fetch utility** - Extracted the multi-URL fetch loop from QuestDB's `hostdb-releases.ts` into `fetchFromRegistryUrls()` in `core/hostdb-client.ts`.
+
+## [0.34.9] - 2026-02-14
+
+### Fixed
+- **FerretDB Windows process termination** - `stopFerretDBProcess()` now force-kills the proxy directly on Windows. Previously, `taskkill` without `/F` sent `WM_CLOSE` (ignored by console processes), throwing an error that made the force-kill fallback and PID file cleanup unreachable. This caused the proxy to stay alive, blocking restores (0 documents), stops (`waitForStopped` timeout), and deletes (EBUSY file locks).
+- **FerretDB Windows PostgreSQL stop** - `stopPostgreSQLProcess()` now uses `exec()` on Windows instead of `spawnAsync()` with piped stdio, preventing pipe-related hangs (same pattern as the `pg_ctl start` Windows fix).
+
+## [0.34.8] - 2026-02-14
+
+### Fixed
+- **FerretDB v1 Windows startup** - `pg_ctl -w` (wait mode) hangs indefinitely on Windows even after PostgreSQL reports ready. Now omits `-w` on Windows and relies on `waitForPort()` for readiness detection.
+
+## [0.34.7] - 2026-02-14
+
+### Fixed
+- **FerretDB restore data visibility** - After `pg_restore`, the FerretDB proxy is now automatically restarted so it picks up the restored collections and documents. Previously, FerretDB's in-memory metadata cache would show 0 documents after a restore because the proxy didn't know about data written directly to PostgreSQL.
+
+## [0.34.6] - 2026-02-14
+
+### Added
+- **FerretDB v1 support** - FerretDB now supports both v1 (1.24.2) and v2 (2.7.0). v1 uses plain PostgreSQL as backend (lighter, all platforms including Windows), v2 uses postgresql-documentdb (macOS/Linux only). Version number determines which backend is used automatically.
+- **FerretDB Windows support** - FerretDB v1 enables Windows compatibility. `spindb create` auto-selects v1 on Windows when no version is specified.
+- **FerretDB v1 integration tests** - Full integration test suite for FerretDB v1 (`tests/integration/ferretdb-v1.test.ts`) covering container lifecycle, seed, backup/restore, rename, port conflict, and partial shutdown recovery. v1 restore asserts exact row count (no DocumentDB metadata conflicts).
+- **FerretDB v1 CI job** - New `test-ferretdb-v1` CI job runs on all 5 platforms including Windows. Runs after v2 job to avoid backend port conflicts.
+- **FerretDB binary URL unit tests** - New `tests/unit/ferretdb-binary-urls.test.ts` tests v1 vs v2 platform support (5 vs 4 platforms), Windows support, and binary URL generation differences.
+- **FerretDB v1 version validator tests** - Added `isV1()`, `FERRETDB_VERSION_MAP['1']`, and `DEFAULT_V1_POSTGRESQL_VERSION` test coverage to existing version validator test file.
+- **FerretDB v1 test runner support** - `pnpm test:engine ferretdb-v1` (aliases: ferret-v1, fdb-v1, fdb1) runs v1 integration tests independently from v2.
+- **FerretDB v1 demo containers** - `pnpm generate:missing` now creates both `demo-ferretdb` (v2) and `demo-ferretdb-v1` (v1) via `VERSION_OVERRIDES` map.
+
+### Changed
+- **FerretDB engine download** - `spindb engines download ferretdb` now supports version selection. On Windows, v2 is blocked with a helpful message suggesting v1.
+- **FerretDB engine deletion** - v1 installations skip PostgreSQL backend cleanup (shared with standalone PostgreSQL containers). v2 continues to clean up postgresql-documentdb as before.
+- **FerretDB platform support** - Removed blanket Windows block; platform checks are now version-aware.
+
+### Fixed
+- **FerretDB v1 startup** - Auth flag (`--no-auth`) only passed for v2 (v1 has auth disabled by default). PostgreSQL URL includes `sslmode=disable` for v1 (pgx driver defaults to TLS).
+- **FerretDB database creation** - When psql is unavailable in the PostgreSQL backend, uses `postgres --single` mode pre-start to create the ferretdb database.
+- **Menu container creation** - Added error handling around engine start in interactive menu. On start failure, orphaned containers are now cleaned up automatically.
+
 ## [0.34.5] - 2026-02-11
 
 ### Added

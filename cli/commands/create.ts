@@ -22,7 +22,11 @@ import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
 import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
 import { resolve } from 'path'
-import { Engine } from '../../types'
+import { Engine, Platform } from '../../types'
+import {
+  FERRETDB_VERSION_MAP,
+  isV1 as isFerretDBv1,
+} from '../../engines/ferretdb/version-maps'
 import type { BaseEngine } from '../../engines/base-engine'
 
 /**
@@ -533,6 +537,23 @@ export const createCommand = new Command('create')
           engine = answers.engine as Engine
           version = answers.version
           database = answers.database
+        }
+
+        // FerretDB: force v1 on Windows (v2 requires postgresql-documentdb, not available on Windows)
+        // Runs after both CLI and interactive paths have resolved engine + version
+        if (
+          engine === Engine.FerretDB &&
+          !isFerretDBv1(version) &&
+          platformService.getPlatformInfo().platform === Platform.Win32
+        ) {
+          version = FERRETDB_VERSION_MAP['1']
+          if (!options.json) {
+            console.log(
+              chalk.yellow(
+                `  FerretDB v2 is not supported on Windows — using v1 (${version})`,
+              ),
+            )
+          }
         }
 
         // Redis/Valkey use numbered databases (0-15), default to "0"

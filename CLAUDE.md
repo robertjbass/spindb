@@ -11,7 +11,7 @@
 
 ## Overview
 
-SpinDB is a CLI tool for running local databases without Docker. Downloads binaries from [hostdb](https://github.com/robertjbass/hostdb). 18 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB.
+SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 18 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB.
 
 **Stack**: Node.js 18+, TypeScript, tsx (no build step), pnpm, Commander.js, Inquirer.js, Chalk, Ora, ESM
 
@@ -23,7 +23,6 @@ core/                 # Business logic (container-manager, process-manager, conf
 config/               # engines.json (registry), engine-defaults.ts, backup-formats.ts
 engines/{engine}/     # Each engine: index.ts, backup.ts, restore.ts, version-maps.ts, binary-manager.ts, etc.
 engines/base-engine.ts
-services/supabase/    # Supabase service layer (attaches to PostgreSQL containers)
 types/index.ts        # Engine enum, ALL_ENGINES, BinaryTool type
 tests/unit/           # Unit tests
 tests/integration/    # Integration tests (reserved ports)
@@ -39,11 +38,9 @@ tests/fixtures/       # Test data and seed files
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
 
-**Supabase service layer** (not an engine): Optional enhancement for PostgreSQL containers. Adds GoTrue (auth), PostgREST (REST API), and an API proxy. Managed via `spindb supabase enable/disable/start/stop/status/info`. Config stored in `container.json` under `supabase` key. Services auto-start/stop with PostgreSQL. JWT secrets regenerated on clone.
-
 ### Critical: When Adding/Modifying Engines
 
-1. **Version maps** (`engines/{engine}/version-maps.ts`) MUST match [hostdb releases.json](https://github.com/robertjbass/hostdb/blob/main/releases.json) exactly. Mismatch = broken downloads or missing versions.
+1. **Version maps** (`engines/{engine}/version-maps.ts`) MUST match [hostdb databases.json](https://github.com/robertjbass/hostdb/blob/main/databases.json) exactly. Mismatch = broken downloads or missing versions.
 
 2. **KNOWN_BINARY_TOOLS** in `core/dependency-manager.ts` — all engine tools MUST be listed here. Missing entries cause `findBinary()` to skip config lookup and silently fall back to PATH.
 
@@ -53,9 +50,26 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 
 5. See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for the full 20+ file checklist.
 
+### Version Lookups (hostdb-releases factory pattern)
+
+All engines use the factory in `core/hostdb-releases-factory.ts` (`createHostdbReleases()`) for version lookups. Each engine's `hostdb-releases.ts` is a ~25-line file that passes engine-specific config to the factory. See `engines/redis/hostdb-releases.ts` as the canonical template.
+
+The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the authoritative version source, with a three-tier fallback: **databases.json → locally installed binaries → hardcoded version map**. Do NOT write custom fetch/cache/fallback logic in engine files — use the factory.
+
+**hostdb data files** (fetched from `registry.layerbase.host`, fallback to GitHub raw):
+- `databases.json` — version listings, platform support, CLI tools per engine (used by factory for version lookups)
+- `downloads.json` — package manager install commands for tools
+- `releases.json` — legacy flat version list (still used by `tests/integration/hostdb-sync.test.ts` for validation, and by binary download URL resolution in `core/hostdb-client.ts`)
+
 ### Binary Sources
 
-All engines from hostdb except: PostgreSQL/Windows uses EDB binaries (`engines/postgresql/edb-binary-urls.ts`). ClickHouse and FerretDB are macOS/Linux only.
+Primary: Layerbase registry (`registry.layerbase.host`). Fallback: GitHub hostdb releases (toggled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). All download/fetch logic is centralized in `core/hostdb-client.ts` (`fetchWithRegistryFallback()`, `fetchHostdbReleases()`, `getReleasesUrls()`).
+
+Exceptions: PostgreSQL/Windows uses EDB-sourced binaries uploaded to hostdb (same download path as other platforms). ClickHouse is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
+
+### hostdb Engine Names vs SpinDB Engines
+
+Most SpinDB engines map 1:1 to hostdb engine names. FerretDB v1 and v2 both use the single `ferretdb` hostdb engine name. The `tests/integration/hostdb-sync.test.ts` test verifies the combined `FERRETDB_VERSION_MAP` against the `ferretdb` entry in hostdb releases.json.
 
 ## Common Tasks
 
@@ -102,6 +116,15 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 **Shell script / JRE engines (QuestDB pattern):** Shell scripts that fork Java processes give useless PIDs. After health check, find real PID via `platformService.findProcessByPort(port)` and write to PID file. Stop also uses port lookup first, PID file as fallback. See `engines/questdb/index.ts`.
 
 **Commander.js:** Use `await program.parseAsync()`, not `program.parse()` — the latter returns immediately without waiting for async actions.
+
+**FerretDB v1 vs v2:** FerretDB is a single engine (`Engine.FerretDB`) with version-branched behavior via `isV1(version)` in `engines/ferretdb/version-maps.ts`. Key differences:
+- **Backend:** v1 uses plain PostgreSQL (shared with standalone PG containers). v2 uses postgresql-documentdb (separate binary).
+- **Platforms:** v1 supports all 5 platforms including Windows. v2 is macOS/Linux only.
+- **Cascade delete:** v1 does NOT delete shared PostgreSQL binaries on engine delete. v2 cleans up postgresql-documentdb.
+- **Auth:** v1 has auth disabled by default (no `--no-auth` flag). v2 requires `--no-auth`.
+- **SSL:** v1 needs `?sslmode=disable` on PostgreSQL URL. v2 omits it.
+- **DB creation:** v1 falls back to `postgres --single` if psql is unavailable. v2 uses psql.
+- See `docs/ENGINE_NOTES.md` FerretDB section for the full list.
 
 ## Code Style
 

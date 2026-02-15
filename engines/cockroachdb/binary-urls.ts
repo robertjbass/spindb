@@ -1,19 +1,17 @@
 /**
  * CockroachDB binary URL generation
  *
- * Generates download URLs for CockroachDB binaries from hostdb.
+ * Generates download URLs for CockroachDB binaries from the layerbase registry.
  */
 
-import type { Platform, Arch } from '../../types'
+import { type Platform, type Arch, Engine } from '../../types'
 import { normalizeVersion } from './version-maps'
-
-const HOSTDB_BASE_URL =
-  'https://github.com/robertjbass/hostdb/releases/download'
+import { buildHostdbUrl } from '../../core/hostdb-client'
 
 /**
  * Get the binary download URL for a specific version and platform
  *
- * URL format: https://github.com/robertjbass/hostdb/releases/download/cockroachdb-{version}/cockroachdb-{version}-{platform}-{arch}.{ext}
+ * URL format: https://registry.layerbase.host/cockroachdb-{version}/cockroachdb-{version}-{platform}-{arch}.{ext}
  *
  * @param version - CockroachDB version (e.g., '25.4.2' or '25')
  * @param platform - Target platform (darwin, linux, win32)
@@ -27,7 +25,11 @@ export function getBinaryUrl(
   const fullVersion = normalizeVersion(version)
   const ext = platform === 'win32' ? 'zip' : 'tar.gz'
 
-  return `${HOSTDB_BASE_URL}/cockroachdb-${fullVersion}/cockroachdb-${fullVersion}-${platform}-${arch}.${ext}`
+  return buildHostdbUrl(Engine.CockroachDB, {
+    version: fullVersion,
+    hostdbPlatform: `${platform}-${arch}`,
+    extension: ext,
+  })
 }
 
 /**

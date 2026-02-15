@@ -2,7 +2,7 @@
  * TypeDB version mapping
  *
  * Maps short version aliases to full versions from hostdb releases.
- * MUST stay in sync with hostdb releases.json
+ * MUST stay in sync with hostdb databases.json
  */
 
 import { logDebug } from '../../core/error-handler'

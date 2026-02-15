@@ -11,7 +11,9 @@ spindb create mydb -e mariadb           # Create MariaDB
 spindb create mydb -e sqlite            # Create SQLite
 spindb create mydb -e duckdb            # Create DuckDB
 spindb create mydb -e mongodb           # Create MongoDB
-spindb create mydb -e ferretdb          # Create FerretDB
+spindb create mydb -e ferretdb          # Create FerretDB (v2 on macOS/Linux, v1 on Windows)
+spindb create mydb -e ferretdb --db-version 1  # FerretDB v1 (plain PG backend, all platforms)
+spindb create mydb -e ferretdb --db-version 2  # FerretDB v2 (DocumentDB backend, macOS/Linux only)
 spindb create mydb -e redis             # Create Redis
 spindb create mydb -e valkey            # Create Valkey
 spindb create mydb -e clickhouse        # Create ClickHouse
@@ -60,8 +62,17 @@ spindb run mych -c "SELECT 1"           # Run ClickHouse SQL
 spindb run mycrdb -c "SELECT 1"         # Run CockroachDB SQL
 spindb run mysurreal -c "SELECT * FROM users"  # Run SurrealQL
 spindb run myquest -c "SELECT * FROM sensors"  # Run QuestDB SQL
+
+# Query with structured output (table or JSON)
+spindb query mydb "SELECT * FROM users"                 # Table output
+spindb query mydb "SELECT * FROM users" --json          # JSON output
+spindb query mydb "SELECT * FROM users" -d analytics    # Specific database
+spindb query myferret "users.find({}).sort({id: 1})"    # MongoDB/FerretDB query
+spindb query myferret "users.find({age: {\$gt: 25}})" --json  # FerretDB JSON output
 ```
 
+> **`run` vs `query`:** Use `run` for executing scripts and fire-and-forget commands (migrations, seeds, DDL). Use `query` when you need structured results back — it outputs a formatted table by default, or JSON with `--json`.
+>
 > **REST API Engines:** Qdrant, Meilisearch, CouchDB, and InfluxDB use REST APIs instead of CLI shells.
 > `spindb connect` shows REST API info. Qdrant, Meilisearch, and CouchDB have web dashboards. InfluxDB is API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
 
@@ -557,6 +568,7 @@ Most commands support `--json` / `-j` for machine-readable output:
 spindb list --json
 spindb engines --json
 spindb create mydb --json
+spindb query mydb "SELECT 1" --json
 spindb url mydb --json
 spindb backup mydb --json
 spindb backups --json

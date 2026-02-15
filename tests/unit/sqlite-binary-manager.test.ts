@@ -128,16 +128,12 @@ describe('SQLite binary-urls', () => {
   })
 
   describe('getBinaryUrl', () => {
-    it('should generate valid hostdb URL for darwin-arm64', () => {
+    it('should generate valid layerbase registry URL for darwin-arm64', () => {
       const url = getBinaryUrl('3', Platform.Darwin, Arch.ARM64)
 
       assert(
-        url.includes('github.com/robertjbass/hostdb'),
-        'URL should use hostdb GitHub',
-      )
-      assert(
-        url.includes('releases/download'),
-        'URL should reference GitHub releases',
+        url.includes('registry.layerbase.host'),
+        'URL should use layerbase registry',
       )
       assert(url.includes('darwin-arm64'), 'URL should include darwin-arm64')
       assert(url.endsWith('.tar.gz'), 'URL should point to tar.gz file')
@@ -231,8 +227,8 @@ describe('SQLiteBinaryManager', () => {
       )
 
       assert(
-        url.includes('github.com/robertjbass/hostdb'),
-        'URL should use hostdb GitHub',
+        url.includes('registry.layerbase.host'),
+        'URL should use layerbase registry',
       )
       assert(url.includes('3.51.2'), 'URL should include full version')
       assert(url.includes('darwin-arm64'), 'URL should include platform')

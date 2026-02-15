@@ -49,6 +49,21 @@ const SUPPORTED_ENGINES = [
 
 type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]
 
+/**
+ * Engines that need multiple demo containers with different versions.
+ * Each entry generates a separate container with the specified version and name suffix.
+ * The first entry (no suffix) is the "default" version.
+ */
+const VERSION_OVERRIDES: Record<
+  string,
+  Array<{ version: string; suffix: string }>
+> = {
+  ferretdb: [
+    { version: '2', suffix: '' }, // demo-ferretdb (v2)
+    { version: '1', suffix: '-v1' }, // demo-ferretdb-v1 (v1)
+  ],
+}
+
 const FILE_BASED_ENGINES: ReadonlySet<string> = new Set(['sqlite', 'duckdb'])
 
 const FILE_BASED_EXTENSIONS: Record<string, string> = {
@@ -116,8 +131,15 @@ function hasSeedScript(engine: string): boolean {
   return existsSync(join(__dirname, 'db', `${engine}.ts`))
 }
 
-function getCreateArgs(engine: string, containerName: string): string[] {
+function getCreateArgs(
+  engine: string,
+  containerName: string,
+  version?: string,
+): string[] {
   const args = ['create', containerName, '--engine', engine]
+  if (version) {
+    args.push('--version', version)
+  }
   if (FILE_BASED_ENGINES.has(engine)) {
     const ext = FILE_BASED_EXTENSIONS[engine]
     const dbPath = join(getDemoDir(), `${containerName}${ext}`)
@@ -126,7 +148,11 @@ function getCreateArgs(engine: string, containerName: string): string[] {
   return args
 }
 
-function runGenerateDb(engine: string, containerName: string): Promise<number> {
+function runGenerateDb(
+  engine: string,
+  containerName: string,
+  version?: string,
+): Promise<number> {
   const scriptPath = join(__dirname, 'db', `${engine}.ts`)
 
   if (!existsSync(scriptPath)) {
@@ -136,7 +162,11 @@ function runGenerateDb(engine: string, containerName: string): Promise<number> {
 
   return new Promise((resolve) => {
     let settled = false
-    const child = spawn('tsx', [scriptPath, containerName], {
+    const args = [scriptPath, containerName]
+    if (version) {
+      args.push('--version', version)
+    }
+    const child = spawn('tsx', args, {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     })
@@ -254,40 +284,68 @@ async function main(): Promise<void> {
   const seeded: string[] = []
   const failed: { engine: string; error: string }[] = []
 
+  // Build the list of containers to create, expanding VERSION_OVERRIDES
+  type CreateTask = {
+    engine: SupportedEngine
+    containerName: string
+    version?: string
+  }
+  const createTasks: CreateTask[] = []
+
   for (const engine of enginesToCreate) {
-    const baseName = `demo-${engine}`
-    const containerName = getNextAvailableName(baseName, existingNames)
+    const overrides = VERSION_OVERRIDES[engine]
+    if (overrides) {
+      // Engine has multiple version variants — create one container per variant
+      for (const { version, suffix } of overrides) {
+        const baseName = `demo-${engine}${suffix}`
+        const containerName = getNextAvailableName(baseName, existingNames)
+        createTasks.push({ engine, containerName, version })
+        existingNames.add(containerName)
+      }
+    } else {
+      const baseName = `demo-${engine}`
+      const containerName = getNextAvailableName(baseName, existingNames)
+      createTasks.push({ engine, containerName })
+      existingNames.add(containerName)
+    }
+  }
+
+  for (const { engine, containerName, version } of createTasks) {
+    const versionLabel = version ? ` v${version}` : ''
 
     if (dryRun) {
       const action = seed ? 'create and seed' : 'create'
-      console.log(`  [dry-run] Would ${action}: ${containerName}`)
+      console.log(
+        `  [dry-run] Would ${action}: ${containerName}${versionLabel}`,
+      )
       created.push(containerName)
-      existingNames.add(containerName)
       continue
     }
 
     if (seed && hasSeedScript(engine)) {
       // Use generate:db which handles create + start + seed
-      console.log(`\nCreating and seeding ${containerName} (${engine})...`)
+      console.log(
+        `\nCreating and seeding ${containerName} (${engine}${versionLabel})...`,
+      )
       console.log('─'.repeat(50))
-      const exitCode = await runGenerateDb(engine, containerName)
+      const exitCode = await runGenerateDb(engine, containerName, version)
 
       if (exitCode === 0) {
         created.push(containerName)
         seeded.push(containerName)
-        existingNames.add(containerName)
       } else {
         failed.push({ engine, error: 'generate:db failed' })
       }
     } else if (seed && !hasSeedScript(engine)) {
       // No seed script — fall back to create-only
-      console.log(`Creating ${containerName} (no seed script for ${engine})...`)
-      const result = runSpindb(getCreateArgs(engine, containerName))
+      console.log(
+        `Creating ${containerName} (no seed script for ${engine}${versionLabel})...`,
+      )
+      const result = runSpindb(getCreateArgs(engine, containerName, version))
 
       if (result.success) {
         console.log(`  Created successfully (no seed available)\n`)
         created.push(containerName)
-        existingNames.add(containerName)
       } else {
         const errorLine =
           result.output
@@ -298,13 +356,12 @@ async function main(): Promise<void> {
         failed.push({ engine, error: errorLine })
       }
     } else {
-      console.log(`Creating ${containerName}...`)
-      const result = runSpindb(getCreateArgs(engine, containerName))
+      console.log(`Creating ${containerName}${versionLabel}...`)
+      const result = runSpindb(getCreateArgs(engine, containerName, version))
 
       if (result.success) {
         console.log(`  Created successfully\n`)
         created.push(containerName)
-        existingNames.add(containerName)
       } else {
         const errorLine =
           result.output

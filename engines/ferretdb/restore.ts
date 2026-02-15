@@ -12,47 +12,51 @@ import { logDebug, logWarning } from '../../core/error-handler'
 import { platformService } from '../../core/platform-service'
 import { ferretdbBinaryManager } from './binary-manager'
 import {
-  normalizeDocumentDBVersion,
   DEFAULT_DOCUMENTDB_VERSION,
+  DEFAULT_V1_POSTGRESQL_VERSION,
+  isV1,
 } from './version-maps'
 import type { ContainerConfig, BackupFormat, RestoreResult } from '../../types'
 
 /**
- * Resolve the path to a postgresql-documentdb binary
- * Shared helper to avoid duplication between getPgRestorePath and getPsqlPath
+ * Resolve the path to a backend binary (pg_restore, psql, etc.)
+ * Uses version-aware backend resolution (v1 = plain PostgreSQL, v2 = postgresql-documentdb)
  */
-function getDocumentDBBinaryPath(
+function getBackendBinaryFullPath(
   container: ContainerConfig,
   binaryName: string,
 ): string {
-  const { backendVersion } = container
+  const { version, backendVersion } = container
   const { platform, arch } = platformService.getPlatformInfo()
+  const v1 = isV1(version)
 
-  const fullBackendVersion = normalizeDocumentDBVersion(
-    backendVersion || DEFAULT_DOCUMENTDB_VERSION,
-  )
-  const documentdbPath = ferretdbBinaryManager.getDocumentDBBinaryPath(
-    fullBackendVersion,
+  const effectiveBackendVersion = v1
+    ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
+    : backendVersion || DEFAULT_DOCUMENTDB_VERSION
+
+  const backendPath = ferretdbBinaryManager.getBackendBinaryPath(
+    version,
+    effectiveBackendVersion,
     platform,
     arch,
   )
 
   const ext = platformService.getExecutableExtension()
-  return join(documentdbPath, 'bin', `${binaryName}${ext}`)
+  return join(backendPath, 'bin', `${binaryName}${ext}`)
 }
 
 /**
- * Get the path to pg_restore from the postgresql-documentdb installation
+ * Get the path to pg_restore from the backend installation
  */
 function getPgRestorePath(container: ContainerConfig): string {
-  return getDocumentDBBinaryPath(container, 'pg_restore')
+  return getBackendBinaryFullPath(container, 'pg_restore')
 }
 
 /**
- * Get the path to psql from the postgresql-documentdb installation
+ * Get the path to psql from the backend installation
  */
 function getPsqlPath(container: ContainerConfig): string {
-  return getDocumentDBBinaryPath(container, 'psql')
+  return getBackendBinaryFullPath(container, 'psql')
 }
 
 /**
@@ -196,8 +200,11 @@ export async function restoreBackup(
 
   if (!existsSync(toolPath)) {
     const toolName = isSqlFormat ? 'psql' : 'pg_restore'
+    const backendName = isV1(container.version)
+      ? 'PostgreSQL'
+      : 'postgresql-documentdb'
     throw new Error(
-      `${toolName} not found at ${toolPath}. Make sure postgresql-documentdb is installed.`,
+      `${toolName} not found at ${toolPath}. Make sure ${backendName} is installed.`,
     )
   }
 

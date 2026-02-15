@@ -2,45 +2,52 @@
 
 ## Overview
 
-FerretDB is a MongoDB-compatible proxy that stores data in PostgreSQL. It requires **two binaries** to function:
+FerretDB is a MongoDB-compatible proxy that stores data in PostgreSQL. It supports **two major versions** with different backends:
 
-1. **ferretdb** - Stateless Go proxy (MongoDB wire protocol -> PostgreSQL SQL)
-2. **postgresql-documentdb** - PostgreSQL 17 with DocumentDB extension
+**v2 (default, macOS/Linux only):**
+1. **ferretdb** (hostdb: `ferretdb`) - Stateless Go proxy
+2. **postgresql-documentdb** (hostdb: `postgresql-documentdb`) - PostgreSQL 17 with DocumentDB extension
 
-This is a **composite engine** with unique binary management requirements.
+**v1 (all platforms including Windows):**
+1. **ferretdb** (hostdb: `ferretdb`) - Stateless Go proxy (same protocol, older version)
+2. **Plain PostgreSQL** - Standard PostgreSQL via `postgresqlBinaryManager` (shared with standalone PG containers)
+
+This is a **composite engine** with unique binary management requirements. The `isV1(version)` helper in `version-maps.ts` is the single branching point for all version-dependent behavior.
 
 ## Platform Support
 
-| Platform | Architecture | Status | Notes |
-|----------|--------------|--------|-------|
-| darwin | x64 | Supported | Both binaries available |
-| darwin | arm64 | Supported | Both binaries available (Apple Silicon) |
-| linux | x64 | Supported | Both binaries available |
-| linux | arm64 | Supported | Both binaries available |
-| win32 | x64 | **NOT SUPPORTED** | postgresql-documentdb has startup issues |
+| Platform | Architecture | v1 Status | v2 Status | Notes |
+|----------|--------------|-----------|-----------|-------|
+| darwin | x64 | Supported | Supported | Both backends available |
+| darwin | arm64 | Supported | Supported | Both backends available (Apple Silicon) |
+| linux | x64 | Supported | Supported | Both backends available |
+| linux | arm64 | Supported | Supported | Both backends available |
+| win32 | x64 | Supported | **NOT SUPPORTED** | v2: postgresql-documentdb has startup issues |
 
-### Windows Limitation
+### Windows Support
 
-FerretDB is **not available on Windows** due to postgresql-documentdb startup issues. The Windows binaries exist in hostdb, but the PostgreSQL backend fails to initialize properly. This has been extensively tested and currently requires WSL as a workaround.
+FerretDB **v1 is supported on Windows**. v2 is not available on Windows because postgresql-documentdb fails to initialize properly. `spindb create` auto-selects v1 on Windows. `spindb engines download ferretdb 2` on Windows is blocked with a helpful error suggesting v1.
+
+**Important hostdb note:** hostdb has `ferretdb` v2 proxy binaries for Windows but does NOT have `postgresql-documentdb` for Windows. This means the v2 proxy would download successfully but fail to start (no backend). The version-aware platform check in `binary-urls.ts` prevents this.
 
 ### macOS SIP / Container Limitations
 
-On macOS, System Integrity Protection (SIP) can block creating symlinks in system directories (e.g., `/usr/local`). In containerized or locked-down environments, even `sudo` may not permit writes to those paths. If you hit permission errors during setup, use a non-system install location or run with elevated privileges when available. See https://github.com/robertjbass/spindb#ferretdb for details.
+On macOS, System Integrity Protection (SIP) can block creating symlinks in system directories (e.g., `/usr/local`). In containerized or locked-down environments, even `sudo` may not permit writes to those paths. If you hit permission errors during setup, use a non-system install location or run with elevated privileges when available. See https://github.com/robertjbass/spindb#ferretdb for details. This only applies to v2 (DocumentDB's Homebrew-derived paths).
 
 ## Binary Packaging
 
 ### Archive Format
-- **Unix (macOS/Linux)**: `tar.gz` for both binaries
-- **Windows**: Not applicable (unsupported)
+- **Unix (macOS/Linux)**: `tar.gz` for both versions
+- **Windows**: `zip` for v1 proxy, plain PostgreSQL handled by `postgresqlBinaryManager`
 
-### FerretDB Archive Structure
+### FerretDB Archive Structure (both v1 and v2)
 ```
 ferretdb/
 └── bin/
     └── ferretdb          # Go proxy binary
 ```
 
-### postgresql-documentdb Archive Structure
+### postgresql-documentdb Archive Structure (v2 only)
 ```
 postgresql-documentdb/
 ├── bin/
@@ -57,7 +64,13 @@ postgresql-documentdb/
 └── share/               # Configuration and data files
 ```
 
-### Why Custom PostgreSQL Build?
+### v1 Backend (Plain PostgreSQL)
+
+v1 delegates backend management to `postgresqlBinaryManager`, which downloads standard PostgreSQL from hostdb. The PostgreSQL binaries are shared with standalone PostgreSQL containers — deleting a FerretDB v1 installation does NOT delete the shared PostgreSQL.
+
+**Caveat:** If `postgresqlBinaryManager.isInstalled()` finds an existing minimal PostgreSQL install (e.g., from a previous DocumentDB extraction) that only has server binaries (`postgres`, `pg_ctl`, `initdb`) but lacks client tools (`psql`), the engine falls back to `postgres --single` mode for pre-start database creation.
+
+### Why Custom PostgreSQL Build? (v2)
 
 The postgresql-documentdb bundle is a **custom PostgreSQL 17 build** that includes:
 - DocumentDB extension (MongoDB-compatible storage)
@@ -79,11 +92,15 @@ Homebrew PostgreSQL has hardcoded paths (`/opt/homebrew/lib/...`) that break on 
 ```typescript
 // FerretDB versions
 export const FERRETDB_VERSION_MAP: Record<string, string> = {
-  '2': '2.7.0',
+  '1': '1.24.2',   // v1: plain PostgreSQL backend
+  '2': '2.7.0',    // v2: postgresql-documentdb backend
 }
 
-// postgresql-documentdb version format: {pg_major}-{documentdb_version}
+// v2 backend version format: {pg_major}-{documentdb_version}
 export const DEFAULT_DOCUMENTDB_VERSION = '17-0.107.0'
+
+// v1 backend: standard PostgreSQL major version
+export const DEFAULT_V1_POSTGRESQL_VERSION = '17'
 ```
 
 ## Implementation Details
@@ -91,14 +108,17 @@ export const DEFAULT_DOCUMENTDB_VERSION = '17-0.107.0'
 ### Composite Binary Manager
 
 FerretDB uses a custom `FerretDBCompositeBinaryManager` that:
-- Downloads both binaries atomically (rolls back if either fails)
-- Manages separate version tracking for FerretDB and DocumentDB
-- Handles platform-specific library requirements
+- Downloads both binaries atomically (rolls back if either fails) — v2 only
+- For v1, downloads FerretDB proxy then delegates PostgreSQL to `postgresqlBinaryManager`
+- `isV1(version)` branches all version-dependent behavior
+- `getBackendBinaryPath()` / `getBackendSpawnEnv()` abstract v1/v2 backend resolution
 
 ### Architecture
 
 ```
-MongoDB Client (:27017) -> FerretDB Proxy -> PostgreSQL+DocumentDB (:54320+)
+MongoDB Client (:27017) -> FerretDB Proxy -> PostgreSQL backend (:54320+)
+                                              v1: plain PostgreSQL
+                                              v2: PostgreSQL + DocumentDB
 ```
 
 ### Three Ports Per Container
@@ -111,11 +131,19 @@ FerretDB containers use **three ports**:
 ### FerretDB-Specific Startup Flags
 
 ```bash
+# v2:
 ferretdb \
-  --no-auth \                              # Disable SCRAM authentication
+  --no-auth \                              # Disable SCRAM authentication (v2 only)
   --debug-addr=127.0.0.1:${port + 10000} \ # Unique debug port per container
   --listen-addr=127.0.0.1:${port} \        # MongoDB wire protocol port
   --postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb
+
+# v1 (differences):
+ferretdb \
+  # no --no-auth (auth disabled by default in v1)
+  --debug-addr=127.0.0.1:${port + 10000} \
+  --listen-addr=127.0.0.1:${port} \
+  --postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb?sslmode=disable
 ```
 
 ### Linux LD_LIBRARY_PATH
@@ -123,10 +151,10 @@ ferretdb \
 On Linux, the bundled binaries need `LD_LIBRARY_PATH` set to find shared libraries:
 
 ```typescript
-getDocumentDBSpawnEnv(): { LD_LIBRARY_PATH: '/path/to/lib:$LD_LIBRARY_PATH' }
+getBackendSpawnEnv(): { LD_LIBRARY_PATH: '/path/to/lib:$LD_LIBRARY_PATH' }
 ```
 
-macOS uses `@loader_path` which doesn't need environment variables.
+macOS uses `@loader_path` which doesn't need environment variables. Applies to both v1 and v2.
 
 ### macOS Code Signing
 
@@ -163,9 +191,9 @@ Restore may fail with: `duplicate key value violates unique constraint`
 
 ### Uninstall Behavior
 
-When uninstalling FerretDB:
-- FerretDB proxy binary is deleted
-- postgresql-documentdb binary is **also deleted** (dedicated dependency)
+**v2:** Both FerretDB proxy and postgresql-documentdb are deleted. The postgresql-documentdb binary is a dedicated dependency not shared with other engines.
+
+**v1:** Only the FerretDB proxy is deleted. Plain PostgreSQL binaries are **NOT deleted** because they are shared with standalone PostgreSQL containers.
 
 This differs from QuestDB's PostgreSQL dependency (see QuestDB README).
 
@@ -173,7 +201,7 @@ This differs from QuestDB's PostgreSQL dependency (see QuestDB README).
 
 ### 1. Authentication Gotcha
 
-FerretDB 2.x enables SCRAM authentication by default. The `--setup-username` and `--setup-password` flags **do NOT exist** despite documentation suggestions. Use `--no-auth` instead.
+FerretDB 2.x enables SCRAM authentication by default. The `--setup-username` and `--setup-password` flags **do NOT exist** despite documentation suggestions. Use `--no-auth` instead. FerretDB 1.x has auth disabled by default (no flag needed).
 
 ### 2. Debug Port Conflicts
 
@@ -187,9 +215,17 @@ Like MongoDB, databases don't appear until data is written. The engine uses the 
 
 Namespace is derived from container name: `my-app` -> `my_app` (dashes replaced with underscores).
 
-### 5. Windows Unsupported
+### 5. Windows: v2 Unsupported, v1 Supported
 
-Extensive testing confirmed postgresql-documentdb does not start properly on Windows. WSL is the recommended workaround.
+Extensive testing confirmed postgresql-documentdb (v2 backend) does not start properly on Windows. FerretDB v1 uses plain PostgreSQL and works on all platforms including Windows. **Note:** hostdb has v2 proxy binaries for Windows but NOT the backend — the download command blocks v2 on Windows to prevent broken installs.
+
+### 6. v1 Binary Verification
+
+FerretDB v1 hostdb builds panic on `--version` because the source expects `build/version/version.txt` (via `//go:embed`). The hostdb build script must create this file. SpinDB skips `--version` verification for v1 (only checks binary exists).
+
+### 7. v1 Database Creation Without psql
+
+If the PostgreSQL backend is a minimal install lacking `psql`, the engine uses `postgres --single` mode before server start to create the `ferretdb` database. This requires exclusive data directory access, so it runs before `pg_ctl start`.
 
 ## Docker E2E Test Notes
 
@@ -201,9 +237,9 @@ FerretDB Docker E2E tests verify:
 
 ## CI/CD Notes
 
-### Skipped on Windows
+### Windows CI
 
-FerretDB CI tests are skipped on Windows runners due to platform limitation.
+FerretDB v2 CI tests are skipped on Windows runners. v1 tests should run on all platforms.
 
 ### GitHub Actions Cache Step
 
@@ -214,11 +250,13 @@ FerretDB CI tests are skipped on Windows runners due to platform limitation.
     path: |
       ~/.spindb/bin/ferretdb-*
       ~/.spindb/bin/postgresql-documentdb-*
+      ~/.spindb/bin/postgresql-*
     key: ferretdb-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('engines/ferretdb/version-maps.ts') }}
 ```
 
 ## Related Documentation
 
 - [plans/FERRETDB.md](../../plans/FERRETDB.md) - Original implementation plan (may be outdated)
-- hostdb releases: [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0)
-- hostdb releases: [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0)
+- hostdb releases: [ferretdb-2.7.0](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-2.7.0) (v2 proxy)
+- hostdb releases: [ferretdb-1.24.2](https://github.com/robertjbass/hostdb/releases/tag/ferretdb-1.24.2) (v1 proxy)
+- hostdb releases: [postgresql-documentdb-17-0.107.0](https://github.com/robertjbass/hostdb/releases/tag/postgresql-documentdb-17-0.107.0) (v2 backend)

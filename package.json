@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.34.5",
+  "version": "0.35.2",
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
@@ -35,6 +35,7 @@
     "spindb",
     "postgres",
     "postgresql",
+    "postgresql-documentdb",
     "mysql",
     "mariadb",
     "database",
@@ -55,6 +56,8 @@
     "questdb",
     "typedb",
     "influxdb",
+    "layerbase",
+    "docker-free",
     "tui",
     "cli",
     "package manager"

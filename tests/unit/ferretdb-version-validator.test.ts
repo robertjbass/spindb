@@ -11,7 +11,9 @@ import {
   normalizeDocumentDBVersion,
   getFullVersion,
   DEFAULT_DOCUMENTDB_VERSION,
+  DEFAULT_V1_POSTGRESQL_VERSION,
   SUPPORTED_MAJOR_VERSIONS,
+  isV1,
 } from '../../engines/ferretdb/version-maps'
 
 describe('FerretDB Version Maps', () => {
@@ -129,6 +131,13 @@ describe('FerretDB Version Maps', () => {
   })
 
   describe('SUPPORTED_MAJOR_VERSIONS', () => {
+    it('should include version 1', () => {
+      assert(
+        SUPPORTED_MAJOR_VERSIONS.includes('1'),
+        'Should include major version 1',
+      )
+    })
+
     it('should include version 2', () => {
       assert(
         SUPPORTED_MAJOR_VERSIONS.includes('2'),
@@ -140,6 +149,44 @@ describe('FerretDB Version Maps', () => {
       assert(
         SUPPORTED_MAJOR_VERSIONS.length > 0,
         'Should have at least one version',
+      )
+    })
+  })
+
+  describe('isV1', () => {
+    it('should return true for major version 1', () => {
+      assert(isV1('1'), 'isV1("1") should be true')
+    })
+
+    it('should return true for full v1 version', () => {
+      assert(isV1('1.24.2'), 'isV1("1.24.2") should be true')
+    })
+
+    it('should return false for major version 2', () => {
+      assert(!isV1('2'), 'isV1("2") should be false')
+    })
+
+    it('should return false for full v2 version', () => {
+      assert(!isV1('2.7.0'), 'isV1("2.7.0") should be false')
+    })
+  })
+
+  describe('FERRETDB_VERSION_MAP v1 entries', () => {
+    it('should contain major version 1', () => {
+      assert(FERRETDB_VERSION_MAP['1'] !== undefined, 'Should have version 1')
+    })
+
+    it('should map major version 1 to a 1.x full version', () => {
+      const fullVersion = FERRETDB_VERSION_MAP['1']
+      assert(fullVersion.startsWith('1.'), 'Full version should start with 1.')
+    })
+  })
+
+  describe('DEFAULT_V1_POSTGRESQL_VERSION', () => {
+    it('should be a numeric major version string', () => {
+      assert(
+        /^\d+$/.test(DEFAULT_V1_POSTGRESQL_VERSION),
+        'Should be a numeric major version (e.g., "17")',
       )
     })
   })

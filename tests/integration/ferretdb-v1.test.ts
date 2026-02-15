@@ -1,0 +1,707 @@
+/**
+ * FerretDB v1 System Integration Tests
+ *
+ * Tests the full container lifecycle with real FerretDB v1 processes.
+ * FerretDB v1 uses plain PostgreSQL as the backend (no DocumentDB extension).
+ * v1 supports all platforms including Windows.
+ */
+
+import { describe, it, before, after } from 'node:test'
+import net from 'net'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+import {
+  TEST_PORTS,
+  generateTestName,
+  findConsecutiveFreePorts,
+  cleanupTestContainers,
+  getRowCount,
+  waitForReady,
+  waitForStopped,
+  containerDataExists,
+  runScriptFile,
+  runScriptJS,
+  executeQuery,
+} from './helpers'
+import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import { logDebug } from '../../core/error-handler'
+import { containerManager } from '../../core/container-manager'
+import { processManager } from '../../core/process-manager'
+import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
+import { getEngine } from '../../engines'
+import { Engine } from '../../types'
+import { readFile, unlink } from 'fs/promises'
+
+const ENGINE = Engine.FerretDB
+const DATABASE = 'testdb'
+const SEED_FILE = join(__dirname, '../fixtures/ferretdb/seeds/sample-db.js')
+const EXPECTED_ROW_COUNT = 5
+const TEST_VERSION = '1' // FerretDB v1 - uses plain PostgreSQL backend
+
+describe('FerretDB v1 Integration Tests', () => {
+  let testPorts: number[]
+  let containerName: string
+  let clonedContainerName: string
+  let renamedContainerName: string
+  let portConflictContainerName: string
+
+  before(async () => {
+    console.log('\n🧹 Cleaning up any existing test containers...')
+    const deleted = await cleanupTestContainers()
+    if (deleted.length > 0) {
+      console.log(`   Deleted: ${deleted.join(', ')}`)
+    }
+
+    console.log('\n🔍 Finding available test ports...')
+    testPorts = await findConsecutiveFreePorts(
+      3,
+      TEST_PORTS['ferretdb-v1'].base,
+    )
+    console.log(`   Using ports: ${testPorts.join(', ')}`)
+
+    containerName = generateTestName('ferretdb-v1-test')
+    clonedContainerName = generateTestName('ferretdb-v1-test-clone')
+    renamedContainerName = generateTestName('ferretdb-v1-test-renamed')
+    portConflictContainerName = generateTestName('ferretdb-v1-test-conflict')
+  })
+
+  after(async () => {
+    console.log('\n🧹 Final cleanup...')
+    const deleted = await cleanupTestContainers()
+    if (deleted.length > 0) {
+      console.log(`   Deleted: ${deleted.join(', ')}`)
+    }
+  })
+
+  it('should create container without starting (--no-start)', async () => {
+    console.log(
+      `\n📦 Creating container "${containerName}" without starting...`,
+    )
+
+    // Ensure FerretDB v1 binaries are downloaded first
+    const engine = getEngine(ENGINE)
+    console.log('   Ensuring FerretDB v1 binaries are available...')
+    await engine.ensureBinaries(TEST_VERSION, ({ message }) => {
+      console.log(`   ${message}`)
+    })
+
+    await containerManager.create(containerName, {
+      engine: ENGINE,
+      version: TEST_VERSION,
+      port: testPorts[0],
+      database: DATABASE,
+    })
+
+    // Initialize the data directory
+    await engine.initDataDir(containerName, TEST_VERSION, {})
+
+    // Verify container exists but is not running
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+    assertEqual(
+      config?.status,
+      'created',
+      'Container status should be "created"',
+    )
+
+    const running = await processManager.isRunning(containerName, {
+      engine: ENGINE,
+    })
+    assert(!running, 'Container should not be running')
+
+    console.log('   ✓ Container created and not running')
+  })
+
+  it('should start the container', async () => {
+    console.log(`\n▶️  Starting container "${containerName}"...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+    await engine.start(config!)
+    await containerManager.updateConfig(containerName, { status: 'running' })
+
+    // Wait for FerretDB to be ready
+    const ready = await waitForReady(ENGINE, testPorts[0])
+    assert(ready, 'FerretDB v1 should be ready to accept connections')
+
+    const running = await processManager.isRunning(containerName, {
+      engine: ENGINE,
+    })
+    assert(running, 'Container should be running')
+
+    console.log('   ✓ Container started and ready')
+  })
+
+  it('should seed the database with test data using runScript', async () => {
+    console.log(
+      `\n🌱 Seeding database with test data using engine.runScript...`,
+    )
+
+    // Use runScriptFile which internally calls engine.runScript
+    // This tests the `spindb run` command functionality
+    await runScriptFile(containerName, SEED_FILE, DATABASE)
+
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Should have correct document count after seeding',
+    )
+
+    console.log(`   ✓ Seeded ${rowCount} documents using engine.runScript`)
+  })
+
+  it('should query seeded data using executeQuery', async () => {
+    logDebug('Querying seeded data using engine.executeQuery...')
+
+    // Test basic find query (FerretDB uses MongoDB JavaScript syntax)
+    // Sort by id field (not _id which is auto-generated)
+    // Must call .toArray() to convert cursor to array for JSON serialization
+    const result = await executeQuery(
+      containerName,
+      'test_user.find({}).sort({id: 1}).toArray()',
+      DATABASE,
+    )
+
+    assertEqual(
+      result.rowCount,
+      EXPECTED_ROW_COUNT,
+      'Should return all documents',
+    )
+
+    // Verify first document data (sorted by id, so id:1 = Alice Johnson)
+    assertEqual(
+      result.rows[0].name,
+      'Alice Johnson',
+      'First document should be Alice Johnson',
+    )
+    assertEqual(
+      result.rows[0].email,
+      'alice@example.com',
+      'First document email should match',
+    )
+
+    // Test filtered query
+    const filteredResult = await executeQuery(
+      containerName,
+      'test_user.find({email: /bob/}).toArray()',
+      DATABASE,
+    )
+
+    assertEqual(
+      filteredResult.rowCount,
+      1,
+      'Should return one document for Bob',
+    )
+    assertEqual(
+      filteredResult.rows[0].name,
+      'Bob Smith',
+      'Should find Bob Smith',
+    )
+
+    // Verify columns include expected fields
+    assertTruthy(result.columns.includes('name'), 'Columns should include name')
+    assertTruthy(
+      result.columns.includes('email'),
+      'Columns should include email',
+    )
+
+    logDebug(`Query returned ${result.rowCount} documents with correct data`)
+  })
+
+  it('should create a user and update password on re-create', async () => {
+    console.log(`\n👤 Testing createUser...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    const creds1 = await engine.createUser(config!, {
+      username: 'testuser',
+      password: 'firstpass123',
+      database: DATABASE,
+    })
+    assertEqual(creds1.username, 'testuser', 'Username should match')
+    assertEqual(creds1.password, 'firstpass123', 'Password should match')
+    console.log('   ✓ Created user with initial password')
+
+    const creds2 = await engine.createUser(config!, {
+      username: 'testuser',
+      password: 'secondpass456',
+      database: DATABASE,
+    })
+    assertEqual(creds2.password, 'secondpass456', 'Password should be updated')
+    console.log('   ✓ Re-created user with new password (idempotent)')
+  })
+
+  it('should create a new container from connection string (dump/restore)', async () => {
+    console.log(
+      `\n📋 Creating container "${clonedContainerName}" from connection string...`,
+    )
+
+    // Create container
+    await containerManager.create(clonedContainerName, {
+      engine: ENGINE,
+      version: TEST_VERSION,
+      port: testPorts[1],
+      database: DATABASE,
+    })
+
+    // Initialize and start
+    const engine = getEngine(ENGINE)
+    await engine.initDataDir(clonedContainerName, TEST_VERSION, {})
+
+    const config = await containerManager.getConfig(clonedContainerName)
+    assert(config !== null, 'Cloned container config should exist')
+
+    await engine.start(config!)
+    await containerManager.updateConfig(clonedContainerName, {
+      status: 'running',
+    })
+
+    // Wait for ready
+    const ready = await waitForReady(ENGINE, testPorts[1])
+    assert(ready, 'Cloned FerretDB v1 should be ready')
+
+    // FerretDB backup/restore uses PostgreSQL pg_dump/pg_restore on the backend
+    const sourceConfig = await containerManager.getConfig(containerName)
+    assert(sourceConfig !== null, 'Source config should exist')
+
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const dumpPath = join(tmpdir(), `ferretdb-v1-test-dump-${Date.now()}.dump`)
+
+    // Use 'custom' format which supports --clean for proper restore
+    await engine.backup(sourceConfig!, dumpPath, {
+      database: 'ferretdb', // FerretDB stores all data in the 'ferretdb' PostgreSQL database
+      format: 'custom',
+    })
+
+    // Re-read config after start to get the backendPort
+    const updatedConfig = await containerManager.getConfig(clonedContainerName)
+    assert(
+      updatedConfig !== null,
+      'Updated cloned container config should exist',
+    )
+
+    try {
+      await engine.restore(updatedConfig!, dumpPath, {
+        database: 'ferretdb',
+      })
+    } finally {
+      // Clean up dump file regardless of restore success/failure
+      await rm(dumpPath, { force: true })
+    }
+
+    console.log('   ✓ Container created from connection string')
+  })
+
+  it('should verify restored data matches source', async () => {
+    console.log(`\n🔍 Verifying restored data...`)
+
+    // FerretDB v1 uses plain PostgreSQL backend (no DocumentDB extension),
+    // so pg_dump/pg_restore should work cleanly without the metadata
+    // conflicts that affect v2's postgresql-documentdb backend.
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[1],
+      DATABASE,
+      'test_user',
+    )
+
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should have same document count (v1 uses plain PostgreSQL - no DocumentDB conflicts)',
+    )
+
+    console.log(`   ✓ Verified ${rowCount} documents in restored container`)
+  })
+
+  it('should stop and delete the restored container', async () => {
+    console.log(`\n🗑️  Deleting restored container "${clonedContainerName}"...`)
+
+    const config = await containerManager.getConfig(clonedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+    await engine.stop(config!)
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(clonedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped before delete')
+
+    await containerManager.delete(clonedContainerName, { force: true })
+
+    // Verify filesystem is cleaned up
+    const exists = containerDataExists(clonedContainerName, ENGINE)
+    assert(!exists, 'Container data directory should be deleted')
+
+    // Verify not in container list
+    const containers = await containerManager.list()
+    const found = containers.find((c) => c.name === clonedContainerName)
+    assert(!found, 'Container should not be in list')
+
+    console.log('   ✓ Container deleted and filesystem cleaned up')
+  })
+
+  it('should modify data using runScript inline JavaScript', async () => {
+    console.log(
+      `\n✏️  Deleting one document using engine.runScript with inline JS...`,
+    )
+
+    // Use runScriptJS for MongoDB-compatible engines (FerretDB)
+    await runScriptJS(
+      containerName,
+      "db.test_user.deleteOne({email: 'eve@example.com'})",
+      DATABASE,
+    )
+
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Should have one less document',
+    )
+
+    console.log(
+      `   ✓ Document deleted using engine.runScript, now have ${rowCount} documents`,
+    )
+  })
+
+  it('should stop, rename container, and change port', async () => {
+    console.log(`\n📝 Renaming container and changing port...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    // Stop the container
+    const engine = getEngine(ENGINE)
+    await engine.stop(config!)
+    await containerManager.updateConfig(containerName, { status: 'stopped' })
+
+    // Wait for the container to be fully stopped (PID file removed)
+    const stopped = await waitForStopped(containerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped before rename')
+
+    // Rename container and change port
+    await containerManager.rename(containerName, renamedContainerName)
+    await containerManager.updateConfig(renamedContainerName, {
+      port: testPorts[2],
+    })
+
+    // Verify rename
+    const oldConfig = await containerManager.getConfig(containerName)
+    assert(oldConfig === null, 'Old container name should not exist')
+
+    const newConfig = await containerManager.getConfig(renamedContainerName)
+    assert(newConfig !== null, 'Renamed container should exist')
+    assertEqual(newConfig?.port, testPorts[2], 'Port should be updated')
+
+    console.log(
+      `   ✓ Renamed to "${renamedContainerName}" on port ${testPorts[2]}`,
+    )
+  })
+
+  it('should verify data persists after rename', async () => {
+    console.log(`\n🔍 Verifying data persists after rename...`)
+
+    const config = await containerManager.getConfig(renamedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    // Start the renamed container
+    const engine = getEngine(ENGINE)
+    await engine.start(config!)
+    await containerManager.updateConfig(renamedContainerName, {
+      status: 'running',
+    })
+
+    // Wait for ready
+    const ready = await waitForReady(ENGINE, testPorts[2])
+    assert(ready, 'Renamed FerretDB v1 should be ready')
+
+    // Verify document count reflects deletion
+    const rowCount = await getRowCount(
+      ENGINE,
+      testPorts[2],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Document count should persist after rename',
+    )
+
+    console.log(`   ✓ Data persisted: ${rowCount} documents`)
+  })
+
+  it('should handle port conflict gracefully', async () => {
+    console.log(`\n⚠️  Testing port conflict handling...`)
+
+    // Try to create container on a port that's already in use (testPorts[2])
+    await containerManager.create(portConflictContainerName, {
+      engine: ENGINE,
+      version: TEST_VERSION,
+      port: testPorts[2], // This port is in use by renamed container
+      database: 'conflictdb',
+    })
+
+    const engine = getEngine(ENGINE)
+    await engine.initDataDir(portConflictContainerName, TEST_VERSION, {})
+
+    // The container should be created but when we try to start, it should detect conflict
+    const config = await containerManager.getConfig(portConflictContainerName)
+    assert(config !== null, 'Container should be created')
+    assertEqual(
+      config?.port,
+      testPorts[2],
+      'Port should be set to conflicting port initially',
+    )
+
+    try {
+      await engine.start(config!)
+      await containerManager.updateConfig(portConflictContainerName, {
+        status: 'running',
+      })
+
+      const running = await processManager.isRunning(
+        portConflictContainerName,
+        {
+          engine: ENGINE,
+        },
+      )
+
+      if (running) {
+        const updatedConfig = await containerManager.getConfig(
+          portConflictContainerName,
+        )
+        console.log(
+          `   ✓ Container started (port: ${updatedConfig?.port}, conflict handling succeeded)`,
+        )
+
+        await engine.stop(updatedConfig!)
+        await waitForStopped(portConflictContainerName, ENGINE)
+      } else {
+        console.log(
+          '   ✓ Container start attempted but not running (port conflict detected)',
+        )
+      }
+    } catch (error) {
+      const e = error as Error
+      assert(
+        e.message.includes('port') ||
+          e.message.includes('address') ||
+          e.message.includes('EADDRINUSE') ||
+          e.message.includes('in use'),
+        `Expected port conflict error, got: ${e.message}`,
+      )
+      console.log(`   ✓ Port conflict detected with error: ${e.message}`)
+    } finally {
+      await containerManager.delete(portConflictContainerName, { force: true })
+    }
+  })
+
+  it('should show warning when starting already running container', async () => {
+    console.log(`\n⚠️  Testing start on already running container...`)
+
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(running, 'Container should already be running')
+
+    const config = await containerManager.getConfig(renamedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    // This should complete without throwing (idempotent behavior)
+    await engine.start(config!)
+
+    const stillRunning = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(
+      stillRunning,
+      'Container should still be running after duplicate start',
+    )
+
+    console.log(
+      '   ✓ Container is already running (duplicate start handled gracefully)',
+    )
+  })
+
+  it('should restart after partial shutdown (orphaned PG backend)', async () => {
+    console.log(
+      `\n🔄 Testing restart after partial shutdown (proxy killed, PG backend alive)...`,
+    )
+
+    const config = await containerManager.getConfig(renamedContainerName)
+    assert(config !== null, 'Container config should exist')
+    assert(config!.backendPort !== undefined, 'backendPort should be set')
+
+    const containerDir = paths.getContainerPath(renamedContainerName, {
+      engine: ENGINE,
+    })
+    const ferretPidFile = join(containerDir, 'ferretdb.pid')
+
+    // 1. Read the FerretDB proxy PID and kill only the proxy
+    const pidContent = await readFile(ferretPidFile, 'utf8')
+    const proxyPid = parseInt(pidContent.trim(), 10)
+    assert(!isNaN(proxyPid), 'FerretDB proxy PID should be valid')
+    assert(
+      platformService.isProcessRunning(proxyPid),
+      'FerretDB proxy should be running',
+    )
+
+    // Kill the proxy process directly (simulating a crash)
+    await platformService.terminateProcess(proxyPid, true)
+
+    // Wait for the process to actually die (SIGKILL is async)
+    const killStart = Date.now()
+    while (
+      platformService.isProcessRunning(proxyPid) &&
+      Date.now() - killStart < 5000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    await unlink(ferretPidFile).catch(() => {})
+
+    // 2. Verify proxy is dead but PG backend is still alive on backendPort
+    assert(
+      !platformService.isProcessRunning(proxyPid),
+      'FerretDB proxy should be dead after kill',
+    )
+
+    const proxyRunning = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(
+      !proxyRunning,
+      'processManager should report not running (proxy dead)',
+    )
+
+    // But the PG backend should still be listening
+    const pgAlive = await new Promise<boolean>((resolve) => {
+      const socket = net.createConnection(config!.backendPort!, '127.0.0.1')
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('error', () => {
+        socket.destroy()
+        resolve(false)
+      })
+      socket.setTimeout(2000, () => {
+        socket.destroy()
+        resolve(false)
+      })
+    })
+    assert(pgAlive, 'PostgreSQL backend should still be running on backendPort')
+
+    // 3. Call start() again — this should succeed (detect PG running, only start proxy)
+    const engine = getEngine(ENGINE)
+    await engine.start(config!)
+    await containerManager.updateConfig(renamedContainerName, {
+      status: 'running',
+    })
+
+    // 4. Verify everything is working
+    const ready = await waitForReady(ENGINE, config!.port)
+    assert(ready, 'FerretDB v1 should be ready after restart')
+
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(running, 'FerretDB v1 should be running after restart')
+
+    // Verify data is still accessible
+    const rowCount = await getRowCount(
+      ENGINE,
+      config!.port,
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT - 1,
+      'Data should be intact after partial shutdown restart',
+    )
+
+    console.log('   ✓ Restart after partial shutdown succeeded, data intact')
+  })
+
+  it('should show warning when stopping already stopped container', async () => {
+    console.log(`\n⚠️  Testing stop on already stopped container...`)
+
+    // First stop the container
+    const config = await containerManager.getConfig(renamedContainerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+    await engine.stop(config!)
+    await containerManager.updateConfig(renamedContainerName, {
+      status: 'stopped',
+    })
+
+    // Wait for the container to be fully stopped
+    const stopped = await waitForStopped(renamedContainerName, ENGINE)
+    assert(stopped, 'Container should be fully stopped')
+
+    // Now it's stopped, verify
+    const running = await processManager.isRunning(renamedContainerName, {
+      engine: ENGINE,
+    })
+    assert(!running, 'Container should be stopped')
+
+    // Attempting to stop again should not throw (idempotent behavior)
+    await engine.stop(config!)
+    console.log(
+      '   ✓ Container is already stopped (double-stop handled gracefully)',
+    )
+  })
+
+  it('should delete container with --force', async () => {
+    console.log(`\n🗑️  Force deleting container "${renamedContainerName}"...`)
+
+    await containerManager.delete(renamedContainerName, { force: true })
+
+    // Verify filesystem cleaned up
+    const exists = containerDataExists(renamedContainerName, ENGINE)
+    assert(!exists, 'Container data directory should be deleted')
+
+    // Verify not in list
+    const containers = await containerManager.list()
+    const found = containers.find((c) => c.name === renamedContainerName)
+    assert(!found, 'Container should not be in list')
+
+    console.log('   ✓ Container force deleted')
+  })
+
+  it('should have no test containers remaining', async () => {
+    console.log(`\n✅ Verifying no test containers remain...`)
+
+    const containers = await containerManager.list()
+    const testContainers = containers.filter((c) => c.name.includes('-test'))
+
+    assertEqual(testContainers.length, 0, 'No test containers should remain')
+
+    console.log('   ✓ All test containers cleaned up')
+  })
+})

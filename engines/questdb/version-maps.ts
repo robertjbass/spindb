@@ -1,8 +1,8 @@
 /**
  * QuestDB Version Maps
  *
- * IMPORTANT: Keep this in sync with hostdb releases.json:
- * https://github.com/robertjbass/hostdb/blob/main/releases.json
+ * IMPORTANT: Keep this in sync with hostdb databases.json:
+ * https://github.com/robertjbass/hostdb/blob/main/databases.json
  *
  * QuestDB uses standard semantic versioning (e.g., 9.2.3)
  */

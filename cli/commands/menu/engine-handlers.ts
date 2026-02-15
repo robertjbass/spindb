@@ -34,6 +34,7 @@ import {
   type InstalledInfluxDBEngine,
 } from '../../helpers'
 
+import { isV1 } from '../../../engines/ferretdb/version-maps'
 import { type MenuChoice } from './shared'
 
 export async function handleEngines(): Promise<void> {
@@ -285,50 +286,68 @@ async function handleDeleteEngine(
   try {
     await rm(enginePath, { recursive: true, force: true })
 
-    // FerretDB is a composite engine - also clean up postgresql-documentdb backend
-    // But only if no other FerretDB installations share it
+    // FerretDB is a composite engine - handle backend cleanup based on version
+    let backendStatus = ''
     if (engineName === 'ferretdb') {
       // enginePath is like: ~/.spindb/bin/ferretdb-2.7.0-darwin-arm64
-      // We need to find: ~/.spindb/bin/postgresql-documentdb-*-darwin-arm64
       const binDir = dirname(enginePath)
       const ferretDirName = basename(enginePath)
-      // Extract platform-arch from ferretdb directory name (e.g., "darwin-arm64")
+      // Extract version from directory name (e.g., "2.7.0" from "ferretdb-2.7.0-darwin-arm64")
       const parts = ferretDirName.split('-')
       const platformArch = parts.slice(-2).join('-') // "darwin-arm64"
 
-      const entries = await readdir(binDir, { withFileTypes: true })
-
-      // Check if other FerretDB installations exist for the same platform
-      // If so, don't delete the shared postgresql-documentdb backend
-      const otherFerretInstalls = entries.filter(
-        (entry) =>
-          entry.isDirectory() &&
-          entry.name.startsWith('ferretdb-') &&
-          entry.name.endsWith(platformArch) &&
-          entry.name !== ferretDirName,
+      // Extract version: remove "ferretdb-" prefix and "-platform-arch" suffix
+      const versionPart = ferretDirName.slice(
+        'ferretdb-'.length,
+        ferretDirName.length - `-${platformArch}`.length,
       )
 
-      if (otherFerretInstalls.length > 0) {
-        // Other FerretDB versions exist - skip documentdb deletion
-        spinner.text = `Skipping postgresql-documentdb (shared by ${otherFerretInstalls.length} other FerretDB install(s))`
+      if (isV1(versionPart)) {
+        // v1: Don't delete shared PostgreSQL binaries (used by standalone PG containers)
+        backendStatus =
+          ' (PostgreSQL backend kept — shared with standalone containers)'
       } else {
-        // No other FerretDB installs - safe to delete documentdb backend
-        const documentdbPattern = `postgresql-documentdb-`
-        for (const entry of entries) {
-          if (
-            entry.isDirectory() &&
-            entry.name.startsWith(documentdbPattern) &&
-            entry.name.endsWith(platformArch)
-          ) {
-            const documentdbPath = join(binDir, entry.name)
-            spinner.text = `Deleting postgresql-documentdb backend...`
-            await rm(documentdbPath, { recursive: true, force: true })
+        // v2: Clean up postgresql-documentdb backend if no other v2 FerretDB installs share it
+        const entries = await readdir(binDir, { withFileTypes: true })
+
+        // Check if other v2 FerretDB installations exist for the same platform
+        const otherV2Installs = entries.filter((entry) => {
+          if (!entry.isDirectory()) return false
+          if (!entry.name.startsWith('ferretdb-')) return false
+          if (!entry.name.endsWith(platformArch)) return false
+          if (entry.name === ferretDirName) return false
+          const otherVersion = entry.name.slice(
+            'ferretdb-'.length,
+            entry.name.length - `-${platformArch}`.length,
+          )
+          return !isV1(otherVersion)
+        })
+
+        if (otherV2Installs.length > 0) {
+          backendStatus = ` (postgresql-documentdb kept — shared by ${otherV2Installs.length} other v2 install(s))`
+        } else {
+          const documentdbPattern = `postgresql-documentdb-`
+          let cleaned = false
+          for (const entry of entries) {
+            if (
+              entry.isDirectory() &&
+              entry.name.startsWith(documentdbPattern) &&
+              entry.name.endsWith(platformArch)
+            ) {
+              const documentdbPath = join(binDir, entry.name)
+              spinner.text = `Deleting postgresql-documentdb backend...`
+              await rm(documentdbPath, { recursive: true, force: true })
+              cleaned = true
+            }
+          }
+          if (cleaned) {
+            backendStatus = ' (postgresql-documentdb backend also deleted)'
           }
         }
       }
     }
 
-    spinner.succeed(`Deleted ${engineName} ${engineVersion}`)
+    spinner.succeed(`Deleted ${engineName} ${engineVersion}${backendStatus}`)
   } catch (error) {
     const e = error as Error
     spinner.fail(`Failed to delete: ${e.message}`)
