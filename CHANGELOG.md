@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.2] - 2026-02-15
+
+### Fixed
+- **FerretDB v1 Windows auto-selection bypass** — Moved the Windows v1 guard in `create.ts` to run after both CLI and interactive prompt paths resolve engine + version. Previously, selecting FerretDB via the interactive menu on Windows would bypass the v2→v1 fallback. Also catches explicit `--db-version 2` on Windows (uses `isFerretDBv1()` instead of `!options.dbVersion`).
+- **`formatBytes` out-of-bounds** — Clamped unit index to prevent array overflow on extremely large byte values.
+
+### Changed
+- **Type-safe engine names** — QuestDB and SurrealDB `binary-urls.ts` now use `Engine` enum instead of string literals for `buildHostdbUrl` calls.
+- **Registry fetch timeout** — `fetchFromRegistryUrls()` now accepts an optional per-request timeout (default 5s) to prevent hanging on unresponsive registries.
+
+### Docs
+- **CLAUDE.md** — Fixed stale reference to removed `edb-binary-urls.ts`; PostgreSQL/Windows now correctly documented as EDB-sourced binaries uploaded to hostdb.
+
 ## [0.35.1] - 2026-02-15
 
 ### Changed

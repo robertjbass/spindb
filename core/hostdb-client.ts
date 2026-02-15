@@ -288,17 +288,21 @@ export async function fetchWithRegistryFallback(
  *
  * @param urls - URLs to try in order (e.g., layerbase then GitHub)
  * @param logger - Callback for logging per-URL failures
+ * @param timeoutMs - Per-request timeout in milliseconds (default: 5000)
  * @returns The first successful Response
  * @throws Error if all URLs fail
  */
 export async function fetchFromRegistryUrls(
   urls: string[],
   logger: (message: string) => void,
+  timeoutMs: number = 5000,
 ): Promise<Response> {
   let lastError: Error | null = null
   for (const url of urls) {
     try {
-      const response = await fetch(url)
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(timeoutMs),
+      })
       if (response.ok) return response
       logger(`Registry fetch from ${url}: HTTP ${response.status}`)
     } catch (error) {

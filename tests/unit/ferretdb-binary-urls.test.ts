@@ -106,7 +106,7 @@ describe('FerretDB Binary URLs', () => {
       assert(urls.documentdb !== undefined, 'v2 should have documentdb URL')
     })
 
-    it('v1 and v2 URLs should use same ferretdb engine name', () => {
+    it('v1 and v2 URLs should use ferretdb engine with version-specific paths', () => {
       const v1Urls = getBinaryUrls(
         '1',
         '17-0.107.0',

@@ -9,7 +9,7 @@
  */
 
 import { FALLBACK_VERSION_MAP } from './version-maps'
-import { type Platform, type Arch } from '../../types'
+import { Engine, type Platform, type Arch } from '../../types'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 
 /**
@@ -26,7 +26,7 @@ export function getBinaryUrl(
   // Windows uses .zip, Unix uses .tar.gz
   const ext = platform === 'win32' ? 'zip' : 'tar.gz'
 
-  return buildHostdbUrl('questdb', {
+  return buildHostdbUrl(Engine.QuestDB, {
     version: fullVersion,
     hostdbPlatform: `${platform}-${arch}`,
     extension: ext,

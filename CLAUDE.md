@@ -65,7 +65,7 @@ The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the author
 
 Primary: Layerbase registry (`registry.layerbase.host`). Fallback: GitHub hostdb releases (toggled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). All download/fetch logic is centralized in `core/hostdb-client.ts` (`fetchWithRegistryFallback()`, `fetchHostdbReleases()`, `getReleasesUrls()`).
 
-Exceptions: PostgreSQL/Windows uses EDB binaries (`engines/postgresql/edb-binary-urls.ts`). ClickHouse is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
+Exceptions: PostgreSQL/Windows uses EDB-sourced binaries uploaded to hostdb (same download path as other platforms). ClickHouse is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
 
 ### hostdb Engine Names vs SpinDB Engines
 

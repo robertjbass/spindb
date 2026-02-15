@@ -4,7 +4,7 @@
  * Generates download URLs for SurrealDB binaries from the layerbase registry.
  */
 
-import type { Platform, Arch } from '../../types'
+import { Engine, type Platform, type Arch } from '../../types'
 import { normalizeVersion } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 
@@ -25,7 +25,7 @@ export function getBinaryUrl(
   const fullVersion = normalizeVersion(version)
   const ext = platform === 'win32' ? 'zip' : 'tar.gz'
 
-  return buildHostdbUrl('surrealdb', {
+  return buildHostdbUrl(Engine.SurrealDB, {
     version: fullVersion,
     hostdbPlatform: `${platform}-${arch}`,
     extension: ext,
