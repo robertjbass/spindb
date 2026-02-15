@@ -25,6 +25,7 @@ import { paths } from '../config/paths'
 import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
 import { logDebug } from './error-handler'
+import { fetchWithRegistryFallback } from './hostdb-client'
 import {
   type Engine,
   Platform,
@@ -203,14 +204,16 @@ export abstract class BaseDocumentBinaryManager {
       let response: Response
       let fileStream: ReturnType<typeof createWriteStream> | null = null
       try {
-        response = await fetch(url, { signal: controller.signal })
+        response = await fetchWithRegistryFallback(url, {
+          signal: controller.signal,
+        })
 
         if (!response.ok) {
           if (response.status === 404) {
             throw new Error(
               `${this.config.displayName} ${fullVersion} binaries not found (404). ` +
                 `This version may have been removed from hostdb. ` +
-                `Try a different version or check https://github.com/robertjbass/hostdb/releases`,
+                `Try a different version or check https://registry.layerbase.host`,
             )
           }
           throw new Error(
