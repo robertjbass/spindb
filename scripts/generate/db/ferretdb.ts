@@ -3,7 +3,7 @@
  * Generate a FerretDB database with sample data.
  *
  * Usage:
- *   pnpm generate:db ferretdb [container-name] [--port <port>]
+ *   pnpm generate:db ferretdb [container-name] [--port <port>] [--version <version>]
  */
 
 import { existsSync } from 'fs'
