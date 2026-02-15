@@ -106,11 +106,30 @@ describe('FerretDB Binary URLs', () => {
       assert(urls.documentdb !== undefined, 'v2 should have documentdb URL')
     })
 
-    it('v1 URL should contain ferretdb-v1 engine name', () => {
-      const urls = getBinaryUrls('1', '17-0.107.0', Platform.Darwin, Arch.ARM64)
+    it('v1 and v2 URLs should use same ferretdb engine name', () => {
+      const v1Urls = getBinaryUrls(
+        '1',
+        '17-0.107.0',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
+      const v2Urls = getBinaryUrls(
+        '2',
+        '17-0.107.0',
+        Platform.Darwin,
+        Arch.ARM64,
+      )
       assert(
-        urls.ferretdb.includes('ferretdb-v1'),
-        'v1 URL should contain ferretdb-v1',
+        !v1Urls.ferretdb.includes('ferretdb-v1-'),
+        'v1 URL should not contain ferretdb-v1 engine name',
+      )
+      assert(
+        v1Urls.ferretdb.includes('/ferretdb-1.'),
+        'v1 URL should use ferretdb engine with v1 version',
+      )
+      assert(
+        v2Urls.ferretdb.includes('/ferretdb-2.'),
+        'v2 URL should use ferretdb engine with v2 version',
       )
     })
 

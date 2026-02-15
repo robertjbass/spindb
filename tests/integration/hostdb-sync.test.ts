@@ -27,8 +27,7 @@ import { COCKROACHDB_VERSION_MAP } from '../../engines/cockroachdb/version-maps'
 import { COUCHDB_VERSION_MAP } from '../../engines/couchdb/version-maps'
 import { DUCKDB_VERSION_MAP } from '../../engines/duckdb/version-maps'
 import {
-  FERRETDB_V1_VERSION_MAP,
-  FERRETDB_V2_VERSION_MAP,
+  FERRETDB_VERSION_MAP,
   DOCUMENTDB_VERSION_MAP,
 } from '../../engines/ferretdb/version-maps'
 import { MEILISEARCH_VERSION_MAP } from '../../engines/meilisearch/version-maps'
@@ -52,8 +51,7 @@ const ENGINES = [
   { name: 'cockroachdb', map: COCKROACHDB_VERSION_MAP },
   { name: 'couchdb', map: COUCHDB_VERSION_MAP },
   { name: 'duckdb', map: DUCKDB_VERSION_MAP },
-  { name: 'ferretdb', map: FERRETDB_V2_VERSION_MAP },
-  { name: 'ferretdb-v1', map: FERRETDB_V1_VERSION_MAP },
+  { name: 'ferretdb', map: FERRETDB_VERSION_MAP },
   { name: 'postgresql-documentdb', map: DOCUMENTDB_VERSION_MAP },
   { name: 'meilisearch', map: MEILISEARCH_VERSION_MAP },
   { name: 'qdrant', map: QDRANT_VERSION_MAP },
