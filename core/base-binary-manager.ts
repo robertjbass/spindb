@@ -454,6 +454,7 @@ export abstract class BaseBinaryManager {
     try {
       const { stdout, stderr } = await spawnAsync(serverPath, ['--version'], {
         timeout: this.verifyTimeoutMs,
+        cwd: binPath,
       })
       // Log stderr if present (may contain warnings)
       if (stderr && stderr.trim()) {
