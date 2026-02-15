@@ -200,8 +200,11 @@ export async function restoreBackup(
 
   if (!existsSync(toolPath)) {
     const toolName = isSqlFormat ? 'psql' : 'pg_restore'
+    const backendName = isV1(container.version)
+      ? 'PostgreSQL'
+      : 'postgresql-documentdb'
     throw new Error(
-      `${toolName} not found at ${toolPath}. Make sure postgresql-documentdb is installed.`,
+      `${toolName} not found at ${toolPath}. Make sure ${backendName} is installed.`,
     )
   }
 

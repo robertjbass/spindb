@@ -72,12 +72,7 @@ export function isPlatformSupported(
   arch: Arch,
   version?: string,
 ): boolean {
-  const key = `${platform}-${arch}`
-  const platforms =
-    version && isV1(version)
-      ? FERRETDB_V1_SUPPORTED_PLATFORMS
-      : FERRETDB_V2_SUPPORTED_PLATFORMS
-  return platforms.has(key)
+  return getHostdbPlatform(platform, arch, version) !== null
 }
 
 /**
@@ -130,7 +125,7 @@ export function getDocumentDBBinaryUrl(
 
   if (!DOCUMENTDB_SUPPORTED_PLATFORMS.has(key)) {
     throw new Error(
-      `Unsupported platform: ${platform}-${arch}. FerretDB is only supported on macOS and Linux.`,
+      `Unsupported platform: ${platform}-${arch}. postgresql-documentdb (FerretDB v2 backend) is only supported on macOS and Linux.`,
     )
   }
 

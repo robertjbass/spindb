@@ -68,8 +68,11 @@ export async function createBackup(
   const pgDump = getPgDumpPath(container)
 
   if (!existsSync(pgDump)) {
+    const backendName = isV1(container.version)
+      ? 'PostgreSQL'
+      : 'postgresql-documentdb'
     throw new Error(
-      `pg_dump not found at ${pgDump}. Make sure postgresql-documentdb is installed.`,
+      `pg_dump not found at ${pgDump}. Make sure ${backendName} is installed.`,
     )
   }
 
