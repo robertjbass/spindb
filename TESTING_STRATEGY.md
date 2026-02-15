@@ -8,9 +8,9 @@ SpinDB tests every engine on every supported platform-arch combo in CI.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci-fast.yml` | Push to any branch (except main) | Fast feedback: lint + unit tests on Ubuntu |
-| `ci.yml` | PR to main, manual dispatch | Full integration tests on all platforms |
-| `ci-full.yml` | Manual dispatch, weekly schedule | Same as ci.yml (kept as rollback target) |
+| `ci.yml` | PR to main, manual dispatch | Lint, unit tests, and full integration tests on all platforms |
+| `publish.yml` | Push to main (merge) | Version check + publish to npm with OIDC |
+| `upstream-version-check.yml` | PR to main | Informational: flags newer PostgreSQL major versions |
 
 ## Platform Coverage (ci.yml)
 
@@ -37,7 +37,7 @@ The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`)
 | FerretDB | 4 (no Windows) | postgresql-documentdb has startup issues on Windows |
 | Meilisearch | 5 (backup/restore skipped on Windows) | Upstream page size alignment bug |
 
-**Unit tests** run on 3 runners in ci.yml (ubuntu-24.04, macos-14, windows-latest) and 5 runners in ci-full.yml (adds ubuntu-22.04, macos-15-intel).
+**Unit tests** run on 3 runners in ci.yml (ubuntu-24.04, macos-14, windows-latest).
 
 ## Test Types
 

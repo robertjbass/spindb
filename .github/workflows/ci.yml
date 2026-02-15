@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [dev]
+  # push:
+  #   branches: [dev] # TODO: change to a feature branch and uncomment to test on feature branches
   workflow_dispatch:
 
 # =============================================================================
@@ -30,8 +30,7 @@ on:
 #
 # Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
 #
-# Full matrix available via: ci-full.yml (manual dispatch or weekly)
-# See TESTING_STRATEGY.md for rollback instructions.
+# Lint & type check: runs as a job in this workflow (see 'lint' job below)
 # =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
@@ -623,6 +622,7 @@ jobs:
   test-ferretdb-v1:
     name: FerretDB v1 ${{ matrix.icon }} ${{ matrix.label }}
     needs: [test-ferretdb]
+    if: always()
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

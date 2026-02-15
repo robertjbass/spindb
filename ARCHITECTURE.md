@@ -20,7 +20,7 @@ This document describes the architecture of SpinDB, a CLI tool for running local
 
 SpinDB follows a **three-tier layered architecture**:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     CLI Layer (cli/)                        │
 │         Commands, Menu, Prompts, Spinners, Theme            │
@@ -52,7 +52,7 @@ SpinDB follows a **three-tier layered architecture**:
 
 ## Directory Structure
 
-```
+```text
 spindb/
 ├── cli/                    # CLI layer
 │   ├── bin.ts              # Entry point (#!/usr/bin/env tsx)
@@ -169,7 +169,7 @@ spindb/
 The CLI layer handles user interaction and command routing.
 
 **Entry Flow:**
-```
+```text
 bin.ts → index.ts → Commander.js → commands/*.ts
 ```
 
@@ -235,7 +235,7 @@ FerretDB is a **composite engine** that requires two separate processes to funct
 
 ### How It Works
 
-```
+```text
 v2: MongoDB Client (:27017) → FerretDB Proxy → PostgreSQL+DocumentDB (:54320+)
 v1: MongoDB Client (:27017) → FerretDB Proxy → Plain PostgreSQL (:54320+)
 ```
@@ -258,7 +258,7 @@ Users connect to the external port with MongoDB connection strings (`mongodb://l
 
 ### Container Structure
 
-```
+```text
 ~/.spindb/containers/ferretdb/myapp/
 ├── container.json          # Config (includes backendVersion, backendPort)
 ├── pg_data/                # PostgreSQL data directory (embedded)
@@ -280,7 +280,7 @@ FerretDB requires TWO binary packages:
 1. **ferretdb** (hostdb: `ferretdb`) - The Go proxy binary (older version, same hostdb engine name)
 2. **Plain PostgreSQL** - Standard PostgreSQL via `postgresqlBinaryManager` (shared with standalone PG containers, NOT a separate download)
 
-```
+```text
 # v2 layout:
 ~/.spindb/bin/
 ├── ferretdb-2.7.0-darwin-arm64/
@@ -451,7 +451,7 @@ Manages container lifecycle and configuration.
 - SQLite registry integration
 
 **Storage:**
-```
+```text
 ~/.spindb/containers/{engine}/{name}/container.json
 ```
 
@@ -512,7 +512,7 @@ Abstracts platform-specific behavior.
 
 ### Container Creation Flow
 
-```
+```text
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │ CLI: create │ ──▶ │ ContainerManager │ ──▶ │ Engine.initDataDir │
 └─────────────┘     └──────────────────┘     └─────────────────┘
@@ -532,7 +532,7 @@ Abstracts platform-specific behavior.
 
 ### Container Start Flow
 
-```
+```text
 ┌─────────────┐     ┌─────────────────┐     ┌──────────────┐
 │ CLI: start  │ ──▶ │ DependencyManager │ ──▶ │ PortManager  │
 └─────────────┘     │ (validate tools)│     │ (check port) │
@@ -552,7 +552,7 @@ Abstracts platform-specific behavior.
 
 ### Backup/Restore Flow
 
-```
+```text
 ┌─────────────┐     ┌────────────────────┐     ┌──────────────┐
 │ CLI: backup │ ──▶ │ Engine.backup      │ ──▶ │ pg_dump /    │
 └─────────────┘     │ (detect format)    │     │ mysqldump    │
@@ -572,7 +572,7 @@ Abstracts platform-specific behavior.
 
 Location: `~/.spindb/` (macOS/Linux) or `%USERPROFILE%\.spindb\` (Windows)
 
-```
+```text
 ~/.spindb/
 ├── bin/                              # PostgreSQL server binaries
 │   └── postgresql-17.7.0-{platform}/  # e.g., darwin-arm64, linux-x64, win32-x64

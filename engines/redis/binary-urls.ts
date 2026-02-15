@@ -115,10 +115,3 @@ function normalizeVersion(
   )
   return version
 }
-
-/**
- * Get the full version string for a major version
- *
- * @param majorVersion - Major version (e.g., '7', '8')
- * @returns Full version string (e.g., '7.4.7') or null if not supported
- */
