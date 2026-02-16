@@ -292,19 +292,29 @@ describe('Weaviate Integration Tests', () => {
       assert(restoreResponse.ok, 'Restore API call should succeed')
 
       // Wait for restore to complete
+      let restored = false
+      let finalStatus = ''
       for (let i = 0; i < 30; i++) {
         const statusResp = await fetch(
           `http://127.0.0.1:${testPorts[1]}/v1/backups/filesystem/${backupId}/restore`,
         )
         if (statusResp.ok) {
           const status = (await statusResp.json()) as { status: string }
-          if (status.status === 'SUCCESS') break
-          if (status.status === 'FAILED') {
+          finalStatus = status.status
+          if (finalStatus === 'SUCCESS') {
+            restored = true
+            break
+          }
+          if (finalStatus === 'FAILED') {
             throw new Error('Restore failed')
           }
         }
         await new Promise((r) => setTimeout(r, 1000))
       }
+      assert(
+        restored,
+        `Restore should have completed (last status: "${finalStatus || 'no response'}")`,
+      )
 
       // Clean up backup directory
       const { rm } = await import('fs/promises')

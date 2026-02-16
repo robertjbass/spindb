@@ -115,7 +115,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 **Shell script / JRE engines (QuestDB pattern):** Shell scripts that fork Java processes give useless PIDs. After health check, find real PID via `platformService.findProcessByPort(port)` and write to PID file. Stop also uses port lookup first, PID file as fallback. See `engines/questdb/index.ts`.
 
-**Binary `--version` verification:** `BaseBinaryManager.verify()` runs `binary --version` after download. Some engines don't support this flag — CouchDB (Erlang app, tries to start) and Weaviate (no `--version` in v1.35.x). These engines override `verify()` to just check binary existence. See `engines/couchdb/binary-manager.ts` and `engines/weaviate/binary-manager.ts`.
+**Binary `--version` verification:** `BaseBinaryManager.verify()` runs `binary --version` after download. Some engines don't support this flag — CouchDB (Erlang app, tries to start) and Weaviate (some releases lack `--version` support). These engines override `verify()` in their `binary-manager.ts` to just check binary existence instead. See `engines/couchdb/binary-manager.ts` and `engines/weaviate/binary-manager.ts`. Consult hostdb's `databases.json` for currently supported Weaviate versions rather than embedding specific version numbers.
 
 **Weaviate internal cluster ports:** Weaviate binds 4 internal ports (gossip 7946, data 7947, raft 8300, raft RPC 8301) that MUST be unique per container. SpinDB derives them from the HTTP port: gossip=port+100, data=port+101, raft=port+200, raft_rpc=port+201. Also sets `CLUSTER_HOSTNAME=node-{port}`. Without unique ports, multiple containers silently conflict or fail to start.
 

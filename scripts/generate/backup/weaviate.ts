@@ -344,15 +344,18 @@ async function main() {
   const outputPath = await getOutputPath()
   const backupSourceDir = join(backupDir, backupId)
 
-  if (existsSync(backupSourceDir)) {
-    console.log(`Copying backup to: ${outputPath}`)
-    await cp(backupSourceDir, outputPath, { recursive: true })
-    console.log('Copy complete!\n')
-  } else {
-    console.log(
-      `Backup created at: ${backupDir}/${backupId} (could not find for copy)`,
+  if (!existsSync(backupSourceDir)) {
+    console.error(
+      `Error: Backup directory not found at ${backupSourceDir}\n` +
+        `The Weaviate backup API reported SUCCESS but the directory does not exist.\n` +
+        `Check that BACKUP_FILESYSTEM_PATH is set to: ${backupDir}`,
     )
+    process.exit(1)
   }
+
+  console.log(`Copying backup to: ${outputPath}`)
+  await cp(backupSourceDir, outputPath, { recursive: true })
+  console.log('Copy complete!\n')
 
   // Clean up - delete the class
   console.log(`Cleaning up ${CLASS_NAME} class...`)

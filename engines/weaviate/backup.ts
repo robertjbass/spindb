@@ -61,6 +61,8 @@ export async function createBackup(
   const maxWait = 300000 // 5 minutes
   const startTime = Date.now()
 
+  let backupCompleted = false
+
   while (Date.now() - startTime < maxWait) {
     const statusResponse = await weaviateApiRequest(
       port,
@@ -76,6 +78,7 @@ export async function createBackup(
 
       if (statusData.status === 'SUCCESS') {
         logDebug(`Weaviate backup completed: ${backupId}`)
+        backupCompleted = true
         break
       }
 
@@ -87,6 +90,12 @@ export async function createBackup(
     }
 
     await new Promise((r) => setTimeout(r, 1000))
+  }
+
+  if (!backupCompleted) {
+    throw new Error(
+      `Weaviate backup '${backupId}' timed out after ${maxWait / 1000}s without completing`,
+    )
   }
 
   // Weaviate stores backup at BACKUP_FILESYSTEM_PATH/<backupId>/

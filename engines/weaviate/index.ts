@@ -1,9 +1,7 @@
 import { spawn, type SpawnOptions } from 'child_process'
-import { createWriteStream, existsSync } from 'fs'
+import { existsSync } from 'fs'
 import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -471,13 +469,33 @@ export class WeaviateEngine extends BaseEngine {
     const raftPort = port + 200 // e.g., 8080 → 8280
     const raftInternalRpcPort = raftPort + 1 // e.g., 8080 → 8281
 
+    // Read weaviate.env file (written by initDataDir and updated by createUser)
+    // so that API key / auth settings persist across restarts
+    const envFilePath = join(containerDir, 'weaviate.env')
+    const fileEnv: Record<string, string> = {}
+    if (existsSync(envFilePath)) {
+      try {
+        const envContent = await readFile(envFilePath, 'utf-8')
+        for (const line of envContent.split('\n')) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed.startsWith('#')) continue
+          const eqIdx = trimmed.indexOf('=')
+          if (eqIdx > 0) {
+            fileEnv[trimmed.substring(0, eqIdx)] = trimmed.substring(eqIdx + 1)
+          }
+        }
+      } catch {
+        logDebug(`Could not read ${envFilePath}, using defaults`)
+      }
+    }
+
     const env = {
       ...process.env,
+      // Defaults from weaviate.env file (includes auth settings from createUser)
+      ...fileEnv,
+      // Explicit spawn values always override file values
       PERSISTENCE_DATA_PATH: dataDir,
       BACKUP_FILESYSTEM_PATH: backupsDir,
-      QUERY_DEFAULTS_LIMIT: '25',
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true',
-      DEFAULT_VECTORIZER_MODULE: 'none',
       ENABLE_MODULES: 'backup-filesystem',
       CLUSTER_HOSTNAME: `node-${port}`,
       GRPC_PORT: String(grpcPort),
@@ -930,7 +948,7 @@ export class WeaviateEngine extends BaseEngine {
    */
   async dumpFromConnectionString(
     connectionString: string,
-    outputPath: string,
+    _outputPath: string,
   ): Promise<DumpResult> {
     // Parse connection string
     const { baseUrl, headers } = parseWeaviateConnectionString(connectionString)
@@ -957,108 +975,22 @@ export class WeaviateEngine extends BaseEngine {
 
     logDebug(`Found ${classCount} classes on remote server`)
 
-    // Create a full backup on the remote server
-    const backupId = `spindb-dump-${Date.now()}`
-    logDebug('Creating backup on remote server...')
-    const backupResponse = await remoteWeaviateRequest(
-      baseUrl,
-      'POST',
-      '/v1/backups/filesystem',
-      headers,
-      { id: backupId },
+    // Weaviate's filesystem backup backend writes to the server's local disk
+    // (BACKUP_FILESYSTEM_PATH/<backup_id>/). These files cannot be downloaded
+    // over the REST API — only the backup metadata is exposed via GET.
+    // To dump from a remote Weaviate instance, use an object-store backup
+    // backend (s3, gcs, azure) which supports remote access.
+    throw new Error(
+      `Cannot dump from a remote Weaviate instance using the filesystem backup backend.\n` +
+        `Weaviate filesystem backups are written to the server's local disk ` +
+        `(BACKUP_FILESYSTEM_PATH/<backup_id>/) and cannot be downloaded over HTTP.\n\n` +
+        `To export data from a remote Weaviate instance, either:\n` +
+        `  1. SSH into the server and copy the backup directory directly\n` +
+        `  2. Configure an object-store backup backend (S3, GCS, Azure) on the remote server\n` +
+        `     and use the appropriate backup module endpoint instead of /v1/backups/filesystem\n` +
+        `  3. Use the Weaviate client SDK to read and re-insert objects programmatically\n\n` +
+        `Remote server at ${baseUrl} has ${classCount} class(es).`,
     )
-
-    if (backupResponse.status !== 200) {
-      throw new Error(
-        `Failed to create backup on remote Weaviate: ${JSON.stringify(backupResponse.data)}`,
-      )
-    }
-
-    logDebug(`Remote backup created: ${backupId}`)
-
-    // Poll for backup completion
-    const maxWait = 300000 // 5 minutes
-    const startTime = Date.now()
-
-    while (Date.now() - startTime < maxWait) {
-      const statusResponse = await remoteWeaviateRequest(
-        baseUrl,
-        'GET',
-        `/v1/backups/filesystem/${backupId}`,
-        headers,
-      )
-
-      if (statusResponse.status === 200) {
-        const statusData = statusResponse.data as { status?: string }
-        if (statusData.status === 'SUCCESS') {
-          break
-        }
-        if (statusData.status === 'FAILED') {
-          throw new Error(
-            `Remote Weaviate backup failed: ${JSON.stringify(statusData)}`,
-          )
-        }
-      }
-
-      await new Promise((r) => setTimeout(r, 1000))
-    }
-
-    // Download the backup metadata
-    const downloadUrl = `${baseUrl}/v1/backups/filesystem/${backupId}`
-    logDebug(`Downloading backup from ${downloadUrl}...`)
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
-
-    let downloadResponse: Response
-    try {
-      downloadResponse = await fetch(downloadUrl, {
-        headers,
-        signal: controller.signal,
-      })
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      const err = fetchError as Error
-      if (err.name === 'AbortError') {
-        throw new Error('Backup download timed out after 5 minutes')
-      }
-      throw fetchError
-    }
-
-    if (!downloadResponse.ok) {
-      clearTimeout(timeoutId)
-      throw new Error(
-        `Failed to download backup: ${downloadResponse.status} ${downloadResponse.statusText}`,
-      )
-    }
-
-    // Stream to output path
-    if (!downloadResponse.body) {
-      clearTimeout(timeoutId)
-      throw new Error('Download failed: response has no body')
-    }
-
-    const fileStream = createWriteStream(outputPath)
-    try {
-      const nodeStream = Readable.fromWeb(downloadResponse.body)
-      await pipeline(nodeStream, fileStream)
-      clearTimeout(timeoutId)
-    } catch (streamError) {
-      clearTimeout(timeoutId)
-      fileStream.destroy()
-      await unlink(outputPath).catch(() => {})
-      throw streamError
-    }
-
-    logDebug(`Backup downloaded to ${outputPath}`)
-
-    return {
-      filePath: outputPath,
-      warnings:
-        classCount === 0
-          ? ['Remote Weaviate instance has no classes']
-          : undefined,
-    }
   }
 
   // Create a backup

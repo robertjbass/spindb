@@ -176,6 +176,26 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
+  // Weaviate batch API returns 200 even if individual objects fail —
+  // errors are embedded in per-object results
+  const batchResults = (await insertResponse.json()) as Array<{
+    result?: {
+      status?: string
+      errors?: { error?: Array<{ message?: string }> }
+    }
+  }>
+  const failures = batchResults.filter((r) => r.result?.status === 'FAILED')
+  if (failures.length > 0) {
+    console.error(
+      `Error: ${failures.length}/${batchResults.length} objects failed to insert:`,
+    )
+    for (const f of failures) {
+      const msgs = f.result?.errors?.error?.map((e) => e.message).join(', ')
+      console.error(`  - ${msgs || 'unknown error'}`)
+    }
+    process.exit(1)
+  }
+
   console.log('Database seeded successfully!\n')
 
   console.log('Verifying data...')

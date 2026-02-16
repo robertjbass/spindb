@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Weaviate CI** — Integration tests on all 5 platforms in `ci.yml` and `ci-full.yml` with binary caching.
 - **Weaviate backup generator** — `pnpm generate:backup weaviate` script for creating test fixture backups on demand.
 
+### Fixed
+- **Weaviate backup timeout detection** — Backup creation and restore polling loops now fail explicitly on timeout instead of silently continuing. Backup generator script also fails with actionable error if the backup directory is missing after API reports success.
+- **Weaviate remote dump guard** — `dumpFromConnectionString` now throws a clear error explaining that Weaviate filesystem backups can't be downloaded over HTTP, with alternative approaches listed.
+- **Weaviate batch insert validation** — Demo seed script now checks per-object results from the batch API (which returns 200 even when individual objects fail).
+- **Weaviate auth persistence** — `start()` now reads `weaviate.env` file so API key/auth settings from `createUser` persist across restarts.
+
 ### Changed
 - **Alphabetical engine ordering** — Engine selection prompt and `spindb engines list` now display engines in alphabetical order instead of insertion order. Previously engines were listed in the order they were added to the codebase.
 
