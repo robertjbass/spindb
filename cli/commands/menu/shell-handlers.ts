@@ -244,6 +244,13 @@ export async function handleOpenShell(
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'weaviate') {
+    // Weaviate uses REST API, open web dashboard in browser
+    defaultShellName = 'REST API'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else if (config.engine === 'couchdb') {
     // CouchDB uses REST API, open Fauxton dashboard in browser
     defaultShellName = 'Fauxton Dashboard'
@@ -338,6 +345,16 @@ export async function handleOpenShell(
     // InfluxDB: influxdb3 query CLI + API info
     choices.push({
       name: `▸ Use default shell (influxdb3 query)`,
+      value: 'default',
+    })
+    choices.push({
+      name: `ℹ Show API info`,
+      value: 'api-info',
+    })
+  } else if (config.engine === 'weaviate') {
+    // Weaviate: REST API dashboard + API info
+    choices.push({
+      name: `◎ Open Dashboard in browser`,
       value: 'default',
     })
     choices.push({
@@ -596,6 +613,20 @@ export async function handleOpenShell(
         chalk.gray(
           `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/api/v3/query_sql -d '{"db":"mydb","q":"SELECT 1"}'`,
         ),
+      )
+    } else if (config.engine === 'weaviate') {
+      console.log(chalk.cyan('Weaviate REST API:'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log(chalk.white(`  gRPC: 127.0.0.1:${config.port + 1}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(
+        chalk.gray(
+          `  curl http://127.0.0.1:${config.port}/v1/.well-known/ready`,
+        ),
+      )
+      console.log(
+        chalk.gray(`  curl http://127.0.0.1:${config.port}/v1/schema`),
       )
     } else if (config.engine === 'couchdb') {
       console.log(chalk.cyan('CouchDB REST API:'))
@@ -1500,6 +1531,15 @@ async function launchShell(
     // Meilisearch: Open dashboard in browser (served at root URL)
     const dashboardUrl = `http://127.0.0.1:${config.port}`
     console.log(uiInfo(`Opening Meilisearch Dashboard in browser...`))
+    console.log(chalk.gray(`  ${dashboardUrl}`))
+    console.log()
+    openInBrowser(dashboardUrl)
+    await pressEnterToContinue()
+    return
+  } else if (config.engine === 'weaviate') {
+    // Weaviate: Open REST API root in browser
+    const dashboardUrl = `http://127.0.0.1:${config.port}`
+    console.log(uiInfo(`Opening Weaviate in browser...`))
     console.log(chalk.gray(`  ${dashboardUrl}`))
     console.log()
     openInBrowser(dashboardUrl)

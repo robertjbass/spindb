@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-02-16
+
+### Added
+- **Weaviate engine** — 19th database engine. AI-native vector database with REST/GraphQL and gRPC APIs. BSD-3-Clause license. Full lifecycle support: create, start, stop, backup/restore, clone, rename, delete. REST API on port 8080, gRPC on port+1. Uses classes/collections instead of traditional databases. Unique internal cluster ports (gossip, data, raft) derived from HTTP port to avoid conflicts between containers.
+- **Weaviate backup/restore** — Directory-based filesystem backups via Weaviate REST API. Restore reads `backup_config.json` to match the internal backup ID (Weaviate validates the directory name). Cross-container restore uses `node_mapping` for hostname translation.
+- **Weaviate CI** — Integration tests on all 5 platforms in `ci.yml` and `ci-full.yml` with binary caching.
+- **Weaviate backup generator** — `pnpm generate:backup weaviate` script for creating test fixture backups on demand.
+
+### Fixed
+- **Weaviate backup timeout detection** — Backup creation and restore polling loops now fail explicitly on timeout instead of silently continuing. Backup generator script also fails with actionable error if the backup directory is missing after API reports success.
+- **Weaviate remote dump guard** — `dumpFromConnectionString` now throws a clear error explaining that Weaviate filesystem backups can't be downloaded over HTTP, with alternative approaches listed.
+- **Weaviate batch insert validation** — Demo seed script now checks per-object results from the batch API (which returns 200 even when individual objects fail).
+- **Weaviate auth persistence** — `start()` now reads `weaviate.env` file so API key/auth settings from `createUser` persist across restarts.
+
+### Changed
+- **Alphabetical engine ordering** — Engine selection prompt and `spindb engines list` now display engines in alphabetical order instead of insertion order. Previously engines were listed in the order they were added to the codebase.
+
 ## [0.35.4] - 2026-02-15
 
 ### Fixed

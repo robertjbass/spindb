@@ -45,6 +45,7 @@ const SUPPORTED_ENGINES = [
   'questdb',
   'typedb',
   'influxdb',
+  'weaviate',
 ] as const
 
 type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]

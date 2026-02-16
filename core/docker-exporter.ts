@@ -72,6 +72,7 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.QuestDB]: 'QuestDB',
     [Engine.TypeDB]: 'TypeDB',
     [Engine.InfluxDB]: 'InfluxDB',
+    [Engine.Weaviate]: 'Weaviate',
   }
   return displayNames[engine] || engine
 }
@@ -145,6 +146,9 @@ const _ENGINE_BINARY_CONFIG: Record<
   [Engine.InfluxDB]: {
     primaryBinaries: [], // REST API only, no CLI tools
   },
+  [Engine.Weaviate]: {
+    primaryBinaries: [], // REST/GraphQL API only, no CLI tools
+  },
 }
 
 /**
@@ -198,6 +202,7 @@ function getConnectionStringTemplate(
 
     case Engine.Meilisearch:
     case Engine.InfluxDB:
+    case Engine.Weaviate:
       return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
 
     case Engine.CouchDB:
@@ -494,6 +499,7 @@ echo "User configured via server settings"
 
     case Engine.Qdrant:
     case Engine.Meilisearch:
+    case Engine.Weaviate:
       userCreationCommands = `
 # API key is configured at server start
 echo "API key configured via server settings"
@@ -1297,6 +1303,7 @@ export async function getDockerConnectionString(
 
     case Engine.Meilisearch:
     case Engine.InfluxDB:
+    case Engine.Weaviate:
       return `http://${host}:${port}`
 
     case Engine.CouchDB:

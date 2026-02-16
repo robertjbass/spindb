@@ -38,6 +38,7 @@ const ENGINE_DEFS = [
   { engine: 'questdb', aliases: ['quest'] },
   { engine: 'typedb', aliases: ['tdb'] },
   { engine: 'influxdb', aliases: ['influx'] },
+  { engine: 'weaviate', aliases: ['wv'] },
 ] as const
 
 type SupportedEngine = (typeof ENGINE_DEFS)[number]['engine']

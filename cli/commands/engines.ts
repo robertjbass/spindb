@@ -30,26 +30,7 @@ import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import {
-  getInstalledEngines,
-  getInstalledPostgresEngines,
-  type InstalledPostgresEngine,
-  type InstalledMysqlEngine,
-  type InstalledSqliteEngine,
-  type InstalledDuckDBEngine,
-  type InstalledMongodbEngine,
-  type InstalledFerretDBEngine,
-  type InstalledRedisEngine,
-  type InstalledValkeyEngine,
-  type InstalledQdrantEngine,
-  type InstalledMeilisearchEngine,
-  type InstalledCouchDBEngine,
-  type InstalledCockroachDBEngine,
-  type InstalledSurrealDBEngine,
-  type InstalledQuestDBEngine,
-  type InstalledTypeDBEngine,
-  type InstalledInfluxDBEngine,
-} from '../helpers'
+import { getInstalledEngines, getInstalledPostgresEngines } from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
   loadEnginesJson,
@@ -73,6 +54,7 @@ import { surrealdbBinaryManager } from '../../engines/surrealdb/binary-manager'
 import { questdbBinaryManager } from '../../engines/questdb/binary-manager'
 import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
 import { influxdbBinaryManager } from '../../engines/influxdb/binary-manager'
+import { weaviateBinaryManager } from '../../engines/weaviate/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   DEFAULT_V1_POSTGRESQL_VERSION,
@@ -434,58 +416,10 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     return
   }
 
-  // Separate engines by type
-  const pgEngines = engines.filter(
-    (e): e is InstalledPostgresEngine => e.engine === 'postgresql',
+  // Sort engines alphabetically by engine name
+  const sortedEngines = [...engines].sort((a, b) =>
+    a.engine.localeCompare(b.engine),
   )
-  const mysqlEngines = engines.filter(
-    (e): e is InstalledMysqlEngine => e.engine === 'mysql',
-  )
-  const sqliteEngine = engines.find(
-    (e): e is InstalledSqliteEngine => e.engine === 'sqlite',
-  )
-  const duckdbEngines = engines.filter(
-    (e): e is InstalledDuckDBEngine => e.engine === 'duckdb',
-  )
-  const mongodbEngines = engines.filter(
-    (e): e is InstalledMongodbEngine => e.engine === 'mongodb',
-  )
-  const ferretdbEngines = engines.filter(
-    (e): e is InstalledFerretDBEngine => e.engine === 'ferretdb',
-  )
-  const redisEngines = engines.filter(
-    (e): e is InstalledRedisEngine => e.engine === 'redis',
-  )
-  const valkeyEngines = engines.filter(
-    (e): e is InstalledValkeyEngine => e.engine === 'valkey',
-  )
-  const qdrantEngines = engines.filter(
-    (e): e is InstalledQdrantEngine => e.engine === 'qdrant',
-  )
-  const meilisearchEngines = engines.filter(
-    (e): e is InstalledMeilisearchEngine => e.engine === 'meilisearch',
-  )
-  const couchdbEngines = engines.filter(
-    (e): e is InstalledCouchDBEngine => e.engine === 'couchdb',
-  )
-  const cockroachdbEngines = engines.filter(
-    (e): e is InstalledCockroachDBEngine => e.engine === 'cockroachdb',
-  )
-  const surrealdbEngines = engines.filter(
-    (e): e is InstalledSurrealDBEngine => e.engine === 'surrealdb',
-  )
-  const questdbEngines = engines.filter(
-    (e): e is InstalledQuestDBEngine => e.engine === 'questdb',
-  )
-  const typedbEngines = engines.filter(
-    (e): e is InstalledTypeDBEngine => e.engine === 'typedb',
-  )
-  const influxdbEngines = engines.filter(
-    (e): e is InstalledInfluxDBEngine => e.engine === 'influxdb',
-  )
-
-  // Calculate total size for PostgreSQL
-  const totalPgSize = pgEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
 
   // Table header
   // Icon is 5 chars, longest engine name is 11 (meilisearch/cockroachdb), so 18 total for ENGINE column
@@ -499,8 +433,8 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   )
   console.log(chalk.gray('  ' + '─'.repeat(59)))
 
-  // PostgreSQL rows
-  for (const engine of pgEngines) {
+  // Display all engines in alphabetical order
+  for (const engine of sortedEngines) {
     const platformInfo = `${engine.platform}-${engine.arch}`
 
     console.log(
@@ -513,375 +447,48 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     )
   }
 
-  // MySQL rows
-  for (const mysqlEngine of mysqlEngines) {
-    const platformInfo = `${mysqlEngine.platform}-${mysqlEngine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('mysql') +
-        chalk.cyan('mysql'.padEnd(13)) +
-        chalk.yellow(mysqlEngine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(mysqlEngine.sizeBytes)),
-    )
-  }
-
-  // SQLite row
-  if (sqliteEngine) {
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('sqlite') +
-        chalk.cyan('sqlite'.padEnd(13)) +
-        chalk.yellow(sqliteEngine.version.padEnd(12)) +
-        chalk.gray('system'.padEnd(18)) +
-        chalk.gray('(system-installed)'),
-    )
-  }
-
-  // DuckDB rows
-  for (const engine of duckdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('duckdb') +
-        chalk.cyan('duckdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // MongoDB rows
-  for (const engine of mongodbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('mongodb') +
-        chalk.cyan('mongodb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // FerretDB rows
-  for (const engine of ferretdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('ferretdb') +
-        chalk.cyan('ferretdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // Redis rows
-  for (const engine of redisEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('redis') +
-        chalk.cyan('redis'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // Valkey rows
-  for (const engine of valkeyEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('valkey') +
-        chalk.cyan('valkey'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // Qdrant rows
-  for (const engine of qdrantEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('qdrant') +
-        chalk.cyan('qdrant'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // Meilisearch rows
-  for (const engine of meilisearchEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('meilisearch') +
-        chalk.cyan('meilisearch'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // CouchDB rows
-  for (const engine of couchdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('couchdb') +
-        chalk.cyan('couchdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // CockroachDB rows
-  for (const engine of cockroachdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('cockroachdb') +
-        chalk.cyan('cockroachdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // SurrealDB rows
-  for (const engine of surrealdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('surrealdb') +
-        chalk.cyan('surrealdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // QuestDB rows
-  for (const engine of questdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('questdb') +
-        chalk.cyan('questdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // TypeDB rows
-  for (const engine of typedbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('typedb') +
-        chalk.cyan('typedb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
-  // InfluxDB rows
-  for (const engine of influxdbEngines) {
-    const platformInfo = `${engine.platform}-${engine.arch}`
-
-    console.log(
-      chalk.gray('  ') +
-        getEngineIcon('influxdb') +
-        chalk.cyan('influxdb'.padEnd(13)) +
-        chalk.yellow(engine.version.padEnd(12)) +
-        chalk.gray(platformInfo.padEnd(18)) +
-        chalk.white(formatBytes(engine.sizeBytes)),
-    )
-  }
-
   console.log(chalk.gray('  ' + '─'.repeat(59)))
 
-  // Summary
+  // Summary - group by engine name (already sorted)
   console.log()
-  if (pgEngines.length > 0) {
+
+  // Engine display name map for summary
+  const ENGINE_DISPLAY_NAMES: Record<string, string> = {
+    clickhouse: 'ClickHouse',
+    cockroachdb: 'CockroachDB',
+    couchdb: 'CouchDB',
+    duckdb: 'DuckDB',
+    ferretdb: 'FerretDB',
+    influxdb: 'InfluxDB',
+    mariadb: 'MariaDB',
+    meilisearch: 'Meilisearch',
+    mongodb: 'MongoDB',
+    mysql: 'MySQL',
+    postgresql: 'PostgreSQL',
+    qdrant: 'Qdrant',
+    questdb: 'QuestDB',
+    redis: 'Redis',
+    sqlite: 'SQLite',
+    surrealdb: 'SurrealDB',
+    typedb: 'TypeDB',
+    valkey: 'Valkey',
+    weaviate: 'Weaviate',
+  }
+
+  // Group engines by name for summary
+  const engineGroups = new Map<string, typeof sortedEngines>()
+  for (const engine of sortedEngines) {
+    const group = engineGroups.get(engine.engine) || []
+    group.push(engine)
+    engineGroups.set(engine.engine, group)
+  }
+
+  for (const [engineName, group] of engineGroups) {
+    const displayName = ENGINE_DISPLAY_NAMES[engineName] || engineName
+    const totalSize = group.reduce((acc, e) => acc + e.sizeBytes, 0)
     console.log(
       chalk.gray(
-        `  PostgreSQL: ${pgEngines.length} version(s), ${formatBytes(totalPgSize)}`,
-      ),
-    )
-  }
-  if (mysqlEngines.length > 0) {
-    const totalMysqlSize = mysqlEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-    console.log(
-      chalk.gray(
-        `  MySQL: ${mysqlEngines.length} version(s), ${formatBytes(totalMysqlSize)}`,
-      ),
-    )
-  }
-  if (sqliteEngine) {
-    console.log(
-      chalk.gray(`  SQLite: system-installed at ${sqliteEngine.path}`),
-    )
-  }
-  if (duckdbEngines.length > 0) {
-    const totalDuckdbSize = duckdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  DuckDB: ${duckdbEngines.length} version(s), ${formatBytes(totalDuckdbSize)}`,
-      ),
-    )
-  }
-  if (mongodbEngines.length > 0) {
-    const totalMongodbSize = mongodbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  MongoDB: ${mongodbEngines.length} version(s), ${formatBytes(totalMongodbSize)}`,
-      ),
-    )
-  }
-  if (ferretdbEngines.length > 0) {
-    const totalFerretdbSize = ferretdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  FerretDB: ${ferretdbEngines.length} version(s), ${formatBytes(totalFerretdbSize)}`,
-      ),
-    )
-  }
-  if (redisEngines.length > 0) {
-    const totalRedisSize = redisEngines.reduce((acc, e) => acc + e.sizeBytes, 0)
-    console.log(
-      chalk.gray(
-        `  Redis: ${redisEngines.length} version(s), ${formatBytes(totalRedisSize)}`,
-      ),
-    )
-  }
-  if (valkeyEngines.length > 0) {
-    const totalValkeySize = valkeyEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  Valkey: ${valkeyEngines.length} version(s), ${formatBytes(totalValkeySize)}`,
-      ),
-    )
-  }
-  if (qdrantEngines.length > 0) {
-    const totalQdrantSize = qdrantEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  Qdrant: ${qdrantEngines.length} version(s), ${formatBytes(totalQdrantSize)}`,
-      ),
-    )
-  }
-  if (meilisearchEngines.length > 0) {
-    const totalMeilisearchSize = meilisearchEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  Meilisearch: ${meilisearchEngines.length} version(s), ${formatBytes(totalMeilisearchSize)}`,
-      ),
-    )
-  }
-  if (couchdbEngines.length > 0) {
-    const totalCouchDBSize = couchdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  CouchDB: ${couchdbEngines.length} version(s), ${formatBytes(totalCouchDBSize)}`,
-      ),
-    )
-  }
-  if (cockroachdbEngines.length > 0) {
-    const totalCockroachDBSize = cockroachdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  CockroachDB: ${cockroachdbEngines.length} version(s), ${formatBytes(totalCockroachDBSize)}`,
-      ),
-    )
-  }
-  if (surrealdbEngines.length > 0) {
-    const totalSurrealDBSize = surrealdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  SurrealDB: ${surrealdbEngines.length} version(s), ${formatBytes(totalSurrealDBSize)}`,
-      ),
-    )
-  }
-  if (questdbEngines.length > 0) {
-    const totalQuestDBSize = questdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  QuestDB: ${questdbEngines.length} version(s), ${formatBytes(totalQuestDBSize)}`,
-      ),
-    )
-  }
-  if (typedbEngines.length > 0) {
-    const totalTypeDBSize = typedbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  TypeDB: ${typedbEngines.length} version(s), ${formatBytes(totalTypeDBSize)}`,
-      ),
-    )
-  }
-  if (influxdbEngines.length > 0) {
-    const totalInfluxDBSize = influxdbEngines.reduce(
-      (acc, e) => acc + e.sizeBytes,
-      0,
-    )
-    console.log(
-      chalk.gray(
-        `  InfluxDB: ${influxdbEngines.length} version(s), ${formatBytes(totalInfluxDBSize)}`,
+        `  ${displayName}: ${group.length} version(s), ${formatBytes(totalSize)}`,
       ),
     )
   }
@@ -2121,9 +1728,56 @@ enginesCommand
         return
       }
 
+      if (['weaviate', 'wv'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('Weaviate requires a version (e.g., 1)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.Weaviate)
+
+        const spinner = createSpinner(
+          `Checking Weaviate ${version} binaries...`,
+        )
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `Weaviate ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`Weaviate ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`Weaviate ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: weaviatePlatform, arch: weaviateArch } =
+          platformService.getPlatformInfo()
+        const weaviateFullVersion =
+          weaviateBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'weaviate',
+          version: weaviateFullVersion,
+          platform: weaviatePlatform,
+          arch: weaviateArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for Weaviate - it's a REST API server
+        // with no CLI client tools (uses HTTP protocols instead)
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb, weaviate`,
         ),
       )
       process.exit(1)
