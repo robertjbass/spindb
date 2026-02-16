@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.2] - 2026-02-16
+
+### Fixed
+- **macOS dylib error detection** — MariaDB, Redis, and Valkey now detect `dyld: Library not loaded` errors at startup and surface actionable messages (e.g., `brew install openssl@3`) instead of cryptic timeouts. Also detects GLIBC and missing shared library errors on Linux.
+- **Library path fallback for hostdb binaries** — MariaDB, Redis, and Valkey spawn calls now set `DYLD_FALLBACK_LIBRARY_PATH` (macOS) / `LD_LIBRARY_PATH` (Linux) to `{binPath}/lib`, preparing for when hostdb ships relocatable builds with bundled dylibs.
+
 ## [0.36.1] - 2026-02-16
 
 ### Fixed
