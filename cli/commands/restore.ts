@@ -20,6 +20,7 @@ import { platformService } from '../../core/platform-service'
 import { TransactionManager } from '../../core/transaction-manager'
 import { isFileBasedEngine } from '../../types'
 import { logDebug } from '../../core/error-handler'
+import { getEngineMetadata } from '../helpers'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
@@ -502,6 +503,7 @@ export const restoreCommand = new Command('restore')
         )
 
         if (options.json) {
+          const metadata = await getEngineMetadata(engineName)
           console.log(
             JSON.stringify({
               success: true,
@@ -512,6 +514,7 @@ export const restoreCommand = new Command('restore')
               sourceType: options.fromUrl ? 'remote' : 'file',
               connectionString,
               overwritten: databaseExists,
+              ...metadata,
             }),
           )
         } else {

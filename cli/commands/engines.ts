@@ -30,7 +30,11 @@ import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import { getInstalledEngines, getInstalledPostgresEngines } from '../helpers'
+import {
+  getInstalledEngines,
+  getInstalledPostgresEngines,
+  getEngineMetadata,
+} from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
   loadEnginesJson,
@@ -398,7 +402,13 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const engines = await getInstalledEngines()
 
   if (options.json) {
-    console.log(JSON.stringify(engines, null, 2))
+    const enginesWithMetadata = await Promise.all(
+      engines.map(async (e) => ({
+        ...e,
+        ...(await getEngineMetadata(e.engine)),
+      })),
+    )
+    console.log(JSON.stringify(enginesWithMetadata, null, 2))
     return
   }
 

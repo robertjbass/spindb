@@ -11,6 +11,7 @@ import { createSpinner } from '../ui/spinner'
 import { uiWarning } from '../ui/theme'
 import { Engine, isFileBasedEngine } from '../../types'
 import { exitWithError, logDebug } from '../../core/error-handler'
+import { getEngineMetadata } from '../helpers'
 
 export const startCommand = new Command('start')
   .description('Start a container')
@@ -189,6 +190,7 @@ export const startCommand = new Command('start')
       const connectionString = engine.getConnectionString(config)
 
       if (options.json) {
+        const metadata = await getEngineMetadata(config.engine)
         console.log(
           JSON.stringify({
             success: true,
@@ -197,6 +199,7 @@ export const startCommand = new Command('start')
             port: result.finalPort,
             connectionString,
             portChanged: result.retriesUsed > 0,
+            ...metadata,
           }),
         )
       } else {

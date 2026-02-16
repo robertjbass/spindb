@@ -10,6 +10,7 @@ import { getEngine } from '../../engines'
 import { uiError, uiInfo, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { isFileBasedEngine, type ContainerConfig } from '../../types'
+import { getEngineMetadata } from '../helpers'
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -43,6 +44,7 @@ async function displayContainerInfo(
   })
 
   if (options.json) {
+    const metadata = await getEngineMetadata(config.engine)
     console.log(
       JSON.stringify(
         {
@@ -50,6 +52,7 @@ async function displayContainerInfo(
           status: actualStatus,
           connectionString,
           dataDir,
+          ...metadata,
         },
         null,
         2,
@@ -147,11 +150,13 @@ async function displayAllContainersInfo(
         const dataDir = paths.getContainerDataPath(config.name, {
           engine: config.engine,
         })
+        const metadata = await getEngineMetadata(config.engine)
         return {
           ...config,
           status: actualStatus,
           connectionString,
           dataDir,
+          ...metadata,
         }
       }),
     )

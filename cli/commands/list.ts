@@ -14,6 +14,7 @@ import {
   getRegistryForEngine,
   type UnregisteredFile,
 } from '../../engines/file-based-utils'
+import { getEngineMetadata } from '../helpers'
 
 type UnregisteredFileWithEngine = UnregisteredFile & { engine: Engine }
 
@@ -159,6 +160,7 @@ export const listCommand = new Command('list')
         const containersWithSize = await Promise.all(
           containers.map(async (container) => ({
             ...container,
+            ...(await getEngineMetadata(container.engine)),
             sizeBytes: await getContainerSize(container),
           })),
         )

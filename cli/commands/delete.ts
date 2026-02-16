@@ -6,6 +6,7 @@ import { getEngine } from '../../engines'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiWarning } from '../ui/theme'
+import { getEngineMetadata } from '../helpers'
 
 export const deleteCommand = new Command('delete')
   .alias('rm')
@@ -113,12 +114,14 @@ export const deleteCommand = new Command('delete')
         deleteSpinner?.succeed(`Container "${containerName}" deleted`)
 
         if (options.json) {
+          const metadata = await getEngineMetadata(config.engine)
           console.log(
             JSON.stringify({
               success: true,
               deleted: containerName,
               container: containerName,
               engine: config.engine,
+              ...metadata,
             }),
           )
         }

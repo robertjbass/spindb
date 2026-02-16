@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { uiError, uiSuccess } from '../ui/theme'
+import { getEngineMetadata } from '../helpers'
 
 /**
  * CLI command for managing database tracking within containers.
@@ -59,16 +60,20 @@ databasesCommand
           }
 
           if (options.json) {
-            const result = containers.map((c) => {
-              const rawDatabases = c.databases || []
-              const databases = [...new Set([c.database, ...rawDatabases])]
-              return {
-                container: c.name,
-                engine: c.engine,
-                primary: c.database,
-                databases,
-              }
-            })
+            const result = await Promise.all(
+              containers.map(async (c) => {
+                const rawDatabases = c.databases || []
+                const databases = [...new Set([c.database, ...rawDatabases])]
+                const metadata = await getEngineMetadata(c.engine)
+                return {
+                  container: c.name,
+                  engine: c.engine,
+                  primary: c.database,
+                  databases,
+                  ...metadata,
+                }
+              }),
+            )
             console.log(JSON.stringify(result, null, 2))
           } else {
             console.log()
@@ -121,8 +126,8 @@ databasesCommand
         const databases = [...new Set([config.database, ...rawDatabases])]
 
         if (options.json) {
-          // Return the full container config - it's already JSON and has all the info
-          console.log(JSON.stringify(config, null, 2))
+          const metadata = await getEngineMetadata(config.engine)
+          console.log(JSON.stringify({ ...config, ...metadata }, null, 2))
         } else {
           console.log()
           console.log(chalk.bold(`Databases in "${container}":`))

@@ -5,8 +5,27 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { paths } from '../config/paths'
 import { platformService } from '../core/platform-service'
+import { type Engine } from '../types'
+import { getEngineConfig } from '../config/engines-registry'
 
 const execFileAsync = promisify(execFile)
+
+export type EngineMetadata = {
+  queryLanguage: string
+  runtime: 'server' | 'embedded'
+  connectionScheme: string | null
+}
+
+export async function getEngineMetadata(
+  engine: string,
+): Promise<EngineMetadata> {
+  const config = await getEngineConfig(engine as Engine)
+  return {
+    queryLanguage: config.queryLanguage,
+    runtime: config.runtime,
+    connectionScheme: config.connectionScheme,
+  }
+}
 
 // Parsed engine directory info
 type ParsedEngineDir = {

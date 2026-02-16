@@ -28,6 +28,7 @@ import {
   isV1 as isFerretDBv1,
 } from '../../engines/ferretdb/version-maps'
 import type { BaseEngine } from '../../engines/base-engine'
+import { getEngineMetadata } from '../helpers'
 
 /**
  * Simplified SQLite container creation flow
@@ -160,6 +161,7 @@ async function createSqliteContainer(
 
   // Display success
   if (json) {
+    const metadata = await getEngineMetadata('sqlite')
     console.log(
       JSON.stringify({
         success: true,
@@ -170,6 +172,7 @@ async function createSqliteContainer(
         database: containerName,
         connectionString,
         restored: !!restoreLocation,
+        ...metadata,
       }),
     )
   } else {
@@ -329,6 +332,7 @@ async function createDuckDBContainer(
 
   // Display success
   if (json) {
+    const metadata = await getEngineMetadata('duckdb')
     console.log(
       JSON.stringify({
         success: true,
@@ -339,6 +343,7 @@ async function createDuckDBContainer(
         database: containerName,
         connectionString,
         restored: !!restoreLocation,
+        ...metadata,
       }),
     )
   } else {
@@ -1096,6 +1101,7 @@ export const createCommand = new Command('create')
           const connectionString = dbEngine.getConnectionString(finalConfig)
 
           if (options.json) {
+            const metadata = await getEngineMetadata(finalConfig.engine)
             console.log(
               JSON.stringify({
                 success: true,
@@ -1107,6 +1113,7 @@ export const createCommand = new Command('create')
                 connectionString,
                 status: finalConfig.status,
                 restored: !!restoreLocation,
+                ...metadata,
               }),
             )
           } else {
