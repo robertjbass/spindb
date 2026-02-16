@@ -49,6 +49,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.TypeDB]: '[TB]',
       [Engine.InfluxDB]: '[IX]',
       [Engine.Weaviate]: '[WV]',
+      [Engine.TigerBeetle]: '[TT]',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = ASCII_ICONS[engine] || '[??]'
@@ -79,6 +80,7 @@ function generatePreviewLine(mode: IconMode): string {
       [Engine.TypeDB]: '\ue706',
       [Engine.InfluxDB]: '\udb85\udf95',
       [Engine.Weaviate]: '\uf0e8',
+      [Engine.TigerBeetle]: '\uf0d6',
     }
     const icons = PREVIEW_ENGINES.map((engine) => {
       const icon = NERD_ICONS[engine] || '\ue706'
@@ -109,6 +111,7 @@ function generatePreviewLine(mode: IconMode): string {
     [Engine.TypeDB]: '\u{1F916}',
     [Engine.InfluxDB]: '\u{1F4C8}',
     [Engine.Weaviate]: '\u{1F52E}',
+    [Engine.TigerBeetle]: '\u{1F42F}',
   }
   const icons = PREVIEW_ENGINES.map((engine) => EMOJI_ICONS[engine] || '\u25A3')
   return icons.join(' ')

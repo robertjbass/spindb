@@ -288,6 +288,13 @@ export async function handleOpenShell(
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'tigerbeetle') {
+    // TigerBeetle uses tigerbeetle repl command
+    defaultShellName = 'tigerbeetle repl'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else {
     defaultShellName = 'psql'
     engineSpecificCli = 'pgcli'
@@ -1737,6 +1744,15 @@ async function launchShell(
       shellArgs = ['console', ...getConsoleBaseArgs(config.port)]
     }
     installHint = 'spindb engines download typedb'
+  } else if (config.engine === 'tigerbeetle') {
+    // TigerBeetle uses tigerbeetle repl command
+    const engine = getEngine(config.engine)
+    const tigerbeetlePath = await engine
+      .getTigerBeetlePath(config.version)
+      .catch(() => null)
+    shellCmd = tigerbeetlePath || 'tigerbeetle'
+    shellArgs = ['repl', '--cluster=0', `--addresses=127.0.0.1:${config.port}`]
+    installHint = 'spindb engines download tigerbeetle'
   } else {
     // PostgreSQL default shell - look up downloaded binary path
     const psqlPath = await configManager.getBinaryPath('psql')

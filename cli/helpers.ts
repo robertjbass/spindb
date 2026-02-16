@@ -254,6 +254,16 @@ export type InstalledWeaviateEngine = {
   source: 'downloaded'
 }
 
+export type InstalledTigerBeetleEngine = {
+  engine: 'tigerbeetle'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -274,6 +284,7 @@ export type InstalledEngine =
   | InstalledTypeDBEngine
   | InstalledInfluxDBEngine
   | InstalledWeaviateEngine
+  | InstalledTigerBeetleEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1347,6 +1358,64 @@ async function getInstalledWeaviateEngines(): Promise<
   return engines
 }
 
+// Get TigerBeetle version from binary path
+async function getTigerBeetleVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const tigerbeetlePath = join(binPath, 'bin', `tigerbeetle${ext}`)
+  if (!existsSync(tigerbeetlePath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(tigerbeetlePath, ['version'])
+    // Parse output like "TigerBeetle v0.16.70" or "0.16.70"
+    const match = stdout.match(/(?:TigerBeetle\s+)?v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed TigerBeetle engines from downloaded binaries
+async function getInstalledTigerBeetleEngines(): Promise<
+  InstalledTigerBeetleEngine[]
+> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledTigerBeetleEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('tigerbeetle-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'tigerbeetle-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getTigerBeetleVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'tigerbeetle',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -1384,6 +1453,7 @@ const ENGINE_PREFIXES = [
   'typedb-',
   'influxdb-',
   'weaviate-',
+  'tigerbeetle-',
 ] as const
 
 /**
@@ -1433,6 +1503,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     typedbEngines,
     influxdbEngines,
     weaviateEngines,
+    tigerbeetleEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1453,6 +1524,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledTypeDBEngines(),
     getInstalledInfluxDBEngines(),
     getInstalledWeaviateEngines(),
+    getInstalledTigerBeetleEngines(),
   ])
 
   return [
@@ -1475,6 +1547,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...typedbEngines,
     ...influxdbEngines,
     ...weaviateEngines,
+    ...tigerbeetleEngines,
   ]
 }
 
@@ -1497,4 +1570,5 @@ export {
   getInstalledTypeDBEngines,
   getInstalledInfluxDBEngines,
   getInstalledWeaviateEngines,
+  getInstalledTigerBeetleEngines,
 }
