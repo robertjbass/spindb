@@ -170,6 +170,14 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Get the path to the tigerbeetle binary if available
+   * Default implementation throws; TigerBeetle engine overrides this method.
+   */
+  async getTigerBeetlePath(_version?: string): Promise<string> {
+    throw new Error('tigerbeetle not found')
+  }
+
+  /**
    * Get the path to the sqlite3 client if available
    * Default implementation returns null; SQLite engine overrides this method.
    */

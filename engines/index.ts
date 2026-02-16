@@ -17,6 +17,7 @@ import { questdbEngine } from './questdb'
 import { typedbEngine } from './typedb'
 import { influxdbEngine } from './influxdb'
 import { weaviateEngine } from './weaviate'
+import { tigerbeetleEngine } from './tigerbeetle'
 import { platformService } from '../core/platform-service'
 import { Engine, Platform } from '../types'
 import type { BaseEngine } from './base-engine'
@@ -87,6 +88,9 @@ export const engines: Record<string, BaseEngine> = {
   // Weaviate and aliases
   [Engine.Weaviate]: weaviateEngine,
   wv: weaviateEngine,
+  // TigerBeetle and aliases
+  [Engine.TigerBeetle]: tigerbeetleEngine,
+  tb: tigerbeetleEngine,
 }
 
 // Get an engine by name
