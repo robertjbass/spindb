@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 19 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 20 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -28,7 +28,7 @@ spindb create cache --engine redis
 
 ## Supported Engines & Platforms
 
-SpinDB supports **19 database engines** across **5 platform architectures**—all with a consistent API.
+SpinDB supports **20 database engines** across **5 platform architectures**—all with a consistent API.
 
 | Engine | Type | macOS ARM | macOS Intel | Linux x64 | Linux ARM | Windows |
 |--------|------|:---------:|:-----------:|:---------:|:---------:|:-------:|
@@ -51,8 +51,9 @@ SpinDB supports **19 database engines** across **5 platform architectures**—al
 | 🤖 **TypeDB** | Knowledge Graph | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 📈 **InfluxDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔮 **Weaviate** | Vector Database | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🐯 **TigerBeetle** | Financial Ledger | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**95 combinations. One CLI. Zero configuration.**
+**100 combinations. One CLI. Zero configuration.**
 
 > ClickHouse is available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 
@@ -128,6 +129,15 @@ spindb connect vectors                            # Open web dashboard
 
 > Weaviate is an AI-native vector database. REST API on default port 8080, gRPC on port+1. Uses classes/collections.
 
+### TigerBeetle
+
+```bash
+spindb create ledger --engine tigerbeetle --start
+spindb connect ledger                            # Open REPL
+```
+
+> TigerBeetle is a high-performance financial ledger database. Custom binary protocol on default port 3000. Uses REPL for interaction.
+
 ### Enhanced Shells & Visual Tools
 
 ```bash
@@ -140,7 +150,7 @@ spindb connect mydb --ui                         # Built-in Web UI (DuckDB)
 ### Any Engine
 
 ```bash
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb|weaviate]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb|weaviate|tigerbeetle]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -182,7 +192,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | DBngin | Postgres.app | Laragon |
 |---------|--------|--------|--------------|---------|
-| **Engines supported** | 19 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
+| **Engines supported** | 20 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
 | CLI-first | ✅ | ❌ GUI-only | ❌ GUI-only | ⚠️ Limited CLI |
 | Multi-version support | ✅ | ✅ | ✅ | ✅ |
 | Built-in backup/restore | ✅ | ✅ | ❌ | ⚠️ Manual |
@@ -198,7 +208,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Docker Desktop | Podman | OrbStack |
 |---------|--------|----------------|--------|----------|
-| **Engines supported** | 19 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
+| **Engines supported** | 20 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
 | Daemon required | ❌ | ✅ | ❌ (rootless) | ✅ |
 | Resource overhead | Native | VM + containers | VM + containers | VM + containers |
 | Built-in backup/restore | ✅ | ❌ Manual | ❌ Manual | ❌ Manual |
@@ -214,7 +224,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Homebrew | apt/winget | asdf-vm |
 |---------|--------|----------|------------|---------|
-| **Engines supported** | 19 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
+| **Engines supported** | 20 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
 | Multi-version side-by-side | ✅ | ⚠️ Complex | ❌ | ✅ |
 | Isolated data directories | ✅ | ❌ System-wide | ❌ System-wide | ❌ |
 | Built-in backup/restore | ✅ | ❌ | ❌ | ❌ |
@@ -285,6 +295,7 @@ See [DEPLOY.md](DEPLOY.md) for comprehensive deployment documentation.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
 - **FerretDB Windows** - v1 supported natively (plain PostgreSQL backend). v2 not supported (postgresql-documentdb has startup issues); use WSL for v2.
 - **Qdrant, Meilisearch, CouchDB, Weaviate** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
+- **TigerBeetle** - Custom binary protocol only. No SQL or REST API. Interact via REPL (`spindb connect`) or client libraries.
 
 ---
 

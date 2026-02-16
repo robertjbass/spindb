@@ -698,10 +698,7 @@ export class RedisEngine extends BaseEngine {
             }
 
             // Check for library loading errors
-            const libError = detectLibraryError(
-              stderr + logContent,
-              'Redis',
-            )
+            const libError = detectLibraryError(stderr + logContent, 'Redis')
             if (libError) {
               reject(new Error(libError))
               return

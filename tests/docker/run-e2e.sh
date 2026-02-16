@@ -42,10 +42,10 @@ SKIP_ENGINES="${SKIP_ENGINES:-}"
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
 GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
 # "other" = REST API engines + file-based engines, grouped for CI load balancing
-GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb weaviate"
+GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb weaviate tigerbeetle"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate tigerbeetle"
 VALID_UTILITY_TESTS="self-update"
 VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
@@ -87,6 +87,8 @@ if [ -n "$ENGINE_FILTER" ]; then
     echo "  pnpm test:engine ferretdb-v1   # v1 tests"
     exit 0
   fi
+  # Note: TigerBeetle requires io_uring syscalls. Docker's default seccomp profile
+  # blocks these, so run-docker-test.sh uses --security-opt seccomp=unconfined.
 fi
 
 # Timeouts
@@ -157,7 +159,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5 [weaviate]=3
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5 [weaviate]=3 [tigerbeetle]=0
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -178,6 +180,7 @@ declare -A BACKUP_FORMATS=(
   [typedb]="typeql"
   [influxdb]="sql"
   [weaviate]="snapshot"
+  [tigerbeetle]="binary"
 )
 
 # Results tracking
@@ -392,6 +395,10 @@ insert_seed_data() {
       ;;
     weaviate)
       # Weaviate uses REST API for seeding (no seed file)
+      seed_file=""
+      ;;
+    tigerbeetle)
+      # TigerBeetle uses custom binary protocol - no seed file
       seed_file=""
       ;;
   esac
@@ -683,6 +690,10 @@ get_data_count() {
         echo "$output" | jq -r '.totalResults // empty' 2>/dev/null
       fi
       ;;
+    tigerbeetle)
+      # TigerBeetle uses custom binary protocol - no data count available
+      echo "0"
+      ;;
   esac
 }
 
@@ -756,6 +767,9 @@ get_backup_extension() {
     weaviate)
       # Weaviate uses snapshot format for backups
       echo ".snapshot" ;;
+    tigerbeetle)
+      # TigerBeetle uses binary data file for backups
+      echo ".tigerbeetle" ;;
     *)
       echo ".$format" ;;
   esac
@@ -802,6 +816,10 @@ create_backup() {
       # Weaviate uses snapshot format for full backups
       run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    tigerbeetle)
+      # TigerBeetle uses stop-and-copy backup of data file
+      run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -844,6 +862,10 @@ create_restore_target() {
       ;;
     weaviate)
       # Weaviate: snapshot restore replaces entire data directory, no explicit target needed
+      return 0
+      ;;
+    tigerbeetle)
+      # TigerBeetle: binary restore replaces data file, no explicit target needed
       return 0
       ;;
     *)
@@ -922,6 +944,10 @@ restore_backup() {
       # Weaviate: snapshot restore replaces data directory
       run_cmd spindb restore "$container_name" "$backup_file" --force
       ;;
+    tigerbeetle)
+      # TigerBeetle: binary restore replaces data file
+      run_cmd spindb restore "$container_name" "$backup_file" --force
+      ;;
   esac
 }
 
@@ -959,6 +985,10 @@ verify_restored_data() {
       ;;
     weaviate)
       # Weaviate snapshot restore replaces the entire data directory
+      actual=$(get_data_count "$engine" "$container_name" "default")
+      ;;
+    tigerbeetle)
+      # TigerBeetle binary restore replaces data file
       actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
   esac
@@ -1001,6 +1031,9 @@ verify_restored_data_with_count() {
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
       ;;
     weaviate)
+      actual=$(get_data_count "$engine" "$container_name" "default")
+      ;;
+    tigerbeetle)
       actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
   esac
@@ -1062,6 +1095,9 @@ cleanup_restore_target() {
       ;;
     weaviate)
       # Weaviate: no cleanup needed for snapshot restore (replaces full data)
+      ;;
+    tigerbeetle)
+      # TigerBeetle: no cleanup needed for binary restore (replaces data file)
       ;;
   esac
 }
@@ -1485,6 +1521,14 @@ run_test() {
       local weaviate_port
       weaviate_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
       if [ -n "$weaviate_port" ] && curl -sf "http://127.0.0.1:${weaviate_port}/v1/.well-known/ready" &>/dev/null; then
+        query_ok=true
+      fi
+      ;;
+    tigerbeetle)
+      # TigerBeetle uses custom binary protocol - check if port is listening
+      local tb_port
+      tb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$tb_port" ] && (echo > "/dev/tcp/127.0.0.1/${tb_port}") 2>/dev/null; then
         query_ok=true
       fi
       ;;
@@ -2123,7 +2167,9 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate; do
+# Note: TigerBeetle requires io_uring syscalls. Docker must be run with
+# --security-opt seccomp=unconfined (handled by run-docker-test.sh).
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate tigerbeetle; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

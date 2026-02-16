@@ -75,6 +75,7 @@ export const TEST_PORTS = {
   typedb: { base: 1730, clone: 1732, renamed: 1731 },
   influxdb: { base: 8087, clone: 8089, renamed: 8088 },
   weaviate: { base: 8090, clone: 8092, renamed: 8091 },
+  tigerbeetle: { base: 3090, clone: 3092, renamed: 3091 },
 }
 
 // Default test versions for each engine
@@ -417,6 +418,10 @@ export async function executeSQL(
     throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else if (engine === Engine.Weaviate) {
     throw new Error('Weaviate uses REST API; use Weaviate REST helpers instead')
+  } else if (engine === Engine.TigerBeetle) {
+    throw new Error(
+      'TigerBeetle uses custom binary protocol; no SQL/REST interface available',
+    )
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -534,6 +539,10 @@ export async function executeSQLFile(
     throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else if (engine === Engine.Weaviate) {
     throw new Error('Weaviate uses REST API; use Weaviate REST helpers instead')
+  } else if (engine === Engine.TigerBeetle) {
+    throw new Error(
+      'TigerBeetle uses custom binary protocol; no SQL/REST interface available',
+    )
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -850,6 +859,26 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('Weaviate health check failed or timed out')
         }
+      } else if (engine === Engine.TigerBeetle) {
+        // TigerBeetle: TCP port check (no HTTP endpoint)
+        const net = await import('net')
+        await new Promise<void>((resolve, reject) => {
+          const socket = new net.Socket()
+          socket.setTimeout(5000)
+          socket.on('connect', () => {
+            socket.destroy()
+            resolve()
+          })
+          socket.on('timeout', () => {
+            socket.destroy()
+            reject(new Error('TigerBeetle TCP check timed out'))
+          })
+          socket.on('error', (err) => {
+            socket.destroy()
+            reject(err)
+          })
+          socket.connect(port, '127.0.0.1')
+        })
       } else if (engine === Engine.TypeDB) {
         // TypeDB health check via HTTP GET to HTTP port
         const httpPort = options?.httpPort ?? port + 6271
@@ -1046,6 +1075,9 @@ export function getConnectionString(
   }
   if (engine === Engine.Weaviate) {
     return `http://127.0.0.1:${port}`
+  }
+  if (engine === Engine.TigerBeetle) {
+    return `127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

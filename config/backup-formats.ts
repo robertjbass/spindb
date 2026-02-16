@@ -29,6 +29,7 @@ import {
   type TypeDBFormat,
   type InfluxDBFormat,
   type WeaviateFormat,
+  type TigerBeetleFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -67,6 +68,7 @@ export const BACKUP_FORMATS: {
   [Engine.TypeDB]: EngineBackupFormats<TypeDBFormat>
   [Engine.InfluxDB]: EngineBackupFormats<InfluxDBFormat>
   [Engine.Weaviate]: EngineBackupFormats<WeaviateFormat>
+  [Engine.TigerBeetle]: EngineBackupFormats<TigerBeetleFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -349,6 +351,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only snapshot format supported
     defaultFormat: 'snapshot',
+  },
+  [Engine.TigerBeetle]: {
+    formats: {
+      binary: {
+        extension: '.tigerbeetle',
+        label: '.tigerbeetle',
+        description: 'TigerBeetle data file - full database copy',
+        spinnerLabel: 'binary',
+      },
+    },
+    supportsFormatChoice: false, // Only binary format supported
+    defaultFormat: 'binary',
   },
 }
 

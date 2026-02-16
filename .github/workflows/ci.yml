@@ -1687,6 +1687,94 @@ jobs:
           }
 
   # ============================================
+  # TigerBeetle Integration Tests
+  # ============================================
+  test-tigerbeetle:
+    name: TigerBeetle ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache TigerBeetle binaries - these are downloaded from hostdb
+      - name: Cache TigerBeetle binaries
+        uses: actions/cache@v4
+        id: tigerbeetle-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-tigerbeetle-0.16-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download TigerBeetle binaries
+      - name: Install TigerBeetle via SpinDB
+        run: pnpm start engines download tigerbeetle 0.16
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run TigerBeetle integration tests
+        run: pnpm test:engine tigerbeetle
+        timeout-minutes: 15
+
+      - name: Show TigerBeetle logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== TigerBeetle container directories ==="
+          ls -la ~/.spindb/containers/tigerbeetle/ 2>/dev/null || echo "No TigerBeetle containers directory"
+          echo ""
+          echo "=== TigerBeetle binary directory ==="
+          ls -la ~/.spindb/bin/tigerbeetle-* 2>/dev/null || echo "No TigerBeetle binaries found"
+          echo ""
+          echo "=== TigerBeetle log files ==="
+          find ~/.spindb/containers/tigerbeetle -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show TigerBeetle logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== TigerBeetle container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\tigerbeetle" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TigerBeetle binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'tigerbeetle' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TigerBeetle log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\tigerbeetle" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -3002,6 +3090,7 @@ jobs:
         test-typedb,
         test-influxdb,
         test-weaviate,
+        test-tigerbeetle,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -3023,7 +3112,7 @@ jobs:
             "test-valkey" "test-clickhouse" "test-qdrant"
             "test-meilisearch" "test-couchdb" "test-cockroachdb"
             "test-surrealdb" "test-questdb" "test-typedb"
-            "test-influxdb" "test-weaviate" "test-cli-e2e" "test-rename-clone"
+            "test-influxdb" "test-weaviate" "test-tigerbeetle" "test-cli-e2e" "test-rename-clone"
             "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
             "test-self-update" "test-docker-linux" "test-docker-export"
           )
@@ -3051,6 +3140,7 @@ jobs:
             "${{ needs.test-typedb.result }}"
             "${{ needs.test-influxdb.result }}"
             "${{ needs.test-weaviate.result }}"
+            "${{ needs.test-tigerbeetle.result }}"
             "${{ needs.test-cli-e2e.result }}"
             "${{ needs.test-rename-clone.result }}"
             "${{ needs.test-clickhouse-rename.result }}"

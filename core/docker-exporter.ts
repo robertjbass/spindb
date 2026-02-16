@@ -73,6 +73,7 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.TypeDB]: 'TypeDB',
     [Engine.InfluxDB]: 'InfluxDB',
     [Engine.Weaviate]: 'Weaviate',
+    [Engine.TigerBeetle]: 'TigerBeetle',
   }
   return displayNames[engine] || engine
 }
@@ -149,6 +150,9 @@ const _ENGINE_BINARY_CONFIG: Record<
   [Engine.Weaviate]: {
     primaryBinaries: [], // REST/GraphQL API only, no CLI tools
   },
+  [Engine.TigerBeetle]: {
+    primaryBinaries: ['tigerbeetle'],
+  },
 }
 
 /**
@@ -217,6 +221,9 @@ function getConnectionStringTemplate(
 
     case Engine.TypeDB:
       return `typedb://<host>:${port}`
+
+    case Engine.TigerBeetle:
+      return `<host>:${port}`
 
     case Engine.SQLite:
     case Engine.DuckDB:
@@ -516,6 +523,13 @@ echo "No authentication required for local InfluxDB 3.x"
     case Engine.TypeDB:
       userCreationCommands = `
 # TypeDB community edition does not support user management
+echo "No authentication required"
+`
+      break
+
+    case Engine.TigerBeetle:
+      userCreationCommands = `
+# TigerBeetle has no authentication
 echo "No authentication required"
 `
       break
@@ -1314,6 +1328,9 @@ export async function getDockerConnectionString(
 
     case Engine.TypeDB:
       return `typedb://${host}:${port}`
+
+    case Engine.TigerBeetle:
+      return `${host}:${port}`
 
     case Engine.SQLite:
     case Engine.DuckDB:

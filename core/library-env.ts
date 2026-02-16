@@ -58,8 +58,7 @@ export function detectLibraryError(
     lower.includes('dyld:') ||
     lower.includes('dyld[')
   ) {
-    const needsOpenssl =
-      lower.includes('libssl') || lower.includes('libcrypto')
+    const needsOpenssl = lower.includes('libssl') || lower.includes('libcrypto')
 
     if (needsOpenssl && plat === 'darwin') {
       return (
@@ -97,8 +96,7 @@ export function detectLibraryError(
     lower.includes('error while loading shared libraries') ||
     lower.includes('cannot open shared object file')
   ) {
-    const needsOpenssl =
-      lower.includes('libssl') || lower.includes('libcrypto')
+    const needsOpenssl = lower.includes('libssl') || lower.includes('libcrypto')
 
     if (needsOpenssl) {
       return (

@@ -101,6 +101,7 @@ describe('ConfigManager', () => {
         TYPEDB_TOOLS,
         INFLUXDB_TOOLS,
         WEAVIATE_TOOLS,
+        TIGERBEETLE_TOOLS,
         PGWEB_TOOLS,
         DBLAB_TOOLS,
         SQLITE_TOOLS,
@@ -125,6 +126,7 @@ describe('ConfigManager', () => {
         TYPEDB_TOOLS.length +
         INFLUXDB_TOOLS.length +
         WEAVIATE_TOOLS.length +
+        TIGERBEETLE_TOOLS.length +
         PGWEB_TOOLS.length +
         DBLAB_TOOLS.length +
         SQLITE_TOOLS.length +

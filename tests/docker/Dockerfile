@@ -35,6 +35,12 @@
 # - TypeDB: typedb, typedb_console_bin
 # - InfluxDB: influxdb3 (REST API engine - tests use curl instead of CLI)
 # - Weaviate: weaviate (REST/gRPC API engine - tests use curl instead of CLI)
+# - TigerBeetle: tigerbeetle (custom binary protocol - REPL for interaction)
+#
+# IMPORTANT: TigerBeetle requires io_uring syscalls which Docker's default seccomp
+# profile blocks. The run-docker-test.sh wrapper passes --security-opt seccomp=unconfined
+# to allow io_uring. This is safe for ephemeral test containers and does not affect the
+# host. TigerBeetle works without issue on regular Linux systems (VMs, bare metal, CI).
 
 FROM ubuntu:22.04
 
