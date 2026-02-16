@@ -37,6 +37,7 @@ import { SURREALDB_VERSION_MAP } from '../../engines/surrealdb/version-maps'
 import { TYPEDB_VERSION_MAP } from '../../engines/typedb/version-maps'
 import { VALKEY_VERSION_MAP } from '../../engines/valkey/version-maps'
 import { INFLUXDB_VERSION_MAP } from '../../engines/influxdb/version-maps'
+import { WEAVIATE_VERSION_MAP } from '../../engines/weaviate/version-maps'
 
 // Engine configurations for testing
 // Names must match the keys in hostdb releases.json
@@ -60,6 +61,7 @@ const ENGINES = [
   { name: 'typedb', map: TYPEDB_VERSION_MAP },
   { name: 'valkey', map: VALKEY_VERSION_MAP },
   { name: 'influxdb', map: INFLUXDB_VERSION_MAP },
+  { name: 'weaviate', map: WEAVIATE_VERSION_MAP },
 ] as const
 
 describe('hostdb Version Sync Verification', () => {

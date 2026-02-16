@@ -34,6 +34,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   questdb: 'questdb.test.ts',
   typedb: 'typedb.test.ts',
   influxdb: 'influxdb.test.ts',
+  weaviate: 'weaviate.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
@@ -71,6 +72,8 @@ const ENGINE_ALIASES: Record<string, string> = {
   tdb: 'typedb',
   // InfluxDB aliases
   influx: 'influxdb',
+  // Weaviate aliases
+  wv: 'weaviate',
 }
 
 // Test run order (matches test:integration script order)
@@ -94,6 +97,7 @@ const TEST_ORDER = [
   'questdb',
   'typedb',
   'influxdb',
+  'weaviate',
 ]
 
 function resolveEngine(input: string): string | null {
@@ -142,6 +146,7 @@ function printUsage(): void {
   console.log('  questdb       (aliases: quest)')
   console.log('  typedb        (aliases: tdb)')
   console.log('  influxdb      (aliases: influx)')
+  console.log('  weaviate      (aliases: wv)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')

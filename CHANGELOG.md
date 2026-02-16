@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-02-16
+
+### Added
+- **Weaviate engine** — 19th database engine. AI-native vector database with REST/GraphQL and gRPC APIs. BSD-3-Clause license. Full lifecycle support: create, start, stop, backup/restore, clone, rename, delete. REST API on port 8080, gRPC on port+1. Uses classes/collections instead of traditional databases. Unique internal cluster ports (gossip, data, raft) derived from HTTP port to avoid conflicts between containers.
+- **Weaviate backup/restore** — Directory-based filesystem backups via Weaviate REST API. Restore reads `backup_config.json` to match the internal backup ID (Weaviate validates the directory name). Cross-container restore uses `node_mapping` for hostname translation.
+- **Weaviate CI** — Integration tests on all 5 platforms in `ci.yml` and `ci-full.yml` with binary caching.
+- **Weaviate backup generator** — `pnpm generate:backup weaviate` script for creating test fixture backups on demand.
+
+### Changed
+- **Alphabetical engine ordering** — Engine selection prompt and `spindb engines list` now display engines in alphabetical order instead of insertion order. Previously engines were listed in the order they were added to the codebase.
+
 ## [0.35.4] - 2026-02-15
 
 ### Fixed

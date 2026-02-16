@@ -251,6 +251,8 @@ export function getDefaultUsername(engine: Engine): string {
       return 'search_key'
     case Engine.Qdrant:
       return 'api_key'
+    case Engine.Weaviate:
+      return 'api_key'
     default:
       return 'spindb'
   }

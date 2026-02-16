@@ -50,8 +50,9 @@ SpinDB supports **18 database engines** across **5 platform architectures**—al
 | ⏱️ **QuestDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🤖 **TypeDB** | Knowledge Graph | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 📈 **InfluxDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔮 **Weaviate** | Vector Database | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**89 combinations. One CLI. Zero configuration.**
+**94 combinations. One CLI. Zero configuration.**
 
 > ClickHouse is available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 
@@ -116,6 +117,16 @@ spindb connect tsdata                             # Interactive SQL console
 ```
 
 > InfluxDB supports two file formats: `.lp` (line protocol) for writing data, `.sql` for queries.
+
+### Weaviate
+
+```bash
+spindb create vectors --engine weaviate --start
+spindb query vectors "GET /v1/schema"             # Query via REST API
+spindb connect vectors                            # Open web dashboard
+```
+
+> Weaviate is an AI-native vector database. REST API on default port 8080, gRPC on port+1. Uses classes/collections.
 
 ### Enhanced Shells & Visual Tools
 
@@ -394,7 +405,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 18 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 19 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 

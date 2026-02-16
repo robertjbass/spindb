@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const SUPPORTED_ENGINES = ['qdrant'] as const
+const SUPPORTED_ENGINES = ['qdrant', 'weaviate'] as const
 type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]
 
 function printUsage(): void {

@@ -309,6 +309,23 @@
       "clientTools": ["influxdb3"],
       "licensing": ["Apache-2.0", "MIT"],
       "notes": "Purpose-built time-series database with SQL support. InfluxDB 3.x is a Rust rewrite using Apache Arrow/DataFusion. HTTP API on port 8086."
+    },
+    "weaviate": {
+      "displayName": "Weaviate",
+      "icon": "🔮",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["1.35.7"],
+      "defaultVersion": "1.35.7",
+      "defaultPort": 8080,
+      "runtime": "server",
+      "queryLanguage": "rest",
+      "scriptFileLabel": null,
+      "connectionScheme": "http",
+      "superuser": null,
+      "clientTools": ["weaviate"],
+      "licensing": "BSD-3-Clause",
+      "notes": "AI-native vector database. REST API on port 8080, gRPC on port+1. Uses classes/collections instead of databases."
     }
   }
 }

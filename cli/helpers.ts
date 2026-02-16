@@ -244,6 +244,16 @@ export type InstalledInfluxDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledWeaviateEngine = {
+  engine: 'weaviate'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -263,6 +273,7 @@ export type InstalledEngine =
   | InstalledQuestDBEngine
   | InstalledTypeDBEngine
   | InstalledInfluxDBEngine
+  | InstalledWeaviateEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1278,6 +1289,64 @@ async function getInstalledFerretDBEngines(): Promise<
   return engines
 }
 
+// Get Weaviate version from binary path
+async function getWeaviateVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const weaviatePath = join(binPath, 'bin', `weaviate${ext}`)
+  if (!existsSync(weaviatePath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(weaviatePath, ['--version'])
+    // Parse output like "weaviate v1.35.7" or "1.35.7"
+    const match = stdout.match(/(?:weaviate\s+)?v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed Weaviate engines from downloaded binaries
+async function getInstalledWeaviateEngines(): Promise<
+  InstalledWeaviateEngine[]
+> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledWeaviateEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('weaviate-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'weaviate-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getWeaviateVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'weaviate',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -1314,6 +1383,7 @@ const ENGINE_PREFIXES = [
   'questdb-',
   'typedb-',
   'influxdb-',
+  'weaviate-',
 ] as const
 
 /**
@@ -1362,6 +1432,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     questdbEngines,
     typedbEngines,
     influxdbEngines,
+    weaviateEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1381,6 +1452,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledQuestDBEngines(),
     getInstalledTypeDBEngines(),
     getInstalledInfluxDBEngines(),
+    getInstalledWeaviateEngines(),
   ])
 
   return [
@@ -1402,6 +1474,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...questdbEngines,
     ...typedbEngines,
     ...influxdbEngines,
+    ...weaviateEngines,
   ]
 }
 
@@ -1423,4 +1496,5 @@ export {
   getInstalledQuestDBEngines,
   getInstalledTypeDBEngines,
   getInstalledInfluxDBEngines,
+  getInstalledWeaviateEngines,
 }

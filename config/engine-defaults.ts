@@ -265,6 +265,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // InfluxDB uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable for time-series DB
   },
+  [Engine.Weaviate]: {
+    defaultVersion: '1',
+    defaultPort: 8080, // Weaviate HTTP REST API port (gRPC is port + 1)
+    portRange: { start: 8080, end: 8180 },
+    latestVersion: '1',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'http',
+    logFileName: 'weaviate.log',
+    pidFileName: 'weaviate.pid',
+    dataSubdir: 'data',
+    clientTools: [], // Weaviate uses REST/GraphQL API, no separate CLI tools
+    maxConnections: 0, // Not applicable for vector DB
+  },
 }
 
 /**

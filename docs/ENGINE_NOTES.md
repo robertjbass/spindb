@@ -137,6 +137,25 @@ Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL backend (:543
 
 See [plans/FERRETDB.md](../plans/FERRETDB.md) for full implementation details including hostdb build process.
 
+## Weaviate
+
+- **AI-native vector database**: REST API + gRPC, uses classes/collections instead of databases
+- **Dual ports**: HTTP (default 8080) + gRPC (HTTP port + 1)
+- **Health endpoint**: `/v1/.well-known/ready`
+- **Schema endpoint**: `/v1/schema` (list classes), `/v1/schema/{class}` (class info)
+- **No --version flag**: Weaviate binary doesn't support `--version` (as of v1.35.x, tracked in [weaviate/weaviate#6571](https://github.com/weaviate/weaviate/issues/6571)). Binary verification only checks file existence, not version output. Same pattern as CouchDB.
+- **Configuration via environment variables**: Uses env vars (not config file) for settings: `PERSISTENCE_DATA_PATH`, `QUERY_DEFAULTS_LIMIT`, `AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED`, `DEFAULT_VECTORIZER_MODULE`, custom `GRPC_PORT`
+- **Internal cluster ports**: Weaviate binds 4 internal ports (gossip 7946, data 7947, raft 8300, raft RPC 8301) that **must be unique per container**. SpinDB derives them from HTTP port: gossip=port+100, data=port+101, raft=port+200, raft_rpc=port+201. Also sets `CLUSTER_HOSTNAME=node-{port}` for uniqueness.
+- **Backup/restore**: Weaviate filesystem backup API (`POST /v1/backups/filesystem`). Requires `ENABLE_MODULES=backup-filesystem` env var. Backups are **directories** (not single files). The backup directory name **must match** the internal backup ID in `backup_config.json` — `restore.ts` reads this file to use the correct name. When restoring to a different node, `node_mapping` is required in the restore API body.
+- **Connection scheme**: `http://` (e.g., `http://127.0.0.1:8080`)
+- **No CLI shell**: REST API only. `spindb connect` opens web dashboard. `spindb run` N/A.
+- **Dashboard URL**: Root path `/` (opens in browser)
+- **API key auth**: Optional via `AUTHENTICATION_APIKEY_ENABLED`, `AUTHENTICATION_APIKEY_ALLOWED_KEYS`, `AUTHENTICATION_APIKEY_USERS` env vars
+- **Default port**: 8080 (auto-increments on conflict)
+- **Version**: 1.35.7 (semver, major=1), BSD-3-Clause license
+- **Platforms**: All 5 (macOS ARM/x64, Linux ARM/x64, Windows x64)
+- **Emoji**: 🔮, **Alias**: `wv`
+
 ## InfluxDB
 
 - **REST API time-series database**: InfluxDB 3.x is a complete Rust rewrite, optimized for high-performance time-series workloads
@@ -164,6 +183,7 @@ Engines with built-in web UIs use `openInBrowser()` in `cli/commands/menu/shell-
 - **ClickHouse**: `http://localhost:8123/play` (built-in Play UI)
 - **CouchDB**: `http://localhost:{port}/_utils` (built-in Fauxton)
 - **QuestDB**: `http://localhost:{http_port}/` (default 9000, or PG port + 188)
+- **Weaviate**: `http://localhost:{port}/` (REST API info display)
 
 Platform commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 
