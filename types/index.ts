@@ -40,6 +40,7 @@ export enum Engine {
   TypeDB = 'typedb',
   InfluxDB = 'influxdb',
   Weaviate = 'weaviate',
+  TigerBeetle = 'tigerbeetle',
 }
 
 // Icon display mode for engine icons in CLI output
@@ -82,6 +83,7 @@ export const ALL_ENGINES = [
   Engine.TypeDB,
   Engine.InfluxDB,
   Engine.Weaviate,
+  Engine.TigerBeetle,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -214,6 +216,7 @@ export type QuestDBFormat = 'sql'
 export type TypeDBFormat = 'typeql'
 export type InfluxDBFormat = 'sql'
 export type WeaviateFormat = 'snapshot'
+export type TigerBeetleFormat = 'binary'
 
 // Query command types
 export type QueryResultRow = Record<string, unknown>
@@ -294,6 +297,7 @@ export type BackupFormatType =
   | TypeDBFormat
   | InfluxDBFormat
   | WeaviateFormat
+  | TigerBeetleFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -316,6 +320,7 @@ type EngineFormatMap = {
   [Engine.TypeDB]: TypeDBFormat
   [Engine.InfluxDB]: InfluxDBFormat
   [Engine.Weaviate]: WeaviateFormat
+  [Engine.TigerBeetle]: TigerBeetleFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -434,6 +439,8 @@ export type BinaryTool =
   | 'influxdb3'
   // Weaviate tools
   | 'weaviate'
+  // TigerBeetle tools
+  | 'tigerbeetle'
   // Web panels
   | 'pgweb'
   // TUI tools
@@ -532,6 +539,8 @@ export type SpinDBConfig = {
     influxdb3?: BinaryConfig
     // Weaviate tools
     weaviate?: BinaryConfig
+    // TigerBeetle tools
+    tigerbeetle?: BinaryConfig
     // Web panels
     pgweb?: BinaryConfig
     // TUI tools

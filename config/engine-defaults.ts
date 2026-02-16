@@ -278,6 +278,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // Weaviate uses REST/GraphQL API, no separate CLI tools
     maxConnections: 0, // Not applicable for vector DB
   },
+  [Engine.TigerBeetle]: {
+    defaultVersion: '0.16',
+    defaultPort: 3000,
+    portRange: { start: 3000, end: 3100 },
+    latestVersion: '0.16',
+    superuser: '', // No auth
+    connectionScheme: '', // Custom binary protocol, no URI scheme
+    logFileName: 'tigerbeetle.log',
+    pidFileName: 'tigerbeetle.pid',
+    dataSubdir: 'data',
+    clientTools: ['tigerbeetle'], // Single binary serves as both server and REPL
+    maxConnections: 0, // Not applicable
+  },
 }
 
 /**

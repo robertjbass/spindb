@@ -84,6 +84,8 @@ const INFLUXDB_TOOLS: BinaryTool[] = ['influxdb3']
 
 const WEAVIATE_TOOLS: BinaryTool[] = ['weaviate']
 
+const TIGERBEETLE_TOOLS: BinaryTool[] = ['tigerbeetle']
+
 const PGWEB_TOOLS: BinaryTool[] = ['pgweb']
 
 const DBLAB_TOOLS: BinaryTool[] = ['dblab']
@@ -113,6 +115,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...TYPEDB_TOOLS,
   ...INFLUXDB_TOOLS,
   ...WEAVIATE_TOOLS,
+  ...TIGERBEETLE_TOOLS,
   ...PGWEB_TOOLS,
   ...DBLAB_TOOLS,
   ...SQLITE_TOOLS,
@@ -139,6 +142,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.TypeDB]: TYPEDB_TOOLS,
   [Engine.InfluxDB]: INFLUXDB_TOOLS,
   [Engine.Weaviate]: WEAVIATE_TOOLS,
+  [Engine.TigerBeetle]: TIGERBEETLE_TOOLS,
 }
 
 export class ConfigManager {
@@ -637,6 +641,7 @@ export {
   TYPEDB_TOOLS,
   INFLUXDB_TOOLS,
   WEAVIATE_TOOLS,
+  TIGERBEETLE_TOOLS,
   PGWEB_TOOLS,
   DBLAB_TOOLS,
   SQLITE_TOOLS,
