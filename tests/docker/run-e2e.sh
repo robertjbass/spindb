@@ -42,10 +42,10 @@ SKIP_ENGINES="${SKIP_ENGINES:-}"
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
 GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
 # "other" = REST API engines + file-based engines, grouped for CI load balancing
-GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb"
+GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb weaviate"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate"
 VALID_UTILITY_TESTS="self-update"
 VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
@@ -157,7 +157,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5 [weaviate]=3
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -177,6 +177,7 @@ declare -A BACKUP_FORMATS=(
   [questdb]="sql"
   [typedb]="typeql"
   [influxdb]="sql"
+  [weaviate]="snapshot"
 )
 
 # Results tracking
@@ -389,6 +390,10 @@ insert_seed_data() {
       # InfluxDB uses REST API for seeding (no seed file)
       seed_file=""
       ;;
+    weaviate)
+      # Weaviate uses REST API for seeding (no seed file)
+      seed_file=""
+      ;;
   esac
 
   # InfluxDB uses REST API for seeding, not a file
@@ -412,6 +417,35 @@ test_user,id=5 name="Eve",email="eve@example.com"' &>/dev/null; then
     fi
     # Allow time for data to be indexed
     sleep 2
+    return 0
+  fi
+
+  # Weaviate uses REST API for seeding, not a file
+  if [ "$engine" = "weaviate" ]; then
+    local weaviate_port
+    weaviate_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+    if [ -z "$weaviate_port" ]; then
+      LAST_ERROR="Could not get Weaviate port"
+      return 1
+    fi
+    # Create class
+    if ! curl -sf -X POST "http://127.0.0.1:${weaviate_port}/v1/schema" \
+      -H 'Content-Type: application/json' \
+      -d '{"class": "TestVectors", "vectorizer": "none", "properties": [{"name": "name", "dataType": ["text"]}, {"name": "city", "dataType": ["text"]}]}' &>/dev/null; then
+      LAST_ERROR="Failed to create Weaviate class"
+      return 1
+    fi
+    # Insert test objects (3 objects to match EXPECTED_COUNTS[weaviate]=3)
+    if ! curl -sf -X POST "http://127.0.0.1:${weaviate_port}/v1/batch/objects" \
+      -H 'Content-Type: application/json' \
+      -d '{"objects": [
+        {"class": "TestVectors", "properties": {"name": "Alice", "city": "NYC"}, "vector": [0.1, 0.2, 0.3, 0.4]},
+        {"class": "TestVectors", "properties": {"name": "Bob", "city": "LA"}, "vector": [0.2, 0.3, 0.4, 0.5]},
+        {"class": "TestVectors", "properties": {"name": "Charlie", "city": "SF"}, "vector": [0.9, 0.8, 0.7, 0.6]}
+      ]}' &>/dev/null; then
+      LAST_ERROR="Failed to insert Weaviate objects"
+      return 1
+    fi
     return 0
   fi
 
@@ -640,6 +674,15 @@ get_data_count() {
         echo "$output" | jq -r '.[0].count // empty' 2>/dev/null
       fi
       ;;
+    weaviate)
+      # Weaviate uses REST API - get object count from schema
+      local weaviate_port
+      weaviate_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$weaviate_port" ]; then
+        output=$(curl -sf "http://127.0.0.1:${weaviate_port}/v1/objects?class=TestVectors&limit=0" 2>/dev/null)
+        echo "$output" | jq -r '.totalResults // empty' 2>/dev/null
+      fi
+      ;;
   esac
 }
 
@@ -710,6 +753,9 @@ get_backup_extension() {
     influxdb)
       # InfluxDB uses SQL format for backups
       echo ".sql" ;;
+    weaviate)
+      # Weaviate uses snapshot format for backups
+      echo ".snapshot" ;;
     *)
       echo ".$format" ;;
   esac
@@ -752,6 +798,10 @@ create_backup() {
       # InfluxDB exports data via REST API SQL dump
       run_cmd spindb backup "$container_name" -d testdb --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    weaviate)
+      # Weaviate uses snapshot format for full backups
+      run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -790,6 +840,10 @@ create_restore_target() {
       ;;
     influxdb)
       # InfluxDB: databases created implicitly on first write, no explicit target needed
+      return 0
+      ;;
+    weaviate)
+      # Weaviate: snapshot restore replaces entire data directory, no explicit target needed
       return 0
       ;;
     *)
@@ -864,6 +918,10 @@ restore_backup() {
       # InfluxDB restore executes SQL statements via REST API
       run_cmd spindb restore "$container_name" "$backup_file" -d restored_db --force
       ;;
+    weaviate)
+      # Weaviate: snapshot restore replaces data directory
+      run_cmd spindb restore "$container_name" "$backup_file" --force
+      ;;
   esac
 }
 
@@ -898,6 +956,10 @@ verify_restored_data() {
       ;;
     influxdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
+    weaviate)
+      # Weaviate snapshot restore replaces the entire data directory
+      actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
   esac
 
@@ -937,6 +999,9 @@ verify_restored_data_with_count() {
       ;;
     influxdb)
       actual=$(get_data_count "$engine" "$container_name" "restored_db")
+      ;;
+    weaviate)
+      actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
   esac
 
@@ -994,6 +1059,9 @@ cleanup_restore_target() {
           -H 'Content-Type: application/json' \
           -d '{"db":"restored_db","q":"DROP TABLE test_user","format":"json"}' &>/dev/null || true
       fi
+      ;;
+    weaviate)
+      # Weaviate: no cleanup needed for snapshot restore (replaces full data)
       ;;
   esac
 }
@@ -1409,6 +1477,14 @@ run_test() {
       local influxdb_port
       influxdb_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
       if [ -n "$influxdb_port" ] && curl -sf "http://127.0.0.1:${influxdb_port}/health" &>/dev/null; then
+        query_ok=true
+      fi
+      ;;
+    weaviate)
+      # Weaviate uses REST API - check ready endpoint via curl
+      local weaviate_port
+      weaviate_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$weaviate_port" ] && curl -sf "http://127.0.0.1:${weaviate_port}/v1/.well-known/ready" &>/dev/null; then
         query_ok=true
       fi
       ;;
@@ -2047,7 +2123,7 @@ fi
 # Note: ferretdb is skipped in Docker E2E due to timeout/signal handling issues with its
 # composite architecture (PostgreSQL backend + FerretDB proxy). The FerretDB integration
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

@@ -11,7 +11,7 @@
 
 ## Overview
 
-SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 18 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB.
+SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 19 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate.
 
 **Stack**: Node.js 18+, TypeScript, tsx (no build step), pnpm, Commander.js, Inquirer.js, Chalk, Ora, ESM
 
@@ -114,6 +114,12 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 **Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. See CockroachDB/SurrealDB engines.
 
 **Shell script / JRE engines (QuestDB pattern):** Shell scripts that fork Java processes give useless PIDs. After health check, find real PID via `platformService.findProcessByPort(port)` and write to PID file. Stop also uses port lookup first, PID file as fallback. See `engines/questdb/index.ts`.
+
+**Binary `--version` verification:** `BaseBinaryManager.verify()` runs `binary --version` after download. Some engines don't support this flag — CouchDB (Erlang app, tries to start) and Weaviate (some releases lack `--version` support). These engines override `verify()` in their `binary-manager.ts` to just check binary existence instead. See `engines/couchdb/binary-manager.ts` and `engines/weaviate/binary-manager.ts`. Consult hostdb's `databases.json` for currently supported Weaviate versions rather than embedding specific version numbers.
+
+**Weaviate internal cluster ports:** Weaviate binds 4 internal ports (gossip 7946, data 7947, raft 8300, raft RPC 8301) that MUST be unique per container. SpinDB derives them from the HTTP port: gossip=port+100, data=port+101, raft=port+200, raft_rpc=port+201. Also sets `CLUSTER_HOSTNAME=node-{port}`. Without unique ports, multiple containers silently conflict or fail to start.
+
+**Weaviate backup/restore:** Requires `ENABLE_MODULES=backup-filesystem` env var. Backups are directories (not single files). The directory name MUST match the internal backup ID in `backup_config.json` — `restore.ts` reads this file to use the correct name. When restoring to a container with a different `CLUSTER_HOSTNAME`, the restore API requires a `node_mapping` body parameter. See `engines/weaviate/README.md`.
 
 **Commander.js:** Use `await program.parseAsync()`, not `program.parse()` — the latter returns immediately without waiting for async actions.
 

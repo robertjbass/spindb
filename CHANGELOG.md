@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-02-16
+
+### Fixed
+- **Weaviate Windows spawn stdio** — Changed Windows spawn from piped stdio to `['ignore','ignore','ignore']` to prevent Node.js process hangs in Docker/CI, matching the pattern used by all other engines.
+- **Weaviate createUser flag tracking** — Fixed `createUser` to track each authentication setting independently instead of using a single flag that could miss settings when only some existed in the env file.
+- **Weaviate Nerd Font icon collision** — Changed Weaviate Nerd Font glyph from `\uf14e` (shared with Qdrant) to `\uf0e8` (nf-fa-sitemap) for a unique icon.
+- **Weaviate restore redundant import** — Replaced dynamic `import('fs/promises')` with static import for `copyFile`.
+- **CI debug log safety** — Replaced `ls | grep` pipe with glob pattern `ls weaviate-*` in Weaviate CI debug steps to avoid broken pipe issues.
+- **README engine counts** — Updated all references from 18 to 19 engines, added `weaviate` to engine list and limitations section.
+- **Weaviate README code blocks** — Added language specifiers to fenced code blocks (MD040).
+- **Weaviate connection string error leak** — `parseWeaviateConnectionString` now redacts query params (including `api_key`) from error messages to avoid exposing secrets in logs.
+- **Weaviate port check shared timestamp** — gRPC and HTTP port availability checks now use independent start timestamps so each gets its full timeout window.
+- **Weaviate startup log capture** — Spawn now redirects stdout/stderr to the log file via file descriptor instead of discarding, so `checkLogForError` can actually find startup errors (e.g., "Address already in use").
+
+## [0.36.0] - 2026-02-16
+
+### Added
+- **Weaviate engine** — 19th database engine. AI-native vector database with REST/GraphQL and gRPC APIs. BSD-3-Clause license. Full lifecycle support: create, start, stop, backup/restore, clone, rename, delete. REST API on port 8080, gRPC on port+1. Uses classes/collections instead of traditional databases. Unique internal cluster ports (gossip, data, raft) derived from HTTP port to avoid conflicts between containers.
+- **Weaviate backup/restore** — Directory-based filesystem backups via Weaviate REST API. Restore reads `backup_config.json` to match the internal backup ID (Weaviate validates the directory name). Cross-container restore uses `node_mapping` for hostname translation.
+- **Weaviate CI** — Integration tests on all 5 platforms in `ci.yml` and `ci-full.yml` with binary caching.
+- **Weaviate backup generator** — `pnpm generate:backup weaviate` script for creating test fixture backups on demand.
+
+### Fixed
+- **Weaviate backup timeout detection** — Backup creation and restore polling loops now fail explicitly on timeout instead of silently continuing. Backup generator script also fails with actionable error if the backup directory is missing after API reports success.
+- **Weaviate remote dump guard** — `dumpFromConnectionString` now throws a clear error explaining that Weaviate filesystem backups can't be downloaded over HTTP, with alternative approaches listed.
+- **Weaviate batch insert validation** — Demo seed script now checks per-object results from the batch API (which returns 200 even when individual objects fail).
+- **Weaviate auth persistence** — `start()` now reads `weaviate.env` file so API key/auth settings from `createUser` persist across restarts.
+
+### Changed
+- **Alphabetical engine ordering** — Engine selection prompt and `spindb engines list` now display engines in alphabetical order instead of insertion order. Previously engines were listed in the order they were added to the codebase.
+
 ## [0.35.4] - 2026-02-15
 
 ### Fixed

@@ -28,6 +28,7 @@ import {
   type QuestDBFormat,
   type TypeDBFormat,
   type InfluxDBFormat,
+  type WeaviateFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -65,6 +66,7 @@ export const BACKUP_FORMATS: {
   [Engine.QuestDB]: EngineBackupFormats<QuestDBFormat>
   [Engine.TypeDB]: EngineBackupFormats<TypeDBFormat>
   [Engine.InfluxDB]: EngineBackupFormats<InfluxDBFormat>
+  [Engine.Weaviate]: EngineBackupFormats<WeaviateFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -335,6 +337,18 @@ export const BACKUP_FORMATS: {
     },
     supportsFormatChoice: false, // Only SQL format supported
     defaultFormat: 'sql',
+  },
+  [Engine.Weaviate]: {
+    formats: {
+      snapshot: {
+        extension: '.snapshot',
+        label: '.snapshot',
+        description: 'Weaviate snapshot - full database backup',
+        spinnerLabel: 'snapshot',
+      },
+    },
+    supportsFormatChoice: false, // Only snapshot format supported
+    defaultFormat: 'snapshot',
   },
 }
 

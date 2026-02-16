@@ -74,6 +74,7 @@ export const TEST_PORTS = {
   questdb: { base: 8820, clone: 8822, renamed: 8821 },
   typedb: { base: 1730, clone: 1732, renamed: 1731 },
   influxdb: { base: 8087, clone: 8089, renamed: 8088 },
+  weaviate: { base: 8090, clone: 8092, renamed: 8091 },
 }
 
 // Default test versions for each engine
@@ -414,6 +415,8 @@ export async function executeSQL(
     }
   } else if (engine === Engine.InfluxDB) {
     throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
+  } else if (engine === Engine.Weaviate) {
+    throw new Error('Weaviate uses REST API; use Weaviate REST helpers instead')
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -529,6 +532,8 @@ export async function executeSQLFile(
     return execAsync(cmd)
   } else if (engine === Engine.InfluxDB) {
     throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
+  } else if (engine === Engine.Weaviate) {
+    throw new Error('Weaviate uses REST API; use Weaviate REST helpers instead')
   } else {
     const connectionString = `postgresql://postgres@127.0.0.1:${port}/${database}`
     const engineImpl = getEngine(engine)
@@ -828,6 +833,23 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('InfluxDB health check failed or timed out')
         }
+      } else if (engine === Engine.Weaviate) {
+        // Weaviate health check via HTTP GET to /v1/.well-known/ready
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(
+            `http://127.0.0.1:${port}/v1/.well-known/ready`,
+            { signal: controller.signal },
+          )
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('Weaviate health check failed or timed out')
+        }
       } else if (engine === Engine.TypeDB) {
         // TypeDB health check via HTTP GET to HTTP port
         const httpPort = options?.httpPort ?? port + 6271
@@ -1020,6 +1042,9 @@ export function getConnectionString(
     return `typedb://127.0.0.1:${port}`
   }
   if (engine === Engine.InfluxDB) {
+    return `http://127.0.0.1:${port}`
+  }
+  if (engine === Engine.Weaviate) {
     return `http://127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
@@ -1485,5 +1510,110 @@ export async function getCouchDBDocuments(
     )
   } catch {
     return []
+  }
+}
+
+// Weaviate helper functions
+
+/**
+ * Get the number of classes in Weaviate
+ */
+export async function getWeaviateClassCount(port: number): Promise<number> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/schema`)
+    const data = (await response.json()) as { classes?: unknown[] }
+    return data.classes?.length || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Create a class in Weaviate
+ */
+export async function createWeaviateClass(
+  port: number,
+  name: string,
+  vectorizer = 'none',
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/schema`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        class: name,
+        vectorizer,
+        properties: [
+          {
+            name: 'content',
+            dataType: ['text'],
+          },
+        ],
+      }),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Delete a class in Weaviate
+ */
+export async function deleteWeaviateClass(
+  port: number,
+  name: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/schema/${name}`, {
+      method: 'DELETE',
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the object count in a Weaviate class
+ */
+export async function getWeaviateObjectCount(
+  port: number,
+  className: string,
+): Promise<number> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/v1/objects?class=${className}&limit=0`,
+    )
+    const data = (await response.json()) as { totalResults?: number }
+    return data.totalResults || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Insert objects into a Weaviate class
+ */
+export async function insertWeaviateObjects(
+  port: number,
+  className: string,
+  objects: Array<{ properties: Record<string, unknown>; vector?: number[] }>,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/batch/objects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        objects: objects.map((obj) => ({
+          class: className,
+          properties: obj.properties,
+          vector: obj.vector,
+        })),
+      }),
+    })
+    return response.ok
+  } catch {
+    return false
   }
 }

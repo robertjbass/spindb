@@ -82,6 +82,8 @@ const TYPEDB_TOOLS: BinaryTool[] = ['typedb', 'typedb_console_bin']
 
 const INFLUXDB_TOOLS: BinaryTool[] = ['influxdb3']
 
+const WEAVIATE_TOOLS: BinaryTool[] = ['weaviate']
+
 const PGWEB_TOOLS: BinaryTool[] = ['pgweb']
 
 const DBLAB_TOOLS: BinaryTool[] = ['dblab']
@@ -110,6 +112,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...QUESTDB_TOOLS,
   ...TYPEDB_TOOLS,
   ...INFLUXDB_TOOLS,
+  ...WEAVIATE_TOOLS,
   ...PGWEB_TOOLS,
   ...DBLAB_TOOLS,
   ...SQLITE_TOOLS,
@@ -135,6 +138,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.QuestDB]: QUESTDB_TOOLS,
   [Engine.TypeDB]: TYPEDB_TOOLS,
   [Engine.InfluxDB]: INFLUXDB_TOOLS,
+  [Engine.Weaviate]: WEAVIATE_TOOLS,
 }
 
 export class ConfigManager {
@@ -368,6 +372,7 @@ export class ConfigManager {
     meilisearch: { found: BinaryTool[]; missing: BinaryTool[] }
     typedb: { found: BinaryTool[]; missing: BinaryTool[] }
     influxdb: { found: BinaryTool[]; missing: BinaryTool[] }
+    weaviate: { found: BinaryTool[]; missing: BinaryTool[] }
     enhanced: { found: BinaryTool[]; missing: BinaryTool[] }
   }> {
     // First, scan ~/.spindb/bin/ for downloaded (bundled) binaries
@@ -428,6 +433,10 @@ export class ConfigManager {
       influxdb: {
         found: found.filter((t) => INFLUXDB_TOOLS.includes(t)),
         missing: missing.filter((t) => INFLUXDB_TOOLS.includes(t)),
+      },
+      weaviate: {
+        found: found.filter((t) => WEAVIATE_TOOLS.includes(t)),
+        missing: missing.filter((t) => WEAVIATE_TOOLS.includes(t)),
       },
       enhanced: {
         found: found.filter((t) => ENHANCED_SHELLS.includes(t)),
@@ -627,6 +636,7 @@ export {
   QUESTDB_TOOLS,
   TYPEDB_TOOLS,
   INFLUXDB_TOOLS,
+  WEAVIATE_TOOLS,
   PGWEB_TOOLS,
   DBLAB_TOOLS,
   SQLITE_TOOLS,

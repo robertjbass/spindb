@@ -39,6 +39,7 @@ export enum Engine {
   QuestDB = 'questdb',
   TypeDB = 'typedb',
   InfluxDB = 'influxdb',
+  Weaviate = 'weaviate',
 }
 
 // Icon display mode for engine icons in CLI output
@@ -80,6 +81,7 @@ export const ALL_ENGINES = [
   Engine.QuestDB,
   Engine.TypeDB,
   Engine.InfluxDB,
+  Engine.Weaviate,
 ] as const
 
 // File-based engines (no server process, data stored in user project directories)
@@ -211,6 +213,7 @@ export type SurrealDBFormat = 'surql'
 export type QuestDBFormat = 'sql'
 export type TypeDBFormat = 'typeql'
 export type InfluxDBFormat = 'sql'
+export type WeaviateFormat = 'snapshot'
 
 // Query command types
 export type QueryResultRow = Record<string, unknown>
@@ -290,6 +293,7 @@ export type BackupFormatType =
   | QuestDBFormat
   | TypeDBFormat
   | InfluxDBFormat
+  | WeaviateFormat
 
 // Mapping from Engine to its corresponding backup format type
 type EngineFormatMap = {
@@ -311,6 +315,7 @@ type EngineFormatMap = {
   [Engine.QuestDB]: QuestDBFormat
   [Engine.TypeDB]: TypeDBFormat
   [Engine.InfluxDB]: InfluxDBFormat
+  [Engine.Weaviate]: WeaviateFormat
 }
 
 // Helper type to get format type for a specific engine
@@ -427,6 +432,8 @@ export type BinaryTool =
   | 'typedb_console_bin'
   // InfluxDB tools
   | 'influxdb3'
+  // Weaviate tools
+  | 'weaviate'
   // Web panels
   | 'pgweb'
   // TUI tools
@@ -523,6 +530,8 @@ export type SpinDBConfig = {
     typedb_console_bin?: BinaryConfig
     // InfluxDB tools
     influxdb3?: BinaryConfig
+    // Weaviate tools
+    weaviate?: BinaryConfig
     // Web panels
     pgweb?: BinaryConfig
     // TUI tools

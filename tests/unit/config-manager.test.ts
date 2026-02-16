@@ -100,6 +100,7 @@ describe('ConfigManager', () => {
         QUESTDB_TOOLS,
         TYPEDB_TOOLS,
         INFLUXDB_TOOLS,
+        WEAVIATE_TOOLS,
         PGWEB_TOOLS,
         DBLAB_TOOLS,
         SQLITE_TOOLS,
@@ -123,6 +124,7 @@ describe('ConfigManager', () => {
         QUESTDB_TOOLS.length +
         TYPEDB_TOOLS.length +
         INFLUXDB_TOOLS.length +
+        WEAVIATE_TOOLS.length +
         PGWEB_TOOLS.length +
         DBLAB_TOOLS.length +
         SQLITE_TOOLS.length +

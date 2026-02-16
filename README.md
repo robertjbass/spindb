@@ -7,7 +7,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 18 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 19 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -28,7 +28,7 @@ spindb create cache --engine redis
 
 ## Supported Engines & Platforms
 
-SpinDB supports **18 database engines** across **5 platform architectures**—all with a consistent API.
+SpinDB supports **19 database engines** across **5 platform architectures**—all with a consistent API.
 
 | Engine | Type | macOS ARM | macOS Intel | Linux x64 | Linux ARM | Windows |
 |--------|------|:---------:|:-----------:|:---------:|:---------:|:-------:|
@@ -50,8 +50,9 @@ SpinDB supports **18 database engines** across **5 platform architectures**—al
 | ⏱️ **QuestDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🤖 **TypeDB** | Knowledge Graph | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 📈 **InfluxDB** | Time-Series | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🔮 **Weaviate** | Vector Database | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**89 combinations. One CLI. Zero configuration.**
+**95 combinations. One CLI. Zero configuration.**
 
 > ClickHouse is available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 
@@ -117,6 +118,16 @@ spindb connect tsdata                             # Interactive SQL console
 
 > InfluxDB supports two file formats: `.lp` (line protocol) for writing data, `.sql` for queries.
 
+### Weaviate
+
+```bash
+spindb create vectors --engine weaviate --start
+spindb query vectors "GET /v1/schema"             # Query via REST API
+spindb connect vectors                            # Open web dashboard
+```
+
+> Weaviate is an AI-native vector database. REST API on default port 8080, gRPC on port+1. Uses classes/collections.
+
 ### Enhanced Shells & Visual Tools
 
 ```bash
@@ -129,7 +140,7 @@ spindb connect mydb --ui                         # Built-in Web UI (DuckDB)
 ### Any Engine
 
 ```bash
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb|weaviate]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -171,7 +182,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | DBngin | Postgres.app | Laragon |
 |---------|--------|--------|--------------|---------|
-| **Engines supported** | 18 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
+| **Engines supported** | 19 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
 | CLI-first | ✅ | ❌ GUI-only | ❌ GUI-only | ⚠️ Limited CLI |
 | Multi-version support | ✅ | ✅ | ✅ | ✅ |
 | Built-in backup/restore | ✅ | ✅ | ❌ | ⚠️ Manual |
@@ -187,7 +198,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Docker Desktop | Podman | OrbStack |
 |---------|--------|----------------|--------|----------|
-| **Engines supported** | 18 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
+| **Engines supported** | 19 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
 | Daemon required | ❌ | ✅ | ❌ (rootless) | ✅ |
 | Resource overhead | Native | VM + containers | VM + containers | VM + containers |
 | Built-in backup/restore | ✅ | ❌ Manual | ❌ Manual | ❌ Manual |
@@ -203,7 +214,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Homebrew | apt/winget | asdf-vm |
 |---------|--------|----------|------------|---------|
-| **Engines supported** | 18 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
+| **Engines supported** | 19 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
 | Multi-version side-by-side | ✅ | ⚠️ Complex | ❌ | ✅ |
 | Isolated data directories | ✅ | ❌ System-wide | ❌ System-wide | ❌ |
 | Built-in backup/restore | ✅ | ❌ | ❌ | ❌ |
@@ -273,7 +284,7 @@ See [DEPLOY.md](DEPLOY.md) for comprehensive deployment documentation.
 - **Local only** - Databases bind to `127.0.0.1`. Remote connection support planned for v1.1.
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
 - **FerretDB Windows** - v1 supported natively (plain PostgreSQL backend). v2 not supported (postgresql-documentdb has startup issues); use WSL for v2.
-- **Qdrant, Meilisearch, CouchDB** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
+- **Qdrant, Meilisearch, CouchDB, Weaviate** - Use REST API instead of CLI shell. Access via HTTP at the configured port.
 
 ---
 
@@ -394,7 +405,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 18 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 19 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 

@@ -16,6 +16,7 @@ import { surrealdbEngine } from './surrealdb'
 import { questdbEngine } from './questdb'
 import { typedbEngine } from './typedb'
 import { influxdbEngine } from './influxdb'
+import { weaviateEngine } from './weaviate'
 import { platformService } from '../core/platform-service'
 import { Engine, Platform } from '../types'
 import type { BaseEngine } from './base-engine'
@@ -83,6 +84,9 @@ export const engines: Record<string, BaseEngine> = {
   // InfluxDB and aliases
   [Engine.InfluxDB]: influxdbEngine,
   influx: influxdbEngine,
+  // Weaviate and aliases
+  [Engine.Weaviate]: weaviateEngine,
+  wv: weaviateEngine,
 }
 
 // Get an engine by name
@@ -119,4 +123,5 @@ export function listEngines(): EngineInfo[] {
       defaultPort: engine.defaultPort,
       supportedVersions: engine.supportedVersions,
     }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
 }
