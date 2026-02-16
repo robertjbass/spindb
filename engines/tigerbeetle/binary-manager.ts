@@ -8,13 +8,13 @@
  * We override verify() to use the correct invocation.
  */
 
-import { execFileSync } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import {
   BaseBinaryManager,
   type BinaryManagerConfig,
 } from '../../core/base-binary-manager'
+import { spawnAsync } from '../../core/spawn-utils'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, Platform, type Arch } from '../../types'
@@ -72,25 +72,24 @@ class TigerBeetleBinaryManager extends BaseBinaryManager {
       )
     }
 
-    // TigerBeetle uses `tigerbeetle version` subcommand
+    // TigerBeetle uses `tigerbeetle version` subcommand (not --version)
     try {
-      const output = execFileSync(serverPath, ['version'], {
+      const { stdout } = await spawnAsync(serverPath, ['version'], {
         timeout: 10000,
-        encoding: 'utf-8',
       })
-      const parsedVersion = this.parseVersionFromOutput(output)
+      const parsedVersion = this.parseVersionFromOutput(stdout)
       if (parsedVersion) {
         logDebug(
           `TigerBeetle binary verified: ${parsedVersion} at ${serverPath}`,
         )
       }
       return true
-    } catch {
-      // If version subcommand fails, just check existence
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
       logDebug(
-        'TigerBeetle version subcommand failed, falling back to existence check',
+        `TigerBeetle version check failed for ${serverPath}: ${msg}`,
       )
-      return true
+      return false
     }
   }
 }

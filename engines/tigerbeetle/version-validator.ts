@@ -14,9 +14,9 @@ export function parseVersion(versionString: string): {
   raw: string
 } | null {
   const cleaned = versionString.replace(/^v/, '').trim()
-  const parts = cleaned.split('.')
+  if (!cleaned) return null
 
-  if (parts.length < 1) return null
+  const parts = cleaned.split('.')
 
   const major = parseInt(parts[0], 10)
   const minor = parts[1] ? parseInt(parts[1], 10) : 0
@@ -55,8 +55,10 @@ export function getMajorVersion(version: string): string {
 }
 
 /**
- * Get major.minor version from full version string
- * e.g., "0.16.70" -> "0.16"
+ * Get major.minor version from full version string.
+ * Intentional alias for getMajorVersion — both return the 2-part xy-format
+ * version (e.g., "0.16"). Kept as a separate export for API consistency
+ * with other engine version validators.
  */
 export function getMajorMinorVersion(version: string): string {
   return getMajorVersion(version)

@@ -1,6 +1,5 @@
-import { TIGERBEETLE_VERSION_MAP } from './version-maps'
+import { normalizeVersion } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
-import { logDebug } from '../../core/error-handler'
 import { Engine, Platform, type Arch } from '../../types'
 
 /**
@@ -52,8 +51,7 @@ export function getBinaryUrl(
     )
   }
 
-  // Normalize version (handles major version lookup and X.Y -> X.Y.Z conversion)
-  const fullVersion = normalizeVersion(version, TIGERBEETLE_VERSION_MAP)
+  const fullVersion = normalizeVersion(version)
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 
   return buildHostdbUrl(Engine.TigerBeetle, {
@@ -61,42 +59,4 @@ export function getBinaryUrl(
     hostdbPlatform,
     extension: ext,
   })
-}
-
-/**
- * Normalize version string to X.Y.Z format
- */
-function normalizeVersion(
-  version: string,
-  versionMap: Record<string, string> = TIGERBEETLE_VERSION_MAP,
-): string {
-  // Check if it's an exact key in the map
-  if (versionMap[version]) {
-    return versionMap[version]
-  }
-
-  const parts = version.split('.')
-
-  // If it's already a full version (X.Y.Z), return as-is
-  if (parts.length === 3) {
-    return version
-  }
-
-  // For two-part versions (e.g., "0.16"), try exact key then fall back to major
-  if (parts.length === 2) {
-    const twoPart = `${parts[0]}.${parts[1]}`
-    if (versionMap[twoPart]) {
-      return versionMap[twoPart]
-    }
-    const major = parts[0]
-    const mapped = versionMap[major]
-    if (mapped) {
-      return mapped
-    }
-  }
-
-  logDebug(
-    `TigerBeetle version '${version}' not in version map, may not be available in hostdb`,
-  )
-  return version
 }

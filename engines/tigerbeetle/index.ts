@@ -18,7 +18,7 @@
 
 import { spawn, execFileSync, type SpawnOptions } from 'child_process'
 import { existsSync, openSync, closeSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, stat } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -602,7 +602,6 @@ export class TigerBeetleEngine extends BaseEngine {
     const dataFile = join(dataDir, '0_0.tigerbeetle')
 
     try {
-      const { stat } = await import('fs/promises')
       const stats = await stat(dataFile)
       return stats.size
     } catch {

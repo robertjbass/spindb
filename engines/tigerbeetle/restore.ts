@@ -6,8 +6,8 @@
  * The server must be stopped before restore.
  */
 
-import { copyFile, mkdir } from 'fs/promises'
-import { existsSync, statSync } from 'fs'
+import { copyFile, mkdir, stat } from 'fs/promises'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { logDebug } from '../../core/error-handler'
 import type { BackupFormat, RestoreResult } from '../../types'
@@ -23,7 +23,7 @@ export async function detectBackupFormat(
     throw new Error(`Backup file not found: ${filePath}`)
   }
 
-  const stats = statSync(filePath)
+  const stats = await stat(filePath)
 
   // TigerBeetle data files are regular files (not directories)
   if (stats.isFile()) {
