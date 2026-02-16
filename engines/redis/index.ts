@@ -45,6 +45,7 @@ import {
   type UserCredentials,
 } from '../../types'
 import { parseRedisResult } from '../../core/query-parser'
+import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
 const execAsync = promisify(exec)
 
@@ -477,6 +478,12 @@ export class RedisEngine extends BaseEngine {
 
     logDebug(`Using redis-server for version ${version}: ${redisServer}`)
 
+    // Compute library fallback paths from the binary directory
+    // redisServer is e.g. /path/to/redis-8.4.0-darwin-arm64/bin/redis-server
+    // We need the parent directory (without /bin/redis-server)
+    const binBaseDir = binaryPath || this.getBinaryPath(version)
+    const libraryEnv = getLibraryEnv(binBaseDir)
+
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'redis.conf')
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
@@ -533,6 +540,7 @@ export class RedisEngine extends BaseEngine {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
           windowsHide: true,
+          env: { ...process.env, ...libraryEnv },
         }
 
         // Convert Windows path to Cygwin format for MSYS2/Cygwin-built binaries
@@ -603,6 +611,16 @@ export class RedisEngine extends BaseEngine {
               logContent = '(log file not found or empty)'
             }
 
+            // Check for library loading errors first
+            const libError = detectLibraryError(
+              stderrOutput + logContent,
+              'Redis',
+            )
+            if (libError) {
+              reject(new Error(libError))
+              return
+            }
+
             const errorDetails = [
               portError || 'Redis failed to start within timeout.',
               `Binary: ${redisServer}`,
@@ -625,6 +643,7 @@ export class RedisEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(redisServer, [configPath], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...libraryEnv },
       })
 
       let stdout = ''
@@ -678,6 +697,16 @@ export class RedisEngine extends BaseEngine {
               logContent = '(log file not found or empty)'
             }
 
+            // Check for library loading errors
+            const libError = detectLibraryError(
+              stderr + logContent,
+              'Redis',
+            )
+            if (libError) {
+              reject(new Error(libError))
+              return
+            }
+
             const errorDetails = [
               'Redis failed to start within timeout.',
               `Binary: ${redisServer}`,
@@ -698,6 +727,16 @@ export class RedisEngine extends BaseEngine {
             logContent = await readFile(logFile, 'utf-8')
           } catch {
             logContent = ''
+          }
+
+          // Check for library loading errors on non-zero exit
+          const libError = detectLibraryError(
+            stderr + stdout + logContent,
+            'Redis',
+          )
+          if (libError) {
+            reject(new Error(libError))
+            return
           }
 
           const errorDetails = [

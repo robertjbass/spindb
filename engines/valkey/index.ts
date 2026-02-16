@@ -45,6 +45,7 @@ import {
   type UserCredentials,
 } from '../../types'
 import { parseRedisResult } from '../../core/query-parser'
+import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
 const execAsync = promisify(exec)
 
@@ -486,6 +487,10 @@ export class ValkeyEngine extends BaseEngine {
 
     logDebug(`Using valkey-server for version ${version}: ${valkeyServer}`)
 
+    // Compute library fallback paths from the binary directory
+    const binBaseDir = binaryPath || this.getBinaryPath(version)
+    const libraryEnv = getLibraryEnv(binBaseDir)
+
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'valkey.conf')
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
@@ -542,6 +547,7 @@ export class ValkeyEngine extends BaseEngine {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
           windowsHide: true,
+          env: { ...process.env, ...libraryEnv },
         }
 
         // Convert Windows path to Cygwin format for Cygwin-built binaries
@@ -612,6 +618,16 @@ export class ValkeyEngine extends BaseEngine {
               logContent = '(log file not found or empty)'
             }
 
+            // Check for library loading errors first
+            const libError = detectLibraryError(
+              stderrOutput + logContent,
+              'Valkey',
+            )
+            if (libError) {
+              reject(new Error(libError))
+              return
+            }
+
             const errorDetails = [
               portError || 'Valkey failed to start within timeout.',
               `Binary: ${valkeyServer}`,
@@ -634,6 +650,7 @@ export class ValkeyEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(valkeyServer, [configPath], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...libraryEnv },
       })
 
       let stdout = ''
@@ -678,6 +695,23 @@ export class ValkeyEngine extends BaseEngine {
               reject(new Error(portError))
               return
             }
+
+            // Check for library loading errors
+            let logContent = ''
+            try {
+              logContent = await readFile(logFile, 'utf-8')
+            } catch {
+              logContent = ''
+            }
+            const libError = detectLibraryError(
+              stderr + logContent,
+              'Valkey',
+            )
+            if (libError) {
+              reject(new Error(libError))
+              return
+            }
+
             reject(
               new Error(
                 `Valkey failed to start within timeout. Check logs at: ${logFile}`,
@@ -685,6 +719,12 @@ export class ValkeyEngine extends BaseEngine {
             )
           }
         } else {
+          // Check for library loading errors on non-zero exit
+          const libError = detectLibraryError(stderr || stdout, 'Valkey')
+          if (libError) {
+            reject(new Error(libError))
+            return
+          }
           reject(
             new Error(
               stderr || stdout || `valkey-server exited with code ${code}`,

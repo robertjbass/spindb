@@ -52,6 +52,7 @@ import {
   type UserCredentials,
 } from '../../types'
 import { parseTSVToQueryResult } from '../../core/query-parser'
+import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
 const execAsync = promisify(exec)
 
@@ -256,18 +257,27 @@ export class MariaDBEngine extends BaseEngine {
       const cmd = `"${installDb}" --datadir="${dataDir}"`
 
       return new Promise((resolve, reject) => {
-        exec(cmd, { timeout: 120000 }, async (error, stdout, stderr) => {
-          if (error) {
-            await cleanupOnFailure()
-            reject(
-              new Error(
-                `MariaDB initialization failed with code ${error.code}: ${stderr || stdout || error.message}`,
-              ),
-            )
-          } else {
-            resolve(dataDir)
-          }
-        })
+        exec(
+          cmd,
+          { timeout: 120000, env: { ...process.env, ...getLibraryEnv(binPath) } },
+          async (error, stdout, stderr) => {
+            if (error) {
+              await cleanupOnFailure()
+              const libError = detectLibraryError(
+                stderr || stdout || error.message,
+                'MariaDB',
+              )
+              reject(
+                new Error(
+                  libError ||
+                    `MariaDB initialization failed with code ${error.code}: ${stderr || stdout || error.message}`,
+                ),
+              )
+            } else {
+              resolve(dataDir)
+            }
+          },
+        )
       })
     }
 
@@ -293,6 +303,7 @@ export class MariaDBEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(installDb, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...getLibraryEnv(binPath) },
       })
 
       let stdout = ''
@@ -310,9 +321,11 @@ export class MariaDBEngine extends BaseEngine {
           resolve(dataDir)
         } else {
           await cleanupOnFailure()
+          const libError = detectLibraryError(stderr || stdout, 'MariaDB')
           reject(
             new Error(
-              `MariaDB initialization failed with code ${code}: ${stderr || stdout}`,
+              libError ||
+                `MariaDB initialization failed with code ${code}: ${stderr || stdout}`,
             ),
           )
         }
@@ -384,11 +397,14 @@ export class MariaDBEngine extends BaseEngine {
 
     let proc: ReturnType<typeof spawn> | null = null
 
+    const libraryEnv = getLibraryEnv(binPath)
+
     if (isWindows()) {
       proc = spawn(mysqld, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
         windowsHide: true,
+        env: { ...process.env, ...libraryEnv },
       })
 
       proc.stdout?.on('data', (data: Buffer) => {
@@ -403,6 +419,7 @@ export class MariaDBEngine extends BaseEngine {
       proc = spawn(mysqld, args, {
         stdio: ['ignore', 'ignore', 'ignore'],
         detached: true,
+        env: { ...process.env, ...libraryEnv },
       })
       proc.unref()
     }
@@ -465,7 +482,21 @@ export class MariaDBEngine extends BaseEngine {
               if (proc) {
                 proc.removeListener('error', errorHandler)
               }
-              reject(new Error('MariaDB failed to start within timeout'))
+
+              // Check log file for library errors
+              let libError: string | null = null
+              try {
+                const logContent = await readFile(logFile, 'utf-8')
+                libError = detectLibraryError(logContent, 'MariaDB')
+              } catch {
+                // Log file might not exist
+              }
+
+              reject(
+                new Error(
+                  libError || 'MariaDB failed to start within timeout',
+                ),
+              )
             }
           }
         }

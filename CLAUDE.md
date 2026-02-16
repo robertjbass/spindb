@@ -85,7 +85,7 @@ pnpm start create mydb        # Direct command
 ### Tests
 
 ```bash
-pnpm test:unit                # Unit tests (740+)
+pnpm test:unit                # Unit tests (1200+)
 pnpm test:engine postgres     # Single engine integration (aliases: pg, postgresql)
 pnpm test:engine              # All integration tests
 pnpm test:docker              # Docker Linux E2E
@@ -120,6 +120,8 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 **Weaviate internal cluster ports:** Weaviate binds 4 internal ports (gossip 7946, data 7947, raft 8300, raft RPC 8301) that MUST be unique per container. SpinDB derives them from the HTTP port: gossip=port+100, data=port+101, raft=port+200, raft_rpc=port+201. Also sets `CLUSTER_HOSTNAME=node-{port}`. Without unique ports, multiple containers silently conflict or fail to start.
 
 **Weaviate backup/restore:** Requires `ENABLE_MODULES=backup-filesystem` env var. Backups are directories (not single files). The directory name MUST match the internal backup ID in `backup_config.json` — `restore.ts` reads this file to use the correct name. When restoring to a container with a different `CLUSTER_HOSTNAME`, the restore API requires a `node_mapping` body parameter. See `engines/weaviate/README.md`.
+
+**Dynamic library errors (MariaDB, Redis, Valkey):** hostdb binaries for these engines are dynamically linked against Homebrew's OpenSSL (`/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`). On Macs without `brew install openssl@3`, they fail with `dyld: Library not loaded` errors. `core/library-env.ts` provides two utilities: `getLibraryEnv(binPath)` returns `DYLD_FALLBACK_LIBRARY_PATH` (macOS) or `LD_LIBRARY_PATH` (Linux) pointing to `{binPath}/lib` — spread into spawn env options. `detectLibraryError(output, engineName)` scans stderr/logs for dyld, GLIBC, and shared-library patterns, returning an actionable error message or null. When adding new engines with dynamically-linked binaries, use these utilities in `start()` and `initDataDir()` spawn calls. See `engines/redis/index.ts` for the canonical integration pattern.
 
 **Commander.js:** Use `await program.parseAsync()`, not `program.parse()` — the latter returns immediately without waiting for async actions.
 
