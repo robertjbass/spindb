@@ -8,7 +8,7 @@
  * 3. Trigger restore via POST /v1/backups/filesystem/<id>/restore
  */
 
-import { cp, open, mkdir, readFile } from 'fs/promises'
+import { cp, copyFile, open, mkdir, readFile } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join, basename } from 'path'
 import { paths } from '../../config/paths'
@@ -171,7 +171,6 @@ export async function restoreBackup(
     if (!existsSync(targetPath)) {
       await mkdir(targetPath, { recursive: true })
     }
-    const { copyFile } = await import('fs/promises')
     await copyFile(backupPath, join(targetPath, basename(backupPath)))
   }
 

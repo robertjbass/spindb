@@ -124,7 +124,7 @@ const NERD_ICONS: Record<Engine, string> = {
   [Engine.QuestDB]: '\ued2f', // nf-fa-gauge-high (time-series performance)
   [Engine.TypeDB]: '\ue706', // nf-dev-database (knowledge graph)
   [Engine.InfluxDB]: '\udb85\udf95', // nf-md-chart-line (time-series)
-  [Engine.Weaviate]: '\uf14e', // nf-fa-compass (vector/search)
+  [Engine.Weaviate]: '\uf0e8', // nf-fa-sitemap (vector graph)
 }
 
 // Emoji icons - original icons, inconsistent width across terminals

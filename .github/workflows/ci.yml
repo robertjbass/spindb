@@ -1665,7 +1665,7 @@ jobs:
           ls -la ~/.spindb/containers/weaviate/ 2>/dev/null || echo "No Weaviate containers directory"
           echo ""
           echo "=== Weaviate binary directory ==="
-          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i weaviate || echo "No Weaviate binaries found"
+          ls -la ~/.spindb/bin/weaviate-* 2>/dev/null || echo "No Weaviate binaries found"
           echo ""
           echo "=== Weaviate log files ==="
           find ~/.spindb/containers/weaviate -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"

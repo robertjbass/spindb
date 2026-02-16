@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-02-16
+
+### Fixed
+- **Weaviate Windows spawn stdio** — Changed Windows spawn from piped stdio to `['ignore','ignore','ignore']` to prevent Node.js process hangs in Docker/CI, matching the pattern used by all other engines.
+- **Weaviate createUser flag tracking** — Fixed `createUser` to track each authentication setting independently instead of using a single flag that could miss settings when only some existed in the env file.
+- **Weaviate Nerd Font icon collision** — Changed Weaviate Nerd Font glyph from `\uf14e` (shared with Qdrant) to `\uf0e8` (nf-fa-sitemap) for a unique icon.
+- **Weaviate restore redundant import** — Replaced dynamic `import('fs/promises')` with static import for `copyFile`.
+- **CI debug log safety** — Replaced `ls | grep` pipe with glob pattern `ls weaviate-*` in Weaviate CI debug steps to avoid broken pipe issues.
+- **README engine counts** — Updated all references from 18 to 19 engines, added `weaviate` to engine list and limitations section.
+- **Weaviate README code blocks** — Added language specifiers to fenced code blocks (MD040).
+
 ## [0.36.0] - 2026-02-16
 
 ### Added

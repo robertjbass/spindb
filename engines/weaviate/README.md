@@ -21,7 +21,7 @@ Weaviate is an AI-native vector database with REST and gRPC APIs. Like Qdrant an
 - **Windows**: `zip`
 
 ### Archive Structure
-```
+```text
 weaviate/
 └── bin/
     └── weaviate           # Server binary
@@ -111,14 +111,14 @@ Weaviate uses 4 internal cluster ports in addition to HTTP and gRPC. These **mus
 
 ### Connection String Format
 
-```
+```text
 http://127.0.0.1:{port}
 ```
 
 ### Web Dashboard
 
 The `connect` command opens the root URL in the default browser:
-```
+```text
 http://localhost:{port}/
 ```
 

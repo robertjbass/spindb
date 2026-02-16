@@ -505,117 +505,21 @@ export class WeaviateEngine extends BaseEngine {
       RAFT_INTERNAL_RPC_PORT: String(raftInternalRpcPort),
     }
 
-    // On non-Windows, use 'ignore' for stdio to allow Node.js process to exit
-    if (isWindows()) {
-      return new Promise((resolve, reject) => {
-        const spawnOpts: SpawnOptions = {
-          cwd: containerDir,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: true,
-          windowsHide: true,
-          env,
-        }
-
-        const proc = spawn(weaviateServer, args, spawnOpts)
-        let settled = false
-        let stderrOutput = ''
-        let stdoutOutput = ''
-
-        proc.on('error', (err) => {
-          if (settled) return
-          settled = true
-          reject(new Error(`Failed to spawn Weaviate server: ${err.message}`))
-        })
-
-        proc.on('exit', (code, signal) => {
-          if (settled) return
-          settled = true
-          const reason = signal ? `signal ${signal}` : `code ${code}`
-          reject(
-            new Error(
-              `Weaviate process exited unexpectedly (${reason}).\n` +
-                `Stderr: ${stderrOutput || '(none)'}\n` +
-                `Stdout: ${stdoutOutput || '(none)'}`,
-            ),
-          )
-        })
-
-        proc.stdout?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stdoutOutput += str
-          logDebug(`weaviate stdout: ${str}`)
-        })
-        proc.stderr?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stderrOutput += str
-          logDebug(`weaviate stderr: ${str}`)
-        })
-
-        proc.unref()
-
-        setTimeout(async () => {
-          if (settled) return
-
-          if (!proc.pid) {
-            settled = true
-            reject(
-              new Error('Weaviate server process failed to start (no PID)'),
-            )
-            return
-          }
-
-          try {
-            await writeFile(pidFile, String(proc.pid))
-          } catch {
-            // Non-fatal
-          }
-
-          const ready = await this.waitForReady(port)
-          if (settled) return
-
-          if (ready) {
-            settled = true
-            resolve({
-              port,
-              connectionString: this.getConnectionString(container),
-            })
-          } else {
-            settled = true
-
-            // Clean up the orphaned detached process before rejecting
-            if (proc.pid && platformService.isProcessRunning(proc.pid)) {
-              try {
-                await platformService.terminateProcess(proc.pid, true)
-              } catch {
-                // Ignore cleanup errors - best effort
-              }
-            }
-
-            const portError = await checkLogForError()
-
-            const errorDetails = [
-              portError || 'Weaviate failed to start within timeout.',
-              `Binary: ${weaviateServer}`,
-              `Log file: ${logFile}`,
-              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
-              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
-            ]
-              .filter(Boolean)
-              .join('\n')
-
-            reject(new Error(errorDetails))
-          }
-        }, 500)
-      })
-    }
-
-    // macOS/Linux: spawn with ignored stdio so Node.js can exit cleanly
-    const proc = spawn(weaviateServer, args, {
+    // Spawn with 'ignore' stdio so Node.js process can exit cleanly.
+    // Using 'pipe' keeps file descriptors open and prevents Node.js exit
+    // even after proc.unref(), causing `spindb start` to hang in Docker/CI.
+    const spawnOpts: SpawnOptions = {
       cwd: containerDir,
       stdio: ['ignore', 'ignore', 'ignore'],
       detached: true,
       env,
-    })
+    }
+
+    if (isWindows()) {
+      spawnOpts.windowsHide = true
+    }
+
+    const proc = spawn(weaviateServer, args, spawnOpts)
     proc.unref()
 
     if (!proc.pid) {
@@ -635,6 +539,15 @@ export class WeaviateEngine extends BaseEngine {
       return {
         port,
         connectionString: this.getConnectionString(container),
+      }
+    }
+
+    // Clean up the orphaned detached process before throwing
+    if (platformService.isProcessRunning(proc.pid)) {
+      try {
+        await platformService.terminateProcess(proc.pid, true)
+      } catch {
+        // Ignore cleanup errors - best effort
       }
     }
 
@@ -1137,33 +1050,40 @@ export class WeaviateEngine extends BaseEngine {
 
     // Update or add authentication settings
     const lines = currentConfig.split('\n')
-    let foundAuth = false
-    let foundApiKey = false
+    let foundAnonAccess = false
+    let foundApiKeyEnabled = false
+    let foundApiKeyAllowed = false
+    let foundApiKeyUsers = false
 
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].startsWith('AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=')) {
         lines[i] = 'AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=false'
-        foundAuth = true
+        foundAnonAccess = true
       }
       if (lines[i].startsWith('AUTHENTICATION_APIKEY_ENABLED=')) {
         lines[i] = 'AUTHENTICATION_APIKEY_ENABLED=true'
-        foundApiKey = true
+        foundApiKeyEnabled = true
       }
       if (lines[i].startsWith('AUTHENTICATION_APIKEY_ALLOWED_KEYS=')) {
         lines[i] = `AUTHENTICATION_APIKEY_ALLOWED_KEYS=${password}`
-        foundApiKey = true
+        foundApiKeyAllowed = true
       }
       if (lines[i].startsWith('AUTHENTICATION_APIKEY_USERS=')) {
         lines[i] = `AUTHENTICATION_APIKEY_USERS=${username}`
+        foundApiKeyUsers = true
       }
     }
 
-    if (!foundAuth) {
+    if (!foundAnonAccess) {
       lines.push('AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=false')
     }
-    if (!foundApiKey) {
+    if (!foundApiKeyEnabled) {
       lines.push('AUTHENTICATION_APIKEY_ENABLED=true')
+    }
+    if (!foundApiKeyAllowed) {
       lines.push(`AUTHENTICATION_APIKEY_ALLOWED_KEYS=${password}`)
+    }
+    if (!foundApiKeyUsers) {
       lines.push(`AUTHENTICATION_APIKEY_USERS=${username}`)
     }
 
