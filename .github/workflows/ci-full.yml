@@ -1,37 +1,24 @@
-name: CI
+name: CI Full Matrix
 
 on:
-  pull_request:
-    branches: [main]
-  # push:
-  #   branches: [dev] # TODO: change to a feature branch and uncomment to test on feature branches
   workflow_dispatch:
 
 # =============================================================================
-# OS Coverage Strategy (Tiered)
+# OS Coverage Strategy (Full Matrix)
 # =============================================================================
-# Platform-arch combos we test (all 5 supported):
-#   - linux-x64:     ubuntu-22.04 (older glibc) + ubuntu-24.04 (newer glibc)
-#   - linux-arm64:   Docker + QEMU smoke test (download, start, query, stop)
-#   - darwin-x64:    macos-15-intel (Intel, available until Aug 2027)
-#   - darwin-arm64:  macos-14 (Apple Silicon)
-#   - win32-x64:     windows-latest
+# Tests on 5 runners covering 4 unique platform-arch combos:
+#   - ubuntu-22.04 (linux-x64) - LTS with older glibc/system libraries
+#   - ubuntu-24.04 (linux-x64) - LTS with newer libraries (catches libaio rename)
+#   - macos-15-intel (darwin-x64) - macOS Intel (available until Aug 2027)
+#   - macos-14 (darwin-arm64) - macOS Apple Silicon
+#   - windows-latest (win32-x64)
 #
 # Note: macos-14 and macos-15 are BOTH ARM64 runners. To test darwin-x64
 # you must use macos-15-intel (or the deprecated macos-13).
 #
-# All engines (5 runners): ubuntu-22.04, ubuntu-24.04, macos-15-intel, macos-14,
-#   windows-latest
-#
-# Exceptions:
-#   - ClickHouse, FerretDB v2: No Windows (no hostdb binaries) → 4 runners
-#   - FerretDB v1: All platforms including Windows (plain PostgreSQL backend)
-#   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
-#
-# Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
-#
-# Full matrix available via: ci-full.yml (manual dispatch or weekly)
-# See TESTING_STRATEGY.md for rollback instructions.
+# Not tested (no free GitHub Actions runners available):
+#   - linux-arm64: QEMU is too slow/flaky; macOS ARM64 validates ARM code paths
+#   - win32-arm64: Not supported by hostdb
 # =============================================================================
 
 # Cancel in-progress runs when a new run is triggered
@@ -50,9 +37,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -526,7 +519,7 @@ jobs:
   # Note: Windows is not supported due to postgresql-documentdb startup issues
   # ============================================
   test-ferretdb:
-    name: FerretDB v2 ${{ matrix.icon }} ${{ matrix.label }}
+    name: FerretDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -544,6 +537,7 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          # Windows not supported - postgresql-documentdb has startup issues
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -561,12 +555,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache FerretDB binaries - includes both ferretdb AND postgresql-documentdb
+      # Version is FerretDB 2, 4 is the cache-busting key for the CI runner only, not the FerretDB version
+      # Do not warn about mismatch between v2 and v4 as v4 is a cache version, not a binary version
       - name: Cache FerretDB binaries
         uses: actions/cache@v4
         id: ferretdb-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-ferretdb-2-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-ferretdb-4-${{ runner.os }}-${{ runner.arch }}
 
       # Download FerretDB binaries via SpinDB (downloads both ferretdb + postgresql-documentdb)
       - name: Download FerretDB binaries
@@ -598,122 +594,6 @@ jobs:
           echo ""
           echo "=== PostgreSQL backend log files ==="
           find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
-
-      - name: Show FerretDB logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== FerretDB container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== FerretDB binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*documentdb*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== FerretDB log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
-  # ============================================
-  # FerretDB v1 Integration Tests
-  # v1 uses plain PostgreSQL backend (no DocumentDB) - supports all platforms incl. Windows
-  # Runs after test-ferretdb to avoid backend port conflicts (both use dynamic PG ports)
-  # ============================================
-  test-ferretdb-v1:
-    name: FerretDB v1 ${{ matrix.icon }} ${{ matrix.label }}
-    needs: [test-ferretdb]
-    if: always()
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            icon: 🐧
-            label: Linux x64 22.04
-          - os: ubuntu-24.04
-            icon: 🐧
-            label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍎
-            label: macOS x64
-          - os: macos-14
-            icon: 🍎
-            label: macOS ARM64
-          - os: windows-latest
-            icon: 🪟
-            label: Win x64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Cache FerretDB v1 binaries - ferretdb proxy + plain PostgreSQL
-      - name: Cache FerretDB v1 binaries
-        uses: actions/cache@v4
-        id: ferretdb-v1-cache
-        with:
-          path: ~/.spindb/bin
-          key: spindb-ferretdb-1-pg-17-${{ runner.os }}-${{ runner.arch }}
-
-      # Download FerretDB v1 binaries (proxy only, backend is plain PostgreSQL)
-      - name: Download FerretDB v1 binaries
-        run: pnpm start engines download ferretdb 1
-
-      # FerretDB uses mongosh (MongoDB shell) for connect/run commands
-      # Download MongoDB binaries to get bundled mongosh
-      - name: Download MongoDB binaries (for mongosh)
-        run: pnpm start engines download mongodb 8.0
-
-      - name: Show installed engines
-        run: pnpm start engines list
-
-      - name: Run FerretDB v1 integration tests
-        run: pnpm test:engine ferretdb-v1
-        timeout-minutes: 20
-
-      - name: Show FerretDB v1 logs on failure (Unix)
-        if: failure() && runner.os != 'Windows'
-        run: |
-          echo "=== FerretDB container directories ==="
-          ls -la ~/.spindb/containers/ferretdb/ 2>/dev/null || echo "No FerretDB containers directory"
-          echo ""
-          echo "=== FerretDB binary directory ==="
-          ls -la ~/.spindb/bin/ 2>/dev/null | grep -iE "(ferret|postgresql)" || echo "No FerretDB binaries found"
-          echo ""
-          echo "=== FerretDB log files ==="
-          find ~/.spindb/containers/ferretdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
-          echo ""
-          echo "=== PostgreSQL backend log files ==="
-          find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
-
-      - name: Show FerretDB v1 logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== FerretDB container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== FerretDB binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*postgresql*" } | Select-Object FullName
-          Write-Host ""
-          Write-Host "=== FerretDB log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
 
   # ============================================
   # Redis Integration Tests
@@ -849,6 +729,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      max-parallel: 4 # Limit parallel jobs to reduce runner contention
       matrix:
         include:
           - os: ubuntu-22.04
@@ -863,6 +744,7 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1328,6 +1210,96 @@ jobs:
           }
 
   # ============================================
+  # TypeDB Integration Tests
+  # Uses SpinDB to download and manage TypeDB binaries from hostdb
+  # TypeDB is a knowledge graph database with TypeQL query language
+  # ============================================
+  test-typedb:
+    name: TypeDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache TypeDB binaries - these are downloaded from hostdb
+      - name: Cache TypeDB binaries
+        uses: actions/cache@v4
+        id: typedb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-typedb-3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download TypeDB binaries
+      - name: Install TypeDB via SpinDB
+        run: pnpm start engines download typedb 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run TypeDB integration tests
+        run: pnpm test:engine typedb
+        timeout-minutes: 15
+
+      - name: Show TypeDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== TypeDB container directories ==="
+          ls -la ~/.spindb/containers/typedb/ 2>/dev/null || echo "No TypeDB containers directory"
+          echo ""
+          echo "=== TypeDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i typedb || echo "No TypeDB binaries found"
+          echo ""
+          echo "=== TypeDB log files ==="
+          find ~/.spindb/containers/typedb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show TypeDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== TypeDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TypeDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'typedb' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== TypeDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
   # QuestDB Integration Tests
   # Uses SpinDB to download and manage QuestDB binaries from hostdb
   # QuestDB is a high-performance time-series database with PostgreSQL wire protocol
@@ -1423,185 +1395,6 @@ jobs:
           }
 
   # ============================================
-  # TypeDB Integration Tests
-  # Uses SpinDB to download and manage TypeDB binaries from hostdb
-  # TypeDB is a knowledge graph database with TypeQL query language
-  # ============================================
-  test-typedb:
-    name: TypeDB ${{ matrix.icon }} ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            icon: 🐧
-            label: Linux x64 22.04
-          - os: ubuntu-24.04
-            icon: 🐧
-            label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍎
-            label: macOS x64
-          - os: macos-14
-            icon: 🍎
-            label: macOS ARM64
-          - os: windows-latest
-            icon: 🪟
-            label: Win x64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Cache TypeDB binaries - these are downloaded from hostdb
-      - name: Cache TypeDB binaries
-        uses: actions/cache@v4
-        id: typedb-cache
-        with:
-          path: ~/.spindb/bin
-          key: spindb-typedb-3-${{ runner.os }}-${{ runner.arch }}
-
-      # Use SpinDB to download TypeDB binaries
-      - name: Install TypeDB via SpinDB
-        run: pnpm start engines download typedb 3
-
-      - name: Show installed engines
-        run: pnpm start engines list
-
-      - name: Run TypeDB integration tests
-        run: pnpm test:engine typedb
-        timeout-minutes: 15
-
-      - name: Show TypeDB logs on failure (Unix)
-        if: failure() && runner.os != 'Windows'
-        run: |
-          echo "=== TypeDB container directories ==="
-          ls -la ~/.spindb/containers/typedb/ 2>/dev/null || echo "No TypeDB containers directory"
-          echo ""
-          echo "=== TypeDB binary directory ==="
-          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i typedb || echo "No TypeDB binaries found"
-          echo ""
-          echo "=== TypeDB log files ==="
-          find ~/.spindb/containers/typedb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
-
-      - name: Show TypeDB logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== TypeDB container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
-          Write-Host ""
-          Write-Host "=== TypeDB binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'typedb' } | Format-Table -AutoSize
-          Write-Host ""
-          Write-Host "=== TypeDB log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\typedb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
-  # ============================================
-  # InfluxDB Integration Tests
-  # Uses SpinDB to download and manage InfluxDB binaries from hostdb
-  # ============================================
-  test-influxdb:
-    name: InfluxDB ${{ matrix.icon }} ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            icon: 🐧
-            label: Linux x64 22.04
-          - os: ubuntu-24.04
-            icon: 🐧
-            label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍎
-            label: macOS x64
-          - os: macos-14
-            icon: 🍎
-            label: macOS ARM64
-          - os: windows-latest
-            icon: 🪟
-            label: Win x64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Cache InfluxDB binaries - these are downloaded from hostdb
-      - name: Cache InfluxDB binaries
-        uses: actions/cache@v4
-        id: influxdb-cache
-        with:
-          path: ~/.spindb/bin
-          key: spindb-influxdb-3-${{ runner.os }}-${{ runner.arch }}
-
-      # Use SpinDB to download InfluxDB binaries
-      - name: Install InfluxDB via SpinDB
-        run: pnpm start engines download influxdb 3
-
-      - name: Show installed engines
-        run: pnpm start engines list
-
-      - name: Run InfluxDB integration tests
-        run: pnpm test:engine influxdb
-        timeout-minutes: 15
-
-      - name: Show InfluxDB logs on failure (Unix)
-        if: failure() && runner.os != 'Windows'
-        run: |
-          echo "=== InfluxDB container directories ==="
-          ls -la ~/.spindb/containers/influxdb/ 2>/dev/null || echo "No InfluxDB containers directory"
-          echo ""
-          echo "=== InfluxDB binary directory ==="
-          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i influx || echo "No InfluxDB binaries found"
-          echo ""
-          echo "=== InfluxDB log files ==="
-          find ~/.spindb/containers/influxdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
-
-      - name: Show InfluxDB logs on failure (Windows)
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== InfluxDB container directories ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\influxdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
-          Write-Host ""
-          Write-Host "=== InfluxDB binary directory ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'influx' } | Format-Table -AutoSize
-          Write-Host ""
-          Write-Host "=== InfluxDB log files ==="
-          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\influxdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "--- $($_.FullName) ---"
-            Get-Content $_.FullName -ErrorAction SilentlyContinue
-          }
-
-  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -1611,12 +1404,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1814,15 +1616,9 @@ jobs:
       max-parallel: 4 # Limit parallel jobs to reduce runner contention
       matrix:
         include:
-          - os: ubuntu-22.04
-            icon: 🐧
-            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
-            label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍎
-            label: macOS x64
+            label: Linux x64
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
@@ -2444,11 +2240,11 @@ jobs:
   #       shell: bash
 
   # ============================================
-  # Docker Linux x64 - Tests library dependencies on minimal Linux
+  # Docker Linux Edge Cases - Tests library dependencies on minimal Linux
   # Verifies hostdb binaries work on clean Ubuntu systems
   # ============================================
   test-docker-linux:
-    name: Docker Linux x64
+    name: Docker Linux Edge Cases
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -2460,52 +2256,6 @@ jobs:
       - name: Run Docker E2E tests
         run: docker run --rm spindb-e2e
         timeout-minutes: 30
-
-  # ============================================
-  # Docker Linux ARM64 (QEMU) - Smoke tests for linux-arm64 binaries
-  # Verifies each engine's hostdb arm64 binary can start and handle a query.
-  # Runs under QEMU emulation so it's slow (~30-45 min) but catches broken
-  # arm64 binaries that no other CI job tests.
-  # ============================================
-  test-docker-linux-arm64:
-    name: Docker Linux ARM64 (QEMU)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU for ARM64 emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build ARM64 Docker test image
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -t spindb-e2e-arm64 \
-            -f tests/docker/Dockerfile \
-            --load .
-        timeout-minutes: 30
-
-      - name: Run ARM64 smoke tests
-        # QEMU emulation is ~5-10x slower than native; increase timeouts so
-        # engines with 30-90s internal waitForReady don't get killed.
-        # SurrealDB is skipped: its large Rust binary hangs during --version
-        # verification under QEMU user-mode emulation.
-        # ClickHouse is skipped: its heavy binary consistently exceeds startup
-        # timeouts under QEMU (~120s+ native, far longer emulated). Tested
-        # natively on macOS/Linux CI runners instead.
-        run: |
-          docker run --rm --platform linux/arm64 \
-            -e START_TIMEOUT=600 \
-            -e STARTUP_TIMEOUT=180 \
-            -e "SKIP_ENGINES=surrealdb clickhouse" \
-            spindb-e2e-arm64
-        timeout-minutes: 90
 
   # ============================================
   # Docker Export Test - Tests the `spindb export docker` functionality
@@ -2756,7 +2506,8 @@ jobs:
   # Uncomment this section if GitHub adds free ARM64 runners or if you have
   # access to paid larger runners. Native ARM64 is much faster than QEMU.
   #
-  # To enable: uncomment the job below.
+  # To enable: uncomment the job below and add 'test-linux-arm64' to the
+  # 'needs' array in the ci-success job at the bottom of this file.
   # ============================================
   #
   # test-linux-arm64:
@@ -2884,16 +2635,11 @@ jobs:
   # ============================================
   # Summary Job - Ensures all tests pass
   # ============================================
-  # Single required check in branch protection so you don't need to
-  # maintain 50+ individual required checks. Individual job results
-  # still appear on the PR checks page.
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
     needs: [
         unit-tests,
-        lint,
-        hostdb-sync,
         test-postgresql,
         test-mariadb,
         test-mysql,
@@ -2901,7 +2647,6 @@ jobs:
         test-duckdb,
         test-mongodb,
         test-ferretdb,
-        test-ferretdb-v1,
         test-redis,
         test-valkey,
         test-clickhouse,
@@ -2912,7 +2657,6 @@ jobs:
         test-surrealdb,
         test-questdb,
         test-typedb,
-        test-influxdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -2920,8 +2664,9 @@ jobs:
         test-upgrade,
         test-self-update,
         test-docker-linux,
-        test-docker-linux-arm64,
         test-docker-export,
+        lint,
+        hostdb-sync,
       ]
     if: always()
     steps:
@@ -2931,14 +2676,13 @@ jobs:
             "unit-tests" "lint" "hostdb-sync"
             "test-postgresql" "test-mariadb" "test-mysql"
             "test-sqlite" "test-duckdb" "test-mongodb"
-            "test-ferretdb" "test-ferretdb-v1" "test-redis"
-            "test-valkey" "test-clickhouse" "test-qdrant"
-            "test-meilisearch" "test-couchdb" "test-cockroachdb"
-            "test-surrealdb" "test-questdb" "test-typedb"
-            "test-influxdb" "test-cli-e2e" "test-rename-clone"
-            "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
-            "test-self-update" "test-docker-linux" "test-docker-linux-arm64"
-            "test-docker-export"
+            "test-ferretdb" "test-redis" "test-valkey"
+            "test-clickhouse" "test-qdrant" "test-meilisearch"
+            "test-couchdb" "test-cockroachdb" "test-surrealdb"
+            "test-questdb" "test-typedb" "test-cli-e2e"
+            "test-rename-clone" "test-clickhouse-rename"
+            "test-fresh-install" "test-upgrade" "test-self-update"
+            "test-docker-linux" "test-docker-export"
           )
           results=(
             "${{ needs.unit-tests.result }}"
@@ -2951,7 +2695,6 @@ jobs:
             "${{ needs.test-duckdb.result }}"
             "${{ needs.test-mongodb.result }}"
             "${{ needs.test-ferretdb.result }}"
-            "${{ needs.test-ferretdb-v1.result }}"
             "${{ needs.test-redis.result }}"
             "${{ needs.test-valkey.result }}"
             "${{ needs.test-clickhouse.result }}"
@@ -2962,7 +2705,6 @@ jobs:
             "${{ needs.test-surrealdb.result }}"
             "${{ needs.test-questdb.result }}"
             "${{ needs.test-typedb.result }}"
-            "${{ needs.test-influxdb.result }}"
             "${{ needs.test-cli-e2e.result }}"
             "${{ needs.test-rename-clone.result }}"
             "${{ needs.test-clickhouse-rename.result }}"
@@ -2970,7 +2712,6 @@ jobs:
             "${{ needs.test-upgrade.result }}"
             "${{ needs.test-self-update.result }}"
             "${{ needs.test-docker-linux.result }}"
-            "${{ needs.test-docker-linux-arm64.result }}"
             "${{ needs.test-docker-export.result }}"
           )
           failed=0

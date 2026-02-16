@@ -1,0 +1,119 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Get PR version
+        id: pr_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Get npm version
+        id: npm_version
+        run: |
+          NPM_VERSION=$(npm view spindb version 2>/dev/null || echo "0.0.0")
+          echo "version=$NPM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        id: compare
+        env:
+          PR_VERSION: ${{ steps.pr_version.outputs.version }}
+          NPM_VERSION: ${{ steps.npm_version.outputs.version }}
+        run: |
+          echo "PR version: $PR_VERSION"
+          echo "npm version: $NPM_VERSION"
+
+          RESULT=$(node -e "
+            const semver = (v) => v.split('.').map(Number);
+            const pr = semver(process.env.PR_VERSION);
+            const npm = semver(process.env.NPM_VERSION);
+
+            for (let i = 0; i < 3; i++) {
+              if (pr[i] > npm[i]) { console.log('greater'); process.exit(0); }
+              if (pr[i] < npm[i]) { console.log('lesser'); process.exit(0); }
+            }
+            console.log('equal');
+          ")
+
+          echo "result=$RESULT" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR if version not bumped
+        if: steps.compare.outputs.result != 'greater'
+        uses: actions/github-script@v7
+        env:
+          PR_VERSION: ${{ steps.pr_version.outputs.version }}
+          NPM_VERSION: ${{ steps.npm_version.outputs.version }}
+        with:
+          script: |
+            const prVersion = process.env.PR_VERSION;
+            const npmVersion = process.env.NPM_VERSION;
+
+            const [major, minor, patch] = npmVersion.split('.').map(Number);
+            const patchBump = `${major}.${minor}.${patch + 1}`;
+            const minorBump = `${major}.${minor + 1}.0`;
+            const majorBump = `${major + 1}.0.0`;
+
+            const body = [
+              '## ❌ Version Check Failed',
+              '',
+              '| Current npm | This PR |',
+              '|-------------|---------|',
+              `| \`${npmVersion}\` | \`${prVersion}\` |`,
+              '',
+              `Please bump the version in \`package.json\` to be greater than \`${npmVersion}\` before merging.`,
+              '',
+              '**Examples:**',
+              `- Patch: \`${patchBump}\``,
+              `- Minor: \`${minorBump}\``,
+              `- Major: \`${majorBump}\``,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Version Check Failed')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if version not bumped
+        if: steps.compare.outputs.result != 'greater'
+        run: |
+          echo "Version must be incremented before merging"
+          exit 1
+
+      - name: Success
+        if: steps.compare.outputs.result == 'greater'
+        env:
+          NPM_VERSION: ${{ steps.npm_version.outputs.version }}
+          PR_VERSION: ${{ steps.pr_version.outputs.version }}
+        run: |
+          echo "Version check passed: $NPM_VERSION -> $PR_VERSION"

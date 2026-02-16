@@ -53,6 +53,7 @@ import {
 import { Engine, Platform } from '../../types'
 import {
   loadEnginesJson,
+  filterEnginesByPlatform,
   type EngineConfig,
 } from '../../config/engines-registry'
 import { mysqlBinaryManager } from '../../engines/mysql/binary-manager'
@@ -2156,7 +2157,10 @@ enginesCommand
   .option('--all', 'Include pending and planned engines')
   .action(async (options: { json?: boolean; all?: boolean }) => {
     try {
-      const enginesData = await loadEnginesJson()
+      const rawData = await loadEnginesJson()
+      const { platform, arch } = platformService.getPlatformInfo()
+      const platformKey = `${platform}-${arch}`
+      const enginesData = filterEnginesByPlatform(rawData, platformKey)
 
       if (options.json) {
         // Output full JSON
