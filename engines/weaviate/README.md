@@ -221,19 +221,23 @@ Weaviate backups are directories (not single files). The backup directory name *
 
 When restoring a backup to a container with a different `CLUSTER_HOSTNAME`, the Weaviate restore API requires a `node_mapping` parameter. Without it, restore fails with "cannot resolve hostname" (422).
 
-### 8. gRPC Port
+### 8. Windows Backup Fails (LSM File Locking)
+
+Weaviate on Windows holds exclusive locks on LSM storage files, preventing `fsync` during backup while the server is running. The backup API returns "Access is denied" errors. Integration tests skip the backup/restore clone test on Windows. Same pattern as Meilisearch.
+
+### 9. gRPC Port
 
 The gRPC port is separate from HTTP (HTTP + 1). Ensure both ports are available if using gRPC clients.
 
-### 9. Snapshot Format
+### 10. Snapshot Format
 
 Snapshots are Weaviate's native backup format and are not compatible with other databases.
 
-### 10. Health Check Endpoint
+### 11. Health Check Endpoint
 
 Use `/v1/.well-known/ready` for health checks (returns 200 when ready).
 
-### 11. Class/Collection Naming
+### 12. Class/Collection Naming
 
 Weaviate class names must start with an uppercase letter (PascalCase). Container names with dashes are auto-converted (e.g., `my-app` becomes class `My_app`).
 
