@@ -7,6 +7,12 @@
 #   ./run-docker-test.sh postgresql # Run only PostgreSQL tests
 #
 # Valid engines: postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb
+#
+# Security note: Runs with --security-opt seccomp=unconfined because TigerBeetle
+# requires io_uring syscalls which Docker's default seccomp profile blocks.
+# This is safe for E2E tests (isolated, ephemeral containers) and does not affect
+# the host. TigerBeetle works fine on regular Linux systems — the restriction is
+# Docker-specific. See: https://docs.docker.com/engine/security/seccomp/
 
 set -e
 
@@ -38,12 +44,17 @@ ENGINE_FILTER="${1:-}"
 echo "Building Docker image..."
 docker build -t spindb-e2e -f "$SCRIPT_DIR/Dockerfile" "$PROJECT_ROOT"
 
+# --security-opt seccomp=unconfined: Required for TigerBeetle which uses io_uring.
+# Docker's default seccomp profile blocks io_uring_* syscalls. This only affects
+# the test container (ephemeral, no network exposure, no persistent state).
+DOCKER_RUN="docker run --rm --security-opt seccomp=unconfined"
+
 echo ""
 echo "Running E2E tests..."
 if [ -n "$ENGINE_FILTER" ]; then
-  docker run --rm spindb-e2e "$ENGINE_FILTER"
+  $DOCKER_RUN spindb-e2e "$ENGINE_FILTER"
 else
-  docker run --rm spindb-e2e
+  $DOCKER_RUN spindb-e2e
 fi
 
 # Cleanup is handled by the trap on EXIT
