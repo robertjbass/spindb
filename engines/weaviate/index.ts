@@ -1055,6 +1055,13 @@ export class WeaviateEngine extends BaseEngine {
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const configPath = join(containerDir, 'weaviate.env')
 
+    if (!existsSync(configPath)) {
+      throw new Error(
+        `Weaviate config not found: ${configPath}\n` +
+          `This file is created during container setup. ` +
+          `Try recreating the container: spindb delete ${name} && spindb create ${name}`,
+      )
+    }
     const currentConfig = await readFile(configPath, 'utf-8')
 
     // Update or add authentication settings

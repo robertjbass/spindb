@@ -2547,50 +2547,52 @@ jobs:
         timeout-minutes: 30
 
   # ============================================
-  # Docker Linux ARM64 (QEMU) - Smoke tests for linux-arm64 binaries
-  # Verifies each engine's hostdb arm64 binary can start and handle a query.
-  # Runs under QEMU emulation so it's slow (~30-45 min) but catches broken
-  # arm64 binaries that no other CI job tests.
+  # Docker Linux ARM64 (QEMU) - COMMENTED OUT
   # ============================================
-  test-docker-linux-arm64:
-    name: Docker Linux ARM64 (QEMU)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU for ARM64 emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build ARM64 Docker test image
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -t spindb-e2e-arm64 \
-            -f tests/docker/Dockerfile \
-            --load .
-        timeout-minutes: 30
-
-      - name: Run ARM64 smoke tests
-        # QEMU emulation is ~5-10x slower than native; increase timeouts so
-        # engines with 30-90s internal waitForReady don't get killed.
-        # SurrealDB is skipped: its large Rust binary hangs during --version
-        # verification under QEMU user-mode emulation.
-        # ClickHouse is skipped: its heavy binary consistently exceeds startup
-        # timeouts under QEMU (~120s+ native, far longer emulated). Tested
-        # natively on macOS/Linux CI runners instead.
-        run: |
-          docker run --rm --platform linux/arm64 \
-            -e START_TIMEOUT=600 \
-            -e STARTUP_TIMEOUT=180 \
-            -e "SKIP_ENGINES=surrealdb clickhouse" \
-            spindb-e2e-arm64
-        timeout-minutes: 90
+  # This job takes ~30-45 min under QEMU emulation (3x longer than all other
+  # tests combined). Uncomment periodically to verify arm64 binaries still
+  # work, or run manually via workflow_dispatch. macOS ARM64 runners validate
+  # ARM code paths in every PR.
+  #
+  # test-docker-linux-arm64:
+  #   name: Docker Linux ARM64 (QEMU)
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Set up QEMU for ARM64 emulation
+  #       uses: docker/setup-qemu-action@v3
+  #       with:
+  #         platforms: arm64
+  #
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #
+  #     - name: Build ARM64 Docker test image
+  #       run: |
+  #         docker buildx build \
+  #           --platform linux/arm64 \
+  #           -t spindb-e2e-arm64 \
+  #           -f tests/docker/Dockerfile \
+  #           --load .
+  #       timeout-minutes: 30
+  #
+  #     - name: Run ARM64 smoke tests
+  #       # QEMU emulation is ~5-10x slower than native; increase timeouts so
+  #       # engines with 30-90s internal waitForReady don't get killed.
+  #       # SurrealDB is skipped: its large Rust binary hangs during --version
+  #       # verification under QEMU user-mode emulation.
+  #       # ClickHouse is skipped: its heavy binary consistently exceeds startup
+  #       # timeouts under QEMU (~120s+ native, far longer emulated). Tested
+  #       # natively on macOS/Linux CI runners instead.
+  #       run: |
+  #         docker run --rm --platform linux/arm64 \
+  #           -e START_TIMEOUT=600 \
+  #           -e STARTUP_TIMEOUT=180 \
+  #           -e "SKIP_ENGINES=surrealdb clickhouse" \
+  #           spindb-e2e-arm64
+  #       timeout-minutes: 90
 
   # ============================================
   # Docker Export Test - Tests the `spindb export docker` functionality
@@ -3007,7 +3009,6 @@ jobs:
         test-upgrade,
         test-self-update,
         test-docker-linux,
-        test-docker-linux-arm64,
         test-docker-export,
       ]
     if: always()
@@ -3024,8 +3025,7 @@ jobs:
             "test-surrealdb" "test-questdb" "test-typedb"
             "test-influxdb" "test-weaviate" "test-cli-e2e" "test-rename-clone"
             "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
-            "test-self-update" "test-docker-linux" "test-docker-linux-arm64"
-            "test-docker-export"
+            "test-self-update" "test-docker-linux" "test-docker-export"
           )
           results=(
             "${{ needs.unit-tests.result }}"
@@ -3058,7 +3058,6 @@ jobs:
             "${{ needs.test-upgrade.result }}"
             "${{ needs.test-self-update.result }}"
             "${{ needs.test-docker-linux.result }}"
-            "${{ needs.test-docker-linux-arm64.result }}"
             "${{ needs.test-docker-export.result }}"
           )
           failed=0
