@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI debug log safety** — Replaced `ls | grep` pipe with glob pattern `ls weaviate-*` in Weaviate CI debug steps to avoid broken pipe issues.
 - **README engine counts** — Updated all references from 18 to 19 engines, added `weaviate` to engine list and limitations section.
 - **Weaviate README code blocks** — Added language specifiers to fenced code blocks (MD040).
+- **Weaviate connection string error leak** — `parseWeaviateConnectionString` now redacts query params (including `api_key`) from error messages to avoid exposing secrets in logs.
+- **Weaviate port check shared timestamp** — gRPC and HTTP port availability checks now use independent start timestamps so each gets its full timeout window.
+- **Weaviate startup log capture** — Spawn now redirects stdout/stderr to the log file via file descriptor instead of discarding, so `checkLogForError` can actually find startup errors (e.g., "Address already in use").
 
 ## [0.36.0] - 2026-02-16
 

@@ -1,5 +1,5 @@
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, openSync, closeSync } from 'fs'
 import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
@@ -71,8 +71,10 @@ function parseWeaviateConnectionString(connectionString: string): {
   try {
     url = new URL(normalized)
   } catch {
+    // Redact query params (may contain api_key) before including in error
+    const safeString = normalized.split('?')[0]
     throw new Error(
-      `Invalid Weaviate connection string: ${connectionString}\n` +
+      `Invalid Weaviate connection string: ${safeString}\n` +
         'Expected format: http://host:port',
     )
   }
@@ -391,11 +393,11 @@ export class WeaviateEngine extends BaseEngine {
 
     // Check if gRPC port is available (Weaviate uses HTTP port + 1 for gRPC)
     const portWaitTimeout = isWindows() ? 60000 : 0
-    const portCheckStart = Date.now()
     const portCheckInterval = 1000
 
+    const grpcCheckStart = Date.now()
     while (!(await portManager.isPortAvailable(grpcPort))) {
-      if (Date.now() - portCheckStart >= portWaitTimeout) {
+      if (Date.now() - grpcCheckStart >= portWaitTimeout) {
         throw new Error(
           `gRPC port ${grpcPort} is already in use. ` +
             `Weaviate requires both HTTP port ${port} and gRPC port ${grpcPort} to be available.`,
@@ -407,8 +409,9 @@ export class WeaviateEngine extends BaseEngine {
 
     // Also check HTTP port on Windows
     if (isWindows()) {
+      const httpCheckStart = Date.now()
       while (!(await portManager.isPortAvailable(port))) {
-        if (Date.now() - portCheckStart >= portWaitTimeout) {
+        if (Date.now() - httpCheckStart >= portWaitTimeout) {
           throw new Error(
             `HTTP port ${port} is already in use. ` +
               `Weaviate requires both HTTP port ${port} and gRPC port ${grpcPort} to be available.`,
@@ -505,12 +508,15 @@ export class WeaviateEngine extends BaseEngine {
       RAFT_INTERNAL_RPC_PORT: String(raftInternalRpcPort),
     }
 
-    // Spawn with 'ignore' stdio so Node.js process can exit cleanly.
-    // Using 'pipe' keeps file descriptors open and prevents Node.js exit
-    // even after proc.unref(), causing `spindb start` to hang in Docker/CI.
+    // Redirect stdout/stderr to log file via file descriptor so
+    // checkLogForError can find startup errors. File descriptors are
+    // inherited by the child and don't keep Node.js event loop alive
+    // (unlike 'pipe'), so proc.unref() works correctly.
+    const logFd = openSync(logFile, 'a')
+
     const spawnOpts: SpawnOptions = {
       cwd: containerDir,
-      stdio: ['ignore', 'ignore', 'ignore'],
+      stdio: ['ignore', logFd, logFd],
       detached: true,
       env,
     }
@@ -521,6 +527,9 @@ export class WeaviateEngine extends BaseEngine {
 
     const proc = spawn(weaviateServer, args, spawnOpts)
     proc.unref()
+
+    // Close fd in parent — child inherited its own copy
+    closeSync(logFd)
 
     if (!proc.pid) {
       throw new Error('Weaviate server process failed to start (no PID)')
