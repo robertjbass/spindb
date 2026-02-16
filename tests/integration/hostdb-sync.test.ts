@@ -38,6 +38,7 @@ import { TYPEDB_VERSION_MAP } from '../../engines/typedb/version-maps'
 import { VALKEY_VERSION_MAP } from '../../engines/valkey/version-maps'
 import { INFLUXDB_VERSION_MAP } from '../../engines/influxdb/version-maps'
 import { WEAVIATE_VERSION_MAP } from '../../engines/weaviate/version-maps'
+import { TIGERBEETLE_VERSION_MAP } from '../../engines/tigerbeetle/version-maps'
 
 // Engine configurations for testing
 // Names must match the keys in hostdb releases.json
@@ -62,6 +63,7 @@ const ENGINES = [
   { name: 'valkey', map: VALKEY_VERSION_MAP },
   { name: 'influxdb', map: INFLUXDB_VERSION_MAP },
   { name: 'weaviate', map: WEAVIATE_VERSION_MAP },
+  { name: 'tigerbeetle', map: TIGERBEETLE_VERSION_MAP },
 ] as const
 
 describe('hostdb Version Sync Verification', () => {
