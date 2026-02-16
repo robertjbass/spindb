@@ -618,12 +618,9 @@ jobs:
   # ============================================
   # FerretDB v1 Integration Tests
   # v1 uses plain PostgreSQL backend (no DocumentDB) - supports all platforms incl. Windows
-  # Runs after test-ferretdb to avoid backend port conflicts (both use dynamic PG ports)
   # ============================================
   test-ferretdb-v1:
     name: FerretDB v1 ${{ matrix.icon }} ${{ matrix.label }}
-    needs: [test-ferretdb]
-    if: always()
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

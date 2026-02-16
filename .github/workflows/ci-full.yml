@@ -1,5 +1,11 @@
 name: CI Full Matrix
 
+# Manual-only workflow. Not triggered by PRs or pushes.
+# Run via: Actions > CI Full Matrix > Run workflow
+# Use before releases or after large changes for extra confidence.
+# Runs all engines on 5 runners (vs ci.yml's 3) including ubuntu-22.04
+# and macos-15-intel which ci.yml skips.
+
 on:
   workflow_dispatch:
 
@@ -594,6 +600,104 @@ jobs:
           echo ""
           echo "=== PostgreSQL backend log files ==="
           find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
+
+  # ============================================
+  # FerretDB v1 Integration Tests
+  # FerretDB v1 uses plain PostgreSQL as backend (not postgresql-documentdb)
+  # Includes Windows (v1 supports all platforms)
+  # ============================================
+  test-ferretdb-v1:
+    name: FerretDB v1 ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache FerretDB v1 binaries - ferretdb proxy + plain PostgreSQL
+      - name: Cache FerretDB v1 binaries
+        uses: actions/cache@v4
+        id: ferretdb-v1-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-ferretdb-1-pg-17-${{ runner.os }}-${{ runner.arch }}
+
+      # Download FerretDB v1 binaries (proxy only, backend is plain PostgreSQL)
+      - name: Download FerretDB v1 binaries
+        run: pnpm start engines download ferretdb 1
+
+      # FerretDB uses mongosh (MongoDB shell) for connect/run commands
+      # Download MongoDB binaries to get bundled mongosh
+      - name: Download MongoDB binaries (for mongosh)
+        run: pnpm start engines download mongodb 8.0
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run FerretDB v1 integration tests
+        run: pnpm test:engine ferretdb-v1
+        timeout-minutes: 20
+
+      - name: Show FerretDB v1 logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== FerretDB container directories ==="
+          ls -la ~/.spindb/containers/ferretdb/ 2>/dev/null || echo "No FerretDB containers directory"
+          echo ""
+          echo "=== FerretDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -iE "(ferret|postgresql)" || echo "No FerretDB binaries found"
+          echo ""
+          echo "=== FerretDB log files ==="
+          find ~/.spindb/containers/ferretdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== PostgreSQL backend log files ==="
+          find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
+
+      - name: Show FerretDB v1 logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== FerretDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== FerretDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*postgresql*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== FerretDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
 
   # ============================================
   # Redis Integration Tests
@@ -1390,6 +1494,95 @@ jobs:
           Write-Host ""
           Write-Host "=== QuestDB log files ==="
           Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # InfluxDB Integration Tests
+  # Uses SpinDB to download and manage InfluxDB binaries from hostdb
+  # ============================================
+  test-influxdb:
+    name: InfluxDB ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache InfluxDB binaries - these are downloaded from hostdb
+      - name: Cache InfluxDB binaries
+        uses: actions/cache@v4
+        id: influxdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-influxdb-3-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download InfluxDB binaries
+      - name: Install InfluxDB via SpinDB
+        run: pnpm start engines download influxdb 3
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run InfluxDB integration tests
+        run: pnpm test:engine influxdb
+        timeout-minutes: 15
+
+      - name: Show InfluxDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== InfluxDB container directories ==="
+          ls -la ~/.spindb/containers/influxdb/ 2>/dev/null || echo "No InfluxDB containers directory"
+          echo ""
+          echo "=== InfluxDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i influx || echo "No InfluxDB binaries found"
+          echo ""
+          echo "=== InfluxDB log files ==="
+          find ~/.spindb/containers/influxdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show InfluxDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== InfluxDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\influxdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== InfluxDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'influx' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== InfluxDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\influxdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "--- $($_.FullName) ---"
             Get-Content $_.FullName -ErrorAction SilentlyContinue
           }
@@ -2640,6 +2833,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [
         unit-tests,
+        lint,
+        hostdb-sync,
         test-postgresql,
         test-mariadb,
         test-mysql,
@@ -2647,6 +2842,7 @@ jobs:
         test-duckdb,
         test-mongodb,
         test-ferretdb,
+        test-ferretdb-v1,
         test-redis,
         test-valkey,
         test-clickhouse,
@@ -2657,6 +2853,7 @@ jobs:
         test-surrealdb,
         test-questdb,
         test-typedb,
+        test-influxdb,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -2665,8 +2862,6 @@ jobs:
         test-self-update,
         test-docker-linux,
         test-docker-export,
-        lint,
-        hostdb-sync,
       ]
     if: always()
     steps:
@@ -2676,13 +2871,13 @@ jobs:
             "unit-tests" "lint" "hostdb-sync"
             "test-postgresql" "test-mariadb" "test-mysql"
             "test-sqlite" "test-duckdb" "test-mongodb"
-            "test-ferretdb" "test-redis" "test-valkey"
-            "test-clickhouse" "test-qdrant" "test-meilisearch"
-            "test-couchdb" "test-cockroachdb" "test-surrealdb"
-            "test-questdb" "test-typedb" "test-cli-e2e"
-            "test-rename-clone" "test-clickhouse-rename"
-            "test-fresh-install" "test-upgrade" "test-self-update"
-            "test-docker-linux" "test-docker-export"
+            "test-ferretdb" "test-ferretdb-v1" "test-redis"
+            "test-valkey" "test-clickhouse" "test-qdrant"
+            "test-meilisearch" "test-couchdb" "test-cockroachdb"
+            "test-surrealdb" "test-questdb" "test-typedb"
+            "test-influxdb" "test-cli-e2e" "test-rename-clone"
+            "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
+            "test-self-update" "test-docker-linux" "test-docker-export"
           )
           results=(
             "${{ needs.unit-tests.result }}"
@@ -2695,6 +2890,7 @@ jobs:
             "${{ needs.test-duckdb.result }}"
             "${{ needs.test-mongodb.result }}"
             "${{ needs.test-ferretdb.result }}"
+            "${{ needs.test-ferretdb-v1.result }}"
             "${{ needs.test-redis.result }}"
             "${{ needs.test-valkey.result }}"
             "${{ needs.test-clickhouse.result }}"
@@ -2705,6 +2901,7 @@ jobs:
             "${{ needs.test-surrealdb.result }}"
             "${{ needs.test-questdb.result }}"
             "${{ needs.test-typedb.result }}"
+            "${{ needs.test-influxdb.result }}"
             "${{ needs.test-cli-e2e.result }}"
             "${{ needs.test-rename-clone.result }}"
             "${{ needs.test-clickhouse-rename.result }}"

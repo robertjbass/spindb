@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.4] - 2026-02-15
+
+### Fixed
+- **CI injection hardening** — `version-check.yml` now uses environment variables instead of direct `${{ }}` interpolation in shell/JS to prevent injection from crafted version strings.
+- **CI failure reporting** — `ci-success` gateway job now prints which specific jobs failed instead of a generic error message.
+
+### Changed
+- **Restore individual CI workflow files** — Brought back `ci-fast.yml`, `ci-full.yml`, and `version-check.yml` so individual job checks are visible on PRs. Removed weekly schedule from `ci-full.yml` (manual dispatch only).
+- **CI full matrix parity** — Added missing `test-influxdb` and `test-ferretdb-v1` jobs to `ci-full.yml` with full 5-runner matrices.
+
 ## [0.35.3] - 2026-02-15
 
 ### Added
