@@ -2663,7 +2663,6 @@ jobs:
         test-fresh-install,
         test-upgrade,
         test-self-update,
-        # test-windows-all,  # Commented out - using parallel Windows tests instead
         test-docker-linux,
         test-docker-export,
         lint,
@@ -2673,117 +2672,56 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
-          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
-            echo "Unit tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-postgresql.result }}" != "success" ]; then
-            echo "PostgreSQL tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-mariadb.result }}" != "success" ]; then
-            echo "MariaDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-mysql.result }}" != "success" ]; then
-            echo "MySQL tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-sqlite.result }}" != "success" ]; then
-            echo "SQLite tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-duckdb.result }}" != "success" ]; then
-            echo "DuckDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-mongodb.result }}" != "success" ]; then
-            echo "MongoDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-ferretdb.result }}" != "success" ]; then
-            echo "FerretDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-redis.result }}" != "success" ]; then
-            echo "Redis tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-valkey.result }}" != "success" ]; then
-            echo "Valkey tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-clickhouse.result }}" != "success" ]; then
-            echo "ClickHouse tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-qdrant.result }}" != "success" ]; then
-            echo "Qdrant tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-meilisearch.result }}" != "success" ]; then
-            echo "Meilisearch tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-couchdb.result }}" != "success" ]; then
-            echo "CouchDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-cockroachdb.result }}" != "success" ]; then
-            echo "CockroachDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-surrealdb.result }}" != "success" ]; then
-            echo "SurrealDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-questdb.result }}" != "success" ]; then
-            echo "QuestDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-typedb.result }}" != "success" ]; then
-            echo "TypeDB tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-cli-e2e.result }}" != "success" ]; then
-            echo "CLI E2E tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-rename-clone.result }}" != "success" ]; then
-            echo "Rename & Clone tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-clickhouse-rename.result }}" != "success" ]; then
-            echo "ClickHouse Rename tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-fresh-install.result }}" != "success" ]; then
-            echo "Fresh install tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-upgrade.result }}" != "success" ]; then
-            echo "Upgrade tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-self-update.result }}" != "success" ]; then
-            echo "Self-update tests failed"
-            exit 1
-          fi
-          # test-windows-all check removed - using parallel Windows tests instead
-          if [ "${{ needs.test-docker-linux.result }}" != "success" ]; then
-            echo "Docker Linux edge case tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-docker-export.result }}" != "success" ]; then
-            echo "Docker Export tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.lint.result }}" != "success" ]; then
-            echo "Lint check failed"
-            exit 1
-          fi
-          if [ "${{ needs.hostdb-sync.result }}" != "success" ]; then
-            echo "hostdb sync check failed"
+          names=(
+            "unit-tests" "lint" "hostdb-sync"
+            "test-postgresql" "test-mariadb" "test-mysql"
+            "test-sqlite" "test-duckdb" "test-mongodb"
+            "test-ferretdb" "test-redis" "test-valkey"
+            "test-clickhouse" "test-qdrant" "test-meilisearch"
+            "test-couchdb" "test-cockroachdb" "test-surrealdb"
+            "test-questdb" "test-typedb" "test-cli-e2e"
+            "test-rename-clone" "test-clickhouse-rename"
+            "test-fresh-install" "test-upgrade" "test-self-update"
+            "test-docker-linux" "test-docker-export"
+          )
+          results=(
+            "${{ needs.unit-tests.result }}"
+            "${{ needs.lint.result }}"
+            "${{ needs.hostdb-sync.result }}"
+            "${{ needs.test-postgresql.result }}"
+            "${{ needs.test-mariadb.result }}"
+            "${{ needs.test-mysql.result }}"
+            "${{ needs.test-sqlite.result }}"
+            "${{ needs.test-duckdb.result }}"
+            "${{ needs.test-mongodb.result }}"
+            "${{ needs.test-ferretdb.result }}"
+            "${{ needs.test-redis.result }}"
+            "${{ needs.test-valkey.result }}"
+            "${{ needs.test-clickhouse.result }}"
+            "${{ needs.test-qdrant.result }}"
+            "${{ needs.test-meilisearch.result }}"
+            "${{ needs.test-couchdb.result }}"
+            "${{ needs.test-cockroachdb.result }}"
+            "${{ needs.test-surrealdb.result }}"
+            "${{ needs.test-questdb.result }}"
+            "${{ needs.test-typedb.result }}"
+            "${{ needs.test-cli-e2e.result }}"
+            "${{ needs.test-rename-clone.result }}"
+            "${{ needs.test-clickhouse-rename.result }}"
+            "${{ needs.test-fresh-install.result }}"
+            "${{ needs.test-upgrade.result }}"
+            "${{ needs.test-self-update.result }}"
+            "${{ needs.test-docker-linux.result }}"
+            "${{ needs.test-docker-export.result }}"
+          )
+          failed=0
+          for i in "${!results[@]}"; do
+            if [ "${results[$i]}" != "success" ]; then
+              echo "${names[$i]}: ${results[$i]}"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
             exit 1
           fi
           echo "All CI checks passed!"

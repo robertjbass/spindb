@@ -2927,6 +2927,19 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
+          names=(
+            "unit-tests" "lint" "hostdb-sync"
+            "test-postgresql" "test-mariadb" "test-mysql"
+            "test-sqlite" "test-duckdb" "test-mongodb"
+            "test-ferretdb" "test-ferretdb-v1" "test-redis"
+            "test-valkey" "test-clickhouse" "test-qdrant"
+            "test-meilisearch" "test-couchdb" "test-cockroachdb"
+            "test-surrealdb" "test-questdb" "test-typedb"
+            "test-influxdb" "test-cli-e2e" "test-rename-clone"
+            "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
+            "test-self-update" "test-docker-linux" "test-docker-linux-arm64"
+            "test-docker-export"
+          )
           results=(
             "${{ needs.unit-tests.result }}"
             "${{ needs.lint.result }}"
@@ -2960,10 +2973,14 @@ jobs:
             "${{ needs.test-docker-linux-arm64.result }}"
             "${{ needs.test-docker-export.result }}"
           )
-          for result in "${results[@]}"; do
-            if [ "$result" != "success" ]; then
-              echo "One or more CI jobs failed or were cancelled"
-              exit 1
+          failed=0
+          for i in "${!results[@]}"; do
+            if [ "${results[$i]}" != "success" ]; then
+              echo "${names[$i]}: ${results[$i]}"
+              failed=1
             fi
           done
+          if [ "$failed" -eq 1 ]; then
+            exit 1
+          fi
           echo "All CI checks passed!"
