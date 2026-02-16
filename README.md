@@ -192,7 +192,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | DBngin | Postgres.app | Laragon |
 |---------|--------|--------|--------------|---------|
-| **Engines supported** | 19 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
+| **Engines supported** | 20 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
 | CLI-first | ✅ | ❌ GUI-only | ❌ GUI-only | ⚠️ Limited CLI |
 | Multi-version support | ✅ | ✅ | ✅ | ✅ |
 | Built-in backup/restore | ✅ | ✅ | ❌ | ⚠️ Manual |
@@ -208,7 +208,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Docker Desktop | Podman | OrbStack |
 |---------|--------|----------------|--------|----------|
-| **Engines supported** | 19 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
+| **Engines supported** | 20 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
 | Daemon required | ❌ | ✅ | ❌ (rootless) | ✅ |
 | Resource overhead | Native | VM + containers | VM + containers | VM + containers |
 | Built-in backup/restore | ✅ | ❌ Manual | ❌ Manual | ❌ Manual |
@@ -224,7 +224,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Homebrew | apt/winget | asdf-vm |
 |---------|--------|----------|------------|---------|
-| **Engines supported** | 19 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
+| **Engines supported** | 20 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
 | Multi-version side-by-side | ✅ | ⚠️ Complex | ❌ | ✅ |
 | Isolated data directories | ✅ | ❌ System-wide | ❌ System-wide | ❌ |
 | Built-in backup/restore | ✅ | ❌ | ❌ | ❌ |

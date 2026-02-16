@@ -61,6 +61,13 @@ import {
 const ENGINE = 'tigerbeetle'
 const engineDef = getEngineDefaults(ENGINE)
 
+/**
+ * Default cluster ID for local single-node development.
+ * TigerBeetle requires a cluster ID for format, start, and REPL commands.
+ * Cluster 0 is the standard default for local/single-node usage.
+ */
+const DEFAULT_CLUSTER_ID = 0
+
 export class TigerBeetleEngine extends BaseEngine {
   name = ENGINE
   displayName = 'TigerBeetle'
@@ -169,7 +176,7 @@ export class TigerBeetleEngine extends BaseEngine {
         tigerbeetleBinary,
         [
           'format',
-          '--cluster=0',
+          `--cluster=${DEFAULT_CLUSTER_ID}`,
           '--replica=0',
           '--replica-count=1',
           '--development',
@@ -556,7 +563,11 @@ export class TigerBeetleEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(
         tigerbeetleBinary,
-        ['repl', '--cluster=0', `--addresses=127.0.0.1:${port}`],
+        [
+          'repl',
+          `--cluster=${DEFAULT_CLUSTER_ID}`,
+          `--addresses=127.0.0.1:${port}`,
+        ],
         spawnOptions,
       )
 

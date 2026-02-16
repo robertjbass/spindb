@@ -1746,12 +1746,19 @@ async function launchShell(
     installHint = 'spindb engines download typedb'
   } else if (config.engine === 'tigerbeetle') {
     // TigerBeetle uses tigerbeetle repl command
+    // Cluster ID 0 is the default for local single-node development.
+    // TigerBeetle format/start also use cluster 0 (see engines/tigerbeetle/index.ts).
+    const clusterId = 0
     const engine = getEngine(config.engine)
     const tigerbeetlePath = await engine
       .getTigerBeetlePath(config.version)
       .catch(() => null)
     shellCmd = tigerbeetlePath || 'tigerbeetle'
-    shellArgs = ['repl', '--cluster=0', `--addresses=127.0.0.1:${config.port}`]
+    shellArgs = [
+      'repl',
+      `--cluster=${clusterId}`,
+      `--addresses=127.0.0.1:${config.port}`,
+    ]
     installHint = 'spindb engines download tigerbeetle'
   } else {
     // PostgreSQL default shell - look up downloaded binary path
