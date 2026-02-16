@@ -703,10 +703,7 @@ export class ValkeyEngine extends BaseEngine {
             } catch {
               logContent = ''
             }
-            const libError = detectLibraryError(
-              stderr + logContent,
-              'Valkey',
-            )
+            const libError = detectLibraryError(stderr + logContent, 'Valkey')
             if (libError) {
               reject(new Error(libError))
               return

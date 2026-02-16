@@ -86,9 +86,7 @@ class TigerBeetleBinaryManager extends BaseBinaryManager {
       return true
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      logDebug(
-        `TigerBeetle version check failed for ${serverPath}: ${msg}`,
-      )
+      logDebug(`TigerBeetle version check failed for ${serverPath}: ${msg}`)
       return false
     }
   }
