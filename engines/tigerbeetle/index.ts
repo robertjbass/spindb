@@ -333,6 +333,20 @@ export class TigerBeetleEngine extends BaseEngine {
     const ready = await this.waitForReady(port)
 
     if (ready) {
+      // On Windows, detached processes may have a different actual PID.
+      // Find the real PID by port and update the PID file (same pattern as QuestDB).
+      try {
+        const pids = await platformService.findProcessByPort(port)
+        if (pids.length > 0 && pids[0] !== proc.pid) {
+          logDebug(
+            `TigerBeetle actual PID ${pids[0]} differs from spawn PID ${proc.pid}, updating PID file`,
+          )
+          await writeFile(pidFile, String(pids[0]))
+        }
+      } catch {
+        // Non-fatal - PID file already has proc.pid from earlier write
+      }
+
       return {
         port,
         connectionString: this.getConnectionString(container),
