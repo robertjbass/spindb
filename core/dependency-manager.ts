@@ -88,6 +88,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'influxdb3',
   // Weaviate
   'weaviate',
+  // TigerBeetle
+  'tigerbeetle',
   // Web panels
   'pgweb',
   // TUI tools

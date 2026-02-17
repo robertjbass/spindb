@@ -391,6 +391,123 @@ describe('JSON Output Validation', () => {
       }
     })
 
+    it('list --json should include engine metadata fields', () => {
+      const result = runCommand('list --json')
+      if (result.exitCode === 0) {
+        const parsed = JSON.parse(result.stdout.trim())
+        for (const container of parsed) {
+          if (typeof container.queryLanguage !== 'string') {
+            throw new Error(
+              `Container "${container.name}" missing queryLanguage field`,
+            )
+          }
+          if (
+            container.runtime !== 'server' &&
+            container.runtime !== 'embedded'
+          ) {
+            throw new Error(
+              `Container "${container.name}" has invalid runtime: ${container.runtime}`,
+            )
+          }
+          if (
+            container.connectionScheme !== null &&
+            typeof container.connectionScheme !== 'string'
+          ) {
+            throw new Error(
+              `Container "${container.name}" missing connectionScheme field`,
+            )
+          }
+        }
+      }
+    })
+
+    it('info --json should include engine metadata fields', () => {
+      const result = runCommand('info --json')
+      if (result.exitCode === 0) {
+        const parsed = JSON.parse(result.stdout.trim())
+        const containers = Array.isArray(parsed) ? parsed : [parsed]
+        for (const container of containers) {
+          if (typeof container.queryLanguage !== 'string') {
+            throw new Error(
+              `Container "${container.name}" missing queryLanguage in info`,
+            )
+          }
+          if (
+            container.runtime !== 'server' &&
+            container.runtime !== 'embedded'
+          ) {
+            throw new Error(
+              `Container "${container.name}" has invalid runtime in info: ${container.runtime}`,
+            )
+          }
+          if (
+            container.connectionScheme !== null &&
+            typeof container.connectionScheme !== 'string'
+          ) {
+            throw new Error(
+              `Container "${container.name}" missing connectionScheme in info`,
+            )
+          }
+        }
+      }
+    })
+
+    it('engines --json should include engine metadata fields', () => {
+      const result = runCommand('engines --json')
+      if (result.exitCode === 0) {
+        const parsed = JSON.parse(result.stdout.trim())
+        if (Array.isArray(parsed)) {
+          for (const engine of parsed) {
+            if (typeof engine.queryLanguage !== 'string') {
+              throw new Error(`Engine "${engine.engine}" missing queryLanguage`)
+            }
+            if (engine.runtime !== 'server' && engine.runtime !== 'embedded') {
+              throw new Error(
+                `Engine "${engine.engine}" has invalid runtime: ${engine.runtime}`,
+              )
+            }
+            if (
+              engine.connectionScheme !== null &&
+              typeof engine.connectionScheme !== 'string'
+            ) {
+              throw new Error(
+                `Engine "${engine.engine}" missing connectionScheme`,
+              )
+            }
+          }
+        }
+      }
+    })
+
+    it('databases list --json should include engine metadata fields', () => {
+      const result = runCommand('databases list --json')
+      if (result.exitCode === 0) {
+        const parsed = JSON.parse(result.stdout.trim())
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (typeof item.queryLanguage !== 'string') {
+              throw new Error(
+                `databases list item "${item.container}" missing queryLanguage`,
+              )
+            }
+            if (item.runtime !== 'server' && item.runtime !== 'embedded') {
+              throw new Error(
+                `databases list item "${item.container}" has invalid runtime: ${item.runtime}`,
+              )
+            }
+            if (
+              item.connectionScheme !== null &&
+              typeof item.connectionScheme !== 'string'
+            ) {
+              throw new Error(
+                `databases list item "${item.container}" missing connectionScheme`,
+              )
+            }
+          }
+        }
+      }
+    })
+
     it('engines supported --json should have correct structure', () => {
       const result = runCommand('engines supported --json')
       const parsed = JSON.parse(result.stdout.trim())

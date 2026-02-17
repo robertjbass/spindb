@@ -1,6 +1,6 @@
 # SpinDB Architecture
 
-This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, and InfluxDB.
+This document describes the architecture of SpinDB, a CLI tool for running local databases without Docker. Supports PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate, and TigerBeetle.
 
 ## Table of Contents
 
@@ -37,7 +37,8 @@ SpinDB follows a **three-tier layered architecture**:
 │                   Engine Layer (engines/)                   │
 │  PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis,      │
 │  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch,   │
-│  CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB │
+│  CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB,          │
+│  InfluxDB, Weaviate, TigerBeetle                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 

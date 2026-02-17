@@ -27,11 +27,7 @@ describe('library-env', () => {
           'Should set LD_LIBRARY_PATH',
         )
       } else if (plat === 'win32') {
-        assertEqual(
-          result,
-          undefined,
-          'Should return undefined on Windows',
-        )
+        assertEqual(result, undefined, 'Should return undefined on Windows')
       }
     })
 
@@ -57,10 +53,7 @@ describe('library-env', () => {
         'dyld[12345]: Library not loaded: /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib'
       const result = detectLibraryError(output, 'Redis')
       assert(result !== null, 'Should detect dyld error')
-      assert(
-        result!.includes('Redis'),
-        'Should include engine name in message',
-      )
+      assert(result!.includes('Redis'), 'Should include engine name in message')
     })
 
     it('should suggest brew install openssl@3 for macOS SSL errors', () => {
@@ -82,10 +75,7 @@ describe('library-env', () => {
         'dyld[999]: Library not loaded: /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib'
       const result = detectLibraryError(output, 'Valkey')
       assert(result !== null, 'Should detect libcrypto error')
-      assert(
-        result!.includes('Valkey'),
-        'Should include engine name',
-      )
+      assert(result!.includes('Valkey'), 'Should include engine name')
     })
 
     it('should detect GLIBC version errors', () => {
@@ -93,10 +83,7 @@ describe('library-env', () => {
         '/lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34` not found'
       const result = detectLibraryError(output, 'Redis')
       assert(result !== null, 'Should detect GLIBC error')
-      assert(
-        result!.includes('GLIBC'),
-        'Should mention GLIBC in message',
-      )
+      assert(result!.includes('GLIBC'), 'Should mention GLIBC in message')
     })
 
     it('should detect Linux shared library errors', () => {
@@ -146,8 +133,7 @@ describe('library-env', () => {
     })
 
     it('should detect dyld with bracket notation', () => {
-      const output =
-        'dyld[45678]: Library not loaded: @rpath/libssl.3.dylib'
+      const output = 'dyld[45678]: Library not loaded: @rpath/libssl.3.dylib'
       const result = detectLibraryError(output, 'Valkey')
       assert(result !== null, 'Should detect dyld[pid] format')
     })
@@ -156,10 +142,7 @@ describe('library-env', () => {
       const output = 'error: libc.so.6: cannot handle TLS data'
       const result = detectLibraryError(output, 'MariaDB')
       assert(result !== null, 'Should detect libc.so error')
-      assert(
-        result!.includes('GLIBC'),
-        'Should mention GLIBC in the message',
-      )
+      assert(result!.includes('GLIBC'), 'Should mention GLIBC in the message')
     })
   })
 })

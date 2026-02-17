@@ -4,6 +4,7 @@ import { platformService } from '../../core/platform-service'
 import { getEngine } from '../../engines'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiSuccess } from '../ui/theme'
+import { getEngineMetadata } from '../helpers'
 
 export const urlCommand = new Command('url')
   .alias('connection-string')
@@ -55,6 +56,7 @@ export const urlCommand = new Command('url')
         )
 
         if (options.json) {
+          const metadata = await getEngineMetadata(config.engine)
           const jsonOutput =
             config.engine === 'sqlite'
               ? {
@@ -62,6 +64,7 @@ export const urlCommand = new Command('url')
                   path: databaseName,
                   engine: config.engine,
                   container: config.name,
+                  ...metadata,
                 }
               : {
                   connectionString,
@@ -71,6 +74,7 @@ export const urlCommand = new Command('url')
                   user: config.engine === 'postgresql' ? 'postgres' : 'root',
                   engine: config.engine,
                   container: config.name,
+                  ...metadata,
                 }
           console.log(JSON.stringify(jsonOutput, null, 2))
           return

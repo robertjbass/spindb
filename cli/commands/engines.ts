@@ -30,7 +30,11 @@ import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import { getInstalledEngines, getInstalledPostgresEngines } from '../helpers'
+import {
+  getInstalledEngines,
+  getInstalledPostgresEngines,
+  getEngineMetadata,
+} from '../helpers'
 import { Engine, Platform } from '../../types'
 import {
   loadEnginesJson,
@@ -55,6 +59,7 @@ import { questdbBinaryManager } from '../../engines/questdb/binary-manager'
 import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
 import { influxdbBinaryManager } from '../../engines/influxdb/binary-manager'
 import { weaviateBinaryManager } from '../../engines/weaviate/binary-manager'
+import { tigerbeetleBinaryManager } from '../../engines/tigerbeetle/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   DEFAULT_V1_POSTGRESQL_VERSION,
@@ -397,7 +402,13 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
   const engines = await getInstalledEngines()
 
   if (options.json) {
-    console.log(JSON.stringify(engines, null, 2))
+    const enginesWithMetadata = await Promise.all(
+      engines.map(async (e) => ({
+        ...e,
+        ...(await getEngineMetadata(e.engine)),
+      })),
+    )
+    console.log(JSON.stringify(enginesWithMetadata, null, 2))
     return
   }
 
@@ -473,6 +484,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     typedb: 'TypeDB',
     valkey: 'Valkey',
     weaviate: 'Weaviate',
+    tigerbeetle: 'TigerBeetle',
   }
 
   // Group engines by name for summary
@@ -1775,9 +1787,53 @@ enginesCommand
         return
       }
 
+      if (['tigerbeetle', 'tb'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('TigerBeetle requires a version (e.g., 0.16)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.TigerBeetle)
+
+        const spinner = createSpinner(
+          `Checking TigerBeetle ${version} binaries...`,
+        )
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `TigerBeetle ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`TigerBeetle ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`TigerBeetle ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: tbPlatform, arch: tbArch } =
+          platformService.getPlatformInfo()
+        const tbFullVersion = tigerbeetleBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'tigerbeetle',
+          version: tbFullVersion,
+          platform: tbPlatform,
+          arch: tbArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        return
+      }
+
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb, weaviate`,
+          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb, weaviate, tigerbeetle`,
         ),
       )
       process.exit(1)

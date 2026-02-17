@@ -39,6 +39,7 @@ const ENGINE_DEFS = [
   { engine: 'typedb', aliases: ['tdb'] },
   { engine: 'influxdb', aliases: ['influx'] },
   { engine: 'weaviate', aliases: ['wv'] },
+  { engine: 'tigerbeetle', aliases: ['tb'] },
 ] as const
 
 type SupportedEngine = (typeof ENGINE_DEFS)[number]['engine']

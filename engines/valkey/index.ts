@@ -601,6 +601,20 @@ export class ValkeyEngine extends BaseEngine {
           if (settled) return
 
           if (ready) {
+            // On Windows, Cygwin binaries may fork internally, making proc.pid stale.
+            // Find the actual PID by port and update the PID file (same pattern as QuestDB).
+            try {
+              const pids = await platformService.findProcessByPort(port)
+              if (pids.length > 0 && pids[0] !== proc.pid) {
+                logDebug(
+                  `Valkey actual PID ${pids[0]} differs from spawn PID ${proc.pid}, updating PID file`,
+                )
+                await writeFile(pidFile, String(pids[0]))
+              }
+            } catch {
+              // Non-fatal - PID file already has proc.pid from earlier write
+            }
+
             settled = true
             resolve({
               port,
@@ -703,10 +717,7 @@ export class ValkeyEngine extends BaseEngine {
             } catch {
               logContent = ''
             }
-            const libError = detectLibraryError(
-              stderr + logContent,
-              'Valkey',
-            )
+            const libError = detectLibraryError(stderr + logContent, 'Valkey')
             if (libError) {
               reject(new Error(libError))
               return

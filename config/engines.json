@@ -326,6 +326,23 @@
       "clientTools": ["weaviate"],
       "licensing": "BSD-3-Clause",
       "notes": "AI-native vector database. REST API on port 8080, gRPC on port+1. Uses classes/collections instead of databases."
+    },
+    "tigerbeetle": {
+      "displayName": "TigerBeetle",
+      "icon": "🐯",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "supportedVersions": ["0.16.70"],
+      "defaultVersion": "0.16.70",
+      "defaultPort": 3000,
+      "runtime": "server",
+      "queryLanguage": "custom",
+      "scriptFileLabel": null,
+      "connectionScheme": null,
+      "superuser": null,
+      "clientTools": ["tigerbeetle"],
+      "licensing": "Apache-2.0",
+      "notes": "High-performance financial ledger database. Custom binary protocol, REPL client. Uses --development flag for local dev."
     }
   }
 }

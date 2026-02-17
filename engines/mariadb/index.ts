@@ -259,7 +259,10 @@ export class MariaDBEngine extends BaseEngine {
       return new Promise((resolve, reject) => {
         exec(
           cmd,
-          { timeout: 120000, env: { ...process.env, ...getLibraryEnv(binPath) } },
+          {
+            timeout: 120000,
+            env: { ...process.env, ...getLibraryEnv(binPath) },
+          },
           async (error, stdout, stderr) => {
             if (error) {
               await cleanupOnFailure()
@@ -493,9 +496,7 @@ export class MariaDBEngine extends BaseEngine {
               }
 
               reject(
-                new Error(
-                  libError || 'MariaDB failed to start within timeout',
-                ),
+                new Error(libError || 'MariaDB failed to start within timeout'),
               )
             }
           }

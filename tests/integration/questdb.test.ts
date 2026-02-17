@@ -146,15 +146,17 @@ describe('QuestDB Integration Tests', () => {
     // Use runScriptFile which internally calls engine.runScript
     await runScriptFile(containerName, SEED_FILE, DATABASE)
 
-    // Give QuestDB time to commit data - time-series DBs use WAL buffering
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // QuestDB uses WAL buffering - poll until data is committed
+    // Windows CI can be significantly slower to flush WAL
+    let rowCount = 0
+    const maxWaitMs = 15000
+    const startTime = Date.now()
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+      if (rowCount >= EXPECTED_ROW_COUNT) break
+    }
 
-    const rowCount = await getRowCount(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
-      'test_user',
-    )
     assertEqual(
       rowCount,
       EXPECTED_ROW_COUNT,
@@ -300,15 +302,16 @@ describe('QuestDB Integration Tests', () => {
       DATABASE,
     )
 
-    // Give QuestDB a moment to commit the data - time-series DBs use WAL buffering
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // QuestDB uses WAL buffering - poll until data is committed
+    let rowCount = 0
+    const maxWaitMs = 15000
+    const startTime = Date.now()
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      rowCount = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+      if (rowCount >= EXPECTED_ROW_COUNT + 1) break
+    }
 
-    const rowCount = await getRowCount(
-      ENGINE,
-      testPorts[0],
-      DATABASE,
-      'test_user',
-    )
     // Should have 6 rows now (5 from seed + 1 from insert)
     assertEqual(rowCount, EXPECTED_ROW_COUNT + 1, 'Should have one more row')
 
