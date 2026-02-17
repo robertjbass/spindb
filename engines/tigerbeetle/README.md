@@ -29,7 +29,7 @@ The `--development` flag is always passed since SpinDB is a local dev tool
 ## REPL Usage
 
 Connect to a running instance:
-```
+```bash
 tigerbeetle repl --cluster=0 --addresses=127.0.0.1:<port>
 ```
 

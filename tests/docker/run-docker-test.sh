@@ -6,9 +6,9 @@
 #   ./run-docker-test.sh clickhouse # Run only ClickHouse tests
 #   ./run-docker-test.sh postgresql # Run only PostgreSQL tests
 #
-# Valid engines: postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb
-#                qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb
-#                weaviate tigerbeetle
+# Valid engines: postgresql mysql mariadb sqlite mongodb ferretdb redis valkey clickhouse
+#                duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb
+#                influxdb weaviate tigerbeetle
 #
 # Security note: Runs with --security-opt seccomp=unconfined because TigerBeetle
 # requires io_uring syscalls which Docker's default seccomp profile blocks.

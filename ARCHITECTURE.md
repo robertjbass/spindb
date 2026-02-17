@@ -37,7 +37,8 @@ SpinDB follows a **three-tier layered architecture**:
 │                   Engine Layer (engines/)                   │
 │  PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis,      │
 │  Valkey, ClickHouse, SQLite, DuckDB, Qdrant, Meilisearch,   │
-│  CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB │
+│  CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB,          │
+│  InfluxDB, Weaviate, TigerBeetle                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
