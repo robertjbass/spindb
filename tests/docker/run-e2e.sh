@@ -398,8 +398,8 @@ insert_seed_data() {
       seed_file=""
       ;;
     tigerbeetle)
-      # TigerBeetle uses custom binary protocol - no seed file
-      seed_file=""
+      # TigerBeetle uses custom binary protocol - no seed file, skip seeding
+      return 0
       ;;
   esac
 
