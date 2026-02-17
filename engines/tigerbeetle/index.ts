@@ -191,6 +191,12 @@ export class TigerBeetleEngine extends BaseEngine {
       logDebug(`TigerBeetle data file formatted successfully: ${dataFile}`)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
+      if (msg.includes('PermissionDenied')) {
+        throw new Error(
+          "TigerBeetle requires io_uring syscalls which are blocked by Docker's default seccomp profile.\n" +
+            'Run your container with: docker run --security-opt seccomp=unconfined ...',
+        )
+      }
       throw new Error(`Failed to format TigerBeetle data file: ${msg}`)
     }
 
@@ -347,14 +353,26 @@ export class TigerBeetleEngine extends BaseEngine {
     try {
       const logContent = await readFile(logFile, 'utf-8')
       const recentLog = logContent.slice(-2000)
+      if (recentLog.includes('PermissionDenied')) {
+        throw new Error(
+          "TigerBeetle requires io_uring syscalls which are blocked by Docker's default seccomp profile.\n" +
+            'Run your container with: docker run --security-opt seccomp=unconfined ...',
+        )
+      }
       if (
         recentLog.includes('Address already in use') ||
         recentLog.includes('address already in use')
       ) {
         logError = `Port ${port} is already in use`
       }
-    } catch {
-      // Log file might not exist
+    } catch (logReadError) {
+      // Re-throw io_uring error, ignore other log read failures
+      if (
+        logReadError instanceof Error &&
+        logReadError.message.includes('io_uring')
+      ) {
+        throw logReadError
+      }
     }
 
     const errorDetails = [
