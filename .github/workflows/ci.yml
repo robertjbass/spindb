@@ -2631,7 +2631,9 @@ jobs:
         run: docker build -t spindb-e2e -f tests/docker/Dockerfile .
 
       - name: Run Docker E2E tests
-        run: docker run --rm spindb-e2e
+        # --security-opt seccomp=unconfined: TigerBeetle requires io_uring syscalls
+        # which Docker's default seccomp profile blocks
+        run: docker run --rm --security-opt seccomp=unconfined spindb-e2e
         timeout-minutes: 30
 
   # ============================================
