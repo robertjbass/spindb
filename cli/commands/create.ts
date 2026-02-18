@@ -22,7 +22,7 @@ import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
 import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
 import { resolve } from 'path'
-import { Engine, Platform } from '../../types'
+import { Engine, Platform, ALL_ENGINES } from '../../types'
 import {
   FERRETDB_VERSION_MAP,
   isV1 as isFerretDBv1,
@@ -436,7 +436,7 @@ export const createCommand = new Command('create')
   .argument('[name]', 'Container name')
   .option(
     '-e, --engine <engine>',
-    'Database engine (postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb)',
+    `Database engine (${ALL_ENGINES.join(', ')})`,
   )
   .option('--db-version <version>', 'Database version (e.g., 17, 8.0)')
   .option('-d, --database <database>', 'Database name')

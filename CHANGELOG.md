@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **TigerBeetle engine** — 20th database engine. High-performance financial ledger database written in Zig. Apache-2.0 license. Full lifecycle support: create, start, stop, backup/restore, clone, rename, delete. Custom binary protocol on default port 3000. Uses REPL for interaction (`spindb connect`). Two-step init with `tigerbeetle format` + `tigerbeetle start`. Stop-and-copy backup of single data file. Uses `--development` flag for local dev.
 
+## [0.37.2] - 2026-02-17
+
+### Fixed
+- **`--engine` help text derived from `ALL_ENGINES`** — The `create --help` engine list was hardcoded and missing Weaviate and TigerBeetle. Now dynamically generated from the `ALL_ENGINES` array so new engines appear automatically. Also fixed the hardcoded engine list in the `engines download` error message.
+
 ## [0.37.1] - 2026-02-16
 
 ### Added

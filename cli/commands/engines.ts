@@ -35,7 +35,7 @@ import {
   getInstalledPostgresEngines,
   getEngineMetadata,
 } from '../helpers'
-import { Engine, Platform } from '../../types'
+import { Engine, Platform, ALL_ENGINES } from '../../types'
 import {
   loadEnginesJson,
   filterEnginesByPlatform,
@@ -1833,7 +1833,7 @@ enginesCommand
 
       console.error(
         uiError(
-          `Unknown engine "${engineName}". Supported: postgresql, mysql, mariadb, sqlite, duckdb, mongodb, ferretdb, redis, valkey, clickhouse, qdrant, meilisearch, couchdb, cockroachdb, surrealdb, questdb, typedb, influxdb, weaviate, tigerbeetle`,
+          `Unknown engine "${engineName}". Supported: ${ALL_ENGINES.join(', ')}`,
         ),
       )
       process.exit(1)
