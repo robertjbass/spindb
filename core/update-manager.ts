@@ -2,6 +2,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { createRequire } from 'module'
 import { configManager } from './config-manager'
+import { logDebug } from './error-handler'
 
 const execAsync = promisify(exec)
 const require = createRequire(import.meta.url)
@@ -10,6 +11,17 @@ const NPM_REGISTRY_URL = 'https://registry.npmjs.org/spindb'
 const CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
+
+const KNOWN_PACKAGE_MANAGERS: PackageManager[] = ['pnpm', 'yarn', 'bun', 'npm']
+
+export function parseUserAgent(
+  userAgent: string | undefined,
+): PackageManager | null {
+  if (!userAgent) return null
+  const firstToken = userAgent.split('/')[0]?.toLowerCase().trim()
+  if (!firstToken) return null
+  return KNOWN_PACKAGE_MANAGERS.find((pm) => pm === firstToken) ?? null
+}
 
 export type UpdateCheckResult = {
   currentVersion: string
@@ -75,49 +87,59 @@ export class UpdateManager {
     }
   }
 
-  // Checks pnpm, yarn, bun first since npm is the fallback
+  // Checks all PMs in parallel, falls back to npm_config_user_agent, then npm
   async detectPackageManager(): Promise<PackageManager> {
-    try {
-      const { stdout } = await execAsync('pnpm list -g spindb --json', {
-        timeout: 5000,
-        cwd: '/',
-      })
-      const data = JSON.parse(stdout) as Array<{
-        dependencies?: { spindb?: unknown }
-      }>
-      if (data[0]?.dependencies?.spindb) {
-        return 'pnpm'
-      }
-    } catch {
-      // pnpm not installed or spindb not found
+    const checks = await Promise.all([
+      this.checkGlobalInstall(
+        'pnpm',
+        'pnpm list -g spindb --json',
+        (stdout) => {
+          const data = JSON.parse(stdout) as Array<{
+            dependencies?: { spindb?: unknown }
+          }>
+          return !!data[0]?.dependencies?.spindb
+        },
+      ),
+      this.checkGlobalInstall('yarn', 'yarn global list --json', (stdout) => {
+        return stdout.includes('"spindb@')
+      }),
+      this.checkGlobalInstall('bun', 'bun pm ls -g', (stdout) => {
+        return stdout.includes('spindb@')
+      }),
+      this.checkGlobalInstall('npm', 'npm list -g spindb --json', (stdout) => {
+        const data = JSON.parse(stdout) as {
+          dependencies?: { spindb?: unknown }
+        }
+        return !!data.dependencies?.spindb
+      }),
+    ])
+
+    const globalPm = checks.find((result) => result !== null)
+    if (globalPm) {
+      logDebug(`Detected global install via ${globalPm}`)
+      return globalPm
     }
 
-    try {
-      const { stdout } = await execAsync('yarn global list --json', {
-        timeout: 5000,
-        cwd: '/',
-      })
-      // yarn outputs newline-delimited JSON, look for spindb in any line
-      if (stdout.includes('"spindb@')) {
-        return 'yarn'
-      }
-    } catch {
-      // yarn not installed or spindb not found
-    }
-
-    try {
-      const { stdout } = await execAsync('bun pm ls -g', {
-        timeout: 5000,
-        cwd: '/',
-      })
-      if (stdout.includes('spindb@')) {
-        return 'bun'
-      }
-    } catch {
-      // bun not installed or spindb not found
+    const agentPm = parseUserAgent(process.env.npm_config_user_agent)
+    if (agentPm) {
+      logDebug(`Detected package manager from user agent: ${agentPm}`)
+      return agentPm
     }
 
     return 'npm'
+  }
+
+  private async checkGlobalInstall(
+    pm: PackageManager,
+    command: string,
+    checkOutput: (stdout: string) => boolean,
+  ): Promise<PackageManager | null> {
+    try {
+      const { stdout } = await execAsync(command, { timeout: 5000, cwd: '/' })
+      return checkOutput(stdout) ? pm : null
+    } catch {
+      return null
+    }
   }
 
   getInstallCommand(pm: PackageManager): string {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
-import { UpdateManager } from '../../core/update-manager'
-import { assert, assertEqual } from '../utils/assertions'
+import { UpdateManager, parseUserAgent } from '../../core/update-manager'
+import { assert, assertEqual, assertNullish } from '../utils/assertions'
 
 describe('UpdateManager', () => {
   describe('getCurrentVersion', () => {
@@ -366,5 +366,131 @@ describe('UpdateManager', () => {
 
       assertEqual(version, '1.0.0', 'Should fallback to previous version')
     })
+  })
+})
+
+describe('parseUserAgent', () => {
+  it('should detect pnpm', () => {
+    assertEqual(
+      parseUserAgent('pnpm/9.1.0 npm/? node/v22.0.0 darwin arm64'),
+      'pnpm',
+      'Should detect pnpm from user agent',
+    )
+  })
+
+  it('should detect npm', () => {
+    assertEqual(
+      parseUserAgent('npm/10.2.0 node/v20.11.0 darwin arm64'),
+      'npm',
+      'Should detect npm from user agent',
+    )
+  })
+
+  it('should detect yarn', () => {
+    assertEqual(
+      parseUserAgent('yarn/1.22.19 npm/? node/v20.11.0 darwin arm64'),
+      'yarn',
+      'Should detect yarn from user agent',
+    )
+  })
+
+  it('should detect bun', () => {
+    assertEqual(
+      parseUserAgent('bun/1.1.0 node/v22.0.0 darwin arm64'),
+      'bun',
+      'Should detect bun from user agent',
+    )
+  })
+
+  it('should return null for undefined', () => {
+    assertNullish(parseUserAgent(undefined), 'Should return null for undefined')
+  })
+
+  it('should return null for empty string', () => {
+    assertNullish(parseUserAgent(''), 'Should return null for empty string')
+  })
+
+  it('should return null for unrecognized PM', () => {
+    assertNullish(
+      parseUserAgent('deno/1.40.0 node/v22.0.0'),
+      'Should return null for unrecognized PM',
+    )
+  })
+
+  it('should handle case-insensitive matching', () => {
+    assertEqual(
+      parseUserAgent('PNPM/9.1.0 npm/? node/v22.0.0'),
+      'pnpm',
+      'Should detect PNPM as pnpm',
+    )
+    assertEqual(
+      parseUserAgent('NPM/10.2.0 node/v20.11.0'),
+      'npm',
+      'Should detect NPM as npm',
+    )
+  })
+})
+
+describe('getInstallCommand', () => {
+  it('should return correct command for each PM', () => {
+    const um = new UpdateManager()
+
+    assertEqual(
+      um.getInstallCommand('pnpm'),
+      'pnpm add -g spindb@latest',
+      'pnpm install command',
+    )
+    assertEqual(
+      um.getInstallCommand('yarn'),
+      'yarn global add spindb@latest',
+      'yarn install command',
+    )
+    assertEqual(
+      um.getInstallCommand('bun'),
+      'bun add -g spindb@latest',
+      'bun install command',
+    )
+    assertEqual(
+      um.getInstallCommand('npm'),
+      'npm install -g spindb@latest',
+      'npm install command',
+    )
+  })
+})
+
+describe('detectPackageManager', () => {
+  it('should return a valid package manager', async () => {
+    const um = new UpdateManager()
+    const pm = await um.detectPackageManager()
+
+    assert(
+      ['npm', 'pnpm', 'yarn', 'bun'].includes(pm),
+      `detectPackageManager returned unexpected value: ${pm}`,
+    )
+  })
+
+  it('should detect pnpm when npm_config_user_agent is set by pnpm', async () => {
+    const originalAgent = process.env.npm_config_user_agent
+    try {
+      // Simulate running under pnpm with no global install
+      process.env.npm_config_user_agent =
+        'pnpm/9.1.0 npm/? node/v22.0.0 darwin arm64'
+      const pm = parseUserAgent(process.env.npm_config_user_agent)
+      assertEqual(pm, 'pnpm', 'Should detect pnpm from user agent env')
+    } finally {
+      if (originalAgent !== undefined) {
+        process.env.npm_config_user_agent = originalAgent
+      } else {
+        delete process.env.npm_config_user_agent
+      }
+    }
+  })
+
+  it('should fall back to npm when user agent is absent and no global install', () => {
+    const pm = parseUserAgent(undefined)
+    assertNullish(
+      pm,
+      'No user agent should return null (triggering npm fallback)',
+    )
   })
 })
