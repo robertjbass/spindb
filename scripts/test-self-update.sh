@@ -25,7 +25,6 @@ set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 GRAY='\033[0;90m'
 NC='\033[0m'
@@ -164,8 +163,10 @@ log_step "Step 3: Run self-update (dev code → global install)"
 cd "$PROJECT_DIR"
 # Use pnpm start to run the dev code's self-update with --force --yes
 # --force is needed because dev version (e.g. 0.37.2) may be ahead of npm latest (0.37.1)
+set +e
 UPDATE_OUTPUT=$(pnpm start self-update --force --yes 2>&1)
 UPDATE_EXIT=$?
+set -e
 
 log_dim "Exit code: $UPDATE_EXIT"
 echo "$UPDATE_OUTPUT" | while IFS= read -r line; do log_dim "$line"; done

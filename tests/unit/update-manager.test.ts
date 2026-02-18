@@ -429,6 +429,30 @@ describe('parseUserAgent', () => {
       'Should detect NPM as npm',
     )
   })
+
+  it('should detect pnpm from npm_config_user_agent env var', () => {
+    const originalAgent = process.env.npm_config_user_agent
+    try {
+      process.env.npm_config_user_agent =
+        'pnpm/9.1.0 npm/? node/v22.0.0 darwin arm64'
+      const pm = parseUserAgent(process.env.npm_config_user_agent)
+      assertEqual(pm, 'pnpm', 'Should detect pnpm from user agent env')
+    } finally {
+      if (originalAgent !== undefined) {
+        process.env.npm_config_user_agent = originalAgent
+      } else {
+        delete process.env.npm_config_user_agent
+      }
+    }
+  })
+
+  it('should return null when user agent is absent', () => {
+    const pm = parseUserAgent(undefined)
+    assertNullish(
+      pm,
+      'No user agent should return null (triggering npm fallback)',
+    )
+  })
 })
 
 describe('getInstallCommand', () => {
@@ -466,31 +490,6 @@ describe('detectPackageManager', () => {
     assert(
       ['npm', 'pnpm', 'yarn', 'bun'].includes(pm),
       `detectPackageManager returned unexpected value: ${pm}`,
-    )
-  })
-
-  it('should detect pnpm when npm_config_user_agent is set by pnpm', async () => {
-    const originalAgent = process.env.npm_config_user_agent
-    try {
-      // Simulate running under pnpm with no global install
-      process.env.npm_config_user_agent =
-        'pnpm/9.1.0 npm/? node/v22.0.0 darwin arm64'
-      const pm = parseUserAgent(process.env.npm_config_user_agent)
-      assertEqual(pm, 'pnpm', 'Should detect pnpm from user agent env')
-    } finally {
-      if (originalAgent !== undefined) {
-        process.env.npm_config_user_agent = originalAgent
-      } else {
-        delete process.env.npm_config_user_agent
-      }
-    }
-  })
-
-  it('should fall back to npm when user agent is absent and no global install', () => {
-    const pm = parseUserAgent(undefined)
-    assertNullish(
-      pm,
-      'No user agent should return null (triggering npm fallback)',
     )
   })
 })
