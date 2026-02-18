@@ -27,7 +27,9 @@ export async function handleCheckUpdate(): Promise<void> {
     spinner.fail('Could not reach npm registry')
     console.log()
     console.log(uiInfo('Check your internet connection and try again.'))
-    console.log(chalk.gray('  Manual update: npm install -g spindb@latest'))
+    const pm = await updateManager.detectPackageManager()
+    const installCmd = updateManager.getInstallCommand(pm)
+    console.log(chalk.gray(`  Manual update: ${installCmd}`))
     console.log()
     await pressEnterToContinue()
     return
@@ -82,7 +84,9 @@ export async function handleCheckUpdate(): Promise<void> {
         console.log()
         console.log(uiError(updateResult.error || 'Unknown error'))
         console.log()
-        console.log(uiInfo('Manual update: npm install -g spindb@latest'))
+        const failPm = await updateManager.detectPackageManager()
+        const failCmd = updateManager.getInstallCommand(failPm)
+        console.log(uiInfo(`Manual update: ${failCmd}`))
       }
       await pressEnterToContinue()
     } else if (action === 'disable') {
