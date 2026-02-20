@@ -2117,7 +2117,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
-          # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -2133,6 +2135,7 @@ jobs:
       # Ensure clean state - no existing ~/.spindb
       - name: Ensure clean state
         run: rm -rf ~/.spindb
+        shell: bash
 
       # Pack and install globally (simulates npm install -g spindb)
       - name: Install dependencies
@@ -2197,7 +2200,9 @@ jobs:
           - os: macos-14
             icon: 🍎
             label: macOS ARM64
-          # Windows excluded - PostgreSQL integration tests cover Windows lifecycle
+          - os: windows-latest
+            icon: 🪟
+            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -2213,6 +2218,7 @@ jobs:
       # Ensure clean state
       - name: Ensure clean state
         run: rm -rf ~/.spindb
+        shell: bash
 
       # Install current version
       - name: Install dependencies

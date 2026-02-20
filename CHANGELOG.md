@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-02-20
+
 ### Added
 - **TigerBeetle engine** — 20th database engine. High-performance financial ledger database written in Zig. Apache-2.0 license. Full lifecycle support: create, start, stop, backup/restore, clone, rename, delete. Custom binary protocol on default port 3000. Uses REPL for interaction (`spindb connect`). Two-step init with `tigerbeetle format` + `tigerbeetle start`. Stop-and-copy backup of single data file. Uses `--development` flag for local dev.
+- **Compiled build pipeline** — SpinDB now ships compiled JavaScript (`dist/`) instead of TypeScript source. Removes tsx as a runtime dependency, reducing install size and improving startup time. Uses `tsc` + `tsc-alias` build pipeline with auto-generated version constant.
+- **FerretDB fallback binary search** — `pg_dump`, `pg_restore`, and `psql` now search all installed PostgreSQL and postgresql-documentdb versions (newest first) when the container's specific backend binary is missing. Falls back to system binaries registered via `spindb config set`. Eliminates "pg_dump not found" errors when the exact backend version isn't installed but another compatible version is available.
+
+### Changed
+- **Simplified dependency install prompts** — `promptInstallDependencies` now directs users to `spindb engines download <engine>` instead of attempting system package manager installation. All engine binaries (including client tools) are bundled with hostdb downloads.
+- **Redis Windows package reference** — Updated winget package from `tporadowski.redis` to `Redis.Redis` (official Redis package)
+
+### Removed
+- **System package manager installation** — Removed `_installEngineViaPackageManager` and related helpers (`displayManualInstallInstructions`). Engine binaries should be installed via `spindb engines download` instead.
 
 ## [0.37.2] - 2026-02-17
 

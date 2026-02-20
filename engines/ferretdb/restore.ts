@@ -9,54 +9,114 @@ import { existsSync, statSync } from 'fs'
 import { open } from 'fs/promises'
 import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
 import { ferretdbBinaryManager } from './binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   DEFAULT_V1_POSTGRESQL_VERSION,
   isV1,
 } from './version-maps'
-import type { ContainerConfig, BackupFormat, RestoreResult } from '../../types'
+import type {
+  ContainerConfig,
+  BinaryTool,
+  BackupFormat,
+  RestoreResult,
+} from '../../types'
 
 /**
- * Resolve the path to a backend binary (pg_restore, psql, etc.)
- * Uses version-aware backend resolution (v1 = plain PostgreSQL, v2 = postgresql-documentdb)
+ * Resolve the path to a PostgreSQL client binary (pg_restore, psql, etc.)
+ *
+ * Searches with fallbacks:
+ * 1. Container's specific backend binary directory
+ * 2. Any installed PostgreSQL version (newest first) — client tools are forward-compatible
+ * 3. postgresql-documentdb installations
+ * 4. System binary registered via `spindb config set`
  */
-function getBackendBinaryFullPath(
+async function findBackendBinary(
   container: ContainerConfig,
-  binaryName: string,
-): string {
+  binaryName: BinaryTool,
+): Promise<string> {
   const { version, backendVersion } = container
   const { platform, arch } = platformService.getPlatformInfo()
   const v1 = isV1(version)
+  const ext = platformService.getExecutableExtension()
 
   const effectiveBackendVersion = v1
     ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
     : backendVersion || DEFAULT_DOCUMENTDB_VERSION
 
+  // 1. Try the container's own backend path
   const backendPath = ferretdbBinaryManager.getBackendBinaryPath(
     version,
     effectiveBackendVersion,
     platform,
     arch,
   )
+  const primaryPath = join(backendPath, 'bin', `${binaryName}${ext}`)
+  if (existsSync(primaryPath)) {
+    return primaryPath
+  }
 
-  const ext = platformService.getExecutableExtension()
-  return join(backendPath, 'bin', `${binaryName}${ext}`)
+  logDebug(
+    `${binaryName} not found at ${primaryPath}, searching other installed PostgreSQL versions`,
+  )
+
+  // 2. Search all installed PostgreSQL versions (newest first)
+  const installed = paths.findInstalledBinaries('postgresql', platform, arch)
+  for (const entry of installed) {
+    const candidate = join(entry.path, 'bin', `${binaryName}${ext}`)
+    if (existsSync(candidate)) {
+      logDebug(`Found ${binaryName} in PostgreSQL ${entry.version}`)
+      return candidate
+    }
+  }
+
+  // 3. Check postgresql-documentdb installations
+  const documentdbInstalled = paths.findInstalledBinaries(
+    'postgresql-documentdb',
+    platform,
+    arch,
+  )
+  for (const entry of documentdbInstalled) {
+    const candidate = join(entry.path, 'bin', `${binaryName}${ext}`)
+    if (existsSync(candidate)) {
+      logDebug(`Found ${binaryName} in postgresql-documentdb ${entry.version}`)
+      return candidate
+    }
+  }
+
+  // 4. Fall back to system binary
+  const systemBinary = await configManager.getBinaryPath(binaryName)
+  if (systemBinary) {
+    return systemBinary
+  }
+
+  const backendName = v1 ? 'PostgreSQL' : 'postgresql-documentdb'
+  throw new Error(
+    `${binaryName} not found. The ${backendName} installation at ${backendPath} does not include client tools.\n` +
+      'Install PostgreSQL client tools:\n' +
+      '  macOS: brew install libpq && brew link --force libpq\n' +
+      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
+      `Or configure manually: spindb config set ${binaryName} /path/to/${binaryName}`,
+  )
 }
 
 /**
- * Get the path to pg_restore from the backend installation
+ * Get the path to pg_restore
  */
-function getPgRestorePath(container: ContainerConfig): string {
-  return getBackendBinaryFullPath(container, 'pg_restore')
+async function getPgRestorePath(
+  container: ContainerConfig,
+): Promise<string> {
+  return findBackendBinary(container, 'pg_restore')
 }
 
 /**
- * Get the path to psql from the backend installation
+ * Get the path to psql
  */
-function getPsqlPath(container: ContainerConfig): string {
-  return getBackendBinaryFullPath(container, 'psql')
+async function getPsqlPath(container: ContainerConfig): Promise<string> {
+  return findBackendBinary(container, 'psql')
 }
 
 /**
@@ -195,18 +255,8 @@ export async function restoreBackup(
   // Choose restore tool based on format
   const isSqlFormat = format.format === 'sql'
   const toolPath = isSqlFormat
-    ? getPsqlPath(container)
-    : getPgRestorePath(container)
-
-  if (!existsSync(toolPath)) {
-    const toolName = isSqlFormat ? 'psql' : 'pg_restore'
-    const backendName = isV1(container.version)
-      ? 'PostgreSQL'
-      : 'postgresql-documentdb'
-    throw new Error(
-      `${toolName} not found at ${toolPath}. Make sure ${backendName} is installed.`,
-    )
-  }
+    ? await getPsqlPath(container)
+    : await getPgRestorePath(container)
 
   const args: string[] = [
     '-h',

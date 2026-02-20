@@ -11,7 +11,9 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
+import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
+import { paths } from '../../config/paths'
 import { ferretdbBinaryManager } from './binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
@@ -21,27 +23,77 @@ import {
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
 /**
- * Get the path to pg_dump from the backend installation
- * Uses version-aware backend resolution (v1 = plain PostgreSQL, v2 = postgresql-documentdb)
+ * Get the path to pg_dump from the backend installation.
+ *
+ * Searches with fallbacks:
+ * 1. Container's specific backend binary directory
+ * 2. Any installed PostgreSQL version (newest first) — pg_dump is forward-compatible
+ * 3. System binary registered via `spindb config set pg_dump`
  */
-function getPgDumpPath(container: ContainerConfig): string {
+async function getPgDumpPath(container: ContainerConfig): Promise<string> {
   const { version, backendVersion } = container
   const { platform, arch } = platformService.getPlatformInfo()
   const v1 = isV1(version)
+  const ext = platformService.getExecutableExtension()
 
   const effectiveBackendVersion = v1
     ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
     : backendVersion || DEFAULT_DOCUMENTDB_VERSION
 
+  // 1. Try the container's own backend path
   const backendPath = ferretdbBinaryManager.getBackendBinaryPath(
     version,
     effectiveBackendVersion,
     platform,
     arch,
   )
+  const primaryPath = join(backendPath, 'bin', `pg_dump${ext}`)
+  if (existsSync(primaryPath)) {
+    return primaryPath
+  }
 
-  const ext = platformService.getExecutableExtension()
-  return join(backendPath, 'bin', `pg_dump${ext}`)
+  logDebug(
+    `pg_dump not found at ${primaryPath}, searching other installed PostgreSQL versions`,
+  )
+
+  // 2. Search all installed PostgreSQL versions (newest first)
+  const installed = paths.findInstalledBinaries('postgresql', platform, arch)
+  for (const entry of installed) {
+    const candidate = join(entry.path, 'bin', `pg_dump${ext}`)
+    if (existsSync(candidate)) {
+      logDebug(`Found pg_dump in PostgreSQL ${entry.version}`)
+      return candidate
+    }
+  }
+
+  // Also check postgresql-documentdb installations
+  const documentdbInstalled = paths.findInstalledBinaries(
+    'postgresql-documentdb',
+    platform,
+    arch,
+  )
+  for (const entry of documentdbInstalled) {
+    const candidate = join(entry.path, 'bin', `pg_dump${ext}`)
+    if (existsSync(candidate)) {
+      logDebug(`Found pg_dump in postgresql-documentdb ${entry.version}`)
+      return candidate
+    }
+  }
+
+  // 3. Fall back to system binary
+  const systemPgDump = await configManager.getBinaryPath('pg_dump')
+  if (systemPgDump) {
+    return systemPgDump
+  }
+
+  const backendName = v1 ? 'PostgreSQL' : 'postgresql-documentdb'
+  throw new Error(
+    `pg_dump not found. The ${backendName} installation at ${backendPath} does not include client tools.\n` +
+      'Install PostgreSQL client tools:\n' +
+      '  macOS: brew install libpq && brew link --force libpq\n' +
+      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
+      'Or configure manually: spindb config set pg_dump /path/to/pg_dump',
+  )
 }
 
 /**
@@ -65,16 +117,7 @@ export async function createBackup(
     )
   }
 
-  const pgDump = getPgDumpPath(container)
-
-  if (!existsSync(pgDump)) {
-    const backendName = isV1(container.version)
-      ? 'PostgreSQL'
-      : 'postgresql-documentdb'
-    throw new Error(
-      `pg_dump not found at ${pgDump}. Make sure ${backendName} is installed.`,
-    )
-  }
+  const pgDump = await getPgDumpPath(container)
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)

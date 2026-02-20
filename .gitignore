@@ -165,6 +165,9 @@ tests/fixtures/qdrant/snapshots/*.snapshot
 # Private docs
 MONETIZATION.md
 
+# Generated version file (created by pnpm build)
+config/version.ts
+
 # macOS
 .DS_Store
 .AppleDouble
