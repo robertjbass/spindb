@@ -30,6 +30,7 @@ spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
 
 spindb start mydb                       # Start container
+spindb start mydb -f                    # Start (auto-download missing binaries)
 spindb stop mydb                        # Stop container
 spindb stop --all                       # Stop all containers
 spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
@@ -375,7 +376,8 @@ spindb logs mydb --editor               # Open in $EDITOR
 spindb engines                          # List downloaded engines
 spindb engines --json                   # List engines as JSON
 spindb engines download postgresql 18   # Download specific version
-spindb engines delete postgresql 17     # Delete engine version
+spindb engines delete postgresql 17     # Delete engine version (prompts)
+spindb engines delete postgresql 17 -y  # Delete engine version (skip prompt)
 spindb deps check                       # Check required tools
 spindb deps install                     # Install missing tools
 ```
