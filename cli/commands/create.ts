@@ -726,12 +726,14 @@ export const createCommand = new Command('create')
               `${dbEngine.displayName} ${version} binaries ready`,
             )
           } catch (error) {
+            const detail =
+              error instanceof Error ? error.message : String(error)
             binarySpinner?.fail(
               `${dbEngine.displayName} ${version} not available`,
             )
             if (options.json) {
               return exitWithError({
-                message: `${dbEngine.displayName} ${version} not available`,
+                message: `${dbEngine.displayName} ${version} not available: ${detail}`,
                 json: true,
               })
             }
