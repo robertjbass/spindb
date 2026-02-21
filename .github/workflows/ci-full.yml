@@ -2146,6 +2146,7 @@ jobs:
 
       - name: Install globally
         run: npm install -g spindb-*.tgz
+        shell: bash
 
       # Test CLI is accessible
       - name: Verify spindb command exists
