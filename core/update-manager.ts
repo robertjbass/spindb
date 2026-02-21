@@ -1,11 +1,10 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { createRequire } from 'module'
 import { configManager } from './config-manager'
 import { logDebug } from './error-handler'
+import { VERSION } from '../config/version'
 
 const execAsync = promisify(exec)
-const require = createRequire(import.meta.url)
 
 const NPM_REGISTRY_URL = 'https://registry.npmjs.org/spindb'
 const CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000 // 24 hours
@@ -39,8 +38,7 @@ export type UpdateResult = {
 
 export class UpdateManager {
   getCurrentVersion(): string {
-    const pkg = require('../package.json') as { version: string }
-    return pkg.version
+    return VERSION
   }
 
   // Throttled to once per 24 hours unless force=true

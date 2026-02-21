@@ -537,7 +537,7 @@ const redisDependencies: EngineDependencies = {
         yum: { package: 'redis' },
         dnf: { package: 'redis' },
         pacman: { package: 'redis' },
-        winget: { package: 'tporadowski.redis' },
+        winget: { package: 'Redis.Redis' },
       },
       manualInstall: {
         darwin: [
@@ -552,9 +552,8 @@ const redisDependencies: EngineDependencies = {
           'Arch: sudo pacman -S redis',
         ],
         win32: [
-          'Using winget (recommended): winget install tporadowski.redis',
-          'Or download from: https://github.com/tporadowski/redis/releases',
-          'Note: Redis on Windows is community-maintained (tporadowski/redis port).',
+          'Using winget (recommended): winget install Redis.Redis',
+          'Or download from: https://github.com/redis-windows/redis-windows/releases',
         ],
       },
     },
@@ -568,7 +567,7 @@ const redisDependencies: EngineDependencies = {
         yum: { package: 'redis' },
         dnf: { package: 'redis' },
         pacman: { package: 'redis' },
-        winget: { package: 'tporadowski.redis' },
+        winget: { package: 'Redis.Redis' },
       },
       manualInstall: {
         darwin: [
@@ -582,8 +581,8 @@ const redisDependencies: EngineDependencies = {
           'Arch: sudo pacman -S redis',
         ],
         win32: [
-          'Using winget (recommended): winget install tporadowski.redis',
-          'Or download from: https://github.com/tporadowski/redis/releases',
+          'Using winget (recommended): winget install Redis.Redis',
+          'Or download from: https://github.com/redis-windows/redis-windows/releases',
         ],
       },
     },

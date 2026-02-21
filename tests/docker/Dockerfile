@@ -125,6 +125,9 @@ RUN pnpm install --frozen-lockfile
 # Now copy the rest of the source (changes frequently, but install is cached)
 COPY --chown=spindb:spindb . /home/spindb/spindb/
 
+# Build compiled JS output (bin/cli.js imports from dist/)
+RUN pnpm build
+
 # Link globally so 'spindb' command works
 RUN pnpm link --global
 

@@ -8,7 +8,6 @@ export default [
     ignores: [
       'dist/',
       'node_modules/',
-      'bin/',
       'eslint.config.js',
       'scripts/',
       'tests/fixtures/',

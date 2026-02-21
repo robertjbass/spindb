@@ -15,10 +15,6 @@ import { paths } from '../../config/paths'
 import { platformService } from '../../core/platform-service'
 import {
   detectPackageManager,
-  checkEngineDependencies,
-  installEngineDependencies,
-  getManualInstallInstructions,
-  getCurrentPlatform,
   findBinary,
 } from '../../core/dependency-manager'
 import {
@@ -28,7 +24,7 @@ import {
 import type { BinaryTool } from '../../types'
 import { promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { uiError, uiWarning, uiInfo, uiSuccess, formatBytes } from '../ui/theme'
+import { uiError, uiWarning, uiInfo, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import {
   getInstalledEngines,
@@ -66,23 +62,6 @@ import {
   normalizeDocumentDBVersion,
   isV1,
 } from '../../engines/ferretdb/version-maps'
-
-// Display manual installation instructions for missing dependencies
-function displayManualInstallInstructions(
-  missingDeps: Array<{ dependency: { name: string }; installed: boolean }>,
-): void {
-  const platform = getCurrentPlatform()
-  for (const status of missingDeps) {
-    const instructions = getManualInstallInstructions(
-      status.dependency as Parameters<typeof getManualInstallInstructions>[0],
-      platform,
-    )
-    console.log(chalk.gray(`  ${status.dependency.name}:`))
-    for (const instruction of instructions) {
-      console.log(chalk.gray(`    ${instruction}`))
-    }
-  }
-}
 
 const execFileAsync = promisify(execFile)
 
@@ -715,88 +694,6 @@ async function deleteEngine(
     const e = error as Error
     spinner.fail(`Failed to delete: ${e.message}`)
     process.exit(1)
-  }
-}
-
-// Install an engine via system package manager (currently unused, kept for future use)
-async function _installEngineViaPackageManager(
-  engine: string,
-  displayName: string,
-): Promise<void> {
-  // Check if already installed
-  const statuses = await checkEngineDependencies(engine)
-  const allInstalled = statuses.every((s) => s.installed)
-
-  if (allInstalled) {
-    console.log(uiInfo(`${displayName} is already installed.`))
-    for (const status of statuses) {
-      if (status.path) {
-        console.log(chalk.gray(`  ${status.dependency.binary}: ${status.path}`))
-      }
-    }
-    return
-  }
-
-  // Detect package manager
-  const packageManager = await detectPackageManager()
-
-  if (!packageManager) {
-    console.error(uiError('No supported package manager found.'))
-    console.log()
-    console.log(chalk.yellow('Manual installation instructions:'))
-    const missingDeps = statuses.filter((s) => !s.installed)
-    displayManualInstallInstructions(missingDeps)
-    process.exit(1)
-  }
-
-  console.log(uiInfo(`Installing ${displayName} via ${packageManager.name}...`))
-  console.log()
-
-  // Install missing dependencies
-  const results = await installEngineDependencies(engine, packageManager)
-
-  // Report results
-  const succeeded = results.filter((r) => r.success)
-  const failed = results.filter((r) => !r.success)
-
-  if (succeeded.length > 0) {
-    console.log()
-    console.log(uiSuccess(`${displayName} installed successfully.`))
-
-    // Show installed paths
-    const newStatuses = await checkEngineDependencies(engine)
-    for (const status of newStatuses) {
-      if (status.installed && status.path) {
-        console.log(chalk.gray(`  ${status.dependency.binary}: ${status.path}`))
-      }
-    }
-  }
-
-  if (failed.length > 0) {
-    console.log()
-    console.error(uiError('Some components failed to install:'))
-    for (const result of failed) {
-      console.error(chalk.red(`  ${result.dependency.name}: ${result.error}`))
-    }
-    process.exit(1)
-  }
-
-  // Check if some dependencies couldn't be installed because the package manager
-  // doesn't have a package definition for them (e.g., Redis on Windows with Chocolatey)
-  if (results.length === 0) {
-    const stillMissing = statuses.filter((s) => !s.installed)
-    if (stillMissing.length > 0) {
-      console.log()
-      console.log(
-        uiWarning(
-          `${packageManager.name} doesn't have packages for ${displayName}.`,
-        ),
-      )
-      console.log()
-      console.log(chalk.yellow('Manual installation required:'))
-      displayManualInstallInstructions(stillMissing)
-      process.exit(1)
-    }
   }
 }
 

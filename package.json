@@ -1,16 +1,23 @@
 {
   "name": "spindb",
-  "version": "0.37.2",
+  "version": "0.38.0",
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
   "type": "module",
   "bin": {
-    "spindb": "./bin/cli.js"
+    "spindb": "./dist/cli/bin.js"
   },
   "scripts": {
     "start": "tsx cli/bin.ts",
     "dev": "tsx --env-file-if-exists=.env cli/bin.ts",
+    "build": "run-s build:version build:tsc build:alias build:assets build:shebang",
+    "build:version": "node -e \"var p=require('./package.json');require('fs').writeFileSync('config/version.ts','// Auto-generated — do not edit manually\\nexport const VERSION = \\''+p.version+'\\'\\n')\"",
+    "build:tsc": "tsc -p tsconfig.build.json",
+    "build:alias": "tsc-alias -p tsconfig.build.json --resolve-full-paths",
+    "build:assets": "node -e \"require('fs').cpSync('config/engines.json','dist/config/engines.json')\"",
+    "build:shebang": "node -e \"const f='dist/cli/bin.js';let s=require('fs').readFileSync(f,'utf8');s=s.replace(/^#!.*\\n/,'#!/usr/bin/env node\\n');require('fs').writeFileSync(f,s)\"",
+    "prepack": "pnpm build",
     "test": "run-s test:all",
     "test:engine": "tsx scripts/test-engine.ts",
     "test:unit": "node --import tsx --test --test-reporter=spec --experimental-test-isolation=none tests/unit/*.test.ts",
@@ -85,7 +92,6 @@
     "inquirer-autocomplete-prompt": "^3.0.1",
     "ora": "^8.1.1",
     "string-width": "^8.1.0",
-    "tsx": "^4.7.0",
     "unzipper": "^0.12.3"
   },
   "devDependencies": {
@@ -98,15 +104,12 @@
     "husky": "^9.1.7",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.6.2",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.48.0"
   },
   "files": [
-    "bin",
-    "cli",
-    "core",
-    "config",
-    "engines",
-    "types"
+    "dist"
   ]
 }

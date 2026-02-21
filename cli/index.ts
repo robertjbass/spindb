@@ -1,6 +1,6 @@
 import { program } from 'commander'
-import { createRequire } from 'module'
 import chalk from 'chalk'
+import { VERSION } from '../config/version'
 import { createCommand } from './commands/create'
 import { listCommand } from './commands/list'
 import { portsCommand } from './commands/ports'
@@ -37,9 +37,6 @@ import { usersCommand } from './commands/users'
 import { updateManager } from '../core/update-manager'
 import { configManager } from '../core/config-manager'
 import { setCachedIconMode } from './constants'
-
-const require = createRequire(import.meta.url)
-const pkg = require('../package.json') as { version: string }
 
 /**
  * Load user preferences from config (icon mode, etc.)
@@ -114,7 +111,7 @@ export async function run(): Promise<void> {
   program
     .name('spindb')
     .description('Spin up local database containers without Docker')
-    .version(pkg.version, '-v, --version', 'output the version number')
+    .version(VERSION, '-v, --version', 'output the version number')
     .enablePositionalOptions()
 
   program.addCommand(createCommand)
