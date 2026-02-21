@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [dev]
+  # push:
+  #   branches: [dev]
   workflow_dispatch:
 
 # =============================================================================
