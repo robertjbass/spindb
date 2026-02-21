@@ -95,67 +95,74 @@ export const startCommand = new Command('start')
             config.version,
           )
           if (!hasCompatible) {
-            // No compatible binaries found - get the current supported version for this major
             const majorVersion = config.version.split('.')[0]
-            console.log(
-              uiWarning(
-                `No PostgreSQL ${majorVersion}.x binaries found (required by "${containerName}")`,
-              ),
-            )
-            const confirmed =
-              options.force ||
-              (await promptConfirm(
-                `Download PostgreSQL ${majorVersion} now?`,
-                true,
-              ))
-            if (!confirmed) {
+
+            if (options.json || options.force) {
+              // Auto-download in JSON/force mode (no prompts)
+              await engine.ensureBinaries(majorVersion)
+            } else {
               console.log(
-                chalk.gray(
-                  `  Run "spindb engines download postgresql ${majorVersion}" to download manually.`,
+                uiWarning(
+                  `No PostgreSQL ${majorVersion}.x binaries found (required by "${containerName}")`,
                 ),
               )
-              return
-            }
-
-            const downloadSpinner = createSpinner(
-              `Downloading PostgreSQL ${majorVersion}...`,
-            )
-            downloadSpinner.start()
-
-            try {
-              await engine.ensureBinaries(
-                majorVersion,
-                ({ stage, message }) => {
-                  if (stage === 'cached') {
-                    downloadSpinner.text = `PostgreSQL ${majorVersion} ready`
-                  } else {
-                    downloadSpinner.text = message
-                  }
-                },
+              const confirmed = await promptConfirm(
+                `Download PostgreSQL ${majorVersion} now?`,
+                true,
               )
-              downloadSpinner.succeed(`PostgreSQL ${majorVersion} downloaded`)
-            } catch (downloadError) {
-              downloadSpinner.fail(
-                `Failed to download PostgreSQL ${majorVersion} for "${containerName}"`,
+              if (!confirmed) {
+                console.log(
+                  chalk.gray(
+                    `  Run "spindb engines download postgresql ${majorVersion}" to download manually.`,
+                  ),
+                )
+                return
+              }
+
+              const downloadSpinner = createSpinner(
+                `Downloading PostgreSQL ${majorVersion}...`,
               )
-              throw downloadError
+              downloadSpinner.start()
+
+              try {
+                await engine.ensureBinaries(
+                  majorVersion,
+                  ({ stage, message }) => {
+                    if (stage === 'cached') {
+                      downloadSpinner.text = `PostgreSQL ${majorVersion} ready`
+                    } else {
+                      downloadSpinner.text = message
+                    }
+                  },
+                )
+                downloadSpinner.succeed(`PostgreSQL ${majorVersion} downloaded`)
+              } catch (downloadError) {
+                downloadSpinner.fail(
+                  `Failed to download PostgreSQL ${majorVersion} for "${containerName}"`,
+                )
+                throw downloadError
+              }
             }
           }
         }
 
-        const spinner = createSpinner(`Starting ${containerName}...`)
-        spinner.start()
+        const spinner = options.json
+          ? null
+          : createSpinner(`Starting ${containerName}...`)
+        spinner?.start()
 
         const result = await startWithRetry({
           engine,
           config,
           onPortChange: (oldPort, newPort) => {
-            spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
+            if (spinner) {
+              spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
+            }
           },
         })
 
         if (!result.success) {
-          spinner.fail(`Failed to start "${containerName}"`)
+          spinner?.fail(`Failed to start "${containerName}"`)
           return exitWithError({
             message: result.error?.message || 'Unknown error',
             json: options.json,
@@ -167,25 +174,35 @@ export const startCommand = new Command('start')
         })
 
         if (result.retriesUsed > 0) {
-          spinner.warn(
+          spinner?.warn(
             `Container "${containerName}" started on port ${result.finalPort} (original port was in use)`,
           )
         } else {
-          spinner.succeed(`Container "${containerName}" started`)
+          spinner?.succeed(`Container "${containerName}" started`)
         }
 
-        // Database might already exist, which is fine
+        // Ensure user's database exists (may already exist, which is fine)
         const defaultDb = engineDefaults.superuser
         if (config.database && config.database !== defaultDb) {
-          const dbSpinner = createSpinner(
-            `Ensuring database "${config.database}" exists...`,
-          )
-          dbSpinner.start()
+          const dbSpinner = options.json
+            ? null
+            : createSpinner(
+                `Ensuring database "${config.database}" exists...`,
+              )
+          dbSpinner?.start()
           try {
             await engine.createDatabase(config, config.database)
-            dbSpinner.succeed(`Database "${config.database}" ready`)
-          } catch {
-            dbSpinner.succeed(`Database "${config.database}" ready`)
+            dbSpinner?.succeed(`Database "${config.database}" ready`)
+          } catch (error) {
+            const msg = (error as Error).message ?? ''
+            if (/already exists/i.test(msg)) {
+              dbSpinner?.succeed(`Database "${config.database}" ready`)
+            } else {
+              dbSpinner?.fail(
+                `Failed to create database "${config.database}"`,
+              )
+              logDebug(`createDatabase error: ${msg}`)
+            }
           }
         }
 

@@ -25,6 +25,8 @@ spindb create mydb -e surrealdb         # Create SurrealDB
 spindb create mydb -e questdb           # Create QuestDB
 spindb create mydb -e typedb            # Create TypeDB
 spindb create mydb -e influxdb          # Create InfluxDB
+spindb create mydb -e weaviate          # Create Weaviate
+spindb create mydb -e tigerbeetle       # Create TigerBeetle
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -74,8 +76,8 @@ spindb query myferret "users.find({age: {\$gt: 25}})" --json  # FerretDB JSON ou
 
 > **`run` vs `query`:** Use `run` for executing scripts and fire-and-forget commands (migrations, seeds, DDL). Use `query` when you need structured results back — it outputs a formatted table by default, or JSON with `--json`.
 >
-> **REST API Engines:** Qdrant, Meilisearch, CouchDB, and InfluxDB use REST APIs instead of CLI shells.
-> `spindb connect` shows REST API info. Qdrant, Meilisearch, and CouchDB have web dashboards. InfluxDB is API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
+> **REST API Engines:** Qdrant, Meilisearch, CouchDB, InfluxDB, and Weaviate use REST APIs instead of CLI shells.
+> `spindb connect` shows REST API info. Qdrant, Meilisearch, CouchDB, and Weaviate have web dashboards. InfluxDB is API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
 
 ## Web Panels
 
@@ -432,6 +434,8 @@ spindb doctor --json                    # JSON output for scripting
 | QuestDB     | 8812    | 8812-8912     | Web Console at PG+188 |
 | TypeDB      | 1729    | 1729-1829     | HTTP on port+6271 |
 | InfluxDB    | 8086    | 8086-8186     | REST API only |
+| Weaviate    | 8080    | 8080-8180     | gRPC on port+1 |
+| TigerBeetle | 3000    | 3000-3100     | Custom binary protocol |
 | SQLite      | N/A     | File-based    | |
 | DuckDB      | N/A     | File-based    | |
 
@@ -456,6 +460,8 @@ SurrealDB:   ws://root:root@127.0.0.1:8000/test/test
 QuestDB:     postgresql://admin:quest@127.0.0.1:8812/qdb
 TypeDB:      typedb://127.0.0.1:1729
 InfluxDB:    http://127.0.0.1:8086
+Weaviate:    http://127.0.0.1:8080
+TigerBeetle: 127.0.0.1:3000
 SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```
@@ -466,6 +472,8 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **QuestDB:** Uses PostgreSQL wire protocol. Default credentials are admin/quest. Single database `qdb`.
 > **TypeDB:** Uses gRPC protocol. Default credentials: admin/password.
 > **InfluxDB:** REST API only. Databases created implicitly on first write. No authentication in local dev mode.
+> **Weaviate:** REST/GraphQL API on HTTP port, gRPC on port+1. No authentication in local dev mode.
+> **TigerBeetle:** Custom binary protocol (no URI scheme). Single binary serves as both server and REPL client.
 
 ## Export to Docker
 
@@ -806,6 +814,8 @@ pnpm generate:db surrealdb     # surreal
 pnpm generate:db questdb       # quest
 pnpm generate:db typedb        # tdb
 pnpm generate:db influxdb      # influx (REST API)
+pnpm generate:db weaviate      # weav (REST/GraphQL API)
+pnpm generate:db tigerbeetle   # tb
 
 # Examples:
 pnpm generate:db pg                      # Create "demo-postgresql" with seed data
