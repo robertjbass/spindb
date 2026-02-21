@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-02-21
+
+### Fixed
+- **Windows Redis/Valkey creation failure** — Creating Redis, Valkey, and other non-PostgreSQL containers failed on Windows because the dependency check ran before binaries were downloaded. Since Windows has no system fallback paths for these engines, `getMissingDependencies()` always reported them as missing. Binary download now runs first for all engines (not just PostgreSQL), ensuring tools are registered before the dependency check.
+
 ## [0.38.0] - 2026-02-20
 
 ### Added

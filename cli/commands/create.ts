@@ -600,7 +600,6 @@ export const createCommand = new Command('create')
         }
 
         const dbEngine = getEngine(engine)
-        const isPostgreSQL = engine === Engine.PostgreSQL
 
         // SQLite has a simplified flow (no port, no start/stop)
         if (engine === Engine.SQLite) {
@@ -694,9 +693,13 @@ export const createCommand = new Command('create')
           }
         }
 
-        // For PostgreSQL, ensure binaries FIRST - they include client tools (psql, pg_dump, etc.)
-        // ensureBinaries also registers tool paths in config cache so getMissingDependencies can find them
-        if (isPostgreSQL) {
+        // Ensure binaries FIRST for ALL engines - they may include client tools
+        // (e.g., psql, pg_dump for PostgreSQL) and ensureBinaries registers tool
+        // paths in config cache so getMissingDependencies can find them.
+        // On Windows, engines like Redis have no system fallback paths, so binaries
+        // must be downloaded before the dependency check or it will always fail.
+        let binaryPath: string | undefined
+        {
           const binarySpinner = options.json
             ? null
             : createSpinner(
@@ -704,24 +707,42 @@ export const createCommand = new Command('create')
               )
           binarySpinner?.start()
 
-          // Always call ensureBinaries - it handles cached binaries gracefully
-          // and registers client tool paths in config (needed for dependency checks)
-          await dbEngine.ensureBinaries(version, ({ stage, message }) => {
-            if (binarySpinner) {
-              if (stage === 'cached') {
-                binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
-              } else {
-                binarySpinner.text = message
-              }
+          try {
+            // ensureBinaries handles cached binaries gracefully
+            // and registers client tool paths in config (needed for dependency checks)
+            binaryPath = await dbEngine.ensureBinaries(
+              version,
+              ({ stage, message }) => {
+                if (binarySpinner) {
+                  if (stage === 'cached') {
+                    binarySpinner.text = `${dbEngine.displayName} ${version} binaries ready (cached)`
+                  } else {
+                    binarySpinner.text = message
+                  }
+                }
+              },
+            )
+            binarySpinner?.succeed(
+              `${dbEngine.displayName} ${version} binaries ready`,
+            )
+          } catch (error) {
+            const detail =
+              error instanceof Error ? error.message : String(error)
+            binarySpinner?.fail(
+              `${dbEngine.displayName} ${version} not available`,
+            )
+            if (options.json) {
+              return exitWithError({
+                message: `${dbEngine.displayName} ${version} not available: ${detail}`,
+                json: true,
+              })
             }
-          })
-          binarySpinner?.succeed(
-            `${dbEngine.displayName} ${version} binaries ready`,
-          )
+            throw error
+          }
         }
 
         // Check dependencies (all engines need this)
-        // For PostgreSQL, this runs AFTER binary download so client tools are available
+        // This runs AFTER binary download so client tools are available
         const depsSpinner = options.json
           ? null
           : createSpinner('Checking required tools...')
@@ -761,44 +782,6 @@ export const createCommand = new Command('create')
           console.log()
         } else {
           depsSpinner?.succeed('Required tools available')
-        }
-
-        // For non-PostgreSQL engines, validate version and get binary path
-        // Store the binary path for version consistency
-        let binaryPath: string | undefined
-        if (!isPostgreSQL) {
-          const binarySpinner = options.json
-            ? null
-            : createSpinner(
-                `Checking ${dbEngine.displayName} ${version} binaries...`,
-              )
-          binarySpinner?.start()
-
-          try {
-            // ensureBinaries validates the version and returns the binary path
-            binaryPath = await dbEngine.ensureBinaries(
-              version,
-              ({ message }) => {
-                if (binarySpinner) {
-                  binarySpinner.text = message
-                }
-              },
-            )
-            binarySpinner?.succeed(
-              `${dbEngine.displayName} ${version} binaries ready`,
-            )
-          } catch (error) {
-            binarySpinner?.fail(
-              `${dbEngine.displayName} ${version} not available`,
-            )
-            if (options.json) {
-              return exitWithError({
-                message: `${dbEngine.displayName} ${version} not available`,
-                json: true,
-              })
-            }
-            throw error
-          }
         }
 
         if (await containerManager.exists(containerName)) {
