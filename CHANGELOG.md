@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-02-22
+
+### Added
+- **Remote container query support** — `spindb query` now works with linked remote containers. Loads credentials from the credential manager, parses the connection string, and passes host/port/password/username/SSL to the engine's native CLI client (psql, mysql, mongosh, redis-cli, etc.). Supported for PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, and Valkey engines.
+
+### Changed
+- **QueryOptions type** — Added optional `host`, `password`, `username`, and `ssl` fields for remote container connections. Local queries are unaffected (all fields default to existing behavior).
+- **`query` no longer listed as unsupported for remote containers** — Remote containers now support `connect`, `url`, `info`, `list`, `delete`, and `query`. Remaining unsupported operations: `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`.
+
 ## [0.39.0] - 2026-02-21
 
 ### Added
@@ -18,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New `core/remote-container.ts`** — Connection string parsing, engine/provider auto-detection, name generation, redaction, and remote config builder utilities.
 
 ### Changed
-- **Graceful rejection for unsupported operations** — `start`, `stop`, `clone`, `logs`, `restore`, `export`, `backup`, `query`, `run` show clear messages for linked containers instead of errors. `stop` exits non-zero for linked containers.
+- **Graceful rejection for unsupported operations** — `start`, `stop`, `clone`, `logs`, `restore`, `export`, `backup`, `run` show clear messages for linked containers instead of errors. `stop` exits non-zero for linked containers.
 - **Container manager** — `list()` preserves `'linked'` status without process checks. `delete()` removes only local metadata for remote containers. `syncDatabases()` returns stored databases for remote containers.
 - **Menu reordering** — "Ports" moved below "Link remote database" in the main menu. Ports only shown when containers exist.
 - **Separated `tsc` type checking** — New `pnpm check` script for `tsc --noEmit`, `pnpm lint` now runs ESLint then type checking.

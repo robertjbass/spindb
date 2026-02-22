@@ -57,7 +57,9 @@ export const urlCommand = new Command('url')
         if (!config) {
           if (options.json) {
             console.log(
-              JSON.stringify({ error: `Container "${containerName}" not found` }),
+              JSON.stringify({
+                error: `Container "${containerName}" not found`,
+              }),
             )
           } else {
             console.error(uiError(`Container "${containerName}" not found`))

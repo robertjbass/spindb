@@ -248,6 +248,10 @@ export type QueryOptions = {
   database?: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' // For REST API engines
   body?: Record<string, unknown> // For REST API engines
+  host?: string // For remote containers (overrides 127.0.0.1)
+  password?: string // For remote containers
+  username?: string // For remote containers
+  ssl?: boolean // For remote containers
 }
 
 // User management types

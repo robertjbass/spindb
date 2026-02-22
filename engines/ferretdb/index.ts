@@ -1691,16 +1691,35 @@ export class FerretDBEngine extends BaseEngine {
     const script = `(async () => { const res = ${normalizedQuery}; return JSON.stringify(res.toArray ? await res.toArray() : await Promise.resolve(res)); })()`
 
     return new Promise((resolve, reject) => {
-      const args = [
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        db,
-        '--quiet',
-        '--eval',
-        script,
-      ]
+      let args: string[]
+
+      if (options?.host) {
+        // Remote: build a connection URI for mongosh
+        const user = options.username
+          ? encodeURIComponent(options.username)
+          : ''
+        const pass = options.password
+          ? encodeURIComponent(options.password)
+          : ''
+        const auth = user ? `${user}:${pass}@` : ''
+        const host = options.host
+        const scheme = options.ssl ? 'mongodb+srv' : 'mongodb'
+        const portSuffix = options.ssl ? '' : `:${port}`
+        const sslParam = options.ssl ? 'tls=true' : ''
+        const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
+        args = [uri, '--quiet', '--eval', script]
+      } else {
+        args = [
+          '--host',
+          '127.0.0.1',
+          '--port',
+          String(port),
+          db,
+          '--quiet',
+          '--eval',
+          script,
+        ]
+      }
 
       const proc = spawn(mongosh, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
