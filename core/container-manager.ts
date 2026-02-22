@@ -19,7 +19,7 @@ import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
 import { duckdbRegistry } from '../engines/duckdb/registry'
 import type { ContainerConfig } from '../types'
-import { Engine, isFileBasedEngine } from '../types'
+import { Engine, isFileBasedEngine, isRemoteContainer } from '../types'
 
 export type CreateOptions = {
   engine: Engine
@@ -318,6 +318,10 @@ export class ContainerManager {
             (async () => {
               const config = await this.getConfig(entry.name, { engine })
               if (!config) return null
+              // Remote containers keep their 'linked' status — no process check
+              if (isRemoteContainer(config)) {
+                return { ...config, status: 'linked' as const }
+              }
               const running = await processManager.isRunning(entry.name, {
                 engine,
               })
@@ -375,6 +379,13 @@ export class ContainerManager {
       if (existsSync(containerPath)) {
         await rm(containerPath, { recursive: true, force: true })
       }
+      return
+    }
+
+    // Remote containers: only remove local metadata (no process to stop)
+    if (isRemoteContainer(config)) {
+      const containerPath = paths.getContainerPath(name, { engine })
+      await this.safeRemoveDirectory(containerPath)
       return
     }
 
@@ -728,6 +739,11 @@ export class ContainerManager {
 
     // File-based engines don't have multiple databases to sync
     if (isFileBasedEngine(config.engine)) {
+      return config.databases || [config.database]
+    }
+
+    // Remote containers: return current registry (no local process to query)
+    if (isRemoteContainer(config)) {
       return config.databases || [config.database]
     }
 

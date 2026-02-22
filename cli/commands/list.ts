@@ -6,7 +6,7 @@ import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { uiInfo, uiError, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import { Engine, isFileBasedEngine } from '../../types'
+import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 import type { ContainerConfig } from '../../types'
 import {
   scanForUnregisteredFiles,
@@ -162,6 +162,7 @@ export const listCommand = new Command('list')
             ...container,
             ...(await getEngineMetadata(container.engine)),
             sizeBytes: await getContainerSize(container),
+            ...(container.remote ? { remote: container.remote } : {}),
           })),
         )
         console.log(JSON.stringify(containersWithSize, null, 2))
@@ -193,9 +194,11 @@ export const listCommand = new Command('list')
         const container = containers[i]
         const size = sizes[i]
 
-        // File-based engines use different status labels (blue/white icons)
+        // Status labels based on container type
         let statusDisplay: string
-        if (isFileBasedEngine(container.engine)) {
+        if (isRemoteContainer(container)) {
+          statusDisplay = chalk.magenta('↔ linked')
+        } else if (isFileBasedEngine(container.engine)) {
           statusDisplay =
             container.status === 'running'
               ? chalk.blue('🔵 available')
@@ -213,9 +216,20 @@ export const listCommand = new Command('list')
 
         const sizeDisplay = size !== null ? formatBytes(size) : '—'
 
-        // File-based engines show truncated file name instead of port
+        // File-based engines show truncated file name, remote shows host, others show port
         let portOrPath: string
-        if (isFileBasedEngine(container.engine)) {
+        if (isRemoteContainer(container)) {
+          // Prefer provider name (more informative), fall back to truncated host
+          const provider = container.remote?.provider
+          const host = container.remote?.host ?? ''
+          portOrPath = provider
+            ? provider.length > 8
+              ? provider.slice(0, 7) + '…'
+              : provider
+            : host.length > 8
+              ? host.slice(0, 7) + '…'
+              : host
+        } else if (isFileBasedEngine(container.engine)) {
           const fileName = basename(container.database)
           // Truncate if longer than 8 chars to fit in 8-char column
           portOrPath =
@@ -238,10 +252,12 @@ export const listCommand = new Command('list')
 
       console.log()
 
-      const serverContainers = containers.filter(
+      const remoteContainers = containers.filter((c) => isRemoteContainer(c))
+      const localContainers = containers.filter((c) => !isRemoteContainer(c))
+      const serverContainers = localContainers.filter(
         (c) => !isFileBasedEngine(c.engine),
       )
-      const fileBasedContainers = containers.filter((c) =>
+      const fileBasedContainers = localContainers.filter((c) =>
         isFileBasedEngine(c.engine),
       )
 
@@ -266,6 +282,9 @@ export const listCommand = new Command('list')
         parts.push(
           `${available} file-based available${missing > 0 ? `, ${missing} missing` : ''}`,
         )
+      }
+      if (remoteContainers.length > 0) {
+        parts.push(`${remoteContainers.length} linked`)
       }
 
       console.log(

@@ -68,6 +68,7 @@ import {
 import {
   UnsupportedOperationError,
   isValidUsername,
+  logDebug,
 } from '../../../core/error-handler'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
 import {
@@ -81,7 +82,17 @@ import {
   getDockerConnectionString,
 } from '../../../core/docker-exporter'
 import { getDefaultFormat } from '../../../config/backup-formats'
-import { Engine, isFileBasedEngine } from '../../../types'
+import {
+  parseConnectionString,
+  detectEngineFromConnectionString,
+  detectProvider,
+  isLocalhost,
+  generateRemoteContainerName,
+  redactConnectionString,
+  buildRemoteConfig,
+  getDefaultPortForEngine,
+} from '../../../core/remote-container'
+import { Engine, isFileBasedEngine, isRemoteContainer } from '../../../types'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 import { getEngineIcon } from '../../constants'
 
@@ -477,6 +488,173 @@ export async function handleCreate(): Promise<'main' | string | void> {
   return containerNameFinal
 }
 
+export async function handleLinkRemote(): Promise<string | void> {
+  console.log()
+  console.log(header('Link Remote Database'))
+  console.log()
+
+  // Step 1: Prompt for connection string
+  console.log(chalk.gray('  Passwords are automatically masked.'))
+  console.log()
+  const { connectionString } = await escapeablePrompt<{
+    connectionString: string
+  }>([
+    {
+      type: 'input',
+      name: 'connectionString',
+      message: 'Connection string:',
+      transformer: (input: string) => redactConnectionString(input.trim()),
+      validate: (input: string) => {
+        if (!input.trim()) return 'Connection string is required'
+        try {
+          parseConnectionString(input)
+          return true
+        } catch (error) {
+          return (error as Error).message
+        }
+      },
+    },
+  ])
+
+  const parsed = parseConnectionString(connectionString)
+
+  // Step 2: Detect engine
+  const detectedEngine = detectEngineFromConnectionString(connectionString)
+  let engine: Engine
+
+  if (detectedEngine) {
+    engine = detectedEngine
+    console.log(chalk.gray(`  Detected engine: ${engine}`))
+  } else {
+    console.log(
+      uiWarning(
+        'Could not detect engine from connection string. Please specify.',
+      ),
+    )
+    const { engineInput } = await escapeablePrompt<{ engineInput: string }>([
+      {
+        type: 'input',
+        name: 'engineInput',
+        message: 'Engine (postgresql, mysql, mongodb, redis):',
+        validate: (input: string) => {
+          if (!input.trim()) return 'Engine is required'
+          const values = Object.values(Engine) as string[]
+          if (!values.includes(input.toLowerCase())) {
+            return `Unknown engine. Valid: ${values.join(', ')}`
+          }
+          return true
+        },
+      },
+    ])
+    engine = engineInput.toLowerCase() as Engine
+  }
+
+  // Extract details
+  const host = parsed.host
+  const port = parsed.port ?? getDefaultPortForEngine(engine)
+  const database = parsed.database || 'default'
+  const provider = detectProvider(host)
+
+  // SpinDB collision check
+  if (isLocalhost(host) && port > 0) {
+    const containers = await containerManager.list()
+    const conflicting = containers.find(
+      (c) => c.engine === engine && c.port === port && c.status !== 'linked',
+    )
+    if (conflicting) {
+      console.log(
+        uiError(
+          `Port ${port} is already managed by SpinDB container "${conflicting.name}". Use "spindb connect ${conflicting.name}" instead.`,
+        ),
+      )
+      await pressEnterToContinue()
+      return
+    }
+  }
+
+  // Step 3: Container name
+  const defaultName = generateRemoteContainerName({
+    engine,
+    host,
+    database,
+    provider,
+  })
+
+  let containerName = await promptContainerName(defaultName)
+  if (!containerName) return
+
+  // Check uniqueness — re-prompt until unique (same pattern as create command)
+  while (await containerManager.exists(containerName, { engine })) {
+    console.log(chalk.yellow(`  Container "${containerName}" already exists.`))
+    containerName = await promptContainerName()
+    if (!containerName) return
+  }
+
+  // Create container
+  const containerPath = paths.getContainerPath(containerName, { engine })
+  await mkdir(containerPath, { recursive: true })
+
+  const remoteConfig = buildRemoteConfig({
+    host,
+    connectionString,
+    provider,
+  })
+
+  const config = {
+    name: containerName,
+    engine,
+    version: 'unknown',
+    port,
+    database,
+    databases: [database],
+    created: new Date().toISOString(),
+    status: 'linked' as const,
+    remote: remoteConfig,
+  }
+
+  await containerManager.saveConfig(containerName, { engine }, config)
+
+  // Save credentials — always use 'remote' as credential key for linked containers
+  try {
+    await saveCredentials(containerName, engine, {
+      username: 'remote',
+      password: parsed.password || '',
+      connectionString,
+      engine,
+      container: containerName,
+      database,
+    })
+  } catch (credError) {
+    console.log(
+      uiWarning(
+        'Could not save credentials. The full connection string may not be retrievable.',
+      ),
+    )
+    logDebug(`Credential save failed: ${(credError as Error).message}`)
+  }
+
+  console.log()
+  console.log(uiSuccess(`Linked remote database as "${containerName}"`))
+  console.log()
+  console.log(
+    chalk.gray('  ') + chalk.white('Engine:'.padEnd(14)) + chalk.cyan(engine),
+  )
+  console.log(
+    chalk.gray('  ') + chalk.white('Host:'.padEnd(14)) + chalk.cyan(host),
+  )
+  if (provider) {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Provider:'.padEnd(14)) +
+        chalk.magenta(provider),
+    )
+  }
+  console.log()
+
+  await pressEnterToContinue()
+  return containerName
+}
+
 export async function handleList(
   showMainMenu: () => Promise<void>,
   options?: { focusContainer?: string },
@@ -534,14 +712,18 @@ export async function handleList(
     const size = sizes[i]
     const isFileBased = isFileBasedEngine(c.engine)
 
+    const isLinked = c.status === 'linked'
+
     // Status display
-    const statusDisplay = isFileBased
-      ? c.status === 'running'
-        ? chalk.blue('● available')
-        : chalk.gray('○ missing')
-      : c.status === 'running'
-        ? chalk.green('● running')
-        : chalk.gray('○ stopped')
+    const statusDisplay = isLinked
+      ? chalk.magenta('↔ linked')
+      : isFileBased
+        ? c.status === 'running'
+          ? chalk.blue('● available')
+          : chalk.gray('○ missing')
+        : c.status === 'running'
+          ? chalk.green('● running')
+          : chalk.gray('○ stopped')
 
     // Truncate name if too long
     const displayName =
@@ -549,8 +731,12 @@ export async function handleList(
         ? c.name.slice(0, COL_NAME - 2) + '…'
         : c.name
 
-    // Port or dash for file-based
-    const portDisplay = isFileBased ? '—' : String(c.port)
+    // Port, provider for linked, or dash for file-based
+    const portDisplay = isLinked
+      ? (c.remote?.provider || 'remote').slice(0, COL_PORT - 1)
+      : isFileBased
+        ? '—'
+        : String(c.port)
 
     // Size display
     const sizeDisplay = size !== null ? formatBytes(size) : '—'
@@ -579,10 +765,12 @@ export async function handleList(
   })
 
   // Calculate summary
-  const serverContainers = containers.filter(
+  const linkedContainers = containers.filter((c) => c.status === 'linked')
+  const localContainers = containers.filter((c) => c.status !== 'linked')
+  const serverContainers = localContainers.filter(
     (c) => !isFileBasedEngine(c.engine),
   )
-  const fileBasedContainers = containers.filter((c) =>
+  const fileBasedContainers = localContainers.filter((c) =>
     isFileBasedEngine(c.engine),
   )
   const running = serverContainers.filter((c) => c.status === 'running').length
@@ -603,10 +791,13 @@ export async function handleList(
       `${available} file-based available${missing > 0 ? `, ${missing} missing` : ''}`,
     )
   }
+  if (linkedContainers.length > 0) {
+    parts.push(`${linkedContainers.length} linked`)
+  }
 
-  // Check if there are any server-based (toggleable) containers
+  // Check if there are any server-based (toggleable) containers (exclude linked)
   const hasServerContainers = containers.some(
-    (c) => !isFileBasedEngine(c.engine),
+    (c) => !isFileBasedEngine(c.engine) && c.status !== 'linked',
   )
 
   // Build the full choice list with footer items
@@ -650,7 +841,11 @@ export async function handleList(
     const containerName = selectedContainer.slice(TOGGLE_PREFIX.length)
     const config = await containerManager.getConfig(containerName)
 
-    if (config && !isFileBasedEngine(config.engine)) {
+    if (
+      config &&
+      !isFileBasedEngine(config.engine) &&
+      !isRemoteContainer(config)
+    ) {
       const isRunning = await processManager.isRunning(containerName, {
         engine: config.engine,
       })
@@ -704,6 +899,8 @@ export async function showContainerSubmenu(
     return
   }
 
+  const isRemote = isRemoteContainer(config)
+
   // File-based databases: Check file existence instead of running status
   const isSQLite = config.engine === Engine.SQLite
   const isDuckDB = config.engine === Engine.DuckDB
@@ -712,7 +909,11 @@ export async function showContainerSubmenu(
   let status: string
   let locationInfo: string
 
-  if (isFileBasedDB) {
+  if (isRemote) {
+    isRunning = false
+    status = 'linked'
+    locationInfo = `→ ${config.remote?.provider || config.remote?.host || 'remote'}`
+  } else if (isFileBasedDB) {
     const fileExists = existsSync(config.database)
     isRunning = fileExists // For file-based DBs, "running" means "file exists"
     status = fileExists ? 'available' : 'missing'
@@ -754,6 +955,80 @@ export async function showContainerSubmenu(
       value: '_disabled_',
       disabled: '', // Empty string hides the "(Disabled)" text
     }
+  }
+
+  // Remote containers get a simplified action set
+  if (isRemote) {
+    actionChoices.push(new inquirer.Separator(chalk.gray(`── Linked ──`)))
+
+    // Connect (open console)
+    actionChoices.push({
+      name: `${chalk.blue('>')} Open console`,
+      value: 'shell',
+    })
+
+    // Copy connection string
+    actionChoices.push({
+      name: `${chalk.green('⎘')} Copy connection string`,
+      value: 'copy',
+    })
+
+    actionChoices.push(new inquirer.Separator())
+
+    // Unlink (delete)
+    actionChoices.push({
+      name: `${chalk.red('✕')} Unlink remote database`,
+      value: 'delete',
+    })
+
+    actionChoices.push(new inquirer.Separator())
+
+    // Navigation
+    actionChoices.push(
+      {
+        name: `${chalk.blue('←')} Back to containers`,
+        value: 'back',
+      },
+      {
+        name: `${chalk.blue('⌂')} Back to main menu ${chalk.gray('(esc)')}`,
+        value: 'main',
+      },
+      new inquirer.Separator(),
+    )
+
+    const { action } = await escapeablePrompt<{ action: string }>([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'What would you like to do?',
+        choices: actionChoices,
+        pageSize: getPageSize(),
+      },
+    ])
+
+    switch (action) {
+      case 'shell':
+        await handleOpenShell(containerName, activeDatabase)
+        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+        return
+      case 'copy':
+        await handleCopyConnectionString(containerName, activeDatabase)
+        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+        return
+      case 'backup':
+        await handleBackupForContainer(containerName, activeDatabase)
+        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+        return
+      case 'delete':
+        await handleDelete(containerName)
+        return
+      case 'back':
+        await handleList(showMainMenu)
+        return
+      case 'main':
+        return
+    }
+    return
   }
 
   // Determine if database-specific actions can be performed
@@ -1086,9 +1361,12 @@ export async function showContainerSubmenu(
 
 export async function handleStart(): Promise<void> {
   const containers = await containerManager.list()
-  // Filter for stopped containers, excluding file-based DBs (no server process to start)
+  // Filter for stopped containers, excluding file-based DBs and linked containers
   const stopped = containers.filter(
-    (c) => c.status !== 'running' && !isFileBasedEngine(c.engine),
+    (c) =>
+      c.status !== 'running' &&
+      c.status !== 'linked' &&
+      !isFileBasedEngine(c.engine),
   )
 
   if (stopped.length === 0) {
@@ -1784,36 +2062,48 @@ async function handleDelete(containerName: string): Promise<void> {
     return
   }
 
-  const confirmed = await promptConfirm(
-    `Are you sure you want to delete "${containerName}"? This cannot be undone.`,
-    false,
-  )
+  const isRemote = isRemoteContainer(config)
+  const confirmMsg = isRemote
+    ? `Unlink "${containerName}"? The remote database will not be affected.`
+    : `Are you sure you want to delete "${containerName}"? This cannot be undone.`
+
+  const confirmed = await promptConfirm(confirmMsg, false)
 
   if (!confirmed) {
-    console.log(uiWarning('Deletion cancelled'))
+    console.log(uiWarning(isRemote ? 'Unlink cancelled' : 'Deletion cancelled'))
     return
   }
 
-  const isRunning = await processManager.isRunning(containerName, {
-    engine: config.engine,
-  })
+  // Remote containers: skip process checks
+  if (!isRemote) {
+    const running = await processManager.isRunning(containerName, {
+      engine: config.engine,
+    })
 
-  if (isRunning) {
-    const stopSpinner = createSpinner(`Stopping ${containerName}...`)
-    stopSpinner.start()
+    if (running) {
+      const stopSpinner = createSpinner(`Stopping ${containerName}...`)
+      stopSpinner.start()
 
-    const engine = getEngine(config.engine)
-    await engine.stop(config)
+      const engine = getEngine(config.engine)
+      await engine.stop(config)
 
-    stopSpinner.succeed(`Stopped "${containerName}"`)
+      stopSpinner.succeed(`Stopped "${containerName}"`)
+    }
   }
 
-  const deleteSpinner = createSpinner(`Deleting ${containerName}...`)
+  const deleteSpinner = createSpinner(
+    isRemote ? `Unlinking ${containerName}...` : `Deleting ${containerName}...`,
+  )
   deleteSpinner.start()
 
   await containerManager.delete(containerName, { force: true })
 
-  deleteSpinner.succeed(`Container "${containerName}" deleted`)
+  if (isRemote) {
+    deleteSpinner.succeed(`Unlinked "${containerName}"`)
+    console.log(chalk.gray('  The remote database is not affected.'))
+  } else {
+    deleteSpinner.succeed(`Container "${containerName}" deleted`)
+  }
 }
 
 async function isDockerContainerRunning(

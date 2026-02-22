@@ -6,6 +6,7 @@ import { getEngine } from '../../engines'
 import { promptContainerSelect, promptContainerName } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiError, uiWarning, connectionBox } from '../ui/theme'
+import { isRemoteContainer } from '../../types'
 
 export const cloneCommand = new Command('clone')
   .description('Clone a container with all its data')
@@ -71,6 +72,17 @@ export const cloneCommand = new Command('clone')
             )
           } else {
             console.error(uiError(`Container "${sourceName}" not found`))
+          }
+          process.exit(1)
+        }
+
+        // Remote containers cannot be cloned
+        if (isRemoteContainer(sourceConfig)) {
+          const errorMsg = `Cannot clone a linked remote container. Use "spindb backup" to export data, then "spindb restore" to import locally.`
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
           }
           process.exit(1)
         }

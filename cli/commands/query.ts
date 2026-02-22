@@ -7,7 +7,12 @@ import { getEngine } from '../../engines'
 import { promptInstallDependencies } from '../ui/prompts'
 import { uiError, uiWarning } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
-import { Engine, isFileBasedEngine, type QueryResult } from '../../types'
+import {
+  Engine,
+  isFileBasedEngine,
+  isRemoteContainer,
+  type QueryResult,
+} from '../../types'
 
 /**
  * Format a QueryResult as a table for terminal output
@@ -98,6 +103,18 @@ export const queryCommand = new Command('query')
         }
 
         const { engine: engineName } = config
+
+        // Remote containers: query not yet supported (engine methods connect to 127.0.0.1)
+        if (isRemoteContainer(config)) {
+          const errorMsg =
+            'Query is not yet supported for linked remote containers. Use "spindb connect" to open a client shell instead.'
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
+          }
+          process.exit(1)
+        }
 
         // File-based databases: check file exists instead of running status
         if (isFileBasedEngine(engineName)) {

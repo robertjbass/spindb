@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-02-21
+
+### Added
+- **Remote database linking** — `spindb link <connection-string>` connects external databases (cloud-hosted or local non-SpinDB instances) to SpinDB. Auto-detects engine from URL scheme (postgresql://, mysql://, mongodb://, redis://) and provider from hostname (Neon, Supabase, PlanetScale, Upstash, Railway, Aiven, CockroachDB Cloud). Linked containers appear in `spindb list` with `↔ linked` status and provider name. Supports `spindb connect`, `spindb url`, `spindb info`, `spindb delete` (metadata-only unlink).
+- **Interactive linking** — "Link remote database" option in the interactive menu with connection string masking (passwords auto-redacted while typing), duplicate name re-prompting, and direct navigation to the container submenu after linking.
+- **Remote container console** — `spindb connect` and the interactive console menu work with linked containers. CLI shells (psql, pgcli, usql, mongosh, mysql, redis-cli, etc.) receive the remote connection string. Web panels (pgweb, dblab, DuckDB UI, ClickHouse Play, QuestDB Console) are hidden for remote containers since they require local servers.
+- **`spindb url --password`** — Shows the full unredacted connection string for linked containers. Default output redacts passwords with `***`.
+- **New `RemoteConnectionConfig` type** and `isRemoteContainer()` type guard in `types/index.ts`. New `'linked'` container status.
+- **New `core/remote-container.ts`** — Connection string parsing, engine/provider auto-detection, name generation, redaction, and remote config builder utilities.
+
+### Changed
+- **Graceful rejection for unsupported operations** — `start`, `stop`, `clone`, `logs`, `restore`, `export`, `backup`, `query`, `run` show clear messages for linked containers instead of errors.
+- **Container manager** — `list()` preserves `'linked'` status without process checks. `delete()` removes only local metadata for remote containers. `syncDatabases()` returns stored databases for remote containers.
+- **Menu reordering** — "Ports" moved below "Link remote database" in the main menu. Ports only shown when containers exist.
+- **Separated `tsc` type checking** — New `pnpm check` script for `tsc --noEmit`, `pnpm lint` now runs ESLint then type checking.
+
 ## [0.38.1] - 2026-02-21
 
 ### Fixed

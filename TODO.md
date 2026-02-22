@@ -28,18 +28,18 @@ Quick capture for ideas that need review and prioritization:
 
 ### v1.1 - Remote Connections & Secrets
 
-- [ ] **Remote database connections** - Connect to remote databases (not just local containers)
-  - `spindb connect --remote "postgresql://user:pass@host:5432/db"`
-  - Save remote connections in config for quick access
-  - List saved remotes with `spindb remotes list`
+- [x] **Remote database linking** - Link external databases to SpinDB via `spindb link <connection-string>`
+  - Auto-detects engine from URL scheme and provider from hostname
+  - Supports connect, url, info, list, delete (unlink)
+  - Credentials stored securely via credential manager
+  - Future: backup, query, run support for remote containers
 - [ ] **Environment variable support** - Use env vars in connection strings
   - `spindb connect --remote "$DATABASE_URL"`
   - `spindb create mydb --from "$PROD_DATABASE_URL"`
-- [ ] **Secrets management** - Secure credential storage
-  - macOS Keychain integration for storing passwords
-  - `spindb secrets set mydb-password`
-  - `spindb secrets get mydb-password`
-  - Reference secrets in connection strings: `postgresql://user:${secret:mydb-password}@host/db`
+- [ ] **Secrets management** - Secure credential storage (currently plaintext `.env` files with 0o600 permissions)
+  - **Near-term**: Encrypt credential files at rest with a machine-derived key (machine ID + user salt) — no native deps, removes plaintext-on-disk exposure
+  - **Long-term**: Encrypted credential sync across CLI/Desktop/Web — per-device keypairs, public keys registered via GitHub auth on Layerbase account, credentials encrypted to all registered keys and stored on Layerbase backend, each device decrypts with its local private key
+  - OS keychain (macOS Keychain, Windows Credential Manager, Linux libsecret) is an option but requires native bindings incompatible with SpinDB's no-build-step tsx approach
 
 ### v1.2 - Advanced Features
 

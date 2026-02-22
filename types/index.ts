@@ -1,3 +1,10 @@
+export type RemoteConnectionConfig = {
+  host: string // e.g., 'ep-cool-123.us-east-2.aws.neon.tech'
+  connectionString: string // Redacted (password replaced with ***)
+  ssl?: boolean // Default true for non-localhost
+  provider?: string // Auto-detected: 'neon', 'supabase', 'planetscale', etc.
+}
+
 export type ContainerConfig = {
   name: string
   engine: Engine
@@ -6,7 +13,7 @@ export type ContainerConfig = {
   database: string
   databases?: string[]
   created: string
-  status: 'created' | 'running' | 'stopped'
+  status: 'created' | 'running' | 'stopped' | 'linked'
   clonedFrom?: string
   // Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis)
   binaryPath?: string
@@ -14,6 +21,15 @@ export type ContainerConfig = {
   backendVersion?: string
   // FerretDB-specific: internal PostgreSQL backend port (e.g., 54320)
   backendPort?: number
+  // Remote database linking (external databases not managed by SpinDB)
+  remote?: RemoteConnectionConfig
+}
+
+/**
+ * Check if a container is a linked remote database
+ */
+export function isRemoteContainer(config: ContainerConfig): boolean {
+  return config.remote !== undefined
 }
 
 /**

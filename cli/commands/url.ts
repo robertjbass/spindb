@@ -5,6 +5,8 @@ import { getEngine } from '../../engines'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiSuccess } from '../ui/theme'
 import { getEngineMetadata } from '../helpers'
+import { isRemoteContainer } from '../../types'
+import { loadCredentials } from '../../core/credential-manager'
 
 export const urlCommand = new Command('url')
   .alias('connection-string')
@@ -12,11 +14,20 @@ export const urlCommand = new Command('url')
   .argument('[name]', 'Container name')
   .option('-c, --copy', 'Copy to clipboard')
   .option('-d, --database <database>', 'Use different database name')
+  .option(
+    '-p, --password',
+    'Show full connection string with password (for remote containers)',
+  )
   .option('--json', 'Output as JSON with additional connection info')
   .action(
     async (
       name: string | undefined,
-      options: { copy?: boolean; database?: string; json?: boolean },
+      options: {
+        copy?: boolean
+        database?: string
+        password?: boolean
+        json?: boolean
+      },
     ) => {
       try {
         let containerName = name
@@ -48,17 +59,45 @@ export const urlCommand = new Command('url')
           process.exit(1)
         }
 
-        const engine = getEngine(config.engine)
         const databaseName = options.database || config.database
-        const connectionString = engine.getConnectionString(
-          config,
-          databaseName,
-        )
+
+        // Remote containers: use stored connection string
+        let connectionString: string
+        if (isRemoteContainer(config)) {
+          if (options.password) {
+            // Full unredacted URL from credentials
+            const creds = await loadCredentials(
+              config.name,
+              config.engine,
+              'remote',
+            )
+            connectionString =
+              creds?.connectionString ?? config.remote?.connectionString ?? ''
+          } else {
+            // Redacted URL from container config
+            connectionString = config.remote?.connectionString ?? ''
+          }
+        } else {
+          const engine = getEngine(config.engine)
+          connectionString = engine.getConnectionString(config, databaseName)
+        }
 
         if (options.json) {
           const metadata = await getEngineMetadata(config.engine)
-          const jsonOutput =
-            config.engine === 'sqlite'
+          const jsonOutput = isRemoteContainer(config)
+            ? {
+                connectionString,
+                host: config.remote?.host,
+                port: config.port,
+                database: databaseName,
+                engine: config.engine,
+                container: config.name,
+                status: 'linked',
+                provider: config.remote?.provider,
+                ssl: config.remote?.ssl,
+                ...metadata,
+              }
+            : config.engine === 'sqlite'
               ? {
                   connectionString,
                   path: databaseName,

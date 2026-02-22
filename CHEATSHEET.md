@@ -101,6 +101,46 @@ Some engines have browser-based interfaces available from the console menu (`spi
 - **Stop**: Select "Stop pgweb" from the container submenu or console menu, or it stops automatically when the database stops
 - **Port**: Dynamically allocated starting at 8081
 
+## Link Remote Databases
+
+Link external databases (cloud-hosted or local non-SpinDB instances) to manage through SpinDB.
+
+```bash
+# Link by connection string (engine auto-detected from scheme)
+spindb link "postgresql://user:pass@ep-cool-123.neon.tech/mydb"
+spindb link "mysql://root:pass@db.planetscale.com/mydb"
+spindb link "mongodb+srv://user:pass@cluster.mongodb.net/mydb"
+spindb link "redis://default:pass@us1-cat.upstash.io:6379"
+
+# Custom name
+spindb link "postgresql://user:pass@host/db" production-pg
+
+# Specify engine when scheme is ambiguous (http/https)
+spindb link "http://localhost:6333" --engine qdrant
+
+# Override database name
+spindb link "postgresql://user:pass@host/db" -d analytics
+
+# JSON output
+spindb link "postgresql://user:pass@host/db" --json
+
+# Connect to linked database
+spindb connect production-pg
+
+# View connection string
+spindb url production-pg               # Redacted (password hidden)
+spindb url production-pg --password    # Full connection string
+
+# Unlink (removes local metadata only, remote database not affected)
+spindb delete production-pg
+```
+
+**Auto-detected providers:** Neon, Supabase, PlanetScale, Upstash, Railway, Aiven, CockroachDB Cloud
+
+**Supported operations:** `connect`, `url`, `info`, `list`, `delete` (unlink), `databases`
+
+**Not yet supported:** `backup`, `query`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`
+
 ## Connection Strings
 
 ```bash
@@ -108,6 +148,7 @@ spindb url mydb                         # Print connection string
 spindb url mydb --copy                  # Copy to clipboard
 spindb url mydb -d analytics            # URL for specific database
 spindb url mydb --json                  # JSON with host/port/user details
+spindb url mydb --password              # Full URL with password (remote only)
 ```
 
 ## Find Container

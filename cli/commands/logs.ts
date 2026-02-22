@@ -6,6 +6,7 @@ import { containerManager } from '../../core/container-manager'
 import { paths } from '../../config/paths'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiInfo } from '../ui/theme'
+import { isRemoteContainer } from '../../types'
 import { followFile, getLastNLines } from '../utils/file-follower'
 
 export const logsCommand = new Command('logs')
@@ -42,6 +43,14 @@ export const logsCommand = new Command('logs')
         if (!config) {
           console.error(uiError(`Container "${containerName}" not found`))
           process.exit(1)
+        }
+
+        // Remote containers don't have local logs
+        if (isRemoteContainer(config)) {
+          console.log(
+            uiInfo('Logs are not available for linked remote containers.'),
+          )
+          return
         }
 
         const logPath = paths.getContainerLogPath(config.name, {

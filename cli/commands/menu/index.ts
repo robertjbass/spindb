@@ -18,6 +18,7 @@ import { MissingToolError } from '../../../core/error-handler'
 import {
   handleCreate,
   handleList,
+  handleLinkRemote,
   showContainerSubmenu,
 } from './container-handlers'
 import { handleSettings } from './settings-handlers'
@@ -60,11 +61,16 @@ async function showMainMenu(): Promise<void> {
   const iconModeSet = config.preferences?.iconMode !== undefined
 
   const running = containers.filter((c) => c.status === 'running').length
-  const stopped = containers.filter((c) => c.status !== 'running').length
+  const linked = containers.filter((c) => c.status === 'linked').length
+  const stopped = containers.filter(
+    (c) => c.status !== 'running' && c.status !== 'linked',
+  ).length
 
+  const summaryParts = [`${running} running`, `${stopped} stopped`]
+  if (linked > 0) summaryParts.push(`${linked} linked`)
   console.log(
     chalk.gray(
-      `  ${containers.length} container(s): ${running} running, ${stopped} stopped`,
+      `  ${containers.length} container(s): ${summaryParts.join(', ')}`,
     ),
   )
   console.log()
@@ -77,12 +83,15 @@ async function showMainMenu(): Promise<void> {
       ? [
           { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
           { name: `${chalk.green('+')} Create container`, value: 'create' },
-          { name: `${chalk.magenta('⊞')} Ports`, value: 'ports' },
         ]
       : [
           { name: `${chalk.green('+')} Create container`, value: 'create' },
           { name: `${chalk.cyan('◉')} Containers`, value: 'list' },
         ]),
+    { name: `${chalk.magenta('↔')} Link remote database`, value: 'link' },
+    ...(hasContainers
+      ? [{ name: `${chalk.magenta('⊞')} Ports`, value: 'ports' }]
+      : []),
     new inquirer.Separator(),
     { name: `${chalk.yellow('⚙')} Settings`, value: 'settings' },
     // Show update option if a new version is available (only when auto-check enabled)
@@ -140,6 +149,9 @@ async function showMainMenu(): Promise<void> {
     case 'list':
       await handleList(showMainMenu)
       break
+    case 'link':
+      await handleLink()
+      break
     case 'ports':
       await handlePorts()
       break
@@ -152,6 +164,13 @@ async function showMainMenu(): Promise<void> {
     case 'exit':
       console.log(chalk.gray('\n  Goodbye!\n'))
       process.exit(0)
+  }
+}
+
+async function handleLink(): Promise<void> {
+  const result = await handleLinkRemote()
+  if (result) {
+    await showContainerSubmenu(result, showMainMenu)
   }
 }
 

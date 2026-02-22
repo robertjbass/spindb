@@ -34,6 +34,7 @@ import { whichCommand } from './commands/which'
 import { exportCommand } from './commands/export'
 import { queryCommand } from './commands/query'
 import { usersCommand } from './commands/users'
+import { linkCommand } from './commands/link'
 import { updateManager } from '../core/update-manager'
 import { configManager } from '../core/config-manager'
 import { setCachedIconMode } from './constants'
@@ -147,6 +148,7 @@ export async function run(): Promise<void> {
   program.addCommand(exportCommand)
   program.addCommand(queryCommand)
   program.addCommand(usersCommand)
+  program.addCommand(linkCommand)
 
   if (process.argv.length <= 2) {
     // Only show update notification in interactive menu mode (once at startup)

@@ -6,7 +6,7 @@ import { getEngine } from '../../engines'
 import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning } from '../ui/theme'
-import { Engine } from '../../types'
+import { Engine, isRemoteContainer } from '../../types'
 
 export const stopCommand = new Command('stop')
   .description('Stop a container')
@@ -154,6 +154,27 @@ export const stopCommand = new Command('stop')
             console.error(uiError(`Container "${containerName}" not found`))
           }
           process.exit(1)
+        }
+
+        // Remote containers are managed externally
+        if (isRemoteContainer(config)) {
+          if (options.json) {
+            console.log(
+              JSON.stringify({
+                success: true,
+                name: containerName,
+                status: 'linked',
+                message: `"${containerName}" is a linked remote database — managed externally.`,
+              }),
+            )
+          } else {
+            console.log(
+              uiWarning(
+                `"${containerName}" is a linked remote database — managed externally.`,
+              ),
+            )
+          }
+          return
         }
 
         const running = await processManager.isRunning(containerName, {

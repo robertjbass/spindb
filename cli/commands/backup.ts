@@ -14,7 +14,7 @@ import {
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning, formatBytes } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
-import { isFileBasedEngine } from '../../types'
+import { isFileBasedEngine, isRemoteContainer } from '../../types'
 import {
   getBackupExtension,
   getBackupSpinnerLabel,
@@ -116,7 +116,19 @@ export const backupCommand = new Command('backup')
 
         const { engine: engineName } = config
 
-        // File-based engines (SQLite, DuckDB) don't need to be "running"
+        // Remote containers: backup not yet supported (engine methods connect to 127.0.0.1)
+        if (isRemoteContainer(config)) {
+          const errorMsg =
+            "Backup is not yet supported for linked remote containers. Use your database provider's backup tools instead."
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
+          }
+          process.exit(1)
+        }
+
+        // File-based engines don't need running check
         if (!isFileBasedEngine(engineName)) {
           const running = await processManager.isRunning(containerName, {
             engine: engineName,
