@@ -34,7 +34,7 @@ tests/fixtures/       # Test data and seed files
 **Engine categories:**
 - **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
 - **File-based** (SQLite, DuckDB): data in CWD, no server process, `start()`/`stop()` are no-ops, tracked via registry in `~/.spindb/config.json`
-- **Remote/linked** (`spindb link`): external databases linked via connection string, `status: 'linked'`, uses `remote` field in ContainerConfig, credentials stored via credential-manager with username `'remote'`. Supports `connect`, `url`, `info`, `list`, `delete`. Does NOT support `backup`, `query`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs` (these block with clear error messages). See `core/remote-container.ts` for utilities.
+- **Remote/linked** (`spindb link`): external databases linked via connection string, `status: 'linked'`, uses `remote` field in ContainerConfig, credentials stored via credential-manager with username `'remote'`. Supports `connect`, `url`, `info`, `list`, `delete`, `query`. Does NOT support `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs` (these block with clear error messages). See `core/remote-container.ts` for utilities. Query support loads credentials, parses the connection string, and passes `host`/`password`/`username`/`ssl` to engine `executeQuery` via `QueryOptions`.
 - **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.

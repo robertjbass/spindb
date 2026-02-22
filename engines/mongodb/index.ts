@@ -963,9 +963,30 @@ export class MongoDBEngine extends BaseEngine {
     // Handle both toArray() results and single document results
     const wrappedScript = `JSON.stringify(${script})`
 
-    const cmd = buildMongoshCommand(mongosh, port, db, wrappedScript, {
-      quiet: true,
-    })
+    let cmd: string
+    if (options?.host) {
+      // Remote: build a connection URI for mongosh
+      const user = options.username ? encodeURIComponent(options.username) : ''
+      const pass = options.password ? encodeURIComponent(options.password) : ''
+      const auth = user ? `${user}:${pass}@` : ''
+      const host = options.host
+      const scheme = options.ssl ? 'mongodb+srv' : 'mongodb'
+      const portSuffix = options.ssl ? '' : `:${port}`
+      const sslParam = options.ssl ? 'tls=true' : ''
+      const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
+
+      if (isWindows()) {
+        const escaped = wrappedScript.replace(/"/g, '\\"')
+        cmd = `"${mongosh}" "${uri}" --quiet --eval "${escaped}"`
+      } else {
+        const escaped = wrappedScript.replace(/'/g, "'\\''")
+        cmd = `"${mongosh}" '${uri}' --quiet --eval '${escaped}'`
+      }
+    } else {
+      cmd = buildMongoshCommand(mongosh, port, db, wrappedScript, {
+        quiet: true,
+      })
+    }
 
     const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
 

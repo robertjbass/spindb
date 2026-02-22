@@ -944,16 +944,18 @@ export class PostgreSQLEngine extends BaseEngine {
     const { port } = container
     const db = options?.database || container.database || 'postgres'
     const psqlPath = await this.getPsqlPath()
+    const host = options?.host ?? '127.0.0.1'
+    const user = options?.username || defaults.superuser
 
     // Use --csv for machine-readable output
     const args = [
       '-X', // Skip ~/.psqlrc to ensure deterministic CSV output
       '-h',
-      '127.0.0.1',
+      host,
       '-p',
       String(port),
       '-U',
-      defaults.superuser,
+      user,
       '-d',
       db,
       '--csv',
@@ -961,9 +963,21 @@ export class PostgreSQLEngine extends BaseEngine {
       query,
     ]
 
+    // For remote containers with SSL, set sslmode
+    if (options?.ssl) {
+      args.unshift('--set=sslmode=require')
+    }
+
+    // Pass password via env for remote containers
+    const env = { ...process.env }
+    if (options?.password) {
+      env.PGPASSWORD = options.password
+    }
+
     return new Promise((resolve, reject) => {
       const proc = spawn(psqlPath, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       })
 
       let stdout = ''

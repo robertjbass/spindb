@@ -11,8 +11,11 @@ import {
   Engine,
   isFileBasedEngine,
   isRemoteContainer,
+  type QueryOptions,
   type QueryResult,
 } from '../../types'
+import { loadCredentials } from '../../core/credential-manager'
+import { parseConnectionString } from '../../core/remote-container'
 
 /**
  * Format a QueryResult as a table for terminal output
@@ -104,20 +107,37 @@ export const queryCommand = new Command('query')
 
         const { engine: engineName } = config
 
-        // Remote containers: query not yet supported (engine methods connect to 127.0.0.1)
+        // Build remote query options if this is a linked container
+        let remoteQueryOptions: QueryOptions | undefined
         if (isRemoteContainer(config)) {
-          const errorMsg =
-            'Query is not yet supported for linked remote containers. Use "spindb connect" to open a client shell instead.'
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
+          const creds = await loadCredentials(
+            containerName,
+            engineName,
+            'remote',
+          )
+          if (!creds?.connectionString) {
+            const errorMsg = `No credentials found for remote container "${containerName}". Try re-linking with: spindb link`
+            if (options.json) {
+              console.log(JSON.stringify({ error: errorMsg }))
+            } else {
+              console.error(uiError(errorMsg))
+            }
+            process.exit(1)
           }
-          process.exit(1)
-        }
 
-        // File-based databases: check file exists instead of running status
-        if (isFileBasedEngine(engineName)) {
+          const parsed = parseConnectionString(creds.connectionString)
+          remoteQueryOptions = {
+            host: parsed.host,
+            password: parsed.password,
+            username: parsed.username,
+            ssl: config.remote?.ssl,
+          }
+          // Override port if the connection string specifies one
+          if (parsed.port) {
+            config.port = parsed.port
+          }
+        } else if (isFileBasedEngine(engineName)) {
+          // File-based databases: check file exists instead of running status
           if (!existsSync(config.database)) {
             if (options.json) {
               console.log(
@@ -203,7 +223,10 @@ export const queryCommand = new Command('query')
         const database = options.database || config.database
 
         // Execute the query
-        const result = await engine.executeQuery(config, query, { database })
+        const result = await engine.executeQuery(config, query, {
+          database,
+          ...remoteQueryOptions,
+        })
 
         // Output results
         if (options.json) {

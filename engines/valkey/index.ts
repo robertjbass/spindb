@@ -1476,11 +1476,19 @@ export class ValkeyEngine extends BaseEngine {
   ): Promise<QueryResult> {
     const { port, version } = container
     const db = options?.database || container.database || '0'
+    const host = options?.host ?? '127.0.0.1'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
 
     return new Promise((resolve, reject) => {
-      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+      const args = ['-h', host, '-p', String(port), '-n', db]
+
+      if (options?.password) {
+        args.push('-a', options.password)
+      }
+      if (options?.ssl) {
+        args.push('--tls')
+      }
 
       const proc = spawn(valkeyCli, args, {
         stdio: ['pipe', 'pipe', 'pipe'],

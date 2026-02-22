@@ -1106,20 +1106,30 @@ export class MariaDBEngine extends BaseEngine {
     assertValidDatabaseName(db)
 
     const mariadb = await this.getMariadbClientPath()
+    const host = options?.host ?? '127.0.0.1'
+    const user = options?.username || engineDef.superuser
 
     // Use -B (batch mode) for tab-separated output
     const args = [
       '-h',
-      '127.0.0.1',
+      host,
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      user,
       '-B',
       db,
       '-e',
       query,
     ]
+
+    if (options?.password) {
+      args.push(`-p${options.password}`)
+    }
+
+    if (options?.ssl) {
+      args.push('--ssl')
+    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(mariadb, args, {

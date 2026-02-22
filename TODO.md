@@ -30,9 +30,9 @@ Quick capture for ideas that need review and prioritization:
 
 - [x] **Remote database linking** - Link external databases to SpinDB via `spindb link <connection-string>`
   - Auto-detects engine from URL scheme and provider from hostname
-  - Supports connect, url, info, list, delete (unlink)
+  - Supports connect, url, info, list, delete, query (unlink)
   - Credentials stored securely via credential manager
-  - Future: backup, query, run support for remote containers
+  - Future: backup, run support for remote containers
 - [ ] **Environment variable support** - Use env vars in connection strings
   - `spindb connect --remote "$DATABASE_URL"`
   - `spindb create mydb --from "$PROD_DATABASE_URL"`
