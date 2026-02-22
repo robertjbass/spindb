@@ -341,30 +341,31 @@ describe('Remote Query Support', () => {
         const user = opts.username || 'postgres'
         const args = ['-X', '-h', host, '-p', String(port), '-U', user]
 
-        if (opts.ssl) {
-          args.unshift('--set=sslmode=require')
-        }
-
         assert(args.includes('db.neon.tech'), 'should include remote host')
         assert(args.includes('neonuser'), 'should include remote username')
-        assert(
-          args.includes('--set=sslmode=require'),
-          'should include SSL mode',
-        )
         assertEqual(
           args.indexOf('127.0.0.1'),
           -1,
           'should not include localhost',
         )
+        // SSL is set via PGSSLMODE env, not via args
+        assert(
+          !args.includes('--set=sslmode=require'),
+          'should not use --set for sslmode',
+        )
       })
 
-      it('should set PGPASSWORD env for remote', () => {
-        const opts: QueryOptions = { password: 'secret' }
+      it('should set PGPASSWORD and PGSSLMODE env for remote', () => {
+        const opts: QueryOptions = { password: 'secret', ssl: true }
         const env: Record<string, string> = {}
         if (opts.password) {
           env.PGPASSWORD = opts.password
         }
+        if (opts.ssl) {
+          env.PGSSLMODE = 'require'
+        }
         assertEqual(env.PGPASSWORD, 'secret', 'PGPASSWORD should be set')
+        assertEqual(env.PGSSLMODE, 'require', 'PGSSLMODE should be set')
       })
 
       it('should not set PGPASSWORD for local queries', () => {
@@ -382,7 +383,7 @@ describe('Remote Query Support', () => {
     })
 
     describe('MySQL/MariaDB remote args', () => {
-      it('should build args with remote host and password', () => {
+      it('should build args with remote host and SSL', () => {
         const opts: QueryOptions = {
           host: 'mysql.planetscale.com',
           username: 'admin',
@@ -395,11 +396,14 @@ describe('Remote Query Support', () => {
         const user = opts.username || 'root'
         const args = ['-h', host, '-P', String(port), '-u', user]
 
-        if (opts.password) {
-          args.push(`-p${opts.password}`)
-        }
         if (opts.ssl) {
           args.push('--ssl-mode=REQUIRED')
+        }
+
+        // Password is passed via MYSQL_PWD env, not via args
+        const env: Record<string, string> = {}
+        if (opts.password) {
+          env.MYSQL_PWD = opts.password
         }
 
         assert(
@@ -407,18 +411,27 @@ describe('Remote Query Support', () => {
           'should include remote host',
         )
         assert(args.includes('admin'), 'should include remote username')
-        assert(args.includes('-psecret'), 'should include password arg')
+        assert(
+          !args.some((a) => a.startsWith('-p')),
+          'should not expose password in args',
+        )
+        assertEqual(
+          env.MYSQL_PWD,
+          'secret',
+          'should pass password via MYSQL_PWD env',
+        )
         assert(args.includes('--ssl-mode=REQUIRED'), 'should include SSL mode')
       })
     })
 
     describe('MongoDB remote args', () => {
-      it('should build connection URI for remote mongosh', () => {
+      it('should build SRV URI when scheme is mongodb+srv', () => {
         const opts: QueryOptions = {
           host: 'cluster.mongodb.net',
-          username: 'dbuser',
-          password: 'dbpass',
+          username: 'db@user',
+          password: 'db#pass',
           ssl: true,
+          scheme: 'mongodb+srv',
           database: 'mydb',
         }
         const port = 27017
@@ -426,22 +439,56 @@ describe('Remote Query Support', () => {
         const user = opts.username ? encodeURIComponent(opts.username) : ''
         const pass = opts.password ? encodeURIComponent(opts.password) : ''
         const auth = user ? `${user}:${pass}@` : ''
-        const scheme = opts.ssl ? 'mongodb+srv' : 'mongodb'
-        const portSuffix = opts.ssl ? '' : `:${port}`
-        const sslParam = opts.ssl ? 'tls=true' : ''
+        const isSrv = opts.scheme === 'mongodb+srv'
+        const scheme = isSrv ? 'mongodb+srv' : 'mongodb'
+        const portSuffix = isSrv ? '' : `:${port}`
+        const sslParam = opts.ssl && !isSrv ? 'tls=true' : ''
         const uri = `${scheme}://${auth}${opts.host}${portSuffix}/${opts.database}${sslParam ? `?${sslParam}` : ''}`
 
+        assert(uri.startsWith('mongodb+srv://'), 'should use srv scheme')
+        // Verify URL-encoded credentials (@ → %40, # → %23)
         assert(
-          uri.startsWith('mongodb+srv://'),
-          'should use srv scheme for SSL',
+          uri.includes(
+            `${encodeURIComponent('db@user')}:${encodeURIComponent('db#pass')}@`,
+          ),
+          'should include URL-encoded credentials',
         )
-        assert(uri.includes('dbuser:dbpass@'), 'should include credentials')
+        assert(
+          !uri.includes('db@user:'),
+          'should not include raw unencoded username',
+        )
         assert(
           uri.includes('cluster.mongodb.net/mydb'),
           'should include host and database',
         )
-        assert(uri.includes('tls=true'), 'should include TLS param')
+        // SRV implies TLS, so no redundant tls=true param needed
+        assert(
+          !uri.includes('tls=true'),
+          'srv should not add redundant tls param',
+        )
         assert(!uri.includes(':27017'), 'srv should not include port')
+      })
+
+      it('should build standard URI with TLS for non-SRV connections', () => {
+        const opts: QueryOptions = {
+          host: 'mongo.example.com',
+          username: 'user',
+          password: 'pass',
+          ssl: true,
+          scheme: 'mongodb',
+          database: 'testdb',
+        }
+        const port = 27017
+
+        const isSrv = opts.scheme === 'mongodb+srv'
+        const scheme = isSrv ? 'mongodb+srv' : 'mongodb'
+        const portSuffix = isSrv ? '' : `:${port}`
+        const sslParam = opts.ssl && !isSrv ? 'tls=true' : ''
+        const uri = `${scheme}://user:pass@${opts.host}${portSuffix}/${opts.database}${sslParam ? `?${sslParam}` : ''}`
+
+        assert(uri.startsWith('mongodb://'), 'should use standard scheme')
+        assert(uri.includes(':27017'), 'should include port for non-SRV')
+        assert(uri.includes('?tls=true'), 'should include tls=true for SSL')
       })
 
       it('should build standard URI without SSL', () => {
@@ -450,23 +497,27 @@ describe('Remote Query Support', () => {
           username: 'user',
           password: 'pass',
           ssl: false,
+          scheme: 'mongodb',
           database: 'testdb',
         }
         const port = 27017
 
-        const scheme = opts.ssl ? 'mongodb+srv' : 'mongodb'
-        const portSuffix = opts.ssl ? '' : `:${port}`
-        const uri = `${scheme}://user:pass@${opts.host}${portSuffix}/${opts.database}`
+        const isSrv = opts.scheme === 'mongodb+srv'
+        const portSuffix = isSrv ? '' : `:${port}`
+        const sslParam = opts.ssl && !isSrv ? 'tls=true' : ''
+        const uri = `mongodb://user:pass@${opts.host}${portSuffix}/${opts.database}${sslParam ? `?${sslParam}` : ''}`
 
         assert(uri.startsWith('mongodb://'), 'should use standard scheme')
-        assert(uri.includes(':27017'), 'should include port without SSL')
+        assert(uri.includes(':27017'), 'should include port')
+        assert(!uri.includes('tls=true'), 'should not include tls param')
       })
     })
 
     describe('Redis/Valkey remote args', () => {
-      it('should build args with auth and TLS', () => {
+      it('should build args with username and TLS, password via env', () => {
         const opts: QueryOptions = {
           host: 'redis.upstash.io',
+          username: 'default',
           password: 'token123',
           ssl: true,
           database: '0',
@@ -474,34 +525,49 @@ describe('Remote Query Support', () => {
         const port = 6379
 
         const host = opts.host ?? '127.0.0.1'
-        const args = ['-h', host, '-p', String(port), '-n', opts.database!]
+        const args = [
+          '-h',
+          host,
+          '-p',
+          String(port),
+          '-n',
+          opts.database!,
+          '--raw',
+        ]
 
-        if (opts.password) {
-          args.push('-a', opts.password)
+        if (opts.username) {
+          args.push('--user', opts.username)
         }
         if (opts.ssl) {
           args.push('--tls')
         }
 
+        // Password is passed via REDISCLI_AUTH env, not via args
+        const env: Record<string, string> = {}
+        if (opts.password) {
+          env.REDISCLI_AUTH = opts.password
+        }
+
         assert(args.includes('redis.upstash.io'), 'should include remote host')
-        assert(args.includes('-a'), 'should include auth flag')
-        assert(args.includes('token123'), 'should include password')
+        assert(args.includes('--user'), 'should include user flag')
+        assert(args.includes('default'), 'should include username')
+        assert(!args.includes('-a'), 'should not expose password in args')
+        assertEqual(
+          env.REDISCLI_AUTH,
+          'token123',
+          'should pass password via REDISCLI_AUTH env',
+        )
         assert(args.includes('--tls'), 'should include TLS flag')
+        assert(args.includes('--raw'), 'should include --raw flag')
       })
 
       it('should not include auth/TLS for local queries', () => {
         const opts: QueryOptions = { database: '0' }
         const host = opts.host ?? '127.0.0.1'
-        const args = ['-h', host, '-p', '6379', '-n', '0']
-
-        if (opts.password) {
-          args.push('-a', opts.password)
-        }
-        if (opts.ssl) {
-          args.push('--tls')
-        }
+        const args = ['-h', host, '-p', '6379', '-n', '0', '--raw']
 
         assertEqual(host, '127.0.0.1', 'should use localhost')
+        assert(!args.includes('--user'), 'should not include user flag')
         assert(!args.includes('-a'), 'should not include auth flag')
         assert(!args.includes('--tls'), 'should not include TLS')
       })

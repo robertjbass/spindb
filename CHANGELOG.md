@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-02-22
+
+### Fixed
+- **PostgreSQL remote SSL** — `--set=sslmode=require` was a psql variable, not a libpq setting, so TLS was never actually enabled for remote queries. Now uses `PGSSLMODE=require` environment variable.
+- **MongoDB/FerretDB SRV conflation** — `ssl: true` incorrectly forced `mongodb+srv://` scheme, breaking self-hosted TLS and DocumentDB connections. SRV is now determined by the original connection string scheme; non-SRV TLS connections use `mongodb://host:port?tls=true`.
+- **MySQL/MariaDB credential exposure** — Password was passed via `-p` command-line argument, visible in process listings. Now uses `MYSQL_PWD` environment variable.
+- **Redis/Valkey credential exposure** — Password was passed via `-a` command-line argument. Now uses `REDISCLI_AUTH` environment variable (matching existing `dumpFromConnectionString` pattern). Also adds `--user` flag for ACL username support.
+- **Valkey missing `--raw` flag** — `valkey-cli` output was not raw, causing the Redis result parser to receive formatted output.
+
 ## [0.40.0] - 2026-02-22
 
 ### Added

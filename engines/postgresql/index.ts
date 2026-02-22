@@ -963,15 +963,13 @@ export class PostgreSQLEngine extends BaseEngine {
       query,
     ]
 
-    // For remote containers with SSL, set sslmode
-    if (options?.ssl) {
-      args.unshift('--set=sslmode=require')
-    }
-
-    // Pass password via env for remote containers
+    // Pass password and SSL mode via env for remote containers
     const env = { ...process.env }
     if (options?.password) {
       env.PGPASSWORD = options.password
+    }
+    if (options?.ssl) {
+      env.PGSSLMODE = 'require'
     }
 
     return new Promise((resolve, reject) => {

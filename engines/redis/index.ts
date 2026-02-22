@@ -1483,15 +1483,21 @@ export class RedisEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const args = ['-h', host, '-p', String(port), '-n', db, '--raw']
 
-      if (options?.password) {
-        args.push('-a', options.password)
+      if (options?.username) {
+        args.push('--user', options.username)
       }
       if (options?.ssl) {
         args.push('--tls')
       }
 
+      // Pass password via REDISCLI_AUTH env to avoid exposing it in process listings
+      const env = options?.password
+        ? { ...process.env, REDISCLI_AUTH: options.password }
+        : process.env
+
       const proc = spawn(redisCli, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       })
 
       let stdout = ''

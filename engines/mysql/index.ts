@@ -1175,17 +1175,19 @@ export class MySQLEngine extends BaseEngine {
       query,
     ]
 
-    if (options?.password) {
-      args.push(`-p${options.password}`)
-    }
-
     if (options?.ssl) {
       args.push('--ssl-mode=REQUIRED')
     }
 
+    // Pass password via env to avoid exposing it in process listings
+    const env = options?.password
+      ? { ...process.env, MYSQL_PWD: options.password }
+      : process.env
+
     return new Promise((resolve, reject) => {
       const proc = spawn(mysql, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       })
 
       let stdout = ''
