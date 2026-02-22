@@ -18,7 +18,7 @@ import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { TransactionManager } from '../../core/transaction-manager'
-import { isFileBasedEngine } from '../../types'
+import { isFileBasedEngine, isRemoteContainer } from '../../types'
 import { logDebug } from '../../core/error-handler'
 import { getEngineMetadata } from '../helpers'
 
@@ -98,6 +98,17 @@ export const restoreCommand = new Command('restore')
             )
           } else {
             console.error(uiError(`Container "${containerName}" not found`))
+          }
+          process.exit(1)
+        }
+
+        // Block restore for remote containers (dangerous for production DBs)
+        if (isRemoteContainer(config)) {
+          const errorMsg = `Restore is not available for linked remote containers. This protects against accidental data loss on remote databases.`
+          if (options.json) {
+            console.log(JSON.stringify({ error: errorMsg }))
+          } else {
+            console.error(uiError(errorMsg))
           }
           process.exit(1)
         }

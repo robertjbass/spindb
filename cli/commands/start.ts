@@ -9,7 +9,7 @@ import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiWarning } from '../ui/theme'
-import { Engine, isFileBasedEngine } from '../../types'
+import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 import { exitWithError, logDebug } from '../../core/error-handler'
 import { getEngineMetadata } from '../helpers'
 
@@ -36,7 +36,9 @@ export const startCommand = new Command('start')
           }
 
           const containers = await containerManager.list()
-          const stopped = containers.filter((c) => c.status !== 'running')
+          const stopped = containers.filter(
+            (c) => c.status !== 'running' && c.status !== 'linked',
+          )
 
           if (stopped.length === 0) {
             if (containers.length === 0) {
@@ -68,6 +70,27 @@ export const startCommand = new Command('start')
         }
 
         const { engine: engineName } = config
+
+        // Remote containers are managed externally
+        if (isRemoteContainer(config)) {
+          if (options.json) {
+            console.log(
+              JSON.stringify({
+                success: true,
+                name: containerName,
+                status: 'linked',
+                message: `"${containerName}" is a linked remote database — managed externally.`,
+              }),
+            )
+          } else {
+            console.log(
+              uiWarning(
+                `"${containerName}" is a linked remote database — managed externally.`,
+              ),
+            )
+          }
+          return
+        }
 
         const running = await processManager.isRunning(containerName, {
           engine: engineName,
@@ -186,9 +209,7 @@ export const startCommand = new Command('start')
         if (config.database && config.database !== defaultDb) {
           const dbSpinner = options.json
             ? null
-            : createSpinner(
-                `Ensuring database "${config.database}" exists...`,
-              )
+            : createSpinner(`Ensuring database "${config.database}" exists...`)
           dbSpinner?.start()
           try {
             await engine.createDatabase(config, config.database)
@@ -198,9 +219,7 @@ export const startCommand = new Command('start')
             if (/already exists/i.test(msg)) {
               dbSpinner?.succeed(`Database "${config.database}" ready`)
             } else {
-              dbSpinner?.fail(
-                `Failed to create database "${config.database}"`,
-              )
+              dbSpinner?.fail(`Failed to create database "${config.database}"`)
               logDebug(`createDatabase error: ${msg}`)
             }
           }

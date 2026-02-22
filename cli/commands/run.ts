@@ -7,7 +7,7 @@ import { getEngine } from '../../engines'
 import { promptInstallDependencies } from '../ui/prompts'
 import { uiError, uiWarning } from '../ui/theme'
 import { getMissingDependencies } from '../../core/dependency-manager'
-import { Engine, isFileBasedEngine } from '../../types'
+import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 
 export const runCommand = new Command('run')
   .description('Run script file or command against a container')
@@ -48,6 +48,16 @@ export const runCommand = new Command('run')
         }
 
         const { engine: engineName } = config
+
+        // Remote containers: run not yet supported (engine methods connect to 127.0.0.1)
+        if (isRemoteContainer(config)) {
+          console.error(
+            uiError(
+              'Run is not yet supported for linked remote containers. Use "spindb connect" to open a client shell instead.',
+            ),
+          )
+          process.exit(1)
+        }
 
         // File-based databases: check file exists instead of running status
         if (isFileBasedEngine(engineName)) {

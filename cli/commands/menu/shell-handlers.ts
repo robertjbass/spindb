@@ -40,6 +40,12 @@ import {
   getDblabPlatformSuffix,
 } from '../../../core/dblab-utils'
 import { getEngine } from '../../../engines'
+import { isRemoteContainer } from '../../../types'
+import { loadCredentials } from '../../../core/credential-manager'
+import {
+  redactConnectionString,
+  parseConnectionString,
+} from '../../../core/remote-container'
 import { createSpinner } from '../../ui/spinner'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../../ui/theme'
 import { logDebug } from '../../../core/error-handler'
@@ -82,18 +88,29 @@ export async function handleCopyConnectionString(
   }
 
   const engine = getEngine(config.engine)
-  // Use provided database or fall back to container's default
-  const connectionString = engine.getConnectionString(config, database)
+
+  // Remote containers: use stored connection string (full from credentials)
+  let connectionString: string
+  let displayString: string
+  if (isRemoteContainer(config)) {
+    const creds = await loadCredentials(config.name, config.engine, 'remote')
+    connectionString =
+      creds?.connectionString ?? config.remote?.connectionString ?? ''
+    displayString = redactConnectionString(connectionString)
+  } else {
+    connectionString = engine.getConnectionString(config, database)
+    displayString = connectionString
+  }
 
   const copied = await platformService.copyToClipboard(connectionString)
 
   console.log()
   if (copied) {
     console.log(uiSuccess('Connection string copied to clipboard'))
-    console.log(chalk.gray(`  ${connectionString}`))
+    console.log(chalk.gray(`  ${displayString}`))
   } else {
     console.log(uiWarning('Could not copy to clipboard. Connection string:'))
-    console.log(chalk.cyan(`  ${connectionString}`))
+    console.log(chalk.cyan(`  ${displayString}`))
   }
   console.log()
 
@@ -117,9 +134,19 @@ export async function handleOpenShell(
   }
 
   const engine = getEngine(config.engine)
+  const isRemote = isRemoteContainer(config)
   // Use provided database or fall back to container's default
   const activeDatabase = database || config.database
-  const connectionString = engine.getConnectionString(config, activeDatabase)
+
+  // For remote containers, use the stored remote connection string
+  let connectionString: string
+  if (isRemote) {
+    const creds = await loadCredentials(config.name, config.engine, 'remote')
+    connectionString =
+      creds?.connectionString ?? config.remote?.connectionString ?? ''
+  } else {
+    connectionString = engine.getConnectionString(config, activeDatabase)
+  }
 
   const shellCheckSpinner = createSpinner('Checking available shells...')
   shellCheckSpinner.start()
@@ -141,6 +168,25 @@ export async function handleOpenShell(
   shellCheckSpinner.stop()
   // Clear the spinner line
   process.stdout.write('\x1b[1A\x1b[2K')
+
+  // REST API engines (no CLI shell) can't be used remotely via console
+  if (
+    isRemote &&
+    ['qdrant', 'meilisearch', 'influxdb', 'weaviate', 'couchdb'].includes(
+      config.engine,
+    )
+  ) {
+    console.log()
+    console.log(
+      uiInfo('Console is not available for linked remote REST API databases.'),
+    )
+    console.log(
+      chalk.gray("  Use your provider's web dashboard or API tools directly."),
+    )
+    console.log()
+    await pressEnterToContinue()
+    return
+  }
 
   type ShellChoice =
     | 'default'
@@ -419,7 +465,8 @@ export async function handleOpenShell(
   }
 
   // dblab visual TUI (supports PostgreSQL, MySQL, MariaDB, CockroachDB, SQLite, QuestDB)
-  if (DBLAB_ENGINES.has(config.engine)) {
+  // Not available for remote containers (hardcodes local connection)
+  if (DBLAB_ENGINES.has(config.engine) && !isRemote) {
     const dblabPath = await configManager.getBinaryPath('dblab')
     if (dblabPath) {
       choices.push({
@@ -434,8 +481,8 @@ export async function handleOpenShell(
     }
   }
 
-  // Web Panel section for engines with browser-based UIs
-  if (config.engine === 'clickhouse') {
+  // Web Panel section for engines with browser-based UIs (local only)
+  if (config.engine === 'clickhouse' && !isRemote) {
     const httpPort = config.port + 1
     choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
     choices.push({
@@ -444,7 +491,7 @@ export async function handleOpenShell(
     })
   }
 
-  if (config.engine === 'questdb') {
+  if (config.engine === 'questdb' && !isRemote) {
     const httpPort = config.port + 188
     choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
     choices.push({
@@ -453,7 +500,7 @@ export async function handleOpenShell(
     })
   }
 
-  if (config.engine === 'duckdb') {
+  if (config.engine === 'duckdb' && !isRemote) {
     choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
     choices.push({
       name: `◎ Open Web UI (built-in, port 4213)`,
@@ -462,9 +509,10 @@ export async function handleOpenShell(
   }
 
   if (
-    config.engine === 'postgresql' ||
-    config.engine === 'cockroachdb' ||
-    config.engine === 'ferretdb'
+    !isRemote &&
+    (config.engine === 'postgresql' ||
+      config.engine === 'cockroachdb' ||
+      config.engine === 'ferretdb')
   ) {
     choices.push(new inquirer.Separator(chalk.gray(`───── Web Panel ─────`)))
     const pgwebPath = await configManager.getBinaryPath('pgweb')
@@ -1419,6 +1467,25 @@ async function launchShell(
   console.log(uiInfo(`Connecting to ${containerName}...`))
   console.log()
 
+  const isRemote = isRemoteContainer(config)
+
+  // Parse remote connection string for host/port/user/password
+  let rHost = '127.0.0.1'
+  let rPort = config.port
+  let rUser = ''
+  let rPass = ''
+  if (isRemote) {
+    try {
+      const parsed = parseConnectionString(connectionString)
+      rHost = parsed.host || config.remote?.host || '127.0.0.1'
+      rPort = parsed.port || config.port
+      rUser = parsed.username || ''
+      rPass = parsed.password || ''
+    } catch {
+      /* use defaults */
+    }
+  }
+
   let shellCmd: string
   let shellArgs: string[]
   let installHint: string
@@ -1430,17 +1497,21 @@ async function launchShell(
     shellArgs = [connectionString]
     installHint = 'brew install pgcli'
   } else if (shellType === 'mycli') {
-    // mycli: mycli -h host -P port -u user database
+    // mycli accepts connection strings directly
     shellCmd = 'mycli'
-    shellArgs = [
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(config.port),
-      '-u',
-      'root',
-      database,
-    ]
+    if (isRemote) {
+      shellArgs = [connectionString]
+    } else {
+      shellArgs = [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(config.port),
+        '-u',
+        'root',
+        database,
+      ]
+    }
     installHint = 'brew install mycli'
   } else if (shellType === 'litecli') {
     // litecli takes the database file path directly
@@ -1467,29 +1538,41 @@ async function launchShell(
     // MySQL uses downloaded binaries - get the actual path
     const mysqlPath = await configManager.getBinaryPath('mysql')
     shellCmd = mysqlPath || 'mysql'
-    shellArgs = [
-      '-u',
-      'root',
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(config.port),
-      database,
-    ]
+    if (isRemote) {
+      shellArgs = ['-h', rHost, '-P', String(rPort), '-u', rUser || 'root']
+      if (rPass) shellArgs.push(`-p${rPass}`)
+      shellArgs.push(database)
+    } else {
+      shellArgs = [
+        '-u',
+        'root',
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(config.port),
+        database,
+      ]
+    }
     installHint = 'spindb engines download mysql'
   } else if (config.engine === 'mariadb') {
     // MariaDB uses downloaded binaries, not system PATH - get the actual path
     const mariadbPath = await configManager.getBinaryPath('mariadb')
     shellCmd = mariadbPath || 'mariadb'
-    shellArgs = [
-      '-u',
-      'root',
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(config.port),
-      database,
-    ]
+    if (isRemote) {
+      shellArgs = ['-h', rHost, '-P', String(rPort), '-u', rUser || 'root']
+      if (rPass) shellArgs.push(`-p${rPass}`)
+      shellArgs.push(database)
+    } else {
+      shellArgs = [
+        '-u',
+        'root',
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(config.port),
+        database,
+      ]
+    }
     installHint = 'spindb engines download mariadb'
   } else if (config.engine === 'mongodb' || config.engine === 'ferretdb') {
     shellCmd = 'mongosh'
@@ -1498,18 +1581,36 @@ async function launchShell(
   } else if (shellType === 'iredis') {
     // iredis: enhanced Redis CLI
     shellCmd = 'iredis'
-    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+    if (isRemote) {
+      shellArgs = ['-h', rHost, '-p', String(rPort)]
+      if (rPass) shellArgs.push('-a', rPass)
+      if (database) shellArgs.push('-n', database)
+    } else {
+      shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+    }
     installHint = 'brew install iredis'
   } else if (config.engine === 'redis') {
     // Default Redis shell
     shellCmd = 'redis-cli'
-    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+    if (isRemote) {
+      shellArgs = ['-h', rHost, '-p', String(rPort)]
+      if (rPass) shellArgs.push('-a', rPass)
+      if (database) shellArgs.push('-n', database)
+    } else {
+      shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+    }
     installHint = 'brew install redis'
   } else if (config.engine === 'valkey') {
     // Default Valkey shell
     const valkeyCliPath = await configManager.getBinaryPath('valkey-cli')
     shellCmd = valkeyCliPath || 'valkey-cli'
-    shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+    if (isRemote) {
+      shellArgs = ['-h', rHost, '-p', String(rPort)]
+      if (rPass) shellArgs.push('-a', rPass)
+      if (database) shellArgs.push('-n', database)
+    } else {
+      shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
+    }
     installHint = 'spindb engines download valkey'
   } else if (config.engine === 'clickhouse') {
     // ClickHouse uses a unified binary with subcommands
@@ -1518,12 +1619,14 @@ async function launchShell(
     shellArgs = [
       'client',
       '--host',
-      '127.0.0.1',
+      isRemote ? rHost : '127.0.0.1',
       '--port',
-      String(config.port),
+      String(isRemote ? rPort : config.port),
       '--database',
       database,
     ]
+    if (isRemote && rUser) shellArgs.push('--user', rUser)
+    if (isRemote && rPass) shellArgs.push('--password', rPass)
     installHint = 'spindb engines download clickhouse'
   } else if (config.engine === 'qdrant') {
     // Qdrant: Open Web UI in browser (only shown when Web UI is installed)
@@ -1688,19 +1791,33 @@ async function launchShell(
       .catch(() => 'surreal')
     const namespace = config.name.replace(/-/g, '_')
     shellCmd = surrealPath
-    shellArgs = [
-      'sql',
-      '--endpoint',
-      `ws://127.0.0.1:${config.port}`,
-      '--namespace',
-      namespace,
-      '--database',
-      database || 'default',
-      '--username',
-      'root',
-      '--password',
-      'root',
-    ]
+    if (isRemote) {
+      shellArgs = [
+        'sql',
+        '--endpoint',
+        `ws://${rHost}:${rPort}`,
+        '--namespace',
+        namespace,
+        '--database',
+        database || 'default',
+      ]
+      if (rUser) shellArgs.push('--username', rUser)
+      if (rPass) shellArgs.push('--password', rPass)
+    } else {
+      shellArgs = [
+        'sql',
+        '--endpoint',
+        `ws://127.0.0.1:${config.port}`,
+        '--namespace',
+        namespace,
+        '--database',
+        database || 'default',
+        '--username',
+        'root',
+        '--password',
+        'root',
+      ]
+    }
     installHint = 'spindb engines download surrealdb'
     // SurrealDB writes history.txt to cwd - use container directory
     spawnCwd = join(paths.containers, 'surrealdb', config.name)
@@ -1711,23 +1828,31 @@ async function launchShell(
       .getCockroachPath(config.version)
       .catch(() => 'cockroach')
     shellCmd = cockroachPath
-    shellArgs = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${config.port}`,
-      '--database',
-      database,
-    ]
+    if (isRemote) {
+      // Use --url for remote connections (supports full connection strings)
+      shellArgs = ['sql', '--url', connectionString]
+    } else {
+      shellArgs = [
+        'sql',
+        '--insecure',
+        '--host',
+        `127.0.0.1:${config.port}`,
+        '--database',
+        database,
+      ]
+    }
     installHint = 'spindb engines download cockroachdb'
   } else if (config.engine === 'questdb') {
     // QuestDB uses PostgreSQL wire protocol on port 8812
-    // Default credentials: admin/quest
     shellCmd = 'psql'
-    const db = database || 'qdb'
-    // QuestDB connection string with explicit password
-    const questDbConnStr = `postgresql://admin:quest@127.0.0.1:${config.port}/${db}`
-    shellArgs = [questDbConnStr]
+    if (isRemote) {
+      shellArgs = [connectionString]
+    } else {
+      // Default credentials: admin/quest
+      const db = database || 'qdb'
+      const questDbConnStr = `postgresql://admin:quest@127.0.0.1:${config.port}/${db}`
+      shellArgs = [questDbConnStr]
+    }
     installHint = 'brew install libpq && brew link --force libpq'
   } else if (config.engine === 'typedb') {
     // TypeDB uses typedb console with address and tls-disabled flags
@@ -1746,8 +1871,6 @@ async function launchShell(
     installHint = 'spindb engines download typedb'
   } else if (config.engine === 'tigerbeetle') {
     // TigerBeetle uses tigerbeetle repl command
-    // Cluster ID 0 is the default for local single-node development.
-    // TigerBeetle format/start also use cluster 0 (see engines/tigerbeetle/index.ts).
     const clusterId = 0
     const engine = getEngine(config.engine)
     const tigerbeetlePath = await engine
@@ -1757,7 +1880,7 @@ async function launchShell(
     shellArgs = [
       'repl',
       `--cluster=${clusterId}`,
-      `--addresses=127.0.0.1:${config.port}`,
+      `--addresses=${isRemote ? rHost : '127.0.0.1'}:${isRemote ? rPort : config.port}`,
     ]
     installHint = 'spindb engines download tigerbeetle'
   } else {

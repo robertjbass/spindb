@@ -106,9 +106,7 @@ async function findBackendBinary(
 /**
  * Get the path to pg_restore
  */
-async function getPgRestorePath(
-  container: ContainerConfig,
-): Promise<string> {
+async function getPgRestorePath(container: ContainerConfig): Promise<string> {
   return findBackendBinary(container, 'pg_restore')
 }
 

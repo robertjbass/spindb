@@ -9,7 +9,11 @@ import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
 import { uiError, uiInfo, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
-import { isFileBasedEngine, type ContainerConfig } from '../../types'
+import {
+  isFileBasedEngine,
+  isRemoteContainer,
+  type ContainerConfig,
+} from '../../types'
 import { getEngineMetadata } from '../helpers'
 
 function formatDate(dateString: string): string {
@@ -19,7 +23,12 @@ function formatDate(dateString: string): string {
 
 async function getActualStatus(
   config: ContainerConfig,
-): Promise<'running' | 'stopped' | 'available' | 'missing'> {
+): Promise<'running' | 'stopped' | 'available' | 'missing' | 'linked'> {
+  // Remote containers are always 'linked'
+  if (isRemoteContainer(config)) {
+    return 'linked'
+  }
+
   // File-based engines: check file existence instead of running status
   if (isFileBasedEngine(config.engine)) {
     const fileExists = existsSync(config.database)
@@ -38,7 +47,10 @@ async function displayContainerInfo(
 ): Promise<void> {
   const actualStatus = await getActualStatus(config)
   const engine = getEngine(config.engine)
-  const connectionString = engine.getConnectionString(config)
+  const isRemote = isRemoteContainer(config)
+  const connectionString = isRemote
+    ? (config.remote?.connectionString ?? '')
+    : engine.getConnectionString(config)
   const dataDir = paths.getContainerDataPath(config.name, {
     engine: config.engine,
   })
@@ -64,9 +76,11 @@ async function displayContainerInfo(
   const icon = getEngineIcon(config.engine)
   const isFileBased = isFileBasedEngine(config.engine)
 
-  // Status display based on engine type
+  // Status display based on container type
   let statusDisplay: string
-  if (isFileBased) {
+  if (isRemote) {
+    statusDisplay = chalk.magenta('↔ linked')
+  } else if (isFileBased) {
     statusDisplay =
       actualStatus === 'available'
         ? chalk.blue('🔵 available')
@@ -90,14 +104,44 @@ async function displayContainerInfo(
     chalk.gray('  ') + chalk.white('Status:'.padEnd(14)) + statusDisplay,
   )
 
-  // Show file path for file-based engines, port for server databases
-  if (isFileBased) {
+  if (isRemote) {
+    // Remote container info
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Host:'.padEnd(14)) +
+        chalk.cyan(config.remote?.host ?? ''),
+    )
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Port:'.padEnd(14)) +
+        chalk.green(String(config.port)),
+    )
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Database:'.padEnd(14)) +
+        chalk.yellow(config.database),
+    )
+    if (config.remote?.provider) {
+      console.log(
+        chalk.gray('  ') +
+          chalk.white('Provider:'.padEnd(14)) +
+          chalk.magenta(config.remote.provider),
+      )
+    }
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('SSL:'.padEnd(14)) +
+        (config.remote?.ssl ? chalk.green('yes') : chalk.gray('no')),
+    )
+  } else if (isFileBased) {
+    // File-based engine info
     console.log(
       chalk.gray('  ') +
         chalk.white('File:'.padEnd(14)) +
         chalk.green(config.database),
     )
   } else {
+    // Server-based engine info
     console.log(
       chalk.gray('  ') +
         chalk.white('Port:'.padEnd(14)) +
@@ -116,8 +160,8 @@ async function displayContainerInfo(
       chalk.gray(formatDate(config.created)),
   )
 
-  // Don't show data dir for file-based engines (file path is already shown)
-  if (!isFileBased) {
+  // Don't show data dir for file-based or remote containers
+  if (!isFileBased && !isRemote) {
     console.log(
       chalk.gray('  ') +
         chalk.white('Data Dir:'.padEnd(14)) +
@@ -146,7 +190,9 @@ async function displayAllContainersInfo(
       containers.map(async (config) => {
         const actualStatus = await getActualStatus(config)
         const engine = getEngine(config.engine)
-        const connectionString = engine.getConnectionString(config)
+        const connectionString = isRemoteContainer(config)
+          ? (config.remote?.connectionString ?? '')
+          : engine.getConnectionString(config)
         const dataDir = paths.getContainerDataPath(config.name, {
           engine: config.engine,
         })
@@ -183,9 +229,11 @@ async function displayAllContainersInfo(
     const actualStatus = await getActualStatus(container)
     const isFileBased = isFileBasedEngine(container.engine)
 
-    // Status display based on engine type
+    // Status display based on container type
     let statusDisplay: string
-    if (isFileBased) {
+    if (actualStatus === 'linked') {
+      statusDisplay = chalk.magenta('↔ linked')
+    } else if (isFileBased) {
       statusDisplay =
         actualStatus === 'available'
           ? chalk.blue('🔵 available')
@@ -230,6 +278,7 @@ async function displayAllContainersInfo(
   const stopped = statusChecks.filter((s) => s === 'stopped').length
   const fileAvailable = statusChecks.filter((s) => s === 'available').length
   const fileMissing = statusChecks.filter((s) => s === 'missing').length
+  const linked = statusChecks.filter((s) => s === 'linked').length
 
   const parts: string[] = []
   if (running + stopped > 0) {
@@ -239,6 +288,9 @@ async function displayAllContainersInfo(
     parts.push(
       `${fileAvailable} file-based available${fileMissing > 0 ? `, ${fileMissing} missing` : ''}`,
     )
+  }
+  if (linked > 0) {
+    parts.push(`${linked} linked`)
   }
 
   console.log(
@@ -250,7 +302,9 @@ async function displayAllContainersInfo(
   console.log(chalk.gray('  ' + '─'.repeat(78)))
   for (const container of containers) {
     const engine = getEngine(container.engine)
-    const connectionString = engine.getConnectionString(container)
+    const connectionString = isRemoteContainer(container)
+      ? (container.remote?.connectionString ?? '')
+      : engine.getConnectionString(container)
     console.log(
       chalk.gray('  ') +
         chalk.cyan(container.name.padEnd(18)) +

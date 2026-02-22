@@ -16,7 +16,7 @@ import {
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning, box, formatBytes } from '../ui/theme'
-import { isFileBasedEngine } from '../../types'
+import { isFileBasedEngine, isRemoteContainer } from '../../types'
 import { getDefaultFormat } from '../../config/backup-formats'
 import { getEngineDefaults } from '../../config/engine-defaults'
 import { paths } from '../../config/paths'
@@ -97,6 +97,17 @@ export const exportCommand = new Command('export')
                 )
               } else {
                 console.error(uiError(`Container "${containerName}" not found`))
+              }
+              process.exit(1)
+            }
+
+            // Block export for remote containers
+            if (isRemoteContainer(config)) {
+              const errorMsg = `Export is not available for linked remote containers.`
+              if (options.json) {
+                console.log(JSON.stringify({ error: errorMsg }))
+              } else {
+                console.error(uiError(errorMsg))
               }
               process.exit(1)
             }

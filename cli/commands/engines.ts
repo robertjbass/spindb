@@ -13,10 +13,7 @@ import { getEngine } from '../../engines'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import { paths } from '../../config/paths'
 import { platformService } from '../../core/platform-service'
-import {
-  detectPackageManager,
-  findBinary,
-} from '../../core/dependency-manager'
+import { detectPackageManager, findBinary } from '../../core/dependency-manager'
 import {
   getRequiredClientTools,
   getPackagesForTools,

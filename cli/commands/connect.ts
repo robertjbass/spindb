@@ -26,8 +26,13 @@ import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../ui/theme'
-import { Engine, isFileBasedEngine } from '../../types'
+import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 import { configManager } from '../../core/config-manager'
+import { loadCredentials } from '../../core/credential-manager'
+import {
+  redactConnectionString,
+  parseConnectionString,
+} from '../../core/remote-container'
 import { DBLAB_ENGINES, getDblabArgs } from '../../core/dblab-utils'
 import { downloadDblabCli } from './menu/shell-handlers'
 
@@ -86,8 +91,9 @@ export const connectCommand = new Command('connect')
 
         if (!containerName) {
           const containers = await containerManager.list()
-          // File-based containers are always "available" if file exists, server containers need to be running
+          // Remote containers are always connectable, file-based need file, server need running
           const connectable = containers.filter((c) => {
+            if (isRemoteContainer(c)) return true
             if (isFileBasedEngine(c.engine)) {
               return existsSync(c.database)
             }
@@ -131,31 +137,61 @@ export const connectCommand = new Command('connect')
         const database =
           options.database ?? config.database ?? engineDefaults.superuser
 
-        // File-based engines: check file exists instead of running status
-        if (isFileBasedEngine(engineName)) {
-          if (!existsSync(config.database)) {
-            console.error(
-              uiError(`Database file not found: ${config.database}`),
-            )
-            process.exit(1)
-          }
-        } else {
-          // Server databases need to be running
-          const running = await processManager.isRunning(containerName, {
-            engine: engineName,
-          })
-          if (!running) {
-            console.error(
-              uiError(
-                `Container "${containerName}" is not running. Start it first.`,
-              ),
-            )
-            process.exit(1)
+        // Remote containers: skip running check, use stored connection string
+        const isRemote = isRemoteContainer(config)
+
+        if (!isRemote) {
+          // File-based engines: check file exists instead of running status
+          if (isFileBasedEngine(engineName)) {
+            if (!existsSync(config.database)) {
+              console.error(
+                uiError(`Database file not found: ${config.database}`),
+              )
+              process.exit(1)
+            }
+          } else {
+            // Server databases need to be running
+            const running = await processManager.isRunning(containerName, {
+              engine: engineName,
+            })
+            if (!running) {
+              console.error(
+                uiError(
+                  `Container "${containerName}" is not running. Start it first.`,
+                ),
+              )
+              process.exit(1)
+            }
           }
         }
 
         const engine = getEngine(engineName)
-        const connectionString = engine.getConnectionString(config, database)
+
+        // For remote containers, retrieve the full connection string from credentials
+        let connectionString: string
+        if (isRemote) {
+          const creds = await loadCredentials(
+            containerName,
+            config.engine,
+            'remote',
+          )
+          if (creds) {
+            connectionString = creds.connectionString
+          } else {
+            // Fallback: use the redacted URL from config (password will be ***)
+            connectionString = config.remote?.connectionString ?? ''
+            if (!connectionString) {
+              console.error(
+                uiError(
+                  'No connection string found for this linked container. Re-link with: spindb link <url>',
+                ),
+              )
+              process.exit(1)
+            }
+          }
+        } else {
+          connectionString = engine.getConnectionString(config, database)
+        }
 
         const useUsql = options.tui || options.installTui
         if (useUsql) {
@@ -558,6 +594,24 @@ export const connectCommand = new Command('connect')
         console.log(uiInfo(`Connecting to ${containerName}:${database}...`))
         console.log()
 
+        // For remote containers, parse host/port/password/username from the connection string
+        // so native clients (redis-cli, mysql, etc.) connect to the remote host
+        const remoteHost = isRemote
+          ? (config.remote?.host ?? '127.0.0.1')
+          : '127.0.0.1'
+        const remotePort = isRemote ? config.port || 0 : config.port
+        let remotePassword = ''
+        let remoteUsername = ''
+        if (isRemote) {
+          try {
+            const parsed = parseConnectionString(connectionString)
+            remotePassword = parsed.password
+            remoteUsername = parsed.username
+          } catch {
+            // If parsing fails, continue without password/username args
+          }
+        }
+
         let clientCmd: string
         let clientArgs: string[]
 
@@ -568,26 +622,34 @@ export const connectCommand = new Command('connect')
           clientCmd = 'iredis'
           clientArgs = [
             '-h',
-            '127.0.0.1',
+            remoteHost,
             '-p',
-            String(config.port),
+            String(remotePort),
             '-n',
             database,
           ]
+          if (isRemote && remotePassword) {
+            clientArgs.push('-a', remotePassword)
+          }
         } else if (usePgcli) {
           clientCmd = 'pgcli'
           clientArgs = [connectionString]
         } else if (useMycli) {
           clientCmd = 'mycli'
-          clientArgs = [
-            '-h',
-            '127.0.0.1',
-            '-P',
-            String(config.port),
-            '-u',
-            engineDefaults.superuser,
-            database,
-          ]
+          if (isRemote) {
+            // mycli supports connection strings
+            clientArgs = [connectionString]
+          } else {
+            clientArgs = [
+              '-h',
+              '127.0.0.1',
+              '-P',
+              String(config.port),
+              '-u',
+              engineDefaults.superuser,
+              database,
+            ]
+          }
         } else if (useUsql) {
           clientCmd = 'usql'
           clientArgs = [connectionString]
@@ -598,23 +660,41 @@ export const connectCommand = new Command('connect')
           clientCmd = 'redis-cli'
           clientArgs = [
             '-h',
-            '127.0.0.1',
+            remoteHost,
             '-p',
-            String(config.port),
+            String(remotePort),
             '-n',
             database,
           ]
+          if (isRemote && remotePassword) {
+            clientArgs.push('-a', remotePassword)
+          }
         } else if (engineName === 'mysql') {
           clientCmd = 'mysql'
-          clientArgs = [
-            '-h',
-            '127.0.0.1',
-            '-P',
-            String(config.port),
-            '-u',
-            engineDefaults.superuser,
-            database,
-          ]
+          if (isRemote) {
+            clientArgs = [
+              '-h',
+              remoteHost,
+              '-P',
+              String(remotePort),
+              '-u',
+              remoteUsername || engineDefaults.superuser,
+              database,
+            ]
+            if (remotePassword) {
+              clientArgs.push(`-p${remotePassword}`)
+            }
+          } else {
+            clientArgs = [
+              '-h',
+              '127.0.0.1',
+              '-P',
+              String(config.port),
+              '-u',
+              engineDefaults.superuser,
+              database,
+            ]
+          }
         } else {
           clientCmd = 'psql'
           clientArgs = [connectionString]
@@ -631,7 +711,11 @@ export const connectCommand = new Command('connect')
             console.log(
               chalk.gray('  Install client tools or connect manually:'),
             )
-            console.log(chalk.cyan(`  ${connectionString}`))
+            console.log(
+              chalk.cyan(
+                `  ${isRemote ? redactConnectionString(connectionString) : connectionString}`,
+              ),
+            )
             console.log()
 
             if (clientCmd === 'usql') {

@@ -1,6 +1,8 @@
 import { Command } from 'commander'
+import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { exitWithError, isInteractiveMode } from '../../core/error-handler'
+import { isRemoteContainer } from '../../types'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
@@ -80,6 +82,37 @@ export const deleteCommand = new Command('delete')
             console.log(uiWarning('Deletion cancelled'))
             return
           }
+        }
+
+        // Remote containers: skip process checks, just remove local metadata
+        if (isRemoteContainer(config)) {
+          const deleteSpinner = options.json
+            ? null
+            : createSpinner(`Removing linked container "${containerName}"...`)
+          deleteSpinner?.start()
+
+          await containerManager.delete(containerName, { force: true })
+
+          deleteSpinner?.succeed(`Linked container "${containerName}" removed`)
+
+          if (options.json) {
+            const metadata = await getEngineMetadata(config.engine)
+            console.log(
+              JSON.stringify({
+                success: true,
+                deleted: containerName,
+                container: containerName,
+                engine: config.engine,
+                remote: true,
+                message:
+                  'Local metadata removed. The remote database is not affected.',
+                ...metadata,
+              }),
+            )
+          } else {
+            console.log(chalk.gray('  The remote database is not affected.'))
+          }
+          return
         }
 
         const running = await processManager.isRunning(containerName, {

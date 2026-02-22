@@ -87,6 +87,7 @@ spindb/
 │   ├── error-handler.ts        # SpinDBError class
 │   ├── platform-service.ts     # Platform abstractions
 │   ├── backup-restore.ts       # Backup/restore orchestration
+│   ├── remote-container.ts     # Remote database linking utilities
 │   ├── hostdb-client.ts        # Shared hostdb fetch/caching
 │   ├── homebrew-version-manager.ts  # Homebrew version detection
 │   ├── update-manager.ts       # Update checking
