@@ -98,7 +98,7 @@ export const linkCommand = new Command('link')
         // Extract connection details
         const host = parsed.host
         const port = parsed.port ?? getDefaultPortForEngine(engine)
-        const database = options.database ?? parsed.database ?? 'default'
+        const database = options.database || parsed.database || 'default'
 
         // Detect provider
         const provider = options.provider ?? detectProvider(host)

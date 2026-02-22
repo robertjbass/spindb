@@ -161,20 +161,20 @@ export const stopCommand = new Command('stop')
           if (options.json) {
             console.log(
               JSON.stringify({
-                success: true,
+                success: false,
                 name: containerName,
                 status: 'linked',
-                message: `"${containerName}" is a linked remote database — managed externally.`,
+                error: `"${containerName}" is a linked remote database — managed externally.`,
               }),
             )
           } else {
-            console.log(
-              uiWarning(
+            console.error(
+              uiError(
                 `"${containerName}" is a linked remote database — managed externally.`,
               ),
             )
           }
-          return
+          process.exit(1)
         }
 
         const running = await processManager.isRunning(containerName, {

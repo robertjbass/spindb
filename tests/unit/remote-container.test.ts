@@ -645,10 +645,10 @@ describe('remote-container', () => {
       )
     })
 
-    it('should return 3001 for TigerBeetle', () => {
+    it('should return 3000 for TigerBeetle', () => {
       assertEqual(
         getDefaultPortForEngine(Engine.TigerBeetle),
-        3001,
+        3000,
         'TigerBeetle default port',
       )
     })

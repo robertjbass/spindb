@@ -84,8 +84,8 @@ export const startCommand = new Command('start')
             )
           } else {
             console.log(
-              chalk.yellow(
-                `  "${containerName}" is a linked remote database — managed externally.`,
+              uiWarning(
+                `"${containerName}" is a linked remote database — managed externally.`,
               ),
             )
           }

@@ -279,7 +279,7 @@ export function getDefaultPortForEngine(engine: Engine): number {
     case Engine.TypeDB:
       return 1729
     case Engine.TigerBeetle:
-      return 3001
+      return 3000
     case Engine.SQLite:
     case Engine.DuckDB:
       return 0

@@ -55,7 +55,13 @@ export const urlCommand = new Command('url')
 
         const config = await containerManager.getConfig(containerName)
         if (!config) {
-          console.error(uiError(`Container "${containerName}" not found`))
+          if (options.json) {
+            console.log(
+              JSON.stringify({ error: `Container "${containerName}" not found` }),
+            )
+          } else {
+            console.error(uiError(`Container "${containerName}" not found`))
+          }
           process.exit(1)
         }
 
@@ -136,7 +142,11 @@ export const urlCommand = new Command('url')
         }
       } catch (error) {
         const e = error as Error
-        console.error(uiError(e.message))
+        if (options.json) {
+          console.log(JSON.stringify({ error: e.message }))
+        } else {
+          console.error(uiError(e.message))
+        }
         process.exit(1)
       }
     },

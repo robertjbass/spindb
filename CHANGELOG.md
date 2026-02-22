@@ -18,10 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New `core/remote-container.ts`** — Connection string parsing, engine/provider auto-detection, name generation, redaction, and remote config builder utilities.
 
 ### Changed
-- **Graceful rejection for unsupported operations** — `start`, `stop`, `clone`, `logs`, `restore`, `export`, `backup`, `query`, `run` show clear messages for linked containers instead of errors.
+- **Graceful rejection for unsupported operations** — `start`, `stop`, `clone`, `logs`, `restore`, `export`, `backup`, `query`, `run` show clear messages for linked containers instead of errors. `stop` exits non-zero for linked containers.
 - **Container manager** — `list()` preserves `'linked'` status without process checks. `delete()` removes only local metadata for remote containers. `syncDatabases()` returns stored databases for remote containers.
 - **Menu reordering** — "Ports" moved below "Link remote database" in the main menu. Ports only shown when containers exist.
 - **Separated `tsc` type checking** — New `pnpm check` script for `tsc --noEmit`, `pnpm lint` now runs ESLint then type checking.
+
+### Fixed
+- **TigerBeetle default port** — `getDefaultPortForEngine` returned 3001 instead of 3000 (matching `engines.json`).
+- **Redis/Valkey remote database index** — Remote iredis, redis-cli, and valkey-cli connections now pass `-n database` flag.
+- **Empty database from Redis URLs** — `redis://host:6379` no longer resolves to empty string; falls back to `'default'`.
+- **`spindb url --json` error handling** — Container-not-found and catch errors now honor `--json` flag.
+- **Clone source list** — Linked containers no longer appear in the interactive clone source picker.
 
 ## [0.38.1] - 2026-02-21
 

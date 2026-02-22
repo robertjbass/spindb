@@ -1584,6 +1584,7 @@ async function launchShell(
     if (isRemote) {
       shellArgs = ['-h', rHost, '-p', String(rPort)]
       if (rPass) shellArgs.push('-a', rPass)
+      if (database) shellArgs.push('-n', database)
     } else {
       shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
     }
@@ -1594,6 +1595,7 @@ async function launchShell(
     if (isRemote) {
       shellArgs = ['-h', rHost, '-p', String(rPort)]
       if (rPass) shellArgs.push('-a', rPass)
+      if (database) shellArgs.push('-n', database)
     } else {
       shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
     }
@@ -1605,6 +1607,7 @@ async function launchShell(
     if (isRemote) {
       shellArgs = ['-h', rHost, '-p', String(rPort)]
       if (rPass) shellArgs.push('-a', rPass)
+      if (database) shellArgs.push('-n', database)
     } else {
       shellArgs = ['-h', '127.0.0.1', '-p', String(config.port), '-n', database]
     }

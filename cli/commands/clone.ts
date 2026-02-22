@@ -33,7 +33,9 @@ export const cloneCommand = new Command('clone')
           }
 
           const containers = await containerManager.list()
-          const stopped = containers.filter((c) => c.status !== 'running')
+          const stopped = containers.filter(
+            (c) => c.status !== 'running' && c.status !== 'linked',
+          )
 
           if (containers.length === 0) {
             console.log(

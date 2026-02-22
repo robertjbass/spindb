@@ -1015,10 +1015,6 @@ export async function showContainerSubmenu(
         await handleCopyConnectionString(containerName, activeDatabase)
         await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
         return
-      case 'backup':
-        await handleBackupForContainer(containerName, activeDatabase)
-        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
-        return
       case 'delete':
         await handleDelete(containerName)
         return
