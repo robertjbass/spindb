@@ -1703,9 +1703,10 @@ export class FerretDBEngine extends BaseEngine {
           : ''
         const auth = user ? `${user}:${pass}@` : ''
         const host = options.host
-        const scheme = options.ssl ? 'mongodb+srv' : 'mongodb'
-        const portSuffix = options.ssl ? '' : `:${port}`
-        const sslParam = options.ssl ? 'tls=true' : ''
+        const isSrv = options.scheme === 'mongodb+srv'
+        const scheme = isSrv ? 'mongodb+srv' : 'mongodb'
+        const portSuffix = isSrv ? '' : `:${port}`
+        const sslParam = options.ssl && !isSrv ? 'tls=true' : ''
         const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
         args = [uri, '--quiet', '--eval', script]
       } else {

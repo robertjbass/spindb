@@ -1479,19 +1479,31 @@ export class RedisEngine extends BaseEngine {
     const host = options?.host ?? '127.0.0.1'
 
     const redisCli = await this.getRedisCliPathForVersion(version)
+    const binBaseDir = this.getBinaryPath(version)
+    const libraryEnv = getLibraryEnv(binBaseDir)
 
     return new Promise((resolve, reject) => {
       const args = ['-h', host, '-p', String(port), '-n', db, '--raw']
 
-      if (options?.password) {
-        args.push('-a', options.password)
+      if (options?.username) {
+        args.push('--user', options.username)
       }
       if (options?.ssl) {
         args.push('--tls')
       }
 
+      // Pass password via REDISCLI_AUTH env to avoid exposing it in process listings
+      const env: Record<string, string | undefined> = {
+        ...process.env,
+        ...libraryEnv,
+      }
+      if (options?.password) {
+        env.REDISCLI_AUTH = options.password
+      }
+
       const proc = spawn(redisCli, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       })
 
       let stdout = ''
@@ -1510,7 +1522,8 @@ export class RedisEngine extends BaseEngine {
         if (code === 0 || code === null) {
           resolve(parseRedisResult(stdout, query))
         } else {
-          reject(new Error(stderr || `redis-cli exited with code ${code}`))
+          const libError = detectLibraryError(stderr, 'Redis')
+          reject(new Error(libError || stderr || `redis-cli exited with code ${code}`))
         }
       })
 

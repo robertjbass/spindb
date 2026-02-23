@@ -252,6 +252,7 @@ export type QueryOptions = {
   password?: string // For remote containers
   username?: string // For remote containers
   ssl?: boolean // For remote containers
+  scheme?: string // For remote containers (preserves original URI scheme, e.g. 'mongodb+srv')
 }
 
 // User management types

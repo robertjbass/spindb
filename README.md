@@ -291,7 +291,7 @@ See [DEPLOY.md](DEPLOY.md) for comprehensive deployment documentation.
 
 ## Limitations
 
-- **Local by default** - Databases bind to `127.0.0.1`. Use `spindb link` to connect to remote databases (supports `connect`, `query`, `url`, `info`).
+- **Local by default** - Databases bind to `127.0.0.1`. Use `spindb link` to connect to remote databases (supports `connect`, `query`, `url`, `info`, `list`, `delete`).
 - **ClickHouse Windows** - Not supported (hostdb doesn't build for Windows).
 - **FerretDB Windows** - v1 supported natively (plain PostgreSQL backend). v2 not supported (postgresql-documentdb has startup issues); use WSL for v2.
 - **Qdrant, Meilisearch, CouchDB, Weaviate** - Use REST API instead of CLI shell. Access via HTTP at the configured port.

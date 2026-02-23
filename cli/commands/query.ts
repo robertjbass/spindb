@@ -131,6 +131,7 @@ export const queryCommand = new Command('query')
             password: parsed.password,
             username: parsed.username,
             ssl: config.remote?.ssl,
+            scheme: parsed.scheme,
           }
           // Override port if the connection string specifies one
           if (parsed.port) {
