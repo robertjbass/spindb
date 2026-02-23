@@ -870,16 +870,15 @@ export class MariaDBEngine extends BaseEngine {
       parseConnectionString(connectionString)
 
     if (isWindows()) {
-      let cmd = `"${dumpPath}" -h ${host} -P ${port} -u ${user} --result-file "${outputPath}" ${database}`
-      let safeCmd = cmd
+      const cmd = `"${dumpPath}" -h ${host} -P ${port} -u ${user} --result-file "${outputPath}" ${database}`
+      const execOptions: { env?: Record<string, string | undefined> } = {}
 
       if (password) {
-        cmd = `"${dumpPath}" -h ${host} -P ${port} -u ${user} -p"${password}" --result-file "${outputPath}" ${database}`
-        safeCmd = `"${dumpPath}" -h ${host} -P ${port} -u ${user} -p"****" --result-file "${outputPath}" ${database}`
+        execOptions.env = { ...process.env, MYSQL_PWD: password }
       }
       try {
-        logDebug('Executing mariadb-dump command', { cmd: safeCmd })
-        await execAsync(cmd)
+        logDebug('Executing mariadb-dump command', { cmd })
+        await execAsync(cmd, execOptions)
         return {
           filePath: outputPath,
           stdout: '',
@@ -900,17 +899,15 @@ export class MariaDBEngine extends BaseEngine {
       user,
       '--result-file',
       outputPath,
+      database,
     ]
-
-    if (password) {
-      args.push(`-p${password}`)
-    }
-
-    args.push(database)
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
       ...getWindowsSpawnOptions(),
+      env: password
+        ? { ...process.env, MYSQL_PWD: password }
+        : process.env,
     }
 
     return new Promise((resolve, reject) => {
