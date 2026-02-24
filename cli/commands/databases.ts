@@ -1161,6 +1161,15 @@ databasesCommand
           }
         } else {
           // Backup/restore rename path
+          if (!options.json) {
+            console.log(
+              `\n${engine.displayName} does not support native database renaming.`,
+            )
+            console.log(
+              `Cloning "${oldName}" to "${newName}" in "${containerName}" via backup/restore...\n`,
+            )
+          }
+
           await mkdir(paths.renameBackups, { recursive: true })
 
           const format = getDefaultFormat(config.engine)
@@ -1173,12 +1182,6 @@ databasesCommand
           const backupPath = join(paths.renameBackups, backupFileName)
 
           let backupSize = 0
-
-          if (!options.json) {
-            console.log(
-              `\nRenaming database "${oldName}" to "${newName}" in "${containerName}"...\n`,
-            )
-          }
 
           // Step 1: Backup old database
           if (!options.json) {

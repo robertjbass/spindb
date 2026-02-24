@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Interactive menu integration** — Container submenu shows "Create database", "Rename database", and "Drop database" options when the engine supports them, with running-state guards and server-side duplicate detection.
 - **Shared rename tracking** — `updateRenameTracking()` in `core/container-manager.ts` centralizes the add-new/remove-old/update-primary logic used by CLI commands and menu handlers.
 
+### Improved
+- **Rename explains strategy** — Backup/restore renames now tell the user why cloning is needed (e.g., "MariaDB does not support native database renaming") and offer to keep the original after cloning.
+- **Escape key in database operations** — Pressing Escape during create/rename/drop prompts returns to the container submenu instead of jumping to the main menu. Mid-operation Escape (e.g., on "Delete the original?") is treated as cancel/no, completing the operation safely.
+- **Post-operation summaries** — Create, rename, and drop handlers now show consistent success messages with connection strings and backup paths matching the existing backup handler pattern.
+- **Drop excludes primary with explanation** — The drop database list notes that the primary is excluded and suggests `spindb delete` for full removal.
+
 ## [0.40.1] - 2026-02-22
 
 ### Fixed
