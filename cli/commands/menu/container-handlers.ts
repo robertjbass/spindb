@@ -11,7 +11,10 @@ import {
 import { stat, mkdir, rm } from 'fs/promises'
 import { dirname, basename, join, resolve } from 'path'
 import { homedir } from 'os'
-import { containerManager } from '../../../core/container-manager'
+import {
+  containerManager,
+  updateRenameTracking,
+} from '../../../core/container-manager'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
@@ -81,7 +84,10 @@ import {
   dockerExportExists,
   getDockerConnectionString,
 } from '../../../core/docker-exporter'
-import { getDefaultFormat } from '../../../config/backup-formats'
+import {
+  getDefaultFormat,
+  getBackupExtension,
+} from '../../../config/backup-formats'
 import {
   parseConnectionString,
   detectEngineFromConnectionString,
@@ -93,6 +99,12 @@ import {
   getDefaultPortForEngine,
 } from '../../../core/remote-container'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../../../types'
+import {
+  canCreateDatabase,
+  canDropDatabase,
+  canRenameDatabase,
+  getDatabaseCapabilities,
+} from '../../../core/database-capabilities'
 import { type MenuChoice, pressEnterToContinue } from './shared'
 import { getEngineIcon } from '../../constants'
 
@@ -1156,6 +1168,42 @@ export async function showContainerSubmenu(
     )
   }
 
+  // Create database - only for engines that support it, requires running
+  if (canCreateDatabase(config.engine)) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.green('+')} Create database`,
+            value: 'create_database',
+          }
+        : disabledItem('+', 'Create database'),
+    )
+  }
+
+  // Rename database - only when engine supports it AND container has databases
+  if (canRenameDatabase(config.engine) && databases.length > 0) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.yellow('⇄')} Rename database`,
+            value: 'rename_database',
+          }
+        : disabledItem('⇄', 'Rename database'),
+    )
+  }
+
+  // Drop database - only when engine supports it AND has >1 database (can't drop primary)
+  if (canDropDatabase(config.engine) && databases.length > 1) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.red('−')} Drop database`,
+            value: 'drop_database',
+          }
+        : disabledItem('−', 'Drop database'),
+    )
+  }
+
   // Backup - requires database selection for multi-db containers
   actionChoices.push(
     canDoDbAction
@@ -1328,6 +1376,18 @@ export async function showContainerSubmenu(
       return
     case 'create_user':
       await handleCreateUser(containerName, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      return
+    case 'create_database':
+      await handleCreateDatabase(containerName)
+      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      return
+    case 'rename_database':
+      await handleRenameDatabase(containerName)
+      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      return
+    case 'drop_database':
+      await handleDropDatabase(containerName)
       await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
       return
     case 'backup':
@@ -2568,6 +2628,359 @@ async function handleCreateUser(
     } else {
       console.log(uiError((error as Error).message))
     }
+  }
+
+  await pressEnterToContinue()
+}
+
+async function handleCreateDatabase(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  if (config.status !== 'running') {
+    console.log(
+      uiError(
+        `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  try {
+    const { dbName } = await escapeablePrompt<{ dbName: string }>([
+      {
+        type: 'input',
+        name: 'dbName',
+        message: 'New database name:',
+        validate: (input: string) => {
+          if (!input.trim()) return 'Database name is required'
+          if (/\s/.test(input)) return 'Database name cannot contain spaces'
+          return true
+        },
+      },
+    ])
+
+    // Check if already exists
+    const rawDatabases = config.databases || []
+    const trackedDatabases = [...new Set([config.database, ...rawDatabases])]
+    if (trackedDatabases.includes(dbName)) {
+      console.log(
+        uiError(`Database "${dbName}" already exists in "${containerName}"`),
+      )
+      await pressEnterToContinue()
+      return
+    }
+
+    const engine = getEngine(config.engine)
+
+    // Check if database exists on the server (not just tracking)
+    try {
+      const serverDatabases = await engine.listDatabases(config)
+      if (serverDatabases.includes(dbName)) {
+        console.log(
+          uiError(
+            `Database "${dbName}" already exists on the server. Use "spindb databases add ${containerName} ${dbName}" to track it.`,
+          ),
+        )
+        await pressEnterToContinue()
+        return
+      }
+    } catch {
+      // listDatabases not supported for all engines — proceed
+    }
+
+    const spinner = createSpinner(
+      `Creating database "${dbName}" in "${containerName}"...`,
+    )
+    spinner.start()
+
+    try {
+      await engine.createDatabase(config, dbName)
+      spinner.succeed(`Created database "${dbName}" in "${containerName}"`)
+    } catch (error) {
+      spinner.fail(`Failed to create database "${dbName}"`)
+      throw error
+    }
+
+    await containerManager.addDatabase(containerName, dbName)
+
+    const connectionString = engine.getConnectionString(config, dbName)
+    console.log(chalk.gray(`  Connection: ${chalk.white(connectionString)}`))
+  } catch (error) {
+    console.log(uiError((error as Error).message))
+  }
+
+  await pressEnterToContinue()
+}
+
+async function handleRenameDatabase(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  if (config.status !== 'running') {
+    console.log(
+      uiError(
+        `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  try {
+    const rawDatabases = config.databases || []
+    const trackedDatabases = [...new Set([config.database, ...rawDatabases])]
+
+    if (trackedDatabases.length === 0) {
+      console.log(uiError(`No databases to rename in "${containerName}"`))
+      await pressEnterToContinue()
+      return
+    }
+
+    // Select database to rename
+    const { oldName } = await escapeablePrompt<{ oldName: string }>([
+      {
+        type: 'list',
+        name: 'oldName',
+        message: 'Select database to rename:',
+        choices: trackedDatabases.map((db) => {
+          const isPrimary = db === config.database
+          return {
+            name: isPrimary ? `${db} (primary)` : db,
+            value: db,
+          }
+        }),
+      },
+    ])
+
+    // Enter new name
+    const { newName } = await escapeablePrompt<{ newName: string }>([
+      {
+        type: 'input',
+        name: 'newName',
+        message: `New name for "${oldName}":`,
+        validate: (input: string) => {
+          if (!input.trim()) return 'Database name is required'
+          if (/\s/.test(input)) return 'Database name cannot contain spaces'
+          if (input === oldName) return 'New name must be different'
+          if (trackedDatabases.includes(input))
+            return `"${input}" already exists`
+          return true
+        },
+      },
+    ])
+
+    const isPrimaryRename = oldName === config.database
+    if (isPrimaryRename) {
+      console.log(
+        uiWarning(
+          `This will rename the primary database. The primary will be updated to "${newName}".`,
+        ),
+      )
+    }
+
+    const caps = getDatabaseCapabilities(config.engine)
+    const engine = getEngine(config.engine)
+
+    if (caps.supportsRename === 'native') {
+      // Native rename
+      const spinner = createSpinner(`Renaming "${oldName}" to "${newName}"...`)
+      spinner.start()
+      try {
+        await engine.renameDatabase(config, oldName, newName)
+        spinner.succeed(`Renamed "${oldName}" to "${newName}"`)
+      } catch (error) {
+        spinner.fail(`Failed to rename database`)
+        throw error
+      }
+    } else {
+      // Backup/restore rename
+      await mkdir(paths.renameBackups, { recursive: true })
+
+      const format = getDefaultFormat(config.engine)
+      const extension = getBackupExtension(config.engine, format)
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, '')
+        .slice(0, 15)
+      const backupFileName = `${containerName}-${oldName}-rename-${timestamp}${extension}`
+      const backupPath = join(paths.renameBackups, backupFileName)
+
+      console.log(
+        `\nRenaming database "${oldName}" to "${newName}" via backup/restore...\n`,
+      )
+
+      // Step 1: Backup
+      const backupSpinner = createSpinner(`Backing up "${oldName}"...`)
+      backupSpinner.start()
+      try {
+        await engine.backup(config, backupPath, {
+          database: oldName,
+          format,
+        })
+        backupSpinner.succeed(`Backed up "${oldName}"`)
+      } catch (error) {
+        backupSpinner.fail(`Failed to backup "${oldName}"`)
+        throw error
+      }
+
+      // Step 2: Create new database
+      const createSpinnerInstance = createSpinner(
+        `Creating database "${newName}"...`,
+      )
+      createSpinnerInstance.start()
+      try {
+        await engine.createDatabase(config, newName)
+        createSpinnerInstance.succeed(`Created database "${newName}"`)
+      } catch (error) {
+        createSpinnerInstance.fail(`Failed to create database "${newName}"`)
+        throw error
+      }
+
+      // Step 3: Restore
+      const restoreSpinner = createSpinner(`Restoring data to "${newName}"...`)
+      restoreSpinner.start()
+      try {
+        await engine.restore({ ...config, database: newName }, backupPath, {
+          database: newName,
+        })
+        restoreSpinner.succeed(`Restored data to "${newName}"`)
+      } catch (error) {
+        restoreSpinner.fail(`Failed to restore data to "${newName}"`)
+        // Rollback: drop new DB, keep backup
+        try {
+          await engine.dropDatabase(config, newName)
+        } catch {
+          // Best-effort cleanup
+        }
+        console.log(uiWarning(`Safety backup retained at: ${backupPath}`))
+        throw error
+      }
+
+      // Step 4: Drop old database
+      const dropSpinner = createSpinner(`Dropping old database "${oldName}"...`)
+      dropSpinner.start()
+      try {
+        await engine.terminateConnections(config, oldName)
+        await engine.dropDatabase(config, oldName)
+        dropSpinner.succeed(`Dropped old database "${oldName}"`)
+      } catch (error) {
+        dropSpinner.warn(
+          `Could not drop "${oldName}": ${(error as Error).message}`,
+        )
+        // Non-fatal — data is safely in new database
+      }
+
+      console.log(chalk.gray(`  Safety backup: ${backupPath}`))
+    }
+
+    // Update tracking
+    await updateRenameTracking(containerName, oldName, newName, {
+      shouldDrop: true,
+      isPrimaryRename,
+    })
+
+    const connectionString = engine.getConnectionString(
+      { ...config, database: newName },
+      newName,
+    )
+    console.log(chalk.gray(`  Connection: ${chalk.white(connectionString)}`))
+    if (isPrimaryRename) {
+      console.log(
+        chalk.gray(
+          `  Note: The primary database has been changed to "${newName}".`,
+        ),
+      )
+    }
+  } catch (error) {
+    console.log(uiError((error as Error).message))
+  }
+
+  await pressEnterToContinue()
+}
+
+async function handleDropDatabase(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  if (config.status !== 'running') {
+    console.log(
+      uiError(
+        `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  try {
+    const rawDatabases = config.databases || []
+    const trackedDatabases = [...new Set([config.database, ...rawDatabases])]
+    const droppable = trackedDatabases.filter((db) => db !== config.database)
+
+    if (droppable.length === 0) {
+      console.log(
+        uiError(
+          `No databases to drop. The primary database cannot be dropped.`,
+        ),
+      )
+      await pressEnterToContinue()
+      return
+    }
+
+    // Select database to drop
+    const { dbName } = await escapeablePrompt<{ dbName: string }>([
+      {
+        type: 'list',
+        name: 'dbName',
+        message: 'Select database to drop:',
+        choices: droppable.map((db) => ({ name: db, value: db })),
+      },
+    ])
+
+    // Confirm
+    const confirm = await promptConfirm(
+      `Drop database "${dbName}" from ${config.engine} container "${containerName}"? This cannot be undone.`,
+      false,
+    )
+    if (!confirm) {
+      console.log(chalk.gray('Cancelled.'))
+      await pressEnterToContinue()
+      return
+    }
+
+    const engine = getEngine(config.engine)
+
+    const spinner = createSpinner(
+      `Dropping database "${dbName}" from "${containerName}"...`,
+    )
+    spinner.start()
+
+    try {
+      await engine.terminateConnections(config, dbName)
+      await engine.dropDatabase(config, dbName)
+      spinner.succeed(`Dropped database "${dbName}" from "${containerName}"`)
+    } catch (error) {
+      spinner.fail(`Failed to drop database "${dbName}"`)
+      throw error
+    }
+
+    await containerManager.removeDatabase(containerName, dbName)
+  } catch (error) {
+    console.log(uiError((error as Error).message))
   }
 
   await pressEnterToContinue()

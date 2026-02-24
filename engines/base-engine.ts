@@ -208,6 +208,19 @@ export abstract class BaseEngine {
     database: string,
   ): Promise<void>
 
+  /**
+   * Rename a database within the container.
+   * Only engines with native rename support should override this (ClickHouse, CockroachDB).
+   * Other engines use backup/restore strategy handled at the CLI layer.
+   */
+  async renameDatabase(
+    _container: ContainerConfig,
+    _oldName: string,
+    _newName: string,
+  ): Promise<void> {
+    throw new UnsupportedOperationError('renameDatabase', this.displayName)
+  }
+
   // Check if binaries are installed
   abstract isBinaryInstalled(version: string): Promise<boolean>
 

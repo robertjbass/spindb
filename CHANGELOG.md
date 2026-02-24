@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-02-24
+
+### Added
+- **Database create/rename/drop commands** — `spindb databases create`, `spindb databases rename`, and `spindb databases drop` perform real database operations on running containers. Supports 14 of 20 engines with full `--json` output for scripting.
+- **Rename strategies** — Native `ALTER DATABASE`/`RENAME DATABASE` for ClickHouse and CockroachDB. All other engines use a safe backup → create → restore → drop sequence with safety backups retained at `~/.spindb/backups/rename/`. Includes `--backup` flag to force backup strategy and `--no-drop` to keep the old database after copying.
+- **Database capabilities system** — `core/database-capabilities.ts` provides a static capability map for all 20 engines with per-engine unsupported messages. Unsupported engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) show clear error messages with alternative instructions.
+- **Interactive menu integration** — Container submenu shows "Create database", "Rename database", and "Drop database" options when the engine supports them, with running-state guards and server-side duplicate detection.
+- **Shared rename tracking** — `updateRenameTracking()` in `core/container-manager.ts` centralizes the add-new/remove-old/update-primary logic used by CLI commands and menu handlers.
+
 ## [0.40.1] - 2026-02-22
 
 ### Fixed

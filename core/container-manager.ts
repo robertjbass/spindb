@@ -801,3 +801,35 @@ export class ContainerManager {
 }
 
 export const containerManager = new ContainerManager()
+
+/**
+ * Update tracking after a database rename.
+ * Shared by CLI commands and interactive menu handlers.
+ */
+export async function updateRenameTracking(
+  containerName: string,
+  oldName: string,
+  newName: string,
+  options: { shouldDrop: boolean; isPrimaryRename: boolean },
+): Promise<void> {
+  const { shouldDrop, isPrimaryRename } = options
+
+  await containerManager.addDatabase(containerName, newName)
+
+  if (
+    shouldDrop &&
+    oldName !== (await containerManager.getConfig(containerName))?.database
+  ) {
+    await containerManager.removeDatabase(containerName, oldName)
+  }
+
+  if (isPrimaryRename) {
+    await containerManager.updateConfig(containerName, { database: newName })
+    if (shouldDrop) {
+      const updatedConfig = await containerManager.getConfig(containerName)
+      if (updatedConfig?.databases?.includes(oldName)) {
+        await containerManager.removeDatabase(containerName, oldName)
+      }
+    }
+  }
+}

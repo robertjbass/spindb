@@ -157,6 +157,11 @@ spindb backup mydb
 spindb restore mydb backup.dump
 spindb clone mydb mydb-copy
 spindb delete mydb -f
+
+# Database management within containers
+spindb databases create mydb analytics          # Create a new database
+spindb databases rename mydb old_name new_name  # Rename (backup/restore or native)
+spindb databases drop mydb analytics --force    # Drop a database
 ```
 
 Every engine works the same way. Learn one, use them all.

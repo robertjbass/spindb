@@ -210,3 +210,22 @@ Platform commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 - **Platforms**: macOS ARM/x64, Linux ARM/x64, Windows x64 (tar.gz archives)
 - **Version**: 0.34.2 (pinned)
 - **CLI flags**: `spindb connect --dblab` or `spindb connect --install-dblab`
+
+## Database Create/Rename/Drop Support
+
+### Engines with native rename
+- **ClickHouse**: Uses `RENAME DATABASE "old" TO "new"` (atomic, instant)
+- **CockroachDB**: Uses `ALTER DATABASE "old" RENAME TO "new"` (atomic, instant)
+
+### Engines using backup/restore rename strategy
+PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, SurrealDB, TypeDB, InfluxDB, CouchDB,
+Qdrant, Meilisearch, Weaviate — rename creates a safety backup at
+`~/.spindb/backups/rename/{container}-{db}-rename-{timestamp}.{ext}`, creates the new
+database, restores data, then drops the old one. If the drop fails, the data is safe in
+the new database and a warning is shown.
+
+### Engines that don't support database operations
+- **SQLite/DuckDB**: File-based. The file IS the database.
+- **Redis/Valkey**: Fixed numbered databases (0-15).
+- **QuestDB**: Single-database model (`qdb`).
+- **TigerBeetle**: Single ledger per container.

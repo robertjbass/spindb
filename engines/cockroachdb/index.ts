@@ -699,6 +699,54 @@ export class CockroachDBEngine extends BaseEngine {
   }
 
   /**
+   * Rename a database using CockroachDB's native ALTER DATABASE RENAME
+   */
+  async renameDatabase(
+    container: ContainerConfig,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    const { port, version } = container
+
+    validateCockroachIdentifier(oldName, 'database')
+    validateCockroachIdentifier(newName, 'database')
+    const escapedOld = escapeCockroachIdentifier(oldName)
+    const escapedNew = escapeCockroachIdentifier(newName)
+
+    const cockroach = await this.getCockroachPath(version)
+
+    const args = [
+      'sql',
+      '--insecure',
+      '--host',
+      `127.0.0.1:${port}`,
+      '--execute',
+      `ALTER DATABASE ${escapedOld} RENAME TO ${escapedNew}`,
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(cockroach, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          logDebug(`Renamed CockroachDB database: ${oldName} -> ${newName}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to rename database: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+    })
+  }
+
+  /**
    * Get the database size in bytes
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
