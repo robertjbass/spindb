@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-02-24
+
+### Bug Fixes
+- **Native rename tracking** — Fixed bug where native rename (PostgreSQL, ClickHouse, CockroachDB, Meilisearch) never removed the old database name from tracking
+- **Drop success tracking** — Menu rename handler now tracks actual drop outcome instead of user intent, preventing stale tracking entries when drop fails
+- **Null guard after drop** — Added null guard when re-fetching config after database drop in case the container was deleted externally
+- **Orphaned database warning** — Show warning when rollback cleanup fails during rename, so users know manual cleanup may be needed
+- **Reserved database guards** — Block renaming reserved databases: ClickHouse (`default`, `system`), CockroachDB (`defaultdb`, `postgres`, `system`), PostgreSQL (`postgres`, `template0`, `template1`)
+- **Meilisearch async task polling** — Poll task status after rename (202 response) instead of assuming success; log warnings on non-200 poll responses
+- **MongoDB exit code handling** — Unconditionally reject on non-zero mongosh exit code instead of silently succeeding
+
+### Improvements
+- **Non-interactive mode guards** — `databases create`, `drop`, and `rename` now error with usage hints when arguments are missing in non-interactive (piped) mode instead of hanging
+- **`disabledItem()` deduplication** — Extracted duplicated helper from two closures to module scope
+- **CHEATSHEET.md** — Moved `query` to supported operations for remote containers; updated "primary" to "default" terminology
+
 ## [0.42.0] - 2026-02-24
 
 ### Added
