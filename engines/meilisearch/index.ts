@@ -975,9 +975,26 @@ export class MeilisearchEngine extends BaseEngine {
           if (task.status === 'failed' || task.status === 'canceled') {
             throw new Error(`Index rename task failed: ${JSON.stringify(task)}`)
           }
+        } else {
+          logDebug(
+            `Meilisearch task poll returned HTTP ${taskResponse.status}, retrying...`,
+          )
         }
 
         await new Promise((r) => setTimeout(r, checkInterval))
+      }
+
+      // If we exited the loop without breaking (succeeded), it timed out
+      const finalCheck = await meilisearchApiRequest(
+        port,
+        'GET',
+        `/tasks/${taskData.taskUid}`,
+      )
+      const finalTask = finalCheck.data as { status?: string }
+      if (finalTask?.status !== 'succeeded') {
+        throw new Error(
+          `Index rename timed out after ${timeoutMs / 1000}s. Task ${taskData.taskUid} status: ${finalTask?.status ?? 'unknown'}`,
+        )
       }
     }
 

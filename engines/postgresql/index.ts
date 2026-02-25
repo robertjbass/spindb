@@ -760,6 +760,14 @@ export class PostgreSQLEngine extends BaseEngine {
     oldName: string,
     newName: string,
   ): Promise<void> {
+    const systemDatabases = ['postgres', 'template0', 'template1']
+    if (systemDatabases.includes(oldName)) {
+      throw new Error(`Cannot rename system database: ${oldName}`)
+    }
+    if (systemDatabases.includes(newName)) {
+      throw new Error(`Cannot rename to system database name: ${newName}`)
+    }
+
     assertValidDatabaseName(oldName)
     assertValidDatabaseName(newName)
     const { port } = container

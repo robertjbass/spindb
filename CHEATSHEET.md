@@ -137,9 +137,9 @@ spindb delete production-pg
 
 **Auto-detected providers:** Neon, Supabase, PlanetScale, Upstash, Railway, Aiven, CockroachDB Cloud
 
-**Supported operations:** `connect`, `url`, `info`, `list`, `delete` (unlink), `databases`
+**Supported operations:** `connect`, `url`, `info`, `list`, `delete` (unlink), `databases`, `query`
 
-**Not yet supported:** `backup`, `query`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`
+**Not yet supported:** `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`
 
 ## Connection Strings
 
@@ -219,7 +219,7 @@ spindb pull mydb --from-env CLONE_FROM_DATABASE_URL
 # Clone mode: pull to new database, leave original untouched
 spindb pull mydb --from-env PROD_DB_URL --as mydb_prod
 
-# Target specific database (default: container's primary database)
+# Target specific database (default: container's default database)
 spindb pull mydb --from-env PROD_DB_URL -d analytics
 
 # Skip backup (dangerous, requires --force)
@@ -382,7 +382,7 @@ spindb databases list mydb --default    # Show only the default database name
 spindb databases add mydb analytics     # Add database to tracking
 spindb databases remove mydb old_backup # Remove from tracking
 spindb databases sync mydb old new      # Sync after rename (remove old, add new)
-spindb databases set-default mydb prod  # Change the default/primary database
+spindb databases set-default mydb prod  # Change the default database
 spindb databases refresh mydb           # Query server and sync registry
 
 # JSON output for scripting

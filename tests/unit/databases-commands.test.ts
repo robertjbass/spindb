@@ -2,11 +2,9 @@
  * Tests for database create, drop, and rename CLI subcommands.
  *
  * These tests validate:
- * 1. Unsupported engine errors for all 6 blocked engines
- * 2. Missing container errors
- * 3. JSON output format for errors
- * 4. Remote container blocking
- * 5. Missing arguments in JSON mode
+ * 1. Missing container errors
+ * 2. JSON output format for errors
+ * 3. Missing arguments in JSON mode
  */
 
 import { describe, it } from 'node:test'

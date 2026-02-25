@@ -109,6 +109,15 @@ import {
 import { type MenuChoice, pressEnterToContinue } from './shared'
 import { getEngineIcon } from '../../constants'
 
+/** Helper for disabled menu items (hint shown in separator, not on each item) */
+function disabledItem(icon: string, label: string) {
+  return {
+    name: chalk.gray(`${icon} ${label}`),
+    value: '_disabled_',
+    disabled: '', // Empty string hides the "(Disabled)" text
+  }
+}
+
 export async function handleCreate(): Promise<'main' | string | void> {
   console.log()
   console.log(header('Create New Database Container'))
@@ -960,15 +969,6 @@ export async function showContainerSubmenu(
   // Build action choices based on engine type
   const actionChoices: MenuChoice[] = []
 
-  // Helper for disabled menu items (hint shown in separator, not on each item)
-  function disabledItem(icon: string, label: string) {
-    return {
-      name: chalk.gray(`${icon} ${label}`),
-      value: '_disabled_',
-      disabled: '', // Empty string hides the "(Disabled)" text
-    }
-  }
-
   // Remote containers get a simplified action set
   if (isRemote) {
     actionChoices.push(new inquirer.Separator(chalk.gray(`── Linked ──`)))
@@ -1518,14 +1518,6 @@ async function showDatabaseActionMenu(
   console.log()
 
   const actionChoices: MenuChoice[] = []
-
-  function disabledItem(icon: string, label: string) {
-    return {
-      name: chalk.gray(`${icon} ${label}`),
-      value: '_disabled_',
-      disabled: '',
-    }
-  }
 
   // Data operations section
   const dataSectionLabel = containerReady
@@ -3049,6 +3041,7 @@ async function handleRenameDatabase(
     const caps = getDatabaseCapabilities(config.engine)
     const engine = getEngine(config.engine)
     let shouldDrop = true
+    let dropSucceeded = false
     let backupPath: string | undefined
 
     if (caps.supportsRename === 'native') {
@@ -3058,6 +3051,7 @@ async function handleRenameDatabase(
       try {
         await engine.renameDatabase(config, oldName, newName)
         spinner.succeed(`Renamed "${oldName}" to "${newName}"`)
+        dropSucceeded = true // Native rename atomically replaces the old name
       } catch (error) {
         spinner.fail(`Failed to rename database`)
         throw error
@@ -3163,6 +3157,7 @@ async function handleRenameDatabase(
           await engine.terminateConnections(config, oldName)
           await engine.dropDatabase(config, oldName)
           dropSpinner.succeed(`Dropped old database "${oldName}"`)
+          dropSucceeded = true
         } catch (error) {
           dropSpinner.warn(
             `Could not drop "${oldName}": ${(error as Error).message}`,
@@ -3178,7 +3173,7 @@ async function handleRenameDatabase(
 
     // Update tracking
     await updateRenameTracking(containerName, oldName, newName, {
-      shouldDrop,
+      shouldDrop: dropSucceeded,
       isPrimaryRename,
     })
 

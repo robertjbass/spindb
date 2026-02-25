@@ -26,6 +26,7 @@ import {
   getDefaultFormat,
   getBackupExtension,
 } from '../../config/backup-formats'
+import { isInteractiveMode } from '../../core/error-handler'
 
 /**
  * CLI command for managing databases within containers.
@@ -723,6 +724,12 @@ databasesCommand
 
         // Prompt for database name if not provided
         if (!database) {
+          if (!isInteractiveMode()) {
+            outputError(
+              'Database name is required in non-interactive mode. Usage: spindb databases create <container> <database>',
+              options.json,
+            )
+          }
           const { dbName } = await inquirer.prompt<{ dbName: string }>([
             {
               type: 'input',
@@ -868,6 +875,13 @@ databasesCommand
             )
           }
 
+          if (!isInteractiveMode()) {
+            outputError(
+              'Database name is required in non-interactive mode. Usage: spindb databases drop <container> <database>',
+              options.json,
+            )
+          }
+
           const { dbName } = await inquirer.prompt<{ dbName: string }>([
             {
               type: 'list',
@@ -1008,6 +1022,13 @@ databasesCommand
             )
           }
 
+          if (!isInteractiveMode()) {
+            outputError(
+              'Database names are required in non-interactive mode. Usage: spindb databases rename <container> <old> <new>',
+              options.json,
+            )
+          }
+
           const { dbName } = await inquirer.prompt<{ dbName: string }>([
             {
               type: 'list',
@@ -1027,6 +1048,13 @@ databasesCommand
 
         // Prompt for new name if not provided
         if (!newName) {
+          if (!isInteractiveMode()) {
+            outputError(
+              'New database name is required in non-interactive mode. Usage: spindb databases rename <container> <old> <new>',
+              options.json,
+            )
+          }
+
           const { dbName } = await inquirer.prompt<{ dbName: string }>([
             {
               type: 'input',
