@@ -1292,6 +1292,7 @@ databasesCommand
           // Step 5: Drop old database (unless --no-drop)
           // options.drop is false when --no-drop is passed (commander inverts it)
           const shouldDrop = options.drop !== false
+          let dropSucceeded = false
           if (shouldDrop) {
             if (!options.json) {
               const spinner = createSpinner(
@@ -1302,6 +1303,7 @@ databasesCommand
                 await engine.terminateConnections(config, oldName)
                 await engine.dropDatabase(config, oldName)
                 spinner.succeed(`Dropped old database "${oldName}"`)
+                dropSucceeded = true
               } catch (error) {
                 const e = error as Error
                 spinner.warn(
@@ -1313,15 +1315,16 @@ databasesCommand
               try {
                 await engine.terminateConnections(config, oldName)
                 await engine.dropDatabase(config, oldName)
+                dropSucceeded = true
               } catch {
                 // Non-fatal warning in JSON mode
               }
             }
           }
 
-          // Update tracking
+          // Update tracking — only remove old DB from tracking if drop actually succeeded
           await updateRenameTracking(containerName, oldName, newName, {
-            shouldDrop,
+            shouldDrop: dropSucceeded,
             isPrimaryRename,
           })
 

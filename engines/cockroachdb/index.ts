@@ -708,6 +708,14 @@ export class CockroachDBEngine extends BaseEngine {
   ): Promise<void> {
     const { port, version } = container
 
+    const systemDatabases = ['defaultdb', 'postgres', 'system']
+    if (systemDatabases.includes(oldName.toLowerCase())) {
+      throw new Error(`Cannot rename system database: ${oldName}`)
+    }
+    if (systemDatabases.includes(newName.toLowerCase())) {
+      throw new Error(`Cannot rename to system database name: ${newName}`)
+    }
+
     validateCockroachIdentifier(oldName, 'database')
     validateCockroachIdentifier(newName, 'database')
     const escapedOld = escapeCockroachIdentifier(oldName)

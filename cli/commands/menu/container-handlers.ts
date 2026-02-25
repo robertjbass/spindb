@@ -1692,8 +1692,12 @@ async function showDatabaseActionMenu(
       await handleDropDatabase(containerName, database)
       // Check if the database still exists after drop
       const freshConfig = await containerManager.getConfig(containerName)
-      const freshDbs = freshConfig?.databases || [freshConfig?.database]
-      if (!freshDbs?.includes(database)) {
+      if (!freshConfig) {
+        // Container was deleted — return to main menu
+        return
+      }
+      const freshDbs = freshConfig.databases || [freshConfig.database]
+      if (!freshDbs.includes(database)) {
         // Database was dropped
         if ((freshDbs?.length ?? 0) <= 1) {
           // Only 1 database left — no longer multi-db, go to container submenu
@@ -3122,7 +3126,11 @@ async function handleRenameDatabase(
         try {
           await engine.dropDatabase(config, newName)
         } catch {
-          // Best-effort cleanup
+          console.log(
+            uiWarning(
+              `Could not remove partially-created database "${newName}" — manual cleanup may be needed`,
+            ),
+          )
         }
         console.log(uiWarning(`Safety backup retained at: ${backupPath}`))
         throw error

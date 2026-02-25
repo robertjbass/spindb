@@ -877,6 +877,13 @@ export class ClickHouseEngine extends BaseEngine {
   ): Promise<void> {
     const { port, version } = container
 
+    if (oldName === 'default' || oldName === 'system') {
+      throw new Error(`Cannot rename system database: ${oldName}`)
+    }
+    if (newName === 'default' || newName === 'system') {
+      throw new Error(`Cannot rename to system database name: ${newName}`)
+    }
+
     validateClickHouseIdentifier(oldName, 'database')
     validateClickHouseIdentifier(newName, 'database')
     const escapedOld = escapeClickHouseIdentifier(oldName)

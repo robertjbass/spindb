@@ -1020,10 +1020,10 @@ export class MongoDBEngine extends BaseEngine {
 
       proc.on('close', (code) => {
         clearTimeout(timeout)
-        if (code !== 0 && stderrBuf && !stdoutBuf.trim()) {
+        if (code !== 0) {
           reject(
             new Error(
-              `${stderrBuf}${stdoutBuf ? `\nOutput: ${stdoutBuf}` : ''}`,
+              `${stderrBuf || `mongosh exited with code ${code}`}${stdoutBuf ? `\nOutput: ${stdoutBuf}` : ''}`,
             ),
           )
           return

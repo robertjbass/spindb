@@ -955,6 +955,32 @@ export class MeilisearchEngine extends BaseEngine {
       )
     }
 
+    // Poll until the async task completes
+    const taskData = response.data as { taskUid?: number }
+    if (taskData?.taskUid !== undefined) {
+      const startTime = Date.now()
+      const timeoutMs = 30000
+      const checkInterval = 500
+
+      while (Date.now() - startTime < timeoutMs) {
+        const taskResponse = await meilisearchApiRequest(
+          port,
+          'GET',
+          `/tasks/${taskData.taskUid}`,
+        )
+
+        if (taskResponse.status === 200) {
+          const task = taskResponse.data as { status?: string }
+          if (task.status === 'succeeded') break
+          if (task.status === 'failed' || task.status === 'canceled') {
+            throw new Error(`Index rename task failed: ${JSON.stringify(task)}`)
+          }
+        }
+
+        await new Promise((r) => setTimeout(r, checkInterval))
+      }
+    }
+
     logDebug(`Renamed Meilisearch index: ${oldName} -> ${newName}`)
   }
 
