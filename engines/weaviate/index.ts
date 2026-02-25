@@ -834,7 +834,7 @@ export class WeaviateEngine extends BaseEngine {
     const response = await weaviateApiRequest(
       port,
       'DELETE',
-      `/v1/schema/${database}`,
+      `/v1/schema/${encodeURIComponent(database)}`,
     )
 
     if (response.status !== 200) {

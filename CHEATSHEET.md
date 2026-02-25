@@ -137,9 +137,9 @@ spindb delete production-pg
 
 **Auto-detected providers:** Neon, Supabase, PlanetScale, Upstash, Railway, Aiven, CockroachDB Cloud
 
-**Supported operations:** `connect`, `url`, `info`, `list`, `delete` (unlink), `databases`
+**Supported operations:** `connect`, `url`, `info`, `list`, `delete` (unlink), `databases`, `query`
 
-**Not yet supported:** `backup`, `query`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`
+**Not yet supported:** `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`
 
 ## Connection Strings
 
@@ -219,7 +219,7 @@ spindb pull mydb --from-env CLONE_FROM_DATABASE_URL
 # Clone mode: pull to new database, leave original untouched
 spindb pull mydb --from-env PROD_DB_URL --as mydb_prod
 
-# Target specific database (default: container's primary database)
+# Target specific database (default: container's default database)
 spindb pull mydb --from-env PROD_DB_URL -d analytics
 
 # Skip backup (dangerous, requires --force)
@@ -337,7 +337,41 @@ syncCredentials()
 
 > **Note:** When using `--no-backup` with `--post-script`, SpinDB still creates a temporary backup so your script can access the original data, then drops it after the script succeeds.
 
-## Database Tracking
+## Database Management
+
+### Create, Rename, and Drop Databases
+
+```bash
+# Create a new database in a running container
+spindb databases create mydb analytics
+spindb databases create mydb                    # Interactive: prompts for name
+
+# Rename a database (backup/restore strategy for safety)
+spindb databases rename mydb old_name new_name
+spindb databases rename mydb                    # Interactive: select + name
+spindb databases rename mydb old new --backup   # Force backup even for native-rename engines
+spindb databases rename mydb old new --no-drop  # Keep old database after copying
+
+# Drop a database (with confirmation)
+spindb databases drop mydb analytics
+spindb databases drop mydb analytics --force    # Skip confirmation
+
+# JSON output for scripting
+spindb databases create mydb analytics --json
+spindb databases rename mydb old new --json
+spindb databases drop mydb analytics --json
+```
+
+> **Rename strategy:** For engines that support native rename (PostgreSQL, ClickHouse, CockroachDB, Meilisearch),
+> the operation is instant. For all others (MySQL, MongoDB, etc.), SpinDB
+> performs a safe backup → create → restore → drop sequence. A safety backup is always
+> created at `~/.spindb/backups/rename/` and retained after the operation.
+>
+> **Not supported:** SQLite, DuckDB (file-based), Redis, Valkey (fixed-numbered DBs),
+> QuestDB (single-database), TigerBeetle (single ledger). These engines show a clear
+> error with alternative instructions.
+
+### Database Tracking
 
 SpinDB tracks which databases exist within each container. Use these commands to keep tracking in sync after external changes (e.g., SQL renames, scripts that create/drop databases).
 
@@ -348,7 +382,7 @@ spindb databases list mydb --default    # Show only the default database name
 spindb databases add mydb analytics     # Add database to tracking
 spindb databases remove mydb old_backup # Remove from tracking
 spindb databases sync mydb old new      # Sync after rename (remove old, add new)
-spindb databases set-default mydb prod  # Change the default/primary database
+spindb databases set-default mydb prod  # Change the default database
 spindb databases refresh mydb           # Query server and sync registry
 
 # JSON output for scripting
@@ -360,7 +394,7 @@ spindb databases set-default mydb prod --json
 spindb databases refresh mydb --json    # {"databases": [...], "changes": {...}}
 ```
 
-> **Note:** `list`, `add`, `remove`, `sync`, and `set-default` only update SpinDB's tracking. They do NOT create or drop actual databases. Use `spindb run` for that.
+> **Note:** `list`, `add`, `remove`, `sync`, and `set-default` only update SpinDB's tracking. They do NOT create or drop actual databases. Use `spindb databases create`/`drop` or `spindb run` for that.
 >
 > **`databases refresh`** queries the actual database server and syncs the registry with what exists. Works on all engines. Called automatically on `spindb start` and after `spindb pull`.
 

@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.4] - 2026-02-25
+
+### Bug Fixes
+- **Rename bypass message** — Backup/restore rename now shows "native rename bypassed via flags" instead of incorrectly claiming the engine lacks native rename support when `--backup` or `--no-drop` is used
+
+## [0.42.3] - 2026-02-25
+
+### Bug Fixes
+- **JSON rename drop error reporting** — Rename `--json` output now includes `oldDatabaseDropped` and `oldDropError` fields instead of silently swallowing drop failures
+- **Meilisearch task poll redundant re-fetch** — Polling loop now tracks success and skips the final re-fetch when the task already succeeded, preventing transient network errors from failing a completed rename
+
+## [0.42.2] - 2026-02-25
+
+### Bug Fixes
+- **`--no-drop` with native rename** — Native rename path now respects `--no-drop` flag by falling back to backup-restore strategy, preserving the original database
+- **Positional arg validation** — `databases create`, `drop`, and `rename` now validate database names from CLI positional arguments (not just interactive prompts), rejecting path traversal, spaces, and invalid characters
+- **Meilisearch taskUid guard** — Throw descriptive error when Meilisearch returns 202 without a `taskUid` instead of silently succeeding
+
+### Documentation
+- **CHEATSHEET.md** — Fixed "fixed numbered" to "fixed-numbered" compound adjective
+
+## [0.42.1] - 2026-02-24
+
+### Bug Fixes
+- **Native rename tracking** — Fixed bug where native rename (PostgreSQL, ClickHouse, CockroachDB, Meilisearch) never removed the old database name from tracking
+- **Drop success tracking** — Menu rename handler now tracks actual drop outcome instead of user intent, preventing stale tracking entries when drop fails
+- **Null guard after drop** — Added null guard when re-fetching config after database drop in case the container was deleted externally
+- **Orphaned database warning** — Show warning when rollback cleanup fails during rename, so users know manual cleanup may be needed
+- **Reserved database guards** — Block renaming reserved databases: ClickHouse (`default`, `system`), CockroachDB (`defaultdb`, `postgres`, `system`), PostgreSQL (`postgres`, `template0`, `template1`)
+- **Meilisearch async task polling** — Poll task status after rename (202 response) instead of assuming success; log warnings on non-200 poll responses
+- **MongoDB exit code handling** — Unconditionally reject on non-zero mongosh exit code instead of silently succeeding
+
+### Improvements
+- **Non-interactive mode guards** — `databases create`, `drop`, and `rename` now error with usage hints when arguments are missing in non-interactive (piped) mode instead of hanging
+- **`disabledItem()` deduplication** — Extracted duplicated helper from two closures to module scope
+- **CHEATSHEET.md** — Moved `query` to supported operations for remote containers; updated "primary" to "default" terminology
+
+## [0.42.0] - 2026-02-24
+
+### Added
+- **Hybrid database submenu** — Multi-database containers now show a "Databases (N)" entry that opens a database list, where selecting a database opens a per-database action menu (shell, run SQL, copy URL, rename, drop, backup, restore). Single-database containers keep all actions inline with zero extra clicks.
+- **Native rename for PostgreSQL** — Uses `ALTER DATABASE "old" RENAME TO "new"` (atomic, instant, available since PG 7.4). Terminates active connections first since PostgreSQL requires zero connections to the target database.
+- **Native rename for Meilisearch** — Uses `PATCH /indexes/{uid}` with `{"uid": "new-name"}` (atomic, available since Meilisearch v1.18.0).
+- **Capability/implementation consistency tests** — New unit tests verify every native-rename engine overrides `renameDatabase()` and backup-restore engines do not, catching misclassifications automatically.
+
+### Fixed
+- **MongoDB shell injection** — `executeQuery()` replaced `execAsync(cmd)` with `spawn(mongosh, args)`, preventing shell injection via crafted query strings.
+- **REST API URL encoding** — Added `encodeURIComponent(database)` to URL path segments in Qdrant, Weaviate, and Meilisearch engines, preventing errors with special characters in collection/index names.
+- **Stale status checks in database handlers** — `handleCreateDatabase`, `handleRenameDatabase`, and `handleDropDatabase` now use live `processManager.isRunning()` instead of cached `config.status` which could be stale.
+- **Config mutation in query command** — Remote container port override now uses `config = { ...config, port }` instead of mutating the shared config object directly.
+
+### Improved
+- **"Set as default" in per-database menu** — Multi-database containers can set any database as the default directly from the per-database action menu.
+- **Rename/drop accept target database** — `handleRenameDatabase` and `handleDropDatabase` accept an optional `targetDatabase` parameter, skipping the selection prompt when called from the per-database action menu.
+- **"Primary" → "default" terminology** — Consistent use of "default" instead of "primary" across all database operation UI strings.
+
+### Removed
+- **`handleSelectDatabase`** and **`handleChangeDefaultDatabase`** — Replaced by the databases submenu and "Set as default" action in the per-database menu.
+
+## [0.41.0] - 2026-02-24
+
+### Added
+- **Database create/rename/drop commands** — `spindb databases create`, `spindb databases rename`, and `spindb databases drop` perform real database operations on running containers. Supports 14 of 20 engines with full `--json` output for scripting.
+- **Rename strategies** — Native `ALTER DATABASE`/`RENAME DATABASE` for ClickHouse and CockroachDB. All other engines use a safe backup → create → restore → drop sequence with safety backups retained at `~/.spindb/backups/rename/`. Includes `--backup` flag to force backup strategy and `--no-drop` to keep the old database after copying.
+- **Database capabilities system** — `core/database-capabilities.ts` provides a static capability map for all 20 engines with per-engine unsupported messages. Unsupported engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) show clear error messages with alternative instructions.
+- **Interactive menu integration** — Container submenu shows "Create database", "Rename database", and "Drop database" options when the engine supports them, with running-state guards and server-side duplicate detection.
+- **Shared rename tracking** — `updateRenameTracking()` in `core/container-manager.ts` centralizes the add-new/remove-old/update-primary logic used by CLI commands and menu handlers.
+
+### Improved
+- **Rename explains strategy** — Backup/restore renames now tell the user why cloning is needed (e.g., "MariaDB does not support native database renaming") and offer to keep the original after cloning.
+- **Escape key in database operations** — Pressing Escape during create/rename/drop prompts returns to the container submenu instead of jumping to the main menu. Mid-operation Escape (e.g., on "Delete the original?") is treated as cancel/no, completing the operation safely.
+- **Post-operation summaries** — Create, rename, and drop handlers now show consistent success messages with connection strings and backup paths matching the existing backup handler pattern.
+- **Drop excludes primary with explanation** — The drop database list notes that the primary is excluded and suggests `spindb delete` for full removal.
+
 ## [0.40.1] - 2026-02-22
 
 ### Fixed

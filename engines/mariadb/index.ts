@@ -905,9 +905,7 @@ export class MariaDBEngine extends BaseEngine {
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
       ...getWindowsSpawnOptions(),
-      env: password
-        ? { ...process.env, MYSQL_PWD: password }
-        : process.env,
+      env: password ? { ...process.env, MYSQL_PWD: password } : process.env,
     }
 
     return new Promise((resolve, reject) => {

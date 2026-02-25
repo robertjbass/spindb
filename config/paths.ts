@@ -44,6 +44,9 @@ export const paths = {
   // Global config file
   config: join(SPINDB_HOME, 'config.json'),
 
+  // Directory for rename backup files
+  renameBackups: join(SPINDB_HOME, 'backups', 'rename'),
+
   // Get path for a specific binary version
   getBinaryPath(options: BinaryPathOptions): string {
     const { engine, version, platform, arch } = options

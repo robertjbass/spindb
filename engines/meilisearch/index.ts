@@ -917,7 +917,7 @@ export class MeilisearchEngine extends BaseEngine {
     const response = await meilisearchApiRequest(
       port,
       'DELETE',
-      `/indexes/${database}`,
+      `/indexes/${encodeURIComponent(database)}`,
     )
 
     // Meilisearch returns 202 Accepted for async delete
@@ -928,6 +928,88 @@ export class MeilisearchEngine extends BaseEngine {
     }
 
     logDebug(`Deleted Meilisearch index: ${database}`)
+  }
+
+  /**
+   * Rename an index using Meilisearch's native PATCH /indexes/{uid}
+   * Available since Meilisearch v1.18.0
+   */
+  async renameDatabase(
+    container: ContainerConfig,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    const { port } = container
+
+    const response = await meilisearchApiRequest(
+      port,
+      'PATCH',
+      `/indexes/${encodeURIComponent(oldName)}`,
+      { uid: newName },
+    )
+
+    // Meilisearch returns 202 Accepted for async operations
+    if (response.status !== 202 && response.status !== 200) {
+      throw new Error(
+        `Failed to rename index: ${JSON.stringify(response.data)}`,
+      )
+    }
+
+    // Poll until the async task completes
+    const taskData = response.data as { taskUid?: number }
+    if (response.status === 202 && taskData?.taskUid === undefined) {
+      throw new Error(
+        `Meilisearch returned 202 but no taskUid — cannot verify rename completed`,
+      )
+    }
+    if (taskData?.taskUid !== undefined) {
+      const startTime = Date.now()
+      const timeoutMs = 30000
+      const checkInterval = 500
+      let succeeded = false
+
+      while (Date.now() - startTime < timeoutMs) {
+        const taskResponse = await meilisearchApiRequest(
+          port,
+          'GET',
+          `/tasks/${taskData.taskUid}`,
+        )
+
+        if (taskResponse.status === 200) {
+          const task = taskResponse.data as { status?: string }
+          if (task.status === 'succeeded') {
+            succeeded = true
+            break
+          }
+          if (task.status === 'failed' || task.status === 'canceled') {
+            throw new Error(`Index rename task failed: ${JSON.stringify(task)}`)
+          }
+        } else {
+          logDebug(
+            `Meilisearch task poll returned HTTP ${taskResponse.status}, retrying...`,
+          )
+        }
+
+        await new Promise((r) => setTimeout(r, checkInterval))
+      }
+
+      if (!succeeded) {
+        // Loop timed out — do one final check
+        const finalCheck = await meilisearchApiRequest(
+          port,
+          'GET',
+          `/tasks/${taskData.taskUid}`,
+        )
+        const finalTask = finalCheck.data as { status?: string }
+        if (finalTask?.status !== 'succeeded') {
+          throw new Error(
+            `Index rename timed out after ${timeoutMs / 1000}s. Task ${taskData.taskUid} status: ${finalTask?.status ?? 'unknown'}`,
+          )
+        }
+      }
+    }
+
+    logDebug(`Renamed Meilisearch index: ${oldName} -> ${newName}`)
   }
 
   /**

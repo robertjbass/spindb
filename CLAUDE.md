@@ -19,7 +19,7 @@ SpinDB is a CLI tool for running local databases without Docker. Downloads pre-b
 
 ```
 cli/commands/menu/    # Interactive menu handlers
-core/                 # Business logic (container-manager, process-manager, config-manager, credential-manager, dependency-manager)
+core/                 # Business logic (container-manager, process-manager, config-manager, credential-manager, dependency-manager, database-capabilities)
 config/               # engines.json (registry), engine-defaults.ts, backup-formats.ts
 engines/{engine}/     # Each engine: index.ts, backup.ts, restore.ts, version-maps.ts, binary-manager.ts, etc.
 engines/base-engine.ts
@@ -38,6 +38,8 @@ tests/fixtures/       # Test data and seed files
 - **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
+
+**Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 20 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 10 other engines use backup/restore; 6 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
 
 ### Critical: When Adding/Modifying Engines
 

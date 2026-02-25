@@ -1524,7 +1524,11 @@ export class ValkeyEngine extends BaseEngine {
           resolve(parseRedisResult(stdout, query))
         } else {
           const libError = detectLibraryError(stderr, 'Valkey')
-          reject(new Error(libError || stderr || `valkey-cli exited with code ${code}`))
+          reject(
+            new Error(
+              libError || stderr || `valkey-cli exited with code ${code}`,
+            ),
+          )
         }
       })
 

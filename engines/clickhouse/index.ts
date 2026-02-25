@@ -868,6 +868,62 @@ export class ClickHouseEngine extends BaseEngine {
   }
 
   /**
+   * Rename a database using ClickHouse's native RENAME DATABASE
+   */
+  async renameDatabase(
+    container: ContainerConfig,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    const { port, version } = container
+
+    if (oldName === 'default' || oldName === 'system') {
+      throw new Error(`Cannot rename system database: ${oldName}`)
+    }
+    if (newName === 'default' || newName === 'system') {
+      throw new Error(`Cannot rename to system database name: ${newName}`)
+    }
+
+    validateClickHouseIdentifier(oldName, 'database')
+    validateClickHouseIdentifier(newName, 'database')
+    const escapedOld = escapeClickHouseIdentifier(oldName)
+    const escapedNew = escapeClickHouseIdentifier(newName)
+
+    const clickhouse = await this.getClickHouseClientPath(version)
+
+    const args = [
+      'client',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--query',
+      `RENAME DATABASE ${escapedOld} TO ${escapedNew}`,
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(clickhouse, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          logDebug(`Renamed ClickHouse database: ${oldName} -> ${newName}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to rename database: ${stderr}`))
+        }
+      })
+      proc.on('error', reject)
+    })
+  }
+
+  /**
    * Get the database size in bytes
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {

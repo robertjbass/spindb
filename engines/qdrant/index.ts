@@ -885,7 +885,7 @@ export class QdrantEngine extends BaseEngine {
     const response = await qdrantApiRequest(
       port,
       'PUT',
-      `/collections/${database}`,
+      `/collections/${encodeURIComponent(database)}`,
       {
         vectors: {
           size: 128, // Default vector size, user should update for their needs
@@ -915,7 +915,7 @@ export class QdrantEngine extends BaseEngine {
     const response = await qdrantApiRequest(
       port,
       'DELETE',
-      `/collections/${database}`,
+      `/collections/${encodeURIComponent(database)}`,
     )
 
     if (response.status !== 200) {

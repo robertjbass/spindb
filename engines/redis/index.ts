@@ -1523,7 +1523,11 @@ export class RedisEngine extends BaseEngine {
           resolve(parseRedisResult(stdout, query))
         } else {
           const libError = detectLibraryError(stderr, 'Redis')
-          reject(new Error(libError || stderr || `redis-cli exited with code ${code}`))
+          reject(
+            new Error(
+              libError || stderr || `redis-cli exited with code ${code}`,
+            ),
+          )
         }
       })
 
