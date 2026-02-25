@@ -1351,6 +1351,7 @@ databasesCommand
           // options.drop is false when --no-drop is passed (commander inverts it)
           const shouldDrop = options.drop !== false
           let dropSucceeded = false
+          let oldDropError: string | undefined
           if (shouldDrop) {
             if (!options.json) {
               const spinner = createSpinner(
@@ -1364,6 +1365,7 @@ databasesCommand
                 dropSucceeded = true
               } catch (error) {
                 const e = error as Error
+                oldDropError = e.message
                 spinner.warn(
                   `Could not drop old database "${oldName}": ${e.message}`,
                 )
@@ -1374,8 +1376,9 @@ databasesCommand
                 await engine.terminateConnections(config, oldName)
                 await engine.dropDatabase(config, oldName)
                 dropSucceeded = true
-              } catch {
-                // Non-fatal warning in JSON mode
+              } catch (error) {
+                oldDropError = (error as Error).message
+                // Non-fatal — reported in JSON output
               }
             }
           }
@@ -1416,6 +1419,8 @@ databasesCommand
                   },
                   connectionString,
                   primaryChanged: isPrimaryRename,
+                  oldDatabaseDropped: dropSucceeded,
+                  ...(oldDropError && { oldDropError }),
                 },
                 null,
                 2,

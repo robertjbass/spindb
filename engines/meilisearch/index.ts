@@ -966,6 +966,7 @@ export class MeilisearchEngine extends BaseEngine {
       const startTime = Date.now()
       const timeoutMs = 30000
       const checkInterval = 500
+      let succeeded = false
 
       while (Date.now() - startTime < timeoutMs) {
         const taskResponse = await meilisearchApiRequest(
@@ -976,7 +977,10 @@ export class MeilisearchEngine extends BaseEngine {
 
         if (taskResponse.status === 200) {
           const task = taskResponse.data as { status?: string }
-          if (task.status === 'succeeded') break
+          if (task.status === 'succeeded') {
+            succeeded = true
+            break
+          }
           if (task.status === 'failed' || task.status === 'canceled') {
             throw new Error(`Index rename task failed: ${JSON.stringify(task)}`)
           }
@@ -989,17 +993,19 @@ export class MeilisearchEngine extends BaseEngine {
         await new Promise((r) => setTimeout(r, checkInterval))
       }
 
-      // If we exited the loop without breaking (succeeded), it timed out
-      const finalCheck = await meilisearchApiRequest(
-        port,
-        'GET',
-        `/tasks/${taskData.taskUid}`,
-      )
-      const finalTask = finalCheck.data as { status?: string }
-      if (finalTask?.status !== 'succeeded') {
-        throw new Error(
-          `Index rename timed out after ${timeoutMs / 1000}s. Task ${taskData.taskUid} status: ${finalTask?.status ?? 'unknown'}`,
+      if (!succeeded) {
+        // Loop timed out — do one final check
+        const finalCheck = await meilisearchApiRequest(
+          port,
+          'GET',
+          `/tasks/${taskData.taskUid}`,
         )
+        const finalTask = finalCheck.data as { status?: string }
+        if (finalTask?.status !== 'succeeded') {
+          throw new Error(
+            `Index rename timed out after ${timeoutMs / 1000}s. Task ${taskData.taskUid} status: ${finalTask?.status ?? 'unknown'}`,
+          )
+        }
       }
     }
 

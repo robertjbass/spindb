@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.3] - 2026-02-25
+
+### Bug Fixes
+- **JSON rename drop error reporting** — Rename `--json` output now includes `oldDatabaseDropped` and `oldDropError` fields instead of silently swallowing drop failures
+- **Meilisearch task poll redundant re-fetch** — Polling loop now tracks success and skips the final re-fetch when the task already succeeded, preventing transient network errors from failing a completed rename
+
 ## [0.42.2] - 2026-02-25
 
 ### Bug Fixes
