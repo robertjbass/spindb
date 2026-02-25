@@ -903,6 +903,12 @@ databasesCommand
 
         // Confirm unless --force
         if (!options.force && !options.json) {
+          if (!isInteractiveMode()) {
+            outputError(
+              `Dropping a database is destructive. Use --force to skip confirmation in non-interactive mode.`,
+              options.json,
+            )
+          }
           const { confirm } = await inquirer.prompt<{ confirm: boolean }>([
             {
               type: 'confirm',
