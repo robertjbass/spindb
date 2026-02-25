@@ -26,7 +26,10 @@ import {
   getDefaultFormat,
   getBackupExtension,
 } from '../../config/backup-formats'
-import { isInteractiveMode } from '../../core/error-handler'
+import {
+  isInteractiveMode,
+  isValidDatabaseName,
+} from '../../core/error-handler'
 
 /**
  * CLI command for managing databases within containers.
@@ -666,6 +669,18 @@ function outputError(message: string, json?: boolean): never {
 }
 
 /**
+ * Helper: validate database name format for CLI args
+ */
+function validateDbName(name: string, json?: boolean): void {
+  if (!isValidDatabaseName(name)) {
+    outputError(
+      `Invalid database name: "${name}". Names must start with a letter and contain only letters, numbers, and underscores.`,
+      json,
+    )
+  }
+}
+
+/**
  * Helper: validate common preconditions for database operations
  */
 async function validateContainer(
@@ -745,6 +760,8 @@ databasesCommand
           ])
           database = dbName
         }
+
+        validateDbName(database, options.json)
 
         // Check if database already exists in tracking
         const rawDatabases = config.databases || []
@@ -892,6 +909,8 @@ databasesCommand
           ])
           database = dbName
         }
+
+        validateDbName(database, options.json)
 
         // Block dropping the primary database
         if (database === config.database) {
@@ -1078,6 +1097,9 @@ databasesCommand
           newName = dbName
         }
 
+        validateDbName(oldName, options.json)
+        validateDbName(newName, options.json)
+
         // Validate old != new
         if (oldName === newName) {
           outputError(
@@ -1124,7 +1146,9 @@ databasesCommand
 
         const caps = getDatabaseCapabilities(config.engine)
         const useNativeRename =
-          caps.supportsRename === 'native' && !options.backup
+          caps.supportsRename === 'native' &&
+          !options.backup &&
+          options.drop !== false
         const isPrimaryRename = oldName === config.database
 
         if (isPrimaryRename && !options.json) {

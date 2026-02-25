@@ -957,6 +957,11 @@ export class MeilisearchEngine extends BaseEngine {
 
     // Poll until the async task completes
     const taskData = response.data as { taskUid?: number }
+    if (response.status === 202 && taskData?.taskUid === undefined) {
+      throw new Error(
+        `Meilisearch returned 202 but no taskUid — cannot verify rename completed`,
+      )
+    }
     if (taskData?.taskUid !== undefined) {
       const startTime = Date.now()
       const timeoutMs = 30000

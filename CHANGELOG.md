@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.2] - 2026-02-25
+
+### Bug Fixes
+- **`--no-drop` with native rename** — Native rename path now respects `--no-drop` flag by falling back to backup-restore strategy, preserving the original database
+- **Positional arg validation** — `databases create`, `drop`, and `rename` now validate database names from CLI positional arguments (not just interactive prompts), rejecting path traversal, spaces, and invalid characters
+- **Meilisearch taskUid guard** — Throw descriptive error when Meilisearch returns 202 without a `taskUid` instead of silently succeeding
+
+### Documentation
+- **CHEATSHEET.md** — Fixed "fixed numbered" to "fixed-numbered" compound adjective
+
 ## [0.42.1] - 2026-02-24
 
 ### Bug Fixes

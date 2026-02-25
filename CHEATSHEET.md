@@ -367,7 +367,7 @@ spindb databases drop mydb analytics --json
 > performs a safe backup → create → restore → drop sequence. A safety backup is always
 > created at `~/.spindb/backups/rename/` and retained after the operation.
 >
-> **Not supported:** SQLite, DuckDB (file-based), Redis, Valkey (fixed numbered DBs),
+> **Not supported:** SQLite, DuckDB (file-based), Redis, Valkey (fixed-numbered DBs),
 > QuestDB (single-database), TigerBeetle (single ledger). These engines show a clear
 > error with alternative instructions.
 
