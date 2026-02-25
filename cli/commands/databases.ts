@@ -1220,9 +1220,15 @@ databasesCommand
         } else {
           // Backup/restore rename path
           if (!options.json) {
-            console.log(
-              `\n${engine.displayName} does not support native database renaming.`,
-            )
+            if (caps.supportsRename === 'native') {
+              console.log(
+                `\nUsing backup/restore (native rename bypassed via flags).`,
+              )
+            } else {
+              console.log(
+                `\n${engine.displayName} does not support native database renaming.`,
+              )
+            }
             console.log(
               `Cloning "${oldName}" to "${newName}" in "${containerName}" via backup/restore...\n`,
             )

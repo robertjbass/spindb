@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.4] - 2026-02-25
+
+### Bug Fixes
+- **Rename bypass message** — Backup/restore rename now shows "native rename bypassed via flags" instead of incorrectly claiming the engine lacks native rename support when `--backup` or `--no-drop` is used
+
 ## [0.42.3] - 2026-02-25
 
 ### Bug Fixes
