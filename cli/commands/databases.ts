@@ -1102,7 +1102,7 @@ databasesCommand
         }
 
         if (useNativeRename) {
-          // Native rename path (ClickHouse, CockroachDB)
+          // Native rename path (PostgreSQL, ClickHouse, CockroachDB, Meilisearch)
           if (!options.json) {
             const spinner = createSpinner(
               `Renaming "${oldName}" to "${newName}" in "${containerName}"...`,

@@ -904,7 +904,6 @@ export async function handleList(
 export async function showContainerSubmenu(
   containerName: string,
   showMainMenu: () => Promise<void>,
-  selectedDatabase?: string,
 ): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
@@ -942,8 +941,8 @@ export async function showContainerSubmenu(
   // Get list of databases in this container
   const databases = config.databases || [config.database]
 
-  // Auto-select: use provided selection, or default to primary database from config
-  const activeDatabase = selectedDatabase || config.database
+  // Active database is always the default from config
+  const activeDatabase = config.database
 
   // Header shows icon + container → database
   const engineIcon = getEngineIcon(config.engine)
@@ -1022,11 +1021,11 @@ export async function showContainerSubmenu(
     switch (action) {
       case 'shell':
         await handleOpenShell(containerName, activeDatabase)
-        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+        await showContainerSubmenu(containerName, showMainMenu)
         return
       case 'copy':
         await handleCopyConnectionString(containerName, activeDatabase)
-        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+        await showContainerSubmenu(containerName, showMainMenu)
         return
       case 'delete':
         await handleDelete(containerName)
@@ -1041,7 +1040,6 @@ export async function showContainerSubmenu(
   }
 
   // Determine if database-specific actions can be performed
-  // Requires: database selected + (running for server DBs OR file exists for file-based DBs)
   const containerReady = isFileBasedDB ? existsSync(config.database) : isRunning
   const hasMultipleDatabases = databases.length > 1
   const canDoDbAction = !!activeDatabase && containerReady
@@ -1051,10 +1049,6 @@ export async function showContainerSubmenu(
     if (!containerReady) {
       return isFileBasedDB ? 'Database file missing' : 'Start container first'
     }
-    if (!activeDatabase && hasMultipleDatabases) {
-      return 'Select database first'
-    }
-    // Show positive state when actions are available
     return isFileBasedDB ? 'Available' : 'Running'
   }
 
@@ -1107,19 +1101,6 @@ export async function showContainerSubmenu(
     })
   }
 
-  // Database selection - show current selection or prompt to select
-  // Only show if there are multiple databases
-  if (hasMultipleDatabases) {
-    const dbIndex = activeDatabase ? databases.indexOf(activeDatabase) + 1 : 0
-    const dbLabel = activeDatabase
-      ? `${chalk.cyan('◉')} Set database ${chalk.gray('|')} Current: ${chalk.white(activeDatabase)} ${chalk.gray(`(${dbIndex} of ${databases.length})`)}`
-      : `${chalk.yellow('◉')} Set database`
-    actionChoices.push({
-      name: dbLabel,
-      value: 'select-database',
-    })
-  }
-
   // ─────────────────────────────────────────────────────────────────────────────
   // SECTION 2: Data Operations
   // Separator shows current state or required action
@@ -1129,97 +1110,123 @@ export async function showContainerSubmenu(
     new inquirer.Separator(chalk.gray(`── ${dataSectionLabel} ──`)),
   )
 
-  // Open console - requires database selection for multi-db containers
-  actionChoices.push(
-    canDoDbAction
-      ? { name: `${chalk.blue('>')} Open console`, value: 'shell' }
-      : disabledItem('>', 'Open console'),
-  )
+  if (hasMultipleDatabases) {
+    // Multi-db: show "Databases (N)" entry — per-db actions are in the databases submenu
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.cyan('◉')} Databases (${databases.length})`,
+            value: 'databases',
+          }
+        : disabledItem('◉', `Databases (${databases.length})`),
+    )
+  } else {
+    // Single-db: all data actions inline
 
-  // Run script file - requires database selection for multi-db containers
-  // Label comes from engines.json scriptFileLabel; null means no script support (REST API engines)
-  const engineConfig = await getEngineConfig(config.engine)
-  if (engineConfig.scriptFileLabel) {
-    const runScriptLabel = engineConfig.scriptFileLabel
+    // Open console
     actionChoices.push(
       canDoDbAction
-        ? { name: `${chalk.yellow('▷')} ${runScriptLabel}`, value: 'run-sql' }
-        : disabledItem('▷', runScriptLabel),
+        ? { name: `${chalk.blue('>')} Open console`, value: 'shell' }
+        : disabledItem('>', 'Open console'),
     )
-  }
 
-  // Copy connection string - requires database selection for multi-db containers
-  actionChoices.push(
-    canDoDbAction
-      ? { name: `${chalk.green('⎘')} Copy connection string`, value: 'copy' }
-      : disabledItem('⎘', 'Copy connection string'),
-  )
+    // Run script file
+    // Label comes from engines.json scriptFileLabel; null means no script support (REST API engines)
+    const engineConfig = await getEngineConfig(config.engine)
+    if (engineConfig.scriptFileLabel) {
+      const runScriptLabel = engineConfig.scriptFileLabel
+      actionChoices.push(
+        canDoDbAction
+          ? {
+              name: `${chalk.yellow('▷')} ${runScriptLabel}`,
+              value: 'run-sql',
+            }
+          : disabledItem('▷', runScriptLabel),
+      )
+    }
 
-  // Create user - only for engines that override createUser from BaseEngine
-  const engine = getEngine(config.engine)
-  const supportsUsers = engine.createUser !== BaseEngine.prototype.createUser
-  if (supportsUsers) {
+    // Copy connection string
     actionChoices.push(
-      containerReady
+      canDoDbAction
         ? {
-            name: `${chalk.yellow('+')} Create user`,
-            value: 'create_user',
+            name: `${chalk.green('⎘')} Copy connection string`,
+            value: 'copy',
           }
-        : disabledItem('+', 'Create user'),
+        : disabledItem('⎘', 'Copy connection string'),
     )
-  }
 
-  // Create database - only for engines that support it, requires running
-  if (canCreateDatabase(config.engine)) {
+    // Create user - only for engines that override createUser from BaseEngine
+    const engine = getEngine(config.engine)
+    const supportsUsers = engine.createUser !== BaseEngine.prototype.createUser
+    if (supportsUsers) {
+      actionChoices.push(
+        containerReady
+          ? {
+              name: `${chalk.yellow('+')} Create user`,
+              value: 'create_user',
+            }
+          : disabledItem('+', 'Create user'),
+      )
+    }
+
+    // Create database - only for engines that support it, requires running
+    if (canCreateDatabase(config.engine)) {
+      actionChoices.push(
+        containerReady
+          ? {
+              name: `${chalk.green('+')} Create database`,
+              value: 'create_database',
+            }
+          : disabledItem('+', 'Create database'),
+      )
+    }
+
+    // Rename database - only when engine supports it AND container has databases
+    if (canRenameDatabase(config.engine) && databases.length > 0) {
+      actionChoices.push(
+        containerReady
+          ? {
+              name: `${chalk.yellow('⇄')} Rename database`,
+              value: 'rename_database',
+            }
+          : disabledItem('⇄', 'Rename database'),
+      )
+    }
+
+    // Drop database - only when engine supports it AND has >1 database (can't drop default)
+    if (canDropDatabase(config.engine) && databases.length > 1) {
+      actionChoices.push(
+        containerReady
+          ? {
+              name: `${chalk.red('−')} Drop database`,
+              value: 'drop_database',
+            }
+          : disabledItem('−', 'Drop database'),
+      )
+    }
+
+    // Backup
     actionChoices.push(
-      containerReady
+      canDoDbAction
         ? {
-            name: `${chalk.green('+')} Create database`,
-            value: 'create_database',
+            name: `${chalk.magenta('↓')} Backup database`,
+            value: 'backup',
           }
-        : disabledItem('+', 'Create database'),
+        : disabledItem('↓', 'Backup database'),
     )
-  }
 
-  // Rename database - only when engine supports it AND container has databases
-  if (canRenameDatabase(config.engine) && databases.length > 0) {
+    // Restore
     actionChoices.push(
-      containerReady
+      canDoDbAction
         ? {
-            name: `${chalk.yellow('⇄')} Rename database`,
-            value: 'rename_database',
+            name: `${chalk.magenta('↑')} Restore from backup`,
+            value: 'restore',
           }
-        : disabledItem('⇄', 'Rename database'),
+        : disabledItem('↑', 'Restore from backup'),
     )
   }
 
-  // Drop database - only when engine supports it AND has >1 database (can't drop primary)
-  if (canDropDatabase(config.engine) && databases.length > 1) {
-    actionChoices.push(
-      containerReady
-        ? {
-            name: `${chalk.red('−')} Drop database`,
-            value: 'drop_database',
-          }
-        : disabledItem('−', 'Drop database'),
-    )
-  }
-
-  // Backup - requires database selection for multi-db containers
-  actionChoices.push(
-    canDoDbAction
-      ? { name: `${chalk.magenta('↓')} Backup database`, value: 'backup' }
-      : disabledItem('↓', 'Backup database'),
-  )
-
-  // Restore - requires database selection for multi-db containers
-  actionChoices.push(
-    canDoDbAction
-      ? { name: `${chalk.magenta('↑')} Restore from backup`, value: 'restore' }
-      : disabledItem('↑', 'Restore from backup'),
-  )
-
-  // Export - server-based DBs must be running, file-based must have the file
+  // Export - always container-level (server-based must be running, file-based must have the file)
   actionChoices.push(
     containerReady
       ? { name: `${chalk.cyan('⬆')} Export`, value: 'export' }
@@ -1304,55 +1311,31 @@ export async function showContainerSubmenu(
         await showMainMenu()
         return
       }
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     }
     case 'stop':
       await handleStopContainer(containerName)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
-    case 'select-database': {
-      const result = await handleSelectDatabase(
-        containerName,
-        databases,
-        config.database,
-      )
-      if (result.action === 'home') {
-        await showMainMenu()
-        return
-      }
-      if (result.action === 'back') {
-        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
-        return
-      }
-      if (result.action === 'change-default') {
-        await handleChangeDefaultDatabase(
-          containerName,
-          databases,
-          config.database,
-        )
-        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
-        return
-      }
-      // action === 'select'
-      await showContainerSubmenu(containerName, showMainMenu, result.database)
+    case 'databases':
+      await showDatabasesSubmenu(containerName, showMainMenu)
       return
-    }
     case 'shell':
       await handleOpenShell(containerName, activeDatabase)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'run-sql':
       await handleRunSql(containerName, activeDatabase)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'logs':
       await handleViewLogs(containerName)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'stop-pgweb':
       await stopPgwebProcess(containerName, config.engine)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'edit': {
       const newName = await handleEditContainer(containerName)
@@ -1362,9 +1345,9 @@ export async function showContainerSubmenu(
       }
       if (newName !== containerName) {
         // Container was renamed, show submenu with new name
-        await showContainerSubmenu(newName, showMainMenu, activeDatabase)
+        await showContainerSubmenu(newName, showMainMenu)
       } else {
-        await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+        await showContainerSubmenu(containerName, showMainMenu)
       }
       return
     }
@@ -1373,31 +1356,31 @@ export async function showContainerSubmenu(
       return
     case 'copy':
       await handleCopyConnectionString(containerName, activeDatabase)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'create_user':
       await handleCreateUser(containerName, activeDatabase)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'create_database':
       await handleCreateDatabase(containerName)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'rename_database':
       await handleRenameDatabase(containerName)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'drop_database':
       await handleDropDatabase(containerName)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'backup':
       await handleBackupForContainer(containerName, activeDatabase)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'restore':
       await handleRestoreForContainer(containerName, activeDatabase)
-      await showContainerSubmenu(containerName, showMainMenu, activeDatabase)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'detach':
       await handleDetachContainer(containerName, showMainMenu)
@@ -1413,6 +1396,337 @@ export async function showContainerSubmenu(
       return
     case 'main':
       return // Return to main menu
+  }
+}
+
+async function showDatabasesSubmenu(
+  containerName: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.error(uiError(`Container "${containerName}" not found`))
+    return
+  }
+
+  const databases = config.databases || [config.database]
+
+  // If only 1 database remains, return to container submenu (inline mode)
+  if (databases.length <= 1) {
+    await showContainerSubmenu(containerName, showMainMenu)
+    return
+  }
+
+  const engineIcon = getEngineIcon(config.engine)
+
+  console.clear()
+  console.log(header(`${engineIcon} ${containerName} - Databases`))
+  console.log()
+
+  const choices: MenuChoice[] = databases.map((db) => ({
+    name: db === config.database ? `${db} ${chalk.gray('(default)')}` : db,
+    value: db,
+  }))
+
+  choices.push(new inquirer.Separator())
+
+  // Create database - only if engine supports it AND container is running
+  const isFileBased = isFileBasedEngine(config.engine)
+  const containerReady = isFileBased
+    ? existsSync(config.database)
+    : await processManager.isRunning(containerName, { engine: config.engine })
+
+  if (canCreateDatabase(config.engine) && containerReady) {
+    choices.push({
+      name: `${chalk.green('+')} Create database`,
+      value: '_create_database',
+    })
+  }
+
+  choices.push({
+    name: `${chalk.blue('←')} Back`,
+    value: '_back',
+  })
+  choices.push({
+    name: `${chalk.blue('⌂')} Home ${chalk.gray('(esc)')}`,
+    value: '_home',
+  })
+  choices.push(new inquirer.Separator())
+
+  const { selection } = await escapeablePrompt<{ selection: string }>([
+    {
+      type: 'list',
+      name: 'selection',
+      message: 'Select a database:',
+      choices,
+      pageSize: getPageSize(),
+    },
+  ])
+
+  switch (selection) {
+    case '_create_database':
+      await handleCreateDatabase(containerName)
+      await showDatabasesSubmenu(containerName, showMainMenu)
+      return
+    case '_back':
+      await showContainerSubmenu(containerName, showMainMenu)
+      return
+    case '_home':
+      return
+    default:
+      await showDatabaseActionMenu(containerName, selection, showMainMenu)
+      return
+  }
+}
+
+async function showDatabaseActionMenu(
+  containerName: string,
+  database: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.error(uiError(`Container "${containerName}" not found`))
+    return
+  }
+
+  const databases = config.databases || [config.database]
+
+  // If the database no longer exists, return to databases submenu
+  if (!databases.includes(database)) {
+    await showDatabasesSubmenu(containerName, showMainMenu)
+    return
+  }
+
+  const engineIcon = getEngineIcon(config.engine)
+  const headerText = `${engineIcon} ${containerName} ${chalk.gray('→')} ${database}`
+
+  console.clear()
+  console.log(header(headerText))
+
+  const isFileBased = isFileBasedEngine(config.engine)
+  const isRunning = isFileBased
+    ? existsSync(config.database)
+    : await processManager.isRunning(containerName, { engine: config.engine })
+  const containerReady = isRunning
+
+  console.log(
+    chalk.gray(
+      `${config.engine} ${config.version} - ${isRunning ? 'running' : 'stopped'}`,
+    ),
+  )
+  console.log()
+
+  const actionChoices: MenuChoice[] = []
+
+  function disabledItem(icon: string, label: string) {
+    return {
+      name: chalk.gray(`${icon} ${label}`),
+      value: '_disabled_',
+      disabled: '',
+    }
+  }
+
+  // Data operations section
+  const dataSectionLabel = containerReady
+    ? isFileBased
+      ? 'Available'
+      : 'Running'
+    : isFileBased
+      ? 'Database file missing'
+      : 'Start container first'
+  actionChoices.push(
+    new inquirer.Separator(chalk.gray(`── ${dataSectionLabel} ──`)),
+  )
+
+  // Open console
+  actionChoices.push(
+    containerReady
+      ? { name: `${chalk.blue('>')} Open console`, value: 'shell' }
+      : disabledItem('>', 'Open console'),
+  )
+
+  // Run script file
+  const engineConfig = await getEngineConfig(config.engine)
+  if (engineConfig.scriptFileLabel) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.yellow('▷')} ${engineConfig.scriptFileLabel}`,
+            value: 'run-sql',
+          }
+        : disabledItem('▷', engineConfig.scriptFileLabel),
+    )
+  }
+
+  // Copy connection string
+  actionChoices.push(
+    containerReady
+      ? {
+          name: `${chalk.green('⎘')} Copy connection string`,
+          value: 'copy',
+        }
+      : disabledItem('⎘', 'Copy connection string'),
+  )
+
+  // Create user
+  const engine = getEngine(config.engine)
+  const supportsUsers = engine.createUser !== BaseEngine.prototype.createUser
+  if (supportsUsers) {
+    actionChoices.push(
+      containerReady
+        ? { name: `${chalk.yellow('+')} Create user`, value: 'create_user' }
+        : disabledItem('+', 'Create user'),
+    )
+  }
+
+  // Rename database
+  if (canRenameDatabase(config.engine)) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.yellow('⇄')} Rename database`,
+            value: 'rename_database',
+          }
+        : disabledItem('⇄', 'Rename database'),
+    )
+  }
+
+  // Drop database - can't drop the default database
+  if (canDropDatabase(config.engine) && database !== config.database) {
+    actionChoices.push(
+      containerReady
+        ? {
+            name: `${chalk.red('−')} Drop database`,
+            value: 'drop_database',
+          }
+        : disabledItem('−', 'Drop database'),
+    )
+  }
+
+  // Backup
+  actionChoices.push(
+    containerReady
+      ? { name: `${chalk.magenta('↓')} Backup database`, value: 'backup' }
+      : disabledItem('↓', 'Backup database'),
+  )
+
+  // Restore
+  actionChoices.push(
+    containerReady
+      ? {
+          name: `${chalk.magenta('↑')} Restore from backup`,
+          value: 'restore',
+        }
+      : disabledItem('↑', 'Restore from backup'),
+  )
+
+  actionChoices.push(new inquirer.Separator())
+
+  // Set as default
+  if (database !== config.database) {
+    actionChoices.push({
+      name: `${chalk.yellow('★')} Set as default`,
+      value: 'set_default',
+    })
+  }
+
+  // Navigation
+  actionChoices.push({
+    name: `${chalk.blue('←')} Back to databases`,
+    value: 'back',
+  })
+  actionChoices.push({
+    name: `${chalk.blue('⌂')} Home ${chalk.gray('(esc)')}`,
+    value: 'home',
+  })
+  actionChoices.push(new inquirer.Separator())
+
+  const { action } = await escapeablePrompt<{ action: string }>([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'What would you like to do?',
+      choices: actionChoices,
+      pageSize: getPageSize(),
+    },
+  ])
+
+  switch (action) {
+    case 'shell':
+      await handleOpenShell(containerName, database)
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'run-sql':
+      await handleRunSql(containerName, database)
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'copy':
+      await handleCopyConnectionString(containerName, database)
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'create_user':
+      await handleCreateUser(containerName, database)
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'rename_database': {
+      // After rename, the database name may have changed
+      const beforeDbs = [...databases]
+      await handleRenameDatabase(containerName, database)
+      const afterConfig = await containerManager.getConfig(containerName)
+      const afterDbs: string[] =
+        afterConfig?.databases ||
+        ([afterConfig?.database].filter(Boolean) as string[])
+      // Find the new database name (appeared after rename but not before)
+      const newDb = afterDbs.find((db) => !beforeDbs.includes(db))
+      if (newDb) {
+        // Database was renamed — show the new database's action menu
+        await showDatabaseActionMenu(containerName, newDb, showMainMenu)
+      } else {
+        // Rename failed or user kept original — stay on current database
+        await showDatabaseActionMenu(containerName, database, showMainMenu)
+      }
+      return
+    }
+    case 'drop_database': {
+      await handleDropDatabase(containerName, database)
+      // Check if the database still exists after drop
+      const freshConfig = await containerManager.getConfig(containerName)
+      const freshDbs = freshConfig?.databases || [freshConfig?.database]
+      if (!freshDbs?.includes(database)) {
+        // Database was dropped
+        if ((freshDbs?.length ?? 0) <= 1) {
+          // Only 1 database left — no longer multi-db, go to container submenu
+          await showContainerSubmenu(containerName, showMainMenu)
+        } else {
+          await showDatabasesSubmenu(containerName, showMainMenu)
+        }
+      } else {
+        // Database still exists (user cancelled) — stay in per-db menu
+        await showDatabaseActionMenu(containerName, database, showMainMenu)
+      }
+      return
+    }
+    case 'backup':
+      await handleBackupForContainer(containerName, database)
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'restore':
+      await handleRestoreForContainer(containerName, database)
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'set_default':
+      await containerManager.updateConfig(containerName, { database })
+      console.log()
+      console.log(uiSuccess(`Default database changed to "${database}"`))
+      await pressEnterToContinue()
+      await showDatabaseActionMenu(containerName, database, showMainMenu)
+      return
+    case 'back':
+      await showDatabasesSubmenu(containerName, showMainMenu)
+      return
+    case 'home':
+      return
   }
 }
 
@@ -1911,105 +2225,6 @@ async function handleEditContainer(
   return containerName
 }
 
-type SelectDatabaseResult =
-  | { action: 'select'; database: string }
-  | { action: 'change-default' }
-  | { action: 'back' }
-  | { action: 'home' }
-
-async function handleSelectDatabase(
-  containerName: string,
-  databases: string[],
-  primaryDatabase: string,
-): Promise<SelectDatabaseResult> {
-  console.clear()
-  console.log(header(`${containerName} - Select Database`))
-  console.log()
-
-  const choices: MenuChoice[] = databases.map((db) => ({
-    name: db === primaryDatabase ? `${db} ${chalk.gray('(default)')}` : db,
-    value: db,
-  }))
-
-  choices.push(new inquirer.Separator())
-  choices.push({
-    name: `${chalk.yellow('★')} Change default database`,
-    value: '_change-default',
-  })
-  choices.push({
-    name: `${chalk.blue('←')} Back`,
-    value: '_back',
-  })
-  choices.push({
-    name: `${chalk.blue('⌂')} Home ${chalk.gray('(esc)')}`,
-    value: '_home',
-  })
-
-  const { database } = await escapeablePrompt<{ database: string }>([
-    {
-      type: 'list',
-      name: 'database',
-      message: 'Select a database:',
-      choices,
-      pageSize: getPageSize(),
-    },
-  ])
-
-  if (database === '_back') {
-    return { action: 'back' }
-  }
-  if (database === '_home') {
-    return { action: 'home' }
-  }
-  if (database === '_change-default') {
-    return { action: 'change-default' }
-  }
-
-  return { action: 'select', database }
-}
-
-async function handleChangeDefaultDatabase(
-  containerName: string,
-  databases: string[],
-  currentDefault: string,
-): Promise<void> {
-  console.clear()
-  console.log(header(`${containerName} - Change Default Database`))
-  console.log()
-
-  const choices: MenuChoice[] = databases.map((db) => ({
-    name:
-      db === currentDefault ? `${db} ${chalk.gray('(current default)')}` : db,
-    value: db,
-  }))
-
-  choices.push(new inquirer.Separator())
-  choices.push({
-    name: `${chalk.blue('←')} Cancel`,
-    value: '_cancel',
-  })
-
-  const { database } = await escapeablePrompt<{ database: string }>([
-    {
-      type: 'list',
-      name: 'database',
-      message: 'Select new default database:',
-      choices,
-      pageSize: getPageSize(),
-    },
-  ])
-
-  if (database === '_cancel' || database === currentDefault) {
-    return
-  }
-
-  // Update the container config
-  await containerManager.updateConfig(containerName, { database })
-  console.log()
-  console.log(uiSuccess(`Default database changed to "${database}"`))
-  await pressEnterToContinue()
-}
-
 async function handleCloneFromSubmenu(
   sourceName: string,
   showMainMenu: () => Promise<void>,
@@ -2246,7 +2461,7 @@ async function handleExportSubmenu(
       await handleExportDocker(containerName, databases, showMainMenu)
       return
     case 'back':
-      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'home':
       await showMainMenu()
@@ -2296,7 +2511,7 @@ async function handleExportDocker(
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
     await pressEnterToContinue()
-    await showContainerSubmenu(containerName, showMainMenu, undefined)
+    await showContainerSubmenu(containerName, showMainMenu)
     return
   }
 
@@ -2320,7 +2535,7 @@ async function handleExportDocker(
     if (!shouldOverwrite) {
       console.log(uiInfo('Export cancelled'))
       await pressEnterToContinue()
-      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     }
     // Remove existing directory
@@ -2333,7 +2548,7 @@ async function handleExportDocker(
         ),
       )
       await pressEnterToContinue()
-      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     }
   }
@@ -2402,7 +2617,7 @@ async function handleExportDocker(
       copySpinner.fail('Failed to copy database file')
       console.log(uiError((error as Error).message))
       await pressEnterToContinue()
-      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     }
   } else {
@@ -2445,7 +2660,7 @@ async function handleExportDocker(
       backupSpinner.fail('Backup failed')
       console.log(uiError((error as Error).message))
       await pressEnterToContinue()
-      await showContainerSubmenu(containerName, showMainMenu, undefined)
+      await showContainerSubmenu(containerName, showMainMenu)
       return
     }
   }
@@ -2503,7 +2718,7 @@ async function handleExportDocker(
   }
 
   await pressEnterToContinue()
-  await showContainerSubmenu(containerName, showMainMenu, undefined)
+  await showContainerSubmenu(containerName, showMainMenu)
 }
 
 async function handleCreateUser(
@@ -2642,7 +2857,10 @@ async function handleCreateDatabase(containerName: string): Promise<void> {
     return
   }
 
-  if (config.status !== 'running') {
+  const isRunning = await processManager.isRunning(containerName, {
+    engine: config.engine,
+  })
+  if (!isRunning) {
     console.log(
       uiError(
         `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
@@ -2730,7 +2948,10 @@ async function handleCreateDatabase(containerName: string): Promise<void> {
   await pressEnterToContinue()
 }
 
-async function handleRenameDatabase(containerName: string): Promise<void> {
+async function handleRenameDatabase(
+  containerName: string,
+  targetDatabase?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
@@ -2738,7 +2959,10 @@ async function handleRenameDatabase(containerName: string): Promise<void> {
     return
   }
 
-  if (config.status !== 'running') {
+  const isRunning = await processManager.isRunning(containerName, {
+    engine: config.engine,
+  })
+  if (!isRunning) {
     console.log(
       uiError(
         `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
@@ -2757,27 +2981,31 @@ async function handleRenameDatabase(containerName: string): Promise<void> {
     return
   }
 
-  // Select database to rename — Escape returns to submenu
+  // Select database to rename — skip prompt if targetDatabase provided
   let oldName: string
-  try {
-    const result = await escapeablePrompt<{ oldName: string }>([
-      {
-        type: 'list',
-        name: 'oldName',
-        message: 'Select database to rename:',
-        choices: trackedDatabases.map((db) => {
-          const isPrimary = db === config.database
-          return {
-            name: isPrimary ? `${db} (primary)` : db,
-            value: db,
-          }
-        }),
-      },
-    ])
-    oldName = result.oldName
-  } catch (error) {
-    if (error instanceof EscapeError) return
-    throw error
+  if (targetDatabase) {
+    oldName = targetDatabase
+  } else {
+    try {
+      const result = await escapeablePrompt<{ oldName: string }>([
+        {
+          type: 'list',
+          name: 'oldName',
+          message: 'Select database to rename:',
+          choices: trackedDatabases.map((db) => {
+            const isDefault = db === config.database
+            return {
+              name: isDefault ? `${db} (default)` : db,
+              value: db,
+            }
+          }),
+        },
+      ])
+      oldName = result.oldName
+    } catch (error) {
+      if (error instanceof EscapeError) return
+      throw error
+    }
   }
 
   // Enter new name — Escape returns to submenu
@@ -2809,7 +3037,7 @@ async function handleRenameDatabase(containerName: string): Promise<void> {
     if (isPrimaryRename) {
       console.log(
         uiWarning(
-          `This will rename the primary database. The primary will be updated to "${newName}".`,
+          `This will rename the default database. The default will be updated to "${newName}".`,
         ),
       )
     }
@@ -2820,7 +3048,7 @@ async function handleRenameDatabase(containerName: string): Promise<void> {
     let backupPath: string | undefined
 
     if (caps.supportsRename === 'native') {
-      // Native rename (ClickHouse, CockroachDB) — instant, no backup needed
+      // Native rename (PostgreSQL, ClickHouse, CockroachDB, Meilisearch) — instant, no backup needed
       const spinner = createSpinner(`Renaming "${oldName}" to "${newName}"...`)
       spinner.start()
       try {
@@ -2959,7 +3187,7 @@ async function handleRenameDatabase(containerName: string): Promise<void> {
       console.log(chalk.gray('  Backup:    '), chalk.white(backupPath))
     }
     if (isPrimaryRename) {
-      console.log(chalk.gray(`  Primary database updated to "${newName}".`))
+      console.log(chalk.gray(`  Default database updated to "${newName}".`))
     }
   } catch (error) {
     console.log(uiError((error as Error).message))
@@ -2968,7 +3196,10 @@ async function handleRenameDatabase(containerName: string): Promise<void> {
   await pressEnterToContinue()
 }
 
-async function handleDropDatabase(containerName: string): Promise<void> {
+async function handleDropDatabase(
+  containerName: string,
+  targetDatabase?: string,
+): Promise<void> {
   const config = await containerManager.getConfig(containerName)
   if (!config) {
     console.log(uiError(`Container "${containerName}" not found`))
@@ -2976,7 +3207,10 @@ async function handleDropDatabase(containerName: string): Promise<void> {
     return
   }
 
-  if (config.status !== 'running') {
+  const isRunning = await processManager.isRunning(containerName, {
+    engine: config.engine,
+  })
+  if (!isRunning) {
     console.log(
       uiError(
         `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
@@ -2986,38 +3220,53 @@ async function handleDropDatabase(containerName: string): Promise<void> {
     return
   }
 
-  const rawDatabases = config.databases || []
-  const trackedDatabases = [...new Set([config.database, ...rawDatabases])]
-  const droppable = trackedDatabases.filter((db) => db !== config.database)
-
-  if (droppable.length === 0) {
-    console.log(
-      uiError(`No databases to drop. The primary database cannot be dropped.`),
-    )
-    await pressEnterToContinue()
-    return
-  }
-
-  // Select database to drop — Escape returns to submenu
+  // Select database to drop — skip prompt if targetDatabase provided
   let dbName: string
-  try {
-    console.log(
-      chalk.gray(
-        `  Primary database "${config.database}" is excluded — use "spindb delete" to remove the container.`,
-      ),
-    )
-    const result = await escapeablePrompt<{ dbName: string }>([
-      {
-        type: 'list',
-        name: 'dbName',
-        message: 'Select database to drop:',
-        choices: droppable.map((db) => ({ name: db, value: db })),
-      },
-    ])
-    dbName = result.dbName
-  } catch (error) {
-    if (error instanceof EscapeError) return
-    throw error
+  if (targetDatabase) {
+    if (targetDatabase === config.database) {
+      console.log(
+        uiError(
+          `Cannot drop the default database. Use "spindb delete" to remove the container.`,
+        ),
+      )
+      await pressEnterToContinue()
+      return
+    }
+    dbName = targetDatabase
+  } else {
+    const rawDatabases = config.databases || []
+    const trackedDatabases = [...new Set([config.database, ...rawDatabases])]
+    const droppable = trackedDatabases.filter((db) => db !== config.database)
+
+    if (droppable.length === 0) {
+      console.log(
+        uiError(
+          `No databases to drop. The default database cannot be dropped.`,
+        ),
+      )
+      await pressEnterToContinue()
+      return
+    }
+
+    try {
+      console.log(
+        chalk.gray(
+          `  Default database "${config.database}" is excluded — use "spindb delete" to remove the container.`,
+        ),
+      )
+      const result = await escapeablePrompt<{ dbName: string }>([
+        {
+          type: 'list',
+          name: 'dbName',
+          message: 'Select database to drop:',
+          choices: droppable.map((db) => ({ name: db, value: db })),
+        },
+      ])
+      dbName = result.dbName
+    } catch (error) {
+      if (error instanceof EscapeError) return
+      throw error
+    }
   }
 
   // Confirm — Escape cancels

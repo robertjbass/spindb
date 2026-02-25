@@ -963,7 +963,8 @@ export class MongoDBEngine extends BaseEngine {
     // Handle both toArray() results and single document results
     const wrappedScript = `JSON.stringify(${script})`
 
-    let cmd: string
+    // Build args array (avoids shell injection by never passing through a shell)
+    let args: string[]
     if (options?.host) {
       // Remote: build a connection URI for mongosh
       const user = options.username ? encodeURIComponent(options.username) : ''
@@ -975,21 +976,61 @@ export class MongoDBEngine extends BaseEngine {
       const portSuffix = isSrv ? '' : `:${port}`
       const sslParam = options.ssl && !isSrv ? 'tls=true' : ''
       const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
-
-      if (isWindows()) {
-        const escaped = wrappedScript.replace(/"/g, '\\"')
-        cmd = `"${mongosh}" "${uri}" --quiet --eval "${escaped}"`
-      } else {
-        const escaped = wrappedScript.replace(/'/g, "'\\''")
-        cmd = `"${mongosh}" '${uri}' --quiet --eval '${escaped}'`
-      }
+      args = [uri, '--quiet', '--eval', wrappedScript]
     } else {
-      cmd = buildMongoshCommand(mongosh, port, db, wrappedScript, {
-        quiet: true,
-      })
+      args = [
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        db,
+        '--quiet',
+        '--eval',
+        wrappedScript,
+      ]
     }
 
-    const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
+    const { stdout, stderr } = await new Promise<{
+      stdout: string
+      stderr: string
+    }>((resolve, reject) => {
+      const proc = spawn(mongosh, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdoutBuf = ''
+      let stderrBuf = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdoutBuf += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderrBuf += data.toString()
+      })
+
+      const timeout = setTimeout(() => {
+        proc.kill('SIGTERM')
+        reject(new Error('Query timed out after 60 seconds'))
+      }, 60000)
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout)
+        reject(err)
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        if (code !== 0 && stderrBuf && !stdoutBuf.trim()) {
+          reject(
+            new Error(
+              `${stderrBuf}${stdoutBuf ? `\nOutput: ${stdoutBuf}` : ''}`,
+            ),
+          )
+          return
+        }
+        resolve({ stdout: stdoutBuf, stderr: stderrBuf })
+      })
+    })
 
     if (stderr && !stdout.trim()) {
       throw new Error(`${stderr}${stdout ? `\nOutput: ${stdout}` : ''}`)

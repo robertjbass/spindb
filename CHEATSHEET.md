@@ -362,8 +362,8 @@ spindb databases rename mydb old new --json
 spindb databases drop mydb analytics --json
 ```
 
-> **Rename strategy:** For engines that support native rename (ClickHouse, CockroachDB),
-> the operation is instant. For all others (PostgreSQL, MySQL, MongoDB, etc.), SpinDB
+> **Rename strategy:** For engines that support native rename (PostgreSQL, ClickHouse, CockroachDB, Meilisearch),
+> the operation is instant. For all others (MySQL, MongoDB, etc.), SpinDB
 > performs a safe backup → create → restore → drop sequence. A safety backup is always
 > created at `~/.spindb/backups/rename/` and retained after the operation.
 >

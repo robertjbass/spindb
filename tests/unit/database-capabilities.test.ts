@@ -8,6 +8,7 @@ import {
   getUnsupportedRenameMessage,
   getUnsupportedDropMessage,
 } from '../../core/database-capabilities'
+import { getEngine } from '../../engines'
 import { Engine, ALL_ENGINES } from '../../types'
 import { assert, assertEqual } from '../utils/assertions'
 
@@ -79,14 +80,18 @@ describe('Database Capabilities', () => {
       }
     })
 
-    it('should return native rename only for ClickHouse and CockroachDB', () => {
+    it('should return native rename for PostgreSQL, ClickHouse, CockroachDB, and Meilisearch', () => {
       const nativeRename = ALL_ENGINES.filter(
         (e) => getDatabaseCapabilities(e).supportsRename === 'native',
       )
       assertEqual(
         nativeRename.length,
-        2,
-        'Should have exactly 2 native-rename engines',
+        4,
+        'Should have exactly 4 native-rename engines',
+      )
+      assert(
+        nativeRename.includes(Engine.PostgreSQL),
+        'PostgreSQL should support native rename',
       )
       assert(
         nativeRename.includes(Engine.ClickHouse),
@@ -96,11 +101,14 @@ describe('Database Capabilities', () => {
         nativeRename.includes(Engine.CockroachDB),
         'CockroachDB should support native rename',
       )
+      assert(
+        nativeRename.includes(Engine.Meilisearch),
+        'Meilisearch should support native rename',
+      )
     })
 
     it('should return backup-restore rename for most supported engines', () => {
       const backupRestore = [
-        Engine.PostgreSQL,
         Engine.MySQL,
         Engine.MariaDB,
         Engine.MongoDB,
@@ -110,7 +118,6 @@ describe('Database Capabilities', () => {
         Engine.InfluxDB,
         Engine.CouchDB,
         Engine.Qdrant,
-        Engine.Meilisearch,
         Engine.Weaviate,
       ]
       for (const engine of backupRestore) {
@@ -399,6 +406,61 @@ describe('Database Capabilities', () => {
       const unsupported = ALL_ENGINES.filter((e) => !canCreateDatabase(e))
       assertEqual(supported.length, 14, 'Should have 14 supported engines')
       assertEqual(unsupported.length, 6, 'Should have 6 unsupported engines')
+    })
+  })
+
+  describe('native rename engine implementations', () => {
+    const nativeRenameEngines = ALL_ENGINES.filter(
+      (e) => getDatabaseCapabilities(e).supportsRename === 'native',
+    )
+
+    it('every native-rename engine should override renameDatabase', () => {
+      for (const engineName of nativeRenameEngines) {
+        const engine = getEngine(engineName)
+        // The base engine's renameDatabase throws UnsupportedOperationError.
+        // Native-rename engines must override it with their own implementation.
+        // We verify by checking the method is not the base class default.
+        const proto = Object.getPrototypeOf(engine)
+        assert(
+          Object.prototype.hasOwnProperty.call(proto, 'renameDatabase'),
+          `${engineName} has native rename capability but does not override renameDatabase()`,
+        )
+      }
+    })
+
+    it('backup-restore engines should NOT override renameDatabase', () => {
+      const backupRestoreEngines = ALL_ENGINES.filter(
+        (e) => getDatabaseCapabilities(e).supportsRename === 'backup-restore',
+      )
+      for (const engineName of backupRestoreEngines) {
+        const engine = getEngine(engineName)
+        const proto = Object.getPrototypeOf(engine)
+        assertEqual(
+          Object.prototype.hasOwnProperty.call(proto, 'renameDatabase'),
+          false,
+          `${engineName} uses backup-restore but overrides renameDatabase() — should it be native?`,
+        )
+      }
+    })
+
+    it('should include PostgreSQL, ClickHouse, CockroachDB, and Meilisearch', () => {
+      const expected = [
+        Engine.PostgreSQL,
+        Engine.ClickHouse,
+        Engine.CockroachDB,
+        Engine.Meilisearch,
+      ]
+      for (const engine of expected) {
+        assert(
+          nativeRenameEngines.includes(engine),
+          `${engine} should be in the native-rename list`,
+        )
+      }
+      assertEqual(
+        nativeRenameEngines.length,
+        expected.length,
+        `Should have exactly ${expected.length} native-rename engines`,
+      )
     })
   })
 })

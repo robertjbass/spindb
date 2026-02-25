@@ -91,7 +91,7 @@ export const queryCommand = new Command('query')
       try {
         const containerName = name
 
-        const config = await containerManager.getConfig(containerName)
+        let config = await containerManager.getConfig(containerName)
         if (!config) {
           if (options.json) {
             console.log(
@@ -135,7 +135,7 @@ export const queryCommand = new Command('query')
           }
           // Override port if the connection string specifies one
           if (parsed.port) {
-            config.port = parsed.port
+            config = { ...config, port: parsed.port }
           }
         } else if (isFileBasedEngine(engineName)) {
           // File-based databases: check file exists instead of running status

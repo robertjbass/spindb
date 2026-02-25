@@ -214,12 +214,14 @@ Platform commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 ## Database Create/Rename/Drop Support
 
 ### Engines with native rename
+- **PostgreSQL**: Uses `ALTER DATABASE "old" RENAME TO "new"` (atomic, instant, since PG 7.4)
 - **ClickHouse**: Uses `RENAME DATABASE "old" TO "new"` (atomic, instant)
 - **CockroachDB**: Uses `ALTER DATABASE "old" RENAME TO "new"` (atomic, instant)
+- **Meilisearch**: Uses `PATCH /indexes/{uid}` with `{"uid": "new"}` (atomic, since v1.18.0)
 
 ### Engines using backup/restore rename strategy
-PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, SurrealDB, TypeDB, InfluxDB, CouchDB,
-Qdrant, Meilisearch, Weaviate — rename creates a safety backup at
+MySQL, MariaDB, MongoDB, FerretDB, SurrealDB, TypeDB, InfluxDB, CouchDB,
+Qdrant, Weaviate — rename creates a safety backup at
 `~/.spindb/backups/rename/{container}-{db}-rename-{timestamp}.{ext}`, creates the new
 database, restores data, then drops the old one. If the drop fails, the data is safe in
 the new database and a warning is shown.

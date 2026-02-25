@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-02-24
+
+### Added
+- **Hybrid database submenu** — Multi-database containers now show a "Databases (N)" entry that opens a database list, where selecting a database opens a per-database action menu (shell, run SQL, copy URL, rename, drop, backup, restore). Single-database containers keep all actions inline with zero extra clicks.
+- **Native rename for PostgreSQL** — Uses `ALTER DATABASE "old" RENAME TO "new"` (atomic, instant, available since PG 7.4). Terminates active connections first since PostgreSQL requires zero connections to the target database.
+- **Native rename for Meilisearch** — Uses `PATCH /indexes/{uid}` with `{"uid": "new-name"}` (atomic, available since Meilisearch v1.18.0).
+- **Capability/implementation consistency tests** — New unit tests verify every native-rename engine overrides `renameDatabase()` and backup-restore engines do not, catching misclassifications automatically.
+
+### Fixed
+- **MongoDB shell injection** — `executeQuery()` replaced `execAsync(cmd)` with `spawn(mongosh, args)`, preventing shell injection via crafted query strings.
+- **REST API URL encoding** — Added `encodeURIComponent(database)` to URL path segments in Qdrant, Weaviate, and Meilisearch engines, preventing errors with special characters in collection/index names.
+- **Stale status checks in database handlers** — `handleCreateDatabase`, `handleRenameDatabase`, and `handleDropDatabase` now use live `processManager.isRunning()` instead of cached `config.status` which could be stale.
+- **Config mutation in query command** — Remote container port override now uses `config = { ...config, port }` instead of mutating the shared config object directly.
+
+### Improved
+- **"Set as default" in per-database menu** — Multi-database containers can set any database as the default directly from the per-database action menu.
+- **Rename/drop accept target database** — `handleRenameDatabase` and `handleDropDatabase` accept an optional `targetDatabase` parameter, skipping the selection prompt when called from the per-database action menu.
+- **"Primary" → "default" terminology** — Consistent use of "default" instead of "primary" across all database operation UI strings.
+
+### Removed
+- **`handleSelectDatabase`** and **`handleChangeDefaultDatabase`** — Replaced by the databases submenu and "Set as default" action in the per-database menu.
+
 ## [0.41.0] - 2026-02-24
 
 ### Added

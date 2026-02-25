@@ -917,7 +917,7 @@ export class MeilisearchEngine extends BaseEngine {
     const response = await meilisearchApiRequest(
       port,
       'DELETE',
-      `/indexes/${database}`,
+      `/indexes/${encodeURIComponent(database)}`,
     )
 
     // Meilisearch returns 202 Accepted for async delete
@@ -928,6 +928,34 @@ export class MeilisearchEngine extends BaseEngine {
     }
 
     logDebug(`Deleted Meilisearch index: ${database}`)
+  }
+
+  /**
+   * Rename an index using Meilisearch's native PATCH /indexes/{uid}
+   * Available since Meilisearch v1.18.0
+   */
+  async renameDatabase(
+    container: ContainerConfig,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    const { port } = container
+
+    const response = await meilisearchApiRequest(
+      port,
+      'PATCH',
+      `/indexes/${encodeURIComponent(oldName)}`,
+      { uid: newName },
+    )
+
+    // Meilisearch returns 202 Accepted for async operations
+    if (response.status !== 202 && response.status !== 200) {
+      throw new Error(
+        `Failed to rename index: ${JSON.stringify(response.data)}`,
+      )
+    }
+
+    logDebug(`Renamed Meilisearch index: ${oldName} -> ${newName}`)
   }
 
   /**

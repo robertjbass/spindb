@@ -210,7 +210,7 @@ export abstract class BaseEngine {
 
   /**
    * Rename a database within the container.
-   * Only engines with native rename support should override this (ClickHouse, CockroachDB).
+   * Only engines with native rename support should override this (PostgreSQL, ClickHouse, CockroachDB, Meilisearch).
    * Other engines use backup/restore strategy handled at the CLI layer.
    */
   async renameDatabase(

@@ -751,6 +751,58 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
+  /**
+   * Rename a database using PostgreSQL's native ALTER DATABASE RENAME.
+   * Terminates active connections first (PG requires zero connections to the target).
+   */
+  async renameDatabase(
+    container: ContainerConfig,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    assertValidDatabaseName(oldName)
+    assertValidDatabaseName(newName)
+    const { port } = container
+    const psqlPath = await this.getPsqlPath()
+
+    // PostgreSQL requires no active connections to the database being renamed
+    await this.terminateConnections(container, oldName)
+
+    const sql = `ALTER DATABASE "${oldName}" RENAME TO "${newName}"`
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      defaults.superuser,
+      '-d',
+      'postgres',
+      '-c',
+      sql,
+    ]
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(psqlPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Failed to rename database: ${stderr.trim()}`))
+        }
+      })
+      proc.on('error', reject)
+    })
+  }
+
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
     const { port, database } = container
     const db = database || 'postgres'

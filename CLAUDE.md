@@ -39,7 +39,7 @@ tests/fixtures/       # Test data and seed files
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
 
-**Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 20 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. ClickHouse and CockroachDB have native rename (`RENAME DATABASE`/`ALTER DATABASE RENAME TO`); 12 other engines use backup/restore; 6 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
+**Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 20 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 10 other engines use backup/restore; 6 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
 
 ### Critical: When Adding/Modifying Engines
 

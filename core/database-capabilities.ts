@@ -10,8 +10,10 @@ type DatabaseCapabilities = {
 function getDatabaseCapabilities(engine: Engine): DatabaseCapabilities {
   switch (engine) {
     // Full support — create, rename (native), drop
+    case Engine.PostgreSQL:
     case Engine.CockroachDB:
     case Engine.ClickHouse:
+    case Engine.Meilisearch:
       return {
         supportsCreate: true,
         supportsDrop: true,
@@ -19,7 +21,6 @@ function getDatabaseCapabilities(engine: Engine): DatabaseCapabilities {
       }
 
     // Full support — create, rename (backup/restore), drop
-    case Engine.PostgreSQL:
     case Engine.MySQL:
     case Engine.MariaDB:
     case Engine.MongoDB:
@@ -29,7 +30,6 @@ function getDatabaseCapabilities(engine: Engine): DatabaseCapabilities {
     case Engine.InfluxDB:
     case Engine.CouchDB:
     case Engine.Qdrant:
-    case Engine.Meilisearch:
     case Engine.Weaviate:
       return {
         supportsCreate: true,
