@@ -168,6 +168,15 @@ Hardcoded file IDs will become stale when EDB updates their download system.
 - [ ] Replace shell commands with Node.js APIs - use `fs.rename()` and `fs.cp()` instead of `mv`/`xcopy`
 - [ ] Validate paths are within expected directories before operations
 
+#### Input Sanitization for Layerbase Cloud Compatibility
+
+**Context:** Layerbase Cloud runs SpinDB inside Docker containers. User-supplied database names and container names flow into shell commands (`psql`, `mysql`, `mongorestore`, etc.) via entrypoint scripts and restore commands. Layerbase Cloud now validates these at its API layer, but SpinDB should also validate at the CLI/core layer as defense in depth.
+
+- [ ] Validate container names: `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$` — already partially enforced, audit for completeness
+- [ ] Validate database names passed to `spindb create --database`: reject shell metacharacters, enforce `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
+- [ ] Audit all `spawnSync`/`execSync` calls where user-supplied values are interpolated into shell strings — prefer argument arrays over string interpolation
+- [ ] Related: `layerbase-cloud/src/api/databases.ts` `getRestoreCommand()` now relies on sanitized inputs from the API layer
+
 ### Medium
 
 #### SQLite Container Creation Doesn't Validate Path
