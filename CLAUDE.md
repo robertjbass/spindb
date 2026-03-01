@@ -8,6 +8,11 @@
 - [docs/ENGINE_NOTES.md](docs/ENGINE_NOTES.md) — Per-engine implementation details
 - [docs/KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md) — Custom keyboard shortcut guide
 - Other: [TODO.md](TODO.md), [CHANGELOG.md](CHANGELOG.md), [TEST_COVERAGE.md](TEST_COVERAGE.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md)
+- **Ecosystem docs:** `~/dev/layerbase-architecture/` — Shared architecture, infrastructure inventory, cross-project rules, and agent configs.
+
+## Ecosystem
+
+SpinDB is the backbone of the Layerbase platform. **hostdb** builds database binaries and publishes them to `registry.layerbase.host` — spindb downloads them. **layerbase-cloud** (`~/dev/layerbase-cloud`) runs spindb inside Docker containers on Hetzner to provide managed databases with connection strings. **layerbase-desktop** (`~/dev/layerbase-desktop`) is an Electron GUI that calls spindb via IPC — it must never contain database logic that isn't in spindb. **layerbase** (`~/dev/layerbase`) is the Next.js web app at layerbase.com for billing, licensing, and eventually a cloud dashboard. Changes to spindb's CLI output or flags are breaking changes for layerbase-desktop.
 
 ## Overview
 
