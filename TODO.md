@@ -10,6 +10,7 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
+- [ ] **`spindb create --no-start` should skip tool check** — For file-based engines (SQLite, DuckDB), `spindb create --no-start` fails because it checks for the client tool (`sqlite3`) before downloading the binary that provides it. The `--no-start` flag should skip tool checks since nothing will run. This breaks the cloud Docker image prebake pattern (`create --no-start` + `delete --force`). Workaround: use `spindb engines download sqlite 3` instead.
 - [ ] **Pick logo and branding assets** - Review SVG concepts in `assets/` and `assets/concepts/`, finalize a logo for the tray icon, app badge, and wordmark
 - [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 18 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
@@ -167,6 +168,15 @@ Hardcoded file IDs will become stale when EDB updates their download system.
 
 - [ ] Replace shell commands with Node.js APIs - use `fs.rename()` and `fs.cp()` instead of `mv`/`xcopy`
 - [ ] Validate paths are within expected directories before operations
+
+#### Input Sanitization for Layerbase Cloud Compatibility
+
+**Context:** Layerbase Cloud runs SpinDB inside Docker containers. User-supplied database names and container names flow into shell commands (`psql`, `mysql`, `mongorestore`, etc.) via entrypoint scripts and restore commands. Layerbase Cloud now validates these at its API layer, but SpinDB should also validate at the CLI/core layer as defense in depth.
+
+- [ ] Validate container names: `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$` — already partially enforced, audit for completeness
+- [ ] Validate database names passed to `spindb create --database`: reject shell metacharacters, enforce `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
+- [ ] Audit all `spawnSync`/`execSync` calls where user-supplied values are interpolated into shell strings — prefer argument arrays over string interpolation
+- [ ] Related: `layerbase-cloud/src/api/databases.ts` `getRestoreCommand()` now relies on sanitized inputs from the API layer
 
 ### Medium
 
