@@ -10,6 +10,7 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
+- [ ] **`spindb create --no-start` should skip tool check** — For file-based engines (SQLite, DuckDB), `spindb create --no-start` fails because it checks for the client tool (`sqlite3`) before downloading the binary that provides it. The `--no-start` flag should skip tool checks since nothing will run. This breaks the cloud Docker image prebake pattern (`create --no-start` + `delete --force`). Workaround: use `spindb engines download sqlite 3` instead.
 - [ ] **Pick logo and branding assets** - Review SVG concepts in `assets/` and `assets/concepts/`, finalize a logo for the tray icon, app badge, and wordmark
 - [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 18 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
