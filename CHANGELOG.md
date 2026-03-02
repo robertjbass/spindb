@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.5] - 2026-03-02
+
+### Documentation
+- **CLAUDE.md** — Added link to ecosystem invariants (`INVARIANTS.md`), updated web app description to reflect cloud dashboard is live
+- **TODO.md** — Added `create --no-start` tool check bypass issue for file-based engines
+
 ## [0.42.4] - 2026-02-25
 
 ### Bug Fixes
