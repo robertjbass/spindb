@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.6] - 2026-03-04
+
+### Bug Fixes
+- **SQLite/DuckDB default location** — Changed default database file location from CWD to `~/.spindb/containers/` for consistency with server-based engines
+
 ## [0.42.5] - 2026-03-02
 
 ### Documentation
