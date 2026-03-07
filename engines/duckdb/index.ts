@@ -5,7 +5,7 @@
  * Key differences from PostgreSQL/MySQL:
  * - No start/stop operations (file-based)
  * - No port management
- * - Database files stored in user project directories (not ~/.spindb/)
+ * - Database files stored in ~/.spindb/containers/duckdb/<name>/ by default
  * - Uses a registry to track file paths
  *
  * Binary sourcing:
@@ -129,9 +129,14 @@ export class DuckDBEngine extends BaseEngine {
     _version: string,
     options: Record<string, unknown> = {},
   ): Promise<string> {
-    // Determine file path - default to CWD
+    // Determine file path - default to container directory (not CWD)
     const pathOption = options.path as string | undefined
-    const filePath = pathOption || `./${containerName}.duckdb`
+    const filePath =
+      pathOption ||
+      join(
+        paths.getContainerPath(containerName, { engine: 'duckdb' }),
+        `${containerName}.duckdb`,
+      )
     const absolutePath = resolve(filePath)
 
     // Ensure parent directory exists
