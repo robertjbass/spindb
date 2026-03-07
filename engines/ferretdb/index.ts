@@ -962,6 +962,13 @@ export class FerretDBEngine extends BaseEngine {
         )
       }
 
+      // Unref piped stdio streams so they stop keeping the Node.js event loop alive.
+      // Using unref() instead of destroy() to avoid SIGPIPE crashing FerretDB.
+      proc.stdout?.removeAllListeners()
+      proc.stderr?.removeAllListeners()
+      ;(proc.stdout as net.Socket)?.unref()
+      ;(proc.stderr as net.Socket)?.unref()
+
       logDebug(`FerretDB started on port ${port}`)
 
       // Persist the allocated backend port if newly allocated
