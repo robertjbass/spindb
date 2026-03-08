@@ -394,7 +394,7 @@ export class InfluxDBEngine extends BaseEngine {
       '--data-dir',
       dataDir,
       '--http-bind',
-      `127.0.0.1:${port}`,
+      `${container.bindAddress ?? '127.0.0.1'}:${port}`,
       '--without-auth',
     ]
 

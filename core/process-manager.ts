@@ -20,6 +20,7 @@ export type InitdbOptions = {
 export type StartOptions = {
   port?: number
   logFile?: string
+  bindAddress?: string
 }
 
 export type PsqlOptions = {
@@ -136,15 +137,18 @@ export class ProcessManager {
     dataDir: string,
     options: StartOptions = {},
   ): Promise<ProcessResult> {
-    const { port, logFile } = options
+    const { port, logFile, bindAddress } = options
     const logDest = logFile || platformService.getNullDevice()
 
     if (isWindows()) {
       // On Windows, start without -w (wait) flag and poll for readiness
       // The -w flag can hang indefinitely on Windows
       let cmd = `"${pgCtlPath}" start -D "${dataDir}" -l "${logDest}"`
-      if (port) {
-        cmd += ` -o "-p ${port}"`
+      const pgOpts: string[] = []
+      if (port) pgOpts.push(`-p ${port}`)
+      if (bindAddress) pgOpts.push(`-h ${bindAddress}`)
+      if (pgOpts.length > 0) {
+        cmd += ` -o "${pgOpts.join(' ')}"`
       }
 
       logDebug('pg_ctl start command (Windows)', { cmd })
@@ -200,6 +204,9 @@ export class ProcessManager {
     const pgOptions: string[] = []
     if (port) {
       pgOptions.push(`-p ${port}`)
+    }
+    if (bindAddress) {
+      pgOptions.push(`-h ${bindAddress}`)
     }
 
     const args = [

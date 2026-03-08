@@ -457,7 +457,7 @@ export class WeaviateEngine extends BaseEngine {
     // Weaviate uses environment variables for configuration
     const args = [
       '--host',
-      '127.0.0.1',
+      container.bindAddress ?? '127.0.0.1',
       '--port',
       String(port),
       '--scheme',

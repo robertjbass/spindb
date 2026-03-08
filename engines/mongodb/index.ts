@@ -323,7 +323,7 @@ export class MongoDBEngine extends BaseEngine {
       '--port',
       String(port),
       '--bind_ip',
-      '127.0.0.1',
+      container.bindAddress ?? '127.0.0.1',
       '--logpath',
       logFile,
       '--logappend',

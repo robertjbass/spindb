@@ -45,6 +45,8 @@ tests/fixtures/       # Test data and seed files
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
 
+**Bind address (`--bind` flag):** `spindb start --bind <address>` sets `bindAddress` in `ContainerConfig`, persisted to `config.json`. All server engines read `container.bindAddress ?? '127.0.0.1'` (QuestDB defaults to `0.0.0.0`). Config-file engines (Redis, Valkey, CouchDB, Qdrant) patch existing configs on restart rather than regenerating them, preserving user modifications like credentials and API keys. ClickHouse patches `<listen_host>` in config.xml. TypeDB regenerates config.yml on every start (passes bindAddress via initDataDir options).
+
 **Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 20 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 10 other engines use backup/restore; 6 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
 
 ### Critical: When Adding/Modifying Engines
@@ -120,7 +122,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 ## Development Gotchas
 
-**Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. See CockroachDB/SurrealDB engines.
+**Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. All 18 server engines now follow this rule (FerretDB was the last to be fixed in 0.43.0).
 
 **Shell script / JRE engines (QuestDB pattern):** Shell scripts that fork Java processes give useless PIDs. After health check, find real PID via `platformService.findProcessByPort(port)` and write to PID file. Stop also uses port lookup first, PID file as fallback. See `engines/questdb/index.ts`.
 

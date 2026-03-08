@@ -910,9 +910,10 @@ export class FerretDBEngine extends BaseEngine {
         ? `postgres://postgres@127.0.0.1:${backendPort}/ferretdb?sslmode=disable`
         : `postgres://postgres@127.0.0.1:${backendPort}/ferretdb`
 
+      const bindAddress = container.bindAddress ?? '127.0.0.1'
       const ferretArgs = [
         '--listen-addr',
-        `127.0.0.1:${port}`,
+        `${bindAddress}:${port}`,
         '--postgresql-url',
         pgUrl,
         '--state-dir',
@@ -927,7 +928,7 @@ export class FerretDBEngine extends BaseEngine {
       logDebug(`Starting FerretDB with args: ${ferretArgs.join(' ')}`)
 
       const spawnOpts: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'ignore', 'ignore'],
         detached: true,
         // Run FerretDB in the container directory so telemetry.json/state.json
         // are written there instead of polluting the user's cwd
@@ -935,17 +936,6 @@ export class FerretDBEngine extends BaseEngine {
       }
 
       const proc = spawn(ferretdbBinary, ferretArgs, spawnOpts)
-
-      // Log output
-      let stderrOutput = ''
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`ferretdb stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderrOutput += data.toString()
-        logDebug(`ferretdb stderr: ${data.toString()}`)
-      })
-
       proc.unref()
 
       // Write PID file
@@ -958,16 +948,9 @@ export class FerretDBEngine extends BaseEngine {
       const ferretReady = await waitForPort(port, 30000)
       if (!ferretReady) {
         throw new Error(
-          `FerretDB failed to start within timeout. Stderr: ${stderrOutput}`,
+          `FerretDB failed to start within timeout. Check logs in: ${containerDir}`,
         )
       }
-
-      // Unref piped stdio streams so they stop keeping the Node.js event loop alive.
-      // Using unref() instead of destroy() to avoid SIGPIPE crashing FerretDB.
-      proc.stdout?.removeAllListeners()
-      proc.stderr?.removeAllListeners()
-      ;(proc.stdout as net.Socket)?.unref()
-      ;(proc.stderr as net.Socket)?.unref()
 
       logDebug(`FerretDB started on port ${port}`)
 

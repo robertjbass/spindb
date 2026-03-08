@@ -249,7 +249,7 @@ export class SurrealDBEngine extends BaseEngine {
       'start',
       `surrealkv://${dataDir}`,
       '--bind',
-      `127.0.0.1:${port}`,
+      `${container.bindAddress ?? '127.0.0.1'}:${port}`,
       '--user',
       'root',
       '--pass',

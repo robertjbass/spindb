@@ -59,13 +59,15 @@ function generateQdrantConfig(options: {
   grpcPort: number
   dataDir: string
   snapshotsDir: string
+  bindAddress?: string
 }): string {
   // Qdrant config uses forward slashes even on Windows
   const normalizePathForQdrant = (p: string) => p.replace(/\\/g, '/')
+  const bindAddress = options.bindAddress ?? '127.0.0.1'
 
   return `# SpinDB generated Qdrant configuration
 service:
-  host: 127.0.0.1
+  host: ${bindAddress}
   http_port: ${options.port}
   grpc_port: ${options.grpcPort}
 
@@ -75,6 +77,22 @@ storage:
 
 log_level: INFO
 `
+}
+
+/**
+ * Patch an existing Qdrant config, only updating spindb-managed values
+ */
+function patchQdrantConfig(
+  existingConfig: string,
+  options: { port: number; grpcPort: number; bindAddress?: string },
+): string {
+  let config = existingConfig
+  config = config.replace(/^(\s*http_port:\s*)\d+/m, `$1${options.port}`)
+  config = config.replace(/^(\s*grpc_port:\s*)\d+/m, `$1${options.grpcPort}`)
+  if (options.bindAddress !== undefined) {
+    config = config.replace(/^(\s*host:\s*).+/m, `$1${options.bindAddress}`)
+  }
+  return config
 }
 
 /**
@@ -460,14 +478,26 @@ export class QdrantEngine extends BaseEngine {
       await mkdir(snapshotsDir, { recursive: true })
     }
 
-    // Regenerate config with current port (in case it changed)
-    const configContent = generateQdrantConfig({
-      port,
-      grpcPort,
-      dataDir,
-      snapshotsDir,
-    })
-    await writeFile(configPath, configContent)
+    // Update config — preserve existing config (e.g. API keys) on restart
+    const bindAddress = container.bindAddress ?? '127.0.0.1'
+    if (existsSync(configPath)) {
+      const existingConfig = await readFile(configPath, 'utf-8')
+      const patchedConfig = patchQdrantConfig(existingConfig, {
+        port,
+        grpcPort,
+        bindAddress,
+      })
+      await writeFile(configPath, patchedConfig)
+    } else {
+      const configContent = generateQdrantConfig({
+        port,
+        grpcPort,
+        dataDir,
+        snapshotsDir,
+        bindAddress,
+      })
+      await writeFile(configPath, configContent)
+    }
 
     onProgress?.({ stage: 'starting', message: 'Starting Qdrant...' })
 

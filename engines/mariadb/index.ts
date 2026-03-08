@@ -386,7 +386,7 @@ export class MariaDBEngine extends BaseEngine {
       `--port=${port}`,
       `--pid-file=${pidFile}`,
       `--log-error=${logFile}`,
-      '--bind-address=127.0.0.1',
+      `--bind-address=${container.bindAddress ?? '127.0.0.1'}`,
       `--max-connections=${engineDef.maxConnections}`,
     ]
 

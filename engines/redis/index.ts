@@ -216,16 +216,18 @@ function generateRedisConfig(options: {
   logFile: string
   pidFile: string
   daemonize?: boolean
+  bindAddress?: string
 }): string {
   // Windows Redis doesn't support daemonize natively, use detached spawn instead
   const daemonizeValue = options.daemonize ?? true
+  const bindAddress = options.bindAddress ?? '127.0.0.1'
 
   // Redis config requires forward slashes even on Windows
   const normalizePathForRedis = (p: string) => p.replace(/\\/g, '/')
 
   return `# SpinDB generated Redis configuration
 port ${options.port}
-bind 127.0.0.1
+bind ${bindAddress}
 dir ${normalizePathForRedis(options.dataDir)}
 daemonize ${daemonizeValue ? 'yes' : 'no'}
 logfile ${normalizePathForRedis(options.logFile)}
@@ -245,6 +247,24 @@ appendonly no
 # Safe for local development (SpinDB's use case).
 ignore-warnings ARM64-COW-BUG
 `
+}
+
+function patchRedisConfig(
+  existingConfig: string,
+  options: { port: number; bindAddress?: string; daemonize?: boolean },
+): string {
+  let config = existingConfig
+  config = config.replace(/^port \d+/m, `port ${options.port}`)
+  if (options.bindAddress !== undefined) {
+    config = config.replace(/^bind .+/m, `bind ${options.bindAddress}`)
+  }
+  if (options.daemonize !== undefined) {
+    config = config.replace(
+      /^daemonize (yes|no)/m,
+      `daemonize ${options.daemonize ? 'yes' : 'no'}`,
+    )
+  }
+  return config
 }
 
 export class RedisEngine extends BaseEngine {
@@ -494,15 +514,28 @@ export class RedisEngine extends BaseEngine {
     // Use detached spawn on Windows instead, similar to MongoDB
     const useDetachedSpawn = isWindows()
 
-    // Regenerate config with current port (in case it changed)
-    const configContent = generateRedisConfig({
-      port,
-      dataDir,
-      logFile,
-      pidFile,
-      daemonize: !useDetachedSpawn, // Disable daemonize on Windows
-    })
-    await writeFile(configPath, configContent)
+    // Preserve existing config (user may have added requirepass, etc.)
+    // Only generate fresh config on first start
+    const bindAddress = container.bindAddress ?? '127.0.0.1'
+    if (existsSync(configPath)) {
+      const existingConfig = await readFile(configPath, 'utf-8')
+      const patchedConfig = patchRedisConfig(existingConfig, {
+        port,
+        bindAddress,
+        daemonize: !useDetachedSpawn,
+      })
+      await writeFile(configPath, patchedConfig)
+    } else {
+      const configContent = generateRedisConfig({
+        port,
+        dataDir,
+        logFile,
+        pidFile,
+        daemonize: !useDetachedSpawn,
+        bindAddress,
+      })
+      await writeFile(configPath, configContent)
+    }
 
     onProgress?.({ stage: 'starting', message: 'Starting Redis...' })
 

@@ -199,10 +199,10 @@ export class TypeDBEngine extends BaseEngine {
     const yamlContainerDir = containerDir.replace(/\\/g, '/')
     const configContent = [
       'server:',
-      `  address: 127.0.0.1:${port}`,
+      `  address: ${(options.bindAddress as string) ?? '127.0.0.1'}:${port}`,
       '  http:',
       '    enabled: true',
-      `    address: 127.0.0.1:${httpPort}`,
+      `    address: ${(options.bindAddress as string) ?? '127.0.0.1'}:${httpPort}`,
       '  authentication:',
       '    token-expiration-seconds: 5000',
       '  encryption:',
@@ -359,7 +359,10 @@ export class TypeDBEngine extends BaseEngine {
 
     // Always regenerate config.yml to ensure paths and port are correct
     // (paths change after rename, port changes after port reassignment)
-    await this.initDataDir(name, version, { port })
+    await this.initDataDir(name, version, {
+      port,
+      bindAddress: container.bindAddress,
+    })
 
     onProgress?.({ stage: 'starting', message: 'Starting TypeDB...' })
 
