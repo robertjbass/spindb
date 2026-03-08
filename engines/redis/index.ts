@@ -251,10 +251,21 @@ ignore-warnings ARM64-COW-BUG
 
 function patchRedisConfig(
   existingConfig: string,
-  options: { port: number; bindAddress?: string; daemonize?: boolean },
+  options: {
+    port: number
+    dataDir: string
+    logFile: string
+    pidFile: string
+    bindAddress?: string
+    daemonize?: boolean
+  },
 ): string {
+  const normalizePathForRedis = (p: string) => p.replace(/\\/g, '/')
   let config = existingConfig
   config = config.replace(/^port \d+/m, `port ${options.port}`)
+  config = config.replace(/^dir .+/m, `dir ${normalizePathForRedis(options.dataDir)}`)
+  config = config.replace(/^logfile .+/m, `logfile ${normalizePathForRedis(options.logFile)}`)
+  config = config.replace(/^pidfile .+/m, `pidfile ${normalizePathForRedis(options.pidFile)}`)
   if (options.bindAddress !== undefined) {
     config = config.replace(/^bind .+/m, `bind ${options.bindAddress}`)
   }
@@ -521,6 +532,9 @@ export class RedisEngine extends BaseEngine {
       const existingConfig = await readFile(configPath, 'utf-8')
       const patchedConfig = patchRedisConfig(existingConfig, {
         port,
+        dataDir,
+        logFile,
+        pidFile,
         bindAddress,
         daemonize: !useDetachedSpawn,
       })

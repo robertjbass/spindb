@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.1] - 2026-03-08
+
+### Fixed
+- **Redis/Valkey config patch missing dir/logfile/pidfile** — Config preservation now patches `dir`, `logfile`, and `pidfile` in addition to `port`, `bind`, and `daemonize`. Fixes crash after container rename when config still referenced old container directory paths.
+
 ## [0.43.0] - 2026-03-07
 
 ### Added
