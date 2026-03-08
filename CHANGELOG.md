@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-03-07
+
+### Added
+- **`--bind` flag for `spindb start`** — Set bind address for database servers (e.g., `spindb start --bind 0.0.0.0 mydb`). Persisted to container config for subsequent starts without needing to re-specify.
+- **`bindAddress` in `ContainerConfig`** — New optional field stored in container `config.json`. All 18 server engines read `container.bindAddress` and pass it to their spawn args or config files.
+
+### Changed
+- **Config preservation on restart** — Redis, Valkey, CouchDB, and Qdrant no longer regenerate config files from scratch on every start. Existing configs are patched (port, bind address, daemonize) while preserving user modifications like `requirepass`, `[admins]` credentials, and API keys.
+- **ClickHouse bind address** — `generateClickHouseConfig` accepts `bindAddress`; `start()` patches `<listen_host>` in `config.xml` when bindAddress is set.
+- **TypeDB bind address** — Config YAML now uses `bindAddress` from container config for both server and HTTP addresses.
+
+### Fixed
+- **FerretDB daemonization** — Changed FerretDB spawn stdio from `['ignore', 'pipe', 'pipe']` to `['ignore', 'ignore', 'ignore']` for clean process detachment. Removes stream listener cleanup code that couldn't fully prevent event loop hangs.
+
 ## [0.42.7] - 2026-03-07
 
 ### Bug Fixes

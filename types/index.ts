@@ -21,6 +21,9 @@ export type ContainerConfig = {
   backendVersion?: string
   // FerretDB-specific: internal PostgreSQL backend port (e.g., 54320)
   backendPort?: number
+  // Bind address for the database server (default: '127.0.0.1')
+  // Set via `spindb start --bind <address>`. Persisted across restarts.
+  bindAddress?: string
   // Remote database linking (external databases not managed by SpinDB)
   remote?: RemoteConnectionConfig
 }

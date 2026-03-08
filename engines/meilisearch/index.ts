@@ -434,7 +434,7 @@ export class MeilisearchEngine extends BaseEngine {
       '--db-path',
       dataDir,
       '--http-addr',
-      `127.0.0.1:${port}`,
+      `${container.bindAddress ?? '127.0.0.1'}:${port}`,
       '--env',
       'development',
       '--no-analytics',

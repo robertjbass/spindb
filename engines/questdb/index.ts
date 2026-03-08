@@ -309,10 +309,10 @@ export class QuestDBEngine extends BaseEngine {
     // - ILP TCP: +197 (default 9009)
     const env = {
       ...process.env,
-      QDB_HTTP_BIND_TO: `0.0.0.0:${httpPort}`,
-      QDB_HTTP_MIN_NET_BIND_TO: `0.0.0.0:${port + 191}`, // HTTP Min Server (health/metrics)
-      QDB_PG_NET_BIND_TO: `0.0.0.0:${port}`,
-      QDB_LINE_TCP_NET_BIND_TO: `0.0.0.0:${port + 197}`, // ILP port
+      QDB_HTTP_BIND_TO: `${container.bindAddress ?? '0.0.0.0'}:${httpPort}`,
+      QDB_HTTP_MIN_NET_BIND_TO: `${container.bindAddress ?? '0.0.0.0'}:${port + 191}`, // HTTP Min Server (health/metrics)
+      QDB_PG_NET_BIND_TO: `${container.bindAddress ?? '0.0.0.0'}:${port}`,
+      QDB_LINE_TCP_NET_BIND_TO: `${container.bindAddress ?? '0.0.0.0'}:${port + 197}`, // ILP port
     }
 
     // IMPORTANT: Use 'ignore' for all stdio to prevent hanging

@@ -442,6 +442,7 @@ export class PostgreSQLEngine extends BaseEngine {
     await processManager.start(pgCtlPath, dataDir, {
       port,
       logFile,
+      bindAddress: container.bindAddress,
     })
 
     return {

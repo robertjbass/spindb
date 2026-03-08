@@ -94,6 +94,21 @@ admin = admin
 `
 }
 
+function patchCouchDBConfig(
+  existingConfig: string,
+  options: { port: number; bindAddress?: string },
+): string {
+  let config = existingConfig
+  config = config.replace(/^port = \d+/m, `port = ${options.port}`)
+  if (options.bindAddress !== undefined) {
+    config = config.replace(
+      /^bind_address = .+/m,
+      `bind_address = ${options.bindAddress}`,
+    )
+  }
+  return config
+}
+
 /**
  * Generate container-specific vm.args with unique Erlang node name
  * Each CouchDB instance needs a unique node name to avoid conflicts
@@ -514,13 +529,25 @@ export class CouchDBEngine extends BaseEngine {
       await new Promise((resolve) => setTimeout(resolve, portCheckInterval))
     }
 
-    // Regenerate config with current port
-    const configContent = generateCouchDBConfig({
-      port,
-      dataDir,
-      logDir,
-    })
-    await writeFile(configPath, configContent)
+    // Preserve existing config (user may have added [admins] credentials, etc.)
+    // Only generate fresh config on first start
+    const bindAddress = container.bindAddress ?? '127.0.0.1'
+    if (existsSync(configPath)) {
+      const existingConfig = await readFile(configPath, 'utf-8')
+      const patchedConfig = patchCouchDBConfig(existingConfig, {
+        port,
+        bindAddress,
+      })
+      await writeFile(configPath, patchedConfig)
+    } else {
+      const configContent = generateCouchDBConfig({
+        port,
+        dataDir,
+        logDir,
+        bindAddress,
+      })
+      await writeFile(configPath, configContent)
+    }
 
     // Regenerate vm.args with unique node name for this port
     const vmArgsPath = join(containerDir, 'vm.args')
@@ -570,7 +597,8 @@ export class CouchDBEngine extends BaseEngine {
       // Write directly to etc/local.ini which CouchDB definitely reads
       // Note: This means only one container can run per binary install (typical for local dev)
       const localIniPath = join(binDir, 'etc', 'local.ini')
-      await writeFile(localIniPath, configContent)
+      const localIniContent = await readFile(configPath, 'utf-8')
+      await writeFile(localIniPath, localIniContent)
       logDebug(`Wrote config to ${localIniPath}`)
 
       // Modify the os_mon.app file directly to disable features

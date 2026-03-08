@@ -18,10 +18,14 @@ export const startCommand = new Command('start')
   .argument('[name]', 'Container name')
   .option('-j, --json', 'Output result as JSON')
   .option('-f, --force', 'Skip confirmation prompts (e.g., binary downloads)')
+  .option(
+    '--bind <address>',
+    'Bind address (default: 127.0.0.1). Persisted for future starts.',
+  )
   .action(
     async (
       name: string | undefined,
-      options: { json?: boolean; force?: boolean },
+      options: { json?: boolean; force?: boolean; bind?: string },
     ) => {
       try {
         let containerName = name
@@ -106,6 +110,14 @@ export const startCommand = new Command('start')
             uiWarning(`Container "${containerName}" is already running`),
           )
           return
+        }
+
+        // Persist bind address if provided
+        if (options.bind) {
+          await containerManager.updateConfig(containerName, {
+            bindAddress: options.bind,
+          })
+          config.bindAddress = options.bind
         }
 
         const engineDefaults = getEngineDefaults(engineName)

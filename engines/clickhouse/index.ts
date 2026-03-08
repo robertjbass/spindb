@@ -61,6 +61,7 @@ function generateClickHouseConfig(options: {
   logDir: string
   tmpDir: string
   pidFile: string
+  bindAddress?: string
 }): string {
   const { port, httpPort, dataDir, logDir, tmpDir, pidFile } = options
 
@@ -77,7 +78,7 @@ function generateClickHouseConfig(options: {
     <http_port>${httpPort}</http_port>
     <tcp_port>${port}</tcp_port>
 
-    <listen_host>127.0.0.1</listen_host>
+    <listen_host>${options.bindAddress ?? '127.0.0.1'}</listen_host>
 
     <pid_file>${pidFile}</pid_file>
 
@@ -471,6 +472,16 @@ export class ClickHouseEngine extends BaseEngine {
     const pidFile = join(containerDir, 'clickhouse.pid')
 
     onProgress?.({ stage: 'starting', message: 'Starting ClickHouse...' })
+
+    // Patch bind address in config.xml if bindAddress is set
+    if (container.bindAddress && existsSync(configPath)) {
+      const configXml = await readFile(configPath, 'utf-8')
+      const patched = configXml.replace(
+        /<listen_host>[^<]+<\/listen_host>/,
+        `<listen_host>${container.bindAddress}</listen_host>`,
+      )
+      await writeFile(configPath, patched)
+    }
 
     logDebug(`Starting ClickHouse with config: ${configPath}`)
 

@@ -295,7 +295,7 @@ export class TigerBeetleEngine extends BaseEngine {
 
     const args = [
       'start',
-      `--addresses=127.0.0.1:${port}`,
+      `--addresses=${container.bindAddress ?? '127.0.0.1'}:${port}`,
       '--development',
       dataFile,
     ]
