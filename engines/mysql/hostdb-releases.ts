@@ -39,3 +39,4 @@ const hostdbReleases = createHostdbReleases({
 
 export const fetchAvailableVersions = hostdbReleases.fetchAvailableVersions
 export const getLatestVersion = hostdbReleases.getLatestVersion
+export const fetchDeprecatedVersions = hostdbReleases.fetchDeprecatedVersions

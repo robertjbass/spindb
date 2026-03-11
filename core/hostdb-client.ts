@@ -36,6 +36,7 @@ export type HostdbRelease = {
   version: string
   releaseTag: string
   releasedAt: string
+  deprecated?: boolean
   platforms: Record<string, HostdbPlatform>
 }
 

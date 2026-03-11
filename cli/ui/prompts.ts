@@ -9,6 +9,7 @@ import { existsSync, statSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
+import { getDeprecatedVersions } from '../../core/hostdb-metadata'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { portManager } from '../../core/port-manager'
 import { containerManager } from '../../core/container-manager'
@@ -523,15 +524,21 @@ export async function promptVersion(
   const engine = getEngine(engineName)
   const majorVersions = engine.supportedVersions
 
-  // Fetch available versions with a loading indicator
+  // Fetch available versions and deprecation info with a loading indicator
   const spinner = ora({
     text: 'Fetching available versions...',
     color: 'cyan',
   }).start()
 
   let availableVersions: Record<string, string[]>
+  let deprecatedVersions: Set<string> = new Set()
   try {
-    availableVersions = await engine.fetchAvailableVersions()
+    const [versions, deprecated] = await Promise.all([
+      engine.fetchAvailableVersions(),
+      getDeprecatedVersions(engineName),
+    ])
+    availableVersions = versions
+    deprecatedVersions = deprecated
     spinner.stop()
   } catch {
     spinner.stop()
@@ -555,12 +562,18 @@ export async function promptVersion(
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
     const isLatestMajor = major === engineDefs.latestVersion
+    const allDeprecated =
+      fullVersions.length > 0 &&
+      fullVersions.every((v) => deprecatedVersions.has(v))
 
     const countLabel =
       versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
+    const deprecatedLabel = allDeprecated
+      ? chalk.yellow(' [deprecated]')
+      : ''
     const label = isLatestMajor
       ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
-      : `${engine.displayName} ${major} ${countLabel}`
+      : `${engine.displayName} ${major} ${countLabel}${deprecatedLabel}`
 
     majorChoices.push({
       name: label,
@@ -605,11 +618,16 @@ export async function promptVersion(
     return majorVersion
   }
 
-  const minorChoices: Choice[] = minorVersions.map((v, i) => ({
-    name: i === 0 ? `${v} ${chalk.green('← latest')}` : v,
-    value: v,
-    short: v,
-  }))
+  const minorChoices: Choice[] = minorVersions.map((v, i) => {
+    const isDeprecated = deprecatedVersions.has(v)
+    const deprecatedTag = isDeprecated ? chalk.yellow(' [deprecated]') : ''
+    const latestTag = i === 0 ? ` ${chalk.green('← latest')}` : ''
+    return {
+      name: `${v}${latestTag}${deprecatedTag}`,
+      value: v,
+      short: v,
+    }
+  })
 
   if (options?.includeBack) {
     minorChoices.push(new inquirer.Separator())

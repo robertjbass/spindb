@@ -28,6 +28,8 @@ type CliTools = {
 
 export type VersionEntryObject = {
   enabled?: boolean
+  deprecated?: boolean
+  note?: string
   platforms?: string[]
   dependencies?: Array<{
     database: string
@@ -320,6 +322,48 @@ export async function getPackagesForTools(
 export function isVersionEnabled(value: boolean | VersionEntryObject): boolean {
   if (typeof value === 'boolean') return value
   return value.enabled !== false
+}
+
+/**
+ * Check if a version entry is deprecated.
+ * Deprecated versions retain their existing releases but are not recommended
+ * for new installations.
+ */
+export function isVersionDeprecated(
+  value: boolean | VersionEntryObject,
+): boolean {
+  if (typeof value === 'boolean') return false
+  return value.deprecated === true
+}
+
+/**
+ * Get the set of deprecated version strings for a database engine from databases.json
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
+ * @returns Set of deprecated version strings, or empty set if fetch fails
+ */
+export async function getDeprecatedVersions(
+  engine: Engine | string,
+): Promise<Set<string>> {
+  try {
+    const data = await fetchDatabasesJson()
+    const key = engine.toLowerCase()
+    const entry = data[key]
+    if (!entry?.versions) return new Set()
+
+    return new Set(
+      Object.entries(entry.versions)
+        .filter(
+          ([, value]) => isVersionEnabled(value) && isVersionDeprecated(value),
+        )
+        .map(([version]) => version),
+    )
+  } catch (error) {
+    logDebug('Failed to fetch deprecated versions from hostdb', {
+      engine,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return new Set()
+  }
 }
 
 /**

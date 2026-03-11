@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-03-11
+
+### Added
+
+- **Deprecated version awareness** — spindb now reads the `deprecated` flag from hostdb's `databases.json` and `releases.json`
+  - Version selection prompts show `[deprecated]` tag on deprecated versions
+  - Major version groups where all versions are deprecated are labeled accordingly
+  - New `isVersionDeprecated()` helper in `hostdb-metadata.ts`
+  - New `getDeprecatedVersions()` fetches deprecated version sets from hostdb
+  - `hostdb-releases-factory` exposes `fetchDeprecatedVersions()` for programmatic use
+- **MySQL 9.6.0** — added as the latest Innovation Release
+
+### Changed
+
+- **MySQL defaults** — default version updated to `8.4` (LTS), latest version updated to `9.6`
+
+### Deprecated
+
+- **MySQL 8.0.40** — use 8.4.x LTS instead
+- **MySQL 9.1.0** — superseded by 9.6.0
+- **MySQL 9.5.0** — superseded by 9.6.0
+
 ## [0.43.1] - 2026-03-08
 
 ### Fixed
