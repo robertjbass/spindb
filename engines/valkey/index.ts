@@ -272,9 +272,18 @@ function patchValkeyConfig(
   const normalizePathForValkey = (p: string) => p.replace(/\\/g, '/')
   let config = existingConfig
   config = config.replace(/^port \d+/m, `port ${options.port}`)
-  config = config.replace(/^dir .+/m, `dir ${normalizePathForValkey(options.dataDir)}`)
-  config = config.replace(/^logfile .+/m, `logfile ${normalizePathForValkey(options.logFile)}`)
-  config = config.replace(/^pidfile .+/m, `pidfile ${normalizePathForValkey(options.pidFile)}`)
+  config = config.replace(
+    /^dir .+/m,
+    `dir ${normalizePathForValkey(options.dataDir)}`,
+  )
+  config = config.replace(
+    /^logfile .+/m,
+    `logfile ${normalizePathForValkey(options.logFile)}`,
+  )
+  config = config.replace(
+    /^pidfile .+/m,
+    `pidfile ${normalizePathForValkey(options.pidFile)}`,
+  )
   if (options.bindAddress !== undefined) {
     config = config.replace(/^bind .+/m, `bind ${options.bindAddress}`)
   }

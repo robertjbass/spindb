@@ -76,7 +76,8 @@ type ToolDownloadInfo = {
   }
 }
 
-// databases.json is keyed directly by engine name
+// databases.json may be keyed directly by engine name (legacy)
+// or wrapped under a "databases" key (current schema)
 type DatabasesJson = Record<string, DatabaseEntry>
 
 type DownloadsJson = {
@@ -95,6 +96,7 @@ async function fetchWithCache<T>(
   urls: string[],
   getCache: () => { data: T; timestamp: number } | null,
   setCache: (cache: { data: T; timestamp: number }) => void,
+  transform?: (raw: Record<string, unknown>) => T,
 ): Promise<T> {
   // Use getter to always check the freshest cache state
   const cache = getCache()
@@ -121,7 +123,10 @@ async function fetchWithCache<T>(
             throw new Error(`Failed to fetch ${url}: ${response.status}`)
           }
 
-          const data = (await response.json()) as T
+          const raw = await response.json()
+          const data = transform
+            ? transform(raw as Record<string, unknown>)
+            : (raw as T)
           setCache({ data, timestamp: Date.now() })
           return data
         } catch (error) {
@@ -139,6 +144,23 @@ async function fetchWithCache<T>(
   return fetchPromise
 }
 
+/**
+ * Unwrap databases.json schema: current schema wraps engines under a "databases" key,
+ * legacy schema has engines at the top level. Handles both.
+ */
+export function unwrapDatabasesJson(
+  raw: Record<string, unknown>,
+): DatabasesJson {
+  if (
+    raw.databases &&
+    typeof raw.databases === 'object' &&
+    !Array.isArray(raw.databases)
+  ) {
+    return raw.databases as DatabasesJson
+  }
+  return raw as DatabasesJson
+}
+
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
   return fetchWithCache(
     [
@@ -148,6 +170,16 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
     () => databasesCache,
     (c) => {
       databasesCache = c
+    },
+    (raw: Record<string, unknown>) => {
+      if (
+        raw.databases &&
+        typeof raw.databases === 'object' &&
+        !Array.isArray(raw.databases)
+      ) {
+        return raw.databases as DatabasesJson
+      }
+      return raw as DatabasesJson
     },
   )
 }

@@ -10,6 +10,20 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
+### Layerbase Cloud — Engine Bypass Elimination
+
+These engines bypass `spindb start` in layerbase-cloud's `setup-database.sh` due to missing SpinDB features. Fixing them lets layerbase-cloud use the standard `spindb start` path, reducing divergence.
+
+- [x] **QuestDB timeout too low** — JVM cold-start takes 60-120s but SpinDB hardcoded 60s (90s Windows). Bumped to 120s (150s Windows). Once shipped in universal image, layerbase-cloud can remove its direct Java launch workaround.
+- [ ] **MariaDB: config file support** — SpinDB uses `--no-defaults`, which blocks TLS config files needed by layerbase-cloud. Need to support custom config file paths.
+- [x] **MongoDB: `--auth` flag** — `spindb start <name> --auth` passes `--auth` to mongod. Persisted via `authEnabled` in ContainerConfig.
+- [x] **FerretDB: restart without `--no-auth`** — `spindb start <name> --auth` omits `--no-auth` on FerretDB v2, enabling SCRAM. Persisted via `authEnabled` in ContainerConfig.
+- [ ] **SurrealDB: credential reset** — Cloud needs to wipe data dir to reset credentials. SpinDB doesn't expose this capability.
+- [ ] **InfluxDB: pre-start admin token** — Admin token file must exist before startup. SpinDB doesn't support pre-start setup hooks.
+- [ ] **Weaviate: RAFT state wipe + env vars** — Cloud needs to wipe RAFT state and pass env vars at startup. SpinDB doesn't expose these.
+
+---
+
 - [ ] **`spindb create --no-start` should skip tool check** — For file-based engines (SQLite, DuckDB), `spindb create --no-start` fails because it checks for the client tool (`sqlite3`) before downloading the binary that provides it. The `--no-start` flag should skip tool checks since nothing will run. This breaks the cloud Docker image prebake pattern (`create --no-start` + `delete --force`). Workaround: use `spindb engines download sqlite 3` instead.
 - [ ] **Pick logo and branding assets** - Review SVG concepts in `assets/` and `assets/concepts/`, finalize a logo for the tray icon, app badge, and wordmark
 - [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 18 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.

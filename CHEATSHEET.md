@@ -30,9 +30,13 @@ spindb create mydb -e tigerbeetle       # Create TigerBeetle
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
+spindb create mydb --show-deprecated    # Show deprecated versions in picker
 
 spindb start mydb                       # Start container
 spindb start mydb -f                    # Start (auto-download missing binaries)
+spindb start mydb --bind 0.0.0.0        # Listen on all interfaces, not just localhost (persisted)
+spindb start mydb --auth                # Enable auth: MongoDB --auth, FerretDB SCRAM (persisted)
+spindb start mydb --no-auth             # Disable auth: restore default no-auth mode (persisted)
 spindb stop mydb                        # Stop container
 spindb stop --all                       # Stop all containers
 spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
@@ -457,6 +461,21 @@ spindb engines delete postgresql 17     # Delete engine version (prompts)
 spindb engines delete postgresql 17 -y  # Delete engine version (skip prompt)
 spindb deps check                       # Check required tools
 spindb deps install                     # Install missing tools
+```
+
+## Network & Authentication
+
+```bash
+# Bind address — expose database beyond localhost (e.g., for Docker, LAN access)
+spindb start mydb --bind 0.0.0.0        # Listen on all interfaces
+spindb start mydb --bind 192.168.1.50   # Listen on specific IP
+# Default is 127.0.0.1 (localhost only). Persisted across restarts.
+
+# Authentication — MongoDB and FerretDB v2 only
+spindb start mymongo --auth             # Require credentials (passes --auth to mongod)
+spindb start myferret --auth            # Enable SCRAM auth (FerretDB v2)
+spindb start myferret --no-auth         # Disable SCRAM auth (default)
+# Persisted across restarts. Other engines ignore --auth/--no-auth with a warning.
 ```
 
 ## Configuration

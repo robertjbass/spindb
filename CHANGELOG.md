@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **MongoDB `--auth` support** — `spindb start <name> --auth` passes `--auth` to mongod, requiring clients to authenticate. Persisted across restarts. Default remains no-auth (backwards-compatible).
+- **FerretDB auth toggle** — `spindb start <name> --auth` enables SCRAM authentication on FerretDB v2 (omits `--no-auth` flag). `spindb start <name> --no-auth` restores the default. Persisted across restarts.
+- **Hide deprecated versions** — Version selection prompts now hide major versions where all versions are deprecated. Use `spindb create --show-deprecated` to see them. Individual deprecated versions within non-deprecated majors still show with `[deprecated]` tag.
+
+### Fixed
+
+- **QuestDB startup timeout** — increased from 60s to 120s (90s → 150s on Windows) to accommodate JVM cold-start times that can take 60-120s
+- **databases.json schema compatibility** — fixed parsing of hostdb's `databases.json` which now wraps engines under a `databases` key. This was silently breaking deprecated version detection, version availability lookups, and CLI tool metadata from hostdb.
+- **Engine preview shows deprecated versions** — the engine selection list (`Select database engine`) now filters deprecated major versions from the version preview (e.g., MySQL shows `8.4, 9.6` instead of `8.0, 8.4, 9.1, 9.5, 9.6`).
+- **Create wizard Back button crash** — pressing Back from version selection to return to engine selection crashed with `Cannot read properties of null (reading 'toLowerCase')`. Fixed wizard state machine to properly reset to engine step.
+
 ## [0.44.0] - 2026-03-11
 
 ### Added

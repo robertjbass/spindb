@@ -107,7 +107,7 @@ Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL backend (:543
 
 **Key differences between v1 and v2:**
 - v1 uses plain PostgreSQL (lighter, all 5 platforms). v2 uses postgresql-documentdb (DocumentDB extension, macOS/Linux only).
-- v1 has auth disabled by default (no `--no-auth` flag). v2 requires `--no-auth` to disable SCRAM.
+- v1 has auth disabled by default (no `--no-auth` flag). v2 defaults to `--no-auth` (SCRAM disabled). Use `spindb start --auth` to enable SCRAM on v2; `spindb start --no-auth` to restore the default. Persisted in `ContainerConfig.authEnabled`.
 - v1 needs `?sslmode=disable` on `--postgresql-url` (pgx defaults to TLS, plain PG has no SSL).
 - v1 binary verification skips `--version` (hostdb build lacks `version.txt` for go embed).
 - v1 engine deletion does NOT delete shared PostgreSQL binaries (v2 cleans up postgresql-documentdb).
@@ -121,13 +121,13 @@ Architecture: `MongoDB Client (:27017) → FerretDB → PostgreSQL backend (:543
 **Three ports per container** — MongoDB (27017), PostgreSQL backend (54320+), debug HTTP (37017+)
 
 **FerretDB-specific flags (in `engines/ferretdb/index.ts`):**
-- `--no-auth` - v2 only: disables SCRAM authentication for local development
+- `--no-auth` - v2 only: disables SCRAM authentication (default). Omitted when `container.authEnabled === true` (set via `spindb start --auth`)
 - `--debug-addr=127.0.0.1:${port + 10000}` - Unique debug HTTP port per container (default 8088 causes conflicts)
 - `--listen-addr=127.0.0.1:${port}` - MongoDB wire protocol port
 - `--postgresql-url=postgres://postgres@127.0.0.1:${backendPort}/ferretdb` - Backend connection (v1 appends `?sslmode=disable`)
 
 **Known issues & gotchas:**
-1. **Authentication**: FerretDB 2.x enables SCRAM by default. `--setup-username`/`--setup-password` flags do NOT exist. Use `--no-auth` for local dev. v1 has auth disabled by default.
+1. **Authentication**: FerretDB 2.x enables SCRAM by default. `--setup-username`/`--setup-password` flags do NOT exist. SpinDB defaults to `--no-auth` for local dev. Use `spindb start --auth` to enable SCRAM (persisted). v1 has auth disabled by default (flag doesn't exist).
 2. **Debug port conflicts**: Multiple containers fail if all use default debug port 8088. Solution: `--debug-addr=127.0.0.1:${port + 10000}`
 3. **Backup/restore limitations**: pg_dump/pg_restore has issues due to DocumentDB internal metadata tables (v2). Use `custom` format with `--clean --if-exists`.
 4. **Connection strings**: No auth needed: `mongodb://127.0.0.1:${port}/${db}`

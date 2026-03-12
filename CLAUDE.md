@@ -47,6 +47,16 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 
 **Bind address (`--bind` flag):** `spindb start --bind <address>` sets `bindAddress` in `ContainerConfig`, persisted to `config.json`. All server engines read `container.bindAddress ?? '127.0.0.1'` (QuestDB defaults to `0.0.0.0`). Config-file engines (Redis, Valkey, CouchDB, Qdrant) patch existing configs on restart rather than regenerating them, preserving user modifications like credentials and API keys. ClickHouse patches `<listen_host>` in config.xml. TypeDB regenerates config.yml on every start (passes bindAddress via initDataDir options).
 
+**Authentication (`--auth` / `--no-auth` flags):** `spindb start --auth` sets `authEnabled: true` in `ContainerConfig`, persisted to `config.json`. `spindb start --no-auth` sets it to `false`. Only supported for MongoDB and FerretDB; warns and ignores for other engines. MongoDB: passes `--auth` to mongod when enabled. FerretDB v2: omits `--no-auth` flag when enabled (SCRAM authentication enforced). Default for both is auth disabled (backwards-compatible).
+
+**Deprecated version strategy:** Deprecated versions are hidden from discovery but fully supported at runtime. The principle: **don't advertise, but don't break.** Specifically:
+- **Version picker** (`promptVersion()` in `cli/ui/prompts.ts`): Hides major versions where all versions are deprecated (per `databases.json`). `spindb create --show-deprecated` reveals them. Individual deprecated versions within non-deprecated majors show with `[deprecated]` tag.
+- **Direct CLI usage** (`--db-version`): Bypasses the filter entirely — users can always create containers with deprecated versions.
+- **Existing containers**: `spindb list`, `spindb start`, `spindb info`, etc. work normally regardless of deprecation status. No warnings, no filtering.
+- **Installed binaries**: `spindb engines list` shows all installed binaries, deprecated or not.
+- **Downloads**: `spindb engines download <engine> <version>` works for deprecated versions — no version picker involved.
+- Deprecation data comes from hostdb's `databases.json` (`deprecated: true` on version entries). Fetched at runtime by `getDeprecatedVersions()` in `core/hostdb-metadata.ts`.
+
 **Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 20 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 10 other engines use backup/restore; 6 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
 
 ### Critical: When Adding/Modifying Engines
@@ -140,7 +150,7 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 - **Backend:** v1 uses plain PostgreSQL (shared with standalone PG containers). v2 uses postgresql-documentdb (separate binary).
 - **Platforms:** v1 supports all 5 platforms including Windows. v2 is macOS/Linux only.
 - **Cascade delete:** v1 does NOT delete shared PostgreSQL binaries on engine delete. v2 cleans up postgresql-documentdb.
-- **Auth:** v1 has auth disabled by default (no `--no-auth` flag). v2 requires `--no-auth`.
+- **Auth:** v1 has auth disabled by default (no `--no-auth` flag). v2 defaults to `--no-auth` (SCRAM disabled). `spindb start --auth` omits `--no-auth` to enable SCRAM; `spindb start --no-auth` restores the default. Persisted in `ContainerConfig.authEnabled`.
 - **SSL:** v1 needs `?sslmode=disable` on PostgreSQL URL. v2 omits it.
 - **DB creation:** v1 falls back to `postgres --single` if psql is unavailable. v2 uses psql.
 - See `docs/ENGINE_NOTES.md` FerretDB section for the full list.

@@ -22,10 +22,23 @@ export const startCommand = new Command('start')
     '--bind <address>',
     'Bind address (default: 127.0.0.1). Persisted for future starts.',
   )
+  .option(
+    '--auth',
+    'Enable authentication (MongoDB: --auth flag, FerretDB v2: SCRAM). Persisted.',
+  )
+  .option(
+    '--no-auth',
+    'Disable authentication (FerretDB v2: pass --no-auth). Persisted.',
+  )
   .action(
     async (
       name: string | undefined,
-      options: { json?: boolean; force?: boolean; bind?: string },
+      options: {
+        json?: boolean
+        force?: boolean
+        bind?: string
+        auth?: boolean
+      },
     ) => {
       try {
         let containerName = name
@@ -118,6 +131,27 @@ export const startCommand = new Command('start')
             bindAddress: options.bind,
           })
           config.bindAddress = options.bind
+        }
+
+        // Persist auth mode if --auth or --no-auth was provided
+        // Commander parses --no-auth as options.auth === false
+        if (options.auth !== undefined) {
+          const authSupported =
+            engineName === Engine.MongoDB || engineName === Engine.FerretDB
+          if (!authSupported) {
+            if (!options.json) {
+              console.log(
+                uiWarning(
+                  `--auth/--no-auth is not supported for ${engineName}`,
+                ),
+              )
+            }
+          } else {
+            await containerManager.updateConfig(containerName, {
+              authEnabled: options.auth,
+            })
+            config.authEnabled = options.auth
+          }
         }
 
         const engineDefaults = getEngineDefaults(engineName)
