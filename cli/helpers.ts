@@ -283,6 +283,16 @@ export type InstalledTigerBeetleEngine = {
   source: 'downloaded'
 }
 
+export type InstalledLibSQLEngine = {
+  engine: 'libsql'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledEngine =
   | InstalledPostgresEngine
   | InstalledMariadbEngine
@@ -304,6 +314,7 @@ export type InstalledEngine =
   | InstalledInfluxDBEngine
   | InstalledWeaviateEngine
   | InstalledTigerBeetleEngine
+  | InstalledLibSQLEngine
 
 async function getPostgresVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1435,6 +1446,62 @@ async function getInstalledTigerBeetleEngines(): Promise<
   return engines
 }
 
+// Get libSQL version from binary path
+async function getLibSQLVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const sqldPath = join(binPath, 'bin', `sqld${ext}`)
+  if (!existsSync(sqldPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(sqldPath, ['--version'])
+    // Parse output like "sqld 0.24.32" or "0.24.32"
+    const match = stdout.match(/(?:sqld\s+)?v?(\d+\.\d+\.\d+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed libSQL engines from downloaded binaries
+async function getInstalledLibSQLEngines(): Promise<InstalledLibSQLEngine[]> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledLibSQLEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('libsql-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'libsql-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getLibSQLVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'libsql',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 export function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map((p) => parseInt(p, 10) || 0)
   const partsB = b.split('.').map((p) => parseInt(p, 10) || 0)
@@ -1473,6 +1540,7 @@ const ENGINE_PREFIXES = [
   'influxdb-',
   'weaviate-',
   'tigerbeetle-',
+  'libsql-',
 ] as const
 
 /**
@@ -1523,6 +1591,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     influxdbEngines,
     weaviateEngines,
     tigerbeetleEngines,
+    libsqlEngines,
   ] = await Promise.all([
     getInstalledPostgresEngines(),
     getInstalledMariadbEngines(),
@@ -1544,6 +1613,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledInfluxDBEngines(),
     getInstalledWeaviateEngines(),
     getInstalledTigerBeetleEngines(),
+    getInstalledLibSQLEngines(),
   ])
 
   return [
@@ -1567,6 +1637,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...influxdbEngines,
     ...weaviateEngines,
     ...tigerbeetleEngines,
+    ...libsqlEngines,
   ]
 }
 
@@ -1590,4 +1661,5 @@ export {
   getInstalledInfluxDBEngines,
   getInstalledWeaviateEngines,
   getInstalledTigerBeetleEngines,
+  getInstalledLibSQLEngines,
 }

@@ -76,6 +76,7 @@ export const TEST_PORTS = {
   influxdb: { base: 8087, clone: 8089, renamed: 8088 },
   weaviate: { base: 8090, clone: 8092, renamed: 8091 },
   tigerbeetle: { base: 3090, clone: 3092, renamed: 3091 },
+  libsql: { base: 8180, clone: 8182, renamed: 8181 },
 }
 
 // Default test versions for each engine
@@ -414,6 +415,8 @@ export async function executeSQL(
     } finally {
       await unlink(tempScript).catch(() => {})
     }
+  } else if (engine === Engine.LibSQL) {
+    throw new Error('libSQL uses REST API; use libSQL API helpers instead')
   } else if (engine === Engine.InfluxDB) {
     throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else if (engine === Engine.Weaviate) {
@@ -535,6 +538,8 @@ export async function executeSQLFile(
     const args = [...getConsoleBaseArgs(port), '--script', filePath]
     const cmd = `"${consolePath}" ${args.map((a) => `"${a}"`).join(' ')}`
     return execAsync(cmd)
+  } else if (engine === Engine.LibSQL) {
+    throw new Error('libSQL uses REST API; use libSQL API helpers instead')
   } else if (engine === Engine.InfluxDB) {
     throw new Error('InfluxDB uses REST API; use InfluxDB REST helpers instead')
   } else if (engine === Engine.Weaviate) {
@@ -859,6 +864,22 @@ export async function waitForReady(
           clearTimeout(timeoutId)
           throw new Error('Weaviate health check failed or timed out')
         }
+      } else if (engine === Engine.LibSQL) {
+        // Use fetch to ping libSQL REST API with timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/health`, {
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          if (response.ok) {
+            return true
+          }
+        } catch {
+          clearTimeout(timeoutId)
+          throw new Error('libSQL health check failed or timed out')
+        }
       } else if (engine === Engine.TigerBeetle) {
         // TigerBeetle: TCP port check (no HTTP endpoint)
         const net = await import('net')
@@ -1078,6 +1099,9 @@ export function getConnectionString(
   }
   if (engine === Engine.TigerBeetle) {
     return `127.0.0.1:${port}`
+  }
+  if (engine === Engine.LibSQL) {
+    return `http://127.0.0.1:${port}`
   }
   return `postgresql://postgres@127.0.0.1:${port}/${database}`
 }

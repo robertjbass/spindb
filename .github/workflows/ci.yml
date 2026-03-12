@@ -24,7 +24,7 @@ on:
 #   windows-latest
 #
 # Exceptions:
-#   - ClickHouse, FerretDB v2: No Windows (no hostdb binaries) → 4 runners
+#   - ClickHouse, FerretDB v2, LibSQL: No Windows (no hostdb binaries) → 4 runners
 #   - FerretDB v1: All platforms including Windows (plain PostgreSQL backend)
 #   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
 #
@@ -1775,6 +1775,80 @@ jobs:
           }
 
   # ============================================
+  # LibSQL Integration Tests
+  # Uses SpinDB to download and manage LibSQL (sqld) binaries from hostdb
+  # NOTE: LibSQL is a REST API engine (HTTP/Hrana protocol)
+  #       Tests use HTTP requests to interact with the database
+  #       Docker E2E tests use curl for connectivity/data operations
+  # No Windows support (macOS/Linux only)
+  # ============================================
+  test-libsql:
+    name: LibSQL ${{ matrix.icon }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            icon: 🐧
+            label: Linux x64 22.04
+          - os: ubuntu-24.04
+            icon: 🐧
+            label: Linux x64 24.04
+          - os: macos-15-intel
+            icon: 🍎
+            label: macOS x64
+          - os: macos-14
+            icon: 🍎
+            label: macOS ARM64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache LibSQL binaries - these are downloaded from hostdb
+      - name: Cache LibSQL binaries
+        uses: actions/cache@v4
+        id: libsql-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-libsql-0.24-${{ runner.os }}-${{ runner.arch }}
+
+      # Use SpinDB to download LibSQL (sqld) binaries
+      - name: Install LibSQL via SpinDB
+        run: pnpm start engines download libsql 0.24
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run LibSQL integration tests
+        run: pnpm test:engine libsql
+        timeout-minutes: 15
+
+      - name: Show LibSQL logs on failure
+        if: failure()
+        run: |
+          echo "=== LibSQL container directories ==="
+          ls -la ~/.spindb/containers/libsql/ 2>/dev/null || echo "No LibSQL containers directory"
+          echo ""
+          echo "=== LibSQL binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i libsql || echo "No LibSQL binaries found"
+          echo ""
+          echo "=== LibSQL log files ==="
+          find ~/.spindb/containers/libsql -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+  # ============================================
   # CLI End-to-End Tests (PostgreSQL + SQLite)
   # ============================================
   test-cli-e2e:
@@ -3100,6 +3174,7 @@ jobs:
         test-influxdb,
         test-weaviate,
         test-tigerbeetle,
+        test-libsql,
         test-cli-e2e,
         test-rename-clone,
         test-clickhouse-rename,
@@ -3121,7 +3196,7 @@ jobs:
             "test-valkey" "test-clickhouse" "test-qdrant"
             "test-meilisearch" "test-couchdb" "test-cockroachdb"
             "test-surrealdb" "test-questdb" "test-typedb"
-            "test-influxdb" "test-weaviate" "test-tigerbeetle" "test-cli-e2e" "test-rename-clone"
+            "test-influxdb" "test-weaviate" "test-tigerbeetle" "test-libsql" "test-cli-e2e" "test-rename-clone"
             "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
             "test-self-update" "test-docker-linux" "test-docker-export"
           )
@@ -3150,6 +3225,7 @@ jobs:
             "${{ needs.test-influxdb.result }}"
             "${{ needs.test-weaviate.result }}"
             "${{ needs.test-tigerbeetle.result }}"
+            "${{ needs.test-libsql.result }}"
             "${{ needs.test-cli-e2e.result }}"
             "${{ needs.test-rename-clone.result }}"
             "${{ needs.test-clickhouse-rename.result }}"

@@ -53,6 +53,7 @@ import { typedbBinaryManager } from '../../engines/typedb/binary-manager'
 import { influxdbBinaryManager } from '../../engines/influxdb/binary-manager'
 import { weaviateBinaryManager } from '../../engines/weaviate/binary-manager'
 import { tigerbeetleBinaryManager } from '../../engines/tigerbeetle/binary-manager'
+import { libsqlBinaryManager } from '../../engines/libsql/binary-manager'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   DEFAULT_V1_POSTGRESQL_VERSION,
@@ -1722,6 +1723,50 @@ enginesCommand
         })
         console.log(chalk.gray(`  Location: ${binPath}`))
 
+        return
+      }
+
+      if (['libsql', 'sqld'].includes(normalizedEngine)) {
+        if (!version) {
+          console.error(uiError('libSQL requires a version (e.g., 0.24)'))
+          process.exit(1)
+        }
+
+        const engine = getEngine(Engine.LibSQL)
+
+        const spinner = createSpinner(`Checking libSQL ${version} binaries...`)
+        spinner.start()
+
+        let wasCached = false
+        await engine.ensureBinaries(version, ({ stage, message }) => {
+          if (stage === 'cached') {
+            wasCached = true
+            spinner.text = `libSQL ${version} binaries ready (cached)`
+          } else {
+            spinner.text = message
+          }
+        })
+
+        if (wasCached) {
+          spinner.succeed(`libSQL ${version} binaries already installed`)
+        } else {
+          spinner.succeed(`libSQL ${version} binaries downloaded`)
+        }
+
+        // Show the path for reference
+        const { platform: lsPlatform, arch: lsArch } =
+          platformService.getPlatformInfo()
+        const lsFullVersion = libsqlBinaryManager.getFullVersion(version)
+        const binPath = paths.getBinaryPath({
+          engine: 'libsql',
+          version: lsFullVersion,
+          platform: lsPlatform,
+          arch: lsArch,
+        })
+        console.log(chalk.gray(`  Location: ${binPath}`))
+
+        // Skip client tools check for libSQL - it's a REST API server
+        // with no CLI client tools (uses HTTP protocol instead)
         return
       }
 

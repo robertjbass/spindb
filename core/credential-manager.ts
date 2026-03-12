@@ -253,6 +253,8 @@ export function getDefaultUsername(engine: Engine): string {
       return 'api_key'
     case Engine.Weaviate:
       return 'api_key'
+    case Engine.LibSQL:
+      return 'auth_token'
     default:
       return 'spindb'
   }

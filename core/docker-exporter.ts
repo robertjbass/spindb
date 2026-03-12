@@ -74,6 +74,7 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.InfluxDB]: 'InfluxDB',
     [Engine.Weaviate]: 'Weaviate',
     [Engine.TigerBeetle]: 'TigerBeetle',
+    [Engine.LibSQL]: 'libSQL',
   }
   return displayNames[engine] || engine
 }
@@ -153,6 +154,9 @@ const _ENGINE_BINARY_CONFIG: Record<
   [Engine.TigerBeetle]: {
     primaryBinaries: ['tigerbeetle'],
   },
+  [Engine.LibSQL]: {
+    primaryBinaries: [], // REST API only, no CLI tools
+  },
 }
 
 /**
@@ -207,6 +211,7 @@ function getConnectionStringTemplate(
     case Engine.Meilisearch:
     case Engine.InfluxDB:
     case Engine.Weaviate:
+    case Engine.LibSQL:
       return useTLS ? `https://<host>:${port}` : `http://<host>:${port}`
 
     case Engine.CouchDB:
@@ -530,6 +535,13 @@ echo "No authentication required"
     case Engine.TigerBeetle:
       userCreationCommands = `
 # TigerBeetle has no authentication
+echo "No authentication required"
+`
+      break
+
+    case Engine.LibSQL:
+      userCreationCommands = `
+# libSQL local dev runs without authentication
 echo "No authentication required"
 `
       break
@@ -1318,6 +1330,7 @@ export async function getDockerConnectionString(
     case Engine.Meilisearch:
     case Engine.InfluxDB:
     case Engine.Weaviate:
+    case Engine.LibSQL:
       return `http://${host}:${port}`
 
     case Engine.CouchDB:

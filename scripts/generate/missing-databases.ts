@@ -47,6 +47,7 @@ const SUPPORTED_ENGINES = [
   'influxdb',
   'weaviate',
   'tigerbeetle',
+  'libsql',
 ] as const
 
 type SupportedEngine = (typeof SUPPORTED_ENGINES)[number]

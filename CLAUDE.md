@@ -17,7 +17,7 @@ SpinDB is the backbone of the Layerbase platform. **hostdb** builds database bin
 
 ## Overview
 
-SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 20 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate, TigerBeetle.
+SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 21 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate, TigerBeetle, LibSQL.
 
 **Stack**: Node.js 18+, TypeScript, tsx (no build step), pnpm, Commander.js, Inquirer.js, Chalk, Ora, ESM
 
@@ -38,16 +38,18 @@ tests/fixtures/       # Test data and seed files
 ## Architecture
 
 **Engine categories:**
-- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, LibSQL): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
 - **File-based** (SQLite, DuckDB): data in CWD, no server process, `start()`/`stop()` are no-ops, tracked via registry in `~/.spindb/config.json`
 - **Remote/linked** (`spindb link`): external databases linked via connection string, `status: 'linked'`, uses `remote` field in ContainerConfig, credentials stored via credential-manager with username `'remote'`. Supports `connect`, `url`, `info`, `list`, `delete`, `query`. Does NOT support `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs` (these block with clear error messages). See `core/remote-container.ts` for utilities. Query support loads credentials, parses the connection string, and passes `host`/`password`/`username`/`ssl` to engine `executeQuery` via `QueryOptions`.
-- **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard
+- **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB, LibSQL): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard (LibSQL shows curl examples)
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
 
 **Bind address (`--bind` flag):** `spindb start --bind <address>` sets `bindAddress` in `ContainerConfig`, persisted to `config.json`. All server engines read `container.bindAddress ?? '127.0.0.1'` (QuestDB defaults to `0.0.0.0`). Config-file engines (Redis, Valkey, CouchDB, Qdrant) patch existing configs on restart rather than regenerating them, preserving user modifications like credentials and API keys. ClickHouse patches `<listen_host>` in config.xml. TypeDB regenerates config.yml on every start (passes bindAddress via initDataDir options).
 
 **Authentication (`--auth` / `--no-auth` flags):** `spindb start --auth` sets `authEnabled: true` in `ContainerConfig`, persisted to `config.json`. `spindb start --no-auth` sets it to `false`. Only supported for MongoDB and FerretDB; warns and ignores for other engines. MongoDB: passes `--auth` to mongod when enabled. FerretDB v2: omits `--no-auth` flag when enabled (SCRAM authentication enforced). Default for both is auth disabled (backwards-compatible).
+
+**LibSQL JWT authentication:** LibSQL uses Ed25519 JWT tokens for authentication (same pattern as Meilisearch API keys). `createUser()` generates an Ed25519 key pair, signs a JWT, writes the public key to the container directory (`jwt-key.pem`), restarts sqld with `--auth-jwt-key-file`, and stores the JWT via credential-manager. Not controlled by `--auth`/`--no-auth` flags.
 
 **Deprecated version strategy:** Deprecated versions are hidden from discovery but fully supported at runtime. The principle: **don't advertise, but don't break.** Specifically:
 - **Version picker** (`promptVersion()` in `cli/ui/prompts.ts`): Hides major versions where all versions are deprecated (per `databases.json`). `spindb create --show-deprecated` reveals them. Individual deprecated versions within non-deprecated majors show with `[deprecated]` tag.
@@ -57,7 +59,7 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 - **Downloads**: `spindb engines download <engine> <version>` works for deprecated versions — no version picker involved.
 - Deprecation data comes from hostdb's `databases.json` (`deprecated: true` on version entries). Fetched at runtime by `getDeprecatedVersions()` in `core/hostdb-metadata.ts`.
 
-**Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 20 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 10 other engines use backup/restore; 6 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
+**Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 21 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 10 other engines use backup/restore; 7 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle, LibSQL) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`.
 
 ### Critical: When Adding/Modifying Engines
 
@@ -86,7 +88,7 @@ The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the author
 
 Primary: Layerbase registry (`registry.layerbase.host`). Fallback: GitHub hostdb releases (toggled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). All download/fetch logic is centralized in `core/hostdb-client.ts` (`fetchWithRegistryFallback()`, `fetchHostdbReleases()`, `getReleasesUrls()`).
 
-Exceptions: PostgreSQL/Windows uses EDB-sourced binaries uploaded to hostdb (same download path as other platforms). ClickHouse is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
+Exceptions: PostgreSQL/Windows uses EDB-sourced binaries uploaded to hostdb (same download path as other platforms). ClickHouse is macOS/Linux only. LibSQL is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
 
 ### hostdb Engine Names vs SpinDB Engines
 
@@ -132,7 +134,9 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 ## Development Gotchas
 
-**Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. All 18 server engines now follow this rule (FerretDB was the last to be fixed in 0.43.0).
+**Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. All 19 server engines now follow this rule (FerretDB was the last to be fixed in 0.43.0).
+
+**LibSQL JWT auth via Ed25519:** LibSQL uses JWT tokens signed with Ed25519 keys for authentication. `createUser()` generates an Ed25519 key pair, signs a JWT with the private key, writes the public key to the container directory as `jwt-key.pem`, restarts sqld with `--auth-jwt-key-file`, and stores the JWT token via credential-manager. The same pattern as Meilisearch API keys — credential is a token, not a username/password pair.
 
 **Shell script / JRE engines (QuestDB pattern):** Shell scripts that fork Java processes give useless PIDs. After health check, find real PID via `platformService.findProcessByPort(port)` and write to PID file. Stop also uses port lookup first, PID file as fallback. See `engines/questdb/index.ts`.
 

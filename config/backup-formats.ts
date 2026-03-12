@@ -30,6 +30,7 @@ import {
   type InfluxDBFormat,
   type WeaviateFormat,
   type TigerBeetleFormat,
+  type LibSQLFormat,
   type BackupFormatType,
 } from '../types'
 
@@ -69,6 +70,7 @@ export const BACKUP_FORMATS: {
   [Engine.InfluxDB]: EngineBackupFormats<InfluxDBFormat>
   [Engine.Weaviate]: EngineBackupFormats<WeaviateFormat>
   [Engine.TigerBeetle]: EngineBackupFormats<TigerBeetleFormat>
+  [Engine.LibSQL]: EngineBackupFormats<LibSQLFormat>
 } = {
   [Engine.PostgreSQL]: {
     formats: {
@@ -362,6 +364,24 @@ export const BACKUP_FORMATS: {
       },
     },
     supportsFormatChoice: false, // Only binary format supported
+    defaultFormat: 'binary',
+  },
+  [Engine.LibSQL]: {
+    formats: {
+      sql: {
+        extension: '.sql',
+        label: '.sql',
+        description: 'SQL dump - human-readable, portable',
+        spinnerLabel: 'SQL',
+      },
+      binary: {
+        extension: '.db',
+        label: '.db',
+        description: 'Binary copy - exact replica, faster',
+        spinnerLabel: 'binary',
+      },
+    },
+    supportsFormatChoice: true,
     defaultFormat: 'binary',
   },
 }

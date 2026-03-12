@@ -27,6 +27,7 @@ spindb create mydb -e typedb            # Create TypeDB
 spindb create mydb -e influxdb          # Create InfluxDB
 spindb create mydb -e weaviate          # Create Weaviate
 spindb create mydb -e tigerbeetle       # Create TigerBeetle
+spindb create mydb -e libsql            # Create LibSQL (macOS/Linux only)
 spindb create mydb --db-version 17      # Specific version
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
@@ -80,8 +81,8 @@ spindb query myferret "users.find({age: {\$gt: 25}})" --json  # FerretDB JSON ou
 
 > **`run` vs `query`:** Use `run` for executing scripts and fire-and-forget commands (migrations, seeds, DDL). Use `query` when you need structured results back — it outputs a formatted table by default, or JSON with `--json`.
 >
-> **REST API Engines:** Qdrant, Meilisearch, CouchDB, InfluxDB, and Weaviate use REST APIs instead of CLI shells.
-> `spindb connect` shows REST API info. Qdrant, Meilisearch, CouchDB, and Weaviate have web dashboards. InfluxDB is API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
+> **REST API Engines:** Qdrant, Meilisearch, CouchDB, InfluxDB, Weaviate, and LibSQL use REST APIs instead of CLI shells.
+> `spindb connect` shows REST API info (LibSQL shows curl examples). Qdrant, Meilisearch, CouchDB, and Weaviate have web dashboards. InfluxDB and LibSQL are API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
 
 ## Web Panels
 
@@ -372,8 +373,8 @@ spindb databases drop mydb analytics --json
 > created at `~/.spindb/backups/rename/` and retained after the operation.
 >
 > **Not supported:** SQLite, DuckDB (file-based), Redis, Valkey (fixed-numbered DBs),
-> QuestDB (single-database), TigerBeetle (single ledger). These engines show a clear
-> error with alternative instructions.
+> QuestDB (single-database), TigerBeetle (single ledger), LibSQL (single database per instance).
+> These engines show a clear error with alternative instructions.
 
 ### Database Tracking
 
@@ -425,11 +426,11 @@ spindb users list mydb                  # List saved credentials
 spindb users list mydb --json           # JSON output
 ```
 
-> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant. Not supported: SQLite, DuckDB, QuestDB, TypeDB, InfluxDB.
+> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant, LibSQL. Not supported: SQLite, DuckDB, QuestDB, TypeDB, InfluxDB.
 >
 > **Credentials** are saved as `.env.{username}` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 >
-> **API key engines** (Meilisearch, Qdrant) generate API keys instead of user/password pairs.
+> **API key / token engines** (Meilisearch, Qdrant) generate API keys; LibSQL generates JWT tokens via Ed25519 key pairs.
 
 ## Edit & Configure
 
@@ -476,6 +477,9 @@ spindb start mymongo --auth             # Require credentials (passes --auth to 
 spindb start myferret --auth            # Enable SCRAM auth (FerretDB v2)
 spindb start myferret --no-auth         # Disable SCRAM auth (default)
 # Persisted across restarts. Other engines ignore --auth/--no-auth with a warning.
+
+# LibSQL JWT auth — generate Ed25519 token (restarts sqld with --auth-jwt-key-file)
+spindb users create mylibsql auth_token # Generate JWT for LibSQL
 ```
 
 ## Configuration
@@ -530,10 +534,11 @@ spindb doctor --json                    # JSON output for scripting
 | InfluxDB    | 8086    | 8086-8186     | REST API only |
 | Weaviate    | 8080    | 8080-8180     | gRPC on port+1 |
 | TigerBeetle | 3000    | 3000-3100     | Custom binary protocol |
+| LibSQL      | 8080    | 8080-8180     | HTTP API (Hrana) |
 | SQLite      | N/A     | File-based    | |
 | DuckDB      | N/A     | File-based    | |
 
-> **Port Conflicts:** FerretDB/MongoDB and Redis/Valkey share default ports. Use different ports if running both concurrently.
+> **Port Conflicts:** FerretDB/MongoDB and Redis/Valkey share default ports. LibSQL and Weaviate share default port 8080. Use different ports if running both concurrently.
 
 ## Connection String Formats
 
@@ -556,6 +561,7 @@ TypeDB:      typedb://127.0.0.1:1729
 InfluxDB:    http://127.0.0.1:8086
 Weaviate:    http://127.0.0.1:8080
 TigerBeetle: 127.0.0.1:3000
+LibSQL:      http://127.0.0.1:8080
 SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```
@@ -567,6 +573,7 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **TypeDB:** Uses gRPC protocol. Default credentials: admin/password.
 > **InfluxDB:** REST API only. Databases created implicitly on first write. No authentication in local dev mode.
 > **Weaviate:** REST/GraphQL API on HTTP port, gRPC on port+1. No authentication in local dev mode.
+> **LibSQL:** HTTP API (Hrana protocol). Single database per instance ('main'). JWT auth via `spindb users create`. macOS/Linux only.
 > **TigerBeetle:** Custom binary protocol (no URI scheme). Single binary serves as both server and REPL client.
 
 ## Export to Docker
@@ -910,6 +917,7 @@ pnpm generate:db typedb        # tdb
 pnpm generate:db influxdb      # influx (REST API)
 pnpm generate:db weaviate      # weav (REST/GraphQL API)
 pnpm generate:db tigerbeetle   # tb
+pnpm generate:db libsql        # lsql (REST API)
 
 # Examples:
 pnpm generate:db pg                      # Create "demo-postgresql" with seed data
