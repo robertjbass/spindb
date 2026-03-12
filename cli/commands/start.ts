@@ -12,6 +12,7 @@ import { uiWarning } from '../ui/theme'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 import { exitWithError, logDebug } from '../../core/error-handler'
 import { getEngineMetadata } from '../helpers'
+import { isV1 as isFerretDBv1 } from '../../engines/ferretdb/version-maps'
 
 export const startCommand = new Command('start')
   .description('Start a container')
@@ -136,15 +137,18 @@ export const startCommand = new Command('start')
         // Persist auth mode if --auth or --no-auth was provided
         // Commander parses --no-auth as options.auth === false
         if (options.auth !== undefined) {
+          const isFerretV1 =
+            engineName === Engine.FerretDB && isFerretDBv1(config.version)
           const authSupported =
-            engineName === Engine.MongoDB || engineName === Engine.FerretDB
+            engineName === Engine.MongoDB ||
+            (engineName === Engine.FerretDB && !isFerretV1)
           if (!authSupported) {
             if (!options.json) {
-              console.log(
-                uiWarning(
-                  `--auth/--no-auth is not supported for ${engineName}`,
-                ),
-              )
+              const reason =
+                isFerretV1
+                  ? '--auth/--no-auth is not supported for FerretDB v1'
+                  : `--auth/--no-auth is not supported for ${engineName}`
+              console.log(uiWarning(reason))
             }
           } else {
             await containerManager.updateConfig(containerName, {

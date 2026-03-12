@@ -171,16 +171,7 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
     (c) => {
       databasesCache = c
     },
-    (raw: Record<string, unknown>) => {
-      if (
-        raw.databases &&
-        typeof raw.databases === 'object' &&
-        !Array.isArray(raw.databases)
-      ) {
-        return raw.databases as DatabasesJson
-      }
-      return raw as DatabasesJson
-    },
+    unwrapDatabasesJson,
   )
 }
 

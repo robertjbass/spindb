@@ -601,6 +601,9 @@ export async function promptVersion(
       fullVersions.every((v) => deprecatedVersions.has(v))
 
     // Hide all-deprecated major versions unless --show-deprecated is set
+    // TODO: If an engine has ALL majors deprecated, majorChoices will be empty.
+    // Add a fallback to re-include deprecated majors so the picker isn't blank.
+    // Only affects interactive wizard — CLI `spindb create --version` bypasses this.
     if (allDeprecated && !options?.showDeprecated) {
       hiddenDeprecatedCount++
       continue

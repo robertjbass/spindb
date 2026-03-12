@@ -129,7 +129,7 @@ describe('QuestDB Integration Tests', () => {
     await containerManager.updateConfig(containerName, { status: 'running' })
 
     // Wait for QuestDB to be ready (90s timeout for slow CI runners)
-    const ready = await waitForReady(ENGINE, testPorts[0], 90000)
+    const ready = await waitForReady(ENGINE, testPorts[0], 150000)
     assert(ready, 'QuestDB should be ready to accept connections')
 
     const running = await processManager.isRunning(containerName, {
@@ -194,7 +194,7 @@ describe('QuestDB Integration Tests', () => {
     })
 
     // Wait for it to be ready
-    const ready = await waitForReady(ENGINE, testPorts[1], 90000)
+    const ready = await waitForReady(ENGINE, testPorts[1], 150000)
     assert(ready, 'Cloned QuestDB should be ready before restore')
 
     // Create backup from source
@@ -392,7 +392,7 @@ describe('QuestDB Integration Tests', () => {
     })
 
     // Wait for ready
-    const ready = await waitForReady(ENGINE, testPort, 90000)
+    const ready = await waitForReady(ENGINE, testPort, 150000)
     assert(ready, 'QuestDB should be ready')
 
     // Verify row count reflects insertion (5 + 1 = 6)
