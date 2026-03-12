@@ -390,8 +390,8 @@ describe('Database Capabilities', () => {
   })
 
   describe('exhaustive coverage', () => {
-    it('should cover all 20 engines', () => {
-      assertEqual(ALL_ENGINES.length, 20, 'Should have exactly 20 engines')
+    it('should cover all 21 engines', () => {
+      assertEqual(ALL_ENGINES.length, 21, 'Should have exactly 21 engines')
       // This test ensures getDatabaseCapabilities handles all engines
       // without throwing (the assertExhaustive in the switch would throw
       // at runtime if any engine was missing)
@@ -405,7 +405,7 @@ describe('Database Capabilities', () => {
       const supported = ALL_ENGINES.filter((e) => canCreateDatabase(e))
       const unsupported = ALL_ENGINES.filter((e) => !canCreateDatabase(e))
       assertEqual(supported.length, 14, 'Should have 14 supported engines')
-      assertEqual(unsupported.length, 6, 'Should have 6 unsupported engines')
+      assertEqual(unsupported.length, 7, 'Should have 7 unsupported engines')
     })
   })
 

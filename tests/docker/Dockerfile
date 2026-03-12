@@ -36,6 +36,7 @@
 # - InfluxDB: influxdb3 (REST API engine - tests use curl instead of CLI)
 # - Weaviate: weaviate (REST/gRPC API engine - tests use curl instead of CLI)
 # - TigerBeetle: tigerbeetle (custom binary protocol - REPL for interaction)
+# - LibSQL: sqld (REST API engine - tests use curl instead of CLI)
 #
 # IMPORTANT: TigerBeetle requires io_uring syscalls which Docker's default seccomp
 # profile blocks. The run-docker-test.sh wrapper passes --security-opt seccomp=unconfined

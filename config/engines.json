@@ -343,6 +343,24 @@
       "clientTools": ["tigerbeetle"],
       "licensing": "Apache-2.0",
       "notes": "High-performance financial ledger database. Custom binary protocol, REPL client. Uses --development flag for local dev."
+    },
+    "libsql": {
+      "displayName": "libSQL",
+      "icon": "📚",
+      "status": "in-progress",
+      "binarySource": "hostdb",
+      "supportedVersions": ["0.24.32"],
+      "defaultVersion": "0.24.32",
+      "defaultPort": 8080,
+      "runtime": "server",
+      "queryLanguage": "sql",
+      "scriptFileLabel": null,
+      "connectionScheme": "http",
+      "superuser": null,
+      "clientTools": null,
+      "licensing": "MIT",
+      "notes": "SQLite fork by Turso with server mode (sqld), HTTP API, replication support. No Windows binaries. Enhanced clients: litecli, usql.",
+      "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]
     }
   }
 }

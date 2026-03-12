@@ -230,6 +230,11 @@ function validateConnectionString(
       break
     case Engine.TigerBeetle:
       return 'TigerBeetle does not support remote dumps (custom binary protocol)'
+    case Engine.LibSQL:
+      if (!input.startsWith('http://') && !input.startsWith('https://')) {
+        return 'Connection string must start with http:// or https://'
+      }
+      break
     case Engine.SQLite:
     case Engine.DuckDB:
       return 'File-based engines do not support remote connection strings'

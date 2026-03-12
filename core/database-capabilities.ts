@@ -93,6 +93,16 @@ function getDatabaseCapabilities(engine: Engine): DatabaseCapabilities {
           'TigerBeetle is a single ledger instance with a fixed schema. Use "spindb delete" to remove the entire ledger.',
       }
 
+    // No support — single SQLite database per server instance
+    case Engine.LibSQL:
+      return {
+        supportsCreate: false,
+        supportsDrop: false,
+        supportsRename: false,
+        unsupportedReason:
+          'libSQL runs a single SQLite database per server instance. Use "spindb create" to make a new instance.',
+      }
+
     default:
       assertExhaustive(engine, `Unknown engine: ${engine}`)
   }

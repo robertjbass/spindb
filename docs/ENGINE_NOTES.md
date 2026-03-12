@@ -211,6 +211,22 @@ Platform commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 - **Version**: 0.34.2 (pinned)
 - **CLI flags**: `spindb connect --dblab` or `spindb connect --install-dblab`
 
+## LibSQL
+
+- **SQLite fork by Turso**: LibSQL (sqld) runs SQLite as a server with an HTTP API (Hrana protocol), enabling network access to SQLite databases
+- **Binary**: `sqld` (single binary, server only)
+- **Default port**: 8080 (HTTP API)
+- **Health endpoint**: `/health`
+- **Connection scheme**: `http://` (e.g., `http://127.0.0.1:8080`)
+- **Single database**: Each instance serves a single database ('main'). No database creation/rename/drop.
+- **Platforms**: macOS ARM/x64, Linux ARM/x64 only (no Windows). Use WSL on Windows.
+- **REST API only**: No CLI shell. `spindb connect` shows curl examples for the HTTP API. `spindb run` is not available.
+- **JWT authentication via Ed25519**: `createUser()` generates an Ed25519 key pair, signs a JWT with the private key, writes the public key to the container directory as `jwt-key.pem`, restarts sqld with `--auth-jwt-key-file jwt-key.pem`. The JWT token is stored via credential-manager (same pattern as Meilisearch API keys). Not controlled by `--auth`/`--no-auth` flags.
+- **Backup formats**: Binary (file copy of the SQLite database file) and SQL (HTTP API dump via `/v1/dump`). Binary is the default format.
+- **Query execution**: Uses the Hrana HTTP API (`POST /v2/pipeline`) with JSON body containing SQL statements. Supports `spindb query` for structured output.
+- **layerbase-cloud notes**: `setup-database.sh` generates an Ed25519 key pair, creates a JWT, and passes the public key to sqld via `--auth-jwt-key-file`. The JWT is used as the bearer token for API requests.
+- **Emoji**: 📚, **Alias**: `lsql`
+
 ## Database Create/Rename/Drop Support
 
 ### Engines with native rename
@@ -231,3 +247,4 @@ the new database and a warning is shown.
 - **Redis/Valkey**: Fixed numbered databases (0-15).
 - **QuestDB**: Single-database model (`qdb`).
 - **TigerBeetle**: Single ledger per container.
+- **LibSQL**: Single database per instance ('main').

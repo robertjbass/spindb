@@ -23,6 +23,7 @@ import { TransactionManager } from '../../core/transaction-manager'
 import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
 import { resolve } from 'path'
 import { Engine, Platform, ALL_ENGINES } from '../../types'
+import { canCreateDatabase } from '../../core/database-capabilities'
 import {
   FERRETDB_VERSION_MAP,
   isV1 as isFerretDBv1,
@@ -598,6 +599,9 @@ export const createCommand = new Command('create')
             })
           }
           database = String(parseInt(database, 10))
+        } else if (engine === Engine.LibSQL) {
+          // libSQL runs a single SQLite database per instance
+          database = database ?? 'main'
         } else {
           database = database ?? containerName.replace(/-/g, '_')
           // Validate database name to prevent SQL injection
@@ -970,7 +974,7 @@ export const createCommand = new Command('create')
           }
 
           const defaultDb = engineDefaults.superuser
-          if (database !== defaultDb) {
+          if (database !== defaultDb && canCreateDatabase(engine)) {
             const dbSpinner = createSpinner(
               `Creating database "${database}"...`,
             )
