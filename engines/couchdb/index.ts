@@ -782,7 +782,7 @@ export class CouchDBEngine extends BaseEngine {
           undefined,
           null,
         )
-        if (response.status === 200) {
+        if (response.status >= 200 && response.status < 500) {
           logDebug(`CouchDB ready on port ${port}`)
           return true
         }

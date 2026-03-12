@@ -285,10 +285,7 @@ function patchValkeyConfig(
     `pidfile ${normalizePathForValkey(options.pidFile)}`,
   )
   if (options.bindAddress !== undefined) {
-    config = config.replace(
-      /^bind [\d.:a-fA-F*]+/m,
-      `bind ${options.bindAddress}`,
-    )
+    config = config.replace(/^bind\s+.*$/m, `bind ${options.bindAddress}`)
   }
   if (options.daemonize !== undefined) {
     config = config.replace(
