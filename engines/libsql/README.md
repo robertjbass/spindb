@@ -73,11 +73,13 @@ libSQL runs a single SQLite database per server instance:
 - `dropDatabase()` throws `UnsupportedOperationError`
 - Use `spindb create` to make a new instance instead
 
-### No Authentication
+### JWT Authentication
 
-libSQL local dev mode does not support user management:
-- `createUser()` throws `UnsupportedOperationError`
-- No `--auth` / `--no-auth` flag support
+libSQL supports Ed25519 JWT authentication via `createUser()`:
+- Generates an Ed25519 key pair, writes public key as `jwt-key.pem`
+- Creates a JWT with `{"a":"rw","exp":...}` payload (10-year TTL for local dev)
+- Restarts sqld with `--auth-jwt-key-file` to enable authentication
+- Token stored via credential-manager (same pattern as Meilisearch API keys)
 
 ### Connection String Format
 
@@ -221,8 +223,8 @@ libSQL Docker E2E uses `curl` against the Hrana HTTP endpoint.
 - name: Cache libSQL binaries
   uses: actions/cache@v4
   with:
-    path: ~/.spindb/bin/libsql-*
-    key: libsql-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('engines/libsql/version-maps.ts') }}
+    path: ~/.spindb/bin
+    key: spindb-libsql-0.24-${{ runner.os }}-${{ runner.arch }}
 ```
 
 ## Known Issues & Gotchas
@@ -243,9 +245,9 @@ Each sqld server manages exactly one SQLite database file (`data.db`). There is 
 
 libSQL (sqld) binaries are not available for Windows. The `SUPPORTED_PLATFORMS` set in `binary-urls.ts` only includes darwin and linux variants.
 
-### 5. No Authentication
+### 5. JWT Authentication
 
-sqld in local dev mode does not support authentication or user management. All requests are unauthenticated.
+sqld supports JWT authentication via Ed25519 key pairs. Tokens include a 10-year expiration by default. Without `createUser()`, all requests are unauthenticated.
 
 ### 6. SQL Restore Skips Transaction Control
 

@@ -54,7 +54,7 @@ SpinDB supports **21 database engines** across **5 platform architectures**—al
 | 🐯 **TigerBeetle** | Financial Ledger | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 📚 **LibSQL** | Embedded SQL Server | ✅ | ✅ | ✅ | ✅ | ❌ |
 
-**105 combinations. One CLI. Zero configuration.**
+**101+ supported combinations. One CLI. Zero configuration.**
 
 > ClickHouse and LibSQL are available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 

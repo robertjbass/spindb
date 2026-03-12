@@ -26,7 +26,7 @@ export const LIBSQL_VERSION_MAP: Record<string, string> = {
 }
 
 /**
- * Supported major Meilisearch versions (1-part format).
+ * Supported major libSQL versions (1-part format).
  * Used for grouping and display purposes.
  */
 export const SUPPORTED_MAJOR_VERSIONS = ['0']

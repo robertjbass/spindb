@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'crypto'
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { existsSync, openSync, closeSync } from 'fs'
+import { mkdir, writeFile, readFile, unlink, stat } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -67,18 +67,25 @@ async function loadAuthToken(
   return creds?.apiKey ?? undefined
 }
 
+/** Default JWT TTL: 10 years (effectively non-expiring for local dev) */
+const DEFAULT_JWT_TTL_SECONDS = 10 * 365 * 24 * 60 * 60
+
 /**
  * Create a JWT token signed with an Ed25519 private key.
  * Header: {"alg":"EdDSA","typ":"JWT"}
- * Payload: {"a":"rw"} (read-write access)
+ * Payload: {"a":"rw","exp":...} (read-write access with expiration)
  */
 function createJwt(
   privateKey: ReturnType<typeof generateKeyPairSync>['privateKey'],
+  ttlSeconds = DEFAULT_JWT_TTL_SECONDS,
 ): string {
   const header = Buffer.from(
     JSON.stringify({ alg: 'EdDSA', typ: 'JWT' }),
   ).toString('base64url')
-  const payload = Buffer.from(JSON.stringify({ a: 'rw' })).toString('base64url')
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds
+  const payload = Buffer.from(JSON.stringify({ a: 'rw', exp })).toString(
+    'base64url',
+  )
   const signingInput = `${header}.${payload}`
   const signature = sign(null, Buffer.from(signingInput), privateKey).toString(
     'base64url',
@@ -319,10 +326,11 @@ export class LibSQLEngine extends BaseEngine {
       return null
     }
 
-    // Spawn detached process with stdio ignored to prevent fd leaks
+    // Spawn detached process with stderr redirected to logFile for debugging
+    const logFd = openSync(logFile, 'a')
     const spawnOpts: SpawnOptions = {
       cwd: containerDir,
-      stdio: ['ignore', 'ignore', 'ignore'],
+      stdio: ['ignore', 'ignore', logFd],
       detached: true,
     }
 
@@ -335,6 +343,7 @@ export class LibSQLEngine extends BaseEngine {
     }
 
     proc.unref()
+    closeSync(logFd)
 
     // Wait for server to be ready
     await new Promise((resolve) => setTimeout(resolve, START_CHECK_DELAY_MS))
@@ -502,16 +511,14 @@ export class LibSQLEngine extends BaseEngine {
   async executeQuery(
     container: ContainerConfig,
     query: string,
-    options?: QueryOptions,
+    _options?: QueryOptions,
   ): Promise<QueryResult> {
     const port = container.port
-    const host = options?.host ?? '127.0.0.1'
-    const effectivePort = host !== '127.0.0.1' ? port : port
 
     // Load auth token from credentials if available
     const authToken = await loadAuthToken(container.name)
 
-    const result = await libsqlQuery(effectivePort, query, {
+    const result = await libsqlQuery(port, query, {
       authToken,
     })
 
@@ -667,7 +674,7 @@ export class LibSQLEngine extends BaseEngine {
     }
 
     try {
-      const { size } = await import('fs/promises').then((fs) => fs.stat(dbPath))
+      const { size } = await stat(dbPath)
       return size
     } catch {
       return null

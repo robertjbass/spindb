@@ -147,19 +147,37 @@ async function main(): Promise<void> {
 
   console.log('Verifying data...')
   try {
-    const result = (await libsqlQuery(
+    const result = await libsqlQuery(
       config.port,
       'SELECT COUNT(*) as count FROM test_user',
-    )) as {
+    )
+
+    const typedResult = result as {
       cols?: Array<{ name: string }>
-      rows?: Array<Array<{ type: string; value: string }>>
+      rows?: Array<Array<{ type: string; value?: string | number }>>
     }
 
-    const count = result?.rows?.[0]?.[0]?.value
-    if (count !== undefined) {
-      console.log(`Verified: ${count} users in test_user table`)
+    if (
+      !Array.isArray(typedResult?.rows) ||
+      !Array.isArray(typedResult.rows[0]) ||
+      typedResult.rows[0][0] == null
+    ) {
+      console.warn(
+        'Warning: Unexpected result shape from COUNT query:',
+        JSON.stringify(result),
+      )
     } else {
-      console.warn('Warning: Could not verify row count')
+      const cell = typedResult.rows[0][0]
+      const count =
+        cell.value !== undefined ? Number(cell.value) : undefined
+      if (count !== undefined && !isNaN(count)) {
+        console.log(`Verified: ${count} users in test_user table`)
+      } else {
+        console.warn(
+          'Warning: Could not parse row count from:',
+          JSON.stringify(cell),
+        )
+      }
     }
   } catch (error) {
     console.error(

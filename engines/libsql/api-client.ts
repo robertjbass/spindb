@@ -163,8 +163,13 @@ export function hranaValueToJs(val: HranaValue): unknown {
   switch (val.type) {
     case 'null':
       return null
-    case 'integer':
-      return Number(val.value)
+    case 'integer': {
+      const n = BigInt(val.value)
+      return n > BigInt(Number.MAX_SAFE_INTEGER) ||
+        n < BigInt(-Number.MAX_SAFE_INTEGER)
+        ? n
+        : Number(val.value)
+    }
     case 'float':
       return val.value
     case 'text':

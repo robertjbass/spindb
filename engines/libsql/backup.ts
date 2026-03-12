@@ -112,14 +112,17 @@ async function createSqlBackup(
   for (const row of tablesResult.rows) {
     const tableName = String(row[0]?.type === 'text' ? row[0].value : row[0])
     const createSql = String(row[1]?.type === 'text' ? row[1].value : row[1])
+    const escapedName = tableName.replace(/"/g, '""')
 
     lines.push(`${createSql};`)
     lines.push('')
 
     // Dump all rows
-    const dataResult = await libsqlQuery(port, `SELECT * FROM "${tableName}"`, {
-      authToken,
-    })
+    const dataResult = await libsqlQuery(
+      port,
+      `SELECT * FROM "${escapedName}"`,
+      { authToken },
+    )
 
     for (const dataRow of dataResult.rows) {
       const values = dataRow.map((val) => {
@@ -132,9 +135,11 @@ async function createSqlBackup(
         return 'NULL'
       })
 
-      const columns = dataResult.cols.map((c) => `"${c.name}"`)
+      const columns = dataResult.cols.map(
+        (c) => `"${c.name.replace(/"/g, '""')}"`,
+      )
       lines.push(
-        `INSERT INTO "${tableName}" (${columns.join(', ')}) VALUES (${values.join(', ')});`,
+        `INSERT INTO "${escapedName}" (${columns.join(', ')}) VALUES (${values.join(', ')});`,
       )
     }
 

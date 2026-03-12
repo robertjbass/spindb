@@ -21,6 +21,113 @@ import {
 } from '../../types'
 
 /**
+ * Split SQL content into individual statements, respecting quoted strings
+ * and comments. Avoids breaking on semicolons inside string literals.
+ */
+function splitSqlStatements(content: string): string[] {
+  const statements: string[] = []
+  let current = ''
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inLineComment = false
+  let inBlockComment = false
+  let i = 0
+
+  while (i < content.length) {
+    const ch = content[i]
+    const next = content[i + 1]
+
+    if (inLineComment) {
+      if (ch === '\n') {
+        inLineComment = false
+      }
+      i++
+      continue
+    }
+
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false
+        i += 2
+        continue
+      }
+      i++
+      continue
+    }
+
+    if (inSingleQuote) {
+      current += ch
+      if (ch === "'" && next === "'") {
+        current += next
+        i += 2
+        continue
+      }
+      if (ch === "'") {
+        inSingleQuote = false
+      }
+      i++
+      continue
+    }
+
+    if (inDoubleQuote) {
+      current += ch
+      if (ch === '"') {
+        inDoubleQuote = false
+      }
+      i++
+      continue
+    }
+
+    // Not inside any quote or comment
+    if (ch === '-' && next === '-') {
+      inLineComment = true
+      i += 2
+      continue
+    }
+
+    if (ch === '/' && next === '*') {
+      inBlockComment = true
+      i += 2
+      continue
+    }
+
+    if (ch === "'") {
+      inSingleQuote = true
+      current += ch
+      i++
+      continue
+    }
+
+    if (ch === '"') {
+      inDoubleQuote = true
+      current += ch
+      i++
+      continue
+    }
+
+    if (ch === ';') {
+      const trimmed = current.trim()
+      if (trimmed) {
+        statements.push(trimmed)
+      }
+      current = ''
+      i++
+      continue
+    }
+
+    current += ch
+    i++
+  }
+
+  const trimmed = current.trim()
+  if (trimmed) {
+    statements.push(trimmed)
+  }
+
+  return statements
+}
+
+/**
  * Detect the backup format from a file path
  */
 export function detectBackupFormat(filePath: string): BackupFormat {
@@ -81,10 +188,12 @@ async function restoreBinaryBackup(
   backupPath: string,
   options: { containerName: string; dataDir: string },
 ): Promise<RestoreResult> {
-  const containerDir = paths.getContainerPath(options.containerName, {
-    engine: 'libsql',
-  })
-  const dataDir = join(containerDir, 'data')
+  const dataDir =
+    options.dataDir ||
+    join(
+      paths.getContainerPath(options.containerName, { engine: 'libsql' }),
+      'data',
+    )
   const dbPath = join(dataDir, 'data.db')
 
   logDebug(`Restoring binary backup to ${dbPath}`)
@@ -130,13 +239,13 @@ async function restoreSqlBackup(
 
   const content = await readFile(backupPath, 'utf-8')
 
-  // Split into individual statements, filtering comments and empty lines
-  const statements = content
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s && !s.startsWith('--'))
+  // Split into individual statements using a state machine that respects
+  // quoted strings and comments (avoids breaking on semicolons inside literals)
+  const statements = splitSqlStatements(content)
 
   let executed = 0
+  const failures: Array<{ statement: string; error: string }> = []
+
   for (const stmt of statements) {
     // Skip transaction control statements - sqld handles transactions differently
     if (/^(BEGIN|COMMIT|ROLLBACK)\b/i.test(stmt)) continue
@@ -145,14 +254,23 @@ async function restoreSqlBackup(
       await libsqlQuery(port, `${stmt};`, { authToken })
       executed++
     } catch (error) {
-      logDebug(
-        `Warning: statement failed during restore: ${(error as Error).message}`,
-      )
+      const message = (error as Error).message
+      const preview = stmt.length > 80 ? `${stmt.slice(0, 80)}...` : stmt
+      failures.push({ statement: preview, error: message })
+      logDebug(`Warning: statement failed during restore: ${message}`)
     }
+  }
+
+  let summary = `Restored ${executed} SQL statements from backup.`
+  if (failures.length > 0) {
+    summary += ` ${failures.length} statement(s) failed.`
+    logDebug(
+      `Restore failures:\n${failures.map((f) => `  ${f.statement}: ${f.error}`).join('\n')}`,
+    )
   }
 
   return {
     format: 'sql',
-    stdout: `Restored ${executed} SQL statements from backup.`,
+    stdout: summary,
   }
 }

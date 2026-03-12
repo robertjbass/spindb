@@ -390,7 +390,7 @@ describe('Database Capabilities', () => {
   })
 
   describe('exhaustive coverage', () => {
-    it('should cover all 20 engines', () => {
+    it('should cover all 21 engines', () => {
       assertEqual(ALL_ENGINES.length, 21, 'Should have exactly 21 engines')
       // This test ensures getDatabaseCapabilities handles all engines
       // without throwing (the assertExhaustive in the switch would throw

@@ -225,7 +225,7 @@ Platform commands: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
 - **Backup formats**: Binary (file copy of the SQLite database file) and SQL (HTTP API dump via `/v1/dump`). Binary is the default format.
 - **Query execution**: Uses the Hrana HTTP API (`POST /v2/pipeline`) with JSON body containing SQL statements. Supports `spindb query` for structured output.
 - **layerbase-cloud notes**: `setup-database.sh` generates an Ed25519 key pair, creates a JWT, and passes the public key to sqld via `--auth-jwt-key-file`. The JWT is used as the bearer token for API requests.
-- **Emoji**: :books:, **Alias**: `lsql`
+- **Emoji**: 📚, **Alias**: `lsql`
 
 ## Database Create/Rename/Drop Support
 
