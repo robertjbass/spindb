@@ -27,7 +27,11 @@ import {
 } from '../../core/error-handler'
 import { mysqlBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
-import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
+import {
+  fetchAvailableVersions,
+  getLatestVersion,
+  fetchDeprecatedVersions,
+} from './hostdb-releases'
 import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
@@ -121,6 +125,10 @@ export class MySQLEngine extends BaseEngine {
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
+  }
+
+  async fetchDeprecatedVersions(): Promise<Set<string>> {
+    return fetchDeprecatedVersions()
   }
 
   getPlatformInfo(): { platform: Platform; arch: Arch } {

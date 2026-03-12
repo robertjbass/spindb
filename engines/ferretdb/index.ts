@@ -918,9 +918,12 @@ export class FerretDBEngine extends BaseEngine {
         pgUrl,
         '--state-dir',
         containerDir,
-        // v2 requires --no-auth to disable SCRAM authentication
-        // v1 has auth disabled by default (flag doesn't exist)
-        ...(isV1(version) ? [] : ['--no-auth']),
+        // v2 enables SCRAM authentication by default. Pass --no-auth to disable it.
+        // v1 has auth disabled by default (flag doesn't exist).
+        // authEnabled=true means SCRAM is on (omit --no-auth); default is auth disabled.
+        ...(isV1(version) || container.authEnabled === true
+          ? []
+          : ['--no-auth']),
         '--debug-addr',
         `127.0.0.1:${debugPort}`,
       ]

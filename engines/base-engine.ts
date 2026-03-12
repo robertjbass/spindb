@@ -244,6 +244,15 @@ export abstract class BaseEngine {
     return versions
   }
 
+  /**
+   * Fetch the set of deprecated version strings from hostdb.
+   * Deprecated versions are still available for download but not recommended
+   * for new installations.
+   */
+  async fetchDeprecatedVersions(): Promise<Set<string>> {
+    return new Set()
+  }
+
   // Create a dump from a remote database using a connection string
   abstract dumpFromConnectionString(
     connectionString: string,

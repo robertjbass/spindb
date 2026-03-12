@@ -461,6 +461,10 @@ export const createCommand = new Command('create')
     'Restore from a dump file or connection string after creation',
   )
   .option('-j, --json', 'Output result as JSON')
+  .option(
+    '--show-deprecated',
+    'Show deprecated versions in the version selection list',
+  )
   .action(
     async (
       name: string | undefined,
@@ -476,6 +480,7 @@ export const createCommand = new Command('create')
         connect?: boolean
         from?: string
         json?: boolean
+        showDeprecated?: boolean
       },
     ) => {
       let tempDumpPath: string | null = null
@@ -537,7 +542,9 @@ export const createCommand = new Command('create')
             })
           }
 
-          const answers = await promptCreateOptions()
+          const answers = await promptCreateOptions({
+            showDeprecated: options.showDeprecated,
+          })
           containerName = answers.name
           engine = answers.engine as Engine
           version = answers.version

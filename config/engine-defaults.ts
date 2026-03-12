@@ -48,7 +48,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '8.4',
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
-    latestVersion: '9',
+    latestVersion: '9.6',
     superuser: 'root',
     connectionScheme: 'mysql',
     logFileName: 'mysql.log',

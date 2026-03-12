@@ -10,7 +10,10 @@
  */
 
 import { compareVersions } from './version-utils'
-import { getAvailableVersions as getHostdbVersions } from './hostdb-metadata'
+import {
+  getAvailableVersions as getHostdbVersions,
+  getDeprecatedVersions as getHostdbDeprecatedVersions,
+} from './hostdb-metadata'
 import { logDebug } from './error-handler'
 import type { Engine, InstalledBinary } from '../types'
 
@@ -51,6 +54,7 @@ export type HostdbReleasesConfig = {
 export type HostdbReleasesModule = {
   fetchAvailableVersions: () => Promise<Record<string, string[]>>
   getLatestVersion: (major: string) => Promise<string>
+  fetchDeprecatedVersions: () => Promise<Set<string>>
 }
 
 /**
@@ -230,8 +234,31 @@ export function createHostdbReleases(
     return `${major}.0.0`
   }
 
+  // Cache for deprecated versions
+  let cachedDeprecated: Set<string> | null = null
+  let deprecatedCachedAt = 0
+
+  async function fetchDeprecatedVersions(): Promise<Set<string>> {
+    const now = Date.now()
+    if (cachedDeprecated && now - deprecatedCachedAt < cacheTTLMs) {
+      return cachedDeprecated
+    }
+
+    try {
+      cachedDeprecated = await getHostdbDeprecatedVersions(engine)
+      deprecatedCachedAt = Date.now()
+      return cachedDeprecated
+    } catch (error) {
+      logDebug(`Failed to fetch deprecated versions for ${displayName}`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return new Set()
+    }
+  }
+
   return {
     fetchAvailableVersions: getCachedVersions,
     getLatestVersion,
+    fetchDeprecatedVersions,
   }
 }

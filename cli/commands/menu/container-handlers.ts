@@ -128,27 +128,31 @@ export async function handleCreate(): Promise<'main' | string | void> {
   let selectedVersion: string | null = null
   let containerName: string | null = null
 
-  // Step 1: Engine selection (back returns to main menu)
-  while (selectedEngine === null) {
-    const result = await promptEngine({ includeBack: true })
-    if (result === MAIN_MENU_VALUE) return 'main'
-    if (result === BACK_VALUE) return // Back to parent menu
-    selectedEngine = result
-  }
-
-  // Step 2: Version selection (back returns to engine)
-  while (selectedVersion === null) {
-    const result = await promptVersion(selectedEngine!, { includeBack: true })
-    if (result === MAIN_MENU_VALUE) return 'main'
-    if (result === BACK_VALUE) {
-      selectedEngine = null
-      continue
-    }
-    selectedVersion = result
-  }
-
-  // Step 3: Container name (back returns to version)
+  // Wizard loop: steps can go back to previous steps
+  // Using a single outer loop so 'continue' restarts from the earliest null step
   while (containerName === null) {
+    // Step 1: Engine selection (back returns to main menu)
+    if (selectedEngine === null) {
+      const result = await promptEngine({ includeBack: true })
+      if (result === MAIN_MENU_VALUE) return 'main'
+      if (result === BACK_VALUE) return // Back to parent menu
+      selectedEngine = result
+    }
+
+    // Step 2: Version selection (back returns to engine)
+    if (selectedVersion === null) {
+      const result = await promptVersion(selectedEngine!, {
+        includeBack: true,
+      })
+      if (result === MAIN_MENU_VALUE) return 'main'
+      if (result === BACK_VALUE) {
+        selectedEngine = null
+        continue
+      }
+      selectedVersion = result
+    }
+
+    // Step 3: Container name (back returns to version)
     const result = await promptContainerName(undefined, { allowBack: true })
     if (result === null) {
       selectedVersion = null

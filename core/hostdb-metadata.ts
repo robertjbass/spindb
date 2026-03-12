@@ -28,6 +28,8 @@ type CliTools = {
 
 export type VersionEntryObject = {
   enabled?: boolean
+  deprecated?: boolean
+  note?: string
   platforms?: string[]
   dependencies?: Array<{
     database: string
@@ -74,7 +76,8 @@ type ToolDownloadInfo = {
   }
 }
 
-// databases.json is keyed directly by engine name
+// databases.json may be keyed directly by engine name (legacy)
+// or wrapped under a "databases" key (current schema)
 type DatabasesJson = Record<string, DatabaseEntry>
 
 type DownloadsJson = {
@@ -93,6 +96,7 @@ async function fetchWithCache<T>(
   urls: string[],
   getCache: () => { data: T; timestamp: number } | null,
   setCache: (cache: { data: T; timestamp: number }) => void,
+  transform?: (raw: Record<string, unknown>) => T,
 ): Promise<T> {
   // Use getter to always check the freshest cache state
   const cache = getCache()
@@ -119,7 +123,10 @@ async function fetchWithCache<T>(
             throw new Error(`Failed to fetch ${url}: ${response.status}`)
           }
 
-          const data = (await response.json()) as T
+          const raw = await response.json()
+          const data = transform
+            ? transform(raw as Record<string, unknown>)
+            : (raw as T)
           setCache({ data, timestamp: Date.now() })
           return data
         } catch (error) {
@@ -137,6 +144,23 @@ async function fetchWithCache<T>(
   return fetchPromise
 }
 
+/**
+ * Unwrap databases.json schema: current schema wraps engines under a "databases" key,
+ * legacy schema has engines at the top level. Handles both.
+ */
+export function unwrapDatabasesJson(
+  raw: Record<string, unknown>,
+): DatabasesJson {
+  if (
+    raw.databases &&
+    typeof raw.databases === 'object' &&
+    !Array.isArray(raw.databases)
+  ) {
+    return raw.databases as DatabasesJson
+  }
+  return raw as DatabasesJson
+}
+
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
   return fetchWithCache(
     [
@@ -147,6 +171,7 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
     (c) => {
       databasesCache = c
     },
+    unwrapDatabasesJson,
   )
 }
 
@@ -320,6 +345,48 @@ export async function getPackagesForTools(
 export function isVersionEnabled(value: boolean | VersionEntryObject): boolean {
   if (typeof value === 'boolean') return value
   return value.enabled !== false
+}
+
+/**
+ * Check if a version entry is deprecated.
+ * Deprecated versions retain their existing releases but are not recommended
+ * for new installations.
+ */
+export function isVersionDeprecated(
+  value: boolean | VersionEntryObject,
+): boolean {
+  if (typeof value === 'boolean') return false
+  return value.deprecated === true
+}
+
+/**
+ * Get the set of deprecated version strings for a database engine from databases.json
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
+ * @returns Set of deprecated version strings, or empty set if fetch fails
+ */
+export async function getDeprecatedVersions(
+  engine: Engine | string,
+): Promise<Set<string>> {
+  try {
+    const data = await fetchDatabasesJson()
+    const key = engine.toLowerCase()
+    const entry = data[key]
+    if (!entry?.versions) return new Set()
+
+    return new Set(
+      Object.entries(entry.versions)
+        .filter(
+          ([, value]) => isVersionEnabled(value) && isVersionDeprecated(value),
+        )
+        .map(([version]) => version),
+    )
+  } catch (error) {
+    logDebug('Failed to fetch deprecated versions from hostdb', {
+      engine,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return new Set()
+  }
 }
 
 /**

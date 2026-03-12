@@ -337,7 +337,7 @@ export class QuestDBEngine extends BaseEngine {
     proc.unref()
 
     // Wait for server to be ready
-    const timeout = isWindows ? 90000 : 60000
+    const timeout = isWindows ? 150000 : 120000
     logDebug(
       `Waiting for QuestDB to be ready on port ${port}... (timeout: ${timeout}ms)`,
     )

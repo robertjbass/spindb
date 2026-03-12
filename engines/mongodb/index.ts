@@ -329,6 +329,11 @@ export class MongoDBEngine extends BaseEngine {
       '--logappend',
     ]
 
+    // Enable authentication if configured (requires clients to provide credentials)
+    if (container.authEnabled) {
+      args.push('--auth')
+    }
+
     // Note: --fork is not supported on macOS (Sonoma+), so we use detached spawn
     // for both macOS and Windows. Only Linux still supports --fork.
     const { platform } = platformService.getPlatformInfo()
@@ -1110,7 +1115,8 @@ export class MongoDBEngine extends BaseEngine {
     const mongosh = await this.getMongoshPath()
 
     // Create user with readWrite role on the target database
-    // Auth is not enforced (no --auth flag) but user is still created
+    // User is created regardless of auth mode. When authEnabled=true, --auth is
+    // passed to mongod and credentials are required to connect.
     // Use JSON.stringify for password to safely escape all special characters in JS context
     // Pass script via stdin to avoid exposing passwords in process listings
     const jsonPwd = JSON.stringify(password)

@@ -9,6 +9,10 @@ import { existsSync, statSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
 import { listEngines, getEngine } from '../../engines'
+import {
+  getDeprecatedVersions,
+  getAvailableVersions,
+} from '../../core/hostdb-metadata'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { portManager } from '../../core/port-manager'
 import { containerManager } from '../../core/container-manager'
@@ -468,11 +472,41 @@ export async function promptEngine(options?: {
 }): Promise<string> {
   const engines = listEngines()
 
-  const engineChoices: FilterableChoice[] = engines.map((e) => ({
-    name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${e.supportedVersions.join(', ')})`)}`,
-    value: e.name,
-    short: e.displayName,
-  }))
+  // Fetch available + deprecated versions per engine (single databases.json fetch, cached)
+  const nonDeprecatedMajors = new Map<string, string[]>()
+  await Promise.all(
+    engines.map(async (e) => {
+      try {
+        const [available, deprecated] = await Promise.all([
+          getAvailableVersions(e.name),
+          getDeprecatedVersions(e.name),
+        ])
+        if (!available || deprecated.size === 0) return
+        // Group available versions by major, keep majors that have at least one non-deprecated version
+        const kept = e.supportedVersions.filter((major) => {
+          const versionsUnderMajor = available.filter((v) =>
+            v.startsWith(`${major}.`),
+          )
+          return versionsUnderMajor.some((v) => !deprecated.has(v))
+        })
+        if (kept.length < e.supportedVersions.length) {
+          nonDeprecatedMajors.set(e.name, kept)
+        }
+      } catch {
+        // Silently ignore — show all versions if fetch fails
+      }
+    }),
+  )
+
+  const engineChoices: FilterableChoice[] = engines.map((e) => {
+    const displayVersions =
+      nonDeprecatedMajors.get(e.name) ?? e.supportedVersions
+    return {
+      name: `${getEngineIcon(e.name)} ${e.displayName} ${chalk.gray(`(versions: ${displayVersions.join(', ')})`)}`,
+      value: e.name,
+      short: e.displayName,
+    }
+  })
 
   const footerChoices: (FilterableChoice | inquirer.Separator)[] = [
     new inquirer.Separator(),
@@ -518,20 +552,26 @@ export async function promptEngine(options?: {
  */
 export async function promptVersion(
   engineName: string,
-  options?: { includeBack?: boolean },
+  options?: { includeBack?: boolean; showDeprecated?: boolean },
 ): Promise<string> {
   const engine = getEngine(engineName)
   const majorVersions = engine.supportedVersions
 
-  // Fetch available versions with a loading indicator
+  // Fetch available versions and deprecation info with a loading indicator
   const spinner = ora({
     text: 'Fetching available versions...',
     color: 'cyan',
   }).start()
 
   let availableVersions: Record<string, string[]>
+  let deprecatedVersions: Set<string> = new Set()
   try {
-    availableVersions = await engine.fetchAvailableVersions()
+    const [versions, deprecated] = await Promise.all([
+      engine.fetchAvailableVersions(),
+      getDeprecatedVersions(engineName),
+    ])
+    availableVersions = versions
+    deprecatedVersions = deprecated
     spinner.stop()
   } catch {
     spinner.stop()
@@ -549,24 +589,50 @@ export async function promptVersion(
 
   const majorChoices: Choice[] = []
   const engineDefs = getEngineDefaults(engineName)
+  let hiddenDeprecatedCount = 0
 
   for (let i = 0; i < majorVersions.length; i++) {
     const major = majorVersions[i]
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
     const isLatestMajor = major === engineDefs.latestVersion
+    const allDeprecated =
+      fullVersions.length > 0 &&
+      fullVersions.every((v) => deprecatedVersions.has(v))
+
+    // Hide all-deprecated major versions unless --show-deprecated is set
+    // TODO: If an engine has ALL majors deprecated, majorChoices will be empty.
+    // Add a fallback to re-include deprecated majors so the picker isn't blank.
+    // Only affects interactive wizard — CLI `spindb create --version` bypasses this.
+    if (allDeprecated && !options?.showDeprecated) {
+      hiddenDeprecatedCount++
+      continue
+    }
 
     const countLabel =
       versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
+    const deprecatedLabel = allDeprecated ? chalk.yellow(' [deprecated]') : ''
     const label = isLatestMajor
       ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
-      : `${engine.displayName} ${major} ${countLabel}`
+      : `${engine.displayName} ${major} ${countLabel}${deprecatedLabel}`
 
     majorChoices.push({
       name: label,
       value: major,
       short: `${engine.displayName} ${major}`,
     })
+  }
+
+  // Show hint about hidden deprecated versions
+  if (hiddenDeprecatedCount > 0) {
+    majorChoices.push(new inquirer.Separator())
+    majorChoices.push(
+      new inquirer.Separator(
+        chalk.gray(
+          `  ${hiddenDeprecatedCount} deprecated version${hiddenDeprecatedCount > 1 ? 's' : ''} hidden`,
+        ),
+      ),
+    )
   }
 
   if (options?.includeBack) {
@@ -605,11 +671,16 @@ export async function promptVersion(
     return majorVersion
   }
 
-  const minorChoices: Choice[] = minorVersions.map((v, i) => ({
-    name: i === 0 ? `${v} ${chalk.green('← latest')}` : v,
-    value: v,
-    short: v,
-  }))
+  const minorChoices: Choice[] = minorVersions.map((v, i) => {
+    const isDeprecated = deprecatedVersions.has(v)
+    const deprecatedTag = isDeprecated ? chalk.yellow(' [deprecated]') : ''
+    const latestTag = i === 0 ? ` ${chalk.green('← latest')}` : ''
+    return {
+      name: `${v}${latestTag}${deprecatedTag}`,
+      value: v,
+      short: v,
+    }
+  })
 
   if (options?.includeBack) {
     minorChoices.push(new inquirer.Separator())
@@ -1286,11 +1357,15 @@ export async function promptFileDatabasePath(
 }
 
 // Full interactive create flow
-export async function promptCreateOptions(): Promise<CreateOptions> {
+export async function promptCreateOptions(promptOptions?: {
+  showDeprecated?: boolean
+}): Promise<CreateOptions> {
   console.log(chalk.cyan('\n  ▣  Create New Database Container\n'))
 
   const engine = await promptEngine()
-  const version = await promptVersion(engine)
+  const version = await promptVersion(engine, {
+    showDeprecated: promptOptions?.showDeprecated,
+  })
   const name = await promptContainerName()
   const database = await promptDatabaseName(name, engine) // Default to container name
 

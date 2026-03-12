@@ -24,6 +24,12 @@ export type ContainerConfig = {
   // Bind address for the database server (default: '127.0.0.1')
   // Set via `spindb start --bind <address>`. Persisted across restarts.
   bindAddress?: string
+  // Authentication mode for engines that support it.
+  // MongoDB: when true, passes --auth to mongod (requires credentials to connect)
+  // FerretDB v2: when true, omits --no-auth (enables SCRAM authentication);
+  //              when false/undefined, passes --no-auth (disables SCRAM)
+  // Set via `spindb start --auth` or `spindb start --no-auth`. Persisted across restarts.
+  authEnabled?: boolean
   // Remote database linking (external databases not managed by SpinDB)
   remote?: RemoteConnectionConfig
 }
