@@ -761,7 +761,7 @@ export class FerretDBEngine extends BaseEngine {
         // Use pg_ctl to start PostgreSQL
         // On Windows, spawnAsync pipes stdout/stderr which get inherited by the
         // PostgreSQL background process, preventing the 'close' event from firing
-        // until PG itself exits (causing a 60s timeout even though PG is ready).
+        // until PG itself exits (causing a 30s timeout even though PG is ready).
         // Use exec() on Windows (matches process-manager.ts approach) which runs
         // through the shell and doesn't hold pipes open. On Unix, use -w (wait mode).
         try {
