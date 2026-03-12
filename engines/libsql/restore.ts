@@ -4,7 +4,7 @@
  */
 
 import { existsSync } from 'fs'
-import { copyFile, readFile, mkdir } from 'fs/promises'
+import { readFile, mkdir, cp, rm } from 'fs/promises'
 import { join } from 'path'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
@@ -181,8 +181,9 @@ export async function restoreBackup(
 }
 
 /**
- * Restore from a binary backup by copying the database file
- * Requires the server to be stopped
+ * Restore from a binary backup by copying the database directory.
+ * sqld's data.db is a directory tree, not a single file.
+ * Requires the server to be stopped.
  */
 async function restoreBinaryBackup(
   backupPath: string,
@@ -203,7 +204,13 @@ async function restoreBinaryBackup(
     await mkdir(dataDir, { recursive: true })
   }
 
-  await copyFile(backupPath, dbPath)
+  // Remove existing data.db directory/file before restoring
+  if (existsSync(dbPath)) {
+    await rm(dbPath, { recursive: true, force: true })
+  }
+
+  // Copy the backup directory tree
+  await cp(backupPath, dbPath, { recursive: true })
 
   return {
     format: 'binary',

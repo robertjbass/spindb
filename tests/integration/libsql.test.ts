@@ -312,7 +312,7 @@ describe('libSQL Integration Tests', () => {
     console.log('\n Creating binary backup...')
 
     const { tmpdir } = await import('os')
-    const backupPath = `${tmpdir()}/libsql-test-backup-binary-${Date.now()}.db`
+    const backupPath = `${tmpdir()}/libsql-test-backup-binary-${Date.now()}`
 
     const sourceConfig = await containerManager.getConfig(containerName)
     assert(sourceConfig !== null, 'Source container config should exist')
@@ -323,12 +323,12 @@ describe('libSQL Integration Tests', () => {
       format: 'binary',
     })
 
-    assertTruthy(result.size > 0, 'Backup file should have content')
+    assertTruthy(result.size > 0, 'Backup should have content')
     assertEqual(result.format, 'binary', 'Backup format should be binary')
 
-    // Clean up
+    // Clean up (binary backup is a directory tree)
     const { rm } = await import('fs/promises')
-    await rm(backupPath, { force: true })
+    await rm(backupPath, { recursive: true, force: true })
 
     console.log(`   Binary backup created (${result.size} bytes)`)
   })
@@ -394,7 +394,7 @@ describe('libSQL Integration Tests', () => {
 
     // Create backup from source
     const { tmpdir } = await import('os')
-    const backupPath = `${tmpdir()}/libsql-test-backup-${Date.now()}.db`
+    const backupPath = `${tmpdir()}/libsql-test-backup-${Date.now()}`
 
     const sourceConfig = await containerManager.getConfig(containerName)
     assert(sourceConfig !== null, 'Source container config should exist')
@@ -430,9 +430,9 @@ describe('libSQL Integration Tests', () => {
     const ready = await waitForReady(ENGINE, testPorts[1])
     assert(ready, 'Cloned libSQL should be ready')
 
-    // Clean up backup file
+    // Clean up backup directory
     const { rm } = await import('fs/promises')
-    await rm(backupPath, { force: true })
+    await rm(backupPath, { recursive: true, force: true })
 
     console.log('   Container cloned via backup/restore')
   })

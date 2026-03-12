@@ -3,8 +3,8 @@
  * Supports binary (file copy) and SQL dump backup formats
  */
 
-import { mkdir, copyFile, stat } from 'fs/promises'
-import { existsSync } from 'fs'
+import { mkdir, stat, cp } from 'fs/promises'
+import { existsSync, statSync } from 'fs'
 import { join, dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
@@ -46,7 +46,10 @@ export async function createBackup(
 }
 
 /**
- * Create a binary backup by copying the database file
+ * Create a binary backup by copying the database directory.
+ * sqld's --db-path creates a directory tree (data.db/dbs/default/data is the
+ * actual SQLite file, plus WAL, metastore, etc.). We copy the whole directory
+ * to preserve all state needed for a clean restore.
  */
 async function createBinaryBackup(
   container: ContainerConfig,
@@ -55,23 +58,44 @@ async function createBinaryBackup(
   const containerDir = paths.getContainerPath(container.name, {
     engine: 'libsql',
   })
-  const dbPath = join(containerDir, 'data', 'data.db')
+  const dbDir = join(containerDir, 'data', 'data.db')
 
-  if (!existsSync(dbPath)) {
+  if (!existsSync(dbDir)) {
     throw new Error(
-      `Database file not found: ${dbPath}. Is the container initialized?`,
+      `Database directory not found: ${dbDir}. Is the container initialized?`,
     )
   }
 
-  logDebug(`Creating binary backup of libSQL database: ${dbPath}`)
+  logDebug(`Creating binary backup of libSQL database: ${dbDir}`)
 
-  await copyFile(dbPath, outputPath)
+  // Copy the entire data.db directory tree
+  await cp(dbDir, outputPath, { recursive: true })
 
-  const stats = await stat(outputPath)
+  // Calculate total size of the backup
+  let totalSize = 0
+  const isDir = statSync(outputPath).isDirectory()
+  if (isDir) {
+    const { readdir } = await import('fs/promises')
+    async function sumDir(dir: string): Promise<void> {
+      const entries = await readdir(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          await sumDir(fullPath)
+        } else {
+          totalSize += (await stat(fullPath)).size
+        }
+      }
+    }
+    await sumDir(outputPath)
+  } else {
+    totalSize = (await stat(outputPath)).size
+  }
+
   return {
     path: outputPath,
     format: 'binary',
-    size: stats.size,
+    size: totalSize,
   }
 }
 

@@ -667,14 +667,22 @@ export class LibSQLEngine extends BaseEngine {
     const containerDir = paths.getContainerPath(container.name, {
       engine: ENGINE,
     })
-    const dbPath = join(containerDir, 'data', 'data.db')
+    // sqld's data.db is a directory; the actual SQLite file is inside
+    const sqliteFile = join(
+      containerDir,
+      'data',
+      'data.db',
+      'dbs',
+      'default',
+      'data',
+    )
 
-    if (!existsSync(dbPath)) {
+    if (!existsSync(sqliteFile)) {
       return null
     }
 
     try {
-      const { size } = await stat(dbPath)
+      const { size } = await stat(sqliteFile)
       return size
     } catch {
       return null
