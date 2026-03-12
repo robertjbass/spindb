@@ -24,9 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **TigerBeetle create fails with numeric cluster ID** — `spindb create --engine tigerbeetle --database 0` failed validation because the generic branch requires names starting with a letter. TigerBeetle now has its own validation branch accepting non-negative integer cluster IDs, defaulting to `'0'`.
-- **CouchDB health check timeout after credential change** — `waitForReady()` and `status()` sent `admin:admin` credentials by default. After credentials are changed (e.g., by layerbase-cloud's setup-database.sh), CouchDB returns 401 even though it's running. Health checks now use anonymous requests which return 200 regardless of configured credentials.
+- **TigerBeetle create fails with numeric cluster ID** — `spindb create --engine tigerbeetle --database 0` failed validation because the generic branch requires names starting with a letter. TigerBeetle now has its own validation branch accepting non-negative integer cluster IDs, defaulting to `'0'`. Leading zeros are normalized (`'007'` → `'7'`).
+- **CouchDB health check timeout after credential change** — `waitForReady()` and `status()` sent `admin:admin` credentials by default. After credentials are changed (e.g., by layerbase-cloud's setup-database.sh), CouchDB returns 401 even though it's running. Health checks now use anonymous requests. `status()` accepts any non-5xx HTTP response as proof CouchDB is running (fixes `spindb list --json` misreporting when `require_valid_user = true`).
 - **QuestDB health check timeout after credential change** — `waitForReady()` used psql with hardcoded `admin`/`quest` credentials. After custom credentials are configured in `server.conf`, psql auth fails and loops for the full timeout. Now always uses the HTTP health check endpoint which doesn't require authentication.
+- **Redis/Valkey config patch bind regex** — `patchRedisConfig`/`patchValkeyConfig` bind address regex tightened from `/^bind .+/` to `/^bind [\d.:a-fA-F*]+/` to avoid matching `bind-source-addr` or other `bind-*` directives.
 - **FerretDB timeout comment mismatch** — corrected comment that stated 60s timeout for Windows pg_ctl start; actual timeout is 30s.
 
 ## [0.44.0] - 2026-03-11

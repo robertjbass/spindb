@@ -895,6 +895,8 @@ export class CouchDBEngine extends BaseEngine {
     const pidFile = join(containerDir, 'couchdb.pid')
 
     // Try health check via REST API (no auth — credentials may have changed)
+    // Any HTTP response (including 401) means CouchDB is running.
+    // This matters when require_valid_user = true and anonymous GET / returns 401.
     try {
       const response = await couchdbApiRequest(
         port,
@@ -904,7 +906,7 @@ export class CouchDBEngine extends BaseEngine {
         undefined,
         null,
       )
-      if (response.status === 200) {
+      if (response.status >= 200 && response.status < 500) {
         return { running: true, message: 'CouchDB is running' }
       }
     } catch {

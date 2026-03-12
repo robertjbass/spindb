@@ -597,6 +597,7 @@ export const createCommand = new Command('create')
               json: options.json,
             })
           }
+          database = String(parseInt(database, 10))
         } else {
           database = database ?? containerName.replace(/-/g, '_')
           // Validate database name to prevent SQL injection
