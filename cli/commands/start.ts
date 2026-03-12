@@ -144,10 +144,9 @@ export const startCommand = new Command('start')
             (engineName === Engine.FerretDB && !isFerretV1)
           if (!authSupported) {
             if (!options.json) {
-              const reason =
-                isFerretV1
-                  ? '--auth/--no-auth is not supported for FerretDB v1'
-                  : `--auth/--no-auth is not supported for ${engineName}`
+              const reason = isFerretV1
+                ? '--auth/--no-auth is not supported for FerretDB v1'
+                : `--auth/--no-auth is not supported for ${engineName}`
               console.log(uiWarning(reason))
             }
           } else {

@@ -589,6 +589,15 @@ export const createCommand = new Command('create')
               json: options.json,
             })
           }
+        } else if (engine === Engine.TigerBeetle) {
+          database = database ?? '0'
+          if (!/^[0-9]+$/.test(database)) {
+            return exitWithError({
+              message: 'TigerBeetle cluster ID must be a non-negative integer',
+              json: options.json,
+            })
+          }
+          database = String(parseInt(database, 10))
         } else {
           database = database ?? containerName.replace(/-/g, '_')
           // Validate database name to prevent SQL injection

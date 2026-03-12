@@ -390,81 +390,18 @@ export class QuestDBEngine extends BaseEngine {
     }
   }
 
-  // Wait for QuestDB to be ready using psql
+  // Wait for QuestDB to be ready using HTTP health check
+  // HTTP is preferred over psql because it doesn't require authentication,
+  // so it works regardless of configured credentials
   private async waitForReady(
     port: number,
-    version: string,
+    _version: string,
     timeoutMs = 60000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for port ${port}`)
-    const startTime = Date.now()
-    const checkInterval = 500
-
-    // Try to find psql for connection checking
-    let psqlPath = await configManager.getBinaryPath('psql')
-    if (!psqlPath) {
-      // Try system psql
-      try {
-        const result = await findBinary('psql')
-        if (result?.path) {
-          psqlPath = result.path
-        }
-      } catch {
-        // Ignore
-      }
-    }
-
-    // If no psql, try HTTP health check instead
-    if (!psqlPath) {
-      logDebug('psql not found, using HTTP health check')
-      return this.waitForReadyHttp(port + 188, timeoutMs)
-    }
-
-    let attempt = 0
-    while (Date.now() - startTime < timeoutMs) {
-      attempt++
-      logDebug(`Connection attempt ${attempt}...`)
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(
-            psqlPath!,
-            [
-              '-h',
-              '127.0.0.1',
-              '-p',
-              String(port),
-              '-U',
-              'admin',
-              '-d',
-              'qdb',
-              '-c',
-              'SELECT 1;',
-            ],
-            {
-              stdio: ['ignore', 'pipe', 'pipe'],
-              env: { ...process.env, PGPASSWORD: 'quest' },
-            },
-          )
-
-          proc.on('close', (code) => {
-            if (code === 0) resolve()
-            else reject(new Error(`Exit code ${code}`))
-          })
-          proc.on('error', reject)
-        })
-        logDebug(`QuestDB ready on port ${port}`)
-        return true
-      } catch (err) {
-        logDebug(`Attempt ${attempt} failed: ${err}`)
-        await new Promise((resolve) => setTimeout(resolve, checkInterval))
-      }
-    }
-
-    logWarning(`QuestDB did not become ready within ${timeoutMs}ms`)
-    return false
+    return this.waitForReadyHttp(port + 188, timeoutMs)
   }
 
-  // Fallback: wait using HTTP health check
   private async waitForReadyHttp(
     httpPort: number,
     timeoutMs: number,
