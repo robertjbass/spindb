@@ -168,8 +168,7 @@ async function main(): Promise<void> {
       )
     } else {
       const cell = typedResult.rows[0][0]
-      const count =
-        cell.value !== undefined ? Number(cell.value) : undefined
+      const count = cell.value !== undefined ? Number(cell.value) : undefined
       if (count !== undefined && !isNaN(count)) {
         console.log(`Verified: ${count} users in test_user table`)
       } else {
