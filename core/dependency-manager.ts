@@ -90,6 +90,8 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'weaviate',
   // TigerBeetle
   'tigerbeetle',
+  // LibSQL
+  'sqld',
   // Web panels
   'pgweb',
   // TUI tools

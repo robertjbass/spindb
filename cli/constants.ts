@@ -79,6 +79,7 @@ export const ENGINE_BRAND_COLORS: Record<Engine, BrandColor> = {
   [Engine.InfluxDB]: { foreground: '#FFFFFF', background: '#9394FF' }, // White on indigo/purple
   [Engine.Weaviate]: { foreground: '#FFFFFF', background: '#00D1A8' }, // White on green
   [Engine.TigerBeetle]: { foreground: '#FFFFFF', background: '#FF6600' }, // White on orange
+  [Engine.LibSQL]: { foreground: '#FFFFFF', background: '#00A4DC' }, // White on Turso blue
 }
 
 // ASCII fallback icons - work in any terminal
@@ -103,6 +104,7 @@ const ASCII_ICONS: Record<Engine, string> = {
   [Engine.InfluxDB]: '[IX]',
   [Engine.Weaviate]: '[WV]',
   [Engine.TigerBeetle]: '[TT]',
+  [Engine.LibSQL]: '[LS]',
 }
 
 // Nerd Font icons - require a patched font
@@ -128,6 +130,7 @@ const NERD_ICONS: Record<Engine, string> = {
   [Engine.InfluxDB]: '\udb85\udf95', // nf-md-chart-line (time-series)
   [Engine.Weaviate]: '\uf0e8', // nf-fa-sitemap (vector graph)
   [Engine.TigerBeetle]: '\uf0d6', // nf-fa-money (financial ledger)
+  [Engine.LibSQL]: '\ue7c4', // nf-dev-sqlite (SQLite fork)
 }
 
 // Emoji icons - original icons, inconsistent width across terminals
@@ -152,6 +155,7 @@ const EMOJI_ICONS: Record<Engine, string> = {
   [Engine.InfluxDB]: '📈',
   [Engine.Weaviate]: '🔮',
   [Engine.TigerBeetle]: '🐯',
+  [Engine.LibSQL]: '📚',
 }
 
 const DEFAULT_ICONS: Record<IconMode, string> = {

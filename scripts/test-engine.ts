@@ -36,6 +36,7 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   influxdb: 'influxdb.test.ts',
   weaviate: 'weaviate.test.ts',
   tigerbeetle: 'tigerbeetle.test.ts',
+  libsql: 'libsql.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
@@ -77,6 +78,8 @@ const ENGINE_ALIASES: Record<string, string> = {
   wv: 'weaviate',
   // TigerBeetle aliases
   tb: 'tigerbeetle',
+  // LibSQL aliases
+  lsql: 'libsql',
 }
 
 // Test run order (matches test:integration script order)
@@ -102,6 +105,7 @@ const TEST_ORDER = [
   'influxdb',
   'weaviate',
   'tigerbeetle',
+  'libsql',
 ]
 
 function resolveEngine(input: string): string | null {
@@ -152,6 +156,7 @@ function printUsage(): void {
   console.log('  influxdb      (aliases: influx)')
   console.log('  weaviate      (aliases: wv)')
   console.log('  tigerbeetle   (aliases: tb)')
+  console.log('  libsql        (aliases: lsql)')
   console.log('')
   console.log('Examples:')
   console.log('  pnpm test:engine              # Run all integration tests')

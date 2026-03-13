@@ -26,7 +26,7 @@ These engines bypass `spindb start` in layerbase-cloud's `setup-database.sh` due
 
 - [ ] **`spindb create --no-start` should skip tool check** — For file-based engines (SQLite, DuckDB), `spindb create --no-start` fails because it checks for the client tool (`sqlite3`) before downloading the binary that provides it. The `--no-start` flag should skip tool checks since nothing will run. This breaks the cloud Docker image prebake pattern (`create --no-start` + `delete --force`). Workaround: use `spindb engines download sqlite 3` instead.
 - [ ] **Pick logo and branding assets** - Review SVG concepts in `assets/` and `assets/concepts/`, finalize a logo for the tray icon, app badge, and wordmark
-- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 18 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
+- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 21 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
 - [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure
@@ -93,7 +93,7 @@ The following engines may be added based on community interest:
 - [ ] **Add `--json` to remaining commands** - clone, connect, logs, edit, attach, detach
 - [ ] **Add `--json` to `spindb run`** - Capture stdout/stderr and return as JSON instead of inheriting stdio
   - Requires updating `runScript` signature in `BaseEngine` (line 233-236 of `engines/base-engine.ts`)
-  - All 18 engine implementations need to be updated to support output capture mode
+  - All 21 engine implementations need to be updated to support output capture mode
   - Output format: `{ success: boolean, stdout: string, stderr: string, exitCode: number, container: string, engine: string, database: string }`
   - Once implemented, update layerbase query logic to use this for programmatic SQL execution
 
@@ -300,7 +300,7 @@ Items noted in source code that need attention:
 
 ## Maintenance
 
-- [x] ~~Add examples for each database in `CHEATSHEET.md`~~ - Covered by existing CHEATSHEET.md content for all 18 engines
+- [x] ~~Add examples for each database in `CHEATSHEET.md`~~ - Covered by existing CHEATSHEET.md content for all 21 engines
 
 ---
 

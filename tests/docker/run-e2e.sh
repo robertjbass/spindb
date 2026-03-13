@@ -42,10 +42,10 @@ SKIP_ENGINES="${SKIP_ENGINES:-}"
 GROUP_SQL="postgresql mysql mariadb cockroachdb clickhouse questdb"
 GROUP_NOSQL="mongodb redis valkey surrealdb typedb"
 # "other" = REST API engines + file-based engines, grouped for CI load balancing
-GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb weaviate tigerbeetle"
+GROUP_OTHER="qdrant meilisearch couchdb sqlite duckdb influxdb weaviate tigerbeetle libsql"
 
 # Valid engines and utility tests
-VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate tigerbeetle"
+VALID_ENGINES="postgresql mysql mariadb sqlite mongodb ferretdb ferretdb-v1 redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate tigerbeetle libsql"
 VALID_UTILITY_TESTS="self-update"
 VALID_GROUPS="sql nosql other"
 VALID_ALL="$VALID_ENGINES $VALID_UTILITY_TESTS"
@@ -159,7 +159,7 @@ FIXTURES_DIR="$SCRIPT_DIR/../fixtures"
 # Note: ferretdb is excluded - it's skipped in Docker E2E due to timeout/signal handling issues
 declare -A EXPECTED_COUNTS=(
   [postgresql]=5 [mysql]=5 [mariadb]=5 [mongodb]=5
-  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5 [weaviate]=3 [tigerbeetle]=0
+  [redis]=6 [valkey]=6 [clickhouse]=5 [sqlite]=5 [duckdb]=5 [qdrant]=3 [meilisearch]=3 [couchdb]=5 [cockroachdb]=5 [surrealdb]=5 [questdb]=5 [typedb]=5 [influxdb]=5 [weaviate]=3 [tigerbeetle]=0 [libsql]=5
 )
 declare -A BACKUP_FORMATS=(
   [postgresql]="sql|custom"
@@ -181,6 +181,7 @@ declare -A BACKUP_FORMATS=(
   [influxdb]="sql"
   [weaviate]="snapshot"
   [tigerbeetle]="binary"
+  [libsql]="binary|sql"
 )
 
 # Results tracking
@@ -397,6 +398,10 @@ insert_seed_data() {
       # Weaviate uses REST API for seeding (no seed file)
       seed_file=""
       ;;
+    libsql)
+      # LibSQL uses REST API (Hrana protocol) for seeding (no seed file)
+      seed_file=""
+      ;;
     tigerbeetle)
       # TigerBeetle uses custom binary protocol - no seed file, skip seeding
       return 0
@@ -451,6 +456,32 @@ test_user,id=5 name="Eve",email="eve@example.com"' &>/dev/null; then
         {"class": "TestVectors", "properties": {"name": "Charlie", "city": "SF"}, "vector": [0.9, 0.8, 0.7, 0.6]}
       ]}' &>/dev/null; then
       LAST_ERROR="Failed to insert Weaviate objects"
+      return 1
+    fi
+    return 0
+  fi
+
+  # LibSQL uses REST API (Hrana protocol) for seeding, not a file
+  if [ "$engine" = "libsql" ]; then
+    local libsql_port
+    libsql_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+    if [ -z "$libsql_port" ]; then
+      LAST_ERROR="Could not get LibSQL port"
+      return 1
+    fi
+    # Create table and insert test data via Hrana protocol (5 records to match EXPECTED_COUNTS[libsql]=5)
+    if ! curl -sf -X POST "http://127.0.0.1:${libsql_port}/v2/pipeline" \
+      -H 'Content-Type: application/json' \
+      -d '{"requests": [
+        {"type": "execute", "stmt": {"sql": "CREATE TABLE IF NOT EXISTS test_user (id INTEGER PRIMARY KEY, name TEXT, email TEXT)"}},
+        {"type": "execute", "stmt": {"sql": "INSERT INTO test_user (id, name, email) VALUES (1, '\''Alice'\'', '\''alice@example.com'\'')"}},
+        {"type": "execute", "stmt": {"sql": "INSERT INTO test_user (id, name, email) VALUES (2, '\''Bob'\'', '\''bob@example.com'\'')"}},
+        {"type": "execute", "stmt": {"sql": "INSERT INTO test_user (id, name, email) VALUES (3, '\''Charlie'\'', '\''charlie@example.com'\'')"}},
+        {"type": "execute", "stmt": {"sql": "INSERT INTO test_user (id, name, email) VALUES (4, '\''Diana'\'', '\''diana@example.com'\'')"}},
+        {"type": "execute", "stmt": {"sql": "INSERT INTO test_user (id, name, email) VALUES (5, '\''Eve'\'', '\''eve@example.com'\'')"}},
+        {"type": "close"}
+      ]}' &>/dev/null; then
+      LAST_ERROR="Failed to insert LibSQL seed data"
       return 1
     fi
     return 0
@@ -690,6 +721,17 @@ get_data_count() {
         echo "$output" | jq -r '.totalResults // empty' 2>/dev/null
       fi
       ;;
+    libsql)
+      # LibSQL uses REST API (Hrana protocol) - get record count via HTTP
+      local libsql_port
+      libsql_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$libsql_port" ]; then
+        output=$(curl -sf -X POST "http://127.0.0.1:${libsql_port}/v2/pipeline" \
+          -H 'Content-Type: application/json' \
+          -d '{"requests": [{"type": "execute", "stmt": {"sql": "SELECT COUNT(*) as count FROM test_user"}}, {"type": "close"}]}' 2>/dev/null)
+        echo "$output" | jq -r '.results[0].response.result.rows[0][0].value // empty' 2>/dev/null
+      fi
+      ;;
     tigerbeetle)
       # TigerBeetle uses custom binary protocol - no data count available
       echo "0"
@@ -770,6 +812,12 @@ get_backup_extension() {
     tigerbeetle)
       # TigerBeetle uses binary data file for backups
       echo ".tigerbeetle" ;;
+    libsql)
+      case $format in
+        sql) echo ".sql" ;;
+        binary) echo ".db" ;;
+      esac
+      ;;
     *)
       echo ".$format" ;;
   esac
@@ -820,6 +868,10 @@ create_backup() {
       # TigerBeetle uses stop-and-copy backup of data file
       run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
       ;;
+    libsql)
+      # LibSQL: single database per instance, no -d flag needed
+      run_cmd spindb backup "$container_name" --format "$format" -o "$BACKUP_DIR" -n "$backup_name"
+      ;;
   esac
 }
 
@@ -866,6 +918,10 @@ create_restore_target() {
       ;;
     tigerbeetle)
       # TigerBeetle: binary restore replaces data file, no explicit target needed
+      return 0
+      ;;
+    libsql)
+      # LibSQL: single database per instance, restore replaces data, no explicit target needed
       return 0
       ;;
     *)
@@ -948,6 +1004,10 @@ restore_backup() {
       # TigerBeetle: binary restore replaces data file
       run_cmd spindb restore "$container_name" "$backup_file" --force
       ;;
+    libsql)
+      # LibSQL: restore replaces data (single database per instance)
+      run_cmd spindb restore "$container_name" "$backup_file" --force
+      ;;
   esac
 }
 
@@ -989,6 +1049,10 @@ verify_restored_data() {
       ;;
     tigerbeetle)
       # TigerBeetle binary restore replaces data file
+      actual=$(get_data_count "$engine" "$container_name" "default")
+      ;;
+    libsql)
+      # LibSQL: single database per instance, data replaced by restore
       actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
   esac
@@ -1034,6 +1098,9 @@ verify_restored_data_with_count() {
       actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
     tigerbeetle)
+      actual=$(get_data_count "$engine" "$container_name" "default")
+      ;;
+    libsql)
       actual=$(get_data_count "$engine" "$container_name" "default")
       ;;
   esac
@@ -1098,6 +1165,9 @@ cleanup_restore_target() {
       ;;
     tigerbeetle)
       # TigerBeetle: no cleanup needed for binary restore (replaces data file)
+      ;;
+    libsql)
+      # LibSQL: no cleanup needed for restore (single database, replaces data)
       ;;
   esac
 }
@@ -1524,6 +1594,14 @@ run_test() {
         query_ok=true
       fi
       ;;
+    libsql)
+      # LibSQL uses REST API - check health endpoint via curl
+      local libsql_port
+      libsql_port=$(spindb info "$container_name" --json 2>/dev/null | jq -r '.port' 2>/dev/null)
+      if [ -n "$libsql_port" ] && curl -sf "http://127.0.0.1:${libsql_port}/health" &>/dev/null; then
+        query_ok=true
+      fi
+      ;;
     tigerbeetle)
       # TigerBeetle uses custom binary protocol - check if port is listening
       local tb_port
@@ -1619,9 +1697,10 @@ run_test() {
   # 4. Restoring via snapshot recovery/import
   # For now, skip backup/restore tests for these engines in Docker E2E.
   # The integration tests (pnpm test:engine qdrant/meilisearch/couchdb) cover backup/restore.
-  if [ "$engine" = "qdrant" ] || [ "$engine" = "meilisearch" ] || [ "$engine" = "couchdb" ]; then
+  if [ "$engine" = "qdrant" ] || [ "$engine" = "meilisearch" ] || [ "$engine" = "couchdb" ] || [ "$engine" = "libsql" ]; then
     local format_name="snapshot"
     [ "$engine" = "couchdb" ] && format_name="json"
+    [ "$engine" = "libsql" ] && format_name="binary"
     log_section "Backup/Restore: $format_name format"
     log_step "Backup/restore tests"
     log_step_result "skip"
@@ -2169,7 +2248,7 @@ fi
 # tests (pnpm test:engine ferretdb) run on GitHub Actions macOS/Linux and provide coverage.
 # Note: TigerBeetle requires io_uring syscalls. Docker must be run with
 # --security-opt seccomp=unconfined (handled by run-docker-test.sh).
-for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate tigerbeetle; do
+for engine in postgresql mysql mariadb sqlite mongodb redis valkey clickhouse duckdb qdrant meilisearch couchdb cockroachdb surrealdb questdb typedb influxdb weaviate tigerbeetle libsql; do
   if should_run_test "$engine"; then
     version=$(get_default_version "$engine")
     if [ -n "$version" ]; then

@@ -291,6 +291,19 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: ['tigerbeetle'], // Single binary serves as both server and REPL
     maxConnections: 0, // Not applicable
   },
+  [Engine.LibSQL]: {
+    defaultVersion: '0.24',
+    defaultPort: 8080, // HTTP API port
+    portRange: { start: 8080, end: 8180 },
+    latestVersion: '0.24',
+    superuser: '', // No auth by default for local dev
+    connectionScheme: 'http',
+    logFileName: 'libsql.log',
+    pidFileName: 'libsql.pid',
+    dataSubdir: 'data',
+    clientTools: [], // LibSQL uses HTTP API, no separate CLI tools
+    maxConnections: 0, // Not applicable for HTTP API
+  },
 }
 
 /**

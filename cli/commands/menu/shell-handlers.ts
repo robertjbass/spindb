@@ -172,9 +172,14 @@ export async function handleOpenShell(
   // REST API engines (no CLI shell) can't be used remotely via console
   if (
     isRemote &&
-    ['qdrant', 'meilisearch', 'influxdb', 'weaviate', 'couchdb'].includes(
-      config.engine,
-    )
+    [
+      'qdrant',
+      'meilisearch',
+      'influxdb',
+      'weaviate',
+      'couchdb',
+      'libsql',
+    ].includes(config.engine)
   ) {
     console.log()
     console.log(
@@ -304,6 +309,13 @@ export async function handleOpenShell(
     engineSpecificInstalled = false
     engineSpecificValue = null
     engineSpecificInstallValue = null
+  } else if (config.engine === 'libsql') {
+    // libSQL uses REST API (Hrana protocol), no CLI shell
+    defaultShellName = 'REST API'
+    engineSpecificCli = null
+    engineSpecificInstalled = false
+    engineSpecificValue = null
+    engineSpecificInstallValue = null
   } else if (config.engine === 'surrealdb') {
     // SurrealDB uses surreal sql command
     defaultShellName = 'surreal sql'
@@ -421,6 +433,12 @@ export async function handleOpenShell(
       value: 'default',
     })
     // Always show API info option for CouchDB
+    choices.push({
+      name: `ℹ Show API info`,
+      value: 'api-info',
+    })
+  } else if (config.engine === 'libsql') {
+    // libSQL: REST API only, show API info
     choices.push({
       name: `ℹ Show API info`,
       value: 'api-info',
@@ -682,6 +700,17 @@ export async function handleOpenShell(
       )
       console.log(
         chalk.gray(`  curl http://127.0.0.1:${config.port}/v1/schema`),
+      )
+    } else if (config.engine === 'libsql') {
+      console.log(chalk.cyan('libSQL REST API (Hrana protocol):'))
+      console.log(chalk.white(`  HTTP: http://127.0.0.1:${config.port}`))
+      console.log()
+      console.log(chalk.gray('Example curl commands:'))
+      console.log(chalk.gray(`  curl http://127.0.0.1:${config.port}/health`))
+      console.log(
+        chalk.gray(
+          `  curl -H "Content-Type: application/json" http://127.0.0.1:${config.port}/v2/pipeline -d '{"requests":[{"type":"execute","stmt":{"sql":"SELECT 1"}},{"type":"close"}]}'`,
+        ),
       )
     } else if (config.engine === 'couchdb') {
       console.log(chalk.cyan('CouchDB REST API:'))

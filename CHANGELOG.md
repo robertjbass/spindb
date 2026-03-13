@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-03-12
+
+### Added
+
+- **LibSQL engine** — Engine #21. LibSQL (sqld) is a SQLite fork by Turso that runs as a server with an HTTP API (Hrana protocol). Supports binary and SQL backup/restore formats. macOS and Linux only (no Windows). Default port 8080.
+- **LibSQL JWT authentication** — `createUser()` generates Ed25519 key pairs and signs JWT tokens, following the same pattern as Meilisearch API keys. Credentials stored via credential-manager.
+- **Database creation guard** — `canCreateDatabase()` now gates the `createDatabase` call during container creation, preventing errors for engines that don't support it (LibSQL, TigerBeetle, QuestDB).
+
 ## [0.44.1] - 2026-03-12
 
 ### Added
