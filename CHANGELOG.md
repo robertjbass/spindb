@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-03-12
+
+### Fixed
+
+- **LibSQL blob backup encoding** — SQL dump backup now correctly converts blob values from base64 to hex for `X'...'` literals (was outputting raw base64)
+- **LibSQL SQL restore double-quote escaping** — SQL statement splitter now handles escaped double-quotes (`""`) inside quoted identifiers, matching the existing single-quote (`''`) handling
+- **LibSQL version parsing** — Replaced permissive `parseInt` with strict regex validation, rejecting malformed version strings like `"32-beta"`
+- **LibSQL Windows download guard** — `spindb engines download libsql` now exits early with a clear message on Windows, matching the ClickHouse pattern
+- **LibSQL engines.json schema** — Fixed `clientTools` from `null` to `[]` for schema compliance with `EngineConfig` type
+
 ## [0.45.0] - 2026-03-12
 
 ### Added

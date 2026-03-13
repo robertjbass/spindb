@@ -71,6 +71,11 @@ function splitSqlStatements(content: string): string[] {
 
     if (inDoubleQuote) {
       current += ch
+      if (ch === '"' && next === '"') {
+        current += next
+        i += 2
+        continue
+      }
       if (ch === '"') {
         inDoubleQuote = false
       }

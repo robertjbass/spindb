@@ -16,15 +16,12 @@ export function parseVersion(versionString: string): {
   const cleaned = versionString.replace(/^v/, '').trim()
   if (!cleaned) return null
 
-  const parts = cleaned.split('.')
+  const match = cleaned.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?$/)
+  if (!match) return null
 
-  const major = parseInt(parts[0], 10)
-  const minor = parts[1] ? parseInt(parts[1], 10) : 0
-  const patch = parts[2] ? parseInt(parts[2], 10) : 0
-
-  if (isNaN(major)) return null
-  if (parts[1] && isNaN(minor)) return null
-  if (parts[2] && isNaN(patch)) return null
+  const major = Number(match[1])
+  const minor = match[2] ? Number(match[2]) : 0
+  const patch = match[3] ? Number(match[3]) : 0
 
   return { major, minor, patch, raw: cleaned }
 }

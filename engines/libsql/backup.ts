@@ -155,7 +155,8 @@ async function createSqlBackup(
         if (val.type === 'float') return String(val.value)
         if (val.type === 'text')
           return `'${String(val.value).replace(/'/g, "''")}'`
-        if (val.type === 'blob') return `X'${val.base64}'`
+        if (val.type === 'blob')
+          return `X'${Buffer.from(val.base64, 'base64').toString('hex')}'`
         return 'NULL'
       })
 

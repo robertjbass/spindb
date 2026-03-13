@@ -1727,6 +1727,20 @@ enginesCommand
       }
 
       if (['libsql', 'sqld'].includes(normalizedEngine)) {
+        // Check platform support
+        const { platform: lsPlatformCheck } = platformService.getPlatformInfo()
+        if (lsPlatformCheck === Platform.Win32) {
+          console.error(
+            uiError('libSQL is not supported on Windows via hostdb'),
+          )
+          console.log(
+            chalk.gray(
+              '  libSQL (sqld) binaries are only available for macOS and Linux.',
+            ),
+          )
+          process.exit(1)
+        }
+
         if (!version) {
           console.error(uiError('libSQL requires a version (e.g., 0.24)'))
           process.exit(1)
