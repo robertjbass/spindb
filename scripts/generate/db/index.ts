@@ -40,7 +40,7 @@ const ENGINE_DEFS = [
   { engine: 'influxdb', aliases: ['influx'] },
   { engine: 'weaviate', aliases: ['wv'] },
   { engine: 'tigerbeetle', aliases: ['tb'] },
-  { engine: 'libsql', aliases: ['lsql'] },
+  { engine: 'libsql', aliases: ['lsql', 'sqld'] },
 ] as const
 
 type SupportedEngine = (typeof ENGINE_DEFS)[number]['engine']
