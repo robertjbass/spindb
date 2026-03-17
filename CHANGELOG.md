@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.2] - 2026-03-17
+
+### Added
+
+- **Layerbase Cloud provider detection** — `spindb link` auto-detects `provider: 'layerbase'` from `*.layerbase.dev` hostnames
+- **`--provider-id` option for `spindb link`** — stores a provider-specific identifier (e.g., cloud database UUID) in `remote.providerId`
+- **`providerId` field on `RemoteConnectionConfig`** — optional field for provider-specific database identifiers
+
 ## [0.45.1] - 2026-03-12
 
 ### Fixed

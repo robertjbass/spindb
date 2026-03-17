@@ -3,6 +3,7 @@ export type RemoteConnectionConfig = {
   connectionString: string // Redacted (password replaced with ***)
   ssl?: boolean // Default true for non-localhost
   provider?: string // Auto-detected: 'neon', 'supabase', 'planetscale', etc.
+  providerId?: string // Provider's identifier (e.g., cloud database UUID)
 }
 
 export type ContainerConfig = {

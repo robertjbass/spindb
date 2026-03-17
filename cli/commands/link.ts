@@ -48,6 +48,7 @@ export const linkCommand = new Command('link')
   .option('--engine <engine>', 'Engine type (auto-detected from URL scheme)')
   .option('-d, --database <name>', 'Database name (extracted from URL)')
   .option('--provider <name>', 'Provider hint (auto-detected from hostname)')
+  .option('--provider-id <id>', 'Provider identifier for this database')
   .option('-j, --json', 'Output as JSON')
   .action(
     async (
@@ -57,6 +58,7 @@ export const linkCommand = new Command('link')
         engine?: string
         database?: string
         provider?: string
+        providerId?: string
         json?: boolean
       },
     ) => {
@@ -158,6 +160,7 @@ export const linkCommand = new Command('link')
           host,
           connectionString,
           provider,
+          providerId: options.providerId,
         })
 
         // Create container config with 'linked' status
@@ -213,6 +216,7 @@ export const linkCommand = new Command('link')
                 database,
                 status: 'linked',
                 provider: provider ?? undefined,
+                providerId: remoteConfig.providerId,
                 ssl: remoteConfig.ssl,
                 connectionString: redactConnectionString(connectionString),
                 ...metadata,
@@ -250,6 +254,13 @@ export const linkCommand = new Command('link')
               chalk.gray('  ') +
                 chalk.white('Provider:'.padEnd(14)) +
                 chalk.magenta(provider),
+            )
+          }
+          if (remoteConfig.providerId) {
+            console.log(
+              chalk.gray('  ') +
+                chalk.white('Provider ID:'.padEnd(14)) +
+                chalk.magenta(remoteConfig.providerId),
             )
           }
           console.log(

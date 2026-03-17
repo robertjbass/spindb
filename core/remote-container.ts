@@ -113,6 +113,8 @@ const PROVIDER_PATTERNS: ProviderPattern[] = [
   { pattern: /\.upstash\.io$/i, name: 'upstash' },
   { pattern: /\.railway\.app$/i, name: 'railway' },
   { pattern: /\.aiven\.io$/i, name: 'aiven' },
+  { pattern: /dev\.cloud\.layerbase\.dev$/i, name: 'layerbase-staging' },
+  { pattern: /\.layerbase\.dev$/i, name: 'layerbase' },
 ]
 
 /**
@@ -227,9 +229,10 @@ export function buildRemoteConfig(options: {
   host: string
   connectionString: string
   provider?: string | null
+  providerId?: string
   ssl?: boolean
 }): RemoteConnectionConfig {
-  const { host, connectionString, provider } = options
+  const { host, connectionString, provider, providerId } = options
 
   // Default SSL to true for non-localhost connections
   const ssl = options.ssl ?? !isLocalhost(host)
@@ -239,6 +242,7 @@ export function buildRemoteConfig(options: {
     connectionString: redactConnectionString(connectionString),
     ssl,
     ...(provider && { provider }),
+    ...(providerId && { providerId }),
   }
 }
 
