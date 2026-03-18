@@ -357,7 +357,7 @@
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [],
+      "clientTools": ["sqld"],
       "licensing": "MIT",
       "notes": "SQLite fork by Turso with server mode (sqld), HTTP API, replication support. No Windows binaries. Enhanced clients: litecli, usql.",
       "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]

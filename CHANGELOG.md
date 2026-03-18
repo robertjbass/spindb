@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.1] - 2026-03-18
+
+### Improved
+
+- **`bin-path` command** — Extract error helper to reduce duplication, align engine aliases with `which` command (`mysql`, `maria`, `meili`, `couch`, `influx`, `weav`, `tb`, `lsql`), pretty-print error JSON, document global tool resolution behavior
+- **LibSQL `clientTools`** — Add `sqld` to LibSQL's `clientTools` in `engines.json` so `spindb bin-path libsql` resolves correctly
+
 ## [0.46.0] - 2026-03-18
 
 ### Added
