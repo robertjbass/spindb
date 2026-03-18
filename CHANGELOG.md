@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-03-18
+
+### Added
+
+- **`spindb bin-path` command** — Resolve the absolute path to an engine's binary tool for scripting (e.g., `PSQL=$(spindb bin-path postgresql)`, `spindb bin-path pg --tool pg_dump --json`). Supports engine aliases, `--tool` flag, and `--json` output.
+
 ## [0.45.2] - 2026-03-17
 
 ### Added
