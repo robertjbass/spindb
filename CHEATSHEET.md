@@ -171,6 +171,23 @@ CONTAINER=$(spindb which --url "$DATABASE_URL")
 spindb pull "$CONTAINER" --from-env PROD_DB_URL
 ```
 
+## Resolve Binary Paths
+
+Find the absolute path to an engine's binary. Useful for scripting when you need to call tools directly.
+
+```bash
+spindb bin-path postgresql                   # Default tool (psql)
+spindb bin-path postgresql --tool pg_dump    # Specific tool
+spindb bin-path redis --tool redis-server    # Server binary
+spindb bin-path pg                           # Aliases work (pg, mongo, etc.)
+spindb bin-path postgresql --json            # JSON output
+
+# Use in scripts
+PSQL=$(spindb bin-path postgresql)
+PG_DUMP=$(spindb bin-path pg --tool pg_dump)
+$PG_DUMP -Fc mydb > backup.dump
+```
+
 ## Backup & Restore
 
 ```bash
@@ -686,6 +703,7 @@ spindb backups --json
 spindb users create mydb --json
 spindb users list mydb --json
 spindb export docker mydb --json
+spindb bin-path postgresql --json
 ```
 
 ## Common Workflows

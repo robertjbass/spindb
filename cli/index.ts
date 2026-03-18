@@ -35,6 +35,7 @@ import { exportCommand } from './commands/export'
 import { queryCommand } from './commands/query'
 import { usersCommand } from './commands/users'
 import { linkCommand } from './commands/link'
+import { binPathCommand } from './commands/bin-path'
 import { updateManager } from '../core/update-manager'
 import { configManager } from '../core/config-manager'
 import { setCachedIconMode } from './constants'
@@ -149,6 +150,7 @@ export async function run(): Promise<void> {
   program.addCommand(queryCommand)
   program.addCommand(usersCommand)
   program.addCommand(linkCommand)
+  program.addCommand(binPathCommand)
 
   if (process.argv.length <= 2) {
     // Only show update notification in interactive menu mode (once at startup)
