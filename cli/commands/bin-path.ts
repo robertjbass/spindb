@@ -4,6 +4,12 @@
  * Resolve the absolute path to an engine's binary tool.
  * Designed for scripting — outputs just the path for $() substitution.
  *
+ * Note: Tool resolution is global, not version-scoped. If multiple versions
+ * of an engine are installed, the path returned is whichever version was
+ * registered most recently (typically the latest download). Tools shared
+ * between engines (e.g., mongosh for both MongoDB and FerretDB) resolve
+ * to the same binary regardless of which engine is specified.
+ *
  * Usage:
  *   spindb bin-path postgresql                   # Default tool (psql)
  *   spindb bin-path postgresql --tool pg_dump     # Specific tool
@@ -21,12 +27,20 @@ import { uiError } from '../ui/theme'
 const ENGINE_ALIASES: Record<string, Engine> = {
   pg: Engine.PostgreSQL,
   postgres: Engine.PostgreSQL,
+  mysql: Engine.MySQL,
+  maria: Engine.MariaDB,
   mongo: Engine.MongoDB,
   cockroach: Engine.CockroachDB,
   crdb: Engine.CockroachDB,
   surreal: Engine.SurrealDB,
   ferret: Engine.FerretDB,
   quest: Engine.QuestDB,
+  meili: Engine.Meilisearch,
+  couch: Engine.CouchDB,
+  influx: Engine.InfluxDB,
+  weav: Engine.Weaviate,
+  tb: Engine.TigerBeetle,
+  lsql: Engine.LibSQL,
 }
 
 function resolveEngine(input: string): Engine | null {
@@ -36,6 +50,15 @@ function resolveEngine(input: string): Engine | null {
     return normalized as Engine
   }
   return ENGINE_ALIASES[normalized] ?? null
+}
+
+function exitWithError(msg: string, json?: boolean): never {
+  if (json) {
+    console.log(JSON.stringify({ error: msg }, null, 2))
+  } else {
+    console.error(uiError(msg))
+  }
+  process.exit(1)
 }
 
 export const binPathCommand = new Command('bin-path')
@@ -58,38 +81,29 @@ export const binPathCommand = new Command('bin-path')
         const engine = resolveEngine(engineInput)
         if (!engine) {
           const validEngines = ALL_ENGINES.join(', ')
-          const errorMsg = `Unknown engine "${engineInput}". Valid engines: ${validEngines}`
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
-          }
-          process.exit(1)
+          exitWithError(
+            `Unknown engine "${engineInput}". Valid engines: ${validEngines}`,
+            options.json,
+          )
         }
 
         const engineConfig = await getEngineConfig(engine)
         const toolName = options.tool ?? engineConfig.clientTools[0]
 
         if (!toolName) {
-          const errorMsg = `Engine "${engine}" has no registered client tools`
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
-          }
-          process.exit(1)
+          exitWithError(
+            `Engine "${engine}" has no registered client tools. This engine uses a REST API — use spindb connect instead.`,
+            options.json,
+          )
         }
 
         // Verify the requested tool belongs to this engine
         if (options.tool && !engineConfig.clientTools.includes(options.tool)) {
           const validTools = engineConfig.clientTools.join(', ')
-          const errorMsg = `Tool "${options.tool}" is not a known tool for ${engine}. Available: ${validTools}`
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
-          }
-          process.exit(1)
+          exitWithError(
+            `Tool "${options.tool}" is not a known tool for ${engine}. Available: ${validTools}`,
+            options.json,
+          )
         }
 
         // Ensure bundled binaries are registered before lookup
@@ -98,13 +112,10 @@ export const binPathCommand = new Command('bin-path')
         const result = await findBinary(toolName)
 
         if (!result) {
-          const errorMsg = `${toolName} not found. Run: spindb engines download ${engine}`
-          if (options.json) {
-            console.log(JSON.stringify({ error: errorMsg }))
-          } else {
-            console.error(uiError(errorMsg))
-          }
-          process.exit(1)
+          exitWithError(
+            `${toolName} not found. Run: spindb engines download ${engine}`,
+            options.json,
+          )
         }
 
         if (options.json) {
@@ -130,12 +141,7 @@ export const binPathCommand = new Command('bin-path')
         }
       } catch (error) {
         const e = error as Error
-        if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
-        } else {
-          console.error(uiError(e.message))
-        }
-        process.exit(1)
+        exitWithError(e.message, options.json)
       }
     },
   )
