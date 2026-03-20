@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.2] - 2026-03-19
+
+### Fixed
+
+- **TigerBeetle interactive creation fails with numeric cluster ID** — Interactive menu and `promptCreateOptions` called `promptDatabaseName` for TigerBeetle, which rejects numeric input. TigerBeetle now defaults to `'0'` like Redis/Valkey, skipping the prompt entirely.
+
 ## [0.46.1] - 2026-03-18
 
 ### Improved

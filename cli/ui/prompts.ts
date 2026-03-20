@@ -1367,7 +1367,11 @@ export async function promptCreateOptions(promptOptions?: {
     showDeprecated: promptOptions?.showDeprecated,
   })
   const name = await promptContainerName()
-  const database = await promptDatabaseName(name, engine) // Default to container name
+  // Redis, Valkey, and TigerBeetle use numeric identifiers — skip the prompt
+  const database =
+    engine === 'redis' || engine === 'valkey' || engine === 'tigerbeetle'
+      ? '0'
+      : await promptDatabaseName(name, engine) // Default to container name
 
   // File-based databases (SQLite/DuckDB) don't need a port but need a path
   let port = 0
