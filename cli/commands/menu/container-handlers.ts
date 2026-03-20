@@ -171,7 +171,7 @@ export async function handleCreate(): Promise<'main' | string | void> {
   // Qdrant uses collections (not databases), so default to "default"
   // Meilisearch uses indexes (not databases), so default to "default"
   let database: string
-  if (engine === 'redis' || engine === 'valkey') {
+  if (engine === 'redis' || engine === 'valkey' || engine === 'tigerbeetle') {
     database = '0'
   } else if (engine === 'qdrant' || engine === 'meilisearch') {
     database = 'default'
