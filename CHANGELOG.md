@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.3] - 2026-03-24
+
+### Added
+
+- **"Set default database" in interactive menu** — Container submenu now shows a `★ Set default database` option for engines that support multiple databases. Queries the server for actual databases, lets the user pick, and automatically adds untracked databases to tracking. Available in both single-db and multi-db views.
+
 ## [0.46.2] - 2026-03-19
 
 ### Fixed
