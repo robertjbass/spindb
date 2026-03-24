@@ -1124,6 +1124,18 @@ export async function showContainerSubmenu(
           }
         : disabledItem('◉', `Databases (${databases.length})`),
     )
+
+    // Set default database - quick access without diving into databases submenu
+    if (canCreateDatabase(config.engine)) {
+      actionChoices.push(
+        containerReady
+          ? {
+              name: `${chalk.yellow('★')} Set default database`,
+              value: 'set_default_database',
+            }
+          : disabledItem('★', 'Set default database'),
+      )
+    }
   } else {
     // Single-db: all data actions inline
 
@@ -1182,6 +1194,18 @@ export async function showContainerSubmenu(
               value: 'create_database',
             }
           : disabledItem('+', 'Create database'),
+      )
+    }
+
+    // Set default database - only when engine supports multiple databases
+    if (canCreateDatabase(config.engine)) {
+      actionChoices.push(
+        containerReady
+          ? {
+              name: `${chalk.yellow('★')} Set default database`,
+              value: 'set_default_database',
+            }
+          : disabledItem('★', 'Set default database'),
       )
     }
 
@@ -1368,6 +1392,10 @@ export async function showContainerSubmenu(
       return
     case 'create_database':
       await handleCreateDatabase(containerName)
+      await showContainerSubmenu(containerName, showMainMenu)
+      return
+    case 'set_default_database':
+      await handleSetDefaultDatabase(containerName)
       await showContainerSubmenu(containerName, showMainMenu)
       return
     case 'rename_database':
@@ -2945,6 +2973,87 @@ async function handleCreateDatabase(containerName: string): Promise<void> {
     console.log(uiError((error as Error).message))
   }
 
+  await pressEnterToContinue()
+}
+
+async function handleSetDefaultDatabase(containerName: string): Promise<void> {
+  const config = await containerManager.getConfig(containerName)
+  if (!config) {
+    console.log(uiError(`Container "${containerName}" not found`))
+    await pressEnterToContinue()
+    return
+  }
+
+  const isRunning = await processManager.isRunning(containerName, {
+    engine: config.engine,
+  })
+  if (!isRunning) {
+    console.log(
+      uiError(
+        `Container "${containerName}" is not running. Start it first with: spindb start ${containerName}`,
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  const engine = getEngine(config.engine)
+
+  // Query the server for actual databases, fall back to tracked list
+  let availableDatabases: string[]
+  try {
+    availableDatabases = await engine.listDatabases(config)
+  } catch {
+    const rawDatabases = config.databases || []
+    availableDatabases = [...new Set([config.database, ...rawDatabases])]
+  }
+
+  // Filter out the current default
+  const selectable = availableDatabases.filter((db) => db !== config.database)
+
+  if (selectable.length === 0) {
+    console.log(
+      uiWarning(
+        `No other databases found in "${containerName}". Create one first with: spindb databases create ${containerName}`,
+      ),
+    )
+    await pressEnterToContinue()
+    return
+  }
+
+  console.log(chalk.gray(`  Current default: ${chalk.cyan(config.database)}`))
+
+  let dbName: string
+  try {
+    const result = await escapeablePrompt<{ dbName: string }>([
+      {
+        type: 'list',
+        name: 'dbName',
+        message: 'Select new default database:',
+        choices: selectable.map((db) => ({ name: db, value: db })),
+        pageSize: getPageSize(),
+      },
+    ])
+    dbName = result.dbName
+  } catch (error) {
+    if (error instanceof EscapeError) return
+    throw error
+  }
+
+  // Add to tracking if not already tracked
+  const trackedDatabases = config.databases || []
+  if (!trackedDatabases.includes(dbName) && dbName !== config.database) {
+    await containerManager.addDatabase(containerName, dbName)
+  }
+
+  await containerManager.updateConfig(containerName, { database: dbName })
+
+  console.log()
+  console.log(
+    uiSuccess(
+      `Default database changed from "${config.database}" to "${dbName}"`,
+    ),
+  )
   await pressEnterToContinue()
 }
 
