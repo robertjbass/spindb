@@ -1201,7 +1201,14 @@ export class InfluxDBEngine extends BaseEngine {
         path = '/' + path
       }
 
-      const response = await influxdbApiRequest(port, method, path, body)
+      const response = await influxdbApiRequest(
+        port,
+        method,
+        path,
+        body,
+        30000,
+        options?.password,
+      )
 
       if (response.status >= 400) {
         throw new Error(
@@ -1222,6 +1229,8 @@ export class InfluxDBEngine extends BaseEngine {
         q: trimmed,
         format: 'json',
       },
+      30000,
+      options?.password,
     )
 
     if (response.status >= 400) {

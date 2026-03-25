@@ -1245,7 +1245,14 @@ export class MeilisearchEngine extends BaseEngine {
       path = '/' + path
     }
 
-    const response = await meilisearchApiRequest(port, method, path, body)
+    const response = await meilisearchApiRequest(
+      port,
+      method,
+      path,
+      body,
+      30000,
+      options?.password,
+    )
 
     if (response.status >= 400) {
       throw new Error(

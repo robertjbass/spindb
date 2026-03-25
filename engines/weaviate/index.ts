@@ -1018,7 +1018,14 @@ export class WeaviateEngine extends BaseEngine {
       path = '/' + path
     }
 
-    const response = await weaviateApiRequest(port, method, path, body)
+    const response = await weaviateApiRequest(
+      port,
+      method,
+      path,
+      body,
+      30000,
+      options?.password,
+    )
 
     if (response.status >= 400) {
       throw new Error(

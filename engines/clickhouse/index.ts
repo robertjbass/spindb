@@ -1259,6 +1259,13 @@ export class ClickHouseEngine extends BaseEngine {
         queryWithFormat,
       ]
 
+      if (options?.username) {
+        args.push('--user', options.username)
+      }
+      if (options?.password) {
+        args.push('--password', options.password)
+      }
+
       const proc = spawn(clickhouse, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
       })

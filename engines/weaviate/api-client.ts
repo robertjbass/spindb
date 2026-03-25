@@ -17,17 +17,23 @@ export async function weaviateApiRequest(
   path: string,
   body?: Record<string, unknown>,
   timeoutMs = 30000,
+  apiKey?: string,
 ): Promise<{ status: number; data: unknown }> {
   const url = `http://127.0.0.1:${port}${path}`
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`
+  }
+
   const options: RequestInit = {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     signal: controller.signal,
   }
 
