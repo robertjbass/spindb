@@ -1167,17 +1167,20 @@ export class CockroachDBEngine extends BaseEngine {
     const cockroach = await this.getCockroachPath(version)
 
     return new Promise((resolve, reject) => {
-      const args = [
-        'sql',
-        '--insecure',
-        '--host',
-        `127.0.0.1:${port}`,
-        '--database',
-        db,
-        '--execute',
-        query,
-        '--format=csv',
-      ]
+      const args = ['sql']
+
+      if (options?.password) {
+        const user = options.username || 'root'
+        const encodedPass = encodeURIComponent(options.password)
+        args.push(
+          '--url',
+          `postgresql://${user}:${encodedPass}@127.0.0.1:${port}/${db}?sslmode=disable`,
+        )
+      } else {
+        args.push('--insecure', '--host', `127.0.0.1:${port}`, '--database', db)
+      }
+
+      args.push('--execute', query, '--format=csv')
 
       const proc = spawn(cockroach, args, {
         stdio: ['ignore', 'pipe', 'pipe'],

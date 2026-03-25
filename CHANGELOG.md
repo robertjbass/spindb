@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.4] - 2026-03-25
+
+### Bug Fixes
+
+- **`spindb query` now authenticates against local password-protected containers** — The query command loads stored credentials from the container's credential files before calling `executeQuery()`, fixing `NOAUTH` and similar auth errors when running queries against containers that have authentication enabled (e.g., inside Layerbase Cloud)
+
+### Improved
+
+- **MongoDB/FerretDB** — `executeQuery` builds authenticated `mongodb://` URI for local connections when credentials are provided
+- **ClickHouse** — `executeQuery` passes `--user` and `--password` flags when credentials are provided
+- **CouchDB** — `executeQuery` forwards stored credentials to REST API requests instead of always using defaults
+- **SurrealDB** — `executeQuery` uses stored credentials instead of hardcoded `root/root`
+- **CockroachDB** — `executeQuery` uses authenticated `--url` connection when credentials are provided, falls back to `--insecure`
+- **Meilisearch** — `executeQuery` passes API key via `Authorization: Bearer` header
+- **Qdrant** — `executeQuery` passes API key via `api-key` header
+- **InfluxDB** — `executeQuery` passes token via `Authorization: Token` header
+- **Weaviate** — `executeQuery` passes API key via `Authorization: Bearer` header
+
 ## [0.46.3] - 2026-03-24
 
 ### Added

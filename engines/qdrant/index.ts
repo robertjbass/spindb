@@ -1218,7 +1218,14 @@ export class QdrantEngine extends BaseEngine {
       path = '/' + path
     }
 
-    const response = await qdrantApiRequest(port, method, path, body)
+    const response = await qdrantApiRequest(
+      port,
+      method,
+      path,
+      body,
+      30000,
+      options?.password,
+    )
 
     if (response.status >= 400) {
       throw new Error(

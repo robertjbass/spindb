@@ -14,7 +14,10 @@ import {
   type QueryOptions,
   type QueryResult,
 } from '../../types'
-import { loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { parseConnectionString } from '../../core/remote-container'
 
 /**
@@ -173,6 +176,22 @@ export const queryCommand = new Command('query')
               )
             }
             process.exit(1)
+          }
+        }
+
+        // For local server containers, load stored credentials for auth
+        if (!remoteQueryOptions && !isFileBasedEngine(engineName)) {
+          const defaultUsername = getDefaultUsername(engineName)
+          const creds = await loadCredentials(
+            containerName,
+            engineName,
+            defaultUsername,
+          )
+          if (creds) {
+            remoteQueryOptions = {
+              password: creds.apiKey || creds.password,
+              username: creds.username,
+            }
           }
         }
 

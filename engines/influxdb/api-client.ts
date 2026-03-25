@@ -17,23 +17,30 @@ export async function influxdbApiRequest(
   path: string,
   body?: Record<string, unknown> | string,
   timeoutMs = 30000,
+  token?: string,
 ): Promise<{ status: number; data: unknown }> {
   const url = `http://127.0.0.1:${port}${path}`
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['Authorization'] = `Token ${token}`
+  }
+
   const options: RequestInit = {
     method,
+    headers,
     signal: controller.signal,
   }
 
   if (body !== undefined) {
     if (typeof body === 'string') {
-      options.headers = { 'Content-Type': 'text/plain' }
+      headers['Content-Type'] = 'text/plain'
       options.body = body
     } else {
-      options.headers = { 'Content-Type': 'application/json' }
+      headers['Content-Type'] = 'application/json'
       options.body = JSON.stringify(body)
     }
   }

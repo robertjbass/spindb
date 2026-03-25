@@ -1702,6 +1702,15 @@ export class FerretDBEngine extends BaseEngine {
         const sslParam = options.ssl && !isSrv ? 'tls=true' : ''
         const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
         args = [uri, '--quiet', '--eval', script]
+      } else if (options?.password) {
+        // Local with auth: build URI with credentials
+        const user = options.username
+          ? encodeURIComponent(options.username)
+          : ''
+        const pass = encodeURIComponent(options.password)
+        const auth = user ? `${user}:${pass}@` : ''
+        const uri = `mongodb://${auth}127.0.0.1:${port}/${db}`
+        args = [uri, '--quiet', '--eval', script]
       } else {
         args = [
           '--host',

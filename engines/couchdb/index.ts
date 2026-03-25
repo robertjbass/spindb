@@ -27,7 +27,7 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
-import { couchdbApiRequest } from './api-client'
+import { couchdbApiRequest, DEFAULT_ADMIN_USER } from './api-client'
 import {
   type Platform,
   type Arch,
@@ -1293,7 +1293,21 @@ export class CouchDBEngine extends BaseEngine {
       path = '/' + path
     }
 
-    const response = await couchdbApiRequest(port, method, path, body)
+    const auth = options?.password
+      ? {
+          username: options.username || DEFAULT_ADMIN_USER,
+          password: options.password,
+        }
+      : undefined
+
+    const response = await couchdbApiRequest(
+      port,
+      method,
+      path,
+      body,
+      30000,
+      auth,
+    )
 
     if (response.status >= 400) {
       throw new Error(
