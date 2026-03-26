@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.5] - 2026-03-26
+
+### Fixed
+
+- **Redis/Valkey managed auth** — `redis-cli` no longer passes `--user default` for password-only local and linked connections, fixing `NOAUTH Authentication required.` against Layerbase-managed Redis and Valkey databases that rely on the implicit default user
+
 ## [0.46.4] - 2026-03-25
 
 ### Bug Fixes
