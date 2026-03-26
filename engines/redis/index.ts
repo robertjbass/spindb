@@ -92,6 +92,17 @@ function validateCommand(command: string): void {
   }
 }
 
+export function shouldPassRedisCliUsername(
+  username?: string,
+): username is string {
+  if (!username) {
+    return false
+  }
+
+  const trimmed = username.trim()
+  return trimmed.length > 0 && trimmed.toLowerCase() !== 'default'
+}
+
 /**
  * Convert a Windows path to Cygwin path format.
  * Redis Windows binaries (from redis-windows) are built with MSYS2/Cygwin runtime
@@ -1185,8 +1196,10 @@ export class RedisEngine extends BaseEngine {
     // Build CLI args for remote connection (password passed via env var for security)
     const buildArgs = (): string[] => {
       const args = ['-h', host, '-p', String(port)]
-      // Redis 6.0+ ACL: pass username via --user flag
-      if (username) {
+      // The implicit default user works with password-only auth (`requirepass`)
+      // and avoids NOAUTH failures on managed Redis/Valkey instances that do
+      // not expect an explicit ACL username.
+      if (shouldPassRedisCliUsername(username)) {
         args.push('--user', username)
       }
       // Enable TLS for rediss:// scheme
@@ -1541,8 +1554,9 @@ export class RedisEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const args = ['-h', host, '-p', String(port), '-n', db, '--raw']
 
-      if (options?.username) {
-        args.push('--user', options.username)
+      const username = options?.username
+      if (shouldPassRedisCliUsername(username)) {
+        args.push('--user', username)
       }
       if (options?.ssl) {
         args.push('--tls')
