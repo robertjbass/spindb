@@ -134,6 +134,14 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 ## Development Gotchas
 
+**Redis/Valkey local query auth:** `spindb query` for local server containers does **not** use ad-hoc env vars from the caller. In `cli/commands/query.ts`, the local-server path loads credentials from `credential-manager.loadCredentials(containerName, engineName, getDefaultUsername(engineName))`. For Redis/Valkey, that means the filename stays `.env.spindb`, but the file contents can still be `DB_USER=default` and `DB_PASSWORD=...`. If cloud or desktop query auth breaks, inspect the saved credential file path and contents before changing CLI flags.
+
+**Redis `default` user vs `--user` flag:** Managed Redis/Valkey setups that use `requirepass` often expect the implicit default user and fail when `redis-cli --user default` is passed explicitly. The fix was to omit `--user` when the resolved username is literally `default`, while still passing `--user` for explicit ACL usernames. This logic must stay aligned in both Redis query paths:
+- remote connection-string query path (`dumpFromConnectionString`)
+- local/linked query execution path (`executeQuery`)
+
+**When debugging Redis/Valkey query auth, test both paths:** a change can fix remote URL queries and still break local container queries, or vice versa. The cloud incident on March 26-27, 2026 only became clear after checking both the cloud-managed local container path and the remote URL path.
+
 **Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. All 19 server engines now follow this rule (FerretDB was the last to be fixed in 0.43.0).
 
 **LibSQL JWT auth via Ed25519:** LibSQL uses JWT tokens signed with Ed25519 keys for authentication. `createUser()` generates an Ed25519 key pair, signs a JWT with the private key, writes the public key to the container directory as `jwt-key.pem`, restarts sqld with `--auth-jwt-key-file`, and stores the JWT token via credential-manager. The same pattern as Meilisearch API keys — credential is a token, not a username/password pair.
