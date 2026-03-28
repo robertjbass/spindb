@@ -13,6 +13,7 @@ import { getDefaultUsername, loadCredentials } from '../../core/credential-manag
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
+import { buildMongoUri } from '../mongo-uri'
 import { ferretdbBinaryManager } from './binary-manager'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
 import {
@@ -118,18 +119,6 @@ async function getPgRestorePath(container: ContainerConfig): Promise<string> {
  */
 async function getPsqlPath(container: ContainerConfig): Promise<string> {
   return findBackendBinary(container, 'psql')
-}
-
-function buildMongoUri(
-  port: number,
-  database: string,
-  auth: { username: string; password: string; authDatabase: string },
-): string {
-  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
-  const params = new URLSearchParams({
-    authSource: auth.authDatabase,
-  })
-  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
 }
 
 function addNamespaceRemapArgs(

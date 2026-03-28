@@ -13,20 +13,9 @@ import { dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import { buildMongoUri } from '../mongo-uri'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
 import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
-
-function buildMongoUri(
-  port: number,
-  database: string,
-  auth: { username: string; password: string; authDatabase: string },
-): string {
-  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
-  const params = new URLSearchParams({
-    authSource: auth.authDatabase,
-  })
-  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
-}
 
 /**
  * Create a backup of a FerretDB database using pg_dump

@@ -45,6 +45,7 @@ import {
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
 import { ferretdbBinaryManager } from './binary-manager'
+import { buildMongoUri, type MongoWireAuth } from '../mongo-uri'
 import {
   SUPPORTED_MAJOR_VERSIONS,
   FALLBACK_VERSION_MAP,
@@ -84,23 +85,7 @@ const execAsync = promisify(exec)
 const ENGINE = 'ferretdb'
 const engineDef = getEngineDefaults(ENGINE)
 
-type LocalFerretAuth = {
-  username: string
-  password: string
-  authDatabase: string
-}
-
-function buildMongoUri(
-  port: number,
-  database: string,
-  auth: LocalFerretAuth,
-): string {
-  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
-  const params = new URLSearchParams({
-    authSource: auth.authDatabase,
-  })
-  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
-}
+type LocalFerretAuth = MongoWireAuth
 
 // Default internal PostgreSQL port range for FerretDB backends
 const BACKEND_PORT_START = 54320

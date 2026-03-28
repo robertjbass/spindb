@@ -10,19 +10,8 @@ import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from './cli-utils'
+import { buildMongoUri } from '../mongo-uri'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
-
-function buildMongoUri(
-  port: number,
-  database: string,
-  auth: { username: string; password: string; authDatabase: string },
-): string {
-  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
-  const params = new URLSearchParams({
-    authSource: auth.authDatabase,
-  })
-  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
-}
 
 // Detect the format of a MongoDB backup
 export async function detectBackupFormat(

@@ -11,19 +11,8 @@ import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
+import { buildMongoUri } from '../mongo-uri'
 import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
-
-function buildMongoUri(
-  port: number,
-  database: string,
-  auth: { username: string; password: string; authDatabase: string },
-): string {
-  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
-  const params = new URLSearchParams({
-    authSource: auth.authDatabase,
-  })
-  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
-}
 
 /**
  * Create a backup of a MongoDB database using mongodump

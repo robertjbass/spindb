@@ -31,6 +31,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
+import { buildMongoUri, type MongoWireAuth } from '../mongo-uri'
 import {
   Engine,
   Platform,
@@ -53,23 +54,7 @@ import { parseMongoDBResult } from '../../core/query-parser'
 const ENGINE = 'mongodb'
 const engineDef = getEngineDefaults(ENGINE)
 
-type LocalMongoAuth = {
-  username: string
-  password: string
-  authDatabase: string
-}
-
-function buildMongoUri(
-  port: number,
-  database: string,
-  auth: LocalMongoAuth,
-): string {
-  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
-  const params = new URLSearchParams({
-    authSource: auth.authDatabase,
-  })
-  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
-}
+type LocalMongoAuth = MongoWireAuth
 
 // Build a mongosh command for inline JavaScript execution
 export function buildMongoshCommand(
