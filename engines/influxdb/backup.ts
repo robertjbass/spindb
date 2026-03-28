@@ -6,9 +6,10 @@
 import { mkdir, stat, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
 /**
  * Create an SQL backup using InfluxDB's REST API
@@ -19,8 +20,14 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port } = container
+  const { port, name } = container
   const database = options.database || container.database
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.InfluxDB,
+    getDefaultUsername(Engine.InfluxDB),
+  )
+  const token = savedCreds?.apiKey
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)
@@ -42,6 +49,8 @@ export async function createBackup(
       q: 'SHOW TABLES',
       format: 'json',
     },
+    30000,
+    token,
   )
 
   if (tablesResponse.status !== 200) {
@@ -92,6 +101,8 @@ export async function createBackup(
           q: `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '${table.replace(/'/g, "''")}'`,
           format: 'json',
         },
+        30000,
+        token,
       )
       if (colResponse.status === 200 && Array.isArray(colResponse.data)) {
         for (const col of colResponse.data as Array<Record<string, unknown>>) {
@@ -115,6 +126,8 @@ export async function createBackup(
         q: `SELECT * FROM "${table.replace(/"/g, '""')}"`,
         format: 'json',
       },
+      30000,
+      token,
     )
 
     if (dataResponse.status !== 200) {

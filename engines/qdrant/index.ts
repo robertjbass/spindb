@@ -439,6 +439,7 @@ export class QdrantEngine extends BaseEngine {
     const snapshotsDir = join(dataDir, 'snapshots')
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'qdrant.pid')
+    const pendingSnapshotMarker = join(containerDir, 'pending-storage-snapshot')
     const grpcPort = port + 1
 
     // Check if gRPC port is available (Qdrant uses HTTP port + 1 for gRPC)
@@ -526,9 +527,21 @@ export class QdrantEngine extends BaseEngine {
       return null
     }
 
+    const args = ['--config-path', configPath]
+    if (existsSync(pendingSnapshotMarker)) {
+      try {
+        const snapshotPath = (await readFile(pendingSnapshotMarker, 'utf-8')).trim()
+        if (snapshotPath && existsSync(snapshotPath)) {
+          args.push('--storage-snapshot', snapshotPath)
+          logDebug(`Starting Qdrant with storage snapshot: ${snapshotPath}`)
+        }
+      } catch (error) {
+        logWarning(`Failed to read pending Qdrant snapshot marker: ${error}`)
+      }
+    }
+
     // Qdrant runs in foreground, so we need to spawn detached
     // Set cwd to container directory so any files Qdrant creates stay there
-    const args = ['--config-path', configPath]
 
     // On non-Windows, use 'ignore' for stdio to allow Node.js process to exit
     // (piped streams keep the event loop alive even after unref)
@@ -598,6 +611,9 @@ export class QdrantEngine extends BaseEngine {
           if (settled) return
 
           if (ready) {
+            if (existsSync(pendingSnapshotMarker)) {
+              await unlink(pendingSnapshotMarker).catch(() => {})
+            }
             settled = true
             resolve({
               port,
@@ -656,6 +672,9 @@ export class QdrantEngine extends BaseEngine {
     const ready = await this.waitForReady(port)
 
     if (ready) {
+      if (existsSync(pendingSnapshotMarker)) {
+        await unlink(pendingSnapshotMarker).catch(() => {})
+      }
       return {
         port,
         connectionString: this.getConnectionString(container),

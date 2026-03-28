@@ -5,9 +5,10 @@
 
 import { open, readFile as readFileAsync } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 /**
  * Detect backup format from file
@@ -249,7 +250,13 @@ async function restoreSqlBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database } = options
+  const { containerName, port, database } = options
+  const savedCreds = await loadCredentials(
+    containerName,
+    Engine.InfluxDB,
+    getDefaultUsername(Engine.InfluxDB),
+  )
+  const token = savedCreds?.apiKey
 
   logDebug(
     `Restoring SQL backup to InfluxDB on port ${port}, database ${database}`,
@@ -301,6 +308,8 @@ async function restoreSqlBackup(
         'POST',
         `/api/v3/write_lp?db=${encodeURIComponent(database)}`,
         body,
+        30000,
+        token,
       )
 
       if (response.status < 300) {

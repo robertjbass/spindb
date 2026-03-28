@@ -10,10 +10,11 @@
 import { mkdir, stat, cp, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
 import { weaviateApiRequest } from './api-client'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
 /**
  * Create a snapshot backup using Weaviate's REST API.
@@ -26,6 +27,12 @@ export async function createBackup(
   _options: BackupOptions,
 ): Promise<BackupResult> {
   const { port, name } = container
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.Weaviate,
+    getDefaultUsername(Engine.Weaviate),
+  )
+  const apiKey = savedCreds?.apiKey
 
   // Ensure output parent directory exists
   const outputDir = dirname(outputPath)
@@ -47,6 +54,7 @@ export async function createBackup(
     '/v1/backups/filesystem',
     { id: backupId },
     600000, // 10 minute timeout
+    apiKey,
   )
 
   if (response.status !== 200) {
@@ -68,6 +76,9 @@ export async function createBackup(
       port,
       'GET',
       `/v1/backups/filesystem/${backupId}`,
+      undefined,
+      30000,
+      apiKey,
     )
 
     if (statusResponse.status === 200) {

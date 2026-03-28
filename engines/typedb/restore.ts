@@ -6,13 +6,14 @@
 import { spawn } from 'child_process'
 import { open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import {
   requireTypeDBConsolePath,
   getConsoleBaseArgs,
   validateTypeDBIdentifier,
 } from './cli-utils'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 /**
  * TypeQL keywords that indicate a TypeDB backup
@@ -182,6 +183,7 @@ export type RestoreOptions = {
  */
 async function restoreTypeQLBackup(
   backupPath: string,
+  containerName: string,
   port: number,
   database: string,
   version?: string,
@@ -209,12 +211,12 @@ async function restoreTypeQLBackup(
     ]
     const command = `database import ${database} ${paths.join(' ')}`
 
-    return runConsoleCommand(consolePath, port, command)
+    return runConsoleCommand(consolePath, containerName, port, command)
   }
 
   // Single file import - treat as schema
   const command = `database import ${database} ${backupPath}`
-  return runConsoleCommand(consolePath, port, command)
+  return runConsoleCommand(consolePath, containerName, port, command)
 }
 
 /**
@@ -222,12 +224,33 @@ async function restoreTypeQLBackup(
  */
 async function runConsoleCommand(
   consolePath: string,
+  containerName: string,
   port: number,
   command: string,
   timeoutMs = 30 * 60 * 1000,
 ): Promise<RestoreResult> {
+  const savedCreds = await loadCredentials(
+    containerName,
+    Engine.TypeDB,
+    getDefaultUsername(Engine.TypeDB),
+  )
+
   return new Promise<RestoreResult>((resolve, reject) => {
-    const args = [...getConsoleBaseArgs(port), '--command', command]
+    const args = [
+      ...getConsoleBaseArgs(
+        port,
+        '127.0.0.1',
+        true,
+        savedCreds
+          ? {
+              username: savedCreds.username,
+              password: savedCreds.password,
+            }
+          : undefined,
+      ),
+      '--command',
+      command,
+    ]
 
     const sanitizedArgs = args.map((a, i) =>
       args[i - 1] === '--password' ? '***' : a,
@@ -299,7 +322,7 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database = 'default', version } = options
+  const { containerName, port, database = 'default', version } = options
 
   // TypeDB backup creates schema/data pair files (-schema.typeql, -data.typeql)
   // rather than a single file at backupPath, so check for those too
@@ -312,7 +335,13 @@ export async function restoreBackup(
   logDebug(`Detected backup format: ${format.format}`)
 
   if (format.format === 'typeql') {
-    return restoreTypeQLBackup(backupPath, port, database, version)
+    return restoreTypeQLBackup(
+      backupPath,
+      containerName,
+      port,
+      database,
+      version,
+    )
   }
 
   throw new Error(

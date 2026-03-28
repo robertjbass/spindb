@@ -6,13 +6,14 @@
 import { spawn } from 'child_process'
 import { open } from 'fs/promises'
 import { existsSync, statSync, createReadStream } from 'fs'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import {
   requireClickHousePath,
   validateClickHouseIdentifier,
   escapeClickHouseIdentifier,
 } from './cli-utils'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 /**
  * SQL keywords that indicate a ClickHouse SQL backup
@@ -27,6 +28,30 @@ const CLICKHOUSE_SQL_KEYWORDS = [
   'ATTACH',
   'DETACH',
 ]
+
+type ClickHouseLocalAuth = {
+  user?: string
+  password?: string
+}
+
+async function loadLocalClickHouseAuth(
+  containerName: string,
+): Promise<ClickHouseLocalAuth> {
+  const savedCreds = await loadCredentials(
+    containerName,
+    Engine.ClickHouse,
+    getDefaultUsername(Engine.ClickHouse),
+  )
+
+  if (!savedCreds) {
+    return {}
+  }
+
+  return {
+    user: savedCreds.username,
+    password: savedCreds.password,
+  }
+}
 
 /**
  * Check if file content looks like ClickHouse SQL
@@ -153,6 +178,7 @@ async function executeQuery(
   port: number,
   database: string,
   query: string,
+  auth?: ClickHouseLocalAuth,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const args = [
@@ -166,6 +192,12 @@ async function executeQuery(
       '--query',
       query,
     ]
+    if (auth?.user) {
+      args.push('--user', auth.user)
+    }
+    if (auth?.password) {
+      args.push('--password', auth.password)
+    }
 
     const proc = spawn(clickhousePath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -201,6 +233,7 @@ async function getTablesInDatabase(
   clickhousePath: string,
   port: number,
   database: string,
+  auth?: ClickHouseLocalAuth,
 ): Promise<string[]> {
   try {
     // Validate database name
@@ -212,6 +245,7 @@ async function getTablesInDatabase(
       port,
       database,
       `SELECT name FROM system.tables WHERE database = '${escapedDb}'`,
+      auth,
     )
 
     if (!result) {
@@ -235,8 +269,9 @@ async function dropAllTables(
   clickhousePath: string,
   port: number,
   database: string,
+  auth?: ClickHouseLocalAuth,
 ): Promise<void> {
-  const tables = await getTablesInDatabase(clickhousePath, port, database)
+  const tables = await getTablesInDatabase(clickhousePath, port, database, auth)
 
   if (tables.length === 0) {
     logDebug('No existing tables to drop')
@@ -258,6 +293,7 @@ async function dropAllTables(
         port,
         database,
         `DROP TABLE IF EXISTS ${escapedTable}`,
+        auth,
       )
       logDebug(`Dropped table: ${table}`)
     } catch (error) {
@@ -273,17 +309,19 @@ async function dropAllTables(
  */
 async function restoreSqlBackup(
   backupPath: string,
+  containerName: string,
   port: number,
   database: string,
   version?: string,
   clean: boolean = false,
 ): Promise<RestoreResult> {
   const clickhousePath = await requireClickHousePath(version)
+  const auth = await loadLocalClickHouseAuth(containerName)
 
   // If clean mode, drop existing tables first
   if (clean) {
     logDebug('Clean mode: dropping existing tables before restore')
-    await dropAllTables(clickhousePath, port, database)
+    await dropAllTables(clickhousePath, port, database, auth)
   }
 
   return new Promise<RestoreResult>((resolve, reject) => {
@@ -297,6 +335,12 @@ async function restoreSqlBackup(
       database,
       '--multiquery',
     ]
+    if (auth.user) {
+      args.push('--user', auth.user)
+    }
+    if (auth.password) {
+      args.push('--password', auth.password)
+    }
 
     const proc = spawn(clickhousePath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -383,7 +427,8 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database = 'default', version, clean = false } = options
+  const { containerName, port, database = 'default', version, clean = false } =
+    options
 
   if (!existsSync(backupPath)) {
     throw new Error(`Backup file not found: ${backupPath}`)
@@ -394,7 +439,14 @@ export async function restoreBackup(
   logDebug(`Detected backup format: ${format.format}`)
 
   if (format.format === 'sql') {
-    return restoreSqlBackup(backupPath, port, database, version, clean)
+    return restoreSqlBackup(
+      backupPath,
+      containerName,
+      port,
+      database,
+      version,
+      clean,
+    )
   }
 
   throw new Error(

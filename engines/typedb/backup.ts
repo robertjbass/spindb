@@ -9,9 +9,10 @@ import { spawn } from 'child_process'
 import { mkdir } from 'fs/promises'
 import { stat } from 'fs/promises'
 import { dirname } from 'path'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { requireTypeDBConsolePath, getConsoleBaseArgs } from './cli-utils'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
 /**
  * Create a TypeQL backup using typedb console export
@@ -43,9 +44,24 @@ async function createTypeQLBackup(
   const dataPath = outputPath.endsWith('.typeql')
     ? outputPath.replace(/\.typeql$/, '-data.typeql')
     : outputPath + '-data.typeql'
+  const savedCreds = await loadCredentials(
+    container.name,
+    Engine.TypeDB,
+    getDefaultUsername(Engine.TypeDB),
+  )
 
   const args = [
-    ...getConsoleBaseArgs(port),
+    ...getConsoleBaseArgs(
+      port,
+      '127.0.0.1',
+      true,
+      savedCreds
+        ? {
+            username: savedCreds.username,
+            password: savedCreds.password,
+          }
+        : undefined,
+    ),
     '--command',
     `database export ${database} ${schemaPath} ${dataPath}`,
   ]
